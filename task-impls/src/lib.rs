@@ -49,3 +49,6 @@ pub mod request;
 
 /// Task for handling logic for quorum proposals
 pub mod quorum_proposal;
+
+/// Task for handling QuorumProposalRecv events
+pub mod quorum_proposal_recv;

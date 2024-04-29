@@ -1,13 +1,12 @@
 use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
 
 use async_broadcast::{Receiver, Sender};
-use async_compatibility_layer::art::{async_sleep, async_spawn};
-use async_lock::{RwLock, RwLockUpgradableReadGuard};
+use async_compatibility_layer::art::async_sleep;
+use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use committable::Committable;
 use either::Either;
-use futures::future::FutureExt;
 use hotshot_task::{
     dependency::{AndDependency, EventDependency, OrDependency},
     dependency_task::{DependencyTask, HandleDepOutput},
@@ -15,11 +14,9 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, Consensus},
-    constants::LOOK_AHEAD,
     data::{Leaf, QuorumProposal},
     event::Event,
     message::Proposal,
-    simple_certificate::UpgradeCertificate,
     traits::{
         block_contents::BlockHeader,
         election::Membership,
@@ -34,10 +31,12 @@ use hotshot_types::{
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
 
+#[cfg(feature = "dependency-tasks")]
+use crate::consensus::proposal_helpers::handle_quorum_proposal_validated;
+
 use crate::{
-    consensus::proposal_helpers::validate_proposal_safety_and_liveness,
     events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task, AnyhowTracing},
+    helpers::{broadcast_event, cancel_task},
 };
 
 /// Proposal dependency types. These types represent events that precipitate a proposal.
@@ -739,125 +738,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                     self.create_dependency_task_if_new(view, event_receiver, event_sender, event);
                 }
             }
-            HotShotEvent::QuorumProposalRecv(proposal, sender) => {
-                let sender = sender.clone();
-                debug!(
-                    "Received Quorum Proposal for view {}",
-                    *proposal.data.view_number
-                );
-
-                // stop polling for the received proposal
-                self.quorum_network
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(
-                        *proposal.data.view_number,
-                    ))
-                    .await;
-
-                let view = proposal.data.get_view_number();
-                if view < self.cur_view {
-                    debug!("Proposal is from an older view {:?}", proposal.data.clone());
-                    return;
-                }
-
-                let view_leader_key = self.quorum_membership.get_leader(view);
-                if view_leader_key != sender {
-                    warn!("Leader key does not match key in proposal");
-                    return;
-                }
-
-                let justify_qc = proposal.data.justify_qc.clone();
-
-                if !justify_qc.is_valid_cert(self.quorum_membership.as_ref()) {
-                    error!("Invalid justify_qc in proposal for view {}", *view);
-                    let consensus = self.consensus.write().await;
-                    consensus.metrics.invalid_qc.update(1);
-                    return;
-                }
-
-                // Validate the upgrade certificate -- this is just a signature validation.
-                // Note that we don't do anything with the certificate directly if this passes; it eventually gets stored as part of the leaf if nothing goes wrong.
-                if let Err(e) = UpgradeCertificate::validate(
-                    &proposal.data.upgrade_certificate,
-                    &self.quorum_membership,
-                ) {
-                    warn!("{:?}", e);
-
-                    return;
-                }
-
-                // NOTE: We could update our view with a valid TC but invalid QC, but that is not what we do here
-                self.update_view(view, &event_sender).await;
-
-                let consensus = self.consensus.upgradable_read().await;
-
-                // Get the parent leaf and state.
-                let parent = match consensus
-                    .saved_leaves
-                    .get(&justify_qc.get_data().leaf_commit)
-                    .cloned()
-                {
-                    Some(leaf) => {
-                        if let (Some(state), _) =
-                            consensus.get_state_and_delta(leaf.get_view_number())
-                        {
-                            Some((leaf, Arc::clone(&state)))
-                        } else {
-                            error!("Parent state not found! Consensus internally inconsistent");
-                            return;
-                        }
-                    }
-                    None => None,
-                };
-
-                if justify_qc.get_view_number() > consensus.high_qc.view_number {
-                    if let Err(e) = self
-                        .storage
-                        .write()
-                        .await
-                        .update_high_qc(justify_qc.clone())
-                        .await
-                    {
-                        warn!("Failed to store High QC not voting. Error: {:?}", e);
-                        return;
-                    }
-                }
-
-                let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
-
-                if justify_qc.get_view_number() > consensus.high_qc.view_number {
-                    debug!("Updating high QC");
-                    consensus.high_qc = justify_qc.clone();
-                }
-
-                // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
-                let Some((parent_leaf, parent_state)) = parent else {
-                    warn!(
-                        "Proposal's parent missing from storage with commitment: {:?}",
-                        justify_qc.get_data().leaf_commit
-                    );
-                    return;
-                };
-                async_spawn(
-                    validate_proposal_safety_and_liveness(
-                        proposal.clone(),
-                        parent_leaf,
-                        Arc::clone(&self.consensus),
-                        None,
-                        Arc::clone(&self.quorum_membership),
-                        Arc::clone(&parent_state),
-                        view_leader_key,
-                        event_sender.clone(),
-                        sender,
-                        self.output_event_stream.clone(),
-                        Arc::clone(&self.storage),
-                        Arc::clone(&self.instance_state),
-                    )
-                    .map(AnyhowTracing::err_as_debug),
-                );
-            }
+            #[cfg(feature = "dependency-tasks")]
             HotShotEvent::QuorumProposalValidated(proposal, _) => {
-                let current_proposal = Some(proposal.clone());
-                let new_view = current_proposal.clone().unwrap().view_number + 1;
+                let new_view = proposal.view_number + 1;
+
+                if let Err(e) =
+                    handle_quorum_proposal_validated(proposal, event_sender.clone(), self).await
+                {
+                    debug!("Failed to handle QuorumProposalValidated event; error = {e:#}");
+                }
 
                 info!(
                     "Node {} creating dependency task for view {:?} from QuorumProposalRecv",
@@ -881,103 +770,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             _ => {}
         }
     }
-
-    /// Must only update the view and GC if the view actually changes
-    #[instrument(skip_all, fields(
-        id = self.id,
-        view = *self.cur_view
-    ), name = "Consensus update view", level = "error")]
-    async fn update_view(
-        &mut self,
-        new_view: TYPES::Time,
-        event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
-    ) -> bool {
-        if *self.cur_view < *new_view {
-            debug!(
-                "Updating view from {} to {} in consensus task",
-                *self.cur_view, *new_view
-            );
-
-            if *self.cur_view / 100 != *new_view / 100 {
-                // TODO (https://github.com/EspressoSystems/HotShot/issues/2296):
-                // switch to info! when INFO logs become less cluttered
-                error!("Progress: entered view {:>6}", *new_view);
-            }
-
-            // cancel the old timeout task
-            if let Some(timeout_task) = self.timeout_task.take() {
-                cancel_task(timeout_task).await;
-            }
-            self.cur_view = new_view;
-
-            // Poll the future leader for lookahead
-            let lookahead_view = new_view + LOOK_AHEAD;
-            if self.quorum_membership.get_leader(lookahead_view) != self.public_key {
-                self.quorum_network
-                    .inject_consensus_info(ConsensusIntentEvent::PollFutureLeader(
-                        *lookahead_view,
-                        self.quorum_membership.get_leader(lookahead_view),
-                    ))
-                    .await;
-            }
-
-            // Start polling for proposals for the new view
-            self.quorum_network
-                .inject_consensus_info(ConsensusIntentEvent::PollForProposal(*self.cur_view + 1))
-                .await;
-
-            self.quorum_network
-                .inject_consensus_info(ConsensusIntentEvent::PollForDAC(*self.cur_view + 1))
-                .await;
-
-            if self.quorum_membership.get_leader(self.cur_view + 1) == self.public_key {
-                debug!("Polling for quorum votes for view {}", *self.cur_view);
-                self.quorum_network
-                    .inject_consensus_info(ConsensusIntentEvent::PollForVotes(*self.cur_view))
-                    .await;
-            }
-
-            broadcast_event(Arc::new(HotShotEvent::ViewChange(new_view)), event_stream).await;
-
-            // Spawn a timeout task if we did actually update view
-            let timeout = self.timeout;
-            self.timeout_task = Some(async_spawn({
-                let stream = event_stream.clone();
-                // Nuance: We timeout on the view + 1 here because that means that we have
-                // not seen evidence to transition to this new view
-                let view_number = self.cur_view + 1;
-                async move {
-                    async_sleep(Duration::from_millis(timeout)).await;
-                    broadcast_event(
-                        Arc::new(HotShotEvent::Timeout(TYPES::Time::new(*view_number))),
-                        &stream,
-                    )
-                    .await;
-                }
-            }));
-            let consensus = self.consensus.upgradable_read().await;
-            consensus
-                .metrics
-                .current_view
-                .set(usize::try_from(self.cur_view.get_u64()).unwrap());
-            // Do the comparison before the subtraction to avoid potential overflow, since
-            // `last_decided_view` may be greater than `cur_view` if the node is catching up.
-            if usize::try_from(self.cur_view.get_u64()).unwrap()
-                > usize::try_from(consensus.last_decided_view.get_u64()).unwrap()
-            {
-                consensus.metrics.number_of_views_since_last_decide.set(
-                    usize::try_from(self.cur_view.get_u64()).unwrap()
-                        - usize::try_from(consensus.last_decided_view.get_u64()).unwrap(),
-                );
-            }
-            let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
-            consensus.update_view(new_view);
-            drop(consensus);
-
-            return true;
-        }
-        false
-    }
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState
@@ -988,8 +780,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState
     fn filter(&self, event: &Arc<HotShotEvent<TYPES>>) -> bool {
         !matches!(
             event.as_ref(),
-            HotShotEvent::QuorumProposalRecv(_, _)
-                | HotShotEvent::QuorumProposalValidated(..)
+            HotShotEvent::QuorumProposalValidated(..)
                 | HotShotEvent::QCFormed(_)
                 | HotShotEvent::SendPayloadCommitmentAndMetadata(..)
                 | HotShotEvent::ViewSyncFinalizeCertificate2Recv(_)

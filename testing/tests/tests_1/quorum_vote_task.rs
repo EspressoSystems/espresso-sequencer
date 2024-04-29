@@ -10,7 +10,7 @@ use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime
 async fn test_quorum_vote_task_success() {
     use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState};
     use hotshot_testing::{
-        predicates::event::{exact, quorum_proposal_validated, quorum_vote_send},
+        predicates::event::{exact, quorum_vote_send},
         script::{run_test_script, TestScriptStage},
         task_helpers::build_system_handle,
         view_generator::TestViewGenerator,
@@ -23,26 +23,31 @@ async fn test_quorum_vote_task_success() {
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
-    generator.next();
-    let view = generator.current_view.clone().unwrap();
+    let mut proposals = Vec::new();
+    let mut leaves = Vec::new();
+    let mut dacs = Vec::new();
+    let mut vids = Vec::new();
+    for view in (&mut generator).take(2) {
+        proposals.push(view.quorum_proposal.clone());
+        leaves.push(view.leaf.clone());
+        dacs.push(view.da_certificate.clone());
+        vids.push(view.vid_proposal.clone());
+    }
 
     // Send the quorum proposal, DAC, and VID disperse data, in which case a dummy vote can be
     // formed and the view number will be updated.
     let view_success = TestScriptStage {
         inputs: vec![
-            QuorumProposalRecv(view.quorum_proposal.clone(), view.leader_public_key),
-            DACertificateRecv(view.da_certificate.clone()),
-            VIDShareRecv(view.vid_proposal.0[0].clone()),
+            QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
+            DACertificateRecv(dacs[1].clone()),
+            VIDShareRecv(vids[1].0[0].clone()),
         ],
         outputs: vec![
-            exact(ViewChange(ViewNumber::new(2))),
-            quorum_proposal_validated(),
-            exact(DACertificateValidated(view.da_certificate.clone())),
-            exact(VIDShareValidated(view.vid_proposal.0[0].clone())),
-            exact(QuorumVoteDependenciesValidated(ViewNumber::new(1))),
+            exact(DACertificateValidated(dacs[1].clone())),
+            exact(VIDShareValidated(vids[1].0[0].clone())),
+            exact(QuorumVoteDependenciesValidated(ViewNumber::new(2))),
             quorum_vote_send(),
         ],
         asserts: vec![],
@@ -74,7 +79,6 @@ async fn test_quorum_vote_task_vote_now() {
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
     generator.next();
@@ -82,7 +86,7 @@ async fn test_quorum_vote_task_vote_now() {
 
     let vote_dependency_data = VoteDependencyData {
         quorum_proposal: view.quorum_proposal.data.clone(),
-        leaf: view.leaf.clone(),
+        parent_leaf: view.leaf.clone(),
         disperse_share: view.vid_proposal.0[0].clone(),
         da_cert: view.da_certificate.clone(),
     };
@@ -109,7 +113,7 @@ async fn test_quorum_vote_task_vote_now() {
 async fn test_quorum_vote_task_miss_dependency() {
     use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState};
     use hotshot_testing::{
-        predicates::event::{exact, quorum_proposal_validated},
+        predicates::event::exact,
         script::{run_test_script, TestScriptStage},
         task_helpers::build_system_handle,
         view_generator::TestViewGenerator,
@@ -122,7 +126,6 @@ async fn test_quorum_vote_task_miss_dependency() {
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
     let mut proposals = Vec::new();
@@ -130,37 +133,31 @@ async fn test_quorum_vote_task_miss_dependency() {
     let mut votes = Vec::new();
     let mut dacs = Vec::new();
     let mut vids = Vec::new();
+    let mut leaves = Vec::new();
     for view in (&mut generator).take(3) {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(view.create_quorum_vote(&handle));
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
+        leaves.push(view.leaf.clone());
     }
 
     // Send two of quorum proposal, DAC, and VID disperse data, in which case there's no vote.
     let view_no_dac = TestScriptStage {
         inputs: vec![
-            QuorumProposalRecv(proposals[0].clone(), leaders[0]),
+            QuorumProposalValidated(proposals[0].data.clone(), leaves[0].clone()),
             VIDShareRecv(get_vid_share(&vids[0].0, handle.get_public_key())),
         ],
-        outputs: vec![
-            exact(ViewChange(ViewNumber::new(2))),
-            quorum_proposal_validated(),
-            exact(VIDShareValidated(vids[0].0[0].clone())),
-        ],
+        outputs: vec![exact(VIDShareValidated(vids[0].0[0].clone()))],
         asserts: vec![],
     };
     let view_no_vid = TestScriptStage {
         inputs: vec![
-            QuorumProposalRecv(proposals[1].clone(), leaders[1]),
+            QuorumProposalValidated(proposals[1].data.clone(), leaves[1].clone()),
             DACertificateRecv(dacs[1].clone()),
         ],
-        outputs: vec![
-            exact(ViewChange(ViewNumber::new(3))),
-            quorum_proposal_validated(),
-            exact(DACertificateValidated(dacs[1].clone())),
-        ],
+        outputs: vec![exact(DACertificateValidated(dacs[1].clone()))],
         asserts: vec![],
     };
     let view_no_quorum_proposal = TestScriptStage {

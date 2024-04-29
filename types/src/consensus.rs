@@ -15,7 +15,8 @@ use crate::{
     error::HotShotError,
     message::Proposal,
     simple_certificate::{
-        DACertificate, QuorumCertificate, TimeoutCertificate, ViewSyncFinalizeCertificate2,
+        DACertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
+        ViewSyncFinalizeCertificate2,
     },
     traits::{
         block_contents::BuilderFee,
@@ -75,6 +76,17 @@ pub struct Consensus<TYPES: NodeType> {
 
     /// A reference to the metrics trait
     pub metrics: Arc<ConsensusMetricsValue>,
+
+    /// The most recent upgrade certificate this node formed.
+    /// Note: this is ONLY for certificates that have been formed internally,
+    /// so that we can propose with them.
+    ///
+    /// Certificates received from other nodes will get reattached regardless of this fields,
+    /// since they will be present in the leaf we propose off of.
+    pub dontuse_formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
+
+    /// most recent decided upgrade certificate
+    pub dontuse_decided_upgrade_cert: Option<UpgradeCertificate<TYPES>>,
 }
 
 /// Contains several `ConsensusMetrics` that we're interested in from the consensus interfaces
