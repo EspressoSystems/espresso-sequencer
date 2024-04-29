@@ -282,32 +282,21 @@ pub(crate) mod tx_iter {
 pub use ns_payload_range::NsPayloadRange;
 mod ns_payload_range {
     use super::{tx_iter::TxIndex, NsIndex, NsPayload, Payload};
-    use crate::block2::{
-        ns_table::NsTable,
-        payload_bytes::{
-            ns_offset_as_bytes,
-            ns_offset_from_bytes,
-            NS_OFFSET_BYTE_LEN,
-            NUM_TXS_BYTE_LEN,
-            // TX_OFFSET_BYTE_LEN,
-        },
-    };
+    use crate::block2::{ns_table::NsTable, payload_bytes::NUM_TXS_BYTE_LEN};
     use serde::{Deserialize, Serialize};
     use std::ops::Range;
 
-    // TODO make NsPayloadRange a Range<usize> instead? YES Then we need to manually impl serde
+    // TODO need to manually impl serde to [u8; NS_OFFSET_BYTE_LEN]
     #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-    pub struct NsPayloadRange(pub(crate) Range<[u8; NS_OFFSET_BYTE_LEN]>); // TODO temporary pub(crate) for tx_proof.rs
+    pub struct NsPayloadRange(pub(crate) Range<usize>); // TODO temporary pub(crate) for tx_proof.rs
 
     impl NsPayloadRange {
         // TODO newtype wrapper over return type?
         pub fn num_txs_range(&self) -> Range<usize> {
-            let start = ns_offset_from_bytes(&self.0.start);
+            let start = self.0.start;
             Range {
                 start,
-                end: start
-                    .saturating_add(NUM_TXS_BYTE_LEN)
-                    .min(ns_offset_from_bytes(&self.0.end)),
+                end: start.saturating_add(NUM_TXS_BYTE_LEN).min(self.0.end),
             }
         }
 
@@ -327,17 +316,13 @@ mod ns_payload_range {
         pub fn tx_table_entries_range(&self, index: &TxIndex) -> Range<usize> {
             let result = index.tx_table_entries_range();
             Range {
-                start: result
-                    .start
-                    .saturating_add(ns_offset_from_bytes(&self.0.start)),
-                end: result
-                    .end
-                    .saturating_add(ns_offset_from_bytes(&self.0.start)),
+                start: result.start.saturating_add(self.0.start),
+                end: result.end.saturating_add(self.0.start),
             }
         }
 
         pub fn as_range(&self) -> Range<usize> {
-            ns_offset_from_bytes(&self.0.start)..ns_offset_from_bytes(&self.0.end)
+            self.0.clone()
         }
     }
 
@@ -356,12 +341,8 @@ mod ns_payload_range {
             ns_payload_range: &NsPayloadRange,
         ) -> Range<usize> {
             let result = self.tx_payload_range_relative(index);
-            result
-                .start
-                .saturating_add(ns_offset_from_bytes(&ns_payload_range.0.start))
-                ..result
-                    .end
-                    .saturating_add(ns_offset_from_bytes(&ns_payload_range.0.start))
+            result.start.saturating_add(ns_payload_range.0.start)
+                ..result.end.saturating_add(ns_payload_range.0.start)
         }
     }
 
@@ -377,7 +358,7 @@ mod ns_payload_range {
         pub fn ns_payload_range(&self, index: &NsIndex, payload_byte_len: usize) -> NsPayloadRange {
             let end = self.read_ns_offset(index).min(payload_byte_len);
             let start = self.read_ns_offset_prev(index).unwrap_or(0).min(end);
-            NsPayloadRange(ns_offset_as_bytes(start)..ns_offset_as_bytes(end))
+            NsPayloadRange(start..end)
         }
     }
 

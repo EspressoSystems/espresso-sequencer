@@ -3,8 +3,8 @@ use crate::{
     block2::{
         iter::Index,
         payload_bytes::{
-            ns_offset_from_bytes, num_txs_from_bytes, tx_offset_as_bytes, tx_offset_from_bytes,
-            NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
+            num_txs_from_bytes, tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN,
+            TX_OFFSET_BYTE_LEN,
         },
         Payload,
     },
@@ -229,11 +229,11 @@ impl TxProof {
                 let tx_payloads_start = num_txs_from_bytes(&self.payload_num_txs)
                     .saturating_mul(TX_OFFSET_BYTE_LEN)
                     .saturating_add(NUM_TXS_BYTE_LEN) // tx_table_byte_len plus...
-                    .saturating_add(ns_offset_from_bytes(&self.ns_payload_range.0.start)); // ...namespace start
+                    .saturating_add(self.ns_payload_range.0.start); // ...namespace start
 
                 let end = tx_offset_from_bytes(&self.payload_tx_table_entry)
                     .saturating_add(tx_payloads_start)
-                    .min(ns_offset_from_bytes(&self.ns_payload_range.0.end));
+                    .min(self.ns_payload_range.0.end);
                 let start = tx_offset_from_bytes(
                     &self
                         .payload_tx_table_entry_prev
