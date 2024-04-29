@@ -6,8 +6,8 @@ set -e
 set -a; source .env; set +a;
 
 SEQUENCER_API=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
-LOAD_GENERATOR=http://localhost:$ESPRESSO_SUBMIT_TRANSACTIONS_PORT
-SEQUENCER_BLOCKS_TIMEOUT=60
+LOAD_GENERATOR=http://localhost:$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
+SEQUENCER_BLOCKS_TIMEOUT=120
 
 # usage: wait_for timeout_in_secs name URL
 function wait_for() {
@@ -17,7 +17,7 @@ function wait_for() {
 	start=$SECONDS
 	elapsed=0
 	echo "Checking if $what @ $url is available, timeout in $timeout seconds"
-	while ! curl -s --fail "$url" > /dev/null; do
+	while ! curl -sL --fail "$url" > /dev/null; do
 		elapsed=$((SECONDS - start))
 		if [[ $elapsed -gt $timeout ]]; then
 			echo "Timeout waiting for $what @ $url"
@@ -34,8 +34,8 @@ wait_for 300 "demo load generator" "$LOAD_GENERATOR/healthcheck"
 
 # Get the block height and number of transactions, wait some time, and check that these numbers have
 # both increased.
-block_height=`curl -s $SEQUENCER_API/node/block-height`
-num_tx=`curl -s $SEQUENCER_API/node/transactions/count`
+block_height=`curl -sL $SEQUENCER_API/node/block-height`
+num_tx=`curl -sL $SEQUENCER_API/node/transactions/count`
 
 echo "Initial state:"
 echo "  block_height: $block_height"
@@ -47,8 +47,8 @@ START=$SECONDS
 # Check blocks and transactions are increasing
 # Every second until timeout after $TIMEOUT seconds
 while true; do
-	new_block_height=`curl -s $SEQUENCER_API/node/block-height`
-	new_num_tx=`curl -s $SEQUENCER_API/node/transactions/count`
+	new_block_height=`curl -sL $SEQUENCER_API/node/block-height`
+	new_num_tx=`curl -sL $SEQUENCER_API/node/transactions/count`
 	if [[ $new_block_height -gt $block_height && $new_num_tx -gt $num_tx ]]; then
 		echo "Final state:"
 		echo "  block_height: $new_block_height"

@@ -34,8 +34,8 @@ test:
 dev-orchestrator:
     target/release/orchestrator -p 8080 -n 1
 
-dev-cdn:
-    RUST_LOG=info target/release/dev-cdn
+dev-cdn *args:
+    RUST_LOG=info cargo run --release --bin dev-cdn -- {{args}}
 
 dev-state-relay-server:
     target/release/state-relay-server -p 8083
@@ -82,6 +82,21 @@ sol-lint:
 sol-test:
     cargo build --bin diff-test --release
     forge test
+
+# Deploys the light client contract on Sepolia and call it for profiling purposes.
+NUM_BLOCKS_PER_EPOCH := "3"
+NUM_INIT_VALIDATORS := "5"
+lc-contract-profiling-sepolia:
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    forge script contracts/test/DeployLightClientTestScript.s.sol --sig "runBench(uint32 numBlocksPerEpoch, uint64 numInitValidators)" {{NUM_BLOCKS_PER_EPOCH}} {{NUM_INIT_VALIDATORS}} --fork-url ${SEPOLIA_RPC_URL} --broadcast --verify --etherscan-api-key ${ETHERSCAN_API_KEY} --chain-id sepolia
+    LC_CONTRACT_ADDRESS=`cat contracts/broadcast/DeployLightClientTestScript.s.sol/11155111/runBench-latest.json | jq -r .receipts[-1].contractAddress`
+    echo $LC_CONTRACT_ADDRESS
+    forge script contracts/script/LightClientCallNewFinalizedState.s.sol --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators, address lcContractAddress)" {{NUM_BLOCKS_PER_EPOCH}} {{NUM_INIT_VALIDATORS}} $LC_CONTRACT_ADDRESS --fork-url ${SEPOLIA_RPC_URL}  --broadcast  --chain-id sepolia
+
+lc-contract-benchmark:
+    cargo build --bin diff-test --release
+    forge test --mt testCorrectUpdateBench | grep testCorrectUpdateBench
 
 # This is meant for local development and produces HTML output. In CI
 # the lcov output is pushed to coveralls.

@@ -2,7 +2,6 @@ use crate::block::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block::payload;
 use crate::{BlockBuildingSnafu, Error, NamespaceId, Transaction};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use commit::Committable;
 use derivative::Derivative;
 use hotshot::traits::BlockPayload;
 use hotshot_types::vid::{
@@ -123,7 +122,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         ns_id: NamespaceId,
         vid_common: VidCommon,
     ) -> Option<NamespaceProof> {
-        if self.raw_payload.len() != VidSchemeType::get_payload_byte_len(&vid_common) {
+        if self.raw_payload.len() != VidSchemeType::get_payload_byte_len(&vid_common) as usize {
             return None; // error: vid_common inconsistent with self
         }
 
@@ -142,7 +141,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         Some(NamespaceProof::Existence {
             ns_id,
             ns_payload_flat: self.raw_payload.get(ns_payload_range.clone())?.into(),
-            ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(&vid_common))
+            ns_proof: vid_scheme(VidSchemeType::get_num_storage_nodes(&vid_common) as usize)
                 .payload_proof(&self.raw_payload, ns_payload_range)
                 .ok()?,
             vid_common,
@@ -229,12 +228,6 @@ impl<TableWord: TableWordTraits + std::fmt::Debug> Display for Payload<TableWord
     }
 }
 
-impl<TableWord: TableWordTraits> Committable for Payload<TableWord> {
-    fn commit(&self) -> commit::Commitment<Self> {
-        todo!()
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(bound = "")] // for V
 pub enum NamespaceProof {
@@ -270,8 +263,10 @@ impl NamespaceProof {
             } => {
                 let ns_index = ns_table.lookup(*ns_id)?;
 
-                let (ns_id, ns_payload_range) = ns_table
-                    .get_payload_range(ns_index, VidSchemeType::get_payload_byte_len(vid_common));
+                let (ns_id, ns_payload_range) = ns_table.get_payload_range(
+                    ns_index,
+                    VidSchemeType::get_payload_byte_len(vid_common) as usize,
+                );
 
                 // verify self against args
                 vid.payload_verify(
@@ -353,7 +348,7 @@ mod test {
 
     fn check_basic_correctness<TableWord: TableWordTraits>() {
         // play with this
-        let test_cases = vec![
+        let test_cases = [
             // 1 namespace only
             vec![vec![5, 8, 8]], // 3 non-empty txs
             vec![vec![0, 8, 8]], // 1 empty tx at the beginning
@@ -688,10 +683,7 @@ mod test {
             );
 
             // TODO don't initialize Payload with empty namespace table
-            let block = Payload::from_bytes(
-                test_case.payload.iter().cloned(),
-                &NameSpaceTable::default(),
-            );
+            let block = Payload::from_bytes(&test_case.payload, &NameSpaceTable::default());
             // assert_eq!(block.len(), test_case.num_txs);
             assert_eq!(block.raw_payload.len(), payload_byte_len);
 
@@ -734,10 +726,7 @@ mod test {
         let test_case = TestCase::<TableWord>::from_tx_table_len_unchecked(1, 3, &mut rng); // 3-byte payload too small to store tx table len
 
         // TODO don't initialize Payload with empty namespace table
-        let block = Payload::from_bytes(
-            test_case.payload.iter().cloned(),
-            &NameSpaceTable::default(),
-        );
+        let block = Payload::from_bytes(&test_case.payload, &NameSpaceTable::default());
         assert_eq!(block.raw_payload.len(), test_case.payload.len());
         // assert_eq!(block.len(), test_case.num_txs);
 
@@ -841,7 +830,7 @@ mod test {
             let actual_payload_bytes = &test_case[1];
 
             let block = Payload::from_bytes(
-                actual_payload_bytes.iter().cloned(),
+                actual_payload_bytes,
                 &NameSpaceTable::from_bytes(actual_ns_table_bytes.to_vec()),
             );
             let disperse_data = vid.disperse(&block.raw_payload).unwrap();
@@ -985,7 +974,7 @@ mod test {
             let actual_payload_bytes = &test_case[1];
 
             let block = Payload::from_bytes(
-                actual_payload_bytes.iter().cloned(),
+                actual_payload_bytes,
                 &NameSpaceTable::from_bytes(actual_ns_table_bytes.to_vec()),
             );
             let ns_table = block.get_ns_table();

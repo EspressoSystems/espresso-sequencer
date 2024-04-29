@@ -18,7 +18,7 @@
 
 use crate::state::FeeInfo;
 use async_std::task::sleep;
-use commit::{Commitment, Committable, RawCommitmentBuilder};
+use committable::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::prelude::*;
 use futures::join;
 use serde::{Deserialize, Serialize};

@@ -50,14 +50,18 @@ orchestrator. Choose a port `$PORT` to run it on and decide how many sequencer n
 The sequencer will distribute a HotShot configuration to all the nodes which connect to it, which specifies consensus
 parameters like view timers. There is a default config, but you can override any parameters you want by passing
 additional options to the `orchestrator` executable. Run `target/release/orchestrator --help` to see a list of available
-options. Next, you must launch a `cdn` instance, which are necessary to facilitate consensus.
+options.
+
+Next, you must launch a `cdn` instance, which is necessary to facilitate consensus.
 
 ```bash
-target/release/dev-cdn -p 1738
+just dev-cdn -- -p 1738
 ```
 
-Once you have started the orchestrator and the web servers, you must connect `$N` sequencer nodes to them, after which
-the network will start up automatically. To start one node, run
+In this case, we run it on port 1738.
+
+Once you have started the orchestrator and the CDN, you must connect `$N` sequencer nodes to them, after which the
+network will start up automatically. To start one node, run
 
 ```bash
 target/release/sequencer \
@@ -129,6 +133,26 @@ Running the script will save a file with details about the deployment in `contra
 - code for demo purposes goes into the `contracts/demo` folder
 - code that eventually ends up in production goes into the `contracts/src` folder
 
+#### Benchmarking and profiling
+
+The gas consumption for updating the state of the light client contract can be seen by running:
+
+```
+> just lc-contract-benchmark
+cargo build --bin diff-test --release
+    Finished release [optimized] target(s) in 0.41s
+forge test --mt testCorrectUpdateBench | grep testCorrectUpdateBench
+[PASS] testCorrectUpdateBench() (gas: 597104)
+```
+
+In order to profile the gas consumption of the light client contract do the following:
+
+1. Set the environment variables `SEPOLIA_RPC_URL`, `MNEMONIC` and `ETHERSCAN_API_KEY`.
+2. `just lc-contract-profiling-sepolia`
+3. Create an account on [sentio.xyz](https://app.sentio.xyz/).
+4. Use the hash of the transaction generated in step two when calling the function `newFinalizedState` in order to
+   obtain the gas profile.
+
 ## Misc
 
 ### Authenticate with GitHub container registry
@@ -153,3 +177,7 @@ us if you have thoughts on licensing.
 
 **DISCLAIMER:** This software is provided "as is" and its security has not been externally audited. Use at your own
 risk.
+
+**DISCLAIMER:** The Rust library crates provided in this repository are intended primarily for use by the binary targets
+in this repository. We make no guarantees of public API stability. If you are building on these crates, reach out by
+opening an issue to discuss the APIs you need.

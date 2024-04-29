@@ -2,10 +2,8 @@
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::{sleep, spawn};
-use bytesize::ByteSize;
 use clap::Parser;
-use commit::{Commitment, Committable};
-use derive_more::From;
+use committable::{Commitment, Committable};
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
 use futures::{
     channel::mpsc::{self, Sender},
@@ -16,15 +14,17 @@ use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, 
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
-use sequencer::{options::parse_duration, SeqTypes, Transaction};
-use snafu::Snafu;
+use sequencer::{
+    options::{parse_duration, parse_size},
+    SeqTypes, Transaction,
+};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
 };
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// Submit random transactions to an Espresso Sequencer.
 #[derive(Clone, Debug, Parser)]
@@ -33,13 +33,13 @@ struct Options {
     ///
     /// The size of each transaction will be chosen uniformly between MIN_SIZE and MAX_SIZE.
     #[clap(long, name = "MIN_SIZE", default_value = "1", value_parser = parse_size, env = "ESPRESSO_SUBMIT_TRANSACTIONS_MIN_SIZE")]
-    min_size: usize,
+    min_size: u64,
 
     /// Maximum size of transaction to submit.
     ///
     /// The size of each transaction will be chosen uniformly between MIN_SIZE and MAX_SIZE.
     #[clap(long, name = "MAX_SIZE", default_value = "1kb", value_parser = parse_size, env = "ESPRESSO_SUBMIT_TRANSACTIONS_MAX_SIZE")]
-    max_size: usize,
+    max_size: u64,
 
     /// Minimum namespace ID to submit to.
     #[clap(
@@ -104,18 +104,21 @@ struct Options {
     #[clap(short, long, env = "ESPRESSO_SUBMIT_TRANSACTIONS_PORT")]
     port: Option<u16>,
 
+    /// Alternative URL to submit transactions to, if not the query service URL.
+    #[clap(long, env = "ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL")]
+    submit_url: Option<Url>,
+
     /// URL of the query service.
-    #[clap(env = "ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL")]
+    #[clap(env = "ESPRESSO_SEQUENCER_URL")]
     url: Url,
 }
 
-#[derive(Clone, Debug, From, Snafu)]
-struct ParseSizeError {
-    msg: String,
-}
-
-fn parse_size(s: &str) -> Result<usize, ParseSizeError> {
-    Ok(s.parse::<ByteSize>()?.0 as usize)
+impl Options {
+    fn submit_url(&self) -> Url {
+        self.submit_url
+            .clone()
+            .unwrap_or_else(|| self.url.join("submit").unwrap())
+    }
 }
 
 #[async_std::main]
@@ -230,7 +233,9 @@ async fn submit_transactions<Ver: StaticVersionType>(
     mut rng: ChaChaRng,
     _: Ver,
 ) {
-    let client = Client::<Error, Ver>::new(opt.url.clone());
+    let url = opt.submit_url();
+    tracing::info!(%url, "starting load generator task");
+    let client = Client::<Error, Ver>::new(url);
 
     // Create an exponential distribution for sampling delay times. The distribution should have
     // mean `opt.delay`, or parameter `\lambda = 1 / opt.delay`.
@@ -245,7 +250,7 @@ async fn submit_transactions<Ver: StaticVersionType>(
             tx.payload().len()
         );
         if let Err(err) = client
-            .post::<()>("submit/submit")
+            .post::<()>("submit")
             .body_binary(&tx)
             .unwrap()
             .send()
@@ -266,7 +271,7 @@ async fn submit_transactions<Ver: StaticVersionType>(
 }
 
 async fn server<Ver: StaticVersionType + 'static>(port: u16, bind_version: Ver) {
-    if let Err(err) = App::<(), ServerError, Ver>::with_state(())
+    if let Err(err) = App::<(), ServerError>::with_state(())
         .serve(format!("0.0.0.0:{port}"), bind_version)
         .await
     {
@@ -278,7 +283,7 @@ fn random_transaction(opt: &Options, rng: &mut ChaChaRng) -> Transaction {
     let namespace = rng.gen_range(opt.min_namespace..=opt.max_namespace);
 
     let len = rng.gen_range(opt.min_size..=opt.max_size);
-    let mut payload = vec![0; len];
+    let mut payload = vec![0; len as usize];
     rng.fill_bytes(&mut payload);
 
     Transaction::new(namespace.into(), payload)

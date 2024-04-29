@@ -1,5 +1,5 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use derive_more::{Display, From, Into};
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
 use jf_primitives::merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
@@ -88,9 +88,13 @@ impl Namespaced for Transaction {
 
 impl Committable for Transaction {
     fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("Transaction")
+        committable::RawCommitmentBuilder::new("Transaction")
             .u64_field("namespace", self.namespace.into())
             .var_size_bytes(&self.payload)
             .finalize()
+    }
+
+    fn tag() -> String {
+        "TX".into()
     }
 }

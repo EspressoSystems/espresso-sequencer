@@ -11,17 +11,17 @@ use sequencer::{
     options::{Modules, Options},
     persistence, BuilderParams, ChainConfig, L1Params, NetworkParams,
 };
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
     setup_logging();
     setup_backtrace();
 
-    tracing::info!("sequencer starting up");
+    tracing::warn!("sequencer starting up");
     let opt = Options::parse();
     let mut modules = opt.modules();
-    tracing::info!("modules: {:?}", modules);
+    tracing::warn!("modules: {:?}", modules);
 
     if let Some(storage) = modules.storage_fs.take() {
         init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await
@@ -55,9 +55,7 @@ where
         url: opt.l1_provider_url,
     };
     let builder_params = BuilderParams {
-        mnemonic: opt.eth_mnemonic,
         prefunded_accounts: opt.prefunded_builder_accounts,
-        eth_account_index: opt.eth_account_index,
     };
 
     // Parse supplied Libp2p addresses to their socket form

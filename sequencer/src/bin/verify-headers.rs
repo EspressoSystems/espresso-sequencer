@@ -11,7 +11,7 @@ use std::cmp::max;
 use std::process::exit;
 use std::time::Duration;
 use surf_disco::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// Utility program to verify properties of headers sequenced by HotShot.
 #[derive(Clone, Debug, Parser)]

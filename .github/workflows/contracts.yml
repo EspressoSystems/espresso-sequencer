@@ -85,3 +85,7 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         run: |
           nix develop --accept-flake-config -c forge test -vvv
+
+      - name: Print light contract gas benchmark
+        run: |
+          nix develop --accept-flake-config -c forge test --mt testCorrectUpdateBench

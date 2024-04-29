@@ -32,7 +32,7 @@ for ARCH in "amd64" "arm64"; do
       ;;
   esac
   mkdir -p ${WORKDIR}/target/$ARCH/release
-  for binary in "orchestrator" "cdn-broker" "cdn-marshal" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "permissionless-builder" "nasty-client"; do
+  for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "permissionless-builder" "nasty-client"; do
     cp -v "${CARGO_TARGET_DIR}/${TARGET}/release/$binary" ${WORKDIR}/target/$ARCH/release
   done
 done
@@ -41,11 +41,12 @@ export DOCKER_BUILDKIT=1
 docker build -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main -f docker/cdn-broker.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/cdn-marshal:main -f docker/cdn-marshal.Dockerfile ${WORKDIR}
+docker build -t ghcr.io/espressosystems/espresso-sequencer/cdn-whitelist:main -f docker/cdn-whitelist.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main -f docker/state-relay-server.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/prover-service:main -f docker/prover-service.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/sequencer:main -f docker/sequencer.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/commitment-task:main -f docker/commitment-task.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main -f docker/submit-transactions.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/deploy:main -f docker/deploy.Dockerfile ${WORKDIR}
-docker build -t ghcr.io/espressosystems/espresso-sequencer/permissionless-builder:main -f docker/permissionless-builder.Dockerfile ${WORKDIR}
+docker build -t ghcr.io/espressosystems/espresso-sequencer/builder:main -f docker/permissionless-builder.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/nasty-client:main -f docker/nasty-client.Dockerfile ${WORKDIR}

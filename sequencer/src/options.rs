@@ -1,7 +1,9 @@
 use crate::{api, persistence};
 use anyhow::{bail, Context};
+use bytesize::ByteSize;
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
+use derive_more::From;
 use ethers::types::{Address, U256};
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::light_client::StateSignKey;
@@ -134,21 +136,6 @@ pub struct Options {
     #[clap(raw = true)]
     modules: Vec<String>,
 
-    /// Mnemonic phrase for builder account.
-    ///
-    /// This is the address fees will be charged to.
-    /// It must be funded with ETH in the Espresso fee ledger
-    #[clap(long, env = "ESPRESSO_SEQUENCER_ETH_MNEMONIC")]
-    pub eth_mnemonic: String,
-
-    /// Index of a funded account derived from eth-mnemonic.
-    #[clap(
-        long,
-        env = "ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX",
-        default_value = "8"
-    )]
-    pub eth_account_index: u32,
-
     /// Prefunded the builder accounts. Use for demo purposes only.
     ///
     /// Comma-separated list of Ethereum addresses.
@@ -171,7 +158,7 @@ pub struct Options {
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
     pub stake_table_capacity: usize,
     /// Maximum size in bytes of a block
-    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE", value_parser = parse_size)]
     pub max_block_size: u64,
 
     #[clap(long, env = "ESPRESSO_SEQUENCER_BASE_FEE")]
@@ -218,6 +205,15 @@ pub fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
         .map_err(|err| ParseDurationError {
             reason: err.to_string(),
         })
+}
+
+#[derive(Clone, Debug, From, Snafu)]
+pub struct ParseSizeError {
+    msg: String,
+}
+
+pub fn parse_size(s: &str) -> Result<u64, ParseSizeError> {
+    Ok(s.parse::<ByteSize>()?.0)
 }
 
 #[derive(Clone, Debug)]

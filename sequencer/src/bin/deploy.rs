@@ -145,7 +145,11 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if let Some(out) = &opt.out {
-        let file = File::options().create(true).write(true).open(out)?;
+        let file = File::options()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(out)?;
         contracts.write(file)?;
     } else {
         contracts.write(stdout())?;

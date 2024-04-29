@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use crate::{BlockBuildingSnafu, Transaction};
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::BlockPayload;
 use hotshot_types::utils::BuilderCommitment;
@@ -23,10 +25,6 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     type Error = crate::Error;
     type Transaction = Transaction;
     type Metadata = NsTable;
-
-    // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
-    // https://github.com/EspressoSystems/HotShot/issues/2115
-    type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
 
     /// Returns (Self, metadata).
     ///
@@ -56,12 +54,9 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         Some((payload, ns_table)).context(BlockBuildingSnafu)
     }
 
-    fn from_bytes<I>(encoded_transactions: I, metadata: &Self::Metadata) -> Self
-    where
-        I: Iterator<Item = u8>,
-    {
+    fn from_bytes(encoded_transactions: &[u8], metadata: &Self::Metadata) -> Self {
         Self {
-            raw_payload: encoded_transactions.into_iter().collect(),
+            raw_payload: encoded_transactions.to_vec(),
             ns_table: metadata.clone(), // TODO don't clone ns_table
         }
     }
@@ -70,8 +65,8 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         Self::from_transactions([]).unwrap()
     }
 
-    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
-        Ok(self.raw_payload.iter().cloned())
+    fn encode(&self) -> Result<Arc<[u8]>, Self::Error> {
+        Ok(Arc::from(self.raw_payload.clone()))
     }
 
     fn transaction_commitments(&self, meta: &Self::Metadata) -> Vec<Commitment<Self::Transaction>> {
@@ -90,8 +85,11 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
 
-    fn get_transactions(&self, _: &Self::Metadata) -> &Vec<Self::Transaction> {
-        unimplemented!()
+    fn get_transactions<'a>(
+        &'a self,
+        metadata: &'a Self::Metadata,
+    ) -> impl 'a + Iterator<Item = Self::Transaction> {
+        self.enumerate(metadata).map(|(_, t)| t)
     }
 }
 
@@ -182,7 +180,7 @@ mod reference {
     fn test_reference_header() {
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~igildJMyCExvG88xSKxAn6MpHzOnnoFoeQWMsRbR07EP",
+            "BLOCK~00ISpu2jHbXD6z-BwMkwR4ijGdgUSoXLp_2jIStmqBrD",
             |header| header.commit(),
         );
     }
@@ -191,7 +189,7 @@ mod reference {
     fn test_reference_transaction() {
         reference_test::<Transaction, _>(
             TRANSACTION.clone(),
-            "COMMIT~77xOf9b3_RtGwqQ7_zOPeuJRS0iZwF7EJiV_NzOv4uID",
+            "TX~77xOf9b3_RtGwqQ7_zOPeuJRS0iZwF7EJiV_NzOv4uJ3",
             |tx| tx.commit(),
         );
     }

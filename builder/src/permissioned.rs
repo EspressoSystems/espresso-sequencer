@@ -28,8 +28,8 @@ use hotshot_types::{
     event::Event,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
-    traits::election::Membership,
-    traits::metrics::Metrics,
+    traits::{election::Membership, metrics::Metrics},
+    utils::BuilderCommitment,
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::fmt::Display;
@@ -48,14 +48,18 @@ use async_std::{
     sync::Arc,
     task::{spawn, JoinHandle},
 };
+use hotshot::traits::BlockPayload;
 use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::{
-    builder_state::{BuildBlockInfo, BuilderProgress, BuilderState, MessageType, ResponseMessage},
+    builder_state::{
+        BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromProposedBlock, MessageType,
+        ResponseMessage,
+    },
     service::{
         run_non_permissioned_standalone_builder_service,
-        run_permissioned_standalone_builder_service, GlobalState,
+        run_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
     },
 };
 use hotshot_state_prover;
@@ -64,7 +68,7 @@ use jf_primitives::{
     signatures::bls_over_bn254::VerKey,
 };
 use sequencer::state_signature::StakeTableCommitmentType;
-use sequencer::{catchup::mock::MockStateCatchup, ChainConfig};
+use sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, ChainConfig};
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -74,13 +78,13 @@ use sequencer::{
     state::FeeAccount,
     state::ValidatedState,
     state_signature::{static_stake_table_commitment, StateSigner},
-    BuilderParams, L1Params, NetworkParams, Node, NodeState, PrivKey, PubKey, SeqTypes,
+    BuilderParams, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey, SeqTypes,
 };
 use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
 use std::{net::Ipv4Addr, thread::Builder};
 use tide_disco::{app, method::ReadState, App, Url};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 use hotshot_types::{
     constants::{Version01, STATIC_VER_0_1},
@@ -131,12 +135,13 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     builder_params: BuilderParams,
     l1_params: L1Params,
     hotshot_builder_api_url: Url,
-    pub_key: PubKey,
-    priv_key: PrivKey,
+    eth_key_pair: EthKeyPair,
     bootstrapped_view: ViewNumber,
     channel_capacity: NonZeroUsize,
     bind_version: Ver,
     persistence: P,
+    max_api_timeout_duration: Duration,
+    buffered_view_num_count: usize,
 ) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -187,7 +192,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
             private_key: my_config.private_key.clone(),
         },
     )
-    .await
     .with_context(|| "Failed to create CDN network")?;
 
     // Initialize the Libp2p network (if enabled)
@@ -236,13 +240,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    // creating the instance state without any builder mnemonic
-    let wallet = MnemonicBuilder::<English>::default()
-        .phrase::<&str>(&builder_params.mnemonic)
-        .index(builder_params.eth_account_index)?
-        .build()?;
-    tracing::info!("Builder account address {:?}", wallet.address());
-
     let mut genesis_state = ValidatedState::default();
     for address in builder_params.prefunded_accounts {
         tracing::warn!("Prefunding account {:?} for demo", address);
@@ -254,7 +251,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let instance_state = NodeState::new(
         ChainConfig::default(),
         l1_client,
-        wallet,
         Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
     );
 
@@ -279,12 +275,13 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         hotshot_handle,
         state_signer,
         node_index,
-        pub_key,
-        priv_key,
+        eth_key_pair,
         bootstrapped_view,
         channel_capacity,
         instance_state,
         hotshot_builder_api_url,
+        max_api_timeout_duration,
+        buffered_view_num_count,
     )
     .await?;
 
@@ -375,12 +372,13 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         hotshot_handle: Consensus<N, P>,
         state_signer: StateSigner<Ver>,
         node_index: u64,
-        pub_key: PubKey,
-        priv_key: PrivKey,
+        eth_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         channel_capacity: NonZeroUsize,
         instance_state: NodeState,
         hotshot_builder_api_url: Url,
+        max_api_timeout_duration: Duration,
+        buffered_view_num_count: usize,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
@@ -401,13 +399,24 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         // builder api response channel
         let (res_sender, res_receiver) = unbounded();
 
+        let (genesis_payload, genesis_ns_table) = Payload::genesis();
+        let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
+        let vid_commitment = {
+            // TODO we should not need to collect payload bytes just to compute vid_commitment
+            let payload_bytes = genesis_payload
+                .encode()
+                .expect("unable to encode genesis payload");
+            vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
+        };
+
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
-            (pub_key, priv_key),
             req_sender,
             res_receiver,
             tx_sender.clone(),
             instance_state.clone(),
+            vid_commitment,
+            bootstrapped_view,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
@@ -415,11 +424,12 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         let global_state_clone = global_state.clone();
 
         let builder_state = BuilderState::<SeqTypes>::new(
-            (
-                bootstrapped_view,
-                vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES),
-                fake_commitment(),
-            ),
+            BuiltFromProposedBlock {
+                view_number: bootstrapped_view,
+                vid_commitment,
+                leaf_commit: fake_commitment(),
+                builder_commitment,
+            },
             tx_receiver,
             decide_receiver,
             da_receiver,
@@ -429,6 +439,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             res_sender,
             NonZeroUsize::new(1).unwrap(),
             bootstrapped_view,
+            buffered_view_num_count,
         );
 
         let hotshot_handle_clone = hotshot_handle.clone();
@@ -450,7 +461,16 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             builder_state.event_loop();
         });
 
-        run_builder_api_service(hotshot_builder_api_url.clone(), global_state.clone());
+        // create the proxy global state it will server the builder apis
+        let proxy_global_state = ProxyGlobalState::new(
+            global_state.clone(),
+            (eth_key_pair.fee_account(), eth_key_pair),
+            max_api_timeout_duration,
+        );
+
+        let proxy_global_api_state = Arc::new(RwLock::new(proxy_global_state));
+
+        run_builder_api_service(hotshot_builder_api_url.clone(), proxy_global_api_state);
 
         let ctx = Self {
             hotshot_handle: hotshot_handle_clone,
@@ -480,10 +500,13 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 mod test {
     use super::*;
     use crate::non_permissioned;
+    use crate::testing::{hotshot_builder_url, PermissionedBuilderTestConfig};
     use crate::testing::{HotShotTestConfig, NonPermissionedBuilderTestConfig};
     use async_compatibility_layer::art::{async_sleep, async_spawn};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use async_lock::RwLock;
     use async_std::task;
+    use es_version::SequencerVersion;
     use hotshot_builder_api::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
@@ -493,23 +516,27 @@ mod test {
         run_non_permissioned_standalone_builder_service,
         run_permissioned_standalone_builder_service,
     };
-    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
-    use hotshot_types::traits::{
-        block_contents::GENESIS_VID_NUM_STORAGE_NODES, node_implementation::NodeType,
-    };
-    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-    use sequencer::persistence::no_storage::{self, NoStorage};
-    use sequencer::transaction::Transaction;
-    use std::time::Duration;
-    use surf_disco::Client;
-
-    use crate::testing::{hotshot_builder_url, PermissionedBuilderTestConfig};
-    use async_lock::RwLock;
-    use es_version::SequencerVersion;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
+    use hotshot_types::{
+        constants::{Version01, STATIC_VER_0_1},
+        signature_key::BLSPubKey,
+        traits::{
+            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+            node_implementation::NodeType,
+            signature_key::SignatureKey,
+        },
+    };
+    use sequencer::{
+        persistence::no_storage::{self, NoStorage},
+        transaction::Transaction,
+        Payload,
+    };
+    use std::time::Duration;
+    use surf_disco::Client;
+
     #[async_std::test]
     async fn test_permissioned_builder() {
         setup_logging();
@@ -536,8 +563,7 @@ mod test {
         let state_signer = handles[node_id].1.take().unwrap();
 
         // builder api url
-        let hotshot_builder_api_url = hotshot_builder_url();
-
+        let hotshot_builder_api_url = hotshot_config.config.builder_url.clone();
         let builder_config = PermissionedBuilderTestConfig::init_permissioned_builder(
             hotshot_config,
             hotshot_context_handle,
@@ -547,7 +573,7 @@ mod test {
         )
         .await;
 
-        let builder_pub_key = builder_config.pub_key;
+        let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
         let builder_client = Client::<hotshot_builder_api::builder::Error, Version01>::new(
@@ -555,12 +581,30 @@ mod test {
         );
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
 
-        let parent_commitment = vid_commitment(&vec![], GENESIS_VID_NUM_STORAGE_NODES);
+        let seed = [207_u8; 32];
+
+        // Hotshot client Public, Private key
+        let (hotshot_client_pub_key, hotshot_client_private_key) =
+            BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
+
+        let parent_commitment = vid_commitment(&[], GENESIS_VID_NUM_STORAGE_NODES);
+
+        // sign the parent_commitment using the client_private_key
+        let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
+            &hotshot_client_private_key,
+            parent_commitment.as_ref(),
+        )
+        .expect("Claim block signing failed");
 
         // test getting available blocks
+        tracing::info!(
+                "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+            );
+        // sleep and wait for builder service to startup
+        async_sleep(Duration::from_millis(3000)).await;
         let available_block_info = match builder_client
             .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
-                "block_info/availableblocks/{parent_commitment}"
+                "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -576,10 +620,6 @@ mod test {
         };
 
         let builder_commitment = available_block_info[0].block_hash.clone();
-        let seed = [207_u8; 32];
-        // Builder Public, Private key
-        let (_hotshot_client_pub_key, hotshot_client_private_key) =
-            BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
 
         // sign the builder_commitment using the client_private_key
         let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
@@ -591,7 +631,7 @@ mod test {
         // Test claiming blocks
         let _available_block_data = match builder_client
             .get::<AvailableBlockData<SeqTypes>>(&format!(
-                "block_info/claimblock/{builder_commitment}/{encoded_signature}"
+                "block_info/claimblock/{builder_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -608,7 +648,7 @@ mod test {
         // Test claiming block header input
         let _available_block_header = match builder_client
             .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
-                "block_info/claimheaderinput/{builder_commitment}/{encoded_signature}"
+                "block_info/claimheaderinput/{builder_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -624,7 +664,7 @@ mod test {
 
         // test getting builder key
         match builder_client
-            .get::<BLSPubKey>("block_info/builderaddress")
+            .get::<FeeAccount>("block_info/builderaddress")
             .send()
             .await
         {

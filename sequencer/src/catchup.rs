@@ -4,13 +4,13 @@ use crate::{
 };
 use async_trait::async_trait;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
-use jf_primitives::merkle_tree::ForgetableMerkleTreeScheme;
+use jf_primitives::merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
 use serde::de::DeserializeOwned;
 use std::{sync::Arc, time::Duration};
 use surf_disco::Request;
 use tide_disco::error::ServerError;
 use url::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 // This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.
@@ -40,9 +40,13 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
-    ) -> Vec<AccountQueryData>;
+    ) -> anyhow::Result<Vec<AccountQueryData>>;
 
-    async fn remember_blocks_merkle_tree(&self, view: ViewNumber, mt: &mut BlockMerkleTree);
+    async fn remember_blocks_merkle_tree(
+        &self,
+        view: ViewNumber,
+        mt: &mut BlockMerkleTree,
+    ) -> anyhow::Result<()>;
 }
 
 #[derive(Debug, Clone, Default)]
@@ -103,12 +107,13 @@ impl<Ver: StaticVersionType> StatePeers<Ver> {
 
 #[async_trait]
 impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
+    #[tracing::instrument(skip(self))]
     async fn fetch_accounts(
         &self,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
-    ) -> Vec<AccountQueryData> {
+    ) -> anyhow::Result<Vec<AccountQueryData>> {
         let mut ret = vec![];
         for account in accounts {
             tracing::info!("Fetching account {account:?} for view {view:?}");
@@ -117,16 +122,21 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
                     .await,
             )
         }
-        ret
+        Ok(ret)
     }
 
-    async fn remember_blocks_merkle_tree(&self, view: ViewNumber, mt: &mut BlockMerkleTree) {
+    #[tracing::instrument(skip(self, mt), height = mt.num_leaves())]
+    async fn remember_blocks_merkle_tree(
+        &self,
+        view: ViewNumber,
+        mt: &mut BlockMerkleTree,
+    ) -> anyhow::Result<()> {
         if self.clients.is_empty() {
             panic!("No peers to fetch frontier from");
         }
         loop {
             for client in self.clients.iter() {
-                tracing::info!("Fetching frontier for view {view:?} from {}", client.url);
+                tracing::info!("Fetching frontier from {}", client.url);
                 match client
                     .get::<BlocksFrontier>(&format!("catchup/{}/blocks", view.get_u64()))
                     .send()
@@ -137,9 +147,12 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
                             tracing::warn!("Provided frontier is missing leaf element");
                             continue;
                         };
-                        match mt.remember(view.get_u64(), *elem, &frontier) {
-                            Ok(_) => return,
-                            Err(err) => tracing::warn!("Error verifying block proof: {}", err),
+                        match mt.remember(mt.num_leaves() - 1, *elem, &frontier) {
+                            Ok(_) => return Ok(()),
+                            Err(err) => {
+                                tracing::warn!("Error verifying block proof: {}", err);
+                                continue;
+                            }
                         }
                     }
                     Err(err) => {
@@ -160,13 +173,17 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
-    ) -> Vec<AccountQueryData> {
+    ) -> anyhow::Result<Vec<AccountQueryData>> {
         (**self)
             .fetch_accounts(view, fee_merkle_tree_root, accounts)
             .await
     }
 
-    async fn remember_blocks_merkle_tree(&self, view: ViewNumber, mt: &mut BlockMerkleTree) {
+    async fn remember_blocks_merkle_tree(
+        &self,
+        view: ViewNumber,
+        mt: &mut BlockMerkleTree,
+    ) -> anyhow::Result<()> {
         (**self).remember_blocks_merkle_tree(view, mt).await
     }
 }
@@ -178,13 +195,17 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         accounts: Vec<FeeAccount>,
-    ) -> Vec<AccountQueryData> {
+    ) -> anyhow::Result<Vec<AccountQueryData>> {
         (**self)
             .fetch_accounts(view, fee_merkle_tree_root, accounts)
             .await
     }
 
-    async fn remember_blocks_merkle_tree(&self, view: ViewNumber, mt: &mut BlockMerkleTree) {
+    async fn remember_blocks_merkle_tree(
+        &self,
+        view: ViewNumber,
+        mt: &mut BlockMerkleTree,
+    ) -> anyhow::Result<()> {
         (**self).remember_blocks_merkle_tree(view, mt).await
     }
 }
@@ -216,7 +237,7 @@ pub mod mock {
             view: ViewNumber,
             fee_merkle_tree_root: FeeMerkleCommitment,
             accounts: Vec<FeeAccount>,
-        ) -> Vec<AccountQueryData> {
+        ) -> anyhow::Result<Vec<AccountQueryData>> {
             tracing::info!("catchup: fetching account data for view {view:?}");
             let src = &self.state[&view].fee_merkle_tree;
             assert_eq!(src.commitment(), fee_merkle_tree_root);
@@ -225,14 +246,18 @@ pub mod mock {
                 .into_iter()
                 .map(|account| {
                     tracing::info!("catchup: fetching account {account:?} for view {view:?}");
-                    FeeAccountProof::prove(src, account.into())
+                    Ok(FeeAccountProof::prove(src, account.into())
                         .unwrap_or_else(|| panic!("Account {account:?} not in memory"))
-                        .into()
+                        .into())
                 })
-                .collect()
+                .collect::<anyhow::Result<_>>()
         }
 
-        async fn remember_blocks_merkle_tree(&self, view: ViewNumber, mt: &mut BlockMerkleTree) {
+        async fn remember_blocks_merkle_tree(
+            &self,
+            view: ViewNumber,
+            mt: &mut BlockMerkleTree,
+        ) -> anyhow::Result<()> {
             tracing::info!("catchup: fetching frontier for view {view:?}");
             let src = &self.state[&view].block_merkle_tree;
 
@@ -246,6 +271,8 @@ pub mod mock {
             let (elem, proof) = src.lookup(index).expect_ok().unwrap();
             mt.remember(index, elem, proof.clone())
                 .expect("Proof verifies");
+
+            Ok(())
         }
     }
 }

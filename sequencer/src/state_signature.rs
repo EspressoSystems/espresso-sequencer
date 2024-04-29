@@ -28,7 +28,7 @@ use jf_primitives::{
 use std::collections::{HashMap, VecDeque};
 use surf_disco::{Client, Url};
 use tide_disco::error::ServerError;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// A relay server that's collecting and serving the light client state signatures
 pub mod relay_server;

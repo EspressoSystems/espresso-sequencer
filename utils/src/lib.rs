@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use async_std::task::sleep;
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use ethers::{
     abi::Detokenize,
     contract::builders::ContractCall,
@@ -454,7 +454,7 @@ async fn wait_for_transaction_to_be_mined<P: JsonRpcClient>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use commit::RawCommitmentBuilder;
+    use committable::RawCommitmentBuilder;
 
     struct TestCommittable;
 

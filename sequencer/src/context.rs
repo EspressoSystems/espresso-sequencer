@@ -20,7 +20,7 @@ use hotshot_types::{
 };
 use std::fmt::Display;
 use url::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 use crate::{
     network, persistence::SequencerPersistence, state_signature::StateSigner,
@@ -54,17 +54,20 @@ pub struct SequencerContext<
     wait_for_orchestrator: Option<Arc<OrchestratorClient>>,
 
     /// Background tasks to shut down when the node is dropped.
-    tasks: Vec<(String, JoinHandle<()>)>,
+    tasks: TaskList,
 
     /// events streamer to stream hotshot events to external clients
     events_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
 
     detached: bool,
+
+    node_state: NodeState,
 }
 
 impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
     SequencerContext<N, P, Ver>
 {
+    #[tracing::instrument(skip_all, fields(node_id))]
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
         config: HotShotConfig<PubKey, ElectionConfig>,
@@ -77,8 +80,22 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         stake_table_capacity: usize,
         _: Ver,
     ) -> anyhow::Result<Self> {
+        let pub_key = config.my_own_validator_config.public_key;
+        tracing::info!(%pub_key, "initializing consensus");
+
+        // Stick our public key and node ID in `metrics` so it is easily accessible via the status
+        // API.
+        metrics
+            .create_label("pub_key".into())
+            .set(pub_key.to_string());
+        metrics
+            .create_gauge("node_index".into(), None)
+            .set(node_id as usize);
+
         // Load saved consensus state from storage.
-        let initializer = persistence.load_consensus_state(instance_state).await?;
+        let initializer = persistence
+            .load_consensus_state(instance_state.clone())
+            .await?;
 
         let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
             config.num_nodes_with_stake.get() as u64,
@@ -86,14 +103,14 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         );
         let membership = GeneralStaticCommittee::create_election(
             config.known_nodes_with_stake.clone(),
-            election_config,
+            election_config.clone(),
             0,
         );
         let memberships = Memberships {
             quorum_membership: membership.clone(),
             da_membership: membership.clone(),
             vid_membership: membership.clone(),
-            view_sync_membership: membership,
+            view_sync_membership: membership.clone(),
         };
 
         let stake_table_commit =
@@ -132,6 +149,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             node_id,
             state_signer,
             event_streamer,
+            instance_state,
         ))
     }
 
@@ -142,6 +160,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         node_index: u64,
         state_signer: StateSigner<Ver>,
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
+        node_state: NodeState,
     ) -> Self {
         let events = handle.get_event_stream();
 
@@ -149,10 +168,11 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             handle,
             node_index,
             state_signer: Arc::new(state_signer),
-            tasks: vec![],
+            tasks: Default::default(),
             detached: false,
             wait_for_orchestrator: None,
             events_streamer: event_streamer.clone(),
+            node_state,
         };
         ctx.spawn(
             "main event handler",
@@ -170,6 +190,12 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     /// Wait for a signal from the orchestrator before starting consensus.
     pub fn wait_for_orchestrator(mut self, client: OrchestratorClient) -> Self {
         self.wait_for_orchestrator = Some(Arc::new(client));
+        self
+    }
+
+    /// Add a list of tasks to the given context.
+    pub(crate) fn with_task_list(mut self, tasks: TaskList) -> Self {
+        self.tasks.extend(tasks);
         self
     }
 
@@ -198,6 +224,10 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         &self.handle
     }
 
+    pub fn node_state(&self) -> NodeState {
+        self.node_state.clone()
+    }
+
     /// Return a mutable reference to the underlying consensus handle.
     pub fn consensus_mut(&mut self) -> &mut Consensus<N, P> {
         &mut self.handle
@@ -206,11 +236,12 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     /// Start participating in consensus.
     pub async fn start_consensus(&self) {
         if let Some(orchestrator_client) = &self.wait_for_orchestrator {
-            tracing::info!("waiting for orchestrated start");
+            tracing::warn!("waiting for orchestrated start");
             orchestrator_client
                 .wait_for_all_nodes_ready(self.node_index)
                 .await;
         }
+        tracing::warn!("starting consensus");
         self.handle.hotshot.start_consensus().await;
     }
 
@@ -219,25 +250,14 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     /// When this context is dropped or [`shut_down`](Self::shut_down), background tasks will be
     /// cancelled in the reverse order that they were spawned.
     pub fn spawn(&mut self, name: impl Display, task: impl Future + Send + 'static) {
-        let name = name.to_string();
-        let task = {
-            let name = name.clone();
-            spawn(async move {
-                task.await;
-                tracing::info!(name, "background task exited");
-            })
-        };
-        self.tasks.push((name, task));
+        self.tasks.spawn(name, task);
     }
 
     /// Stop participating in consensus.
     pub async fn shut_down(&mut self) {
         tracing::info!("shutting down SequencerContext");
         self.handle.shut_down().await;
-        for (name, task) in self.tasks.drain(..).rev() {
-            tracing::info!(name, "cancelling background task");
-            task.cancel().await;
-        }
+        self.tasks.shut_down().await;
     }
 
     /// Wait for consensus to complete.
@@ -245,7 +265,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     /// Under normal conditions, this function will block forever, which is a convenient way of
     /// keeping the main thread from exiting as long as there are still active background tasks.
     pub async fn join(mut self) {
-        join_all(self.tasks.drain(..).map(|(_, task)| task)).await;
+        self.tasks.join().await;
     }
 
     /// Allow this node to continue participating in consensus even after it is dropped.
@@ -286,5 +306,49 @@ async fn handle_events<Ver: StaticVersionType>(
         if let Some(events_streamer) = events_streamer.as_ref() {
             events_streamer.write().await.handle_event(event).await;
         }
+    }
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct TaskList(Vec<(String, JoinHandle<()>)>);
+
+impl TaskList {
+    /// Spawn a background task attached to this [`TaskList`].
+    ///
+    /// When this [`TaskList`] is dropped or [`shut_down`](Self::shut_down), background tasks will
+    /// be cancelled in the reverse order that they were spawned.
+    pub fn spawn(&mut self, name: impl Display, task: impl Future + Send + 'static) {
+        let name = name.to_string();
+        let task = {
+            let name = name.clone();
+            spawn(async move {
+                task.await;
+                tracing::info!(name, "background task exited");
+            })
+        };
+        self.0.push((name, task));
+    }
+
+    /// Stop all background tasks.
+    pub async fn shut_down(&mut self) {
+        for (name, task) in self.0.drain(..).rev() {
+            tracing::info!(name, "cancelling background task");
+            task.cancel().await;
+        }
+    }
+
+    /// Wait for all background tasks to complete.
+    pub async fn join(&mut self) {
+        join_all(self.0.drain(..).map(|(_, task)| task)).await;
+    }
+
+    pub fn extend(&mut self, mut tasks: TaskList) {
+        self.0.extend(std::mem::take(&mut tasks.0));
+    }
+}
+
+impl Drop for TaskList {
+    fn drop(&mut self) {
+        async_std::task::block_on(self.shut_down());
     }
 }
