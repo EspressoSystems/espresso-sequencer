@@ -49,7 +49,8 @@ impl Payload {
         let ns_proof = {
             let ns_payload_range = self
                 .ns_table
-                .ns_payload_range(&ns_index, self.payload.len());
+                .ns_payload_range(&ns_index, self.payload.len())
+                .as_range();
             let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
             vid.payload_proof(&self.payload, ns_payload_range).ok()? // error: failure to make a payload proof
         };
@@ -81,10 +82,12 @@ impl NsProof {
                     .payload_verify(
                         Statement {
                             payload_subslice: pf.ns_payload.as_byte_slice(),
-                            range: ns_table.ns_payload_range(
-                                &ns_index,
-                                VidSchemeType::get_payload_byte_len(common),
-                            ),
+                            range: ns_table
+                                .ns_payload_range(
+                                    &ns_index,
+                                    VidSchemeType::get_payload_byte_len(common),
+                                )
+                                .as_range(),
                             commit,
                             common,
                         },

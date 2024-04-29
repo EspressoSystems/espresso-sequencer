@@ -5,7 +5,7 @@ use super::payload_bytes::{
 use crate::NamespaceId;
 use ns_iter::{NsIndex, NsIter};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, ops::Range};
+use std::collections::HashSet;
 
 // TODO do these all need to be pub?
 pub mod ns_payload;
@@ -47,20 +47,6 @@ impl NsTable {
     /// Search the namespace table for the ns_index belonging to `ns_id`.
     pub fn find_ns_id(&self, ns_id: &NamespaceId) -> Option<NsIndex> {
         self.iter().find(|index| self.read_ns_id(index) == *ns_id)
-    }
-
-    /// Read subslice range for the `index`th namespace from the namespace
-    /// table.
-    ///
-    /// Returned range guaranteed to satisfy `start <= end <= payload_byte_len`.
-    ///
-    /// TODO remove `payload_byte_len` arg and do not check `end`?
-    ///
-    /// Panics if `index >= self.num_nss()`.
-    pub fn ns_payload_range(&self, index: &NsIndex, payload_byte_len: usize) -> Range<usize> {
-        let end = self.read_ns_offset(index).min(payload_byte_len);
-        let start = self.read_ns_offset_prev(index).unwrap_or(0).min(end);
-        start..end
     }
 
     pub fn iter(&self) -> impl Iterator<Item = <NsIter as Iterator>::Item> + '_ {

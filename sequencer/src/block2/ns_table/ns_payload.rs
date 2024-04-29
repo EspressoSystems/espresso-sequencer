@@ -132,13 +132,6 @@ impl NsPayload {
     }
 }
 
-impl Payload {
-    /// TODO panics if index out of bounds
-    pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
-        NsPayload::new(&self.payload[self.ns_table.ns_payload_range(index, self.payload.len())])
-    }
-}
-
 /// Crazy boilerplate code to make it so that [`NsPayloadOwned`] is to
 /// [`NsPayload`] as [`Vec<T>`] is to `[T]`. See [How can I create newtypes for
 /// an unsized type and its owned counterpart (like `str` and `String`) in safe
@@ -278,6 +271,82 @@ pub(crate) mod tx_iter {
 
         fn next(&mut self) -> Option<Self::Item> {
             self.0.next().map(|i| TxIndex(num_txs_as_bytes(i)))
+        }
+    }
+}
+
+// TODO move this module to a separate file?
+pub use ns_payload_range::NsPayloadRange;
+mod ns_payload_range {
+    use super::{tx_iter::TxIndex, NsIndex, NsPayload, Payload};
+    use crate::block2::{
+        ns_table::NsTable,
+        payload_bytes::{
+            ns_offset_as_bytes, ns_offset_from_bytes, NS_OFFSET_BYTE_LEN, NUM_TXS_BYTE_LEN,
+        },
+    };
+    use serde::{Deserialize, Serialize};
+    use std::ops::Range;
+
+    // TODO make NsPayloadRange a Range<usize> instead? YES Then we need to manually impl serde
+    #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+    pub struct NsPayloadRange(pub(crate) Range<[u8; NS_OFFSET_BYTE_LEN]>); // TODO temporary pub(crate) for tx_proof.rs
+
+    impl NsPayloadRange {
+        // TODO newtype wrapper over return type?
+        pub fn num_txs_range(&self) -> Range<usize> {
+            let start = ns_offset_from_bytes(&self.0.start);
+            Range {
+                start,
+                end: start
+                    .saturating_add(NUM_TXS_BYTE_LEN)
+                    .min(ns_offset_from_bytes(&self.0.end)),
+            }
+        }
+
+        /// TODO explain: compute tx table entries range, translated by this namespace's start index
+        pub fn tx_table_entries_range(&self, index: &TxIndex) -> Range<usize> {
+            let result = index.tx_table_entries_range();
+            Range {
+                start: result
+                    .start
+                    .saturating_add(ns_offset_from_bytes(&self.0.start)),
+                end: result
+                    .end
+                    .saturating_add(ns_offset_from_bytes(&self.0.start)),
+            }
+        }
+
+        pub fn as_range(&self) -> Range<usize> {
+            ns_offset_from_bytes(&self.0.start)..ns_offset_from_bytes(&self.0.end)
+        }
+    }
+
+    impl NsTable {
+        /// Read subslice range for the `index`th namespace from the namespace
+        /// table.
+        ///
+        /// Returned range guaranteed to satisfy `start <= end <= payload_byte_len`.
+        ///
+        /// TODO remove `payload_byte_len` arg and do not check `end`?
+        ///
+        /// Panics if `index >= self.num_nss()`.
+        pub fn ns_payload_range(&self, index: &NsIndex, payload_byte_len: usize) -> NsPayloadRange {
+            let end = self.read_ns_offset(index).min(payload_byte_len);
+            let start = self.read_ns_offset_prev(index).unwrap_or(0).min(end);
+            NsPayloadRange(ns_offset_as_bytes(start)..ns_offset_as_bytes(end))
+        }
+    }
+
+    impl Payload {
+        /// TODO panics if index out of bounds
+        pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
+            // TODO make NsPayloadRange a Range<usize> instead?
+            let range = self
+                .ns_table
+                .ns_payload_range(index, self.payload.len())
+                .as_range();
+            NsPayload::new(&self.payload[range]) // TODO delete new() method?
         }
     }
 }

@@ -1,9 +1,10 @@
+use super::ns_payload::{tx_iter::TxIndex, NsPayloadRange};
 use crate::{
     block2::{
         iter::Index,
         payload_bytes::{
-            ns_offset_as_bytes, ns_offset_from_bytes, num_txs_from_bytes, tx_offset_as_bytes,
-            tx_offset_from_bytes, NS_OFFSET_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
+            ns_offset_from_bytes, num_txs_from_bytes, tx_offset_as_bytes, tx_offset_from_bytes,
+            NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
         },
         Payload,
     },
@@ -16,9 +17,6 @@ use jf_primitives::vid::{
     VidScheme,
 };
 use serde::{Deserialize, Serialize};
-use std::ops::Range;
-
-use super::ns_payload::tx_iter::TxIndex;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxProof {
@@ -30,8 +28,7 @@ pub struct TxProof {
     // a separate arg, and replace ns_range_x here with ns_index into the ns
     // table. I think we can trust them because payload proofs are tied to a
     // specific location
-    ns_range_start: [u8; NS_OFFSET_BYTE_LEN], // serialized usize
-    ns_range_end: [u8; NS_OFFSET_BYTE_LEN],   // serialized usize
+    ns_payload_range: NsPayloadRange,
 
     // TODO make [u8; XXX] a newtype at a lower level of code so that XXX is not
     // exposed here.
@@ -76,14 +73,8 @@ impl Payload {
         // Read the tx table len from this namespace's tx table and compute a
         // proof of correctness.
         let (payload_num_txs, payload_proof_num_txs) = {
-            // TODO make range_num_txs a method (of NsPayload)?
-            let range_num_txs = Range {
-                start: ns_payload_range.start,
-                end: ns_payload_range
-                    .start
-                    .saturating_add(NUM_TXS_BYTE_LEN)
-                    .min(ns_payload_range.end),
-            };
+            let range_num_txs = ns_payload_range.num_txs_range();
+
             (
                 // TODO make read_num_txs a method (of NsPayload)? Careful not to correct the original bytes!
                 // TODO should be safe to read NUM_TXS_BYTE_LEN from payload; we would have exited by now otherwise.
@@ -94,18 +85,13 @@ impl Payload {
 
         // Read the tx table entries for this tx and compute a proof of
         // correctness.
+        // TODO read_tx_offset converts bytes->usize, then we convert back to bytes
         let payload_tx_table_entry_prev = ns_payload
             .read_tx_offset_prev(&index.tx_index)
             .map(tx_offset_as_bytes);
         let payload_tx_table_entry = tx_offset_as_bytes(ns_payload.read_tx_offset(&index.tx_index));
         let payload_proof_tx_table_entries = {
-            let range = index.tx_index.tx_table_entries_range();
-
-            // TODO add a method Payload::tx_table_entries_range(index: Index)
-            // that automatically translates TxIndex::tx_table_entries_range by
-            // the namespace offset?
-            let range = range.start.saturating_add(ns_payload_range.start)
-                ..range.end.saturating_add(ns_payload_range.start);
+            let range = ns_payload_range.tx_table_entries_range(&index.tx_index);
 
             // tracing::info!(
             //     "prove: (ns,tx) ({:?},{:?}), tx_table_entries_range {:?}, content {:?}",
@@ -122,11 +108,17 @@ impl Payload {
         let payload_proof_tx = {
             let range = ns_payload.tx_payload_range(&index.tx_index);
 
+            // TODO IDEA: NsPayload[Owned] should also come with a NsPayloadRange
+
             // TODO add a method Payload::tx_payload_range(index: Index)
             // that automatically translates NsPayload::tx_payload_range by
             // the namespace offset?
-            let range = range.start.saturating_add(ns_payload_range.start)
-                ..range.end.saturating_add(ns_payload_range.start);
+            let range = range
+                .start
+                .saturating_add(ns_offset_from_bytes(&ns_payload_range.0.start))
+                ..range
+                    .end
+                    .saturating_add(ns_offset_from_bytes(&ns_payload_range.0.start));
 
             tracing::info!(
                 "prove: (ns,tx) ({:?},{:?}), tx_payload_range {:?}, content {:?}",
@@ -146,8 +138,7 @@ impl Payload {
         Some((
             self.transaction(index)?,
             TxProof {
-                ns_range_start: ns_offset_as_bytes(ns_payload_range.start),
-                ns_range_end: ns_offset_as_bytes(ns_payload_range.end),
+                ns_payload_range,
                 payload_num_txs,
                 payload_proof_num_txs,
                 tx_index: index.tx_index.clone(),
@@ -176,21 +167,13 @@ impl TxProof {
         // newtype T for num_txs and make a method T::is_valid(index: TxIndex)
         // to check whether index is in bounds.
 
-        // TODO check ns_range: start <= end <= payload byte len
-        let ns_payload_range =
-            ns_offset_from_bytes(&self.ns_range_start)..ns_offset_from_bytes(&self.ns_range_end);
+        // TODO check ns_payload_range: start <= end <= payload byte len
 
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
 
         // Verify proof for tx table len
         {
-            let num_txs_range = Range {
-                start: ns_payload_range.start,
-                end: ns_payload_range
-                    .start
-                    .saturating_add(NUM_TXS_BYTE_LEN)
-                    .min(ns_payload_range.end),
-            };
+            let num_txs_range = self.ns_payload_range.num_txs_range();
 
             if vid
                 .payload_verify(
@@ -211,19 +194,7 @@ impl TxProof {
 
         // Verify proof for tx table entries
         {
-            let range = {
-                let range = self.tx_index.tx_table_entries_range();
-
-                // TODO newtype NsPayloadRange wrapping
-                // self.ns_range_start..self.ns_range_end with a method
-                // tx_table_entries_range() that automatically translates the
-                // range by namespace offset? Such a method could be used to
-                // impl the corresponding new method
-                // `Payload::tx_table_entries_range` proposed for use in
-                // transaction_with_proof.
-                range.start.saturating_add(ns_payload_range.start)
-                    ..range.end.saturating_add(ns_payload_range.start)
-            };
+            let range = self.ns_payload_range.tx_table_entries_range(&self.tx_index);
 
             // concatenate the two table entry payloads
             let payload_subslice = &{
@@ -266,11 +237,11 @@ impl TxProof {
                 let tx_payloads_start = num_txs_from_bytes(&self.payload_num_txs)
                     .saturating_mul(TX_OFFSET_BYTE_LEN)
                     .saturating_add(NUM_TXS_BYTE_LEN) // tx_table_byte_len plus...
-                    .saturating_add(ns_payload_range.start); // ...namespace start
+                    .saturating_add(ns_offset_from_bytes(&self.ns_payload_range.0.start)); // ...namespace start
 
                 let end = tx_offset_from_bytes(&self.payload_tx_table_entry)
                     .saturating_add(tx_payloads_start)
-                    .min(ns_payload_range.end);
+                    .min(ns_offset_from_bytes(&self.ns_payload_range.0.end));
                 let start = tx_offset_from_bytes(
                     &self
                         .payload_tx_table_entry_prev
