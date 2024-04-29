@@ -6,6 +6,7 @@ use cdn_marshal::{Config, Marshal};
 use clap::Parser;
 use hotshot::traits::implementations::ProductionDef;
 use hotshot_example_types::node_types::TestTypes;
+use tracing_subscriber::EnvFilter;
 
 // TODO: forall, add logging where we need it
 
@@ -45,9 +46,14 @@ async fn main() -> Result<()> {
 
     // Initialize tracing
     if std::env::var("RUST_LOG_FORMAT") == Ok("json".to_string()) {
-        tracing_subscriber::fmt().json().init();
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .json()
+            .init();
     } else {
-        tracing_subscriber::fmt().init();
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .init();
     }
 
     // Create a new `Config`

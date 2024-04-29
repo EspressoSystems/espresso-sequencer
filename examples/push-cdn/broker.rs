@@ -7,6 +7,7 @@ use hotshot::traits::implementations::{KeyPair, ProductionDef, WrappedSignatureK
 use hotshot_example_types::node_types::TestTypes;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use sha2::Digest;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -62,9 +63,14 @@ async fn main() -> Result<()> {
 
     // Initialize tracing
     if std::env::var("RUST_LOG_FORMAT") == Ok("json".to_string()) {
-        tracing_subscriber::fmt().json().init();
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .json()
+            .init();
     } else {
-        tracing_subscriber::fmt().init();
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::from_default_env())
+            .init();
     }
 
     // Generate the broker key from the supplied seed
