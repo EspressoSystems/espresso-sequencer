@@ -518,7 +518,7 @@ pub mod testing {
                 num_nodes_with_stake: num_nodes.try_into().unwrap(),
                 num_nodes_without_stake: 0,
                 known_da_nodes: known_nodes_with_stake.clone(),
-                known_nodes_with_stake,
+                known_nodes_with_stake: known_nodes_with_stake.clone(),
                 known_nodes_without_stake: vec![],
                 next_view_timeout: Duration::from_secs(5).as_millis() as u64,
                 timeout_ratio: (10, 11),
@@ -536,6 +536,8 @@ pub mod testing {
                     pick_unused_port().unwrap()
                 ))
                 .unwrap(),
+                builder_timeout: Duration::from_secs(1),
+                start_threshold: (known_nodes_with_stake.clone().len() as u64, known_nodes_with_stake.clone().len() as u64),
             };
 
             Self {

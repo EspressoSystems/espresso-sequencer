@@ -210,18 +210,14 @@ pub mod testing {
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
                 num_nodes_without_stake,
-                min_transactions: 1,
-                max_transactions: 10000.try_into().unwrap(),
                 known_da_nodes: known_nodes_with_stake.clone(),
-                known_nodes_with_stake,
+                known_nodes_with_stake: known_nodes_with_stake.clone(),
                 known_nodes_without_stake: known_nodes_without_stake_pub_keys,
                 next_view_timeout: Duration::from_secs(5).as_millis() as u64,
                 timeout_ratio: (10, 11),
                 round_start_delay: Duration::from_millis(1).as_millis() as u64,
                 start_delay: Duration::from_millis(1).as_millis() as u64,
                 num_bootstrap: 1usize,
-                propose_min_round_time: Duration::from_secs(0),
-                propose_max_round_time: Duration::from_secs(1),
                 da_staked_committee_size: num_nodes_with_stake,
                 da_non_staked_committee_size: num_nodes_without_stake,
                 my_own_validator_config: Default::default(),
@@ -229,6 +225,11 @@ pub mod testing {
                 view_sync_timeout: Duration::from_secs(5),
                 fixed_leader_for_gpuvid: 0,
                 builder_url,
+                builder_timeout: Duration::from_secs(1),
+                start_threshold: (
+                    known_nodes_with_stake.clone().len() as u64,
+                    known_nodes_with_stake.clone().len() as u64,
+                ),
             };
 
             Self {
@@ -557,6 +558,8 @@ pub mod testing {
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
                 15,
+                Duration::from_millis(50),
+                0,
             )
             .await
             .unwrap();
@@ -618,6 +621,8 @@ pub mod testing {
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
                 15,
+                Duration::from_millis(50),
+                0,
             )
             .await
             .unwrap();
@@ -698,7 +703,9 @@ mod test {
         let genesis_state = NodeState::mock();
         let mut parent = {
             // TODO refactor repeated code from other tests
-            let (genesis_payload, genesis_ns_table) = Payload::from_transactions([], genesis_state);
+            let (genesis_payload, genesis_ns_table) =
+                Payload::from_transactions([], Arc::new(genesis_state.clone()))
+                    .expect("unable to create genesis payload");
             let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment

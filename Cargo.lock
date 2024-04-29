@@ -1345,7 +1345,7 @@ dependencies = [
  "hotshot",
  "hotshot-builder-api",
  "hotshot-builder-core",
- "hotshot-events-service 0.1.15 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=hg/update_hotshot_0.5.45)",
+ "hotshot-events-service",
  "hotshot-orchestrator",
  "hotshot-stake-table",
  "hotshot-state-prover",
@@ -4117,7 +4117,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service 0.1.15 (git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.15)",
+ "hotshot-events-service",
  "hotshot-types",
  "serde",
  "sha2 0.10.8",
@@ -4156,31 +4156,6 @@ dependencies = [
 name = "hotshot-events-service"
 version = "0.1.15"
 source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.15#9f294559199974baa44769516c655f66d4696c27"
-dependencies = [
- "async-broadcast",
- "async-compatibility-layer",
- "async-lock 2.8.0",
- "async-std",
- "async-trait",
- "clap",
- "derivative",
- "derive_more",
- "either",
- "futures",
- "hotshot-types",
- "serde",
- "snafu 0.8.2",
- "tagged-base64 0.4.0",
- "tide-disco",
- "toml",
- "tracing",
- "vbs",
-]
-
-[[package]]
-name = "hotshot-events-service"
-version = "0.1.15"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=hg/update_hotshot_0.5.45#e85f0834333f9255802fc199e06d482e81cc7b05"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -8607,7 +8582,7 @@ dependencies = [
  "ethers-contract-derive",
  "futures",
  "hotshot",
- "hotshot-events-service 0.1.15 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=hg/update_hotshot_0.5.45)",
+ "hotshot-events-service",
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",

@@ -81,6 +81,8 @@ impl BuilderConfig {
         hotshot_builder_apis_url: Url,
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
+        maximise_txns_count_timeout_duration: Duration,
+        base_fee: u64,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
@@ -102,7 +104,8 @@ impl BuilderConfig {
         let (res_sender, res_receiver) = unbounded();
 
         let (genesis_payload, genesis_ns_table) =
-            Payload::from_transactions([], instance_state).unwrap();
+            Payload::from_transactions([], Arc::new(instance_state.clone()))
+                .expect("genesis payload construction failed");
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
         let vid_commitment = {
             // TODO we should not need to collect payload bytes just to compute vid_commitment
@@ -117,9 +120,10 @@ impl BuilderConfig {
             req_sender,
             res_receiver,
             tx_sender.clone(),
-            instance_state.clone(),
             vid_commitment,
             bootstrapped_view,
+            bootstrapped_view,
+            buffered_view_num_count as u64,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
@@ -142,7 +146,10 @@ impl BuilderConfig {
             res_sender,
             NonZeroUsize::new(1).unwrap(),
             bootstrapped_view,
-            buffered_view_num_count,
+            buffered_view_num_count as u64,
+            maximise_txns_count_timeout_duration,
+            base_fee,
+            Arc::new(instance_state),
         );
 
         // spawn the builder event loop
@@ -190,7 +197,6 @@ impl BuilderConfig {
                 qc_sender,
                 decide_sender,
                 subscribed_events,
-                instance_state,
             )
             .await;
         });

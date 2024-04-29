@@ -142,6 +142,8 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     max_api_timeout_duration: Duration,
     buffered_view_num_count: usize,
     is_da: bool,
+    maximise_txns_count_timeout_duration: Duration,
+    base_fee: u64,
 ) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -284,6 +286,8 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         hotshot_builder_api_url,
         max_api_timeout_duration,
         buffered_view_num_count,
+        maximise_txns_count_timeout_duration,
+        base_fee,
     )
     .await?;
 
@@ -378,6 +382,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         hotshot_builder_api_url: Url,
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
+        maximise_txns_count_timeout_duration: Duration,
+        base_fee: u64,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
@@ -397,7 +403,9 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
         // builder api response channel
         let (res_sender, res_receiver) = unbounded();
-        let (genesis_payload, genesis_ns_table) = Payload::from_transactions([]);
+        let (genesis_payload, genesis_ns_table) =
+            Payload::from_transactions([], Arc::new(instance_state.clone()))
+                .expect("genesis payload construction failed");
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
         let vid_commitment = {
             // TODO we should not need to collect payload bytes just to compute vid_commitment
@@ -412,9 +420,10 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             req_sender,
             res_receiver,
             tx_sender.clone(),
-            instance_state.clone(),
             vid_commitment,
             bootstrapped_view,
+            bootstrapped_view,
+            buffered_view_num_count as u64,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
@@ -437,7 +446,10 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             res_sender,
             NonZeroUsize::new(1).unwrap(),
             bootstrapped_view,
-            buffered_view_num_count,
+            buffered_view_num_count as u64,
+            maximise_txns_count_timeout_duration,
+            base_fee,
+            Arc::new(instance_state),
         );
 
         let hotshot_handle_clone = hotshot_handle.clone();
@@ -449,7 +461,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 qc_sender,
                 decide_sender,
                 hotshot_handle,
-                instance_state,
             )
             .await;
         });

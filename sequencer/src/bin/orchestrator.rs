@@ -129,6 +129,15 @@ struct Args {
     /// HotShot builder URL
     #[arg(long, env = "ESPRESSO_ORCHESTRATOR_BUILDER_URL")]
     builder_url: Url,
+
+    /// The delay a builder timeout
+    #[arg(
+        long,
+        env = "ESPRESSO_ORCHESTRATOR_BUILDER_TIMEOUT",
+        default_value = "1ms",
+        value_parser = parse_duration
+    )]
+    builder_timeout: Duration,
 }
 
 #[derive(Debug, Snafu, From)]
@@ -217,6 +226,7 @@ async fn main() {
         online_time: 10,
         num_txn_per_round: 0,
         server_mode: false,
+        builder_timeout: args.builder_timeout,
     };
 
     config.config.num_nodes_with_stake = args.num_nodes;
@@ -224,19 +234,15 @@ async fn main() {
     config.config.known_nodes_with_stake = vec![Default::default(); args.num_nodes.get()];
     config.config.known_da_nodes = Vec::new();
     config.config.known_nodes_without_stake = vec![];
-    config.config.max_transactions = args.max_transactions;
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;
     config.libp2p_config = Some(libp2p_config);
     config.config.timeout_ratio = args.timeout_ratio.into();
     config.config.round_start_delay = args.round_start_delay.as_millis() as u64;
     config.config.start_delay = args.start_delay.as_millis() as u64;
-    config.config.propose_min_round_time = args.min_propose_time;
-    config.config.propose_max_round_time = args.max_propose_time;
     config.config.da_staked_committee_size = args.num_nodes.get();
     config.config.da_non_staked_committee_size = 0;
-    config.config.min_transactions = args.min_transactions;
     config.config.builder_url = args.builder_url;
-
+    config.config.builder_timeout = args.builder_timeout;
     run_orchestrator(
         config,
         format!("http://0.0.0.0:{}", args.port).parse().unwrap(),
