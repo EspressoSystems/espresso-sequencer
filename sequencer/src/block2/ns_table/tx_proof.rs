@@ -106,19 +106,11 @@ impl Payload {
 
         // Read the tx payload and compute a proof of correctness.
         let payload_proof_tx = {
-            let range = ns_payload.tx_payload_range(&index.tx_index);
+            // TODO sucks that I need ns_payload AND ns_payload_range here.
+            // should be able to get this with less...
+            let range = ns_payload.tx_payload_range(&index.tx_index, &ns_payload_range);
 
             // TODO IDEA: NsPayload[Owned] should also come with a NsPayloadRange
-
-            // TODO add a method Payload::tx_payload_range(index: Index)
-            // that automatically translates NsPayload::tx_payload_range by
-            // the namespace offset?
-            let range = range
-                .start
-                .saturating_add(ns_offset_from_bytes(&ns_payload_range.0.start))
-                ..range
-                    .end
-                    .saturating_add(ns_offset_from_bytes(&ns_payload_range.0.start));
 
             tracing::info!(
                 "prove: (ns,tx) ({:?},{:?}), tx_payload_range {:?}, content {:?}",

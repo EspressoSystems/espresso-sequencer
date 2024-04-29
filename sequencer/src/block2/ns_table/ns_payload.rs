@@ -96,12 +96,12 @@ impl NsPayload {
     }
 
     /// Read subslice range for the `index`th tx from the tx
-    /// table.
+    /// table, relative to the beginning of this namespace's payload.
     ///
     /// Returned range guaranteed to satisfy `start <= end <= namespace_byte_len`.
     ///
     /// Panics if `index >= self.num_txs()`.
-    pub fn tx_payload_range(&self, index: &TxIndex) -> Range<usize> {
+    fn tx_payload_range_relative(&self, index: &TxIndex) -> Range<usize> {
         let tx_table_byte_len = self.tx_table_byte_len();
         let end = self
             .read_tx_offset(index)
@@ -124,11 +124,14 @@ impl NsPayload {
     /// TODO store `ns_id` in `NsPayload` struct?
     pub fn export_all_txs(&self, ns_id: &NamespaceId) -> Vec<Transaction> {
         TxIter::new(self)
-            .map(|i| Transaction::new(*ns_id, self.0[self.tx_payload_range(&i)].to_vec()))
+            .map(|i| Transaction::new(*ns_id, self.0[self.tx_payload_range_relative(&i)].to_vec()))
             .collect()
     }
     pub fn export_tx(&self, ns_id: &NamespaceId, index: &TxIndex) -> Transaction {
-        Transaction::new(*ns_id, self.0[self.tx_payload_range(index)].to_vec())
+        Transaction::new(
+            *ns_id,
+            self.0[self.tx_payload_range_relative(index)].to_vec(),
+        )
     }
 }
 
@@ -282,7 +285,11 @@ mod ns_payload_range {
     use crate::block2::{
         ns_table::NsTable,
         payload_bytes::{
-            ns_offset_as_bytes, ns_offset_from_bytes, NS_OFFSET_BYTE_LEN, NUM_TXS_BYTE_LEN,
+            ns_offset_as_bytes,
+            ns_offset_from_bytes,
+            NS_OFFSET_BYTE_LEN,
+            NUM_TXS_BYTE_LEN,
+            // TX_OFFSET_BYTE_LEN,
         },
     };
     use serde::{Deserialize, Serialize};
@@ -304,6 +311,18 @@ mod ns_payload_range {
             }
         }
 
+        /// TODO fix: Byte length of this namespace's tx table.
+        ///
+        /// Guaranteed to be no larger than this namespace's payload byte length.
+        ///
+        /// TODO num_txs arg should be a newtype for [u8; NUM_TXS_BYTE_LEN]
+        // pub fn tx_table_byte_len(&self, num_txs: usize) -> usize {
+        //     num_txs
+        //         .saturating_mul(TX_OFFSET_BYTE_LEN)
+        //         .saturating_add(NUM_TXS_BYTE_LEN)
+        //         .min(self.0.len())
+        // }
+
         /// TODO explain: compute tx table entries range, translated by this namespace's start index
         pub fn tx_table_entries_range(&self, index: &TxIndex) -> Range<usize> {
             let result = index.tx_table_entries_range();
@@ -319,6 +338,30 @@ mod ns_payload_range {
 
         pub fn as_range(&self) -> Range<usize> {
             ns_offset_from_bytes(&self.0.start)..ns_offset_from_bytes(&self.0.end)
+        }
+    }
+
+    impl NsPayload {
+        /// TODO make ns_payload_range a field of NsPayload
+        ///
+        /// Read subslice range for the `index`th tx from the tx
+        /// table, translated by [`ns_payload_range`].
+        ///
+        /// Returned range guaranteed to satisfy `start <= end <= namespace_byte_len`.
+        ///
+        /// Panics if `index >= self.num_txs()`.
+        pub fn tx_payload_range(
+            &self,
+            index: &TxIndex,
+            ns_payload_range: &NsPayloadRange,
+        ) -> Range<usize> {
+            let result = self.tx_payload_range_relative(index);
+            result
+                .start
+                .saturating_add(ns_offset_from_bytes(&ns_payload_range.0.start))
+                ..result
+                    .end
+                    .saturating_add(ns_offset_from_bytes(&ns_payload_range.0.start))
         }
     }
 
