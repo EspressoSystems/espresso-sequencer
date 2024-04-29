@@ -173,7 +173,9 @@ impl Payload {
                 ..range.end.saturating_add(ns_payload_range.start);
 
             tracing::info!(
-                "prove: tx_table_entries_range {:?}, content {:?}",
+                "prove: (ns,tx) ({:?},{:?}), tx_table_entries_range {:?}, content {:?}",
+                index.ns_index,
+                index.tx_index,
                 range,
                 &self.payload[range.clone()]
             );
@@ -278,7 +280,8 @@ impl TxProof {
             };
 
             tracing::info!(
-                "verify: tx_table_entries_range {:?}, content {:?}",
+                "verify: tx_index {:?}, tx_table_entries_range {:?}, content {:?}",
+                self.tx_index,
                 range,
                 payload_subslice
             );
@@ -291,7 +294,7 @@ impl TxProof {
                         commit,
                         common,
                     },
-                    &self.payload_proof_num_txs,
+                    &self.payload_proof_tx_table_entries,
                 )
                 .ok()?
                 .is_err()
