@@ -2,8 +2,8 @@ use crate::{
     block2::{
         iter::Index,
         payload_bytes::{
-            ns_offset_as_bytes, ns_offset_from_bytes, tx_offset_as_bytes, NS_OFFSET_BYTE_LEN,
-            NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
+            ns_offset_as_bytes, ns_offset_from_bytes, num_txs_from_bytes, tx_offset_as_bytes,
+            tx_offset_from_bytes, NS_OFFSET_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
         },
         Payload,
     },
@@ -42,7 +42,7 @@ pub struct TxProof {
     payload_tx_table_entry_prev: Option<[u8; TX_OFFSET_BYTE_LEN]>, // serialized usize, `None` for the 0th tx
     payload_tx_table_entry: [u8; TX_OFFSET_BYTE_LEN],              // serialized usize
     payload_proof_tx_table_entries: SmallRangeProofType,
-    // payload_proof_tx: Option<SmallRangeProofType>, // `None` if the tx has zero length
+    payload_proof_tx: Option<SmallRangeProofType>, // `None` if the tx has zero length
 }
 
 impl Payload {
@@ -72,71 +72,6 @@ impl Payload {
             .ns_payload_range(&index.ns_index, self.payload.len());
 
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
-
-        // BEGIN WIP
-        // range of contiguous bytes in this namespace's tx table
-        // TODO refactor as a function of `index`?
-        // let tx_table_range = {
-        //     let start = if index.tx_index.index == 0 {
-        //         // Special case: the desired range includes only one entry from
-        //         // the tx table: the first entry. This entry starts immediately
-        //         // following the bytes that encode the tx table length.
-        //         NUM_NSS_BYTE_LEN
-        //     } else {
-        //         // the desired range starts at the beginning of the previous
-        //         // transaction's tx table entry
-        //         (index.tx_index.index - 1)
-        //             .saturating_mul(TX_OFFSET_BYTE_LEN)
-        //             .saturating_add(NUM_TXS_BYTE_LEN)
-        //     };
-        //     // The desired range ends at the end of this transaction's tx table
-        //     // entry
-        //     let end = index
-        //         .tx_index
-        //         .index
-        //         .saturating_add(1)
-        //         .saturating_mul(TX_OFFSET_BYTE_LEN)
-        //         .saturating_add(NUM_TXS_BYTE_LEN);
-        //     Range {
-        //         start: start.saturating_add(index.ns_index.ns_range.start),
-        //         end: end.saturating_add(index.ns_index.ns_range.start),
-        //     }
-        // };
-
-        // let payload_tx_range_start: Option<[u8; TX_OFFSET_BYTE_LEN]> = if index.tx_index.index == 0
-        // {
-        //     None
-        // } else {
-        //     Some(
-        //         self.payload
-        //             .get(
-        //                 tx_table_range.start
-        //                     ..tx_table_range.start.saturating_add(TX_OFFSET_BYTE_LEN),
-        //             )?
-        //             .try_into()
-        //             .unwrap(), // panic is impossible
-        //     )
-        // };
-
-        // let payload_tx_range_end: [u8; TX_OFFSET_BYTE_LEN] = self
-        //     .payload
-        //     .get(tx_table_range.end.saturating_sub(TX_OFFSET_BYTE_LEN)..tx_table_range.end)?
-        //     .try_into()
-        //     .unwrap(); // panic is impossible
-
-        // let tx_range = Range {
-        //     start: index
-        //         .tx_index
-        //         .range
-        //         .start
-        //         .saturating_add(index.ns_index.ns_range.start),
-        //     end: index
-        //         .tx_index
-        //         .range
-        //         .end
-        //         .saturating_add(index.ns_index.ns_range.start),
-        // };
-        // END WIP
 
         // Read the tx table len from this namespace's tx table and compute a
         // proof of correctness.
@@ -172,15 +107,40 @@ impl Payload {
             let range = range.start.saturating_add(ns_payload_range.start)
                 ..range.end.saturating_add(ns_payload_range.start);
 
+            // tracing::info!(
+            //     "prove: (ns,tx) ({:?},{:?}), tx_table_entries_range {:?}, content {:?}",
+            //     index.ns_index,
+            //     index.tx_index,
+            //     range,
+            //     &self.payload[range.clone()]
+            // );
+
+            vid.payload_proof(&self.payload, range).ok()?
+        };
+
+        // Read the tx payload and compute a proof of correctness.
+        let payload_proof_tx = {
+            let range = ns_payload.tx_payload_range(&index.tx_index);
+
+            // TODO add a method Payload::tx_payload_range(index: Index)
+            // that automatically translates NsPayload::tx_payload_range by
+            // the namespace offset?
+            let range = range.start.saturating_add(ns_payload_range.start)
+                ..range.end.saturating_add(ns_payload_range.start);
+
             tracing::info!(
-                "prove: (ns,tx) ({:?},{:?}), tx_table_entries_range {:?}, content {:?}",
+                "prove: (ns,tx) ({:?},{:?}), tx_payload_range {:?}, content {:?}",
                 index.ns_index,
                 index.tx_index,
                 range,
                 &self.payload[range.clone()]
             );
 
-            vid.payload_proof(&self.payload, range).ok()?
+            if range.is_empty() {
+                None
+            } else {
+                Some(vid.payload_proof(&self.payload, range).ok()?)
+            }
         };
 
         Some((
@@ -194,11 +154,7 @@ impl Payload {
                 payload_tx_table_entry_prev,
                 payload_tx_table_entry,
                 payload_proof_tx_table_entries,
-                //     payload_proof_tx: if tx_range.is_empty() {
-                //         None
-                //     } else {
-                //         Some(vid.payload_proof(&self.payload, tx_range).ok()?)
-                //     },
+                payload_proof_tx,
             },
         ))
     }
@@ -209,7 +165,7 @@ impl TxProof {
     // - `bool` result, or should we use `Result<(),()>` ?
     pub fn verify(
         &self,
-        _tx: &Transaction,
+        tx: &Transaction,
         commit: &VidCommitment,
         common: &VidCommon,
     ) -> Option<bool> {
@@ -279,12 +235,12 @@ impl TxProof {
                 bytes
             };
 
-            tracing::info!(
-                "verify: tx_index {:?}, tx_table_entries_range {:?}, content {:?}",
-                self.tx_index,
-                range,
-                payload_subslice
-            );
+            // tracing::info!(
+            //     "verify: tx_index {:?}, tx_table_entries_range {:?}, content {:?}",
+            //     self.tx_index,
+            //     range,
+            //     payload_subslice
+            // );
 
             if vid
                 .payload_verify(
@@ -306,25 +262,63 @@ impl TxProof {
         // Verify proof for tx payload
         {
             // TODO refactor this range arithmetic to a lower level
-            // let tx_range = {
-            //     let tx_payloads_start = num_txs_from_bytes(&self.payload_num_txs)
-            //         .saturating_mul(TX_OFFSET_BYTE_LEN)
-            //         .saturating_add(NUM_TXS_BYTE_LEN) // tx_table_byte_len plus...
-            //         .saturating_add(ns_range.start); // ...namespace start
+            let range = {
+                let tx_payloads_start = num_txs_from_bytes(&self.payload_num_txs)
+                    .saturating_mul(TX_OFFSET_BYTE_LEN)
+                    .saturating_add(NUM_TXS_BYTE_LEN) // tx_table_byte_len plus...
+                    .saturating_add(ns_payload_range.start); // ...namespace start
 
-            //     let end = tx_offset_from_bytes(&self.payload_tx_table_entry)
-            //         .saturating_add(tx_payloads_start)
-            //         .min(ns_range.end);
-            //     let start = tx_offset_from_bytes(
-            //         &self
-            //             .payload_tx_table_entry_prev
-            //             .unwrap_or([0; TX_OFFSET_BYTE_LEN]),
-            //     )
-            //     .saturating_add(tx_payloads_start)
-            //     .min(end);
-            //     start..end
-            // };
-            // tracing::info!("verify: tx_range {:?}", tx_range);
+                let end = tx_offset_from_bytes(&self.payload_tx_table_entry)
+                    .saturating_add(tx_payloads_start)
+                    .min(ns_payload_range.end);
+                let start = tx_offset_from_bytes(
+                    &self
+                        .payload_tx_table_entry_prev
+                        .unwrap_or([0; TX_OFFSET_BYTE_LEN]),
+                )
+                .saturating_add(tx_payloads_start)
+                .min(end);
+                start..end
+            };
+
+            tracing::info!(
+                "verify: tx_index {:?}, tx_payload_range {:?}, content {:?}",
+                self.tx_index,
+                range,
+                tx.payload()
+            );
+
+            match (&self.payload_proof_tx, range.is_empty()) {
+                (Some(proof), false) => {
+                    if vid
+                        .payload_verify(
+                            Statement {
+                                payload_subslice: tx.payload(),
+                                range,
+                                commit,
+                                common,
+                            },
+                            proof,
+                        )
+                        .ok()?
+                        .is_err()
+                    {
+                        return Some(false);
+                    }
+                }
+                (None, true) => {} // 0-length tx, nothing to verify
+                (None, false) => {
+                    tracing::info!(
+                        "tx verify: missing proof for nonempty tx payload range {:?}",
+                        range
+                    );
+                    return None;
+                }
+                (Some(_), true) => {
+                    tracing::info!("tx verify: unexpected proof for empty tx payload range");
+                    return None;
+                }
+            }
         }
 
         Some(true)
