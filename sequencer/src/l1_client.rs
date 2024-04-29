@@ -157,6 +157,7 @@ impl L1Client {
                 Arc::new(&self.provider),
             )
             .deposit_filter()
+            .address(self._address.into())
             .from_block(prev)
             .to_block(new_finalized)
             .query()
