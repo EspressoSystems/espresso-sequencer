@@ -8,9 +8,7 @@
 //! an extension that node operators can opt into. This module defines the minimum level of
 //! persistence which is _required_ to run a node.
 
-use crate::{
-    ElectionConfig, Header, Leaf, NodeState, PubKey, SeqTypes, ValidatedState, ViewNumber,
-};
+use crate::{Header, Leaf, NodeState, PubKey, SeqTypes, ValidatedState, ViewNumber};
 use anyhow::{ensure, Context};
 use async_std::sync::Arc;
 use async_trait::async_trait;
@@ -33,7 +31,7 @@ pub mod fs;
 pub mod no_storage;
 pub mod sql;
 
-pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey, ElectionConfig>;
+pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey>;
 
 #[async_trait]
 pub trait PersistenceOptions: Clone {

@@ -32,7 +32,7 @@ pub mod transaction;
 use derivative::Derivative;
 use hotshot::{
     traits::{
-        election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
+        election::static_committee::GeneralStaticCommittee,
         implementations::{
             derive_libp2p_peer_id, KeyPair, MemoryNetwork, NetworkingMetricsValue, PushCdnNetwork,
             WrappedSignatureKey,
@@ -114,8 +114,6 @@ pub type Event = hotshot::types::Event<SeqTypes>;
 
 pub type PubKey = BLSPubKey;
 pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
-
-type ElectionConfig = StaticElectionConfig;
 
 impl<N: network::Type, P: SequencerPersistence> NodeImplementation<SeqTypes> for Node<N, P> {
     type QuorumNetwork = N::QuorumChannel;
@@ -208,7 +206,6 @@ impl NodeType for SeqTypes {
     type BlockPayload = Payload<TxTableEntryWord>;
     type SignatureKey = PubKey;
     type Transaction = Transaction;
-    type ElectionConfigType = ElectionConfig;
     type InstanceState = NodeState;
     type ValidatedState = ValidatedState;
     type Membership = GeneralStaticCommittee<Self, PubKey>;
@@ -274,6 +271,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     stake_table_capacity: usize,
     bind_version: Ver,
     chain_config: ChainConfig,
+    is_da: bool,
 ) -> anyhow::Result<SequencerContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -288,6 +286,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         private_key: network_params.private_staking_key,
         stake_value: 1,
         state_key_pair,
+        is_da,
     };
 
     // Derive our Libp2p public key from our private key
@@ -313,9 +312,11 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
                 // can contact us on startup
                 Some(network_params.libp2p_advertise_address),
                 Some(libp2p_public_key),
+                false,
             )
             .await?
             .0;
+
             tracing::info!(
                 node_id = config.node_index,
                 stake_table = ?config.config.known_nodes_with_stake,
@@ -328,10 +329,19 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     };
     let node_index = config.node_index;
 
+    // If we are a DA node, we need to subscribe to the DA topic
+    let topics = {
+        let mut topics = vec!["Global".into()];
+        if is_da {
+            topics.push("DA".into());
+        }
+        topics
+    };
+
     // Initialize the push CDN network (and perform the initial connection)
     let cdn_network = PushCdnNetwork::new(
         network_params.cdn_endpoint,
-        vec!["Global".into(), "DA".into()],
+        topics,
         KeyPair {
             public_key: WrappedSignatureKey(my_config.public_key),
             private_key: my_config.private_key.clone(),
@@ -472,7 +482,7 @@ pub mod testing {
 
     #[derive(Clone)]
     pub struct TestConfig {
-        config: HotShotConfig<PubKey, ElectionConfig>,
+        config: HotShotConfig<PubKey>,
         priv_keys: Vec<BLSPrivKey>,
         state_key_pairs: Vec<StateKeyPair>,
         master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
@@ -502,23 +512,19 @@ pub mod testing {
 
             let master_map = MasterMap::new();
 
-            let config: HotShotConfig<PubKey, ElectionConfig> = HotShotConfig {
+            let config: HotShotConfig<PubKey> = HotShotConfig {
                 fixed_leader_for_gpuvid: 0,
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: num_nodes.try_into().unwrap(),
                 num_nodes_without_stake: 0,
-                min_transactions: 1,
-                max_transactions: 10000.try_into().unwrap(),
-                known_nodes_with_stake,
+                known_da_nodes: known_nodes_with_stake.clone(),
+                known_nodes_with_stake: known_nodes_with_stake.clone(),
                 known_nodes_without_stake: vec![],
                 next_view_timeout: Duration::from_secs(5).as_millis() as u64,
                 timeout_ratio: (10, 11),
                 round_start_delay: Duration::from_millis(1).as_millis() as u64,
                 start_delay: Duration::from_millis(1).as_millis() as u64,
                 num_bootstrap: 1usize,
-                propose_min_round_time: Duration::from_secs(0),
-                propose_max_round_time: Duration::from_secs(1),
-                election_config: None,
                 da_staked_committee_size: num_nodes,
                 da_non_staked_committee_size: 0,
                 my_own_validator_config: Default::default(),
@@ -530,6 +536,11 @@ pub mod testing {
                     pick_unused_port().unwrap()
                 ))
                 .unwrap(),
+                builder_timeout: Duration::from_secs(1),
+                start_threshold: (
+                    known_nodes_with_stake.clone().len() as u64,
+                    known_nodes_with_stake.clone().len() as u64,
+                ),
             };
 
             Self {
@@ -549,7 +560,7 @@ pub mod testing {
             self.priv_keys.len()
         }
 
-        pub fn hotshot_config(&self) -> &HotShotConfig<PubKey, ElectionConfig> {
+        pub fn hotshot_config(&self) -> &HotShotConfig<PubKey> {
             &self.config
         }
 
@@ -570,6 +581,7 @@ pub mod testing {
                     &NoMetrics,
                     STAKE_TABLE_CAPACITY_FOR_TEST,
                     bind_version,
+                    true,
                 )
                 .await
             }))
@@ -586,6 +598,7 @@ pub mod testing {
             metrics: &dyn Metrics,
             stake_table_capacity: usize,
             bind_version: Ver,
+            is_da: bool,
         ) -> SequencerContext<network::Memory, P, Ver> {
             let mut config = self.config.clone();
             config.my_own_validator_config = ValidatorConfig {
@@ -596,6 +609,7 @@ pub mod testing {
                     .stake_amount
                     .as_u64(),
                 state_key_pair: self.state_key_pairs[i].clone(),
+                is_da,
             };
 
             let network = Arc::new(MemoryNetwork::new(
@@ -769,7 +783,8 @@ mod test {
 
         let mut parent = {
             // TODO refactor repeated code from other tests
-            let (genesis_payload, genesis_ns_table) = Payload::genesis();
+            let (genesis_payload, genesis_ns_table) =
+                Payload::from_transactions([], Arc::new(NodeState::mock())).unwrap();
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload

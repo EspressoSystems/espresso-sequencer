@@ -24,7 +24,7 @@ use vbs::version::StaticVersionType;
 
 use crate::{
     network, persistence::SequencerPersistence, state_signature::StateSigner,
-    static_stake_table_commitment, ElectionConfig, Node, NodeState, PubKey, SeqTypes, Transaction,
+    static_stake_table_commitment, Node, NodeState, PubKey, SeqTypes, Transaction,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 /// The consensus handle
@@ -70,7 +70,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     #[tracing::instrument(skip_all, fields(node_id))]
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
-        config: HotShotConfig<PubKey, ElectionConfig>,
+        config: HotShotConfig<PubKey>,
         instance_state: NodeState,
         persistence: P,
         networks: Networks<SeqTypes, Node<N, P>>,
@@ -97,20 +97,23 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             .load_consensus_state(instance_state.clone())
             .await?;
 
-        let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
-            config.num_nodes_with_stake.get() as u64,
-            0,
-        );
-        let membership = GeneralStaticCommittee::create_election(
+        let committee_membership = GeneralStaticCommittee::create_election(
             config.known_nodes_with_stake.clone(),
-            election_config.clone(),
+            config.known_nodes_with_stake.clone(),
             0,
         );
+
+        let da_membership = GeneralStaticCommittee::create_election(
+            config.known_nodes_with_stake.clone(),
+            config.known_da_nodes.clone(),
+            0,
+        );
+
         let memberships = Memberships {
-            quorum_membership: membership.clone(),
-            da_membership: membership.clone(),
-            vid_membership: membership.clone(),
-            view_sync_membership: membership.clone(),
+            quorum_membership: committee_membership.clone(),
+            da_membership,
+            vid_membership: committee_membership.clone(),
+            view_sync_membership: committee_membership.clone(),
         };
 
         let stake_table_commit =

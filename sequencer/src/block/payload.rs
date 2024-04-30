@@ -1,6 +1,6 @@
 use crate::block::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block::payload;
-use crate::{BlockBuildingSnafu, Error, NamespaceId, Transaction};
+use crate::{BlockBuildingSnafu, Error, NamespaceId, NodeState, Transaction};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use derivative::Derivative;
 use hotshot::traits::BlockPayload;
@@ -15,6 +15,7 @@ use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::default::Default;
+use std::sync::Arc;
 use std::{collections::HashMap, fmt::Display};
 
 use crate::block::tables::NameSpaceTable;
@@ -308,7 +309,9 @@ impl hotshot_types::traits::block_contents::TestableBlock
     for Payload<crate::block::entry::TxTableEntryWord>
 {
     fn genesis() -> Self {
-        BlockPayload::genesis().0
+        BlockPayload::from_transactions([], Arc::new(NodeState::mock()))
+            .unwrap()
+            .0
     }
 
     fn txn_count(&self) -> u64 {
@@ -337,7 +340,7 @@ mod test {
     use hotshot_types::{traits::BlockPayload, vid::vid_scheme};
     use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
     use rand::RngCore;
-    use std::{collections::HashMap, marker::PhantomData, ops::Range};
+    use std::{collections::HashMap, marker::PhantomData, ops::Range, sync::Arc};
 
     const NUM_STORAGE_NODES: usize = 10;
 
@@ -460,7 +463,9 @@ mod test {
             let all_txs_iter = derived_nss
                 .iter()
                 .flat_map(|(_ns_id, ns)| ns.txs.iter().cloned());
-            let (block, actual_ns_table) = Payload::from_transactions(all_txs_iter).unwrap();
+            let (block, actual_ns_table) =
+                Payload::from_transactions(all_txs_iter, Arc::new(crate::NodeState::mock()))
+                    .unwrap();
             let disperse_data = vid.disperse(&block.raw_payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF

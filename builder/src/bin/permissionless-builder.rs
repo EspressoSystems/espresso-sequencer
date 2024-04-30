@@ -72,6 +72,15 @@ struct NonPermissionedBuilderOptions {
         default_value = "15"
     )]
     buffer_view_num_count: usize,
+
+    /// Base Fee for a block
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE",
+        default_value = "0"
+    )]
+    base_fee: u64,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -110,6 +119,9 @@ async fn main() -> anyhow::Result<()> {
 
     let api_response_timeout_duration = opt.max_api_timeout_duration;
 
+    // make the txn timeout as 1/4 of the api_response_timeout_duration
+    let txn_timeout_duration = api_response_timeout_duration / 4;
+
     let buffer_view_num_count = opt.buffer_view_num_count;
 
     let _builder_config = BuilderConfig::init(
@@ -121,6 +133,8 @@ async fn main() -> anyhow::Result<()> {
         builder_server_url,
         api_response_timeout_duration,
         buffer_view_num_count,
+        txn_timeout_duration,
+        opt.base_fee,
     )
     .await;
 

@@ -170,6 +170,19 @@ pub struct PermissionedBuilderOptions {
         default_value = "15"
     )]
     pub buffer_view_num_count: usize,
+
+    /// Whether or not we are a DA node.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IS_DA", action)]
+    pub is_da: bool,
+
+    /// Base Fee for a block
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE",
+        default_value = "0"
+    )]
+    base_fee: u64,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -259,7 +272,9 @@ async fn main() -> anyhow::Result<()> {
 
     let bootstrapped_view = ViewNumber::new(opt.view_number);
 
-    let max_response_timeout = opt.max_api_timeout_duration;
+    let max_api_response_timeout_duration = opt.max_api_timeout_duration;
+    // make the txn timeout as 1/4 of the api_response_timeout_duration
+    let txn_timeout_duration = max_api_response_timeout_duration / 4;
 
     let buffer_view_num_count = opt.buffer_view_num_count;
 
@@ -275,8 +290,11 @@ async fn main() -> anyhow::Result<()> {
         opt.channel_capacity,
         sequencer_version,
         NoStorage,
-        max_response_timeout,
+        max_api_response_timeout_duration,
         buffer_view_num_count,
+        opt.is_da,
+        txn_timeout_duration,
+        opt.base_fee,
     )
     .await?;
 

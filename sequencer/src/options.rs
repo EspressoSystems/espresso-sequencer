@@ -150,6 +150,10 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
     pub l1_provider_url: Url,
 
+    /// Whether or not we are a DA node.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IS_DA", action)]
+    pub is_da: bool,
+
     /// Peer nodes use to fetch missing state
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
     pub state_peers: Vec<Url>,
