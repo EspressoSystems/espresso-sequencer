@@ -353,11 +353,23 @@ mod tests {
                     api_port
                 ),
             )
+            .await;
+            api_get_test(
+                &client,
+                format!("http://localhost:{}/block-state/2/3", api_port),
+            )
             .await
         }
 
         child_process.kill().unwrap();
         db.kill().unwrap();
+
+        let _ = Command::new("docker")
+            .arg("compose")
+            .arg("down")
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
     }
 
     async fn api_get_test(client: &reqwest::Client, url: String) {
