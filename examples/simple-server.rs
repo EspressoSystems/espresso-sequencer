@@ -42,7 +42,7 @@ use hotshot_types::{
     consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
     traits::election::Membership, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
-use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
+use std::{num::NonZeroUsize, time::Duration};
 
 const NUM_NODES: usize = 2;
 
