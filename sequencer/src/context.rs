@@ -67,15 +67,7 @@ pub struct SequencerContext<
 impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
     SequencerContext<N, P, Ver>
 {
-    #[tracing::instrument(skip(
-        config,
-        instance_state,
-        persistence,
-        networks,
-        state_relay_server,
-        metrics,
-        stake_table_capacity
-    ))]
+    #[tracing::instrument(skip_all, fields(node_id))]
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
         config: HotShotConfig<PubKey>,
@@ -88,6 +80,18 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         stake_table_capacity: usize,
         _: Ver,
     ) -> anyhow::Result<Self> {
+        let pub_key = config.my_own_validator_config.public_key;
+        tracing::info!(%pub_key, "initializing consensus");
+
+        // Stick our public key and node ID in `metrics` so it is easily accessible via the status
+        // API.
+        metrics
+            .create_label("pub_key".into())
+            .set(pub_key.to_string());
+        metrics
+            .create_gauge("node_index".into(), None)
+            .set(node_id as usize);
+
         // Load saved consensus state from storage.
         let initializer = persistence
             .load_consensus_state(instance_state.clone())

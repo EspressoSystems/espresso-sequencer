@@ -264,14 +264,15 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return states[finalizedState];
     }
 
-    // === Pure or View-only APIs ===
-    /// @notice Transform a state into an array of field elements, prepared as public inputs of the
-    /// plonk proof verification
-    function preparePublicInput(LightClientState memory state)
+    /// @notice Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK
+    /// used in inherited contracts.
+    function verifyProof(LightClientState memory state, IPlonkVerifier.PlonkProof memory proof)
         internal
-        view
-        returns (uint256[] memory)
+        virtual
     {
+        IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
+
+        // Prepare the public input
         uint256[] memory publicInput = new uint256[](8);
         publicInput[0] = votingThreshold;
         publicInput[1] = uint256(state.viewNum);
@@ -282,20 +283,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         publicInput[6] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableSchnorrKeyComm);
         publicInput[7] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableAmountComm);
 
-        return publicInput;
-    }
-
-    /// @notice Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK
-    /// used
-    /// in inherited contracts.
-    function verifyProof(LightClientState memory state, IPlonkVerifier.PlonkProof memory proof)
-        internal
-        virtual
-    {
-        IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
-        uint256[] memory publicInput = preparePublicInput(state);
-
-        if (!PlonkVerifier.verify(vk, publicInput, proof, bytes(""))) {
+        if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
     }
