@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{ensure, Context};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::sync::Arc;
 use clap::Parser;
@@ -108,6 +108,15 @@ async fn main() -> anyhow::Result<()> {
         .with_chain_id(chain_id);
     let owner = wallet.address();
     let l1 = Arc::new(SignerMiddleware::new(provider, wallet));
+
+    // As a sanity check, check that the deployer address has some balance of ETH it can use to pay
+    // gas.
+    let balance = l1.get_balance(owner, None).await?;
+    ensure!(
+        balance > 0.into(),
+        "deployer account {owner:#x} is not funded!"
+    );
+    tracing::info!(%balance, "deploying from address {owner:#x}");
 
     contracts
         .deploy_tx(Contract::HotShot, HotShot::deploy(l1.clone(), ())?)
