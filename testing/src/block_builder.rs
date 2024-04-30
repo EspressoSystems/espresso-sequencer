@@ -330,6 +330,16 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES> {
                 })
             })
             .await;
+
+        if transactions.is_empty() {
+            // We don't want to return an empty block, as we will end up driving consensus to
+            // produce empty blocks extremely quickly. Instead, we return no blocks, so that
+            // consensus will keep asking for blocks until either we have something non-trivial to
+            // propose, or a timeout, in which case consensus will finally propose an empty block
+            // anyways.
+            return Ok(vec![]);
+        }
+
         let (metadata, payload, header_input) = build_block(
             transactions,
             self.num_storage_nodes,

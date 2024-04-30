@@ -80,7 +80,7 @@ impl Default for TimingData {
             timeout_ratio: (11, 10),
             round_start_delay: 100,
             start_delay: 100,
-            builder_timeout: Duration::from_millis(1000),
+            builder_timeout: Duration::from_millis(500),
             data_request_delay: Duration::from_millis(200),
             secondary_network_delay: Duration::from_millis(1000),
             view_sync_timeout: Duration::from_millis(2000),
