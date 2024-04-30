@@ -10,7 +10,7 @@ testing = ["hotshot-testing"]
 libp2p = []
 
 [[bin]]
-name = "test-node"
+name = "espresso-dev-node"
 required-features = ["testing"]
 
 [dev-dependencies]

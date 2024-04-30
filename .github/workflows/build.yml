@@ -72,7 +72,7 @@ jobs:
             target/release/keygen
             target/release/permissionless-builder
             target/release/nasty-client
-            target/release/espresso-test-node
+            target/release/espresso-dev-node
             target/release/pub-key
 
   build-arm:
@@ -117,7 +117,7 @@ jobs:
             target/release/keygen
             target/release/permissionless-builder
             target/release/nasty-client
-            target/release/espresso-test-node
+            target/release/espresso-dev-node
             target/release/pub-key
 
   build-dockers:
@@ -136,7 +136,7 @@ jobs:
       deploy-tag: ${{ steps.deploy.outputs.tags }}
       builder-tag: ${{ steps.builder.outputs.tags }}
       nasty-client-tag: ${{ steps.nasty-client.outputs.tags }}
-      espresso-test-node-tag: ${{ steps.espresso-test-node.outputs.tags }}
+      espresso-dev-node-tag: ${{ steps.espresso-dev-node.outputs.tags }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -238,11 +238,11 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/nasty-client
 
-      - name: Generate espresso-test-node metadata
+      - name: Generate espresso-dev-node metadata
         uses: docker/metadata-action@v5
-        id: test-node
+        id: dev-node
         with:
-          images: ghcr.io/espressosystems/espresso-sequencer/espresso-test-node
+          images: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node
 
       - name: Build and push sequencer docker
         uses: docker/build-push-action@v5
@@ -364,15 +364,15 @@ jobs:
           tags: ${{ steps.nasty-client.outputs.tags }}
           labels: ${{ steps.nasty-client.outputs.labels }}
 
-      - name: Build and push espresso-test-node docker
+      - name: Build and push espresso-dev-node docker
         uses: docker/build-push-action@v5
         with:
           context: ./
           file: ./docker/nasty-client.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.espresso-test-node.outputs.tags }}
-          labels: ${{ steps.espresso-test-node.outputs.labels }}
+          tags: ${{ steps.espresso-dev-node.outputs.tags }}
+          labels: ${{ steps.espresso-dev-node.outputs.labels }}
 
   test-demo:
     if: ${{ github.event_name != 'pull_request' }}

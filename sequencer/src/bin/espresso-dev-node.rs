@@ -243,7 +243,7 @@ mod tests {
             .unwrap();
 
         let mut child_process = CargoBuild::new()
-            .bin("test-node")
+            .bin("dev-node")
             .features("testing")
             .current_target()
             .run()
