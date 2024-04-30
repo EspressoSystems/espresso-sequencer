@@ -7,7 +7,7 @@ RUN apt-get update \
     &&  rm -rf /var/lib/apt/lists/*
 ENTRYPOINT ["tini", "--"]
 
-COPY target/$TARGETARCH/release/test-node /bin/test-node
+COPY target/$TARGETARCH/release/espresso-test-node /bin/test-node
 RUN chmod +x /bin/test-node
 
 # When running as a Docker service, we always want a healthcheck endpoint, so set a default for the
@@ -15,4 +15,4 @@ RUN chmod +x /bin/test-node
 ENV ESPRESSO_SEQUENCER_API_PORT=40001
 HEALTHCHECK --interval=1s --timeout=1s --retries=100 CMD curl --fail http://localhost:${ESPRESSO_SEQUENCER_API_PORT}/status/block-height || exit 1
 
-CMD [ "/bin/test-node"]
+CMD [ "/bin/espresso-test-node"]

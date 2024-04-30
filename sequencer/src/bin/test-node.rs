@@ -23,7 +23,8 @@ use vbs::version::StaticVersionType;
 
 #[derive(Clone, Debug, Parser)]
 struct Args {
-    /// A JSON-RPC endpoint for the L1 to deploy to.
+    /// A JSON-RPC endpoint for the L1 to deploy to. If this is not provided, an Avil node will be
+    /// launched automatically.
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
     rpc_url: Option<Url>,
     /// Mnemonic for an L1 wallet.
