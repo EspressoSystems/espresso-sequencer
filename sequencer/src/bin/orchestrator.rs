@@ -26,58 +26,6 @@ struct Args {
     #[clap(long, env = "ESPRESSO_ORCHESTRATOR_START_DELAY", default_value = "10s", value_parser = parse_duration)]
     start_delay: Duration,
 
-    /// Minimum time to wait for submitted transactions before proposing a block.
-    ///
-    /// Increasing this trades off latency for throughput: the rate of new block proposals gets
-    /// slower, but each block is proportionally larger. Because of batch verification, larger
-    /// blocks should lead to increased throughput.
-    ///
-    /// `min-propose-time` is set to 1s by default, since minimum block size can be controlled using
-    /// `min-transactions`, which is a more intentional, declarative setting. You may still wish to
-    /// set a non-zero `min-propose-time` to allow for larger blocks in higher volumes while setting
-    /// `min-transactions` to something small to handle low-volume conditions.
-    #[arg(
-        long,
-        env = "ESPRESSO_ORCHESTRATOR_MIN_PROPOSE_TIME",
-        default_value = "1s",
-        value_parser = parse_duration
-    )]
-    min_propose_time: Duration,
-
-    /// Maximum time to wait for submitted transactions before proposing a block.
-    ///
-    /// If a validator has not received `min-transactions` after `min-propose-time`, it will wait up
-    /// to `max-propose-time` before giving up and submitting a block with whatever transactions it
-    /// does have.
-    #[arg(
-        long,
-        env = "ESPRESSO_ORCHESTRATOR_MAX_PROPOSE_TIME",
-        default_value = "30s",
-        value_parser = parse_duration
-    )]
-    max_propose_time: Duration,
-
-    /// Minimum number of transactions to include in a block, if possible.
-    ///
-    /// After `min-propose-time`, a leader will propose a block as soon as it has at least
-    /// `min-transactions`. Note that a block with fewer than `min-transactions` may still be
-    /// proposed, if `min-transactions` are not submitted before `max-propose-time`.
-    ///
-    /// The default is 1, because a non-zero value of `min-transactions` is required in order for
-    /// `max-propose-time` to have any effect -- if `min-transactions = 0`, then an empty block will
-    /// be proposed each view after `min-propose-time`. Setting `min-transactions` to 1 limits the
-    /// number of empty blocks proposed while still allowing a block to be proposed as soon as any
-    /// transaction has been received. In a setting where high volume is expected most of the time,
-    /// you might set this greater than 1 to encourage larger blocks and better throughput, while
-    /// setting `max-propose-time` very large to handle low-volume conditions without affecting
-    /// latency in high-volume conditions.
-    #[clap(
-        long,
-        env = "ESPRESSO_ORCHESTRATOR_MIN_TRANSACTIONS",
-        default_value = "1"
-    )]
-    min_transactions: usize,
-
     /// Base duration for next-view timeout.
     #[arg(
         long,
@@ -104,17 +52,6 @@ struct Args {
     )]
     round_start_delay: Duration,
 
-    /// Maximum number of transactions in a block.
-    ///
-    /// TODO replace with maximum byte len:
-    /// https://github.com/EspressoSystems/espresso-sequencer/pull/1087#discussion_r1489585926
-    #[arg(
-        long,
-        env = "ESPRESSO_ORCHESTRATOR_MAX_TRANSACTIONS",
-        default_value = "1000"
-    )]
-    max_transactions: NonZeroUsize,
-
     /// The number of nodes a Libp2p node should try to maintain
     /// a connection with at one time.
     #[arg(long, env = "ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N", default_value = "4")]
@@ -130,7 +67,7 @@ struct Args {
     #[arg(long, env = "ESPRESSO_ORCHESTRATOR_BUILDER_URL")]
     builder_url: Url,
 
-    /// The delay a builder timeout
+    /// The maximum amount of time a leader can wait to get a block from a builder
     #[arg(
         long,
         env = "ESPRESSO_ORCHESTRATOR_BUILDER_TIMEOUT",
