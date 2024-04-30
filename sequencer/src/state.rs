@@ -632,7 +632,7 @@ impl ValidatedState {
 
         // Ensure merkle tree has frontier
         if self.need_to_fetch_blocks_mt_frontier() {
-            tracing::warn!("fetching block frontier for view {view:?} from peers");
+            tracing::info!("fetching block frontier for view {view:?} from peers");
 
             instance
                 .peers
@@ -643,7 +643,7 @@ impl ValidatedState {
 
         // Fetch missing fee state entries
         if !missing_accounts.is_empty() {
-            tracing::warn!("fetching missing accounts {missing_accounts:?} from peers");
+            tracing::info!("fetching missing accounts {missing_accounts:?} from peers");
 
             let missing_account_proofs = instance
                 .peers
