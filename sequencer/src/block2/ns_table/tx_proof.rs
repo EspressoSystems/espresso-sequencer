@@ -108,6 +108,9 @@ impl Payload {
         let payload_proof_tx = {
             // TODO sucks that I need ns_payload AND ns_payload_range here.
             // should be able to get this with less...
+            //
+            // TODO I'm re-reading the tx_payload_range here... because I want automatic translaction by ns_payload_range?
+            // In `verify` I don't have this luxury; Perhaps I should instead compute the tx_payload_range the same way I do in `verify`?
             let range = ns_payload.tx_payload_range(&index.tx_index, &ns_payload_range);
 
             // TODO IDEA: NsPayload[Owned] should also come with a NsPayloadRange
@@ -225,6 +228,8 @@ impl TxProof {
         // Verify proof for tx payload
         {
             // TODO refactor this range arithmetic to a lower level
+            // this `range` should be obtained by NsPayloadRange::tx_payload_range(payload_num_txs, payload_tx_table_entries)
+            // of course, in `prove` we can wrap that ugly call in `NsPayload::tx_payload_range(tx_index)`
             let range = {
                 let tx_payloads_start = num_txs_from_bytes(&self.payload_num_txs)
                     .saturating_mul(TX_OFFSET_BYTE_LEN)

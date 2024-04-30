@@ -68,7 +68,7 @@ impl NsProof {
     /// Verify a [`NsProof`] against a payload commitment.
     pub fn verify_namespace_proof(
         &self,
-        ns_table: &NsTable,
+        ns_table: &NsTable, // TODO delete this arg: ns_range is part of ns_payload
         commit: &VidCommitment,
         common: &VidCommon,
     ) -> Option<(Vec<Transaction>, NamespaceId)> {

@@ -93,6 +93,9 @@ impl NsPayload {
             .saturating_mul(TX_OFFSET_BYTE_LEN)
             .saturating_add(NUM_TXS_BYTE_LEN)
             .min(self.0.len())
+        // TODO FIX: NsPayload needs a NsPayloadRange field
+        // or make it like tx_payload_range()
+        // NsPayloadRange::tx_table_byte_len(&self, self.num_txs())
     }
 
     /// Read subslice range for the `index`th tx from the tx
@@ -282,7 +285,10 @@ pub(crate) mod tx_iter {
 pub use ns_payload_range::NsPayloadRange;
 mod ns_payload_range {
     use super::{tx_iter::TxIndex, NsIndex, NsPayload, Payload};
-    use crate::block2::{ns_table::NsTable, payload_bytes::NUM_TXS_BYTE_LEN};
+    use crate::block2::{
+        ns_table::NsTable,
+        payload_bytes::{NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
+    };
     use serde::{Deserialize, Serialize};
     use std::ops::Range;
 
@@ -305,12 +311,12 @@ mod ns_payload_range {
         /// Guaranteed to be no larger than this namespace's payload byte length.
         ///
         /// TODO num_txs arg should be a newtype for [u8; NUM_TXS_BYTE_LEN]
-        // pub fn tx_table_byte_len(&self, num_txs: usize) -> usize {
-        //     num_txs
-        //         .saturating_mul(TX_OFFSET_BYTE_LEN)
-        //         .saturating_add(NUM_TXS_BYTE_LEN)
-        //         .min(self.0.len())
-        // }
+        pub fn tx_table_byte_len(&self, num_txs: usize) -> usize {
+            num_txs
+                .saturating_mul(TX_OFFSET_BYTE_LEN)
+                .saturating_add(NUM_TXS_BYTE_LEN)
+                .min(self.0.len())
+        }
 
         /// TODO explain: compute tx table entries range, translated by this namespace's start index
         pub fn tx_table_entries_range(&self, index: &TxIndex) -> Range<usize> {
