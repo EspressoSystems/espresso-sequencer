@@ -4344,7 +4344,6 @@ dependencies = [
  "es-version",
  "ethers",
  "futures",
- "hotshot",
  "hotshot-contract-adapter",
  "hotshot-orchestrator",
  "hotshot-stake-table",
