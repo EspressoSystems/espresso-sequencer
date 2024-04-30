@@ -243,7 +243,7 @@ mod tests {
             .unwrap();
 
         let mut child_process = CargoBuild::new()
-            .bin("dev-node")
+            .bin("espresso-dev-node")
             .features("testing")
             .current_target()
             .run()

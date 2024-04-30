@@ -240,7 +240,7 @@ jobs:
 
       - name: Generate espresso-dev-node metadata
         uses: docker/metadata-action@v5
-        id: dev-node
+        id: espresso-dev-node
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node
 

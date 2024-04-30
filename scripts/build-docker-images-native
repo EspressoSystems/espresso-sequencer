@@ -112,4 +112,4 @@ docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/deploy:main -f docker/deploy.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/builder:main -f docker/permissionless-builder.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/nasty-client:main -f docker/nasty-client.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:main -f docker/dev-node.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:main -f docker/espresso-dev-node.Dockerfile ${WORKDIR}
