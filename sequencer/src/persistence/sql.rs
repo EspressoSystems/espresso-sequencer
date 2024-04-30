@@ -7,6 +7,7 @@ use crate::{
 use anyhow::{bail, Context};
 use async_trait::async_trait;
 use clap::Parser;
+use derivative::Derivative;
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_query_service::{
     data_source::{
@@ -32,7 +33,8 @@ use jf_primitives::merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
 use std::time::Duration;
 
 /// Options for Postgres-backed persistence.
-#[derive(Parser, Clone, Debug, Default)]
+#[derive(Parser, Clone, Derivative, Default)]
+#[derivative(Debug)]
 pub struct Options {
     /// Postgres URI.
     ///
@@ -44,6 +46,8 @@ pub struct Options {
     /// Options set explicitly via other env vars or flags will take precedence, so you can use this
     /// URI to set a baseline and then use other parameters to override or add configuration. In
     /// addition, there are some parameters which cannot be set via the URI, such as TLS.
+    // Hide from debug output since may contain sensitive data.
+    #[derivative(Debug = "ignore")]
     pub uri: Option<String>,
 
     /// Hostname for the remote Postgres database server.
@@ -64,6 +68,8 @@ pub struct Options {
 
     /// Password for Postgres user.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_PASSWORD")]
+    // Hide from debug output since may contain sensitive data.
+    #[derivative(Debug = "ignore")]
     pub password: Option<String>,
 
     /// Use TLS for an encrypted connection to the database.

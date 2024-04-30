@@ -236,7 +236,7 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
         uint256[] memory publicInput = preparePublicInput(state);
 
-        if (!PlonkVerifier.verify(vk, publicInput, proof, bytes(""))) {
+        if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
     }

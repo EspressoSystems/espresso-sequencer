@@ -73,6 +73,7 @@ jobs:
             target/release/permissionless-builder
             target/release/nasty-client
             target/release/espresso-test-node
+            target/release/pub-key
 
   build-arm:
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
@@ -117,6 +118,7 @@ jobs:
             target/release/permissionless-builder
             target/release/nasty-client
             target/release/espresso-test-node
+            target/release/pub-key
 
   build-dockers:
     runs-on: ubuntu-latest

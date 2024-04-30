@@ -20,6 +20,9 @@ RUN chmod +x /bin/reset-storage
 COPY target/$TARGETARCH/release/keygen /bin/keygen
 RUN chmod +x /bin/keygen
 
+COPY target/$TARGETARCH/release/pub-key /bin/pub-key
+RUN chmod +x /bin/pub-key
+
 # Set a path to save the consensus config on startup.
 #
 # Upon restart, the config will be loaded from this file and the node will be able to resume

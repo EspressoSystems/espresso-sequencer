@@ -8,6 +8,8 @@ out/
 /broadcast/*/1337/
 /broadcast/*/900/
 /broadcast/**/dry-run/
+/broadcast/LightClientCallNewFinalizedState.s.sol
+/broadcast/DeployLightClientTestScript.s.sol
 
 # Dotenv file
 .env
