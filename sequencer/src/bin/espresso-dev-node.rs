@@ -125,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
     start_commitment_server(opt.commitment_task_port, hotshot_address, SEQUENCER_VERSION).unwrap();
 
     tracing::info!("starting the builder server");
-    let builder_address = "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
+    let builder_address = "0xb0cfa4e5893107e2995974ef032957752bb526e9"
         .parse()
         .unwrap();
     start_builder_server(opt.builder_port, builder_address, SEQUENCER_VERSION).unwrap();
