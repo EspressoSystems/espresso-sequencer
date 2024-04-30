@@ -125,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
     start_commitment_server(opt.commitment_task_port, hotshot_address, SEQUENCER_VERSION).unwrap();
 
     tracing::info!("starting the builder server");
-    let builder_address = "0xb0cfa4e5893107e2995974ef032957752bb526e9"
+    let builder_address = "0x7103f704ee6272ad0228343b362eeb3199f7e2b1"
         .parse()
         .unwrap();
     start_builder_server(opt.builder_port, builder_address, SEQUENCER_VERSION).unwrap();
@@ -211,7 +211,10 @@ fn start_commitment_server<Ver: StaticVersionType + 'static>(
 mod tests {
     use std::{process::Stdio, time::Duration};
 
-    use async_compatibility_layer::art::async_sleep;
+    use async_compatibility_layer::{
+        art::async_sleep,
+        logging::{setup_backtrace, setup_logging},
+    };
     use async_std::process::Command;
     use escargot::CargoBuild;
     use portpicker::pick_unused_port;
@@ -226,6 +229,8 @@ mod tests {
     // - Types (like `Header`) update
     #[async_std::test]
     async fn dev_node_test() {
+        setup_logging();
+        setup_backtrace();
         let anvil = AnvilOptions::default().spawn().await;
         let builder_port = pick_unused_port().unwrap();
         let commitment_task_port = pick_unused_port().unwrap();
@@ -237,6 +242,8 @@ mod tests {
             .arg("up")
             .arg("-d")
             .arg("sequencer-db")
+            .arg("--force-recreate")
+            .arg("--renew-anon-volumes")
             .env("ESPRESSO_SEQUENCER_DB_PORT", postgres_port.to_string())
             .stdout(Stdio::null())
             .spawn()
@@ -263,7 +270,6 @@ mod tests {
             )
             .env("ESPRESSO_SEQUENCER_POSTGRES_USER", "root")
             .env("ESPRESSO_SEQUENCER_POSTGRES_PASSWORD", "password")
-            .stdout(Stdio::null())
             .spawn()
             .unwrap();
 
