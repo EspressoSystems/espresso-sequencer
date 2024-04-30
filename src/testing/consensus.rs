@@ -40,9 +40,9 @@ use hotshot_types::{
     traits::{election::Membership, signature_key::SignatureKey as _},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
+use std::fmt::Display;
 use std::num::NonZeroUsize;
 use std::time::Duration;
-use std::{collections::HashSet, fmt::Display};
 use tracing::{info_span, Instrument};
 
 struct MockNode<D: DataSourceLifeCycle> {
@@ -82,12 +82,9 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             })
             .collect::<Vec<_>>();
 
-        // Create memberships
-        let election_config =
-            MockMembership::default_election_config(num_staked_nodes.get() as u64, 0);
         let membership = MockMembership::create_election(
             known_nodes_with_stake.clone(),
-            election_config.clone(),
+            known_nodes_with_stake.clone(),
             0,
         );
 
@@ -128,18 +125,18 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         round_start_delay: 0,
                         next_view_timeout: 10000,
                         timeout_ratio: (11, 10),
-                        propose_min_round_time: Duration::from_secs(0),
-                        propose_max_round_time: Duration::from_millis(500),
-                        min_transactions: 1,
-                        max_transactions: NonZeroUsize::new(100).unwrap(),
                         num_bootstrap: 0,
                         execution_type: ExecutionType::Continuous,
-                        election_config: None,
                         da_staked_committee_size: pub_keys.len(),
-                        known_da_nodes: HashSet::from_iter(known_nodes_with_stake.clone()),
+                        known_da_nodes: known_nodes_with_stake.clone(),
                         da_non_staked_committee_size: 0,
                         data_request_delay: Duration::from_millis(200),
                         view_sync_timeout: Duration::from_millis(250),
+                        start_threshold: (
+                            known_nodes_with_stake.len() as u64,
+                            known_nodes_with_stake.len() as u64,
+                        ),
+                        builder_timeout: Duration::from_secs(1),
                     };
 
                     let pub_keys = pub_keys.clone();

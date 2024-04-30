@@ -58,7 +58,6 @@ mod test_helpers {
         stream::{BoxStream, StreamExt},
     };
     use std::ops::{Bound, RangeBounds};
-
     /// Apply an upper bound to a range based on the currently available block height.
     async fn bound_range<R, D>(ds: &D, range: R) -> impl RangeBounds<usize>
     where
@@ -574,6 +573,7 @@ pub mod node_tests {
         vid::{vid_scheme, VidSchemeType},
     };
     use jf_primitives::vid::VidScheme;
+    use std::sync::Arc;
 
     #[async_std::test]
     pub async fn test_sync_status<D: TestableDataSource>() {
@@ -719,8 +719,11 @@ pub mod node_tests {
             // (since we insert more than 2 transactions total). The query service should still
             // count these as separate transactions and should include both duplicates when
             // computing the total size.
-            let (payload, metadata) =
-                TestBlockPayload::from_transactions([mock_transaction(vec![i as u8 % 2])]).unwrap();
+            let (payload, metadata) = TestBlockPayload::from_transactions(
+                [mock_transaction(vec![i as u8 % 2])],
+                Arc::new(TestInstanceState {}),
+            )
+            .unwrap();
             let encoded = payload.encode().unwrap();
             let payload_commitment = vid_commitment(&encoded, 1);
             let header = TestBlockHeader {

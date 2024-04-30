@@ -17,8 +17,7 @@ use crate::{
     types::HeightIndexed,
 };
 use hotshot::traits::{
-    election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
-    implementations::MemoryNetwork,
+    election::static_committee::GeneralStaticCommittee, implementations::MemoryNetwork,
     NodeImplementation,
 };
 use hotshot_example_types::{
@@ -125,7 +124,6 @@ impl NodeType for MockTypes {
     type BlockPayload = MockPayload;
     type SignatureKey = BLSPubKey;
     type Transaction = MockTransaction;
-    type ElectionConfigType = StaticElectionConfig;
     type InstanceState = TestInstanceState;
     type ValidatedState = TestValidatedState;
     type Membership = GeneralStaticCommittee<Self, BLSPubKey>;
