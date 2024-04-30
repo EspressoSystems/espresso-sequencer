@@ -67,7 +67,10 @@ struct Args {
     #[arg(long, env = "ESPRESSO_ORCHESTRATOR_BUILDER_URL")]
     builder_url: Url,
 
-    /// The maximum amount of time a leader can wait to get a block from a builder
+    /// The maximum amount of time a leader can wait to get a block from a builder.
+    ///
+    /// If the consensus leader is unable to get a block from a builder within this time, it will
+    /// propose an empty block instead.
     #[arg(
         long,
         env = "ESPRESSO_ORCHESTRATOR_BUILDER_TIMEOUT",
