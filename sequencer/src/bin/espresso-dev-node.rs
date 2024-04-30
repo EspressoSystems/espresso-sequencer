@@ -225,7 +225,7 @@ mod tests {
     // - APIs update
     // - Types (like `Header`) update
     #[async_std::test]
-    async fn test_node_test() {
+    async fn dev_node_test() {
         let anvil = AnvilOptions::default().spawn().await;
         let builder_port = pick_unused_port().unwrap();
         let commitment_task_port = pick_unused_port().unwrap();
