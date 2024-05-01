@@ -122,36 +122,33 @@ async fn main() -> anyhow::Result<()> {
         .deploy_tx(Contract::HotShot, HotShot::deploy(l1.clone(), ())?)
         .await?;
 
-    if opt.use_mock_contract {
-        // LightClientMock is a non-upgradable contract, thus directly initialize
-        // it via its constructor
+    // Deploy the upgradable light client contract first, then initialize it throught a proxy contract
+    let lc_address = if opt.use_mock_contract {
         contracts
             .deploy_fn(Contract::LightClient, |contracts| {
                 deploy_mock_light_client_contract(l1.clone(), contracts, None).boxed()
             })
-            .await?;
+            .await?
     } else {
-        // LightClient is a upgradable contract, thus deploy first,
-        // then initialize it through a proxy contract
-        let lc_address = contracts
+        contracts
             .deploy_fn(Contract::LightClient, |contracts| {
                 deploy_light_client_contract(l1.clone(), contracts).boxed()
             })
-            .await?;
-        let light_client = LightClient::new(lc_address, l1.clone());
+            .await?
+    };
+    let light_client = LightClient::new(lc_address, l1.clone());
 
-        let genesis = light_client_genesis(&opt.orchestrator_url, opt.stake_table_capacity).await?;
-        let data = light_client
-            .initialize(genesis.into(), u32::MAX, owner)
-            .calldata()
-            .context("calldata for initialize transaction not available")?;
-        contracts
-            .deploy_tx(
-                Contract::LightClientProxy,
-                ERC1967Proxy::deploy(l1.clone(), (lc_address, data))?,
-            )
-            .await?;
-    }
+    let genesis = light_client_genesis(&opt.orchestrator_url, opt.stake_table_capacity).await?;
+    let data = light_client
+        .initialize(genesis.into(), u32::MAX, owner)
+        .calldata()
+        .context("calldata for initialize transaction not available")?;
+    contracts
+        .deploy_tx(
+            Contract::LightClientProxy,
+            ERC1967Proxy::deploy(l1.clone(), (lc_address, data))?,
+        )
+        .await?;
 
     if let Some(out) = &opt.out {
         let file = File::options()
