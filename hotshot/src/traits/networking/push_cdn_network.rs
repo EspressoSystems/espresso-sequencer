@@ -4,6 +4,7 @@ use std::{collections::BTreeSet, marker::PhantomData};
 #[cfg(feature = "hotshot-testing")]
 use std::{path::Path, sync::Arc, time::Duration};
 
+use async_compatibility_layer::art::async_sleep;
 #[cfg(feature = "hotshot-testing")]
 use async_compatibility_layer::art::async_spawn;
 use async_compatibility_layer::channel::UnboundedSendError;
@@ -262,15 +263,32 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
             .to_string_lossy()
             .into_owned();
 
+        // Pick some unused public ports
+        let public_address_1 = format!(
+            "127.0.0.1:{}",
+            portpicker::pick_unused_port().expect("could not find an open port")
+        );
+        let public_address_2 = format!(
+            "127.0.0.1:{}",
+            portpicker::pick_unused_port().expect("could not find an open port")
+        );
+
         // 2 brokers
-        for _ in 0..2 {
+        for i in 0..2 {
             // Get the ports to bind to
             let private_port = portpicker::pick_unused_port().expect("could not find an open port");
-            let public_port = portpicker::pick_unused_port().expect("could not find an open port");
 
             // Extrapolate addresses
             let private_address = format!("127.0.0.1:{private_port}");
-            let public_address = format!("127.0.0.1:{public_port}");
+            let (public_address, other_public_address) = if i == 0 {
+                (public_address_1.clone(), public_address_2.clone())
+            } else {
+                (public_address_2.clone(), public_address_1.clone())
+            };
+
+            // Calculate the broker identifiers
+            let broker_identifier = format!("{public_address}/{public_address}");
+            let other_broker_identifier = format!("{other_public_address}/{other_public_address}");
 
             // Configure the broker
             let config: BrokerConfig<TestingDef<TYPES>> = BrokerConfig {
@@ -292,6 +310,12 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
             async_spawn(async move {
                 let broker: Broker<TestingDef<TYPES>> =
                     Broker::new(config).await.expect("broker failed to start");
+
+                // If we are the first broker by identifier, we need to sleep a bit
+                // for discovery to happen first
+                if other_broker_identifier > broker_identifier {
+                    async_sleep(Duration::from_secs(2)).await;
+                }
 
                 // Error if we stopped unexpectedly
                 if let Err(err) = broker.start().await {
