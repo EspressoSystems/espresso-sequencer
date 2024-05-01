@@ -20,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("sequencer starting up");
     let opt = Options::parse();
-    tracing::info!("options: {:?}", opt);
+    tracing::warn!("options: {:?}", opt);
     let mut modules = opt.modules();
 
     if let Some(storage) = modules.storage_fs.take() {
