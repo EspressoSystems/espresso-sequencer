@@ -122,7 +122,7 @@ async fn main() -> anyhow::Result<()> {
         .deploy_tx(Contract::HotShot, HotShot::deploy(l1.clone(), ())?)
         .await?;
 
-    // Deploy the upgradable light client contract first, then initialize it throught a proxy contract
+    // Deploy the upgradable light client contract first, then initialize it through a proxy contract
     let lc_address = if opt.use_mock_contract {
         contracts
             .deploy_fn(Contract::LightClient, |contracts| {
