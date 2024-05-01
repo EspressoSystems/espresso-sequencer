@@ -144,10 +144,11 @@ where
         .get("available_blocks", |req, state| {
             async move {
                 let hash = req.blob_param("parent_hash")?;
+                let view_number = req.integer_param("view_number")?;
                 let signature = try_extract_param(&req, "signature")?;
                 let sender = try_extract_param(&req, "sender")?;
                 state
-                    .get_available_blocks(&hash, sender, &signature)
+                    .get_available_blocks(&hash, view_number, sender, &signature)
                     .await
                     .context(BlockAvailableSnafu {
                         resource: hash.to_string(),
@@ -157,28 +158,30 @@ where
         })?
         .get("claim_block", |req, state| {
             async move {
-                let hash: BuilderCommitment = req.blob_param("block_hash")?;
+                let block_hash: BuilderCommitment = req.blob_param("block_hash")?;
+                let view_number = req.integer_param("view_number")?;
                 let signature = try_extract_param(&req, "signature")?;
                 let sender = try_extract_param(&req, "sender")?;
                 state
-                    .claim_block(&hash, sender, &signature)
+                    .claim_block(&block_hash, view_number, sender, &signature)
                     .await
                     .context(BlockClaimSnafu {
-                        resource: hash.to_string(),
+                        resource: block_hash.to_string(),
                     })
             }
             .boxed()
         })?
         .get("claim_header_input", |req, state| {
             async move {
-                let hash: BuilderCommitment = req.blob_param("block_hash")?;
+                let block_hash: BuilderCommitment = req.blob_param("block_hash")?;
+                let view_number = req.integer_param("view_number")?;
                 let signature = try_extract_param(&req, "signature")?;
                 let sender = try_extract_param(&req, "sender")?;
                 state
-                    .claim_block_header_input(&hash, sender, &signature)
+                    .claim_block_header_input(&block_hash, view_number, sender, &signature)
                     .await
                     .context(BlockClaimSnafu {
-                        resource: hash.to_string(),
+                        resource: block_hash.to_string(),
                     })
             }
             .boxed()

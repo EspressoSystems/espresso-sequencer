@@ -30,4 +30,8 @@ FORMAT_VERSION = "0.1.0"
 [route.submit_txn]
 PATH = ["/submit"]
 METHOD = "POST"
-DOC = "Submit a transaction to builder's private mempool."
+DOC = """
+Submit a transaction to the Builder
+
+Returns transaction hash
+"""

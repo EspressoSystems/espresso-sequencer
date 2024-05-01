@@ -107,13 +107,14 @@ impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver> {
     pub async fn get_available_blocks(
         &self,
         parent: VidCommitment,
+        view_number: u64,
         sender: TYPES::SignatureKey,
         signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<Vec<AvailableBlockInfo<TYPES>>, BuilderClientError> {
         let encoded_signature: TaggedBase64 = signature.clone().into();
         self.inner
             .get(&format!(
-                "availableblocks/{parent}/{sender}/{encoded_signature}"
+                "availableblocks/{parent}/{view_number}/{sender}/{encoded_signature}"
             ))
             .send()
             .await
@@ -128,13 +129,14 @@ impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver> {
     pub async fn claim_block(
         &self,
         block_hash: BuilderCommitment,
+        view_number: u64,
         sender: TYPES::SignatureKey,
         signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<AvailableBlockData<TYPES>, BuilderClientError> {
         let encoded_signature: TaggedBase64 = signature.clone().into();
         self.inner
             .get(&format!(
-                "claimblock/{block_hash}/{sender}/{encoded_signature}"
+                "claimblock/{block_hash}/{view_number}/{sender}/{encoded_signature}"
             ))
             .send()
             .await
@@ -149,13 +151,14 @@ impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver> {
     pub async fn claim_block_header_input(
         &self,
         block_hash: BuilderCommitment,
+        view_number: u64,
         sender: TYPES::SignatureKey,
         signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<AvailableBlockHeaderInput<TYPES>, BuilderClientError> {
         let encoded_signature: TaggedBase64 = signature.clone().into();
         self.inner
             .get(&format!(
-                "claimheaderinput/{block_hash}/{sender}/{encoded_signature}"
+                "claimheaderinput/{block_hash}/{view_number}/{sender}/{encoded_signature}"
             ))
             .send()
             .await

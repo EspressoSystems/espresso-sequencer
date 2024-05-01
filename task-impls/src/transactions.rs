@@ -214,7 +214,7 @@ impl<
     }
 
     /// Get last known builder commitment from consensus.
-    async fn latest_known_vid_commitment(&self) -> VidCommitment {
+    async fn latest_known_vid_commitment(&self) -> (TYPES::Time, VidCommitment) {
         let consensus = self.consensus.read().await;
 
         let mut prev_view = TYPES::Time::new(self.cur_view.saturating_sub(1));
@@ -235,13 +235,16 @@ impl<
                         ViewInner::Failed => None,
                     })
             {
-                return commitment;
+                return (prev_view, commitment);
             }
             prev_view = prev_view - 1;
         }
 
         // If not found, return commitment for last decided block
-        consensus.get_decided_leaf().get_payload_commitment()
+        (
+            prev_view,
+            consensus.get_decided_leaf().get_payload_commitment(),
+        )
     }
 
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "wait_for_block", level = "error")]
@@ -249,7 +252,7 @@ impl<
         let task_start_time = Instant::now();
 
         // Find commitment to the block we want to build upon
-        let parent_comm = self.latest_known_vid_commitment().await;
+        let (view_num, parent_comm) = self.latest_known_vid_commitment().await;
         let parent_comm_sig = match <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
             &self.private_key,
             parent_comm.as_ref(),
@@ -266,7 +269,7 @@ impl<
                 self.api
                     .builder_timeout()
                     .saturating_sub(task_start_time.elapsed()),
-                self.get_block_from_builder(parent_comm, &parent_comm_sig),
+                self.get_block_from_builder(parent_comm, view_num, &parent_comm_sig),
             )
             .await
             {
@@ -299,11 +302,17 @@ impl<
     async fn get_block_from_builder(
         &self,
         parent_comm: VidCommitment,
+        view_number: TYPES::Time,
         parent_comm_sig: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> anyhow::Result<BuilderResponses<TYPES>> {
         let available_blocks = self
             .builder_client
-            .get_available_blocks(parent_comm, self.public_key.clone(), parent_comm_sig)
+            .get_available_blocks(
+                parent_comm,
+                view_number.get_u64(),
+                self.public_key.clone(),
+                parent_comm_sig,
+            )
             .await
             .context("getting available blocks")?;
         tracing::debug!("Got available blocks: {available_blocks:?}");
@@ -341,8 +350,8 @@ impl<
         .context("signing block hash")?;
 
         let (block, header_input) = futures::join! {
-            self.builder_client.claim_block(block_info.block_hash.clone(), self.public_key.clone(), &request_signature),
-            self.builder_client.claim_block_header_input(block_info.block_hash.clone(), self.public_key.clone(), &request_signature)
+            self.builder_client.claim_block(block_info.block_hash.clone(), view_number.get_u64(), self.public_key.clone(), &request_signature),
+            self.builder_client.claim_block_header_input(block_info.block_hash.clone(), view_number.get_u64(), self.public_key.clone(), &request_signature)
         };
 
         let block_data = block.context("claiming block data")?;
