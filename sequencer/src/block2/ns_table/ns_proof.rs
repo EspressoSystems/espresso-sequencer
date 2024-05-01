@@ -66,9 +66,19 @@ impl Payload {
 }
 impl NsProof {
     /// Verify a [`NsProof`] against a payload commitment.
+    ///
+    /// TODO the only way to verify `ns_id` is to look it up in the ns_table,
+    /// read the ns_range from the ns_table, then verify the proof against the
+    /// range we looked up. Also, the `ns_range` I just painstakingly added to
+    /// `NsPayloadOwned` is now useless -> we ignore it in favour of what we
+    /// find in the ns_table.
+    ///
+    /// If we don't care about checking `ns_id` then we can instead rely on the
+    /// ns_range in `NsPayloadOwned` and we can delete the `ns_table` arg from
+    /// this method.
     pub fn verify_namespace_proof(
         &self,
-        ns_table: &NsTable, // TODO delete this arg: ns_range is part of ns_payload
+        ns_table: &NsTable, // TODO delete this arg: ns_range is part of ns_payload, but we still need to check that `ns_id` is in the ns table!!
         commit: &VidCommitment,
         common: &VidCommon,
     ) -> Option<(Vec<Transaction>, NamespaceId)> {
@@ -81,7 +91,7 @@ impl NsProof {
                 vid_scheme(VidSchemeType::get_num_storage_nodes(common))
                     .payload_verify(
                         Statement {
-                            payload_subslice: pf.ns_payload.as_byte_slice(),
+                            payload_subslice: pf.ns_payload.as_unowned().as_byte_slice(),
                             range: ns_table
                                 .ns_payload_range(
                                     &ns_index,
@@ -98,7 +108,10 @@ impl NsProof {
 
                 // verification succeeded, return some data
                 // we know ns_id is correct because the corresponding ns_payload_range passed verification
-                Some((pf.ns_payload.export_all_txs(&self.ns_id), self.ns_id))
+                Some((
+                    pf.ns_payload.as_unowned().export_all_txs(&self.ns_id),
+                    self.ns_id,
+                ))
             }
             (None, None) => Some((Vec::new(), self.ns_id)), // successful verification of nonexistence
             (None, Some(_)) | (Some(_), None) => None, // error: expect [non]existence but found the opposite

@@ -53,7 +53,7 @@ impl<'a> Iterator for Iter<'a> {
 
             if let Some(tx_index) = self
                 .tx_iter
-                .get_or_insert_with(|| TxIter::new(self.block.ns_payload(ns_index))) // ensure `tx_iter` is set
+                .get_or_insert_with(|| TxIter::new(&self.block.ns_payload(ns_index))) // ensure `tx_iter` is set
                 .next()
             {
                 return Some(Index {
