@@ -14,7 +14,7 @@ import { UUPSUpgradeable } from
 contract DemoBoxV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error BoxAlreadyExists();
     error BoxSizeTooSmall();
-    error BoxCapcityTooSmall();
+    error BoxCapacityTooSmall();
     error NoBoxExists();
     error YouMustDepositETH();
     error ZeroBalance();
@@ -67,7 +67,7 @@ contract DemoBoxV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
 
         if (_maxItems == 0) {
-            revert BoxCapcityTooSmall();
+            revert BoxCapacityTooSmall();
         }
 
         boxes[msg.sender] =
@@ -115,7 +115,7 @@ contract DemoBoxV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert BoxSizeTooSmall();
         }
         if (_maxItems == 0) {
-            revert BoxCapcityTooSmall();
+            revert BoxCapacityTooSmall();
         }
         if (boxes[msg.sender].size == 0) {
             revert NoBoxExists();
@@ -137,7 +137,7 @@ contract DemoBoxV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice update a box capacity for the user if it exists
     function updateBoxCapacity(uint256 _maxItems) public {
         if (_maxItems == 0) {
-            revert BoxCapcityTooSmall();
+            revert BoxCapacityTooSmall();
         }
         if (boxes[msg.sender].size == 0) {
             revert NoBoxExists();
