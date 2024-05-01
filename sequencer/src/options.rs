@@ -3,6 +3,8 @@ use anyhow::{bail, Context};
 use bytesize::ByteSize;
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
+use core::fmt::Display;
+use derivative::Derivative;
 use derive_more::From;
 use ethers::types::{Address, U256};
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
@@ -37,7 +39,9 @@ use url::Url;
 // BEST NOT TO ADD REQUIRED ARGUMENTS TO THIS TYPE, since the required arguments will be required
 // even if the user is only asking for help on a module. Try to give every argument on this type a
 // default value, even if it is a bit arbitrary.
-#[derive(Parser, Clone, Debug)]
+
+#[derive(Parser, Clone, Derivative)]
+#[derivative(Debug(bound = ""))]
 pub struct Options {
     /// Unique identifier for this instance of the sequencer network.
     #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
@@ -50,6 +54,7 @@ pub struct Options {
         env = "ESPRESSO_SEQUENCER_ORCHESTRATOR_URL",
         default_value = "http://localhost:8080"
     )]
+    #[derivative(Debug(format_with = "Display::fmt"))]
     pub orchestrator_url: Url,
 
     /// The socket address of the HotShot CDN's main entry point (the marshal)
@@ -88,6 +93,7 @@ pub struct Options {
         env = "ESPRESSO_STATE_RELAY_SERVER_URL",
         default_value = "http://localhost:8083"
     )]
+    #[derivative(Debug(format_with = "Display::fmt"))]
     pub state_relay_server_url: Url,
 
     /// Path to file containing private keys.
@@ -108,6 +114,7 @@ pub struct Options {
         env = "ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY",
         conflicts_with = "key_file"
     )]
+    #[derivative(Debug = "ignore")]
     pub private_staking_key: Option<BLSPrivKey>,
 
     /// Private state signing key.
@@ -118,6 +125,7 @@ pub struct Options {
         env = "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY",
         conflicts_with = "key_file"
     )]
+    #[derivative(Debug = "ignore")]
     pub private_state_key: Option<StateSignKey>,
 
     /// Add optional modules to the service.
@@ -148,6 +156,7 @@ pub struct Options {
 
     /// Url we will use for RPC communication with L1.
     #[clap(long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
+    #[derivative(Debug(format_with = "Display::fmt"))]
     pub l1_provider_url: Url,
 
     /// Whether or not we are a DA node.
@@ -156,11 +165,13 @@ pub struct Options {
 
     /// Peer nodes use to fetch missing state
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
+    #[derivative(Debug(format_with = "fmt_urls"))]
     pub state_peers: Vec<Url>,
 
     /// Stake table capacity for the prover circuit
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
     pub stake_table_capacity: usize,
+
     /// Maximum size in bytes of a block
     #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE", value_parser = parse_size)]
     pub max_block_size: u64,
@@ -196,6 +207,15 @@ impl Options {
             bail!("neither key file nor full set of private keys was provided")
         }
     }
+}
+
+// The Debug implementation for Url is noisy, we just want to see the URL
+fn fmt_urls(v: &[Url], fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+    write!(
+        fmt,
+        "{:?}",
+        v.iter().map(|i| i.to_string()).collect::<Vec<_>>()
+    )
 }
 
 #[derive(Clone, Debug, Snafu)]
