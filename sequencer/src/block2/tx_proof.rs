@@ -44,12 +44,12 @@ pub struct TxProof {
 
 impl Payload {
     pub fn transaction(&self, index: &Index) -> Option<Transaction> {
-        // TODO check index.ns_index in bounds
+        // TODO check index.ns() in bounds
         // TODO don't copy the tx bytes into the return value
         // https://github.com/EspressoSystems/hotshot-query-service/issues/267
         Some(
-            self.ns_payload(&index.ns_index)
-                .export_tx(&self.ns_table.read_ns_id(&index.ns_index), &index.tx_index),
+            self.ns_payload(index.ns())
+                .export_tx(&self.ns_table.read_ns_id(index.ns()), index.tx()),
         )
     }
 
@@ -62,11 +62,11 @@ impl Payload {
             return None; // error: common inconsistent with self
         }
 
-        // TODO check index.ns_index in bounds
-        let ns_payload = self.ns_payload(&index.ns_index);
+        // TODO check index.ns() in bounds
+        let ns_payload = self.ns_payload(index.ns());
         let ns_payload_range = self
             .ns_table
-            .ns_payload_range(&index.ns_index, self.payload.len());
+            .ns_payload_range(index.ns(), self.payload.len());
 
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
 
@@ -87,16 +87,16 @@ impl Payload {
         // correctness.
         // TODO read_tx_offset converts bytes->usize, then we convert back to bytes
         let payload_tx_table_entry_prev = ns_payload
-            .read_tx_offset_prev(&index.tx_index)
+            .read_tx_offset_prev(index.tx())
             .map(tx_offset_as_bytes);
-        let payload_tx_table_entry = tx_offset_as_bytes(ns_payload.read_tx_offset(&index.tx_index));
+        let payload_tx_table_entry = tx_offset_as_bytes(ns_payload.read_tx_offset(index.tx()));
         let payload_proof_tx_table_entries = {
-            let range = ns_payload_range.tx_table_entries_range(&index.tx_index);
+            let range = ns_payload_range.tx_table_entries_range(index.tx());
 
             // tracing::info!(
             //     "prove: (ns,tx) ({:?},{:?}), tx_table_entries_range {:?}, content {:?}",
-            //     index.ns_index,
-            //     index.tx_index,
+            //     index.ns(),
+            //     index.tx(),
             //     range,
             //     &self.payload[range.clone()]
             // );
@@ -111,7 +111,7 @@ impl Payload {
             //
             // TODO I'm re-reading the tx_payload_range here... because I want automatic translaction by ns_payload_range?
             // In `verify` I don't have this luxury; Perhaps I should instead compute the tx_payload_range the same way I do in `verify`?
-            // let range = ns_payload.tx_payload_range(&index.tx_index, &ns_payload_range);
+            // let range = ns_payload.tx_payload_range(index.tx(), &ns_payload_range);
 
             // TODO (i) payload_xxx should be a newtype(usize) that serializes to bytes
             let range = ns_payload_range.tx_payload_range(
@@ -122,8 +122,8 @@ impl Payload {
 
             tracing::info!(
                 "prove: (ns,tx) ({:?},{:?}), tx_payload_range {:?}, content {:?}",
-                index.ns_index,
-                index.tx_index,
+                index.ns(),
+                index.tx(),
                 range,
                 &self.payload[range.clone()]
             );
@@ -141,7 +141,7 @@ impl Payload {
                 ns_payload_range,
                 payload_num_txs,
                 payload_proof_num_txs,
-                tx_index: index.tx_index.clone(),
+                tx_index: index.tx().clone(),
                 payload_tx_table_entry_prev,
                 payload_tx_table_entry,
                 payload_proof_tx_table_entries,

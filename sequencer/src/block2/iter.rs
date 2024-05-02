@@ -8,8 +8,17 @@ use std::iter::Peekable;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Index {
-    pub(super) ns_index: NsIndex, // TODO remove pub(super)
-    pub(super) tx_index: TxIndex,
+    ns_index: NsIndex,
+    tx_index: TxIndex,
+}
+
+impl Index {
+    pub fn ns(&self) -> &NsIndex {
+        &self.ns_index
+    }
+    pub fn tx(&self) -> &TxIndex {
+        &self.tx_index
+    }
 }
 
 // TODO don't impl `PartialOrd`
