@@ -89,7 +89,8 @@ pub fn define_api<
 ) -> Result<Api<State, Error, Ver>, ApiError>
 where
     State: 'static + Send + Sync + ReadState,
-    <State as ReadState>::State: Send + Sync + MerklizedStateDataSource<Types, M, ARITY>,
+    <State as ReadState>::State:
+        Send + Sync + MerklizedStateDataSource<Types, M, ARITY> + MerklizedStateHeightPersistence,
     Types: NodeType,
     for<'a> <M::Commit as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
@@ -118,6 +119,9 @@ where
                 state.get_path(snapshot, key).await.context(QuerySnafu)
             }
             .boxed()
+        })?
+        .get("get_height", move |_, state| {
+            async move { state.get_last_state_height().await.context(QuerySnafu) }.boxed()
         })?;
 
     Ok(api)
