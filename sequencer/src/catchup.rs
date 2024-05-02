@@ -67,6 +67,7 @@ impl<Ver: StaticVersionType> StatePeers<Ver> {
         }
     }
 
+    #[tracing::instrument(skip(self))]
     async fn fetch_account(
         &self,
         view: ViewNumber,
@@ -107,7 +108,6 @@ impl<Ver: StaticVersionType> StatePeers<Ver> {
 
 #[async_trait]
 impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
-    #[tracing::instrument(skip(self))]
     async fn fetch_accounts(
         &self,
         view: ViewNumber,
