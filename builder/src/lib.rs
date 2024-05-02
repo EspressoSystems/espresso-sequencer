@@ -558,7 +558,7 @@ pub mod testing {
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
                 15,
-                Duration::from_millis(50),
+                Duration::from_millis(500),
                 0,
             )
             .await
@@ -621,7 +621,7 @@ pub mod testing {
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
                 15,
-                Duration::from_millis(50),
+                Duration::from_millis(500),
                 0,
             )
             .await

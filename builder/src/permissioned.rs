@@ -402,7 +402,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
 
         // builder api response channel
-        let (res_sender, res_receiver) = unbounded();
+        //let (res_sender, res_receiver) = unbounded();
         let (genesis_payload, genesis_ns_table) =
             Payload::from_transactions([], Arc::new(instance_state.clone()))
                 .expect("genesis payload construction failed");
@@ -418,7 +418,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
             req_sender,
-            res_receiver,
             tx_sender.clone(),
             vid_commitment,
             bootstrapped_view,
@@ -443,7 +442,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             qc_receiver,
             req_receiver,
             global_state_clone,
-            res_sender,
             NonZeroUsize::new(1).unwrap(),
             bootstrapped_view,
             buffered_view_num_count as u64,

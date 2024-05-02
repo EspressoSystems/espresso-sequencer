@@ -46,19 +46,19 @@ dotenvy = "0.15"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", branch = "nfy/do_not_merge/track_hotshot_main" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 # Hotshot imports
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.46" }
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.46" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.14" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.46" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.14" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.46" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "local_testing" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "hg/local_testing" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.46" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.46" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.46" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.46" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.16" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
