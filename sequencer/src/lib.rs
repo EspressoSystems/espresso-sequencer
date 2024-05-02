@@ -63,7 +63,7 @@ use hotshot_types::{
     utils::{BuilderCommitment, View},
     ValidatorConfig,
 };
-use persistence::SequencerPersistence;
+use persistence::{PersistenceOptions, SequencerPersistence};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc};
@@ -154,6 +154,7 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
 
 #[derive(Debug, Clone)]
 pub struct NodeState {
+    node_id: u64,
     chain_config: ChainConfig,
     l1_client: L1Client,
     peers: Arc<dyn StateCatchup>,
@@ -162,11 +163,13 @@ pub struct NodeState {
 
 impl NodeState {
     pub fn new(
+        node_id: u64,
         chain_config: ChainConfig,
         l1_client: L1Client,
         catchup: impl StateCatchup + 'static,
     ) -> Self {
         Self {
+            node_id,
             chain_config,
             l1_client,
             peers: Arc::new(catchup),
@@ -177,6 +180,7 @@ impl NodeState {
     #[cfg(any(test, feature = "testing"))]
     pub fn mock() -> Self {
         Self::new(
+            0,
             ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
             catchup::mock::MockStateCatchup::default(),
@@ -262,17 +266,17 @@ pub struct L1Params {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
+pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     network_params: NetworkParams,
     metrics: &dyn Metrics,
-    mut persistence: P,
+    persistence_opt: P,
     builder_params: BuilderParams,
     l1_params: L1Params,
     stake_table_capacity: usize,
     bind_version: Ver,
     chain_config: ChainConfig,
     is_da: bool,
-) -> anyhow::Result<SequencerContext<network::Production, P, Ver>> {
+) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -294,6 +298,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         derive_libp2p_peer_id::<<SeqTypes as NodeType>::SignatureKey>(&my_config.private_key)
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
+    let mut persistence = persistence_opt.clone().create().await?;
     let (config, wait_for_orchestrator) = match persistence.load_config().await? {
         Some(config) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
@@ -413,7 +418,12 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         chain_config,
         l1_client,
         genesis_state,
-        peers: Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
+        peers: catchup::local_and_remote(
+            persistence_opt,
+            StatePeers::<Ver>::from_urls(network_params.state_peers),
+        )
+        .await,
+        node_id: node_index,
     };
 
     let mut ctx = SequencerContext::init(
@@ -423,7 +433,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         networks,
         Some(network_params.state_relay_server_url),
         metrics,
-        node_index,
         stake_table_capacity,
         bind_version,
     )
@@ -442,8 +451,9 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 pub mod testing {
     use super::*;
     use crate::{
-        catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair,
-        persistence::no_storage::NoStorage,
+        catchup::mock::MockStateCatchup,
+        eth_signature_key::EthKeyPair,
+        persistence::no_storage::{self, NoStorage},
     };
     use committable::Committable;
     use ethers::utils::{Anvil, AnvilInstance};
@@ -576,7 +586,7 @@ pub mod testing {
                 self.init_node(
                     i,
                     ValidatedState::default(),
-                    NoStorage,
+                    no_storage::Options,
                     MockStateCatchup::default(),
                     &NoMetrics,
                     STAKE_TABLE_CAPACITY_FOR_TEST,
@@ -589,17 +599,17 @@ pub mod testing {
         }
 
         #[allow(clippy::too_many_arguments)]
-        pub async fn init_node<Ver: StaticVersionType + 'static, P: SequencerPersistence>(
+        pub async fn init_node<Ver: StaticVersionType + 'static, P: PersistenceOptions>(
             &self,
             i: usize,
             mut state: ValidatedState,
-            persistence: P,
+            persistence_opt: P,
             catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
             stake_table_capacity: usize,
             bind_version: Ver,
             is_da: bool,
-        ) -> SequencerContext<network::Memory, P, Ver> {
+        ) -> SequencerContext<network::Memory, P::Persistence, Ver> {
             let mut config = self.config.clone();
             config.my_own_validator_config = ValidatorConfig {
                 public_key: config.known_nodes_with_stake[i].stake_table_entry.stake_key,
@@ -629,9 +639,10 @@ pub mod testing {
             tracing::info!(%builder_account, "prefunding builder account");
             state.prefund_account(builder_account, U256::max_value().into());
             let node_state = NodeState::new(
+                i as u64,
                 ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
-                catchup,
+                catchup::local_and_remote(persistence_opt.clone(), catchup).await,
             )
             .with_genesis(state);
 
@@ -644,11 +655,10 @@ pub mod testing {
             SequencerContext::init(
                 config,
                 node_state,
-                persistence,
+                persistence_opt.create().await.unwrap(),
                 networks,
                 None,
                 metrics,
-                i as u64,
                 stake_table_capacity,
                 bind_version,
             )

@@ -18,10 +18,10 @@ async fn main() -> anyhow::Result<()> {
     setup_logging();
     setup_backtrace();
 
-    tracing::info!("sequencer starting up");
+    tracing::warn!("sequencer starting up");
     let opt = Options::parse();
-    tracing::warn!("options: {:?}", opt);
     let mut modules = opt.modules();
+    tracing::warn!("modules: {:?}", modules);
 
     if let Some(storage) = modules.storage_fs.take() {
         init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await
@@ -111,7 +111,6 @@ where
                 http_opt = http_opt.hotshot_events(hotshot_events);
             }
 
-            let storage = storage_opt.create().await?;
             http_opt
                 .serve(
                     move |metrics| {
@@ -119,7 +118,7 @@ where
                             init_node(
                                 network_params,
                                 &*metrics,
-                                storage,
+                                storage_opt,
                                 builder_params,
                                 l1_params,
                                 stake_table_capacity,
@@ -140,7 +139,7 @@ where
             init_node(
                 network_params,
                 &NoMetrics,
-                storage_opt.create().await?,
+                storage_opt,
                 builder_params,
                 l1_params,
                 stake_table_capacity,

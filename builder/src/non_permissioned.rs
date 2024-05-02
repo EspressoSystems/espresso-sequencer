@@ -63,6 +63,7 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
 ) -> anyhow::Result<NodeState> {
     let l1_client = L1Client::new(l1_params.url, Address::default());
     let instance_state = NodeState::new(
+        u64::MAX, // dummy node ID, only used for debugging
         ChainConfig::default(),
         l1_client,
         Arc::new(StatePeers::<Ver>::from_urls(state_peers)),

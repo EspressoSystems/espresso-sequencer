@@ -1,6 +1,6 @@
 use crate::{
-    api::endpoints::AccountQueryData, catchup::StateCatchup, eth_signature_key::EthKeyPair,
-    ChainConfig, Header, Leaf, NodeState, SeqTypes,
+    catchup::SqlStateCatchup, eth_signature_key::EthKeyPair, ChainConfig, Header, Leaf, NodeState,
+    SeqTypes,
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use ark_serialize::{
@@ -8,7 +8,6 @@ use ark_serialize::{
 };
 use async_std::stream::StreamExt;
 use async_std::sync::RwLock;
-use async_trait::async_trait;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::DepositFilter;
 use core::fmt::Debug;
@@ -20,8 +19,7 @@ use hotshot_query_service::{
     availability::{AvailabilityDataSource, LeafQueryData},
     data_source::VersionedDataSource,
     merklized_state::{
-        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
-        UpdateStateData,
+        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, UpdateStateData,
     },
     types::HeightIndexed,
 };
@@ -33,8 +31,7 @@ use hotshot_types::{
 };
 use itertools::Itertools;
 use jf_primitives::merkle_tree::{
-    prelude::{MerkleNode, MerkleProof},
-    ToTraversalPath, UniversalMerkleTreeScheme,
+    prelude::MerkleProof, ToTraversalPath, UniversalMerkleTreeScheme,
 };
 use jf_primitives::{
     errors::PrimitivesError,
@@ -290,108 +287,8 @@ fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[derive(Debug)]
-struct SqlStateCatchup<T> {
-    db: Arc<RwLock<T>>,
-    block_height: u64,
-}
-
-#[async_trait]
-impl<T> StateCatchup for SqlStateCatchup<T>
-where
-    T: SequencerStateDataSource,
-{
-    async fn fetch_accounts(
-        &self,
-        _view: ViewNumber,
-        _fee_merkle_tree_root: FeeMerkleCommitment,
-        accounts: Vec<FeeAccount>,
-    ) -> anyhow::Result<Vec<AccountQueryData>> {
-        let mut ret = vec![];
-        for account in accounts {
-            let block_height = self.block_height;
-
-            let proof = self
-                .db
-                .read()
-                .await
-                .get_path(
-                    Snapshot::<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>::Index(
-                        block_height,
-                    ),
-                    account,
-                )
-                .await
-                .context(format!("fetching account {account}; height {block_height}"))?;
-
-            match proof.proof.first().context(format!(
-                "empty proof for account {account}; height {block_height}"
-            ))? {
-                MerkleNode::Leaf { pos, elem, .. } => {
-                    ret.push(AccountQueryData {
-                        balance: elem.0,
-                        proof: FeeAccountProof {
-                            account: (*pos).into(),
-                            proof: FeeMerkleProof::Presence(proof),
-                        },
-                    });
-                }
-
-                MerkleNode::Empty => {
-                    ret.push(AccountQueryData {
-                        balance: 0_u64.into(),
-                        proof: FeeAccountProof {
-                            account: account.into(),
-                            proof: FeeMerkleProof::Absence(proof),
-                        },
-                    });
-                }
-                _ => {
-                    bail!("Invalid proof");
-                }
-            }
-        }
-        Ok(ret)
-    }
-
-    async fn remember_blocks_merkle_tree(
-        &self,
-        _view: ViewNumber,
-        mt: &mut BlockMerkleTree,
-    ) -> anyhow::Result<()> {
-        let bh = self.block_height;
-
-        if bh == 0 {
-            return Ok(());
-        }
-
-        let proof = self
-            .db
-            .read()
-            .await
-            .get_path(
-                Snapshot::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(bh),
-                bh - 1,
-            )
-            .await
-            .context(format!("fetching frontier at height {bh}"))?;
-
-        match proof
-            .proof
-            .first()
-            .context(format!("empty proof for frontier at height {bh}"))?
-        {
-            MerkleNode::Leaf { pos, elem, .. } => mt
-                .remember(pos, elem, proof.clone())
-                .context("failed to remember proof"),
-            _ => bail!("invalid proof"),
-        }
-    }
-}
-
 async fn compute_state_update(
-    storage: Arc<RwLock<impl SequencerStateDataSource>>,
-    instance: &mut NodeState,
+    instance: &NodeState,
     parent_leaf: &LeafQueryData<SeqTypes>,
     proposed_leaf: &LeafQueryData<SeqTypes>,
 ) -> anyhow::Result<(ValidatedState, Delta)> {
@@ -399,13 +296,6 @@ async fn compute_state_update(
     let parent_leaf = parent_leaf.leaf();
     let header = proposed_leaf.get_block_header();
     let validated_state = ValidatedState::from_header(parent_leaf.get_block_header());
-
-    let catchup = SqlStateCatchup {
-        db: storage,
-        block_height: parent_leaf.get_height(),
-    };
-    instance.peers = Arc::new(catchup);
-
     validated_state
         .apply_header(instance, parent_leaf, header)
         .await
@@ -475,16 +365,23 @@ async fn store_state_update(
     Ok(())
 }
 
+#[tracing::instrument(
+    skip_all,
+    fields(
+        node_id = instance.node_id,
+        view = ?parent_leaf.leaf().get_view_number(),
+        height = parent_leaf.height(),
+    ),
+)]
 async fn update_state_storage(
     storage: &Arc<RwLock<impl SequencerStateDataSource>>,
-    instance: &mut NodeState,
+    instance: &NodeState,
     parent_leaf: &LeafQueryData<SeqTypes>,
     proposed_leaf: &LeafQueryData<SeqTypes>,
 ) -> anyhow::Result<()> {
-    let (state, delta) =
-        compute_state_update(storage.clone(), instance, parent_leaf, proposed_leaf)
-            .await
-            .context("computing state update")?;
+    let (state, delta) = compute_state_update(instance, parent_leaf, proposed_leaf)
+        .await
+        .context("computing state update")?;
 
     let mut storage = storage.write().await;
     if let Err(err) = store_state_update(&mut *storage, proposed_leaf.height(), state, delta).await
@@ -534,6 +431,7 @@ pub async fn update_state_storage_loop(
     instance: impl Future<Output = NodeState>,
 ) -> anyhow::Result<()> {
     let mut instance = instance.await;
+    instance.peers = Arc::new(SqlStateCatchup::from(storage.clone()));
 
     // get last saved merklized state
     let (last_height, parent_leaf, mut leaves) = {
@@ -564,7 +462,7 @@ pub async fn update_state_storage_loop(
 
     while let Some(leaf) = leaves.next().await {
         loop {
-            match update_state_storage(&storage, &mut instance, &parent_leaf, &leaf).await {
+            match update_state_storage(&storage, &instance, &parent_leaf, &leaf).await {
                 Ok(()) => {
                     parent_leaf = leaf;
                     break;
@@ -628,28 +526,42 @@ impl ValidatedState {
             accounts.chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
         );
 
-        let view = parent_leaf.get_view_number();
+        let parent_height = parent_leaf.get_height();
+        let parent_view = parent_leaf.get_view_number();
 
         // Ensure merkle tree has frontier
         if self.need_to_fetch_blocks_mt_frontier() {
-            tracing::info!("fetching block frontier for view {view:?} from peers");
-
+            tracing::info!(
+                parent_height,
+                ?parent_view,
+                "fetching block frontier from peers"
+            );
             instance
                 .peers
                 .as_ref()
-                .remember_blocks_merkle_tree(view, &mut validated_state.block_merkle_tree)
+                .remember_blocks_merkle_tree(
+                    parent_height,
+                    parent_view,
+                    &mut validated_state.block_merkle_tree,
+                )
                 .await?;
         }
 
         // Fetch missing fee state entries
         if !missing_accounts.is_empty() {
-            tracing::info!("fetching missing accounts {missing_accounts:?} from peers");
+            tracing::info!(
+                parent_height,
+                ?parent_view,
+                ?missing_accounts,
+                "fetching missing accounts from peers"
+            );
 
             let missing_account_proofs = instance
                 .peers
                 .as_ref()
                 .fetch_accounts(
-                    view,
+                    parent_height,
+                    parent_view,
                     validated_state.fee_merkle_tree.commitment(),
                     missing_accounts,
                 )
@@ -735,7 +647,11 @@ impl HotShotState<SeqTypes> for ValidatedState {
     /// proposal descends from parent. Returns updated `ValidatedState`.
     #[tracing::instrument(
         skip_all,
-        fields(view = ?parent_leaf.get_view_number(), height = parent_leaf.get_block_header().height),
+        fields(
+            node_id = instance.node_id,
+            view = ?parent_leaf.get_view_number(),
+            height = parent_leaf.get_height(),
+        ),
     )]
     async fn validate_and_apply_header(
         &self,
@@ -1150,6 +1066,26 @@ enum FeeMerkleProof {
 }
 
 impl FeeAccountProof {
+    pub(crate) fn presence(
+        pos: FeeAccount,
+        proof: <FeeMerkleTree as MerkleTreeScheme>::MembershipProof,
+    ) -> Self {
+        Self {
+            account: pos.into(),
+            proof: FeeMerkleProof::Presence(proof),
+        }
+    }
+
+    pub(crate) fn absence(
+        pos: FeeAccount,
+        proof: <FeeMerkleTree as UniversalMerkleTreeScheme>::NonMembershipProof,
+    ) -> Self {
+        Self {
+            account: pos.into(),
+            proof: FeeMerkleProof::Absence(proof),
+        }
+    }
+
     pub fn prove(tree: &FeeMerkleTree, account: Address) -> Option<(Self, U256)> {
         match tree.universal_lookup(FeeAccount(account)) {
             LookupResult::Ok(balance, proof) => Some((

@@ -1,6 +1,6 @@
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Header, Leaf, SeqTypes, ValidatedState, ViewNumber};
-use anyhow::{anyhow, bail, Context};
+use crate::{Leaf, SeqTypes, ViewNumber};
+use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use clap::Parser;
 
@@ -348,10 +348,6 @@ impl SequencerPersistence for Persistence {
                 Ok(())
             },
         )
-    }
-
-    async fn load_validated_state(&self, _header: &Header) -> anyhow::Result<ValidatedState> {
-        bail!("state persistence not implemented");
     }
 }
 

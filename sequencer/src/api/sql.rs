@@ -22,11 +22,8 @@ impl SequencerDataSource for DataSource {
 #[cfg(test)]
 mod impl_testable_data_source {
     use super::*;
-    use crate::{
-        api::{self, data_source::testing::TestableSequencerDataSource},
-        persistence::PersistenceOptions,
-    };
-    use hotshot_query_service::data_source::storage::sql::{testing::TmpDb, SqlStorage};
+    use crate::api::{self, data_source::testing::TestableSequencerDataSource};
+    use hotshot_query_service::data_source::storage::sql::testing::TmpDb;
 
     fn tmp_options(db: &TmpDb) -> Options {
         Options {
@@ -41,14 +38,13 @@ mod impl_testable_data_source {
     #[async_trait]
     impl TestableSequencerDataSource for DataSource {
         type Storage = TmpDb;
-        type Persistence = SqlStorage;
 
         async fn create_storage() -> Self::Storage {
             TmpDb::init().await
         }
 
-        async fn connect(storage: &Self::Storage) -> Self::Persistence {
-            tmp_options(storage).create().await.unwrap()
+        fn persistence_options(storage: &Self::Storage) -> Self::Options {
+            tmp_options(storage)
         }
 
         fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {

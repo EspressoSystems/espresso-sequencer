@@ -1,25 +1,20 @@
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
 use crate::{
+    catchup::{SqlStateCatchup, StateCatchup},
     options::parse_duration,
-    state::{BlockMerkleTree, FeeMerkleTree},
-    Header, Leaf, SeqTypes, ValidatedState, ViewNumber,
+    Leaf, SeqTypes, ViewNumber,
 };
-use anyhow::{bail, Context};
+use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use clap::Parser;
 use derivative::Derivative;
 use futures::future::{BoxFuture, FutureExt};
-use hotshot_query_service::{
-    data_source::{
-        storage::{
-            pruning::PrunerCfg,
-            sql::{
-                include_migrations, postgres::types::ToSql, Config, Query, SqlStorage, Transaction,
-            },
-        },
-        VersionedDataSource,
+use hotshot_query_service::data_source::{
+    storage::{
+        pruning::PrunerCfg,
+        sql::{include_migrations, postgres::types::ToSql, Config, Query, SqlStorage, Transaction},
     },
-    merklized_state::{MerklizedState, MerklizedStateDataSource, Snapshot},
+    VersionedDataSource,
 };
 use hotshot_types::{
     data::{DAProposal, VidDisperseShare},
@@ -29,7 +24,6 @@ use hotshot_types::{
     traits::node_implementation::ConsensusTime,
     vote::HasViewNumber,
 };
-use jf_primitives::merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
 use std::time::Duration;
 
 /// Options for Postgres-backed persistence.
@@ -240,6 +234,10 @@ async fn transaction(
 
 #[async_trait]
 impl SequencerPersistence for Persistence {
+    fn into_catchup_provider(self) -> anyhow::Result<Arc<dyn StateCatchup>> {
+        Ok(Arc::new(SqlStateCatchup::from(Arc::new(RwLock::new(self)))))
+    }
+
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
         tracing::info!("loading config from Postgres");
 
@@ -467,42 +465,6 @@ impl SequencerPersistence for Persistence {
             .boxed()
         })
         .await
-    }
-
-    async fn load_validated_state(&self, header: &Header) -> anyhow::Result<ValidatedState> {
-        let height = header.height;
-        let block_merkle_tree = if height == 0 {
-            BlockMerkleTree::new(BlockMerkleTree::tree_height())
-        } else {
-            // For the block Merkle tree, we only require the frontier, which we can load from
-            // storage and remember into a sparse tree.
-            let mut tree = BlockMerkleTree::from_commitment(header.block_merkle_tree_root);
-            let snapshot =
-                Snapshot::<_, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(height);
-            let frontier = self
-                .get_path(snapshot, height - 1)
-                .await
-                .context("fetching frontier")?;
-            let Some(&parent) = frontier.elem() else {
-                bail!("invalid frontier: missing element");
-            };
-            tree.remember(height - 1, parent, frontier)
-                .context("remembering frontier")?;
-            tree
-        };
-
-        // For the fee Merkle tree, we need the entire thing, since we never know which accounts we
-        // may need to access.
-        let snapshot = Snapshot::<_, FeeMerkleTree, { FeeMerkleTree::ARITY }>::Index(height);
-        let fee_merkle_tree = self
-            .get_snapshot(snapshot)
-            .await
-            .context("loading fee merkle tree")?;
-
-        Ok(ValidatedState {
-            block_merkle_tree,
-            fee_merkle_tree,
-        })
     }
 }
 

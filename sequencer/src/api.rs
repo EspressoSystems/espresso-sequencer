@@ -189,7 +189,7 @@ mod test_helpers {
     use crate::{
         api::endpoints::{AccountQueryData, BlocksFrontier},
         catchup::{mock::MockStateCatchup, StateCatchup},
-        persistence::{no_storage::NoStorage, SequencerPersistence},
+        persistence::{no_storage, PersistenceOptions, SequencerPersistence},
         state::BlockMerkleTree,
         testing::{run_test_builder, wait_for_decide_on_handle, TestConfig},
     };
@@ -227,7 +227,7 @@ mod test_helpers {
         pub async fn with_state(
             opt: Options,
             state: [ValidatedState; TestConfig::NUM_NODES],
-            persistence: [P; TestConfig::NUM_NODES],
+            persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
             catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
         ) -> Self {
             let mut cfg = TestConfig::default();
@@ -299,7 +299,10 @@ mod test_helpers {
             Self { server, peers, cfg }
         }
 
-        pub async fn new(opt: Options, persistence: [P; TestConfig::NUM_NODES]) -> Self {
+        pub async fn new(
+            opt: Options,
+            persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
+        ) -> Self {
             Self::with_state(
                 opt,
                 Default::default(),
@@ -333,7 +336,8 @@ mod test_helpers {
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).status(Default::default()));
-        let _network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
+        let _network =
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
         client.connect(None).await;
 
         // The status API is well tested in the query service repo. Here we are just smoke testing
@@ -379,7 +383,7 @@ mod test_helpers {
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
-        let network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
+        let network = TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
         let mut events = network.server.get_event_stream();
 
         client.connect(None).await;
@@ -408,7 +412,7 @@ mod test_helpers {
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }));
-        let network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
+        let network = TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
 
         let mut height: u64;
         // Wait for block >=2 appears
@@ -449,7 +453,8 @@ mod test_helpers {
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).catchup(Default::default()));
-        let mut network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
+        let mut network =
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
         client.connect(None).await;
 
         // Wait for a few blocks to be decided.
@@ -567,7 +572,7 @@ mod api_tests {
 
     use super::*;
     use crate::{
-        persistence::no_storage::NoStorage,
+        persistence::no_storage,
         testing::{wait_for_decide_on_handle, TestConfig},
         Header,
     };
@@ -618,7 +623,7 @@ mod api_tests {
         let storage = D::create_storage().await;
         let network = TestNetwork::new(
             D::options(&storage, options::Http { port }.into()).submit(Default::default()),
-            [NoStorage; TestConfig::NUM_NODES],
+            [no_storage::Options; TestConfig::NUM_NODES],
         )
         .await;
         let mut events = network.server.get_event_stream();
@@ -716,7 +721,8 @@ mod api_tests {
         })
         .hotshot_events(hotshot_events);
 
-        let _network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
+        let _network =
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
 
         let mut subscribed_events = client
             .socket("hotshot-events/events")
@@ -752,7 +758,7 @@ mod test {
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StatePeers},
-        persistence::no_storage::NoStorage,
+        persistence::no_storage,
         state::{FeeAccount, FeeAmount},
         testing::TestConfig,
         Header,
@@ -793,7 +799,8 @@ mod test {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
         let options = Options::from(options::Http { port });
-        let _network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
+        let _network =
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
 
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
@@ -835,7 +842,8 @@ mod test {
                 .status(Default::default()),
         );
 
-        let mut network = TestNetwork::new(options, [NoStorage; TestConfig::NUM_NODES]).await;
+        let mut network =
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
@@ -897,7 +905,7 @@ mod test {
         let mut network = TestNetwork::with_state(
             Options::from(options::Http { port }).catchup(Default::default()),
             Default::default(),
-            [NoStorage; TestConfig::NUM_NODES],
+            [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|_| {
                 StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
                     .parse()
@@ -940,7 +948,7 @@ mod test {
             .init_node(
                 1,
                 ValidatedState::default(),
-                NoStorage,
+                no_storage::Options,
                 StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
                     .parse()
                     .unwrap()]),
@@ -988,14 +996,12 @@ mod test {
         // Initialize nodes.
         let storage =
             join_all((0..TestConfig::NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-        let persistence = join_all(
-            storage
-                .iter()
-                .map(<SqlDataSource as TestableSequencerDataSource>::connect),
-        )
-        .await
-        .try_into()
-        .unwrap();
+        let persistence = storage
+            .iter()
+            .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
         let port = pick_unused_port().unwrap();
         let mut network = TestNetwork::with_state(
             SqlDataSource::options(&storage[0], options::Http { port }.into())
@@ -1069,14 +1075,12 @@ mod test {
 
         // Start up again, resuming from the last decided leaf.
         let port = pick_unused_port().expect("No ports free");
-        let persistence = join_all(
-            storage
-                .iter()
-                .map(<SqlDataSource as TestableSequencerDataSource>::connect),
-        )
-        .await
-        .try_into()
-        .unwrap();
+        let persistence = storage
+            .iter()
+            .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
         let _network = TestNetwork::with_state(
             SqlDataSource::options(&storage[0], options::Http { port }.into())
                 .catchup(Default::default()),
