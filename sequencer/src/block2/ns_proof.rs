@@ -1,5 +1,10 @@
-use super::{ns_payload::NsPayloadOwned, NsTable};
-use crate::{block2::Payload, NamespaceId, Transaction};
+use crate::{
+    block2::{
+        ns_table::{ns_payload::NsPayloadOwned, NsTable},
+        Payload,
+    },
+    NamespaceId, Transaction,
+};
 use hotshot_types::vid::{
     vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType,
 };

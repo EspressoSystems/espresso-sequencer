@@ -1,7 +1,7 @@
-use super::ns_payload::{tx_iter::TxIndex, NsPayloadRange};
 use crate::{
     block2::{
         iter::Index,
+        ns_table::ns_payload::{tx_iter::TxIndex, NsPayloadRange},
         payload_bytes::{
             num_txs_from_bytes, tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN,
             TX_OFFSET_BYTE_LEN,

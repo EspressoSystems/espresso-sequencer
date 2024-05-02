@@ -9,8 +9,6 @@ use std::collections::HashSet;
 
 // TODO do these all need to be pub?
 pub mod ns_payload;
-pub mod ns_proof;
-pub mod tx_proof;
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct NsTable(pub(super) Vec<u8>); // TODO remove pub(super)
