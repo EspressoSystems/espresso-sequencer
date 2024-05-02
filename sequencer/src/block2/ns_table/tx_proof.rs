@@ -149,6 +149,10 @@ impl Payload {
 impl TxProof {
     // - Returns `None` if an error occurred.
     // - `bool` result, or should we use `Result<(),()>` ?
+    //
+    // TODO we're not even checking the namespace id for `tx`. That would
+    // require the ns_table so we can look up the corresponding ns_range, which
+    // makes TxProof::ns_range redundant
     pub fn verify(
         &self,
         tx: &Transaction,
