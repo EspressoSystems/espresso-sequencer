@@ -14,7 +14,7 @@
 FORMAT_VERSION = "0.1.0"
 NAME = "hotshot-state"
 DESCRIPTION = """
-Query snapshot of merklized state. 
+Query snapshot of merklized state.
 
 The state API provides an interface for serving queries against arbitrarily old snapshots of the state. This allows a full Merkle tree to be reconstructed from storage. However, if any parent state is missing then the partial snapshot can not be queried.
 """
@@ -27,7 +27,7 @@ PATH = ["/:height/:key", "commit/:commit/:key"]
 DOC = """
 The endpoint offers two methods to query: by block height or by the tree's commitment.
 
-GET /:height/:key 
+GET /:height/:key
 Retrieves the Merkle Path for the membership proof of a leaf based on the block height and entry index.
 Parameters:
 :height : The block height of the snapshot.
@@ -41,4 +41,11 @@ Parameters:
 :key : The index of the entry in the Merkle tree.
 """
 
- 
+[route.get_height]
+PATH = ["/block-height"]
+DOC = """
+The latest block height for which the merklized state is available.
+
+Note that this may be less than the block height indicated by other APIs, such as `status` or
+`node`, since the merklized state storage is updated asynchronously.
+"""
