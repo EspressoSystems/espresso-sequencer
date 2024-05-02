@@ -5,7 +5,7 @@ pub mod client;
 /// Configuration for the orchestrator
 pub mod config;
 
-use std::{collections::HashSet, fs::OpenOptions, io, io::ErrorKind};
+use std::{collections::HashMap, fs::OpenOptions, io, io::ErrorKind};
 
 use async_lock::RwLock;
 use client::{BenchResults, BenchResultsDownloadConfig};
@@ -59,6 +59,7 @@ pub fn libp2p_generate_indexed_identity(seed: [u8; 32], index: u64) -> Keypair {
 
 /// The state of the orchestrator
 #[derive(Default, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 struct OrchestratorState<KEY: SignatureKey> {
     /// Tracks the latest node index we have generated a configuration for
     latest_index: u16,
@@ -66,12 +67,10 @@ struct OrchestratorState<KEY: SignatureKey> {
     tmp_latest_index: u16,
     /// The network configuration
     config: NetworkConfig<KEY>,
-    /// The total nodes that have posted their public keys
-    nodes_with_pubkey: u64,
     /// Whether the network configuration has been updated with all the peer's public keys/configs
     peer_pub_ready: bool,
-    /// The set of index for nodes that have posted their public keys/configs
-    pub_posted: HashSet<u64>,
+    /// A map from public keys to `(node_index, is_da)`.
+    pub_posted: HashMap<Vec<u8>, (u64, bool)>,
     /// Whether nodes should start their HotShot instances
     /// Will be set to true once all nodes post they are ready to start
     start: bool,
@@ -81,6 +80,10 @@ struct OrchestratorState<KEY: SignatureKey> {
     bench_results: BenchResults,
     /// The number of nodes that have posted their results
     nodes_post_results: u64,
+    /// Whether the orchestrator can be started manually
+    manual_start_allowed: bool,
+    /// Whether we are still accepting new keys for registration
+    accepting_new_keys: bool,
 }
 
 impl<KEY: SignatureKey + 'static> OrchestratorState<KEY> {
@@ -90,13 +93,14 @@ impl<KEY: SignatureKey + 'static> OrchestratorState<KEY> {
             latest_index: 0,
             tmp_latest_index: 0,
             config: network_config,
-            nodes_with_pubkey: 0,
             peer_pub_ready: false,
-            pub_posted: HashSet::new(),
+            pub_posted: HashMap::new(),
             nodes_connected: 0,
             start: false,
             bench_results: BenchResults::default(),
             nodes_post_results: 0,
+            manual_start_allowed: true,
+            accepting_new_keys: true,
         }
     }
 
@@ -178,10 +182,11 @@ pub trait OrchestratorApi<KEY: SignatureKey> {
     /// if unable to serve
     fn register_public_key(
         &mut self,
-        node_index: u64,
         pubkey: &mut Vec<u8>,
         is_da: bool,
-    ) -> Result<(), ServerError>;
+        libp2p_address: Option<Multiaddr>,
+        libp2p_public_key: Option<PeerId>,
+    ) -> Result<(u64, bool), ServerError>;
     /// post endpoint for whether or not all peers public keys are ready
     /// # Errors
     /// if unable to serve
@@ -189,7 +194,7 @@ pub trait OrchestratorApi<KEY: SignatureKey> {
     /// get endpoint for the network config after all peers public keys are collected
     /// # Errors
     /// if unable to serve
-    fn get_config_after_peer_collected(&self) -> Result<NetworkConfig<KEY>, ServerError>;
+    fn post_config_after_peer_collected(&mut self) -> Result<NetworkConfig<KEY>, ServerError>;
     /// get endpoint for whether or not the run has started
     /// # Errors
     /// if unable to serve
@@ -202,6 +207,10 @@ pub trait OrchestratorApi<KEY: SignatureKey> {
     /// # Errors
     /// if unable to serve
     fn post_ready(&mut self) -> Result<(), ServerError>;
+    /// post endpoint for manually starting the orchestrator
+    /// # Errors
+    /// if unable to serve
+    fn post_manual_start(&mut self, password_bytes: Vec<u8>) -> Result<(), ServerError>;
 }
 
 impl<KEY> OrchestratorApi<KEY> for OrchestratorState<KEY>
@@ -269,41 +278,78 @@ where
     #[allow(clippy::cast_possible_truncation)]
     fn register_public_key(
         &mut self,
-        node_index: u64,
         pubkey: &mut Vec<u8>,
-        is_da: bool,
-    ) -> Result<(), ServerError> {
-        if self.pub_posted.contains(&node_index) {
+        da_requested: bool,
+        libp2p_address: Option<Multiaddr>,
+        libp2p_public_key: Option<PeerId>,
+    ) -> Result<(u64, bool), ServerError> {
+        if !self.accepting_new_keys {
             return Err(ServerError {
-                status: tide_disco::StatusCode::BadRequest,
-                message: "Node has already posted public key".to_string(),
+                status: tide_disco::StatusCode::Forbidden,
+                message:
+                    "Network has been started manually, and is no longer registering new keys."
+                        .to_string(),
             });
         }
-        self.pub_posted.insert(node_index);
 
-        // The guess is the first extra 12 bytes are from orchestrator serialization
-        pubkey.drain(..12);
-        let register_pub_key_with_stake = PeerConfig::<KEY>::from_bytes(pubkey).unwrap();
-        self.config.config.known_nodes_with_stake[node_index as usize] =
-            register_pub_key_with_stake.clone();
-
-        // If the node wants to be DA, add it to the list of known DAs
-        if is_da {
-            self.config
-                .config
-                .known_da_nodes
-                .push(register_pub_key_with_stake);
-        };
-
-        self.nodes_with_pubkey += 1;
-        println!(
-            "Node {:?} posted public key, now total num posted public key: {:?}",
-            node_index, self.nodes_with_pubkey
-        );
-        if self.nodes_with_pubkey >= (self.config.config.num_nodes_with_stake.get() as u64) {
-            self.peer_pub_ready = true;
+        if let Some((node_index, is_da)) = self.pub_posted.get(pubkey) {
+            return Ok((*node_index, *is_da));
         }
-        Ok(())
+
+        let node_index = self.pub_posted.len() as u64;
+
+        let staked_pubkey = PeerConfig::<KEY>::from_bytes(pubkey).unwrap();
+        self.config
+            .config
+            .known_nodes_with_stake
+            .push(staked_pubkey.clone());
+
+        let mut added_to_da = false;
+
+        let da_full =
+            self.config.config.known_da_nodes.len() >= self.config.config.da_staked_committee_size;
+
+        #[allow(clippy::nonminimal_bool)]
+        // We add the node to the DA committee depending on either its node index or whether it requested membership.
+        //
+        // Since we issue `node_index` incrementally, if we are deciding DA membership by node_index
+        // we only need to check that the committee is not yet full.
+        //
+        // Note: this logically simplifies to (self.config.indexed_da || da_requested) && !da_full,
+        // but writing it that way makes it a little less clear to me.
+        if (self.config.indexed_da || (!self.config.indexed_da && da_requested)) && !da_full {
+            self.config.config.known_da_nodes.push(staked_pubkey);
+            added_to_da = true;
+        }
+
+        self.pub_posted
+            .insert(pubkey.clone(), (node_index, added_to_da));
+
+        // If the orchestrator is set up for libp2p and we have supplied the proper
+        // Libp2p data, add our node to the list of bootstrap nodes.
+        if self.config.libp2p_config.clone().is_some() {
+            if let (Some(libp2p_public_key), Some(libp2p_address)) =
+                (libp2p_public_key, libp2p_address)
+            {
+                // Push to our bootstrap nodes
+                self.config
+                    .libp2p_config
+                    .as_mut()
+                    .unwrap()
+                    .bootstrap_nodes
+                    .push((libp2p_public_key, libp2p_address));
+            }
+        }
+
+        println!("Posted public key for node_index {node_index}");
+
+        // node_index starts at 0, so once it matches `num_nodes_with_stake`
+        // we will have registered one node too many. hence, we want `node_index + 1`.
+        if node_index + 1 >= (self.config.config.num_nodes_with_stake.get() as u64) {
+            self.peer_pub_ready = true;
+            self.accepting_new_keys = false;
+        }
+        Ok((node_index, added_to_da))
     }
 
     fn peer_pub_ready(&self) -> Result<bool, ServerError> {
@@ -316,13 +362,15 @@ where
         Ok(self.peer_pub_ready)
     }
 
-    fn get_config_after_peer_collected(&self) -> Result<NetworkConfig<KEY>, ServerError> {
+    fn post_config_after_peer_collected(&mut self) -> Result<NetworkConfig<KEY>, ServerError> {
         if !self.peer_pub_ready {
             return Err(ServerError {
                 status: tide_disco::StatusCode::BadRequest,
                 message: "Peer's public configs are not ready".to_string(),
             });
         }
+
+        self.manual_start_allowed = false;
         Ok(self.config.clone())
     }
 
@@ -341,14 +389,62 @@ where
     // TODO ED Add a map to verify which nodes have posted they're ready
     fn post_ready(&mut self) -> Result<(), ServerError> {
         self.nodes_connected += 1;
+
         println!("Nodes connected: {}", self.nodes_connected);
+
         // i.e. nodes_connected >= num_nodes_with_stake * (start_threshold.0 / start_threshold.1)
         if self.nodes_connected * self.config.config.start_threshold.1
             >= (self.config.config.num_nodes_with_stake.get() as u64)
                 * self.config.config.start_threshold.0
         {
+            self.accepting_new_keys = false;
+            self.manual_start_allowed = false;
             self.start = true;
         }
+
+        Ok(())
+    }
+
+    /// Manually start the network
+    fn post_manual_start(&mut self, password_bytes: Vec<u8>) -> Result<(), ServerError> {
+        if !self.manual_start_allowed {
+            return Err(ServerError {
+            status: tide_disco::StatusCode::Forbidden,
+            message: "Configs have already been distributed to nodes, and the network can no longer be started manually.".to_string(),
+          });
+        }
+
+        let password = String::from_utf8(password_bytes)
+            .expect("Failed to decode raw password as UTF-8 string.");
+
+        // Check that the password matches
+        if self.config.manual_start_password != Some(password) {
+            return Err(ServerError {
+                status: tide_disco::StatusCode::Forbidden,
+                message: "Incorrect password.".to_string(),
+            });
+        }
+
+        let registered_nodes_with_stake = self.config.config.known_nodes_with_stake.len();
+        let registered_da_nodes = self.config.config.known_da_nodes.len();
+
+        if registered_da_nodes > 1 {
+            self.config.config.num_nodes_with_stake =
+                std::num::NonZeroUsize::new(registered_nodes_with_stake)
+                    .expect("Failed to convert to NonZeroUsize; this should be impossible.");
+
+            self.config.config.da_staked_committee_size = registered_da_nodes;
+        } else {
+            return Err(ServerError {
+                status: tide_disco::StatusCode::Forbidden,
+                message: format!("We cannot manually start the network, because we only have {registered_nodes_with_stake} nodes with stake registered, with {registered_da_nodes} DA nodes.")
+            });
+        }
+
+        self.accepting_new_keys = false;
+        self.manual_start_allowed = false;
+        self.peer_pub_ready = true;
+
         Ok(())
     }
 
@@ -448,22 +544,44 @@ where
     })?
     .post("post_pubkey", |req, state| {
         async move {
-            let node_index = req.integer_param("node_index")?;
             let is_da = req.boolean_param("is_da")?;
-            let mut pubkey = req.body_bytes();
-            state.register_public_key(node_index, &mut pubkey, is_da)
+            // Read the bytes from the body
+            let mut body_bytes = req.body_bytes();
+            body_bytes.drain(..12);
+
+            // Decode the libp2p data so we can add to our bootstrap nodes (if supplied)
+            let Ok((mut pubkey, libp2p_address, libp2p_public_key)) =
+                vbs::Serializer::<Version01>::deserialize(&body_bytes)
+            else {
+                return Err(ServerError {
+                    status: tide_disco::StatusCode::BadRequest,
+                    message: "Malformed body".to_string(),
+                });
+            };
+
+            state.register_public_key(&mut pubkey, is_da, libp2p_address, libp2p_public_key)
         }
         .boxed()
     })?
     .get("peer_pubconfig_ready", |_req, state| {
         async move { state.peer_pub_ready() }.boxed()
     })?
-    .get("get_config_after_peer_collected", |_req, state| {
-        async move { state.get_config_after_peer_collected() }.boxed()
+    .post("post_config_after_peer_collected", |_req, state| {
+        async move { state.post_config_after_peer_collected() }.boxed()
     })?
     .post(
         "post_ready",
         |_req, state: &mut <State as ReadState>::State| async move { state.post_ready() }.boxed(),
+    )?
+    .post(
+        "post_manual_start",
+        |req, state: &mut <State as ReadState>::State| {
+            async move {
+                let password = req.body_bytes();
+                state.post_manual_start(password)
+            }
+            .boxed()
+        },
     )?
     .get("get_start", |_req, state| {
         async move { state.get_start() }.boxed()
@@ -483,10 +601,23 @@ where
 /// This errors if tide disco runs into an issue during serving
 /// # Panics
 /// This panics if unable to register the api with tide disco
-pub async fn run_orchestrator<KEY>(network_config: NetworkConfig<KEY>, url: Url) -> io::Result<()>
+pub async fn run_orchestrator<KEY>(
+    mut network_config: NetworkConfig<KEY>,
+    url: Url,
+) -> io::Result<()>
 where
     KEY: SignatureKey + 'static + serde::Serialize,
 {
+    let env_password = std::env::var("ORCHESTRATOR_MANUAL_START_PASSWORD");
+
+    if env_password.is_ok() {
+        tracing::warn!("Took orchestrator manual start password from the environment variable: ORCHESTRATOR_MANUAL_START_PASSWORD={:?}", env_password);
+        network_config.manual_start_password = env_password.ok();
+    }
+
+    network_config.config.known_nodes_with_stake = vec![];
+    network_config.config.known_da_nodes = vec![];
+
     let web_api =
         define_api().map_err(|_e| io::Error::new(ErrorKind::Other, "Failed to define api"));
 

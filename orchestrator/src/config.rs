@@ -157,8 +157,15 @@ impl Default for RandomBuilderConfig {
 pub struct NetworkConfig<KEY: SignatureKey> {
     /// number of views to run
     pub rounds: usize,
+    /// whether DA membership is determined by index.
+    /// if true, the first k nodes to register form the DA committee
+    /// if false, DA membership is requested by the nodes
+    pub indexed_da: bool,
     /// number of transactions per view
     pub transactions_per_round: usize,
+    /// password to have the orchestrator start the network,
+    /// regardless of the number of nodes connected.
+    pub manual_start_password: Option<String>,
     /// number of bootstrap nodes
     pub num_bootrap: usize,
     /// timeout before starting the next view
@@ -291,50 +298,24 @@ impl<K: SignatureKey> NetworkConfig<K> {
     /// If we are unable to get the configuration from the orchestrator
     pub async fn get_complete_config(
         client: &OrchestratorClient,
-        file: Option<String>,
         my_own_validator_config: ValidatorConfig<K>,
         libp2p_address: Option<SocketAddr>,
         libp2p_public_key: Option<PeerId>,
-        // If true, we will use the node index to determine if we are a DA node
-        indexed_da: bool,
     ) -> anyhow::Result<(NetworkConfig<K>, NetworkConfigSource)> {
-        let (mut run_config, source) =
-            Self::from_file_or_orchestrator(client, file, libp2p_address, libp2p_public_key)
-                .await?;
-        let node_index = run_config.node_index;
-
-        // Assign my_own_validator_config to the run_config if not loading from file
-        match source {
-            NetworkConfigSource::Orchestrator => {
-                run_config.config.my_own_validator_config = my_own_validator_config.clone();
-            }
-            NetworkConfigSource::File => {
-                // do nothing, my_own_validator_config has already been loaded from file
-            }
-        }
-
-        // If we've chosen to be DA based on the index, do so
-        if indexed_da {
-            run_config.config.my_own_validator_config.is_da =
-                run_config.node_index < run_config.config.da_staked_committee_size as u64;
-        }
-
-        // one more round of orchestrator here to get peer's public key/config
-        let updated_config: NetworkConfig<K> = client
+        // get the configuration from the orchestrator
+        let run_config: NetworkConfig<K> = client
             .post_and_wait_all_public_keys::<K>(
-                run_config.node_index,
-                run_config
-                    .config
-                    .my_own_validator_config
-                    .get_public_config(),
-                run_config.config.my_own_validator_config.is_da,
+                my_own_validator_config,
+                libp2p_address,
+                libp2p_public_key,
             )
             .await;
-        run_config.config.known_nodes_with_stake = updated_config.config.known_nodes_with_stake;
-        run_config.config.known_da_nodes = updated_config.config.known_da_nodes;
 
-        info!("Retrieved config; our node index is {node_index}.");
-        Ok((run_config, source))
+        info!(
+            "Retrieved config; our node index is {}. DA committee member: {}",
+            run_config.node_index, run_config.config.my_own_validator_config.is_da
+        );
+        Ok((run_config, NetworkConfigSource::Orchestrator))
     }
 
     /// Loads a `NetworkConfig` from a file.
@@ -434,10 +415,12 @@ impl<K: SignatureKey> Default for NetworkConfig<K> {
     fn default() -> Self {
         Self {
             rounds: ORCHESTRATOR_DEFAULT_NUM_ROUNDS,
+            indexed_da: true,
             transactions_per_round: ORCHESTRATOR_DEFAULT_TRANSACTIONS_PER_ROUND,
             node_index: 0,
             seed: [0u8; 32],
             transaction_size: ORCHESTRATOR_DEFAULT_TRANSACTION_SIZE,
+            manual_start_password: None,
             libp2p_config: None,
             config: HotShotConfigFile::default().into(),
             start_delay_seconds: 60,
@@ -466,9 +449,16 @@ pub struct NetworkConfigFile<KEY: SignatureKey> {
     /// number of views to run
     #[serde_inline_default(ORCHESTRATOR_DEFAULT_NUM_ROUNDS)]
     pub rounds: usize,
+    /// number of views to run
+    #[serde(default)]
+    pub indexed_da: bool,
     /// number of transactions per view
     #[serde_inline_default(ORCHESTRATOR_DEFAULT_TRANSACTIONS_PER_ROUND)]
     pub transactions_per_round: usize,
+    /// password to have the orchestrator start the network,
+    /// regardless of the number of nodes connected.
+    #[serde(default)]
+    pub manual_start_password: Option<String>,
     /// global index of node (for testing purposes a uid)
     #[serde(default)]
     pub node_index: u64,
@@ -513,9 +503,11 @@ impl<K: SignatureKey> From<NetworkConfigFile<K>> for NetworkConfig<K> {
     fn from(val: NetworkConfigFile<K>) -> Self {
         NetworkConfig {
             rounds: val.rounds,
+            indexed_da: val.indexed_da,
             transactions_per_round: val.transactions_per_round,
             node_index: 0,
             num_bootrap: val.config.num_bootstrap,
+            manual_start_password: val.manual_start_password,
             next_view_timeout: val.config.next_view_timeout,
             view_sync_timeout: val.config.view_sync_timeout,
             builder_timeout: val.config.builder_timeout,
@@ -736,7 +728,7 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
 
         Self {
             num_nodes_with_stake: NonZeroUsize::new(10).unwrap(),
-            start_threshold: (8, 10),
+            start_threshold: (1, 1),
             num_nodes_without_stake: 0,
             my_own_validator_config: ValidatorConfig::default(),
             known_nodes_with_stake: gen_known_nodes_with_stake,

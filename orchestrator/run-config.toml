@@ -1,4 +1,5 @@
 rounds = 10
+indexed_da = true
 transactions_per_round = 10
 transaction_size = 1000
 node_index = 0

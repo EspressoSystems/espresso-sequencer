@@ -323,8 +323,8 @@ fn calculate_num_tx_per_round(
 ) -> usize {
     transactions_per_round / total_num_nodes
         + usize::from(
-            (total_num_nodes - 1 - node_index as usize)
-                < (transactions_per_round % total_num_nodes),
+            (total_num_nodes)
+                < (transactions_per_round % total_num_nodes) + 1 + (node_index as usize),
         )
 }
 
@@ -1020,12 +1020,9 @@ pub async fn main_entry_point<
     // which means the previous `generate_validator_config_when_init` will not be taken by sequencer, it's only for key pair generation for testing in hotshot.
     let (mut run_config, source) = NetworkConfig::<TYPES::SignatureKey>::get_complete_config(
         &orchestrator_client,
-        args.clone().network_config_file,
         my_own_validator_config,
         args.advertise_address,
         Some(libp2p_public_key),
-        // If `indexed_da` is true: use the node index to determine if we are a DA node.
-        true,
     )
     .await
     .expect("failed to get config");

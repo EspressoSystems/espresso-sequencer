@@ -22,7 +22,7 @@ This must be a POST request so we can update the OrchestratorState in the server
 received from the 'identity' endpoint
 """
 
-# GET the latest temporary node index only for generating validator's key pair
+# POST the latest temporary node index only for generating validator's key pair
 [route.get_tmp_node_index]
 PATH = ["get_tmp_node_index"]
 METHOD = "POST"
@@ -32,9 +32,8 @@ Get the latest temporary node index only for generating validator's key pair for
 
 # POST the node's node index to generate public key for pubkey collection
 [route.post_pubkey]
-PATH = ["pubkey/:node_index/:is_da"]
+PATH = ["pubkey/:is_da"]
 METHOD = "POST"
-":node_index" = "Integer"
 ":is_da" = "Boolean"
 DOC = """
 Post a node's node_index so that its public key could be posted and collected by the orchestrator. 
@@ -48,9 +47,10 @@ DOC = """
 Get whether the node can collect the final config which includs all peer's public config/info like public keys, returns a boolean.
 """
 
-# GET the updated config with all peers' public keys / configs
-[route.get_config_after_peer_collected]
-PATH = ["get_config_after_peer_collected"]
+# POST the updated config with all peers' public keys / configs
+[route.post_config_after_peer_collected]
+PATH = ["post_config_after_peer_collected"]
+METHOD = "POST"
 DOC = """
 Get the updated config with all peers' public keys / configs, returns a NetworkConfig.
 """
@@ -78,4 +78,12 @@ PATH = ["results"]
 METHOD = "POST"
 DOC = """
 Post run results.
+"""
+
+# POST to manually start the run
+[route.post_manual_start]
+PATH = ["manual_start"]
+METHOD = "POST"
+DOC = """
+Post whether the orchestrator should start the run immediately, with the nodes that have already registered.
 """
