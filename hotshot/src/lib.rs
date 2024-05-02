@@ -58,7 +58,7 @@ use tracing::{debug, instrument, trace};
 use vbs::version::Version;
 
 #[cfg(feature = "dependency-tasks")]
-use crate::tasks::{add_quorum_proposal_task, add_quorum_vote_task};
+use crate::tasks::{add_quorum_proposal_recv_task, add_quorum_proposal_task, add_quorum_vote_task};
 use crate::{
     tasks::{
         add_consensus_task, add_da_task, add_network_event_task, add_network_message_task,
@@ -691,6 +691,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         .await;
         #[cfg(feature = "dependency-tasks")]
         add_quorum_vote_task(
+            Arc::clone(&registry),
+            event_tx.clone(),
+            event_rx.activate_cloned(),
+            &handle,
+        )
+        .await;
+        #[cfg(feature = "dependency-tasks")]
+        add_quorum_proposal_recv_task(
             Arc::clone(&registry),
             event_tx.clone(),
             event_rx.activate_cloned(),

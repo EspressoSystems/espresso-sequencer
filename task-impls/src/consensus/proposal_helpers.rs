@@ -44,7 +44,7 @@ use crate::quorum_proposal::QuorumProposalTaskState;
 #[cfg(feature = "dependency-tasks")]
 use crate::quorum_proposal_recv::QuorumProposalRecvTaskState;
 use crate::{
-    consensus::update_view,
+    consensus::{update_view, view_change::SEND_VIEW_CHANGE_EVENT},
     events::HotShotEvent,
     helpers::{broadcast_event, AnyhowTracing},
 };
@@ -53,7 +53,7 @@ use crate::{
 /// a `QuorumProposalValidated` event.
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_lines)]
-pub async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
+async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
     proposal: Proposal<TYPES, QuorumProposal<TYPES>>,
     parent_leaf: Leaf<TYPES>,
     consensus: Arc<RwLock<Consensus<TYPES>>>,
@@ -248,9 +248,8 @@ pub async fn create_and_send_proposal<TYPES: NodeType>(
         _pd: PhantomData,
     };
     debug!(
-        "Sending null proposal for view {:?} \n {:?}",
+        "Sending null proposal for view {:?}",
         proposed_leaf.get_view_number(),
-        ""
     );
 
     async_sleep(Duration::from_millis(round_start_delay)).await;
@@ -384,7 +383,6 @@ pub async fn get_parent_leaf_and_state<TYPES: NodeType>(
             }
             next_parent_hash = next_parent_leaf.get_parent_commitment();
         }
-        debug!("updated saved leaves");
         // TODO do some sort of sanity check on the view number that it matches decided
     }
 
@@ -660,6 +658,7 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
         Arc::clone(&task_state.consensus),
         &mut task_state.cur_view,
         &mut task_state.timeout_task,
+        SEND_VIEW_CHANGE_EVENT,
     )
     .await
     {
@@ -746,57 +745,63 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
 
         // If we are missing the parent from storage, the safety check will fail.  But we can
         // still vote if the liveness check succeeds.
-        let liveness_check = justify_qc.get_view_number() > consensus_write.locked_view;
+        #[cfg(not(feature = "dependency-tasks"))]
+        {
+            let liveness_check = justify_qc.get_view_number() > consensus_write.locked_view;
 
-        let high_qc = consensus_write.high_qc.clone();
-        let locked_view = consensus_write.locked_view;
+            let high_qc = consensus_write.high_qc.clone();
+            let locked_view = consensus_write.locked_view;
 
-        drop(consensus_write);
+            drop(consensus_write);
 
-        let mut current_proposal = None;
+            let mut current_proposal = None;
+            if liveness_check {
+                current_proposal = Some(proposal.data.clone());
+                let new_view = proposal.data.view_number + 1;
 
-        if liveness_check {
-            current_proposal = Some(proposal.data.clone());
-            let new_view = proposal.data.view_number + 1;
+                // This is for the case where we form a QC but have not yet seen the previous proposal ourselves
+                let should_propose = task_state.quorum_membership.get_leader(new_view)
+                    == task_state.public_key
+                    && high_qc.view_number == current_proposal.clone().unwrap().view_number;
 
-            // This is for the case where we form a QC but have not yet seen the previous proposal ourselves
-            let should_propose = task_state.quorum_membership.get_leader(new_view)
-                == task_state.public_key
-                && high_qc.view_number == current_proposal.clone().unwrap().view_number;
+                let qc = high_qc.clone();
+                if should_propose {
+                    debug!(
+                        "Attempting to publish proposal after voting; now in view: {}",
+                        *new_view
+                    );
+                    let create_and_send_proposal_handle = publish_proposal_if_able(
+                        task_state.cur_view,
+                        qc.view_number + 1,
+                        event_stream,
+                        Arc::clone(&task_state.quorum_membership),
+                        task_state.public_key.clone(),
+                        task_state.private_key.clone(),
+                        Arc::clone(&task_state.consensus),
+                        task_state.round_start_delay,
+                        task_state.formed_upgrade_certificate.clone(),
+                        task_state.decided_upgrade_cert.clone(),
+                        &mut task_state.payload_commitment_and_metadata,
+                        &mut task_state.proposal_cert,
+                        Arc::clone(&task_state.instance_state),
+                    )
+                    .await?;
 
-            let qc = high_qc.clone();
-            if should_propose {
-                debug!(
-                    "Attempting to publish proposal after voting; now in view: {}",
-                    *new_view
-                );
-                let create_and_send_proposal_handle = publish_proposal_if_able(
-                    task_state.cur_view,
-                    qc.view_number + 1,
-                    event_stream,
-                    Arc::clone(&task_state.quorum_membership),
-                    task_state.public_key.clone(),
-                    task_state.private_key.clone(),
-                    Arc::clone(&task_state.consensus),
-                    task_state.round_start_delay,
-                    task_state.formed_upgrade_certificate.clone(),
-                    task_state.decided_upgrade_cert.clone(),
-                    &mut task_state.payload_commitment_and_metadata,
-                    &mut task_state.proposal_cert,
-                    Arc::clone(&task_state.instance_state),
-                )
-                .await?;
-
-                task_state
-                    .spawned_tasks
-                    .entry(view)
-                    .or_default()
-                    .push(create_and_send_proposal_handle);
+                    task_state
+                        .spawned_tasks
+                        .entry(view)
+                        .or_default()
+                        .push(create_and_send_proposal_handle);
+                }
             }
-        }
-        warn!(?high_qc, ?proposal.data, ?locked_view, "Failed liveneess check; cannot find parent either.");
 
-        return Ok(current_proposal);
+            warn!(?high_qc, ?proposal.data, ?locked_view, "Failed liveneess check; cannot find parent either.");
+
+            return Ok(current_proposal);
+        }
+
+        #[cfg(feature = "dependency-tasks")]
+        return Ok(None);
     };
 
     task_state
@@ -1007,8 +1012,17 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
             .metrics
             .last_decided_view
             .set(usize::try_from(consensus.last_decided_view.get_u64()).unwrap());
-        let cur_number_of_views_per_decide_event =
-            *task_state.cur_view - consensus.last_decided_view.get_u64();
+        let cur_number_of_views_per_decide_event = {
+            #[cfg(not(feature = "dependency-tasks"))]
+            {
+                *task_state.cur_view - consensus.last_decided_view.get_u64()
+            }
+
+            #[cfg(feature = "dependency-tasks")]
+            {
+                *task_state.latest_proposed_view - consensus.last_decided_view.get_u64()
+            }
+        };
         consensus
             .metrics
             .number_of_views_per_decide_event

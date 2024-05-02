@@ -44,9 +44,6 @@ pub struct QuorumProposalRecvTaskState<TYPES: NodeType, I: NodeImplementation<TY
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
 
-    /// The commitment to the current block payload and its metadata submitted to DA.
-    pub payload_commitment_and_metadata: Option<CommitmentAndMetadata<TYPES>>,
-
     /// Network for all nodes
     pub quorum_network: Arc<I::QuorumNetwork>,
 
@@ -121,7 +118,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
         if let HotShotEvent::QuorumProposalRecv(proposal, sender) = event.as_ref() {
             match handle_quorum_proposal_recv(proposal, sender, event_stream.clone(), self).await {
                 Ok(Some(current_proposal)) => {
-                    self.cancel_tasks(proposal.data.get_view_number() + 1).await;
                     // Build the parent leaf since we didn't find it during the proposal check.
                     let parent_leaf = match get_parent_leaf_and_state(
                         self.cur_view,
@@ -133,14 +129,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
                     .await
                     {
                         Ok((parent_leaf, _ /* state */)) => parent_leaf,
-                        Err(e) => {
-                            warn!(?e, "Failed to get parent leaf and state");
+                        Err(error) => {
+                            warn!(?error, "Failed to get parent leaf and state");
                             return;
                         }
                     };
 
-                    let consensus = self.consensus.read().await;
                     let view = current_proposal.get_view_number();
+                    self.cancel_tasks(proposal.data.get_view_number()).await;
+                    let consensus = self.consensus.read().await;
                     let Some(vid_shares) = consensus.vid_shares.get(&view) else {
                         debug!(
                                 "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
@@ -177,7 +174,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
                     .await;
                 }
                 Ok(None) => {
-                    self.cancel_tasks(proposal.data.get_view_number() + 1).await;
+                    self.cancel_tasks(proposal.data.get_view_number()).await;
                 }
                 Err(e) => warn!(?e, "Failed to propose"),
             }
@@ -191,7 +188,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState
     type Event = Arc<HotShotEvent<TYPES>>;
     type Output = ();
     fn filter(&self, event: &Arc<HotShotEvent<TYPES>>) -> bool {
-        !matches!(event.as_ref(), HotShotEvent::QuorumProposalRecv(..))
+        !matches!(
+            event.as_ref(),
+            HotShotEvent::QuorumProposalRecv(..) | HotShotEvent::Shutdown
+        )
     }
 
     async fn handle_event(event: Self::Event, task: &mut Task<Self>) -> Option<()>

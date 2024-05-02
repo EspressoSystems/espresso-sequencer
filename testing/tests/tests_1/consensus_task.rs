@@ -1,3 +1,6 @@
+// TODO: Remove after integration of dependency-tasks
+#![allow(unused_imports)]
+
 use hotshot::tasks::{inject_consensus_polls, task_state::CreateTaskState};
 
 use std::sync::Arc;
@@ -26,6 +29,7 @@ use jf_primitives::vid::VidScheme;
 use sha2::Digest;
 
 #[cfg(test)]
+#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_task() {
@@ -114,6 +118,7 @@ async fn test_consensus_task() {
 }
 
 #[cfg(test)]
+#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_vote() {
@@ -173,6 +178,7 @@ async fn test_consensus_vote() {
 /// Tests the voting behavior by allowing the input to be permuted in any order desired. This
 /// assures that, no matter what, a vote is indeed sent no matter what order the precipitating
 /// events occur. The permutation is specified as `input_permutation` and is a vector of indices.
+#[cfg(not(feature = "dependency-tasks"))]
 async fn test_vote_with_specific_order(input_permutation: Vec<usize>) {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -238,6 +244,7 @@ async fn test_vote_with_specific_order(input_permutation: Vec<usize>) {
 }
 
 #[cfg(test)]
+#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_vote_with_permuted_dac() {
@@ -253,6 +260,7 @@ async fn test_consensus_vote_with_permuted_dac() {
 }
 
 #[cfg(test)]
+#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_view_sync_finalize_propose() {
@@ -391,6 +399,7 @@ async fn test_view_sync_finalize_propose() {
 }
 
 #[cfg(test)]
+#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 /// Makes sure that, when a valid ViewSyncFinalize certificate is available, the consensus task
@@ -488,6 +497,7 @@ async fn test_view_sync_finalize_vote() {
 }
 
 #[cfg(test)]
+#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 /// Makes sure that, when a valid ViewSyncFinalize certificate is available, the consensus task
@@ -595,6 +605,7 @@ async fn test_view_sync_finalize_vote_fail_view_number() {
 }
 
 #[cfg(test)]
+#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_vid_disperse_storage_failure() {

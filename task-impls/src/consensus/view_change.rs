@@ -25,6 +25,12 @@ use crate::{
     helpers::{broadcast_event, cancel_task},
 };
 
+/// Constant which tells [`update_view`] to send a view change event when called.
+pub(crate) const SEND_VIEW_CHANGE_EVENT: bool = true;
+
+/// Constant which tells [`update_view`] to not send a view change event when called.
+pub(crate) const DONT_SEND_VIEW_CHANGE_EVENT: bool = false;
+
 /// Update the view if it actually changed, takes a mutable reference to the `cur_view` and the
 /// `timeout_task` which are updated during the operation of the function.
 ///
@@ -41,6 +47,7 @@ pub(crate) async fn update_view<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     consensus: Arc<RwLock<Consensus<TYPES>>>,
     cur_view: &mut TYPES::Time,
     timeout_task: &mut Option<JoinHandle<()>>,
+    send_view_change_event: bool,
 ) -> Result<()> {
     ensure!(
         new_view > *cur_view,
@@ -86,14 +93,14 @@ pub(crate) async fn update_view<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         .await;
 
     if quorum_membership.get_leader(next_view) == public_key {
-        debug!("Polling for quorum votes for view {}", **cur_view);
         quorum_network
             .inject_consensus_info(ConsensusIntentEvent::PollForVotes(**cur_view))
             .await;
     }
 
-    broadcast_event(Arc::new(HotShotEvent::ViewChange(new_view)), event_stream).await;
-
+    if send_view_change_event {
+        broadcast_event(Arc::new(HotShotEvent::ViewChange(new_view)), event_stream).await;
+    }
     // Spawn a timeout task if we did actually update view
     *timeout_task = Some(async_spawn({
         let stream = event_stream.clone();
@@ -127,6 +134,7 @@ pub(crate) async fn update_view<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     }
     let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
     consensus.update_view(new_view);
+    tracing::trace!("View updated successfully");
 
     Ok(())
 }

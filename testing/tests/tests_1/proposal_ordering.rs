@@ -1,3 +1,5 @@
+// TODO: Remove this after integration
+#![allow(unused_imports)]
 use std::sync::Arc;
 
 use hotshot::tasks::task_state::CreateTaskState;
@@ -23,6 +25,7 @@ use sha2::Digest;
 
 /// Runs a basic test where a qualified proposal occurs (i.e. not initiated by the genesis view or node 1).
 /// This proposal should happen no matter how the `input_permutation` is specified.
+#[cfg(not(feature = "dependency-tasks"))]
 async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     use hotshot_testing::{
         script::{run_test_script, TestScriptStage},
@@ -117,6 +120,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     run_test_script(script, consensus_state).await;
 }
 
+#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(
     async_executor_impl = "tokio",
     tokio::test(flavor = "multi_thread", worker_threads = 2)

@@ -2,6 +2,12 @@ use std::{collections::BTreeMap, sync::Arc};
 
 #[cfg(not(feature = "dependency-tasks"))]
 use anyhow::Result;
+
+#[cfg(not(feature = "dependency-tasks"))]
+use hotshot_types::vid::vid_scheme;
+#[cfg(not(feature = "dependency-tasks"))]
+use jf_primitives::vid::VidScheme;
+
 use async_broadcast::Sender;
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
@@ -28,10 +34,9 @@ use hotshot_types::{
         signature_key::SignatureKey,
         storage::Storage,
     },
-    vid::vid_scheme,
     vote::{Certificate, HasViewNumber},
 };
-use jf_primitives::vid::VidScheme;
+
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
@@ -42,7 +47,7 @@ use self::proposal_helpers::handle_quorum_proposal_validated;
 #[cfg(not(feature = "dependency-tasks"))]
 use crate::consensus::proposal_helpers::{handle_quorum_proposal_recv, publish_proposal_if_able};
 use crate::{
-    consensus::view_change::update_view,
+    consensus::view_change::{update_view, DONT_SEND_VIEW_CHANGE_EVENT},
     events::{HotShotEvent, HotShotTaskCompleted},
     helpers::{broadcast_event, cancel_task},
     vote_collection::{
@@ -620,7 +625,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
             }
             HotShotEvent::ViewChange(new_view) => {
                 let new_view = *new_view;
-                debug!("View Change event for view {} in consensus task", *new_view);
+                tracing::trace!("View Change event for view {} in consensus task", *new_view);
 
                 let old_view_number = self.cur_view;
 
@@ -669,6 +674,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     Arc::clone(&self.consensus),
                     &mut self.cur_view,
                     &mut self.timeout_task,
+                    DONT_SEND_VIEW_CHANGE_EVENT,
                 )
                 .await
                 {
@@ -746,6 +752,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                 let consensus = self.consensus.read().await;
                 consensus.metrics.number_of_timeouts.add(1);
             }
+            #[cfg(not(feature = "dependency-tasks"))]
             HotShotEvent::SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
@@ -762,37 +769,32 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     fee: fee.clone(),
                     block_view: view,
                 });
-                #[cfg(not(feature = "dependency-tasks"))]
+                if self.quorum_membership.get_leader(view) == self.public_key
+                    && self.consensus.read().await.high_qc.get_view_number() + 1 == view
                 {
-                    if self.quorum_membership.get_leader(view) == self.public_key
-                        && self.consensus.read().await.high_qc.get_view_number() + 1 == view
-                    {
-                        if let Err(e) = self.publish_proposal(view, event_stream.clone()).await {
-                            warn!("Failed to propose; error = {e:?}");
-                        };
-                    }
+                    if let Err(e) = self.publish_proposal(view, event_stream.clone()).await {
+                        warn!("Failed to propose; error = {e:?}");
+                    };
+                }
 
-                    if let Some(cert) = &self.proposal_cert {
-                        match cert {
-                            ViewChangeEvidence::Timeout(tc) => {
-                                if self.quorum_membership.get_leader(tc.get_view_number() + 1)
-                                    == self.public_key
-                                {
-                                    if let Err(e) = self.publish_proposal(view, event_stream).await
-                                    {
-                                        warn!("Failed to propose; error = {e:?}");
-                                    };
-                                }
+                if let Some(cert) = &self.proposal_cert {
+                    match cert {
+                        ViewChangeEvidence::Timeout(tc) => {
+                            if self.quorum_membership.get_leader(tc.get_view_number() + 1)
+                                == self.public_key
+                            {
+                                if let Err(e) = self.publish_proposal(view, event_stream).await {
+                                    warn!("Failed to propose; error = {e:?}");
+                                };
                             }
-                            ViewChangeEvidence::ViewSync(vsc) => {
-                                if self.quorum_membership.get_leader(vsc.get_view_number())
-                                    == self.public_key
-                                {
-                                    if let Err(e) = self.publish_proposal(view, event_stream).await
-                                    {
-                                        warn!("Failed to propose; error = {e:?}");
-                                    };
-                                }
+                        }
+                        ViewChangeEvidence::ViewSync(vsc) => {
+                            if self.quorum_membership.get_leader(vsc.get_view_number())
+                                == self.public_key
+                            {
+                                if let Err(e) = self.publish_proposal(view, event_stream).await {
+                                    warn!("Failed to propose; error = {e:?}");
+                                };
                             }
                         }
                     }
