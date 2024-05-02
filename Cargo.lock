@@ -1533,17 +1533,19 @@ dependencies = [
 [[package]]
 name = "cdn-broker"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.6#9e494917ff46732ac669ce07c5dcb8a989bbc03a"
+source = "git+https://github.com/EspressoSystems/Push-CDN?branch=rm/push2#5110e0e6821d2f18afba7bc22aaa5afbd0aad805"
 dependencies = [
  "async-std",
- "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.6)",
+ "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?branch=rm/push2)",
  "clap",
+ "console-subscriber",
  "dashmap",
  "derivative",
  "jf-primitives 0.4.0-pre.0",
  "lazy_static",
  "local-ip-address",
  "parking_lot",
+ "portpicker",
  "prometheus",
  "rand 0.8.5",
  "rkyv",
@@ -1584,10 +1586,10 @@ dependencies = [
 [[package]]
 name = "cdn-marshal"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.6#9e494917ff46732ac669ce07c5dcb8a989bbc03a"
+source = "git+https://github.com/EspressoSystems/Push-CDN?branch=rm/push2#5110e0e6821d2f18afba7bc22aaa5afbd0aad805"
 dependencies = [
  "async-std",
- "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.6)",
+ "cdn-proto 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?branch=rm/push2)",
  "clap",
  "jf-primitives 0.4.0-pre.0",
  "tokio",
@@ -1630,7 +1632,7 @@ dependencies = [
 [[package]]
 name = "cdn-proto"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.6#9e494917ff46732ac669ce07c5dcb8a989bbc03a"
+source = "git+https://github.com/EspressoSystems/Push-CDN?branch=rm/push2#5110e0e6821d2f18afba7bc22aaa5afbd0aad805"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -1642,7 +1644,6 @@ dependencies = [
  "lazy_static",
  "mnemonic",
  "mockall",
- "parking_lot",
  "pem 3.0.4",
  "prometheus",
  "quinn",
@@ -8566,8 +8567,8 @@ dependencies = [
  "bincode",
  "blake3",
  "bytesize",
- "cdn-broker 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.6)",
- "cdn-marshal 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.2.6)",
+ "cdn-broker 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?branch=rm/push2)",
+ "cdn-marshal 0.1.0 (git+https://github.com/EspressoSystems/Push-CDN?branch=rm/push2)",
  "clap",
  "cld",
  "committable",
