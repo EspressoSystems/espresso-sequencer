@@ -142,7 +142,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     max_api_timeout_duration: Duration,
     buffered_view_num_count: usize,
     is_da: bool,
-    maximise_txns_count_timeout_duration: Duration,
+    maximize_txns_count_timeout_duration: Duration,
     base_fee: u64,
 ) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
@@ -286,7 +286,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         hotshot_builder_api_url,
         max_api_timeout_duration,
         buffered_view_num_count,
-        maximise_txns_count_timeout_duration,
+        maximize_txns_count_timeout_duration,
         base_fee,
     )
     .await?;
@@ -382,7 +382,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         hotshot_builder_api_url: Url,
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
-        maximise_txns_count_timeout_duration: Duration,
+        maximize_txns_count_timeout_duration: Duration,
         base_fee: u64,
     ) -> anyhow::Result<Self> {
         // tx channel
@@ -445,7 +445,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             NonZeroUsize::new(1).unwrap(),
             bootstrapped_view,
             buffered_view_num_count as u64,
-            maximise_txns_count_timeout_duration,
+            maximize_txns_count_timeout_duration,
             base_fee,
             Arc::new(instance_state),
         );

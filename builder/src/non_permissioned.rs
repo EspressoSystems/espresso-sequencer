@@ -81,7 +81,7 @@ impl BuilderConfig {
         hotshot_builder_apis_url: Url,
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
-        maximise_txns_count_timeout_duration: Duration,
+        maximize_txns_count_timeout_duration: Duration,
         base_fee: u64,
     ) -> anyhow::Result<Self> {
         // tx channel
@@ -145,7 +145,7 @@ impl BuilderConfig {
             NonZeroUsize::new(1).unwrap(),
             bootstrapped_view,
             buffered_view_num_count as u64,
-            maximise_txns_count_timeout_duration,
+            maximize_txns_count_timeout_duration,
             base_fee,
             Arc::new(instance_state),
         );
