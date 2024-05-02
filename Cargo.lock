@@ -4105,7 +4105,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.15"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=hg/fixing_GC#1a339a88ea2d72cdba99c6ce784884b560ad3828"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.15#546b25bd66840994af3c85ff5c0ecca7db0920e1"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4114,6 +4114,7 @@ dependencies = [
  "async-trait",
  "clap",
  "committable",
+ "derivative",
  "futures",
  "hotshot",
  "hotshot-builder-api",
