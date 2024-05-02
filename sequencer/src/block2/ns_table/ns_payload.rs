@@ -2,8 +2,7 @@ use crate::{
     block2::{
         ns_table::ns_iter::NsIndex,
         payload_bytes::{
-            num_txs_as_bytes, num_txs_from_bytes, tx_offset_as_bytes, NUM_TXS_BYTE_LEN,
-            TX_OFFSET_BYTE_LEN,
+            num_txs_as_bytes, tx_offset_as_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
         },
         Payload,
     },
@@ -85,22 +84,6 @@ impl NsPayload {
     /// else is a degenerate case.
     pub fn num_txs_byte_len(&self) -> usize {
         NUM_TXS_BYTE_LEN.min(self.0.len())
-    }
-
-    /// Number of entries in this namespace's tx table.
-    ///
-    /// Returns the minimum of:
-    /// - The declared number of txs from the tx table.
-    /// - The maximum number of tx table entries that could fit into the
-    ///   namespace payload.
-    pub fn num_txs(&self) -> usize {
-        let num_txs_byte_len = self.num_txs_byte_len();
-        std::cmp::min(
-            // Read the declared number of txs from the tx table
-            num_txs_from_bytes(&self.0[..num_txs_byte_len]),
-            // Max number of entries that could fit in the namespace payload
-            self.0.len().saturating_sub(num_txs_byte_len) / TX_OFFSET_BYTE_LEN,
-        )
     }
 
     /// Byte length of this namespace's tx table.
@@ -202,5 +185,41 @@ impl Payload {
             .ns_payload_range(index, self.payload.len())
             .as_range();
         NsPayload::new(&self.payload[range])
+    }
+}
+
+/// TODO separate module?
+pub mod num_txs {
+    use crate::block2::{
+        ns_table::ns_payload::NsPayload,
+        payload_bytes::{num_txs_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
+    };
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Clone, Debug, Deserialize, Hash, Serialize)]
+    pub struct NumTxs(usize);
+
+    // TODO manual derive serde as `[u8; NUM_TXS_BYTE_LEN]`
+
+    impl NsPayload {
+        /// Number of txs in this namespace.
+        ///
+        /// Returns the minimum of:
+        /// - The number of txs declared in the tx table
+        /// - The maximum number of tx table entries that could fit in the
+        ///   namespace payload.
+        pub fn num_txs(&self) -> usize {
+            std::cmp::min(
+                // Number of txs declared in the tx table
+                self.read_num_txs().0,
+                // Max number of tx table entries that could fit in the namespace payload
+                self.0.len().saturating_sub(NUM_TXS_BYTE_LEN) / TX_OFFSET_BYTE_LEN,
+            )
+        }
+
+        /// Read the number of txs declared in the tx table.
+        pub fn read_num_txs(&self) -> NumTxs {
+            NumTxs(num_txs_from_bytes(&self.0[..self.num_txs_byte_len()]))
+        }
     }
 }
