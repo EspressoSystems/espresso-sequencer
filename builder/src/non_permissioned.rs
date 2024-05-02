@@ -162,9 +162,9 @@ impl BuilderConfig {
             max_api_timeout_duration,
         );
 
-        let proxy_global_api_state = Arc::new(RwLock::new(proxy_global_state));
+        //let proxy_global_api_state = Arc::new(RwLock::new(proxy_global_state));
         // start the hotshot api service
-        run_builder_api_service(hotshot_builder_apis_url.clone(), proxy_global_api_state);
+        run_builder_api_service(hotshot_builder_apis_url.clone(), proxy_global_state);
 
         // create a client for it
         // Start Client for the event streaming api

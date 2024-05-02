@@ -69,10 +69,10 @@ pub mod non_permissioned;
 pub mod permissioned;
 
 // It runs the api service for the builder
-pub fn run_builder_api_service(url: Url, source: Arc<RwLock<ProxyGlobalState<SeqTypes>>>) {
+pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     // it is to serve hotshot
     let builder_api = hotshot_builder_api::builder::define_api::<
-        Arc<RwLock<ProxyGlobalState<SeqTypes>>>,
+        ProxyGlobalState<SeqTypes>,
         SeqTypes,
         Version01,
     >(&HotshotBuilderApiOptions::default())
@@ -80,14 +80,13 @@ pub fn run_builder_api_service(url: Url, source: Arc<RwLock<ProxyGlobalState<Seq
 
     // it enables external clients to submit txn to the builder's private mempool
     let private_mempool_api = hotshot_builder_api::builder::submit_api::<
-        Arc<RwLock<ProxyGlobalState<SeqTypes>>>,
+        ProxyGlobalState<SeqTypes>,
         SeqTypes,
         Version01,
     >(&HotshotBuilderApiOptions::default())
     .expect("Failed to construct the builder API for private mempool txns");
 
-    let mut app: App<Arc<RwLock<ProxyGlobalState<SeqTypes>>>, BuilderApiError> =
-        App::with_state(source);
+    let mut app: App<ProxyGlobalState<SeqTypes>, BuilderApiError> = App::with_state(source);
 
     app.register_module("block_info", builder_api)
         .expect("Failed to register the builder API");
