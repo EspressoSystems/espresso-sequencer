@@ -2,12 +2,6 @@ use std::{collections::BTreeMap, sync::Arc};
 
 #[cfg(not(feature = "dependency-tasks"))]
 use anyhow::Result;
-
-#[cfg(not(feature = "dependency-tasks"))]
-use hotshot_types::vid::vid_scheme;
-#[cfg(not(feature = "dependency-tasks"))]
-use jf_primitives::vid::VidScheme;
-
 use async_broadcast::Sender;
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
@@ -19,6 +13,8 @@ use hotshot_task::task::{Task, TaskState};
 use hotshot_types::data::VidDisperseShare;
 #[cfg(not(feature = "dependency-tasks"))]
 use hotshot_types::message::Proposal;
+#[cfg(not(feature = "dependency-tasks"))]
+use hotshot_types::vid::vid_scheme;
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, Consensus},
     data::{null_block, Leaf, QuorumProposal, ViewChangeEvidence},
@@ -36,7 +32,8 @@ use hotshot_types::{
     },
     vote::{Certificate, HasViewNumber},
 };
-
+#[cfg(not(feature = "dependency-tasks"))]
+use jf_primitives::vid::VidScheme;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};

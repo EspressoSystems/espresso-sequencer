@@ -1,13 +1,14 @@
-use crate::{
-    block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
-    builder::BuildError,
-};
 use async_trait::async_trait;
 use committable::Commitment;
 use hotshot_types::{
     traits::{node_implementation::NodeType, signature_key::SignatureKey},
     utils::BuilderCommitment,
     vid::VidCommitment,
+};
+
+use crate::{
+    block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+    builder::BuildError,
 };
 
 #[async_trait]
@@ -48,8 +49,8 @@ pub trait AcceptsTxnSubmits<I>
 where
     I: NodeType,
 {
-    async fn submit_txn(
-        &mut self,
-        txn: <I as NodeType>::Transaction,
-    ) -> Result<Commitment<<I as NodeType>::Transaction>, BuildError>;
+    async fn submit_txns(
+        &self,
+        txns: Vec<<I as NodeType>::Transaction>,
+    ) -> Result<Vec<Commitment<<I as NodeType>::Transaction>>, BuildError>;
 }
