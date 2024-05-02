@@ -11,6 +11,7 @@ use crate::{
 };
 use async_std::sync::Arc;
 use async_trait::async_trait;
+use futures::future::Future;
 use hotshot_query_service::{
     availability::AvailabilityDataSource,
     data_source::{UpdateDataSource, VersionedDataSource},
@@ -79,9 +80,8 @@ pub fn provider<Ver: StaticVersionType + 'static>(
     provider
 }
 
-#[trait_variant::make(SubmitDataSource: Send)]
-pub(crate) trait LocalSubmitDataSource<N: network::Type, P: SequencerPersistence> {
-    async fn submit(&self, tx: Transaction) -> anyhow::Result<()>;
+pub(crate) trait SubmitDataSource<N: network::Type, P: SequencerPersistence> {
+    fn submit(&self, tx: Transaction) -> impl Send + Future<Output = anyhow::Result<()>>;
 }
 
 #[async_trait]
