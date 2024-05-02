@@ -192,14 +192,34 @@ impl Payload {
 pub mod num_txs {
     use crate::block2::{
         ns_table::ns_payload::NsPayload,
-        payload_bytes::{num_txs_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
+        payload_bytes::{
+            num_txs_as_bytes, num_txs_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
+        },
     };
-    use serde::{Deserialize, Serialize};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-    #[derive(Clone, Debug, Deserialize, Hash, Serialize)]
+    /// manual serde as a byte array via [`num_txs_as_bytes`].
+    #[derive(Clone, Debug, Hash)]
     pub struct NumTxs(usize);
 
-    // TODO manual derive serde as `[u8; NUM_TXS_BYTE_LEN]`
+    impl Serialize for NumTxs {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            num_txs_as_bytes(self.0).serialize(serializer)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for NumTxs {
+        fn deserialize<D>(deserializer: D) -> Result<NumTxs, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            <[u8; NUM_TXS_BYTE_LEN] as Deserialize>::deserialize(deserializer)
+                .map(|bytes: [u8; NUM_TXS_BYTE_LEN]| NumTxs(num_txs_from_bytes(&bytes)))
+        }
+    }
 
     impl NsPayload {
         /// Number of txs in this namespace.
@@ -208,6 +228,8 @@ pub mod num_txs {
         /// - The number of txs declared in the tx table
         /// - The maximum number of tx table entries that could fit in the
         ///   namespace payload.
+        ///
+        /// TODO avoid confusion: pub? separate newtype for return type?
         pub fn num_txs(&self) -> usize {
             std::cmp::min(
                 // Number of txs declared in the tx table
