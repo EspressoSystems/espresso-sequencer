@@ -1092,19 +1092,6 @@ mod test {
         let state = network.server.consensus().get_decided_state().await;
         tracing::info!(?decided_view, ?state, "consensus state");
 
-        // Wait for merklized state storage to update.
-        while let Err(err) = client
-            .get::<()>(&format!("block-state/{}/{}", height - 1, height - 2))
-            .send()
-            .await
-        {
-            tracing::info!(
-                height,
-                "waiting for merklized state to become available ({err:#})"
-            );
-            sleep(Duration::from_secs(1)).await;
-        }
-
         // Fully shut down the API servers.
         drop(network);
 
