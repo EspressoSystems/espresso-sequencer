@@ -1,6 +1,6 @@
 # A simplest nix shell file with the project dependencies and
 # a cross-compilation support.
-{ pkgs, RUSTFLAGS, RUST_LOG, RUST_BACKTRACE, CARGO_TARGET_DIR }:
+{ pkgs, RUST_LOG, RUST_BACKTRACE, CARGO_TARGET_DIR }:
 pkgs.mkShell {
   # Native project dependencies like build utilities and additional routines
   # like container building, linters, etc.
@@ -25,5 +25,5 @@ pkgs.mkShell {
     rustCrossHook
   ];
 
-  inherit RUSTFLAGS RUST_LOG RUST_BACKTRACE CARGO_TARGET_DIR;
+  inherit RUST_LOG RUST_BACKTRACE CARGO_TARGET_DIR;
 }

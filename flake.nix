@@ -49,8 +49,6 @@
       # node=error: disable noisy anvil output
       RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
       RUST_BACKTRACE = 1;
-      RUSTFLAGS =
-        " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\" --cfg hotshot_example";
       # Use a distinct target dir for builds from within nix shells.
       CARGO_TARGET_DIR = "target/nix";
 
@@ -92,7 +90,7 @@
         in
         import ./cross-shell.nix {
           inherit pkgs;
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+          inherit RUST_LOG RUST_BACKTRACE CARGO_TARGET_DIR;
         };
     in
     with pkgs; {
@@ -231,7 +229,7 @@
           '' + self.checks.${system}.pre-commit-check.shellHook;
           RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
           FOUNDRY_SOLC = "${solc}/bin/solc";
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+          inherit RUST_LOG RUST_BACKTRACE CARGO_TARGET_DIR;
         };
       devShells.crossShell =
         crossShell { config = "x86_64-unknown-linux-musl"; };
@@ -252,7 +250,7 @@
             protobuf # to compile libp2p-autonat
             toolchain
           ];
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+          inherit RUST_LOG RUST_BACKTRACE CARGO_TARGET_DIR;
         };
       devShells.coverage =
         let
@@ -268,7 +266,7 @@
             toolchain
             grcov
           ];
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+          inherit RUST_LOG RUST_BACKTRACE CARGO_TARGET_DIR;
           CARGO_INCREMENTAL = "0";
           shellHook = ''
             RUSTFLAGS="$RUSTFLAGS -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests -Cdebuginfo=2"
@@ -291,7 +289,7 @@
             protobuf # to compile libp2p-autonat
             stableToolchain
           ];
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+          inherit RUST_LOG RUST_BACKTRACE CARGO_TARGET_DIR;
         };
     });
 }

@@ -56,14 +56,12 @@ case $KERNEL in
   CARGO_TARGET_DIR=target/docker
 
   # Build in docker container:
-  #   - RUSTFLAGS is needed for compilation.
   #   - CARGO_TARGET_DIR is set to point to the location where the hosts
   #     CARGO_TARGET_DIR is mounted.
   #   - PWD is mounted to /work.
   #   - Cargo registry and git directory are mounted to avoid re-downloading
   #     dependencies.
   docker run \
-    -e RUSTFLAGS \
     -e CARGO_TARGET_DIR=/work/target/docker \
     -v "$(pwd):/work" \
     -v "$CARGO_HOME/registry:/usr/local/cargo/registry" \
