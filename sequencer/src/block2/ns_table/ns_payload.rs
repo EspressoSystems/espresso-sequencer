@@ -347,13 +347,7 @@ mod ns_payload_range {
             }
         }
 
-        pub fn as_range(&self) -> Range<usize> {
-            self.0.clone()
-        }
-    }
-
-    impl NsPayload {
-        /// TODO use the new ns_range field of NsPayload... or just delete it
+        /// TODO newtype wrapper `TxPayloadRange` like `NsPayloadRange`
         ///
         /// Read subslice range for the `index`th tx from the tx
         /// table, translated by [`ns_payload_range`].
@@ -363,12 +357,28 @@ mod ns_payload_range {
         /// Panics if `index >= self.num_txs()`.
         pub fn tx_payload_range(
             &self,
-            index: &TxIndex,
-            ns_payload_range: &NsPayloadRange,
+            num_txs: usize, // TODO newtype. unchecked payload value, or corrected?
+            tx_table_entry: usize, // TODO newtype. pair with `tx_table_entry_prev`?
+            tx_table_entry_prev: usize, // TODO newtype. unchecked payload value, or corrected?
         ) -> Range<usize> {
-            let result = self.tx_payload_range_relative(index);
-            result.start.saturating_add(ns_payload_range.0.start)
-                ..result.end.saturating_add(ns_payload_range.0.start)
+            let tx_payloads_start = num_txs
+                .saturating_mul(TX_OFFSET_BYTE_LEN)
+                .saturating_add(NUM_TXS_BYTE_LEN) // tx_table_byte_len plus...
+                .saturating_add(self.0.start); // ...namespace start
+
+            let end = tx_table_entry
+                .saturating_add(tx_payloads_start)
+                .min(self.0.end);
+            let start = tx_table_entry_prev
+                .saturating_add(tx_payloads_start)
+                .min(end);
+            start..end
+
+            // let result = self.tx_payload_range_relative(index);
+        }
+
+        pub fn as_range(&self) -> Range<usize> {
+            self.0.clone()
         }
     }
 

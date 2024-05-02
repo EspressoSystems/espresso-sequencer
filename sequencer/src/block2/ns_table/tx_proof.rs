@@ -72,7 +72,7 @@ impl Payload {
 
         // Read the tx table len from this namespace's tx table and compute a
         // proof of correctness.
-        let (payload_num_txs, payload_proof_num_txs) = {
+        let (payload_num_txs, payload_proof_num_txs): ([u8; NUM_TXS_BYTE_LEN], _) = {
             let range_num_txs = ns_payload_range.num_txs_range();
 
             (
@@ -111,9 +111,14 @@ impl Payload {
             //
             // TODO I'm re-reading the tx_payload_range here... because I want automatic translaction by ns_payload_range?
             // In `verify` I don't have this luxury; Perhaps I should instead compute the tx_payload_range the same way I do in `verify`?
-            let range = ns_payload.tx_payload_range(&index.tx_index, &ns_payload_range);
+            // let range = ns_payload.tx_payload_range(&index.tx_index, &ns_payload_range);
 
-            // TODO IDEA: NsPayload[Owned] should also come with a NsPayloadRange
+            // TODO (i) payload_xxx should be a newtype(usize) that serializes to bytes
+            let range = ns_payload_range.tx_payload_range(
+                num_txs_from_bytes(&payload_num_txs),
+                tx_offset_from_bytes(&payload_tx_table_entry),
+                tx_offset_from_bytes(&payload_tx_table_entry_prev.unwrap_or([0; NUM_TXS_BYTE_LEN])),
+            );
 
             tracing::info!(
                 "prove: (ns,tx) ({:?},{:?}), tx_payload_range {:?}, content {:?}",
@@ -193,6 +198,11 @@ impl TxProof {
 
         // Verify proof for tx table entries
         {
+            // TODO this is the only place we use `self.tx_index`. But if we
+            // want to eliminate it then we need another way to get the
+            // tx_table_entries_range -> so we'd have to replace `tx_index` with
+            // a new range for tx_table entries, which is no improvement.
+            // Basically `tx_index` is a way to compress this range.
             let range = self.ns_payload_range.tx_table_entries_range(&self.tx_index);
 
             // concatenate the two table entry payloads
@@ -231,27 +241,15 @@ impl TxProof {
 
         // Verify proof for tx payload
         {
-            // TODO refactor this range arithmetic to a lower level
-            // this `range` should be obtained by NsPayloadRange::tx_payload_range(payload_num_txs, payload_tx_table_entries)
-            // of course, in `prove` we can wrap that ugly call in `NsPayload::tx_payload_range(tx_index)`
-            let range = {
-                let tx_payloads_start = num_txs_from_bytes(&self.payload_num_txs)
-                    .saturating_mul(TX_OFFSET_BYTE_LEN)
-                    .saturating_add(NUM_TXS_BYTE_LEN) // tx_table_byte_len plus...
-                    .saturating_add(self.ns_payload_range.0.start); // ...namespace start
-
-                let end = tx_offset_from_bytes(&self.payload_tx_table_entry)
-                    .saturating_add(tx_payloads_start)
-                    .min(self.ns_payload_range.0.end);
-                let start = tx_offset_from_bytes(
+            let range = self.ns_payload_range.tx_payload_range(
+                num_txs_from_bytes(&self.payload_num_txs),
+                tx_offset_from_bytes(&self.payload_tx_table_entry),
+                tx_offset_from_bytes(
                     &self
                         .payload_tx_table_entry_prev
                         .unwrap_or([0; TX_OFFSET_BYTE_LEN]),
-                )
-                .saturating_add(tx_payloads_start)
-                .min(end);
-                start..end
-            };
+                ),
+            );
 
             tracing::info!(
                 "verify: tx_index {:?}, tx_payload_range {:?}, content {:?}",
