@@ -1,13 +1,18 @@
 use self::data_source::StateSignatureDataSource;
 use crate::{
-    network, persistence::SequencerPersistence, state::ValidatedState,
-    state_signature::StateSigner, Node, NodeState, SeqTypes, SequencerContext, Transaction,
+    network,
+    persistence::SequencerPersistence,
+    state::{BlockMerkleTree, FeeAccountProof},
+    state_signature::StateSigner,
+    Node, NodeState, SeqTypes, SequencerContext, Transaction,
 };
+use anyhow::Context;
 use async_once_cell::Lazy;
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
-use data_source::{StateDataSource, SubmitDataSource};
+use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
+use ethers::prelude::{Address, U256};
 use futures::{
     future::{BoxFuture, Future, FutureExt},
     stream::{BoxStream, Stream},
@@ -16,6 +21,8 @@ use hotshot::types::{Event, SystemContextHandle};
 use hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
+use jf_primitives::merkle_tree::MerkleTreeScheme;
+use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use vbs::version::StaticVersionType;
 
@@ -27,6 +34,20 @@ pub mod sql;
 mod update;
 
 pub use options::Options;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AccountQueryData {
+    pub balance: U256,
+    pub proof: FeeAccountProof,
+}
+
+impl From<(FeeAccountProof, U256)> for AccountQueryData {
+    fn from((proof, balance): (FeeAccountProof, U256)) -> Self {
+        Self { balance, proof }
+    }
+}
+
+pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
 
 type BoxLazy<T> = Pin<Arc<Lazy<T, BoxFuture<'static, T>>>>;
 
@@ -139,29 +160,82 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
 
 impl<
         N: network::Type,
-        D: Send + Sync,
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
-    > StateDataSource for StorageState<N, P, D, Ver>
+        D: CatchupDataSource + Send + Sync,
+    > CatchupDataSource for StorageState<N, P, D, Ver>
 {
-    async fn get_decided_state(&self) -> Arc<ValidatedState> {
-        self.as_ref().get_decided_state().await
+    #[tracing::instrument(skip(self))]
+    async fn get_account(
+        &self,
+        height: u64,
+        view: ViewNumber,
+        account: Address,
+    ) -> anyhow::Result<AccountQueryData> {
+        // Check if we have the desired state in memory.
+        match self.as_ref().get_account(height, view, account).await {
+            Ok(account) => return Ok(account),
+            Err(err) => {
+                tracing::info!("account is not in memory, trying storage: {err:#}");
+            }
+        }
+
+        // Try storage.
+        self.inner().get_account(height, view, account).await
     }
 
-    async fn get_undecided_state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>> {
-        self.as_ref().get_undecided_state(view).await
+    #[tracing::instrument(skip(self))]
+    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+        // Check if we have the desired state in memory.
+        match self.as_ref().get_frontier(height, view).await {
+            Ok(frontier) => return Ok(frontier),
+            Err(err) => {
+                tracing::info!("frontier is not in memory, trying storage: {err:#}");
+            }
+        }
+
+        // Try storage.
+        self.inner().get_frontier(height, view).await
     }
 }
 
-impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence> StateDataSource
+impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence> CatchupDataSource
     for ApiState<N, P, Ver>
 {
-    async fn get_decided_state(&self) -> Arc<ValidatedState> {
-        self.consensus().await.get_decided_state().await
+    #[tracing::instrument(skip(self))]
+    async fn get_account(
+        &self,
+        height: u64,
+        view: ViewNumber,
+        account: Address,
+    ) -> anyhow::Result<AccountQueryData> {
+        let state = self
+            .consensus()
+            .await
+            .get_state(view)
+            .await
+            .context(format!(
+                "state not available for height {height}, view {view:?}"
+            ))?;
+        let (proof, balance) = FeeAccountProof::prove(&state.fee_merkle_tree, account).context(
+            format!("account {account} not available for height {height}, view {view:?}"),
+        )?;
+        Ok(AccountQueryData { balance, proof })
     }
 
-    async fn get_undecided_state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>> {
-        self.consensus().await.get_state(view).await
+    #[tracing::instrument(skip(self))]
+    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+        let state = self
+            .consensus()
+            .await
+            .get_state(view)
+            .await
+            .context(format!(
+                "state not available for height {height}, view {view:?}"
+            ))?;
+        let tree = &state.block_merkle_tree;
+        let frontier = tree.lookup(tree.num_leaves() - 1).expect_ok()?.1;
+        Ok(frontier)
     }
 }
 
@@ -187,10 +261,9 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
 mod test_helpers {
     use super::*;
     use crate::{
-        api::endpoints::{AccountQueryData, BlocksFrontier},
         catchup::{mock::MockStateCatchup, StateCatchup},
         persistence::{no_storage, PersistenceOptions, SequencerPersistence},
-        state::BlockMerkleTree,
+        state::{BlockMerkleTree, ValidatedState},
         testing::{run_test_builder, wait_for_decide_on_handle, TestConfig},
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -437,14 +510,14 @@ mod test_helpers {
             .unwrap();
     }
 
-    /// Test the state API with custom options.
+    /// Test the catchup API with custom options.
     ///
     /// The `opt` function can be used to modify the [`Options`] which are used to start the server.
     /// By default, the options are the minimal required to run this test (configuring a port and
-    /// enabling the state API). `opt` may add additional functionality (e.g. adding a query module
+    /// enabling the catchup API). `opt` may add additional functionality (e.g. adding a query module
     /// to test a different initialization path) but should not remove or modify the existing
-    /// functionality (e.g. removing the state module or changing the port).
-    pub async fn state_test_helper(opt: impl FnOnce(Options) -> Options) {
+    /// functionality (e.g. removing the catchup module or changing the port).
+    pub async fn catchup_test_helper(opt: impl FnOnce(Options) -> Options) {
         setup_logging();
         setup_backtrace();
 
@@ -477,34 +550,13 @@ mod test_helpers {
         // Stop consensus running on the node so we freeze the decided and undecided states.
         network.server.consensus_mut().shut_down().await;
 
-        // Decided fee state: absent account.
-        let res = client
-            .get::<AccountQueryData>(&format!("catchup/account/{:x}", Address::default()))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(res.balance, 0.into());
-        assert_eq!(
-            res.proof
-                .verify(
-                    &network
-                        .server
-                        .consensus()
-                        .get_decided_state()
-                        .await
-                        .fee_merkle_tree
-                        .commitment()
-                )
-                .unwrap(),
-            0.into()
-        );
-
         // Undecided fee state: absent account.
         let leaf = network.server.consensus().get_decided_leaf().await;
+        let height = leaf.get_height() + 1;
         let view = leaf.get_view_number() + 1;
         let res = client
             .get::<AccountQueryData>(&format!(
-                "catchup/{}/account/{:x}",
+                "catchup/{height}/{}/account/{:x}",
                 view.get_u64(),
                 Address::default()
             ))
@@ -528,26 +580,9 @@ mod test_helpers {
             0.into()
         );
 
-        // Decided block state.
-        let res = client
-            .get::<BlocksFrontier>("catchup/blocks")
-            .send()
-            .await
-            .unwrap();
-        let root = &network
-            .server
-            .consensus()
-            .get_decided_state()
-            .await
-            .block_merkle_tree
-            .commitment();
-        BlockMerkleTree::verify(root.digest(), root.size() - 1, res)
-            .unwrap()
-            .unwrap();
-
         // Undecided block state.
         let res = client
-            .get::<BlocksFrontier>(&format!("catchup/{}/blocks", view.get_u64()))
+            .get::<BlocksFrontier>(&format!("catchup/{height}/{}/blocks", view.get_u64()))
             .send()
             .await
             .unwrap();
@@ -587,7 +622,7 @@ mod api_tests {
     use portpicker::pick_unused_port;
     use surf_disco::Client;
     use test_helpers::{
-        state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
+        catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
         TestNetwork,
     };
     use tide_disco::error::ServerError;
@@ -688,9 +723,9 @@ mod api_tests {
     }
 
     #[async_std::test]
-    pub(crate) async fn state_test_with_query_module<D: TestableSequencerDataSource>() {
+    pub(crate) async fn catchup_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
-        state_test_helper(|opt| D::options(&storage, opt)).await
+        catchup_test_helper(|opt| D::options(&storage, opt)).await
     }
 
     #[async_std::test]
@@ -759,7 +794,7 @@ mod test {
     use crate::{
         catchup::{mock::MockStateCatchup, StatePeers},
         persistence::no_storage,
-        state::{FeeAccount, FeeAmount},
+        state::{FeeAccount, FeeAmount, ValidatedState},
         testing::TestConfig,
         Header,
     };
@@ -785,7 +820,7 @@ mod test {
     use std::time::Duration;
     use surf_disco::Client;
     use test_helpers::{
-        state_signature_test_helper, state_test_helper, status_test_helper, submit_test_helper,
+        catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
         TestNetwork,
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
@@ -823,8 +858,8 @@ mod test {
     }
 
     #[async_std::test]
-    async fn state_test_without_query_module() {
-        state_test_helper(|opt| opt).await
+    async fn catchup_test_without_query_module() {
+        catchup_test_helper(|opt| opt).await
     }
 
     #[async_std::test]

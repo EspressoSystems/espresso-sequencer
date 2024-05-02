@@ -1,6 +1,6 @@
 use crate::{
-    catchup::SqlStateCatchup, eth_signature_key::EthKeyPair, ChainConfig, Header, Leaf, NodeState,
-    SeqTypes,
+    api::data_source::CatchupDataSource, catchup::SqlStateCatchup, eth_signature_key::EthKeyPair,
+    ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use ark_serialize::{
@@ -18,9 +18,7 @@ use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, LeafQueryData},
     data_source::VersionedDataSource,
-    merklized_state::{
-        MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, UpdateStateData,
-    },
+    merklized_state::{MerklizedState, MerklizedStateHeightPersistence, UpdateStateData},
     types::HeightIndexed,
 };
 use hotshot_types::{
@@ -426,7 +424,7 @@ async fn store_genesis_state(
     Ok(())
 }
 
-pub async fn update_state_storage_loop(
+pub(crate) async fn update_state_storage_loop(
     storage: Arc<RwLock<impl SequencerStateDataSource>>,
     instance: impl Future<Output = NodeState>,
 ) -> anyhow::Result<()> {
@@ -479,13 +477,12 @@ pub async fn update_state_storage_loop(
     Ok(())
 }
 
-pub trait SequencerStateDataSource:
+pub(crate) trait SequencerStateDataSource:
     'static
     + Debug
     + AvailabilityDataSource<SeqTypes>
     + VersionedDataSource
-    + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
-    + MerklizedStateDataSource<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
+    + CatchupDataSource
     + UpdateStateData<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
     + UpdateStateData<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
     + MerklizedStateHeightPersistence
@@ -497,8 +494,7 @@ impl<T> SequencerStateDataSource for T where
         + Debug
         + AvailabilityDataSource<SeqTypes>
         + VersionedDataSource
-        + MerklizedStateDataSource<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
-        + MerklizedStateDataSource<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
+        + CatchupDataSource
         + UpdateStateData<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
         + UpdateStateData<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
         + MerklizedStateHeightPersistence

@@ -1,14 +1,12 @@
 use crate::{
-    api::endpoints::{AccountQueryData, BlocksFrontier},
+    api::{data_source::CatchupDataSource, AccountQueryData, BlocksFrontier},
     persistence::PersistenceOptions,
-    state::{BlockMerkleTree, FeeAccount, FeeAccountProof, FeeMerkleCommitment, FeeMerkleTree},
-    SeqTypes,
+    state::{BlockMerkleTree, FeeAccount, FeeMerkleCommitment},
 };
 use anyhow::{bail, Context};
 use async_std::sync::RwLock;
 use async_trait::async_trait;
 use derive_more::From;
-use hotshot_query_service::merklized_state::{MerklizedStateDataSource, Snapshot};
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
 use jf_primitives::merkle_tree::{
     prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme,
@@ -152,7 +150,7 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
     #[tracing::instrument(skip(self))]
     async fn try_fetch_account(
         &self,
-        _height: u64,
+        height: u64,
         view: ViewNumber,
         fee_merkle_tree_root: FeeMerkleCommitment,
         account: FeeAccount,
@@ -160,7 +158,10 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
         for client in self.clients.iter() {
             tracing::info!("Fetching account {account:?} from {}", client.url);
             match client
-                .get::<AccountQueryData>(&format!("catchup/{}/account/{account}", view.get_u64(),))
+                .get::<AccountQueryData>(&format!(
+                    "catchup/{height}/{}/account/{account}",
+                    view.get_u64(),
+                ))
                 .send()
                 .await
             {
@@ -179,14 +180,14 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
     #[tracing::instrument(skip(self, mt), height = mt.num_leaves())]
     async fn try_remember_blocks_merkle_tree(
         &self,
-        _height: u64,
+        height: u64,
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         for client in self.clients.iter() {
             tracing::info!("Fetching frontier from {}", client.url);
             match client
-                .get::<BlocksFrontier>(&format!("catchup/{}/blocks", view.get_u64()))
+                .get::<BlocksFrontier>(&format!("catchup/{height}/{}/blocks", view.get_u64()))
                 .send()
                 .await
             {
@@ -224,71 +225,35 @@ pub(crate) struct SqlStateCatchup<T> {
 #[async_trait]
 impl<T> StateCatchup for SqlStateCatchup<T>
 where
-    T: MerklizedStateDataSource<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
-        + MerklizedStateDataSource<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
-        + Debug
-        + Send
-        + Sync,
+    T: CatchupDataSource + Debug + Send + Sync,
 {
     #[tracing::instrument(skip(self))]
     async fn try_fetch_account(
         &self,
         block_height: u64,
-        _view: ViewNumber,
+        view: ViewNumber,
         _fee_merkle_tree_root: FeeMerkleCommitment,
         account: FeeAccount,
     ) -> anyhow::Result<AccountQueryData> {
-        let proof = self
-            .db
+        self.db
             .read()
             .await
-            .get_path(
-                Snapshot::<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>::Index(block_height),
-                account,
-            )
+            .get_account(block_height, view, account.into())
             .await
-            .context(format!("fetching account {account}; height {block_height}"))?;
-
-        match proof.proof.first().context(format!(
-            "empty proof for account {account}; height {block_height}"
-        ))? {
-            MerkleNode::Leaf { pos, elem, .. } => Ok(AccountQueryData {
-                balance: (*elem).into(),
-                proof: FeeAccountProof::presence(*pos, proof),
-            }),
-
-            MerkleNode::Empty => Ok(AccountQueryData {
-                balance: 0_u64.into(),
-                proof: FeeAccountProof::absence(account, proof),
-            }),
-            _ => {
-                bail!("Invalid proof");
-            }
-        }
     }
 
     #[tracing::instrument(skip(self))]
     async fn try_remember_blocks_merkle_tree(
         &self,
         bh: u64,
-        _view: ViewNumber,
+        view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         if bh == 0 {
             return Ok(());
         }
 
-        let proof = self
-            .db
-            .read()
-            .await
-            .get_path(
-                Snapshot::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(bh),
-                bh - 1,
-            )
-            .await
-            .context(format!("fetching frontier at height {bh}"))?;
-
+        let proof = self.db.read().await.get_frontier(bh, view).await?;
         match proof
             .proof
             .first()

@@ -2,7 +2,7 @@
 
 use super::{
     data_source::{
-        SequencerDataSource, StateDataSource, StateSignatureDataSource, SubmitDataSource,
+        CatchupDataSource, SequencerDataSource, StateSignatureDataSource, SubmitDataSource,
     },
     StorageState,
 };
@@ -10,13 +10,11 @@ use crate::{
     block::payload::{parse_ns_payload, NamespaceProof},
     network,
     persistence::SequencerPersistence,
-    state::{BlockMerkleTree, FeeAccountProof, ValidatedState},
     NamespaceId, SeqTypes, Transaction,
 };
 use anyhow::Result;
 use async_std::sync::{Arc, RwLock};
 use committable::Committable;
-use ethers::prelude::U256;
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
@@ -24,7 +22,6 @@ use hotshot_query_service::{
     node, Error,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
-use jf_primitives::merkle_tree::MerkleTreeScheme;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use tagged_base64::TaggedBase64;
@@ -40,20 +37,6 @@ pub struct NamespaceProofQueryData {
     pub proof: NamespaceProof,
     pub transactions: Vec<Transaction>,
 }
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AccountQueryData {
-    pub balance: U256,
-    pub proof: FeeAccountProof,
-}
-
-impl From<(FeeAccountProof, U256)> for AccountQueryData {
-    fn from((proof, balance): (FeeAccountProof, U256)) -> Self {
-        Self { balance, proof }
-    }
-}
-
-pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
 
 pub(super) type AvailState<N, P, D, Ver> = Arc<RwLock<StorageState<N, P, D, Ver>>>;
 
@@ -215,33 +198,19 @@ where
 pub(super) fn catchup<S, Ver: StaticVersionType + 'static>(_: Ver) -> Result<Api<S, Error, Ver>>
 where
     S: 'static + Send + Sync + ReadState,
-    S::State: Send + Sync + StateDataSource,
+    S::State: Send + Sync + CatchupDataSource,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/catchup.toml"))?;
     let mut api = Api::<S, Error, Ver>::new(toml)?;
 
-    async fn get_state<S: StateDataSource>(
-        req: &tide_disco::RequestParams,
-        state: &S,
-    ) -> Result<Arc<ValidatedState>, Error> {
-        match req
-            .opt_integer_param("view")
-            .map_err(Error::from_request_error)?
-        {
-            Some(view) => state
-                .get_undecided_state(ViewNumber::new(view))
-                .await
-                .ok_or(Error::catch_all(
-                    StatusCode::NotFound,
-                    format!("state not available for view {view}"),
-                )),
-            None => Ok(state.get_decided_state().await),
-        }
-    }
-
     api.get("account", |req, state| {
         async move {
-            let state = get_state(&req, state).await?;
+            let height = req
+                .integer_param("height")
+                .map_err(Error::from_request_error)?;
+            let view = req
+                .integer_param("view")
+                .map_err(Error::from_request_error)?;
             let account = req
                 .string_param("address")
                 .map_err(Error::from_request_error)?;
@@ -252,32 +221,26 @@ where
                 )
             })?;
 
-            let (proof, balance) =
-                FeeAccountProof::prove(&state.fee_merkle_tree, account).ok_or(Error::catch_all(
-                    StatusCode::NotFound,
-                    format!("account {account} is not in memory"),
-                ))?;
-            Ok(AccountQueryData { balance, proof })
+            state
+                .get_account(height, ViewNumber::new(view), account)
+                .await
+                .map_err(|err| Error::catch_all(StatusCode::NotFound, format!("{err:#}")))
         }
         .boxed()
     })?
     .get("blocks", |req, state| {
         async move {
-            let state = get_state(&req, state).await?;
+            let height = req
+                .integer_param("height")
+                .map_err(Error::from_request_error)?;
+            let view = req
+                .integer_param("view")
+                .map_err(Error::from_request_error)?;
 
-            // Get the frontier of the blocks Merkle tree, if we have it.
-            let tree = &state.block_merkle_tree;
-            let frontier: BlocksFrontier = tree
-                .lookup(tree.num_leaves() - 1)
-                .expect_ok()
-                .map_err(|err| {
-                    Error::catch_all(
-                        StatusCode::NotFound,
-                        format!("blocks frontier is not in memory: {err}"),
-                    )
-                })?
-                .1;
-            Ok(frontier)
+            state
+                .get_frontier(height, ViewNumber::new(view))
+                .await
+                .map_err(|err| Error::catch_all(StatusCode::NotFound, format!("{err:#}")))
         }
         .boxed()
     })?;

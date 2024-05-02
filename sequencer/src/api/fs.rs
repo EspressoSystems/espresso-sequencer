@@ -1,4 +1,4 @@
-use super::data_source::{Provider, SequencerDataSource};
+use super::data_source::{CatchupDataSource, Provider, SequencerDataSource};
 use crate::{persistence::fs::Options, SeqTypes};
 use async_trait::async_trait;
 use hotshot_query_service::data_source::FileSystemDataSource;
@@ -23,6 +23,8 @@ impl SequencerDataSource for DataSource {
         Ok(data_source)
     }
 }
+
+impl CatchupDataSource for DataSource {}
 
 #[cfg(test)]
 mod impl_testable_data_source {
