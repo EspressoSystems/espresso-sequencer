@@ -138,7 +138,6 @@ impl CatchupDataSource for MetricsDataSource {}
 pub(crate) mod testing {
     use super::super::Options;
     use super::*;
-    use crate::persistence::PersistenceOptions;
 
     #[async_trait]
     pub(crate) trait TestableSequencerDataSource: SequencerDataSource {
@@ -147,11 +146,5 @@ pub(crate) mod testing {
         async fn create_storage() -> Self::Storage;
         fn persistence_options(storage: &Self::Storage) -> Self::Options;
         fn options(storage: &Self::Storage, opt: Options) -> Options;
-
-        async fn connect(
-            storage: &Self::Storage,
-        ) -> <Self::Options as PersistenceOptions>::Persistence {
-            Self::persistence_options(storage).create().await.unwrap()
-        }
     }
 }
