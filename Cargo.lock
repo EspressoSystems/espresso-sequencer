@@ -4041,7 +4041,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.47#cd9d329d35376f278ac7ad8cb9f1241847841404"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.48#136dd95096528dfdaf3672b17e2d7bfcb6a581d7"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4086,7 +4086,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.47#cd9d329d35376f278ac7ad8cb9f1241847841404"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.48#136dd95096528dfdaf3672b17e2d7bfcb6a581d7"
 dependencies = [
  "async-trait",
  "clap",
@@ -4104,8 +4104,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-builder-core"
-version = "0.1.15"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.15#546b25bd66840994af3c85ff5c0ecca7db0920e1"
+version = "0.1.16"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.16#5c529bb32f980377ec1b6d7fb1947380d566cc42"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4155,8 +4155,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-events-service"
-version = "0.1.17"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.17#f2656d3c66627a32a0faf5be59497762d250a812"
+version = "0.1.18"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.18#fb32c7c0f12e571436ec462c48ad2938017f9f8b"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4181,7 +4181,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.47#cd9d329d35376f278ac7ad8cb9f1241847841404"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.48#136dd95096528dfdaf3672b17e2d7bfcb6a581d7"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4211,7 +4211,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.47#cd9d329d35376f278ac7ad8cb9f1241847841404"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.48#136dd95096528dfdaf3672b17e2d7bfcb6a581d7"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4222,7 +4222,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.47#cd9d329d35376f278ac7ad8cb9f1241847841404"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.48#136dd95096528dfdaf3672b17e2d7bfcb6a581d7"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4250,8 +4250,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-query-service"
-version = "0.1.15"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.15#13a02972dd3bbf5aad520a9ab665d1d7733942f2"
+version = "0.1.16"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.16#cbdfa40278fb98c283e220264a0b563f3bb8fd41"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4305,7 +4305,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.47#cd9d329d35376f278ac7ad8cb9f1241847841404"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.48#136dd95096528dfdaf3672b17e2d7bfcb6a581d7"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4371,7 +4371,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.47#cd9d329d35376f278ac7ad8cb9f1241847841404"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.48#136dd95096528dfdaf3672b17e2d7bfcb6a581d7"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4384,7 +4384,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.47#cd9d329d35376f278ac7ad8cb9f1241847841404"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.48#136dd95096528dfdaf3672b17e2d7bfcb6a581d7"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4417,7 +4417,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.47#cd9d329d35376f278ac7ad8cb9f1241847841404"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.48#136dd95096528dfdaf3672b17e2d7bfcb6a581d7"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4456,7 +4456,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.47#cd9d329d35376f278ac7ad8cb9f1241847841404"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.48#136dd95096528dfdaf3672b17e2d7bfcb6a581d7"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -4508,7 +4508,7 @@ dependencies = [
 [[package]]
 name = "hotshot-web-server"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.47#cd9d329d35376f278ac7ad8cb9f1241847841404"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.48#136dd95096528dfdaf3672b17e2d7bfcb6a581d7"
 dependencies = [
  "async-compatibility-layer",
  "async-lock 2.8.0",
@@ -5704,7 +5704,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.47#cd9d329d35376f278ac7ad8cb9f1241847841404"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.48#136dd95096528dfdaf3672b17e2d7bfcb6a581d7"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -7495,7 +7495,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19de2de2a00075bf566bee3bd4db014b11587e84184d3f7a791bc17f1a8e9e48"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn 2.0.60",
