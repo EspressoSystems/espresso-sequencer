@@ -43,6 +43,14 @@ struct Args {
     )]
     timeout_ratio: Ratio,
 
+    /// The threshold
+    #[arg(
+        long,
+        env = "ESPRESSO_ORCHESTRATOR_START_THRESHOLD",
+        default_value = "8:10"
+    )]
+    start_threshold: Ratio,
+
     /// The delay a leader inserts before starting pre-commit.
     #[arg(
         long,
@@ -147,6 +155,7 @@ async fn main() {
     let args = Args::parse();
     let mut config = NetworkConfig::<PubKey> {
         start_delay_seconds: args.start_delay.as_secs(),
+        indexed_da: false,
         ..Default::default()
     };
 
@@ -177,6 +186,7 @@ async fn main() {
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;
     config.libp2p_config = Some(libp2p_config);
     config.config.timeout_ratio = args.timeout_ratio.into();
+    config.config.start_threshold = args.start_threshold.into();
     config.config.round_start_delay = args.round_start_delay.as_millis() as u64;
     config.config.start_delay = args.start_delay.as_millis() as u64;
     config.config.da_staked_committee_size = args.num_nodes.get();
