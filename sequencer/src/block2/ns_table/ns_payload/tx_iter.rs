@@ -103,34 +103,56 @@ pub mod tx_table_entry {
             NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
         },
     };
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::ops::Range;
 
     /// manual serde as a byte array.
-    #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
     pub struct TxTableEntries {
         cur: usize,
         prev: Option<usize>,
     }
 
-    // impl Serialize for TxTableEntries {
-    //     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    //     where
-    //         S: Serializer,
-    //     {
-    //         self.as_bytes().serialize(serializer)
-    //     }
-    // }
+    /// Manual [`serde`] impl for [`TxTableEntries`].
+    mod tx_table_entries_serde {
+        use crate::block2::{
+            ns_table::ns_payload::tx_iter::tx_table_entry::TxTableEntries,
+            payload_bytes::{tx_offset_as_bytes, tx_offset_from_bytes, TX_OFFSET_BYTE_LEN},
+        };
+        use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-    // impl<'de> Deserialize<'de> for TxTableEntries {
-    //     fn deserialize<D>(deserializer: D) -> Result<TxTableEntries, D::Error>
-    //     where
-    //         D: Deserializer<'de>,
-    //     {
-    //         <[u8; TX_OFFSET_BYTE_LEN] as Deserialize>::deserialize(deserializer)
-    //             .map(|bytes: [u8; TX_OFFSET_BYTE_LEN]| TxTableEntries(tx_offset_from_bytes(&bytes)))
-    //     }
-    // }
+        #[derive(Debug, Serialize, Deserialize)]
+        struct TxTableEntriesSerde {
+            cur: [u8; TX_OFFSET_BYTE_LEN],
+            prev: Option<[u8; TX_OFFSET_BYTE_LEN]>,
+        }
+
+        impl Serialize for TxTableEntries {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                TxTableEntriesSerde {
+                    cur: tx_offset_as_bytes(self.cur),
+                    prev: self.prev.map(tx_offset_as_bytes),
+                }
+                .serialize(serializer)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for TxTableEntries {
+            fn deserialize<D>(deserializer: D) -> Result<TxTableEntries, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                <TxTableEntriesSerde as Deserialize>::deserialize(deserializer).map(|x| {
+                    TxTableEntries {
+                        cur: tx_offset_from_bytes(&x.cur),
+                        prev: x.prev.map(|bytes| tx_offset_from_bytes(&bytes)),
+                    }
+                })
+            }
+        }
+    }
 
     impl TxTableEntries {
         /// Infallible serialization.
