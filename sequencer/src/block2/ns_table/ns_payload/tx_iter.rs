@@ -17,20 +17,22 @@ pub struct TxIndex([u8; NUM_TXS_BYTE_LEN]);
 impl TxIndex {
     /// Return a byte range into a tx table for use in a transaction proof.
     ///
-    /// TODO move this method to NsPayloadRange, where it can be properly translated into the payload.
-    /// TODO newtype for the returned range to ensure it's not accidentally miused?
+    /// TODO move this method to NsPayloadRange, where it can be properly
+    /// translated into the payload. Ugh I can't do that because some
+    /// descendants depend on `NsPayload`! There's gotta be a better way to
+    /// control visibility. TODO newtype for the returned range to ensure it's
+    /// not accidentally miused?
     ///
-    /// The returned range `R` is relative to the beginning of a payload for
-    /// a namespace `N`. If `R` is to be used to retrieve bytes in a
-    /// multi-namespace payload then `R` must be translated to the beginning
-    /// of `N`.
+    /// The returned range `R` is relative to the beginning of a payload for a
+    /// namespace `N`. If `R` is to be used to retrieve bytes in a
+    /// multi-namespace payload then `R` must be translated to the beginning of
+    /// `N`.
     ///
     /// `R` covers one entry in the tx table if `self` is zero, otherwise it
     /// covers two entries.
     ///
-    /// It is the responsibility of the caller to ensure that `R` is used
-    /// only when `self` is less than the number of entries in `N`'s tx
-    /// table.
+    /// It is the responsibility of the caller to ensure that `R` is used only
+    /// when `self` is less than the number of entries in `N`'s tx table.
     ///
     /// This method should be `const` but that's forbidden by Rust.
     ///
@@ -40,14 +42,14 @@ impl TxIndex {
     /// (start,end) byte indices for the `tx_index`th transaction payload.
     ///
     /// The `tx_index`th entry in the tx table encodes the byte index of the
-    /// *end* of this transaction's payload range. By deinition, this byte
-    /// index is also the *start* of the *previous* transaction's payload
-    /// range. Thus, the returned range includes `(tx_index - 1)`th and
-    /// `tx_index`th entries of the tx table.
+    /// *end* of this transaction's payload range. By deinition, this byte index
+    /// is also the *start* of the *previous* transaction's payload range. Thus,
+    /// the returned range includes `(tx_index - 1)`th and `tx_index`th entries
+    /// of the tx table.
     ///
-    /// Special case: If `tx_index` is 0 then the start index is implicitly
-    /// 0, so the returned range contains only one entry from the tx table:
-    /// the first entry of the tx table.
+    /// Special case: If `tx_index` is 0 then the start index is implicitly 0,
+    /// so the returned range contains only one entry from the tx table: the
+    /// first entry of the tx table.
     pub fn tx_table_entries_range_relative(&self) -> Range<usize> {
         let index = tx_offset_from_bytes(&self.0);
         let start = if index == 0 {

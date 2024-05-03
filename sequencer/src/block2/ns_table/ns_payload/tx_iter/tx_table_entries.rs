@@ -79,6 +79,7 @@ impl TxTableEntries {
     }
 }
 
+/// TODO try to move all these impl blocks up to their struct defs.
 impl NsPayload {
     /// Read the `index`th and `(index-1)`th entries from the tx table.
     ///
