@@ -30,7 +30,7 @@ pub struct TxnTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     pub next_node_idx: Option<usize>,
     /// time to wait between txns
     pub duration: Duration,
-    ///
+    /// Receiver for the shutdown signal from the testing harness
     pub shutdown_chan: Receiver<GlobalTestEvent>,
 }
 

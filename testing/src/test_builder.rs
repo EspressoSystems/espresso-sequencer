@@ -1,6 +1,6 @@
 use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
-use hotshot::traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation};
+use hotshot::traits::{NetworkReliability, TestableNodeImplementation};
 use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
 use hotshot_orchestrator::config::ValidatorConfigFile;
 use hotshot_types::{
@@ -233,10 +233,7 @@ impl TestDescription {
     >(
         self,
         node_id: u64,
-    ) -> TestLauncher<TYPES, I>
-    where
-        I: NodeImplementation<TYPES>,
-    {
+    ) -> TestLauncher<TYPES, I> {
         let TestDescription {
             num_nodes_with_stake,
             num_bootstrap_nodes,

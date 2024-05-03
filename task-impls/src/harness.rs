@@ -44,14 +44,13 @@ impl<TYPES: NodeType> TaskState for TestHarnessState<TYPES> {
 /// Panics if any state the test expects is not set. Panicking causes a test failure
 #[allow(clippy::implicit_hasher)]
 #[allow(clippy::panic)]
-pub async fn run_harness<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>>>>(
+pub async fn run_harness<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>>> + Send + 'static>(
     input: Vec<HotShotEvent<TYPES>>,
     expected_output: HashMap<HotShotEvent<TYPES>, usize>,
     state: S,
     allow_extra_output: bool,
 ) where
     TYPES: NodeType,
-    S: Send + 'static,
 {
     let registry = Arc::new(TaskRegistry::default());
     let mut tasks = vec![];

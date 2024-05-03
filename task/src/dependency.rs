@@ -33,12 +33,6 @@ pub trait Dependency<T> {
     }
 }
 
-/// Used to combine dependencies to create `AndDependency`s or `OrDependency`s
-trait CombineDependencies<T: Clone + Send + Sync + 'static>:
-    Sized + Dependency<T> + Send + 'static
-{
-}
-
 /// Defines a dependency that completes when all of its deps complete
 pub struct AndDependency<T> {
     /// Dependencies being combined

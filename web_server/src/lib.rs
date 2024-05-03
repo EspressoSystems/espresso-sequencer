@@ -873,14 +873,13 @@ pub struct Options {
 /// Transport versioning (generic params here) only changes when the web-CDN itself changes.
 /// When transport versioning changes, the application itself must update its version.
 #[allow(clippy::too_many_lines)]
-fn define_api<State, KEY, NetworkVersion: StaticVersionType>(
+fn define_api<State, KEY, NetworkVersion: StaticVersionType + 'static>(
     options: &Options,
 ) -> Result<Api<State, Error, NetworkVersion>, ApiError>
 where
     State: 'static + Send + Sync + ReadState + WriteState,
     <State as ReadState>::State: Send + Sync + WebServerDataSource<KEY>,
     KEY: SignatureKey,
-    NetworkVersion: 'static,
 {
     let mut api = match &options.api_path {
         Some(path) => Api::<State, Error, NetworkVersion>::from_file(path)?,

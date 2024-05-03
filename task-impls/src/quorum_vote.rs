@@ -271,7 +271,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
         event_sender: &Sender<Arc<HotShotEvent<TYPES>>>,
         event: Option<Arc<HotShotEvent<TYPES>>>,
     ) {
-        if self.vote_dependencies.get(&view_number).is_some() {
+        if self.vote_dependencies.contains_key(&view_number) {
             return;
         }
 

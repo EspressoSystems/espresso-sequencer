@@ -45,7 +45,7 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
         amount: Self::Amount,
         (): Self::Aux,
     ) -> Result<(), StakeTableError> {
-        if self.mapping.get(&new_key).is_some() {
+        if self.mapping.contains_key(&new_key) {
             Err(StakeTableError::ExistingKey)
         } else {
             let pos = self.mapping.len();

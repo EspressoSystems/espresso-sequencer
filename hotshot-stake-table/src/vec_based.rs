@@ -103,7 +103,7 @@ where
         amount: Self::Amount,
         aux: Self::Aux,
     ) -> Result<(), StakeTableError> {
-        if self.bls_mapping.get(&new_key).is_some() {
+        if self.bls_mapping.contains_key(&new_key) {
             Err(StakeTableError::ExistingKey)
         } else {
             let pos = self.bls_mapping.len();

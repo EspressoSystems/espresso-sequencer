@@ -497,13 +497,12 @@ where
 }
 
 /// Sets up all API routes
-fn define_api<KEY: SignatureKey, State, VER: StaticVersionType>(
-) -> Result<Api<State, ServerError, VER>, ApiError>
+fn define_api<KEY, State, VER>() -> Result<Api<State, ServerError, VER>, ApiError>
 where
     State: 'static + Send + Sync + ReadState + WriteState,
     <State as ReadState>::State: Send + Sync + OrchestratorApi<KEY>,
-    KEY: serde::Serialize,
-    VER: 'static,
+    KEY: serde::Serialize + SignatureKey,
+    VER: StaticVersionType + 'static,
 {
     let api_toml = toml::from_str::<toml::Value>(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),

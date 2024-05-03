@@ -89,12 +89,14 @@ where
 /// Note: the task is not spawned with an async thread; instead, the harness just calls `handle_event`.
 /// This has a few implications, e.g. shutting down tasks doesn't really make sense,
 /// and event ordering is deterministic.
-pub async fn run_test_script<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>>>>(
+pub async fn run_test_script<
+    TYPES,
+    S: TaskState<Event = Arc<HotShotEvent<TYPES>>> + Send + 'static,
+>(
     mut script: TestScript<TYPES, S>,
     state: S,
 ) where
     TYPES: NodeType,
-    S: Send + 'static,
 {
     let registry = Arc::new(TaskRegistry::default());
 

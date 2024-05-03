@@ -91,7 +91,7 @@ where
 /// - Initialize network nodes
 /// - Kill network nodes
 /// - A test assertion fails
-pub async fn test_bed<S: 'static + Send + Default + Debug + Clone, F, FutF, G: Clone, FutG>(
+pub async fn test_bed<S: 'static + Send + Default + Debug + Clone, F, FutF, G, FutG>(
     run_test: F,
     client_handler: G,
     num_nodes: usize,
@@ -101,7 +101,7 @@ pub async fn test_bed<S: 'static + Send + Default + Debug + Clone, F, FutF, G: C
     FutF: Future<Output = ()>,
     FutG: Future<Output = Result<(), NetworkNodeHandleError>> + 'static + Send + Sync,
     F: FnOnce(Vec<HandleWithState<S>>, Duration) -> FutF,
-    G: Fn(NetworkEvent, HandleWithState<S>) -> FutG + 'static + Send + Sync,
+    G: Fn(NetworkEvent, HandleWithState<S>) -> FutG + 'static + Send + Sync + Clone,
 {
     setup_logging();
     setup_backtrace();
