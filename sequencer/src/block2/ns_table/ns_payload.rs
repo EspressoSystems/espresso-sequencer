@@ -9,7 +9,6 @@ use crate::{
     NamespaceId, Transaction,
 };
 use serde::{Deserialize, Serialize};
-use std::ops::Range;
 use tx_iter::{TxIndex, TxIter};
 
 pub mod tx_iter;
@@ -84,40 +83,6 @@ impl NsPayload {
     /// else is a degenerate case.
     pub fn num_txs_byte_len(&self) -> usize {
         NUM_TXS_BYTE_LEN.min(self.0.len())
-    }
-
-    /// Byte length of this namespace's tx table.
-    ///
-    /// Guaranteed to be no larger than this namespace's payload byte length.
-    pub fn tx_table_byte_len(&self) -> usize {
-        self.num_txs()
-            .saturating_mul(TX_OFFSET_BYTE_LEN)
-            .saturating_add(NUM_TXS_BYTE_LEN)
-            .min(self.0.len())
-        // TODO FIX: NsPayload needs a NsPayloadRange field
-        // or make it like tx_payload_range()
-        // NsPayloadRange::tx_table_byte_len(&self, self.num_txs())
-    }
-
-    /// Read subslice range for the `index`th tx from the tx
-    /// table, relative to the beginning of this namespace's payload.
-    ///
-    /// Returned range guaranteed to satisfy `start <= end <= namespace_byte_len`.
-    ///
-    /// Panics if `index >= self.num_txs()`.
-    fn tx_payload_range_relative(&self, index: &TxIndex) -> Range<usize> {
-        let tx_table_byte_len = self.tx_table_byte_len();
-        let end = self
-            .read_tx_offset(index)
-            .saturating_add(tx_table_byte_len)
-            .min(self.0.len());
-        let start = self
-            .read_tx_offset_prev(index)
-            .unwrap_or(0)
-            .saturating_add(tx_table_byte_len)
-            .min(end);
-        // tracing::info!("tx_payload_range {:?}", start..end);
-        start..end
     }
 
     /// Access the bytes of this [`NsPayload`].

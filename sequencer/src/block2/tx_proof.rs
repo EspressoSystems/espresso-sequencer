@@ -2,11 +2,11 @@ use crate::{
     block2::{
         iter::Index,
         ns_table::{
-            ns_payload::{num_txs::NumTxs, tx_iter::TxIndex},
+            ns_payload::{
+                num_txs::NumTxs,
+                tx_iter::{tx_table_entry::TxTableEntries, TxIndex},
+            },
             ns_payload_range::NsPayloadRange,
-        },
-        payload_bytes::{
-            tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
         },
         Payload,
     },
@@ -38,8 +38,7 @@ pub struct TxProof {
     payload_proof_num_txs: SmallRangeProofType,
 
     tx_index: TxIndex,
-    payload_tx_table_entry_prev: Option<[u8; TX_OFFSET_BYTE_LEN]>, // serialized usize, `None` for the 0th tx
-    payload_tx_table_entry: [u8; TX_OFFSET_BYTE_LEN],              // serialized usize
+    payload_tx_table_entries: TxTableEntries,
     payload_proof_tx_table_entries: SmallRangeProofType,
     payload_proof_tx: Option<SmallRangeProofType>, // `None` if the tx has zero length
 }
@@ -81,11 +80,7 @@ impl Payload {
 
         // Read the tx table entries for this tx and compute a proof of
         // correctness.
-        // TODO read_tx_offset converts bytes->usize, then we convert back to bytes
-        let payload_tx_table_entry_prev = ns_payload
-            .read_tx_offset_prev(index.tx())
-            .map(tx_offset_as_bytes);
-        let payload_tx_table_entry = tx_offset_as_bytes(ns_payload.read_tx_offset(index.tx()));
+        let payload_tx_table_entries = ns_payload.read_tx_table_entries(index.tx());
         let payload_proof_tx_table_entries = {
             let range = ns_payload_range.tx_table_entries_range(index.tx());
 
@@ -110,11 +105,8 @@ impl Payload {
             // let range = ns_payload.tx_payload_range(index.tx(), &ns_payload_range);
 
             // TODO (i) payload_xxx should be a newtype(usize) that serializes to bytes
-            let range = ns_payload_range.tx_payload_range(
-                &payload_num_txs,
-                tx_offset_from_bytes(&payload_tx_table_entry),
-                tx_offset_from_bytes(&payload_tx_table_entry_prev.unwrap_or([0; NUM_TXS_BYTE_LEN])),
-            );
+            let range =
+                ns_payload_range.tx_payload_range(&payload_num_txs, &payload_tx_table_entries);
 
             tracing::info!(
                 "prove: (ns,tx) ({:?},{:?}), tx_payload_range {:?}, content {:?}",
@@ -138,8 +130,7 @@ impl Payload {
                 payload_num_txs,
                 payload_proof_num_txs,
                 tx_index: index.tx().clone(),
-                payload_tx_table_entry_prev,
-                payload_tx_table_entry,
+                payload_tx_table_entries,
                 payload_proof_tx_table_entries,
                 payload_proof_tx,
             },
@@ -200,14 +191,7 @@ impl TxProof {
             let range = self.ns_payload_range.tx_table_entries_range(&self.tx_index);
 
             // concatenate the two table entry payloads
-            let payload_subslice = &{
-                let mut bytes = Vec::with_capacity(TX_OFFSET_BYTE_LEN.saturating_mul(2));
-                if let Some(prev) = self.payload_tx_table_entry_prev {
-                    bytes.extend(prev);
-                }
-                bytes.extend(self.payload_tx_table_entry);
-                bytes
-            };
+            let payload_subslice = &self.payload_tx_table_entries.as_bytes();
 
             // tracing::info!(
             //     "verify: tx_index {:?}, tx_table_entries_range {:?}, content {:?}",
@@ -235,15 +219,9 @@ impl TxProof {
 
         // Verify proof for tx payload
         {
-            let range = self.ns_payload_range.tx_payload_range(
-                &self.payload_num_txs,
-                tx_offset_from_bytes(&self.payload_tx_table_entry),
-                tx_offset_from_bytes(
-                    &self
-                        .payload_tx_table_entry_prev
-                        .unwrap_or([0; TX_OFFSET_BYTE_LEN]),
-                ),
-            );
+            let range = self
+                .ns_payload_range
+                .tx_payload_range(&self.payload_num_txs, &self.payload_tx_table_entries);
 
             tracing::info!(
                 "verify: tx_index {:?}, tx_payload_range {:?}, content {:?}",

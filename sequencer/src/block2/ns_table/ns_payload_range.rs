@@ -1,8 +1,5 @@
 use crate::block2::{
-    ns_table::{
-        ns_payload::{num_txs::NumTxs, tx_iter::TxIndex},
-        NsIndex, NsTable,
-    },
+    ns_table::{ns_payload::tx_iter::TxIndex, NsIndex, NsTable},
     payload_bytes::NUM_TXS_BYTE_LEN,
 };
 use serde::{Deserialize, Serialize};
@@ -29,33 +26,6 @@ impl NsPayloadRange {
             start: result.start.saturating_add(self.0.start),
             end: result.end.saturating_add(self.0.start),
         }
-    }
-
-    /// TODO newtype wrapper `TxPayloadRange` like `NsPayloadRange`
-    ///
-    /// Read subslice range for the `index`th tx from the tx table, translated
-    /// by [`ns_payload_range`].
-    ///
-    /// Returned range guaranteed to fit within this namespace's payload range.
-    /// (ie. `self`).
-    ///
-    /// Panics if `index >= self.num_txs()`.
-    pub fn tx_payload_range(
-        &self,
-        num_txs: &NumTxs,
-        tx_table_entry: usize, // TODO newtype. pair with `tx_table_entry_prev`?
-        tx_table_entry_prev: usize, // TODO newtype. unchecked payload value, or corrected?
-    ) -> Range<usize> {
-        let tx_payloads_start = num_txs
-            .tx_table_byte_len_unchecked()
-            .saturating_add(self.0.start);
-        let end = tx_table_entry
-            .saturating_add(tx_payloads_start)
-            .min(self.0.end);
-        let start = tx_table_entry_prev
-            .saturating_add(tx_payloads_start)
-            .min(end);
-        start..end
     }
 
     pub fn as_range(&self) -> Range<usize> {
