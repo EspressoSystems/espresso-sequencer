@@ -1,10 +1,12 @@
 use crate::{
     block2::{
         iter::Index,
-        ns_table::{ns_payload::tx_iter::TxIndex, ns_payload_range::NsPayloadRange},
+        ns_table::{
+            ns_payload::{num_txs::NumTxs, tx_iter::TxIndex},
+            ns_payload_range::NsPayloadRange,
+        },
         payload_bytes::{
-            num_txs_from_bytes, tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN,
-            TX_OFFSET_BYTE_LEN,
+            tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
         },
         Payload,
     },
@@ -32,7 +34,7 @@ pub struct TxProof {
 
     // TODO make [u8; XXX] a newtype at a lower level of code so that XXX is not
     // exposed here.
-    payload_num_txs: [u8; NUM_TXS_BYTE_LEN], // serialized usize
+    payload_num_txs: NumTxs,
     payload_proof_num_txs: SmallRangeProofType,
 
     tx_index: TxIndex,
@@ -72,16 +74,10 @@ impl Payload {
 
         // Read the tx table len from this namespace's tx table and compute a
         // proof of correctness.
-        let (payload_num_txs, payload_proof_num_txs): ([u8; NUM_TXS_BYTE_LEN], _) = {
-            let range_num_txs = ns_payload_range.num_txs_range();
-
-            (
-                // TODO make read_num_txs a method (of NsPayload)? Careful not to correct the original bytes!
-                // TODO should be safe to read NUM_TXS_BYTE_LEN from payload; we would have exited by now otherwise.
-                self.payload.get(range_num_txs.clone())?.try_into().unwrap(), // panic is impossible [TODO after we fix ns iterator])
-                vid.payload_proof(&self.payload, range_num_txs).ok()?,
-            )
-        };
+        let payload_num_txs = ns_payload.read_num_txs();
+        let payload_proof_num_txs = vid
+            .payload_proof(&self.payload, ns_payload_range.num_txs_range())
+            .ok()?;
 
         // Read the tx table entries for this tx and compute a proof of
         // correctness.
@@ -115,7 +111,7 @@ impl Payload {
 
             // TODO (i) payload_xxx should be a newtype(usize) that serializes to bytes
             let range = ns_payload_range.tx_payload_range(
-                num_txs_from_bytes(&payload_num_txs),
+                &payload_num_txs,
                 tx_offset_from_bytes(&payload_tx_table_entry),
                 tx_offset_from_bytes(&payload_tx_table_entry_prev.unwrap_or([0; NUM_TXS_BYTE_LEN])),
             );
@@ -177,13 +173,11 @@ impl TxProof {
 
         // Verify proof for tx table len
         {
-            let num_txs_range = self.ns_payload_range.num_txs_range();
-
             if vid
                 .payload_verify(
                     Statement {
-                        payload_subslice: &self.payload_num_txs,
-                        range: num_txs_range,
+                        payload_subslice: &self.payload_num_txs.as_bytes(),
+                        range: self.ns_payload_range.num_txs_range(),
                         commit,
                         common,
                     },
@@ -242,7 +236,7 @@ impl TxProof {
         // Verify proof for tx payload
         {
             let range = self.ns_payload_range.tx_payload_range(
-                num_txs_from_bytes(&self.payload_num_txs),
+                &self.payload_num_txs,
                 tx_offset_from_bytes(&self.payload_tx_table_entry),
                 tx_offset_from_bytes(
                     &self
