@@ -168,13 +168,11 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     let config = NetworkConfig::get_complete_config(
         &orchestrator_client,
-        None,
         my_config.clone(),
         // Register in our Libp2p advertise address and public key so other nodes
         // can contact us on startup
         Some(network_params.libp2p_advertise_address),
         Some(libp2p_public_key),
-        false,
     )
     .await?
     .0;

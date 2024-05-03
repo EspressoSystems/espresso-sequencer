@@ -105,7 +105,7 @@ async fn init_stake_table_from_orchestrator(
         match client.get::<bool>("api/peer_pub_ready").send().await {
             Ok(true) => {
                 match client
-                    .get::<NetworkConfig>("api/get_config_after_peer_collected")
+                    .post::<NetworkConfig>("api/post_config_after_peer_collected")
                     .send()
                     .await
                 {
