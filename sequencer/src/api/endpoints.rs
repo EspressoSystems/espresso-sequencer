@@ -18,7 +18,9 @@ use committable::Committable;
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
-    merklized_state::{self, MerklizedState, MerklizedStateDataSource},
+    merklized_state::{
+        self, MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence,
+    },
     node, Error,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
@@ -254,7 +256,11 @@ pub(super) fn merklized_state<N, P, D, S, Ver: StaticVersionType + 'static, cons
 ) -> Result<MerklizedStateApi<N, P, D, Ver>>
 where
     N: network::Type,
-    D: MerklizedStateDataSource<SeqTypes, S, ARITY> + Send + Sync + 'static,
+    D: MerklizedStateDataSource<SeqTypes, S, ARITY>
+        + Send
+        + Sync
+        + MerklizedStateHeightPersistence
+        + 'static,
     S: MerklizedState<SeqTypes, ARITY>,
     P: SequencerPersistence,
     for<'a> <S::Commit as TryFrom<&'a TaggedBase64>>::Error: std::fmt::Display,
