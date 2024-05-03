@@ -286,6 +286,7 @@ fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
 }
 
 async fn compute_state_update(
+    state: &ValidatedState,
     instance: &NodeState,
     parent_leaf: &LeafQueryData<SeqTypes>,
     proposed_leaf: &LeafQueryData<SeqTypes>,
@@ -293,16 +294,29 @@ async fn compute_state_update(
     let proposed_leaf = proposed_leaf.leaf();
     let parent_leaf = parent_leaf.leaf();
     let header = proposed_leaf.get_block_header();
-    let validated_state = ValidatedState::from_header(parent_leaf.get_block_header());
-    validated_state
-        .apply_header(instance, parent_leaf, header)
-        .await
+
+    // Check internal consistency.
+    let parent_header = parent_leaf.get_block_header();
+    ensure!(
+        state.block_merkle_tree.commitment() == parent_header.block_merkle_tree_root,
+        "internal error! in-memory block tree {:?} does not match parent header {:?}",
+        state.block_merkle_tree.commitment(),
+        parent_header.block_merkle_tree_root
+    );
+    ensure!(
+        state.fee_merkle_tree.commitment() == parent_header.fee_merkle_tree_root,
+        "internal error! in-memory fee tree {:?} does not match parent header {:?}",
+        state.fee_merkle_tree.commitment(),
+        parent_header.fee_merkle_tree_root
+    );
+
+    state.apply_header(instance, parent_leaf, header).await
 }
 
 async fn store_state_update(
     storage: &mut impl SequencerStateDataSource,
     block_number: u64,
-    state: ValidatedState,
+    state: &ValidatedState,
     delta: Delta,
 ) -> anyhow::Result<()> {
     let ValidatedState {
@@ -372,23 +386,24 @@ async fn store_state_update(
     ),
 )]
 async fn update_state_storage(
+    parent_state: &ValidatedState,
     storage: &Arc<RwLock<impl SequencerStateDataSource>>,
     instance: &NodeState,
     parent_leaf: &LeafQueryData<SeqTypes>,
     proposed_leaf: &LeafQueryData<SeqTypes>,
-) -> anyhow::Result<()> {
-    let (state, delta) = compute_state_update(instance, parent_leaf, proposed_leaf)
+) -> anyhow::Result<ValidatedState> {
+    let (state, delta) = compute_state_update(parent_state, instance, parent_leaf, proposed_leaf)
         .await
         .context("computing state update")?;
 
     let mut storage = storage.write().await;
-    if let Err(err) = store_state_update(&mut *storage, proposed_leaf.height(), state, delta).await
+    if let Err(err) = store_state_update(&mut *storage, proposed_leaf.height(), &state, delta).await
     {
         storage.revert().await;
         return Err(err);
     }
 
-    Ok(())
+    Ok(state)
 }
 
 async fn store_genesis_state(
@@ -445,6 +460,7 @@ pub(crate) async fn update_state_storage_loop(
     // resolve the parent leaf future _after_ dropping our lock on the state, in case it is not
     // ready yet and another task needs a mutable lock on the state to produce the parent leaf.
     let mut parent_leaf = parent_leaf.await;
+    let mut parent_state = ValidatedState::from_header(parent_leaf.header());
 
     if last_height == 0 {
         // If the last height is 0, we need to insert the genesis state, since this state is
@@ -460,9 +476,12 @@ pub(crate) async fn update_state_storage_loop(
 
     while let Some(leaf) = leaves.next().await {
         loop {
-            match update_state_storage(&storage, &instance, &parent_leaf, &leaf).await {
-                Ok(()) => {
+            match update_state_storage(&parent_state, &storage, &instance, &parent_leaf, &leaf)
+                .await
+            {
+                Ok(state) => {
                     parent_leaf = leaf;
+                    parent_state = state;
                     break;
                 }
                 Err(err) => {
