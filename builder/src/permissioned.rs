@@ -253,6 +253,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let l1_client = L1Client::new(l1_params.url, Address::default());
 
     let instance_state = NodeState::new(
+        node_index,
         ChainConfig::default(),
         l1_client,
         Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),

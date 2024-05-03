@@ -2,7 +2,8 @@
 
 use super::{
     data_source::{
-        provider, SequencerDataSource, StateDataSource, StateSignatureDataSource, SubmitDataSource,
+        provider, CatchupDataSource, SequencerDataSource, StateSignatureDataSource,
+        SubmitDataSource,
     },
     endpoints, fs, sql,
     update::update_loop,
@@ -164,7 +165,7 @@ impl Options {
                 )
                 .await?
             } else if let Some(opt) = self.storage_fs.take() {
-                self.init_with_query_module_fs::<N, P, fs::DataSource, Ver>(
+                self.init_with_query_module_fs::<N, P, Ver>(
                     query_opt,
                     opt,
                     state,
@@ -248,7 +249,7 @@ impl Options {
     where
         N: network::Type,
         P: SequencerPersistence,
-        D: SequencerDataSource + Send + Sync + 'static,
+        D: SequencerDataSource + CatchupDataSource + Send + Sync + 'static,
     {
         let metrics = ds.populate_metrics();
         let ds: endpoints::AvailState<N, P, D, Ver> =
@@ -278,10 +279,10 @@ impl Options {
         Ok((metrics, ds, app))
     }
 
-    async fn init_with_query_module_fs<N, P, D, Ver: StaticVersionType + 'static>(
+    async fn init_with_query_module_fs<N, P, Ver: StaticVersionType + 'static>(
         &self,
         query_opt: Query,
-        mod_opt: D::Options,
+        mod_opt: persistence::fs::Options,
         state: ApiState<N, P, Ver>,
         tasks: &mut TaskList,
         bind_version: Ver,
@@ -289,9 +290,13 @@ impl Options {
     where
         N: network::Type,
         P: SequencerPersistence,
-        D: SequencerDataSource + Send + Sync + 'static,
     {
-        let ds = D::create(mod_opt, provider(query_opt.peers, bind_version), false).await?;
+        let ds = <fs::DataSource as SequencerDataSource>::create(
+            mod_opt,
+            provider(query_opt.peers, bind_version),
+            false,
+        )
+        .await?;
 
         let (metrics, _, app) = self
             .init_app_modules(ds, state.clone(), tasks, bind_version)
@@ -374,7 +379,7 @@ impl Options {
         S: 'static + Send + Sync + ReadState + WriteState,
         P: SequencerPersistence,
         S::State:
-            Send + Sync + SubmitDataSource<N, P> + StateSignatureDataSource<N> + StateDataSource,
+            Send + Sync + SubmitDataSource<N, P> + StateSignatureDataSource<N> + CatchupDataSource,
         N: network::Type,
     {
         let bind_version = Ver::instance();
