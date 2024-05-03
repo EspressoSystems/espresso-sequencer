@@ -18,6 +18,10 @@ struct Args {
     #[clap(short, long, env = "ESPRESSO_ORCHESTRATOR_PORT")]
     port: u16,
 
+    /// Port to run the server on.
+    #[clap(short, long, env = "ESPRESSO_ORCHESTRATOR_MANUAL_START_PASSWORD")]
+    manual_start_password: Option<String>,
+
     /// Number of nodes in the network.
     #[clap(short, long, env = "ESPRESSO_ORCHESTRATOR_NUM_NODES")]
     num_nodes: NonZeroUsize,
@@ -155,6 +159,7 @@ async fn main() {
     let args = Args::parse();
     let mut config = NetworkConfig::<PubKey> {
         start_delay_seconds: args.start_delay.as_secs(),
+        manual_start_password: args.manual_start_password,
         indexed_da: false,
         ..Default::default()
     };
