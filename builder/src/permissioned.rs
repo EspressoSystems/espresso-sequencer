@@ -142,7 +142,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     max_api_timeout_duration: Duration,
     buffered_view_num_count: usize,
     is_da: bool,
-    maximise_txns_count_timeout_duration: Duration,
+    maximize_txns_count_timeout_duration: Duration,
     base_fee: u64,
 ) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
@@ -286,7 +286,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         hotshot_builder_api_url,
         max_api_timeout_duration,
         buffered_view_num_count,
-        maximise_txns_count_timeout_duration,
+        maximize_txns_count_timeout_duration,
         base_fee,
     )
     .await?;
@@ -382,7 +382,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         hotshot_builder_api_url: Url,
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
-        maximise_txns_count_timeout_duration: Duration,
+        maximize_txns_count_timeout_duration: Duration,
         base_fee: u64,
     ) -> anyhow::Result<Self> {
         // tx channel
@@ -401,12 +401,12 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         // builder api request channel
         let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
 
-        // builder api response channel
-        let (res_sender, res_receiver) = unbounded();
         let (genesis_payload, genesis_ns_table) =
             Payload::from_transactions([], Arc::new(instance_state.clone()))
                 .expect("genesis payload construction failed");
+
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
+
         let vid_commitment = {
             // TODO we should not need to collect payload bytes just to compute vid_commitment
             let payload_bytes = genesis_payload
@@ -418,7 +418,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
             req_sender,
-            res_receiver,
             tx_sender.clone(),
             vid_commitment,
             bootstrapped_view,
@@ -443,11 +442,10 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             qc_receiver,
             req_receiver,
             global_state_clone,
-            res_sender,
             NonZeroUsize::new(1).unwrap(),
             bootstrapped_view,
             buffered_view_num_count as u64,
-            maximise_txns_count_timeout_duration,
+            maximize_txns_count_timeout_duration,
             base_fee,
             Arc::new(instance_state),
         );
@@ -477,9 +475,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             max_api_timeout_duration,
         );
 
-        let proxy_global_api_state = Arc::new(RwLock::new(proxy_global_state));
-
-        run_builder_api_service(hotshot_builder_api_url.clone(), proxy_global_api_state);
+        // start the builder api service
+        run_builder_api_service(hotshot_builder_api_url.clone(), proxy_global_state);
 
         let ctx = Self {
             hotshot_handle: hotshot_handle_clone,
@@ -605,15 +602,16 @@ mod test {
         )
         .expect("Claim block signing failed");
 
+        let test_view_num = 0;
         // test getting available blocks
         tracing::info!(
-                "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+                "block_info/availableblocks/{parent_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
             );
         // sleep and wait for builder service to startup
         async_sleep(Duration::from_millis(3000)).await;
         let available_block_info = match builder_client
             .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
-                "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+                "block_info/availableblocks/{parent_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -640,7 +638,7 @@ mod test {
         // Test claiming blocks
         let _available_block_data = match builder_client
             .get::<AvailableBlockData<SeqTypes>>(&format!(
-                "block_info/claimblock/{builder_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+                "block_info/claimblock/{builder_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -657,7 +655,7 @@ mod test {
         // Test claiming block header input
         let _available_block_header = match builder_client
             .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
-                "block_info/claimheaderinput/{builder_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+                "block_info/claimheaderinput/{builder_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await

@@ -11,6 +11,7 @@ use crate::{
 };
 use async_std::sync::Arc;
 use async_trait::async_trait;
+use futures::future::Future;
 use hotshot_query_service::{
     availability::AvailabilityDataSource,
     data_source::{UpdateDataSource, VersionedDataSource},
@@ -79,9 +80,8 @@ pub fn provider<Ver: StaticVersionType + 'static>(
     provider
 }
 
-#[trait_variant::make(SubmitDataSource: Send)]
-pub(crate) trait LocalSubmitDataSource<N: network::Type, P: SequencerPersistence> {
-    async fn submit(&self, tx: Transaction) -> anyhow::Result<()>;
+pub(crate) trait SubmitDataSource<N: network::Type, P: SequencerPersistence> {
+    fn submit(&self, tx: Transaction) -> impl Send + Future<Output = anyhow::Result<()>>;
 }
 
 #[async_trait]
@@ -89,10 +89,12 @@ pub(crate) trait StateSignatureDataSource<N: network::Type> {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody>;
 }
 
-#[trait_variant::make(StateDataSource: Send)]
-pub(crate) trait LocalStateDataSource {
-    async fn get_decided_state(&self) -> Arc<ValidatedState>;
-    async fn get_undecided_state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>>;
+pub(crate) trait StateDataSource {
+    fn get_decided_state(&self) -> impl Send + Future<Output = Arc<ValidatedState>>;
+    fn get_undecided_state(
+        &self,
+        view: ViewNumber,
+    ) -> impl Send + Future<Output = Option<Arc<ValidatedState>>>;
 }
 
 #[cfg(test)]
