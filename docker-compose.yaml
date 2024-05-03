@@ -448,7 +448,8 @@ services:
     ports:
       - "$ESPRESSO_NASTY_CLIENT_PORT:$ESPRESSO_NASTY_CLIENT_PORT"
     environment:
-      - ESPRESSO_SEQUENCER_URL
+      # Point the nasty client at sequencer1, the only one running the state API.
+      - ESPRESSO_SEQUENCER_URL=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
       - ESPRESSO_NASTY_CLIENT_PORT
       - RUST_LOG
       - RUST_LOG_FORMAT
