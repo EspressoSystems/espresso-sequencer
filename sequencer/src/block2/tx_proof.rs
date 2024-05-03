@@ -4,7 +4,7 @@ use crate::{
         ns_table::{
             ns_payload::{
                 num_txs::NumTxs,
-                tx_iter::{tx_table_entry::TxTableEntries, TxIndex},
+                tx_iter::{tx_table_entries::TxTableEntries, TxIndex},
             },
             ns_payload_range::NsPayloadRange,
         },
