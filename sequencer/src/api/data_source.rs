@@ -89,10 +89,12 @@ pub(crate) trait StateSignatureDataSource<N: network::Type> {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody>;
 }
 
-#[trait_variant::make(StateDataSource: Send)]
-pub(crate) trait LocalStateDataSource {
-    async fn get_decided_state(&self) -> Arc<ValidatedState>;
-    async fn get_undecided_state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>>;
+pub(crate) trait StateDataSource {
+    fn get_decided_state(&self) -> impl Send + Future<Output = Arc<ValidatedState>>;
+    fn get_undecided_state(
+        &self,
+        view: ViewNumber,
+    ) -> impl Send + Future<Output = Option<Arc<ValidatedState>>>;
 }
 
 #[cfg(test)]

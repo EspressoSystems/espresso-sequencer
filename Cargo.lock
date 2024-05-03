@@ -8617,7 +8617,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.18",
  "trait-set",
- "trait-variant",
  "typenum",
  "url",
  "vbs",
