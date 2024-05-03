@@ -1,8 +1,5 @@
 use crate::block2::{
-    ns_table::{
-        ns_payload::{num_txs::NumTxs, tx_iter::TxIndex, NsPayload},
-        ns_payload_range::NsPayloadRange,
-    },
+    ns_table::ns_payload::{tx_iter::TxIndex, NsPayload},
     payload_bytes::{
         num_txs_as_bytes, num_txs_from_bytes, tx_offset_as_bytes, tx_offset_from_bytes,
         NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
@@ -75,7 +72,7 @@ impl TxTableEntries {
     /// Convert a [`TxTableEntries`] to a valid [`Range`], translated and capped.
     ///
     /// Returned range guaranteed to satisfy `translate <= start <= end <= cap`.
-    fn as_range(&self, translate: usize, cap: usize) -> Range<usize> {
+    pub fn as_range(&self, translate: usize, cap: usize) -> Range<usize> {
         let end = self.cur.saturating_add(translate).min(cap);
         let start = self.prev.unwrap_or(0).saturating_add(translate).min(end);
         start..end
@@ -115,23 +112,5 @@ impl NsPayload {
         let tx_table_byte_len = self.read_num_txs().tx_table_byte_len_unchecked();
         self.read_tx_table_entries(index)
             .as_range(tx_table_byte_len, self.0.len())
-    }
-}
-
-impl NsPayloadRange {
-    /// Compute a subslice range for a tx payload, relative to an entire
-    /// block payload.
-    ///
-    /// Returned range guaranteed to lay within this namespace's payload
-    /// range.
-    pub fn tx_payload_range(
-        &self,
-        num_txs: &NumTxs,
-        tx_table_entries: &TxTableEntries,
-    ) -> Range<usize> {
-        let tx_payloads_start = num_txs
-            .tx_table_byte_len_unchecked()
-            .saturating_add(self.0.start);
-        tx_table_entries.as_range(tx_payloads_start, self.0.end)
     }
 }

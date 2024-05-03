@@ -1,5 +1,11 @@
 use crate::block2::{
-    ns_table::{ns_payload::tx_iter::TxIndex, NsIndex, NsTable},
+    ns_table::{
+        ns_payload::{
+            num_txs::NumTxs,
+            tx_iter::{tx_table_entries::TxTableEntries, TxIndex},
+        },
+        NsIndex, NsTable,
+    },
     payload_bytes::NUM_TXS_BYTE_LEN,
 };
 use serde::{Deserialize, Serialize};
@@ -7,7 +13,7 @@ use std::ops::Range;
 
 // TODO need to manually impl serde to [u8; NS_OFFSET_BYTE_LEN]
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct NsPayloadRange(pub(crate) Range<usize>); // TODO temporary pub(crate) for tx_proof.rs
+pub struct NsPayloadRange(Range<usize>);
 
 impl NsPayloadRange {
     // TODO newtype wrapper over return type?
@@ -26,6 +32,22 @@ impl NsPayloadRange {
             start: result.start.saturating_add(self.0.start),
             end: result.end.saturating_add(self.0.start),
         }
+    }
+
+    /// Compute a subslice range for a tx payload, relative to an entire
+    /// block payload.
+    ///
+    /// Returned range guaranteed to lay within this namespace's payload
+    /// range.
+    pub fn tx_payload_range(
+        &self,
+        num_txs: &NumTxs,
+        tx_table_entries: &TxTableEntries,
+    ) -> Range<usize> {
+        let tx_payloads_start = num_txs
+            .tx_table_byte_len_unchecked()
+            .saturating_add(self.0.start);
+        tx_table_entries.as_range(tx_payloads_start, self.0.end)
     }
 
     pub fn as_range(&self) -> Range<usize> {
