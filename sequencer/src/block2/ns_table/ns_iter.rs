@@ -52,7 +52,7 @@ impl NsTable {
 pub struct NsIter<'a> {
     cur_index: usize,
     repeat_nss: HashSet<NamespaceId>,
-    num_nss: usize,
+    num_nss_with_duplicates: usize,
     ns_table: &'a NsTable,
 }
 
@@ -61,7 +61,7 @@ impl<'a> NsIter<'a> {
         Self {
             cur_index: 0,
             repeat_nss: HashSet::new(),
-            num_nss: ns_table.num_nss(), // cache for speed
+            num_nss_with_duplicates: ns_table.num_nss_with_duplicates(),
             ns_table,
         }
     }
@@ -71,7 +71,7 @@ impl<'a> Iterator for NsIter<'a> {
     type Item = NsIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.cur_index < self.num_nss {
+        while self.cur_index < self.num_nss_with_duplicates {
             let result = NsIndex(num_nss_as_bytes(self.cur_index));
             let ns_id = self.ns_table.read_ns_id(&result);
             self.cur_index += 1;

@@ -81,7 +81,7 @@ impl NsPayload {
     ///
     /// In all nontrivial cases this quantity is [`NUM_TXS_BYTE_LEN`]. Anything
     /// else is a degenerate case.
-    pub fn num_txs_byte_len(&self) -> usize {
+    fn num_txs_byte_len(&self) -> usize {
         NUM_TXS_BYTE_LEN.min(self.0.len())
     }
 
@@ -222,8 +222,6 @@ pub mod num_txs {
         /// - The number of txs declared in the tx table
         /// - The maximum number of tx table entries that could fit in the
         ///   namespace payload.
-        ///
-        /// TODO avoid confusion: pub? separate newtype for return type?
         pub fn num_txs(&self) -> usize {
             std::cmp::min(
                 // Number of txs declared in the tx table

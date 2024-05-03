@@ -22,24 +22,29 @@ impl NsTable {
     ///
     /// In all nontrivial cases this quantity is [`NUM_NSS_BYTE_LEN`]. Anything
     /// else is a degenerate case.
-    pub fn num_nss_byte_len(&self) -> usize {
+    fn num_nss_byte_len(&self) -> usize {
         NUM_NSS_BYTE_LEN.min(self.0.len())
     }
 
-    /// The number of entries in the namespace table.
+    /// The number of entries in the namespace table, including all duplicate
+    /// namespace IDs.
     ///
     /// Returns the minimum of:
-    /// - The declared number of namespaces from the namespace table.
+    /// - The number of namespaces declared in the ns table
     /// - The maximum number of entries that could fit into the namespace table.
-    pub fn num_nss(&self) -> usize {
-        let num_nss_byte_len = self.num_nss_byte_len();
+    fn num_nss_with_duplicates(&self) -> usize {
         std::cmp::min(
-            // Read the declared number of namespaces from the namespace table
-            num_nss_from_bytes(&self.0[..num_nss_byte_len]),
+            // Number of namespaces declared in the ns table
+            self.read_num_nss(),
             // Max number of entries that could fit in the namespace table
-            self.0.len().saturating_sub(num_nss_byte_len)
+            self.0.len().saturating_sub(NUM_NSS_BYTE_LEN)
                 / NS_ID_BYTE_LEN.saturating_add(NS_OFFSET_BYTE_LEN),
         )
+    }
+
+    /// Read the number of namespaces declared in the namespace table.
+    fn read_num_nss(&self) -> usize {
+        num_nss_from_bytes(&self.0[..self.num_nss_byte_len()])
     }
 
     /// Search the namespace table for the ns_index belonging to `ns_id`.
@@ -47,10 +52,12 @@ impl NsTable {
         self.iter().find(|index| self.read_ns_id(index) == *ns_id)
     }
 
+    /// Iterator over all unique namespaces in the namespace table.
     pub fn iter(&self) -> impl Iterator<Item = <NsIter as Iterator>::Item> + '_ {
         NsIter::new(self)
     }
 
+    /// The number of unique namespaces in the namespace table.
     pub fn num_namespaces(&self) -> usize {
         // Don't double count duplicate namespace IDs. The easiest solution is
         // to consume an iterator. If performance is a concern then we could
