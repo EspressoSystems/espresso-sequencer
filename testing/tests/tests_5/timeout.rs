@@ -3,10 +3,10 @@
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 // TODO Add memory network tests after this issue is finished:
 // https://github.com/EspressoSystems/HotShot/issues/1790
-async fn test_timeout_web() {
+async fn test_timeout() {
     use std::time::Duration;
 
-    use hotshot_example_types::node_types::{TestTypes, WebImpl};
+    use hotshot_example_types::node_types::{TestTypes, MemoryImpl};
     use hotshot_testing::{
         block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
@@ -53,7 +53,7 @@ async fn test_timeout_web() {
     // TODO ED Test with memory network once issue is resolved
     // https://github.com/EspressoSystems/HotShot/issues/1790
     metadata
-        .gen_launcher::<TestTypes, WebImpl>(0)
+        .gen_launcher::<TestTypes, MemoryImpl>(0)
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;

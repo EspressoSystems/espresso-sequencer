@@ -13,6 +13,7 @@ use futures::{
 };
 #[cfg(async_executor_impl = "tokio")]
 use tokio::time::error::Elapsed as TimeoutError;
+
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
 compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
 use std::{
@@ -166,83 +167,6 @@ pub enum NetworkError {
         errors: Vec<Box<NetworkError>>,
     },
 }
-#[derive(Clone, Debug)]
-// Storing view number as a u64 to avoid the need TYPES generic
-/// Events to poll or cancel consensus processes.
-pub enum ConsensusIntentEvent<K: SignatureKey> {
-    /// Poll for votes for a particular view
-    PollForVotes(u64),
-    /// Poll for upgrade votes for a particular view
-    PollForUpgradeVotes(u64),
-    /// Poll for a proposal for a particular view
-    PollForProposal(u64),
-    /// Poll for an upgrade proposal for a particular view
-    PollForUpgradeProposal(u64),
-    /// Poll for VID disperse data for a particular view
-    PollForVIDDisperse(u64),
-    /// Poll for the most recent [quorum/da] proposal the webserver has
-    PollForLatestProposal,
-    /// Poll for the most recent view sync proposal the webserver has
-    PollForLatestViewSyncCertificate,
-    /// Poll for a DAC for a particular view
-    PollForDAC(u64),
-    /// Poll for view sync votes starting at a particular view
-    PollForViewSyncVotes(u64),
-    /// Poll for view sync proposals (certificates) for a particular view
-    PollForViewSyncCertificate(u64),
-    /// Poll for new transactions
-    PollForTransactions(u64),
-    /// Poll for future leader
-    PollFutureLeader(u64, K),
-    /// Cancel polling for votes
-    CancelPollForVotes(u64),
-    /// Cancel polling for view sync votes.
-    CancelPollForViewSyncVotes(u64),
-    /// Cancel polling for proposals.
-    CancelPollForProposal(u64),
-    /// Cancel polling for the latest proposal.
-    CancelPollForLatestProposal(u64),
-    /// Cancel polling for the latest view sync certificate
-    CancelPollForLatestViewSyncCertificate(u64),
-    /// Cancal polling for DAC.
-    CancelPollForDAC(u64),
-    /// Cancel polling for view sync certificate.
-    CancelPollForViewSyncCertificate(u64),
-    /// Cancel polling for VID disperse data
-    CancelPollForVIDDisperse(u64),
-    /// Cancel polling for transactions
-    CancelPollForTransactions(u64),
-}
-
-impl<K: SignatureKey> ConsensusIntentEvent<K> {
-    /// Get the view number of the event.
-    #[must_use]
-    pub fn view_number(&self) -> u64 {
-        match &self {
-            ConsensusIntentEvent::PollForVotes(view_number)
-            | ConsensusIntentEvent::PollForProposal(view_number)
-            | ConsensusIntentEvent::PollForUpgradeVotes(view_number)
-            | ConsensusIntentEvent::PollForUpgradeProposal(view_number)
-            | ConsensusIntentEvent::PollForDAC(view_number)
-            | ConsensusIntentEvent::PollForViewSyncVotes(view_number)
-            | ConsensusIntentEvent::CancelPollForViewSyncVotes(view_number)
-            | ConsensusIntentEvent::CancelPollForVotes(view_number)
-            | ConsensusIntentEvent::CancelPollForProposal(view_number)
-            | ConsensusIntentEvent::CancelPollForLatestProposal(view_number)
-            | ConsensusIntentEvent::CancelPollForLatestViewSyncCertificate(view_number)
-            | ConsensusIntentEvent::PollForVIDDisperse(view_number)
-            | ConsensusIntentEvent::CancelPollForVIDDisperse(view_number)
-            | ConsensusIntentEvent::CancelPollForDAC(view_number)
-            | ConsensusIntentEvent::CancelPollForViewSyncCertificate(view_number)
-            | ConsensusIntentEvent::PollForViewSyncCertificate(view_number)
-            | ConsensusIntentEvent::PollForTransactions(view_number)
-            | ConsensusIntentEvent::CancelPollForTransactions(view_number)
-            | ConsensusIntentEvent::PollFutureLeader(view_number, _) => *view_number,
-            ConsensusIntentEvent::PollForLatestProposal
-            | ConsensusIntentEvent::PollForLatestViewSyncCertificate => 1,
-        }
-    }
-}
 
 /// common traits we would like our network messages to implement
 pub trait NetworkMsg:
@@ -303,11 +227,11 @@ pub enum ResponseMessage<TYPES: NodeType> {
     Denied,
 }
 
+#[async_trait]
 /// represents a networking implmentration
 /// exposes low level API for interacting with a network
 /// intended to be implemented for libp2p, the centralized server,
 /// and memory network
-#[async_trait]
 pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
     Clone + Send + Sync + 'static
 {
@@ -420,13 +344,12 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
         Ok(())
     }
 
-    /// Injects consensus data such as view number into the networking implementation
-    /// blocking
-    /// Ideally we would pass in the `Time` type, but that requires making the entire trait generic over NodeType
-    async fn inject_consensus_info(&self, _event: ConsensusIntentEvent<K>) {}
-
     /// handles view update
-    fn update_view(&self, _view: u64) {}
+    async fn update_view<'a, TYPES>(&'a self, _view: u64, _membership: &TYPES::Membership)
+    where
+        TYPES: NodeType<SignatureKey = K> + 'a,
+    {
+    }
 
     /// Is primary network down? Makes sense only for combined network
     fn is_primary_down(&self) -> bool {

@@ -1,5 +1,5 @@
 use hotshot_example_types::{
-    node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl, WebImpl},
+    node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl},
     state_types::TestTypes,
 };
 use hotshot_macros::cross_tests;
@@ -12,7 +12,7 @@ use hotshot_testing::{
 // Test one node leaving the network.
 cross_tests!(
     TestName: test_with_failures_one,
-    Impls: [MemoryImpl, WebImpl, Libp2pImpl, PushCdnImpl],
+    Impls: [MemoryImpl, Libp2pImpl, PushCdnImpl],
     Types: [TestTypes],
     Ignore: false,
     Metadata: {

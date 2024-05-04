@@ -39,9 +39,10 @@ use hotshot_types::{
     data::ViewNumber,
     message::{DataMessage::DataResponse, Message, MessageKind},
     traits::{
+        election::Membership,
         network::{
-            self, ConnectedNetwork, ConsensusIntentEvent, FailedToSerializeSnafu, NetworkError,
-            NetworkMsg, ResponseMessage,
+            self, ConnectedNetwork, FailedToSerializeSnafu, NetworkError, NetworkMsg,
+            ResponseMessage,
         },
         node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
@@ -1112,24 +1113,17 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
             .await
     }
 
-    async fn inject_consensus_info(&self, event: ConsensusIntentEvent<K>) {
-        match event {
-            ConsensusIntentEvent::PollFutureLeader(future_view, future_leader) => {
-                let _ = self
-                    .queue_node_lookup(ViewNumber::new(future_view), future_leader)
-                    .await
-                    .map_err(|err| warn!("failed to process node lookup request: {}", err));
-            }
+    /// handles view update
+    async fn update_view<'a, TYPES>(&'a self, view: u64, membership: &TYPES::Membership)
+    where
+        TYPES: NodeType<SignatureKey = K> + 'a,
+    {
+        let future_view = <TYPES as NodeType>::Time::new(view) + LOOK_AHEAD;
+        let future_leader = membership.get_leader(future_view);
 
-            ConsensusIntentEvent::PollForProposal(new_view) => {
-                if new_view > self.inner.latest_seen_view.load(Ordering::Relaxed) {
-                    self.inner
-                        .latest_seen_view
-                        .store(new_view, Ordering::Relaxed);
-                }
-            }
-
-            _ => {}
-        }
+        let _ = self
+            .queue_node_lookup(ViewNumber::new(*future_view), future_leader)
+            .await
+            .map_err(|err| tracing::warn!("failed to process node lookup request: {err}"));
     }
 }

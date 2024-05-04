@@ -400,7 +400,9 @@ impl<
                 }
                 HotShotEvent::ViewChange(view) => {
                     self.view = view;
-                    self.channel.update_view(self.view.get_u64());
+                    self.channel
+                        .update_view::<TYPES>(self.view.get_u64(), membership)
+                        .await;
                     return None;
                 }
                 HotShotEvent::VersionUpgrade(version) => {

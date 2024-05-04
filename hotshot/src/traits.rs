@@ -19,7 +19,6 @@ pub mod implementations {
         push_cdn_network::{
             KeyPair, ProductionDef, PushCdnNetwork, TestingDef, WrappedSignatureKey,
         },
-        web_server_network::WebServerNetwork,
         NetworkingMetricsValue,
     };
 }

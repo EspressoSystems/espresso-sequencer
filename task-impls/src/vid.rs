@@ -9,7 +9,6 @@ use hotshot_types::{
     traits::{
         consensus_api::ConsensusApi,
         election::Membership,
-        network::{ConnectedNetwork, ConsensusIntentEvent},
         node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
         BlockPayload,
@@ -126,13 +125,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     warn!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
-
-                // Start polling for VID disperse for the new view
-                self.network
-                    .inject_consensus_info(ConsensusIntentEvent::PollForVIDDisperse(
-                        *self.cur_view + 1,
-                    ))
-                    .await;
 
                 // If we are not the next leader, we should exit
                 if self.membership.get_leader(self.cur_view + 1) != self.public_key {

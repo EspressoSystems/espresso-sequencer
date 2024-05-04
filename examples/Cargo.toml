@@ -38,31 +38,6 @@ path = "libp2p/orchestrator.rs"
 name = "all-libp2p"
 path = "libp2p/all.rs"
 
-# webserver
-[[example]]
-name = "webserver"
-path = "webserver/webserver.rs"
-
-[[example]]
-name = "orchestrator-webserver"
-path = "webserver/orchestrator.rs"
-
-[[example]]
-name = "validator-webserver"
-path = "webserver/validator.rs"
-
-[[example]]
-name = "multi-validator-webserver"
-path = "webserver/multi-validator.rs"
-
-[[example]]
-name = "multi-webserver"
-path = "webserver/multi-webserver.rs"
-
-[[example]]
-name = "all-webserver"
-path = "webserver/all.rs"
-
 # combined
 [[example]]
 name = "all-combined"
@@ -113,7 +88,6 @@ custom_debug = { workspace = true }
 dashmap = "5"
 either = { workspace = true }
 futures = { workspace = true }
-hotshot-web-server = { version = "0.5.36", path = "../web_server", default-features = false }
 hotshot-orchestrator = { version = "0.5.36", path = "../orchestrator", default-features = false }
 hotshot-types = { path = "../types" }
 hotshot-testing = { path = "../testing" }

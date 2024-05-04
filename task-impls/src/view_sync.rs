@@ -24,7 +24,6 @@ use hotshot_types::{
     traits::{
         consensus_api::ConsensusApi,
         election::Membership,
-        network::{ConnectedNetwork, ConsensusIntentEvent},
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
     },
@@ -470,11 +469,6 @@ impl<
                     return;
                 }
 
-                // cancel poll for votes
-                self.network
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(*view_number))
-                    .await;
-
                 self.num_timeouts_tracked += 1;
                 error!(
                     "Num timeouts tracked since last view change is {}. View {} timed out",
@@ -487,38 +481,7 @@ impl<
 
                 if self.num_timeouts_tracked >= 2 {
                     error!("Starting view sync protocol for view {}", *view_number + 1);
-                    // Start polling for view sync certificates
-                    self.network
-                        .inject_consensus_info(ConsensusIntentEvent::PollForViewSyncCertificate(
-                            *view_number + 1,
-                        ))
-                        .await;
 
-                    self.network
-                        .inject_consensus_info(ConsensusIntentEvent::PollForViewSyncVotes(
-                            *view_number + 1,
-                        ))
-                        .await;
-
-                    // Spawn replica task
-                    let next_view = *view_number + 1;
-                    // Subscribe to the view after we are leader since we know we won't propose in the next view if we are leader.
-                    let subscribe_view = if self.membership.get_leader(TYPES::Time::new(next_view))
-                        == self.public_key
-                    {
-                        next_view + 1
-                    } else {
-                        next_view
-                    };
-                    // Subscribe to the next view just in case there is progress being made
-                    self.network
-                        .inject_consensus_info(ConsensusIntentEvent::PollForProposal(
-                            subscribe_view,
-                        ))
-                        .await;
-                    self.network
-                        .inject_consensus_info(ConsensusIntentEvent::PollForDAC(subscribe_view))
-                        .await;
                     self.send_to_or_create_replica(
                         Arc::new(HotShotEvent::ViewSyncTrigger(view_number + 1)),
                         view_number + 1,
@@ -744,20 +707,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 if certificate.get_view_number() > self.next_view {
                     return Some(HotShotTaskCompleted);
                 }
-
-                // cancel poll for votes
-                self.network
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForViewSyncVotes(
-                        *certificate.view_number,
-                    ))
-                    .await;
-
-                // cancel poll for view sync cert
-                self.network
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForViewSyncCertificate(
-                        *certificate.view_number,
-                    ))
-                    .await;
 
                 if certificate.get_data().relay > self.relay {
                     self.relay = certificate.get_data().relay;

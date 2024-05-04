@@ -23,7 +23,6 @@ use hotshot_types::{
     traits::{
         block_contents::BlockHeader,
         election::Membership,
-        network::{ConnectedNetwork, ConsensusIntentEvent},
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         states::ValidatedState,
@@ -620,14 +619,6 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
         *proposal.data.view_number
     );
 
-    // stop polling for the received proposal
-    task_state
-        .quorum_network
-        .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(
-            *proposal.data.view_number,
-        ))
-        .await;
-
     validate_proposal_view_and_certs(
         proposal,
         &sender,
@@ -648,12 +639,9 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
     }
 
     // NOTE: We could update our view with a valid TC but invalid QC, but that is not what we do here
-    if let Err(e) = update_view::<TYPES, I>(
-        task_state.public_key.clone(),
+    if let Err(e) = update_view::<TYPES>(
         view,
         &event_stream,
-        Arc::clone(&task_state.quorum_membership),
-        Arc::clone(&task_state.quorum_network),
         task_state.timeout,
         Arc::clone(&task_state.consensus),
         &mut task_state.cur_view,

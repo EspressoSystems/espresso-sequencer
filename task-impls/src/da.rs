@@ -16,7 +16,6 @@ use hotshot_types::{
         block_contents::vid_commitment,
         consensus_api::ConsensusApi,
         election::Membership,
-        network::{ConnectedNetwork, ConsensusIntentEvent},
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         storage::Storage,
@@ -108,13 +107,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // the `DAProposalRecv` event. Otherwise, the view number subtraction below will
                 // cause an overflow error.
                 // TODO ED Come back to this - we probably don't need this, but we should also never receive a DAC where this fails, investigate block ready so it doesn't make one for the genesis block
-
-                // stop polling for the received proposal
-                self.da_network
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForProposal(
-                        *proposal.data.view_number,
-                    ))
-                    .await;
 
                 if self.cur_view != TYPES::Time::genesis() && view < self.cur_view - 1 {
                     warn!("Throwing away DA proposal that is more than one view older");
@@ -266,47 +258,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
                 self.cur_view = view;
 
-                // Inject view info into network
-                let is_da = self
-                    .da_membership
-                    .get_whole_committee(self.cur_view + 1)
-                    .contains(&self.public_key);
-
-                if is_da {
-                    debug!("Polling for DA proposals for view {}", *self.cur_view + 1);
-                    self.da_network
-                        .inject_consensus_info(ConsensusIntentEvent::PollForProposal(
-                            *self.cur_view + 1,
-                        ))
-                        .await;
-                }
-                if self.da_membership.get_leader(self.cur_view + 3) == self.public_key {
-                    debug!("Polling for transactions for view {}", *self.cur_view + 3);
-                    self.da_network
-                        .inject_consensus_info(ConsensusIntentEvent::PollForTransactions(
-                            *self.cur_view + 3,
-                        ))
-                        .await;
-                }
-
                 // If we are not the next leader (DA leader for this view) immediately exit
                 if self.da_membership.get_leader(self.cur_view + 1) != self.public_key {
                     return None;
                 }
                 debug!("Polling for DA votes for view {}", *self.cur_view + 1);
 
-                // Start polling for DA votes for the "next view"
-                self.da_network
-                    .inject_consensus_info(ConsensusIntentEvent::PollForVotes(*self.cur_view + 1))
-                    .await;
-
                 return None;
             }
             HotShotEvent::BlockRecv(encoded_transactions, metadata, view, _fee) => {
                 let view = *view;
-                self.da_network
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForTransactions(*view))
-                    .await;
 
                 // quick hash the encoded txns with sha256
                 let encoded_transactions_hash = Sha256::digest(encoded_transactions);
@@ -340,12 +301,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     &event_stream,
                 )
                 .await;
-            }
-
-            HotShotEvent::Timeout(view) => {
-                self.da_network
-                    .inject_consensus_info(ConsensusIntentEvent::CancelPollForVotes(**view))
-                    .await;
             }
 
             HotShotEvent::Shutdown => {

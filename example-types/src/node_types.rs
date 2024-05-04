@@ -1,12 +1,9 @@
 use hotshot::traits::{
     election::static_committee::{GeneralStaticCommittee, StaticCommittee},
-    implementations::{
-        CombinedNetworks, Libp2pNetwork, MemoryNetwork, PushCdnNetwork, WebServerNetwork,
-    },
+    implementations::{CombinedNetworks, Libp2pNetwork, MemoryNetwork, PushCdnNetwork},
     NodeImplementation,
 };
 use hotshot_types::{
-    constants::WebServerVersion,
     data::ViewNumber,
     message::Message,
     signature_key::{BLSPubKey, BuilderKey},
@@ -80,12 +77,6 @@ impl<TYPES: NodeType> NodeImplementation<TYPES> for PushCdnImpl {
 impl<TYPES: NodeType> NodeImplementation<TYPES> for MemoryImpl {
     type QuorumNetwork = MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>;
     type CommitteeNetwork = MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>;
-    type Storage = TestStorage<TYPES>;
-}
-
-impl<TYPES: NodeType> NodeImplementation<TYPES> for WebImpl {
-    type QuorumNetwork = WebServerNetwork<TYPES, WebServerVersion>;
-    type CommitteeNetwork = WebServerNetwork<TYPES, WebServerVersion>;
     type Storage = TestStorage<TYPES>;
 }
 
