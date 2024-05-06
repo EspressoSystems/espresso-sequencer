@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
-
-use hotshot_example_types::state_types::TestInstanceState;
-
 use hotshot::{tasks::task_state::CreateTaskState, types::SystemContextHandle};
 use hotshot_example_types::{
     block_types::{TestMetadata, TestTransaction},
     node_types::{MemoryImpl, TestTypes},
+    state_types::TestInstanceState,
 };
 use hotshot_task_impls::{da::DATaskState, events::HotShotEvent::*};
 use hotshot_testing::{
@@ -32,7 +30,6 @@ async fn test_da_task() {
     let handle = build_system_handle(2).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
-
 
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
@@ -78,7 +75,8 @@ async fn test_da_task() {
                 encoded_transactions,
                 TestMetadata,
                 ViewNumber::new(2),
-                null_block::builder_fee(quorum_membership.total_nodes(), Arc::new(TestInstanceState {})).unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
+                    .unwrap(),
             ),
         ],
         outputs: vec![exact(DAProposalSend(proposals[1].clone(), leaders[1]))],
@@ -113,7 +111,6 @@ async fn test_da_task_storage_failure() {
     handle.get_storage().write().await.should_return_err = true;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
-
 
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
@@ -159,7 +156,8 @@ async fn test_da_task_storage_failure() {
                 encoded_transactions,
                 TestMetadata,
                 ViewNumber::new(2),
-                null_block::builder_fee(quorum_membership.total_nodes(), Arc::new(TestInstanceState {})).unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
+                    .unwrap(),
             ),
         ],
         outputs: vec![exact(DAProposalSend(proposals[1].clone(), leaders[1]))],

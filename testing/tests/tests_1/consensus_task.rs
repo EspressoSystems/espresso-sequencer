@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use hotshot::tasks::{task_state::CreateTaskState};
+use hotshot::tasks::task_state::CreateTaskState;
 use hotshot_example_types::{
     node_types::{MemoryImpl, TestTypes},
     state_types::TestInstanceState,
@@ -96,11 +96,8 @@ async fn test_consensus_task() {
                 builder_commitment,
                 TestMetadata,
                 ViewNumber::new(2),
-                null_block::builder_fee(
-                    quorum_membership.total_nodes(),
-                    Arc::new(TestInstanceState {}),
-                )
-                .unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
+                    .unwrap(),
             ),
         ],
         outputs: vec![
@@ -376,7 +373,7 @@ async fn test_view_sync_finalize_propose() {
                 builder_commitment,
                 TestMetadata,
                 ViewNumber::new(4),
-                null_block::builder_fee(4, Arc::new(TestInstanceState {})).unwrap(),
+                null_block::builder_fee(4, &TestInstanceState {}).unwrap(),
             ),
         ],
         outputs: vec![

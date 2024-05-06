@@ -92,11 +92,8 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
             builder_commitment,
             TestMetadata,
             ViewNumber::new(node_id),
-            null_block::builder_fee(
-                quorum_membership.total_nodes(),
-                Arc::new(TestInstanceState {}),
-            )
-            .unwrap(),
+            null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
+                .unwrap(),
         ),
     ];
 

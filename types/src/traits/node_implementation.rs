@@ -201,7 +201,7 @@ pub trait NodeType:
     /// The block type that this hotshot setup is using.
     ///
     /// This should be the same block that `ValidatedState::BlockPayload` is using.
-    type BlockPayload: BlockPayload<Transaction = Self::Transaction>;
+    type BlockPayload: BlockPayload<Instance = Self::InstanceState, Transaction = Self::Transaction>;
     /// The signature key that this hotshot setup is using.
     type SignatureKey: SignatureKey;
     /// The transaction type that this hotshot setup is using.

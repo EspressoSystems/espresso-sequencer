@@ -18,7 +18,7 @@ use crate::{
 };
 
 /// Instance-level state, which allows us to fetch missing validated state.
-pub trait InstanceState: Debug + Send + Sync {}
+pub trait InstanceState: Debug + Send + Sync + Default {}
 
 /// Application-specific state delta, which will be used to store a list of merkle tree entries.
 pub trait StateDelta: Debug + Send + Sync + Serialize + for<'a> Deserialize<'a> {}

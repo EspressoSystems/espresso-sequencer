@@ -49,6 +49,8 @@ pub trait BlockPayload:
     /// The error type for this type of block
     type Error: Error + Debug + Send + Sync + Serialize + DeserializeOwned;
 
+    /// The type of the instance-level state this state is associated with
+    type Instance: InstanceState;
     /// The type of the transitions we are applying
     type Transaction: Transaction;
     /// Data created during block building which feeds into the block header
@@ -68,7 +70,7 @@ pub trait BlockPayload:
     /// If the transaction length conversion fails.
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,
-        state: Arc<dyn InstanceState>,
+        instance_state: &Self::Instance,
     ) -> Result<(Self, Self::Metadata), Self::Error>;
 
     /// Build a payload with the encoded transaction bytes, metadata,

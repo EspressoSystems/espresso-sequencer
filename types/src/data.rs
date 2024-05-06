@@ -457,7 +457,8 @@ impl<TYPES: NodeType> Leaf<TYPES> {
     /// interpreted as bytes).
     #[must_use]
     pub fn genesis(instance_state: &TYPES::InstanceState) -> Self {
-        let (payload, metadata) = TYPES::BlockPayload::genesis();
+        let (payload, metadata) =
+            TYPES::BlockPayload::from_transactions([], instance_state).unwrap();
         let builder_commitment = payload.builder_commitment(&metadata);
         let payload_bytes = payload.encode().expect("unable to encode genesis payload");
 
@@ -701,7 +702,6 @@ impl<TYPES: NodeType> Leaf<TYPES> {
 
 pub mod null_block {
     #![allow(missing_docs)]
-    use std::sync::Arc;
 
     use jf_primitives::vid::VidScheme;
     use memoize::memoize;
@@ -735,7 +735,7 @@ pub mod null_block {
     #[must_use]
     pub fn builder_fee<TYPES: NodeType>(
         num_storage_nodes: usize,
-        state: Arc<TYPES::InstanceState>,
+        instance_state: &<TYPES::BlockPayload as BlockPayload>::Instance,
     ) -> Option<BuilderFee<TYPES>> {
         /// Arbitrary fee amount, this block doesn't actually come from a builder
         const FEE_AMOUNT: u64 = 0;
@@ -746,7 +746,7 @@ pub mod null_block {
             );
 
         let (_null_block, null_block_metadata) =
-            <TYPES::BlockPayload as BlockPayload>::from_transactions([], state).ok()?;
+            <TYPES::BlockPayload as BlockPayload>::from_transactions([], instance_state).ok()?;
 
         match TYPES::BuilderSignatureKey::sign_fee(
             &priv_key,
