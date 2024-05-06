@@ -1537,13 +1537,13 @@ where
                             })
                             .collect::<QueryResult<Vec<_>>>()?;
 
-                        if data[*branch as usize] != val {
+                        if data[*branch] != val {
                             // This can only happen if data is missing: we have an old version of
                             // one of the nodes in the path, which is why it is not matching up with
                             // its parent.
                             tracing::warn!(
                                 ?key,
-                                parent = ?data[*branch as usize],
+                                parent = ?data[*branch],
                                 child = ?val,
                                 branch = %*branch,
                                 %created,
