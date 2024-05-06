@@ -1,8 +1,7 @@
 use crate::block2::{
     ns_table::ns_payload::{tx_iter::TxIndex, NsPayload},
     payload_bytes::{
-        num_txs_as_bytes, num_txs_from_bytes, tx_offset_as_bytes, tx_offset_from_bytes,
-        NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
+        tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
     },
 };
 use std::ops::Range;
@@ -59,7 +58,7 @@ mod tx_table_entries_serde {
 impl TxTableEntries {
     /// Infallible serialization.
     ///
-    /// TODO same question as `NumTxs::as_bytes`
+    /// TODO same question as [`NumTxs::as_bytes`]
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(TX_OFFSET_BYTE_LEN.saturating_mul(2));
         if let Some(prev) = self.prev {
@@ -86,18 +85,20 @@ impl NsPayload {
     /// TODO Panics if `index >= self.num_txs()`?
     pub fn read_tx_table_entries(&self, index: &TxIndex) -> TxTableEntries {
         let cur = self.read_tx_offset(index);
-        let prev = if index.0 == [0; NUM_TXS_BYTE_LEN] {
+        let prev = if index.0 == 0 {
             None
         } else {
-            let prev_index = TxIndex(num_txs_as_bytes(num_txs_from_bytes(&index.0) - 1));
+            let prev_index = TxIndex(&index.0 - 1);
             Some(self.read_tx_offset(&prev_index))
         };
         TxTableEntries { cur, prev }
     }
 
     /// Read the `index`th entry from the tx table.
+    ///
+    /// TODO newtype for return type?
     fn read_tx_offset(&self, index: &TxIndex) -> usize {
-        let start = tx_offset_from_bytes(&index.0) * TX_OFFSET_BYTE_LEN + NUM_TXS_BYTE_LEN;
+        let start = index.0 * TX_OFFSET_BYTE_LEN + NUM_TXS_BYTE_LEN;
         tx_offset_from_bytes(&self.0[start..start + TX_OFFSET_BYTE_LEN])
     }
 

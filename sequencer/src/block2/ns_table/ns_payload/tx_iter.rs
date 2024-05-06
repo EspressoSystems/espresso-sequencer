@@ -1,18 +1,42 @@
 use crate::block2::{
     ns_table::ns_payload::NsPayload,
     payload_bytes::{
-        num_txs_as_bytes, tx_offset_from_bytes, NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN,
+        num_txs_as_bytes, num_txs_from_bytes, NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN,
         TX_OFFSET_BYTE_LEN,
     },
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
 
 pub mod tx_table_entries;
 
-/// TODO explain: index has same byte length as num_txs, store in serialized form
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct TxIndex([u8; NUM_TXS_BYTE_LEN]);
+/// Index for an entry in a tx table.
+///
+/// Byte length same as [`NumTxs`].
+///
+/// Custom serialization and helper methods.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct TxIndex(usize);
+
+// TODO so much boilerplate for serde
+impl Serialize for TxIndex {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.as_bytes().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for TxIndex {
+    fn deserialize<D>(deserializer: D) -> Result<TxIndex, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        <[u8; NUM_TXS_BYTE_LEN] as Deserialize>::deserialize(deserializer)
+            .map(|bytes: [u8; NUM_TXS_BYTE_LEN]| TxIndex(num_txs_from_bytes(&bytes)))
+    }
+}
 
 impl TxIndex {
     /// Return a byte range into a tx table for use in a transaction proof.
@@ -51,8 +75,7 @@ impl TxIndex {
     /// so the returned range contains only one entry from the tx table: the
     /// first entry of the tx table.
     pub fn tx_table_entries_range_relative(&self) -> Range<usize> {
-        let index = tx_offset_from_bytes(&self.0);
-        let start = if index == 0 {
+        let start = if self.0 == 0 {
             // Special case: the desired range includes only one entry from
             // the tx table: the first entry. This entry starts immediately
             // following the bytes that encode the tx table length.
@@ -60,16 +83,24 @@ impl TxIndex {
         } else {
             // The desired range starts at the beginning of the previous tx
             // table entry.
-            (index - 1)
+            (self.0 - 1)
                 .saturating_mul(TX_OFFSET_BYTE_LEN)
                 .saturating_add(NUM_TXS_BYTE_LEN)
         };
         // The desired range ends at the end of this transaction's tx table entry
-        let end = index
+        let end = self
+            .0
             .saturating_add(1)
             .saturating_mul(TX_OFFSET_BYTE_LEN)
             .saturating_add(NUM_TXS_BYTE_LEN);
         start..end
+    }
+
+    /// Infallible serialization.
+    ///
+    /// TODO same question as [`NumTxs::as_bytes`]
+    pub fn as_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
+        num_txs_as_bytes(self.0)
     }
 }
 
@@ -86,6 +117,6 @@ impl Iterator for TxIter {
     type Item = TxIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(|i| TxIndex(num_txs_as_bytes(i)))
+        self.0.next().map(TxIndex)
     }
 }
