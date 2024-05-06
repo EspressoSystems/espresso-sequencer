@@ -475,3 +475,13 @@ services:
       interval: 5s
       timeout: 4s
       retries: 20
+
+  block-explorer:
+    image: ghcr.io/espressosystems/espresso-block-explorer:release-cappuccino
+    ports:
+      - "3000:3000"
+    environment:
+      - QUERY_SERVICE_URI:http://localhost:$ESPRESSO_SEQUENCER1_API_PORT/v0/
+    depends_on:
+      sequencer1:
+        condition: service_healthy
