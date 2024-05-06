@@ -8,19 +8,52 @@ use crate::{
     },
     NamespaceId,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashSet;
 
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct NsIndex([u8; NUM_NSS_BYTE_LEN]);
+/// Index for an entry in a ns table.
+///
+/// Byte length same as [`NumNss`], which doesn't exist yet.
+///
+/// Custom serialization and helper methods.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct NsIndex(usize);
+
+impl NsIndex {
+    /// Infallible serialization.
+    ///
+    /// TODO same question as [`NumTxs::as_bytes`]
+    pub fn as_bytes(&self) -> [u8; NUM_NSS_BYTE_LEN] {
+        num_nss_as_bytes(self.0)
+    }
+}
+
+// TODO so much boilerplate for serde
+impl Serialize for NsIndex {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.as_bytes().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for NsIndex {
+    fn deserialize<D>(deserializer: D) -> Result<NsIndex, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        <[u8; NUM_NSS_BYTE_LEN] as Deserialize>::deserialize(deserializer)
+            .map(|bytes: [u8; NUM_NSS_BYTE_LEN]| NsIndex(num_nss_from_bytes(&bytes)))
+    }
+}
 
 impl NsTable {
     /// Read the namespace id from the `index`th entry from the namespace table.
     ///
     /// Panics if `index >= self.num_nss()`.
     pub fn read_ns_id(&self, index: &NsIndex) -> NamespaceId {
-        let start =
-            num_nss_from_bytes(&index.0) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
+        let start = index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
         ns_id_from_bytes(&self.0[start..start + NS_ID_BYTE_LEN])
     }
 
@@ -28,9 +61,9 @@ impl NsTable {
     ///
     /// Panics if `index >= self.num_nss()`.
     pub fn read_ns_offset(&self, index: &NsIndex) -> usize {
-        let start = num_nss_from_bytes(&index.0) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN)
-            + NUM_NSS_BYTE_LEN
-            + NS_ID_BYTE_LEN;
+        // TODO refactor repeated index gymnastics code from `read_ns_id`
+        let start =
+            index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
         ns_offset_from_bytes(&self.0[start..start + NS_OFFSET_BYTE_LEN])
     }
 
@@ -39,10 +72,10 @@ impl NsTable {
     ///
     /// Panics if `index >= self.num_nss()`.
     pub fn read_ns_offset_prev(&self, index: &NsIndex) -> Option<usize> {
-        if index.0 == [0; NUM_NSS_BYTE_LEN] {
+        if index.0 == 0 {
             None
         } else {
-            let prev_index = NsIndex(num_nss_as_bytes(num_nss_from_bytes(&index.0) - 1));
+            let prev_index = NsIndex(index.0 - 1);
             Some(self.read_ns_offset(&prev_index))
         }
     }
@@ -72,7 +105,7 @@ impl<'a> Iterator for NsIter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while self.cur_index < self.num_nss_with_duplicates {
-            let result = NsIndex(num_nss_as_bytes(self.cur_index));
+            let result = NsIndex(self.cur_index);
             let ns_id = self.ns_table.read_ns_id(&result);
             self.cur_index += 1;
 
