@@ -30,7 +30,7 @@ DOC = """
 Get the latest temporary node index only for generating validator's key pair for testing in hotshot, later the generated key pairs might be bound with other node_index.
 """
 
-# POST the node's node index to generate public key for pubkey collection
+# POST the node's node index for pubkey and is_da collection
 [route.post_pubkey]
 PATH = ["pubkey/:is_da"]
 METHOD = "POST"

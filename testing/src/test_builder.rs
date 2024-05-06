@@ -2,7 +2,6 @@ use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 use hotshot::traits::{NetworkReliability, TestableNodeImplementation};
 use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
-use hotshot_orchestrator::config::ValidatorConfigFile;
 use hotshot_types::{
     traits::node_implementation::NodeType, ExecutionType, HotShotConfig, ValidatorConfig,
 };
@@ -266,18 +265,13 @@ impl TestDescription {
             })
             .collect();
         // But now to test validator's config, we input the info of my_own_validator from config file when node_id == 0.
-        let mut my_own_validator_config = ValidatorConfig::generated_from_seed_indexed(
+        let my_own_validator_config = ValidatorConfig::generated_from_seed_indexed(
             [0u8; 32],
             node_id,
             1,
             // This is the config for node 0
             0 < da_staked_committee_size,
         );
-        if node_id == 0 {
-            my_own_validator_config = ValidatorConfig::from(ValidatorConfigFile::from_file(
-                "config/ValidatorConfigFile.toml",
-            ));
-        }
         // let da_committee_nodes = known_nodes[0..da_committee_size].to_vec();
         let config = HotShotConfig {
             // TODO this doesn't exist anymore

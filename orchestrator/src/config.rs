@@ -497,8 +497,6 @@ pub struct NetworkConfigFile<KEY: SignatureKey> {
     pub random_builder: Option<RandomBuilderConfig>,
 }
 
-impl<K: SignatureKey> NetworkConfigFile<K> {}
-
 impl<K: SignatureKey> From<NetworkConfigFile<K>> for NetworkConfig<K> {
     fn from(val: NetworkConfigFile<K>) -> Self {
         NetworkConfig {
