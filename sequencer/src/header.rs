@@ -21,6 +21,7 @@ use hotshot_types::{
 };
 use jf_primitives::merkle_tree::prelude::*;
 use serde::{Deserialize, Serialize};
+use snafu::Snafu;
 use time::OffsetDateTime;
 
 /// A header is like a [`Block`] with the body replaced by a digest.
@@ -243,7 +244,18 @@ impl Header {
     }
 }
 
+#[derive(Debug, Snafu)]
+#[snafu(display("Invalid Block Headre {msg}"))]
+pub struct InvalidBlockHeader {
+    msg: String,
+}
+impl InvalidBlockHeader {
+    fn new(msg: String) -> Self {
+        Self { msg }
+    }
+}
 impl BlockHeader<SeqTypes> for Header {
+    type Error = InvalidBlockHeader;
     #[tracing::instrument(
         skip_all,
         fields(
@@ -252,6 +264,7 @@ impl BlockHeader<SeqTypes> for Header {
             height = parent_leaf.get_block_header().height,
         ),
     )]
+
     async fn new(
         parent_state: &ValidatedState,
         instance_state: &NodeState,
@@ -260,7 +273,7 @@ impl BlockHeader<SeqTypes> for Header {
         builder_commitment: BuilderCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
         builder_fee: BuilderFee<SeqTypes>,
-    ) -> Self {
+    ) -> Result<Self, Self::Error> {
         let height = parent_leaf.get_height();
         let view = parent_leaf.get_view_number();
 
@@ -355,8 +368,7 @@ impl BlockHeader<SeqTypes> for Header {
             validated_state,
             instance_state.chain_config,
         )
-        // TODO we should be able to return an error from `Header::new`
-        .unwrap_or_else(|err| panic!("invalid proposal: {err:#}"))
+        .map_err(|e| InvalidBlockHeader::new(e.to_string()))
     }
 
     fn genesis(
@@ -843,7 +855,8 @@ mod test_headers {
             ns_table,
             builder_fee,
         )
-        .await;
+        .await
+        .unwrap();
 
         let mut proposal_state = parent_state.clone();
         for fee_info in genesis_state
