@@ -84,7 +84,7 @@ use std::{
 use tokio_postgres::{
     config::Host,
     tls::TlsConnect,
-    types::{private::BytesMut, to_sql_checked, BorrowToSql, FromSql, ToSql, Type},
+    types::{BorrowToSql, ToSql},
     Client, NoTls, Row, ToStatement,
 };
 
@@ -1229,12 +1229,14 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
         for node in path.iter() {
             match node {
                 MerkleNode::Empty => {
-                    let ltree_path = LTree::from(traversal_path.clone());
                     let index = serde_json::to_value(pos.clone()).map_err(ParseError::Serde)?;
-
+                    // The node path represents the sequence of nodes from the root down to a specific node.
+                    // Therefore, the traversal path needs to be reversed
+                    // The root node path is an empty array.
+                    let node_path = traversal_path.clone().rev().map(|n| *n as i32).collect();
                     nodes.push((
                         Node {
-                            pos: ltree_path,
+                            path: node_path,
                             index: Some(index),
                             ..Default::default()
                         },
@@ -1253,14 +1255,14 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                         .serialize_compressed(&mut leaf_commit)
                         .map_err(ParseError::Serialize)?;
 
-                    let ltree_path = LTree::from(traversal_path.clone());
+                    let path = traversal_path.clone().rev().map(|n| *n as i32).collect();
 
-                    let index = serde_json::to_value(pos).map_err(ParseError::Serde)?;
+                    let index = serde_json::to_value(pos.clone()).map_err(ParseError::Serde)?;
                     let entry = serde_json::to_value(elem).map_err(ParseError::Serde)?;
 
                     nodes.push((
                         Node {
-                            pos: ltree_path,
+                            path,
                             index: Some(index),
                             entry: Some(entry),
                             ..Default::default()
@@ -1316,10 +1318,10 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                         .collect();
 
                     // insert internal node
-                    let ltree_path = LTree::from(traversal_path.clone());
+                    let path = traversal_path.clone().rev().map(|n| *n as i32).collect();
                     nodes.push((
                         Node {
-                            pos: ltree_path,
+                            path,
                             children: Some(children_hash_ids),
                             children_bitvec: Some(children_bitvec),
                             ..Default::default()
@@ -1396,28 +1398,15 @@ where
         let tree_height = State::tree_height();
 
         // Get the traversal path of the index
-        let traversal_path = State::Key::to_traversal_path(&key, tree_height)
-            .into_iter()
-            .map(|x| x as i64)
-            .collect::<Vec<_>>();
+        let traversal_path = State::Key::to_traversal_path(&key, tree_height);
         let (created, merkle_commitment) = self.snapshot_info(snapshot).await?;
 
         // Get all the nodes in the path to the index.
         // Order by pos DESC is to return nodes from the leaf to the root
-        let nodes = self
-            .query(
-                &format!(
-                    "SELECT DISTINCT ON (pos) *
-                    FROM {state_type}
-                    WHERE pos @> $1 and created <= $2
-                    ORDER BY pos DESC , created DESC;"
-                ),
-                [
-                    sql_param(&LTree::from(traversal_path.iter())),
-                    sql_param(&created),
-                ],
-            )
-            .await?;
+
+        let (params, stmt) = build_get_path_query(state_type, traversal_path.clone(), created);
+
+        let nodes = self.query(&stmt, params).await?;
 
         let nodes: Vec<_> = nodes.map(|res| Node::try_from(res?)).try_collect().await?;
 
@@ -1598,10 +1587,10 @@ where
         let rows = self
             .query(
                 &format!(
-                    "SELECT DISTINCT ON (pos) index
+                    "SELECT DISTINCT ON (path) index
                     FROM {state_type}
                     WHERE created <= $1 AND index IS NOT NULL
-                    ORDER BY pos, created DESC;"
+                    ORDER BY path, created DESC;"
                 ),
                 [sql_param(&created)],
             )
@@ -1791,7 +1780,7 @@ impl From<ParseError> for QueryError {
 // Represents a row in a state table
 #[derive(Debug, Default, Clone)]
 struct Node {
-    pos: LTree,
+    path: Vec<i32>,
     created: i64,
     hash_id: i32,
     children: Option<Vec<i32>>,
@@ -1809,7 +1798,7 @@ impl Node {
             .iter()
             .flat_map(|n| {
                 [
-                    &n.pos as &(dyn ToSql + Sync),
+                    &n.path as &(dyn ToSql + Sync),
                     &n.created,
                     &n.hash_id,
                     &n.children,
@@ -1821,13 +1810,13 @@ impl Node {
             .collect();
 
         let stmt = format!(
-                "INSERT INTO {name} (pos, created, hash_id, children, children_bitvec, index, entry) values {} ON CONFLICT (pos, created) 
+                "INSERT INTO {name} (path, created, hash_id, children, children_bitvec, index, entry) values {} ON CONFLICT (path, created) 
                 DO UPDATE SET hash_id = EXCLUDED.hash_id, children = EXCLUDED.children, children_bitvec = EXCLUDED.children_bitvec, 
-                index = EXCLUDED.index, entry = EXCLUDED.entry RETURNING pos",
+                index = EXCLUDED.index, entry = EXCLUDED.entry RETURNING path",
                 (1..params.len()+1)
                 .tuples()
-                    .format_with(", ", |(pos, created, id, children, bitmap, i, e), f| 
-                    { f(&format_args!("(${pos}, ${created}, ${id}, ${children}, ${bitmap}, ${i}, ${e})")) }),
+                    .format_with(", ", |(path, created, id, children, bitmap, i, e), f| 
+                    { f(&format_args!("(${path}, ${created}, ${id}, ${children}, ${bitmap}, ${i}, ${e})")) }),
             );
 
         (params, stmt)
@@ -1839,8 +1828,8 @@ impl TryFrom<Row> for Node {
     type Error = QueryError;
     fn try_from(row: Row) -> Result<Self, Self::Error> {
         Ok(Self {
-            pos: row.try_get(0).map_err(|e| QueryError::Error {
-                message: format!("failed to get column pos: {e}"),
+            path: row.try_get(0).map_err(|e| QueryError::Error {
+                message: format!("failed to get column path: {e}"),
             })?,
             created: row.try_get(1).map_err(|e| QueryError::Error {
                 message: format!("failed to get column created: {e}"),
@@ -3003,58 +2992,6 @@ fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
     param
 }
 
-/// LTree SQL data type
-///
-/// The traversal path in a merkle tree is from the leaf to the root.
-/// The LTREE path is created by reversing the traversal path.
-/// Root node is represented as an empty LTree
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct LTree(String);
-
-impl<I, Iter: Iterator<Item = I> + DoubleEndedIterator> From<Iter> for LTree
-where
-    I: Display + Clone,
-{
-    fn from(iter: Iter) -> Self {
-        Self(itertools::intersperse(iter.map(|x| x.to_string()).rev(), ".".to_string()).collect())
-    }
-}
-
-impl ToSql for LTree {
-    fn to_sql(
-        &self,
-        ty: &postgres::types::Type,
-        out: &mut BytesMut,
-    ) -> Result<postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>>
-    where
-        Self: Sized,
-    {
-        <String as ToSql>::to_sql(&self.0, ty, out)
-    }
-
-    fn accepts(ty: &postgres::types::Type) -> bool
-    where
-        Self: Sized,
-    {
-        <String as ToSql>::accepts(ty)
-    }
-
-    to_sql_checked!();
-}
-
-impl<'a> FromSql<'a> for LTree {
-    fn from_sql(
-        ty: &Type,
-        raw: &'a [u8],
-    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
-        <String as FromSql>::from_sql(ty, raw).map(LTree)
-    }
-
-    fn accepts(ty: &Type) -> bool {
-        <String as FromSql>::accepts(ty)
-    }
-}
-
 // tokio-postgres is written in terms of the tokio AsyncRead/AsyncWrite traits. However, these
 // traits do not require any specifics of the tokio runtime. Thus we can implement them using the
 // async_std TcpStream type, and have a stream which is compatible with tokio-postgres but will run
@@ -3120,6 +3057,42 @@ impl tokio::io::AsyncWrite for TcpStream {
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         Pin::new(&mut self.0).poll_close(cx)
     }
+}
+
+fn build_get_path_query(
+    table: &'static str,
+    traversal_path: Vec<usize>,
+    created: i64,
+) -> (Vec<Box<(dyn ToSql + Send + Sync)>>, String) {
+    let mut traversal_path = traversal_path.into_iter();
+
+    // Since the 'created' parameter is common to all queries,
+    // we place it at the first position in the 'params' vector.
+    // We iterate through the path vector skipping the first element after each iteration
+    let mut params: Vec<Box<(dyn ToSql + Send + Sync)>> = vec![Box::new(created)];
+    let len = traversal_path.len();
+    let mut queries = Vec::new();
+
+    for i in 0..=len {
+        let node_path = traversal_path
+            .clone()
+            .rev()
+            .map(|x| x as i32)
+            .collect::<Vec<_>>();
+
+        let query = format!(
+            "(SELECT * FROM {table} WHERE path = ${} AND created <= $1 ORDER BY created DESC LIMIT 1)",
+            i + 2
+        );
+
+        queries.push(query);
+        params.push(Box::new(node_path));
+        traversal_path.next();
+    }
+
+    let mut final_query: String = queries.join(" UNION ");
+    final_query.push_str("ORDER BY path DESC");
+    (params, final_query)
 }
 
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
@@ -3259,7 +3232,7 @@ pub mod testing {
         
             CREATE TABLE {name}
             (
-                pos LTREE NOT NULL, 
+                path integer[] NOT NULL, 
                 created BIGINT NOT NULL,
                 hash_id INT NOT NULL REFERENCES hash (id),
                 children INT[],
@@ -3267,8 +3240,8 @@ pub mod testing {
                 index JSONB,
                 entry JSONB 
             );
-            ALTER TABLE {name} ADD CONSTRAINT {name}_pk PRIMARY KEY (pos, created);
-            CREATE INDEX {name}_path ON {name} USING GIST (pos);"
+            ALTER TABLE {name} ADD CONSTRAINT {name}_pk PRIMARY KEY (path, created);
+            CREATE INDEX {name}_created ON {name} (path);"
             )
         }
     }
@@ -3636,12 +3609,17 @@ mod test {
         // update saved state height
         storage.set_last_state_height(2).await.unwrap();
 
+        let node_path = traversal_path
+            .into_iter()
+            .rev()
+            .map(|n| n as i32)
+            .collect::<Vec<_>>();
+
         // Find all the nodes of Index 0 in table
-        let ltree_path = LTree::from(traversal_path.iter());
         let rows = storage
             .query(
-                "SELECT * from test_tree where pos = $1 ORDER BY created",
-                [sql_param(&ltree_path)],
+                "SELECT * from test_tree where path = $1 ORDER BY created",
+                [sql_param(&node_path)],
             )
             .await
             .unwrap();
@@ -4045,14 +4023,19 @@ mod test {
         .expect("failed to insert nodes");
 
         // Deleting one internal node
+        let node_path = traversal_path[1..]
+            .iter()
+            .rev()
+            .map(|n| *n as i32)
+            .collect::<Vec<_>>();
         let rows = storage
             .client
             .execute_raw(
                 &format!(
-                    "DELETE FROM {} WHERE created = 2 and pos = $1",
+                    "DELETE FROM {} WHERE created = 2 and path = $1",
                     MockMerkleTree::state_type()
                 ),
-                [sql_param(&(LTree::from(traversal_path[1..].iter())))],
+                [sql_param(&node_path)],
             )
             .await
             .expect("failed to delete internal node");
