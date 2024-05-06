@@ -125,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
     start_commitment_server(opt.commitment_task_port, hotshot_address, SEQUENCER_VERSION).unwrap();
 
     tracing::info!("starting the builder server");
-    let builder_address = "0x7103f704ee6272ad0228343b362eeb3199f7e2b1"
+    let builder_address = "0xb0cfa4e5893107e2995974ef032957752bb526e9"
         .parse()
         .unwrap();
     start_builder_server(opt.builder_port, builder_address, SEQUENCER_VERSION).unwrap();
@@ -216,6 +216,8 @@ mod tests {
         logging::{setup_backtrace, setup_logging},
     };
     use async_std::process::Command;
+    use committable::{Commitment, Committable};
+    use es_version::SequencerVersion;
     use escargot::CargoBuild;
     use portpicker::pick_unused_port;
     use reqwest::StatusCode;
@@ -293,6 +295,9 @@ mod tests {
         async_sleep(Duration::from_secs(50)).await;
 
         let client = reqwest::Client::new();
+        let api_client = surf_disco::Client::<hotshot_query_service::Error, SequencerVersion>::new(
+            format!("http://localhost:{}", api_port).parse().unwrap(),
+        );
 
         let builder_address = client
             .get(builder_url)
@@ -327,12 +332,25 @@ mod tests {
             .unwrap();
         assert!(!hotshot_contract.is_empty());
 
-        let sequencer_submit_url = format!("http://localhost:{}/submit", api_port);
         let tx = Transaction::new(100.into(), vec![1, 2, 3]);
 
+        let hash: Commitment<Transaction> = api_client
+            .post("submit/submit")
+            .body_json(&tx)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+
+        let tx_hash = tx.commit();
+        assert_eq!(hash, tx_hash);
+
+        async_sleep(Duration::from_secs(5)).await;
         let resp = client
-            .post(sequencer_submit_url)
-            .body(serde_json::to_string(&tx).unwrap())
+            .get(format!(
+                "http://localhost:{}/availability/transaction/hash/{}",
+                api_port, tx_hash
+            ))
             .send()
             .await
             .unwrap()
