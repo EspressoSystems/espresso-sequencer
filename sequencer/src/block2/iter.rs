@@ -1,5 +1,5 @@
-use super::{
-    ns_table::ns_iter::{NsIndex, NsIter},
+use crate::block2::{
+    ns_iter::{NsIndex, NsIter},
     ns_table::ns_payload::tx_iter::{TxIndex, TxIter},
     Payload,
 };

@@ -1,6 +1,6 @@
 use crate::{
     block2::{
-        ns_table::ns_iter::NsIndex,
+        ns_iter::NsIndex,
         num_txs::NumTxs,
         payload_bytes::{
             num_txs_as_bytes, tx_offset_as_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,

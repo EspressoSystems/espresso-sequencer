@@ -12,6 +12,7 @@ use std::{collections::HashMap, fmt::Display};
 use tx_proof::TxProof;
 
 mod iter;
+mod ns_iter;
 mod ns_proof;
 mod ns_table;
 mod num_txs;

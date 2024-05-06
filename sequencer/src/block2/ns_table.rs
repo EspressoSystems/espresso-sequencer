@@ -1,12 +1,11 @@
-use super::payload_bytes::{
-    num_nss_from_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
+use crate::block2::{
+    ns_iter::{NsIndex, NsIter},
+    payload_bytes::{num_nss_from_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN},
 };
 use crate::NamespaceId;
-use ns_iter::{NsIndex, NsIter};
 use serde::{Deserialize, Serialize};
 
 // TODO do these all need to be pub?
-pub mod ns_iter;
 pub mod ns_payload;
 pub mod ns_payload_range;
 
@@ -32,7 +31,7 @@ impl NsTable {
     /// Returns the minimum of:
     /// - The number of namespaces declared in the ns table
     /// - The maximum number of entries that could fit into the namespace table.
-    fn num_nss_with_duplicates(&self) -> usize {
+    pub fn num_nss_with_duplicates(&self) -> usize {
         std::cmp::min(
             // Number of namespaces declared in the ns table
             self.read_num_nss(),
