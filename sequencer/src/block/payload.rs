@@ -367,18 +367,17 @@ mod test {
             payload_size.try_into().unwrap(),
         ));
 
-        // The final 2 txns will be ommitted
+        // The final 2 txns will be omitted
         let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
         assert_eq!(payload.txn_count(), txs.len() as u64 - 2u64);
 
-        // The final txn will be ommitted
+        // The final txn will be omitted
         txs.pop();
         let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
         assert_eq!(payload.txn_count(), txs.len() as u64 - 1u64);
 
         // All txns will be included.
         txs.pop();
-        dbg!(txs.len());
         let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
 
         assert_eq!(payload.txn_count(), txs.len() as u64);
