@@ -193,6 +193,8 @@ pub struct TestBlockHeader {
 impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> BlockHeader<TYPES>
     for TestBlockHeader
 {
+    type Error = std::convert::Infallible;
+
     async fn new(
         _parent_state: &TYPES::ValidatedState,
         _instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
@@ -201,7 +203,7 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
         builder_commitment: BuilderCommitment,
         _metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
         _builder_fee: BuilderFee<TYPES>,
-    ) -> Self {
+    ) -> Result<Self, Self::Error> {
         let parent = parent_leaf.get_block_header();
 
         let mut timestamp = OffsetDateTime::now_utc().unix_timestamp() as u64;
@@ -210,12 +212,12 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
             timestamp = parent.timestamp;
         }
 
-        Self {
+        Ok(Self {
             block_number: parent.block_number + 1,
             payload_commitment,
             builder_commitment,
             timestamp,
-        }
+        })
     }
 
     fn genesis(

@@ -167,6 +167,9 @@ pub struct BuilderFee<TYPES: NodeType> {
 pub trait BlockHeader<TYPES: NodeType>:
     Serialize + Clone + Debug + Hash + PartialEq + Eq + Send + Sync + DeserializeOwned + Committable
 {
+    /// Error type for this type of block header
+    type Error: Error + Debug + Send + Sync;
+
     /// Build a header with the parent validate state, instance-level state, parent leaf, payload
     /// commitment, and metadata.
     fn new(
@@ -177,7 +180,7 @@ pub trait BlockHeader<TYPES: NodeType>:
         builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
         builder_fee: BuilderFee<TYPES>,
-    ) -> impl Future<Output = Self> + Send;
+    ) -> impl Future<Output = Result<Self, Self::Error>> + Send;
 
     /// Build the genesis header, payload, and metadata.
     fn genesis(

@@ -210,7 +210,7 @@ pub async fn create_and_send_proposal<TYPES: NodeType>(
     round_start_delay: u64,
     instance_state: Arc<TYPES::InstanceState>,
 ) {
-    let block_header = TYPES::BlockHeader::new(
+    let block_header = match TYPES::BlockHeader::new(
         state.as_ref(),
         instance_state.as_ref(),
         &parent_leaf,
@@ -219,7 +219,14 @@ pub async fn create_and_send_proposal<TYPES: NodeType>(
         commitment_and_metadata.metadata,
         commitment_and_metadata.fee,
     )
-    .await;
+    .await
+    {
+        Ok(header) => header,
+        Err(err) => {
+            error!(%err, "Failed to construct block header");
+            return;
+        }
+    };
 
     let proposal = QuorumProposal {
         block_header,
