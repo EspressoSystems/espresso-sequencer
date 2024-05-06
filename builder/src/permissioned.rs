@@ -13,7 +13,7 @@ use hotshot::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
             derive_libp2p_peer_id, CombinedNetworks, KeyPair, Libp2pNetwork,
-            NetworkingMetricsValue, PushCdnNetwork, WebServerNetwork, WrappedSignatureKey,
+            NetworkingMetricsValue, PushCdnNetwork, WrappedSignatureKey,
         },
     },
     types::{SignatureKey, SystemContextHandle},

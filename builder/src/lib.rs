@@ -10,8 +10,7 @@ use futures::{
 };
 use hotshot::{
     traits::{
-        election::static_committee::GeneralStaticCommittee,
-        implementations::{NetworkingMetricsValue, WebServerNetwork},
+        election::static_committee::GeneralStaticCommittee, implementations::NetworkingMetricsValue,
     },
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
@@ -706,7 +705,7 @@ mod test {
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], Arc::new(genesis_state.clone()))
+                Payload::from_transactions([], &genesis_state)
                     .expect("unable to create genesis payload");
             let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
             let genesis_commitment = {
