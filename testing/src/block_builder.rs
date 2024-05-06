@@ -37,7 +37,10 @@ use rand::{rngs::SmallRng, Rng, RngCore, SeedableRng};
 use tide_disco::{method::ReadState, App, Url};
 
 #[async_trait]
-pub trait TestBuilderImplementation<TYPES: NodeType> {
+pub trait TestBuilderImplementation<TYPES: NodeType>
+where
+    <TYPES as NodeType>::InstanceState: Default,
+{
     type Config: Default;
 
     async fn start(
@@ -52,6 +55,7 @@ pub struct RandomBuilderImplementation;
 impl<TYPES> TestBuilderImplementation<TYPES> for RandomBuilderImplementation
 where
     TYPES: NodeType<Transaction = TestTransaction>,
+    <TYPES as NodeType>::InstanceState: Default,
 {
     type Config = RandomBuilderConfig;
 
@@ -69,7 +73,10 @@ where
 pub struct SimpleBuilderImplementation;
 
 #[async_trait]
-impl<TYPES: NodeType> TestBuilderImplementation<TYPES> for SimpleBuilderImplementation {
+impl<TYPES: NodeType> TestBuilderImplementation<TYPES> for SimpleBuilderImplementation
+where
+    <TYPES as NodeType>::InstanceState: Default,
+{
     type Config = ();
 
     async fn start(
@@ -140,7 +147,10 @@ where
 
     /// Spawn a task building blocks, configured with given options
     #[allow(clippy::missing_panics_doc)] // ony panics on 16-bit platforms
-    pub fn run(&self, num_storage_nodes: usize, options: RandomBuilderConfig) {
+    pub fn run(&self, num_storage_nodes: usize, options: RandomBuilderConfig)
+    where
+        <TYPES as NodeType>::InstanceState: Default,
+    {
         let blocks = self.blocks.clone();
         let (priv_key, pub_key) = (self.priv_key.clone(), self.pub_key.clone());
         async_spawn(async move {
@@ -262,6 +272,7 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
 pub fn run_random_builder<TYPES>(url: Url, num_storage_nodes: usize, options: RandomBuilderConfig)
 where
     TYPES: NodeType<Transaction = TestTransaction>,
+    <TYPES as NodeType>::InstanceState: Default,
 {
     let (pub_key, priv_key) = TYPES::BuilderSignatureKey::generated_from_seed_indexed([1; 32], 0);
     let source = RandomBuilderSource::new(pub_key, priv_key);
@@ -307,7 +318,10 @@ impl<TYPES: NodeType> ReadState for SimpleBuilderSource<TYPES> {
 }
 
 #[async_trait]
-impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES> {
+impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES>
+where
+    <TYPES as NodeType>::InstanceState: Default,
+{
     async fn get_available_blocks(
         &self,
         _for_parent: &VidCommitment,
@@ -411,7 +425,10 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES> {
 }
 
 impl<TYPES: NodeType> SimpleBuilderSource<TYPES> {
-    pub async fn run(self, url: Url) {
+    pub async fn run(self, url: Url)
+    where
+        <TYPES as NodeType>::InstanceState: Default,
+    {
         let builder_api = hotshot_builder_api::builder::define_api::<
             SimpleBuilderSource<TYPES>,
             TYPES,
