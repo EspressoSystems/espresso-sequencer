@@ -18,6 +18,7 @@ use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
     availability::{AvailabilityDataSource, LeafQueryData},
     data_source::VersionedDataSource,
+    explorer::MonetaryValue,
     merklized_state::{MerklizedState, MerklizedStateHeightPersistence, UpdateStateData},
     types::HeightIndexed,
 };
@@ -886,6 +887,12 @@ impl_to_fixed_bytes!(FeeAmount, U256);
 impl From<u64> for FeeAmount {
     fn from(amt: u64) -> Self {
         Self(amt.into())
+    }
+}
+
+impl From<FeeAmount> for MonetaryValue {
+    fn from(value: FeeAmount) -> Self {
+        MonetaryValue::eth(value.0.as_u128() as i128)
     }
 }
 

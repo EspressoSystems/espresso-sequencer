@@ -335,6 +335,8 @@ impl Options {
             .init_app_modules(ds, state.clone(), tasks, bind_version)
             .await?;
 
+        app.register_module("explorer", endpoints::explorer(bind_version)?)?;
+
         if self.state.is_some() {
             // Initialize merklized state module for block merkle tree
             app.register_module(

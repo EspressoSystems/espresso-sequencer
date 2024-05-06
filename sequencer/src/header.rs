@@ -2,14 +2,14 @@ use crate::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
     chain_config::ResolvableChainConfig,
     l1_client::L1Snapshot,
-    state::{BlockMerkleCommitment, FeeAccount, FeeInfo, FeeMerkleCommitment},
-    ChainConfig, L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
+    state::{BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment},
+    ChainConfig, L1BlockInfo, Leaf, NamespaceId, NodeState, SeqTypes, ValidatedState,
 };
 use anyhow::Context;
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::types;
-use hotshot_query_service::availability::QueryableHeader;
+use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BlockPayload, BuilderFee},
@@ -423,6 +423,50 @@ fn fee_message(
 impl QueryableHeader<SeqTypes> for Header {
     fn timestamp(&self) -> u64 {
         self.timestamp
+    }
+}
+
+impl ExplorerHeader<SeqTypes> for Header {
+    type BalanceAmount = FeeAmount;
+    type WalletAddress = FeeAccount;
+    type ProposerId = FeeAccount;
+    type NamespaceId = NamespaceId;
+
+    fn proposer_id(&self) -> Self::ProposerId {
+        self.fee_info.account()
+    }
+
+    fn fee_info_account(&self) -> Self::WalletAddress {
+        self.fee_info.account()
+    }
+
+    fn fee_info_balance(&self) -> Self::BalanceAmount {
+        self.fee_info.amount()
+    }
+
+    fn reward_balance(&self) -> Self::BalanceAmount {
+        FeeAmount::from(0)
+    }
+
+    fn namespace_ids(&self) -> Vec<Self::NamespaceId> {
+        let l = self.ns_table.len();
+        let mut result: Vec<Self::NamespaceId> = Vec::with_capacity(l);
+        for i in 0..l {
+            let (ns_id, _) = self.ns_table.get_table_entry(i);
+            result.push(ns_id);
+        }
+
+        result
+    }
+
+    fn namespace_ids_for_offset(&self, offset: usize) -> Vec<Self::NamespaceId> {
+        let l = self.ns_table.len();
+        if offset >= l {
+            return vec![];
+        }
+
+        let (ns_id, _) = self.ns_table.get_table_entry(offset);
+        vec![ns_id]
     }
 }
 
