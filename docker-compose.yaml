@@ -229,6 +229,7 @@ services:
       - ESPRESSO_SEQUENCER_POSTGRES_HOST=sequencer-db
       - ESPRESSO_SEQUENCER_POSTGRES_USER=root
       - ESPRESSO_SEQUENCER_POSTGRES_PASSWORD=password
+      - ESPRESSO_SEQUENCER_POSTGRES_DATABASE=sequencer
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - ESPRESSO_STATE_RELAY_SERVER_URL
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_1
@@ -466,6 +467,7 @@ services:
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=root
+      - POSTGRES_DB=sequencer
     healthcheck:
       # Postgres can be falsely "ready" once before running init scripts.
       # See https://github.com/docker-library/postgres/issues/146 for discussion.
