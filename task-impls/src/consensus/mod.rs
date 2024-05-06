@@ -35,7 +35,9 @@ use hotshot_types::{
 use jf_primitives::vid::VidScheme;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-use tracing::{debug, error, info, instrument, warn};
+#[cfg(not(feature = "dependency-tasks"))]
+use tracing::info;
+use tracing::{debug, error, instrument, warn};
 use vbs::version::Version;
 
 #[cfg(not(feature = "dependency-tasks"))]
@@ -506,7 +508,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     }
 
                     let mut consensus = self.consensus.write().await;
-                    consensus.high_qc = qc.clone();
+                    consensus.update_high_qc_if_new(qc.clone());
 
                     drop(consensus);
                     debug!(
@@ -716,7 +718,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     block_view: view,
                 });
                 if self.quorum_membership.get_leader(view) == self.public_key
-                    && self.consensus.read().await.high_qc.get_view_number() + 1 == view
+                    && self.consensus.read().await.high_qc().get_view_number() + 1 == view
                 {
                     if let Err(e) = self.publish_proposal(view, event_stream.clone()).await {
                         debug!("Failed to propose; error = {e:?}");

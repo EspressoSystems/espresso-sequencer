@@ -267,22 +267,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             saved_payloads.insert(anchored_leaf.get_view_number(), Arc::clone(&encoded_txns));
         }
 
-        let consensus = Consensus {
+        let consensus = Consensus::new(
             validated_state_map,
-            vid_shares: BTreeMap::new(),
-            cur_view: anchored_leaf.get_view_number(),
-            last_decided_view: anchored_leaf.get_view_number(),
+            anchored_leaf.get_view_number(),
+            anchored_leaf.get_view_number(),
             saved_leaves,
             saved_payloads,
-            saved_da_certs: HashMap::new(),
             // TODO this is incorrect
             // https://github.com/EspressoSystems/HotShot/issues/560
-            locked_view: anchored_leaf.get_view_number(),
-            high_qc: initializer.high_qc,
-            metrics: Arc::clone(&consensus_metrics),
-            dontuse_decided_upgrade_cert: None,
-            dontuse_formed_upgrade_certificate: None,
-        };
+            anchored_leaf.get_view_number(),
+            initializer.high_qc,
+            Arc::clone(&consensus_metrics),
+        );
 
         let consensus = Arc::new(RwLock::new(consensus));
         let version = Arc::new(RwLock::new(BASE_VERSION));
@@ -328,7 +324,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         self.internal_event_stream
             .0
             .broadcast_direct(Arc::new(HotShotEvent::QCFormed(either::Left(
-                consensus.high_qc.clone(),
+                consensus.high_qc().clone(),
             ))))
             .await
             .expect("Genesis Broadcast failed");
@@ -381,7 +377,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         trace!("Adding transaction to our own queue");
 
         let api = self.clone();
-        let view_number = api.consensus.read().await.cur_view;
+        let view_number = api.consensus.read().await.cur_view();
 
         // Wrap up a message
         let message = DataMessage::SubmitTransaction(transaction.clone(), view_number);

@@ -536,7 +536,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                         }
 
                         let mut consensus = self.consensus.write().await;
-                        consensus.high_qc = qc.clone();
+                        consensus.update_high_qc_if_new(qc.clone());
+
                         // We need to drop our handle here to make the borrow checker happy.
                         drop(consensus);
 

@@ -173,7 +173,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
 
     /// Wrapper to get the view number this node is on.
     pub async fn get_cur_view(&self) -> TYPES::Time {
-        self.hotshot.consensus.read().await.cur_view
+        self.hotshot.consensus.read().await.cur_view()
     }
 
     /// Provides a reference to the underlying storage for this [`SystemContext`], allowing access to

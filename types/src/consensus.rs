@@ -7,7 +7,7 @@ use std::{
 
 use committable::Commitment;
 use displaydoc::Display;
-use tracing::error;
+use tracing::{debug, error};
 
 pub use crate::utils::{View, ViewInner};
 use crate::{
@@ -53,7 +53,7 @@ pub struct Consensus<TYPES: NodeType> {
     pub saved_da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
 
     /// View number that is currently on.
-    pub cur_view: TYPES::Time,
+    cur_view: TYPES::Time,
 
     /// last view had a successful decide event
     pub last_decided_view: TYPES::Time,
@@ -72,7 +72,7 @@ pub struct Consensus<TYPES: NodeType> {
     pub locked_view: TYPES::Time,
 
     /// the highqc per spec
-    pub high_qc: QuorumCertificate<TYPES>,
+    high_qc: QuorumCertificate<TYPES>,
 
     /// A reference to the metrics trait
     pub metrics: Arc<ConsensusMetricsValue>,
@@ -263,9 +263,57 @@ impl Default for ConsensusMetricsValue {
 }
 
 impl<TYPES: NodeType> Consensus<TYPES> {
+    /// Constructor.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        validated_state_map: BTreeMap<TYPES::Time, View<TYPES>>,
+        cur_view: TYPES::Time,
+        last_decided_view: TYPES::Time,
+        saved_leaves: CommitmentMap<Leaf<TYPES>>,
+        saved_payloads: BTreeMap<TYPES::Time, Arc<[u8]>>,
+        locked_view: TYPES::Time,
+        high_qc: QuorumCertificate<TYPES>,
+        metrics: Arc<ConsensusMetricsValue>,
+    ) -> Self {
+        Consensus {
+            validated_state_map,
+            vid_shares: BTreeMap::new(),
+            saved_da_certs: HashMap::new(),
+            cur_view,
+            last_decided_view,
+            saved_leaves,
+            saved_payloads,
+            locked_view,
+            high_qc,
+            metrics,
+            dontuse_decided_upgrade_cert: None,
+            dontuse_formed_upgrade_certificate: None,
+        }
+    }
+
+    /// Get the current view.
+    pub fn cur_view(&self) -> TYPES::Time {
+        self.cur_view
+    }
+
     /// Update the current view.
-    pub fn update_view(&mut self, view_number: TYPES::Time) {
-        self.cur_view = view_number;
+    pub fn update_view_if_new(&mut self, view_number: TYPES::Time) {
+        if view_number > self.cur_view {
+            self.cur_view = view_number;
+        }
+    }
+
+    /// Get the high QC.
+    pub fn high_qc(&self) -> &QuorumCertificate<TYPES> {
+        &self.high_qc
+    }
+
+    /// Update the high QC if given a newer one.
+    pub fn update_high_qc_if_new(&mut self, high_qc: QuorumCertificate<TYPES>) {
+        if high_qc.view_number > self.high_qc.view_number {
+            debug!("Updating high QC");
+            self.high_qc = high_qc;
+        }
     }
 
     /// gather information from the parent chain of leaves
