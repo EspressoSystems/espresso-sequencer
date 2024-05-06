@@ -806,7 +806,7 @@ mod test {
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], Arc::new(NodeState::mock())).unwrap();
+                Payload::from_transactions([], &NodeState::mock()).unwrap();
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload

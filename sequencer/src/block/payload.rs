@@ -335,7 +335,7 @@ mod test {
             tx_iterator::TxIndex,
         },
         transaction::NamespaceId,
-        NodeState, Transaction,
+        ChainConfig, NodeState, Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
@@ -351,25 +351,30 @@ mod test {
     fn enforce_max_block_size() {
         let mut rng = jf_utils::test_rng();
         let max_block_size = 1000u64;
+        let chain_config = ChainConfig::new(1, max_block_size, 1);
         let payload_size = 10;
+        let n_txs = max_block_size / payload_size;
 
         let len = max_block_size;
         // let mut txs: Vec<Transaction> = vec![];
-        let mut txs = (0..max_block_size / payload_size)
-            .map(|_| Transaction::of_size(&mut rng, payload_size))
+        let mut txs = (0..n_txs)
+            .map(|_| Transaction::of_size(&mut rng, payload_size.try_into().unwrap()))
             .collect::<Vec<Transaction>>();
 
         // should panic b/c txs size > max_block_size
-        txns.push(Transaction::of_size(&mut rng, payload_size));
-        Payload::<TxTableEntryWord>::from_txs(txs, max_block_size).unwrap();
+        txs.push(Transaction::of_size(
+            &mut rng,
+            payload_size.try_into().unwrap(),
+        ));
+        Payload::<TxTableEntryWord>::from_txs(txs, &chain_config).unwrap();
 
         // should panic b/c txs size = max_block_size
-        txns.pop(Transaction::of_size(&mut rng, payload_size));
-        Payload::<TxTableEntryWord>::from_txs(txs, max_block_size).unwrap();
+        txs.pop();
+        Payload::<TxTableEntryWord>::from_txs(txs, &chain_config).unwrap();
 
         // should succeed b/c txs size < max_block_size
-        txns.pop(Transaction::of_size(&mut rng, payload_size));
-        Payload::<TxTableEntryWord>::from_txs(txs, max_block_size).unwrap();
+        txs.pop();
+        Payload::<TxTableEntryWord>::from_txs(txs, &chain_config).unwrap();
 
         // let mut block_size = 0u64;
         // loop {
@@ -381,26 +386,7 @@ mod test {
         //         break;
         //     }
         // }
-        Payload::<TxTableEntryWord>::from_txs(txs, max_block_size).unwrap();
-    }
-
-    #[test]
-    fn basic_correctness() {
-        check_basic_correctness::<TxTableEntryWord>()
-    }
-
-    fn check_basic_correctness<TableWord: TableWordTraits>() {
-        // let mut block_size = 0u64;
-        // loop {
-        //     if block_size < max_block_size {
-        //         let tx = Transaction::of_size(&mut rng, max_block_size / 100);
-        //         block_size += tx.payload().len() as u64;
-        //         txs.push(tx);
-        //     } else {
-        //         break;
-        //     }
-        // }
-        Payload::<TxTableEntryWord>::from_txs(txs, max_block_size).unwrap();
+        Payload::<TxTableEntryWord>::from_txs(txs, &chain_config).unwrap();
     }
 
     #[test]
@@ -523,7 +509,7 @@ mod test {
                 .iter()
                 .flat_map(|(_ns_id, ns)| ns.txs.iter().cloned());
             let (block, actual_ns_table) =
-                Payload::from_transactions(all_txs_iter, Arc::new(NodeState::mock())).unwrap();
+                Payload::from_transactions(all_txs_iter, &NodeState::mock()).unwrap();
             let disperse_data = vid.disperse(&block.raw_payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF
