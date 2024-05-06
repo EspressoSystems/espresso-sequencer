@@ -1,19 +1,20 @@
 use super::{
     fs,
     options::{Options, Query},
-    sql,
+    sql, AccountQueryData, BlocksFrontier,
 };
 use crate::{
     network,
     persistence::{self, SequencerPersistence},
-    state::ValidatedState,
     SeqTypes, Transaction,
 };
-use async_std::sync::Arc;
+use anyhow::bail;
 use async_trait::async_trait;
+use ethers::prelude::Address;
+use futures::future::Future;
 use hotshot_query_service::{
     availability::AvailabilityDataSource,
-    data_source::{UpdateDataSource, VersionedDataSource},
+    data_source::{MetricsDataSource, UpdateDataSource, VersionedDataSource},
     fetching::provider::{AnyProvider, QueryServiceProvider},
     node::NodeDataSource,
     status::StatusDataSource,
@@ -79,9 +80,8 @@ pub fn provider<Ver: StaticVersionType + 'static>(
     provider
 }
 
-#[trait_variant::make(SubmitDataSource: Send)]
-pub(crate) trait LocalSubmitDataSource<N: network::Type, P: SequencerPersistence> {
-    async fn submit(&self, tx: Transaction) -> anyhow::Result<()>;
+pub(crate) trait SubmitDataSource<N: network::Type, P: SequencerPersistence> {
+    fn submit(&self, tx: Transaction) -> impl Send + Future<Output = anyhow::Result<()>>;
 }
 
 #[async_trait]
@@ -89,26 +89,62 @@ pub(crate) trait StateSignatureDataSource<N: network::Type> {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody>;
 }
 
-#[trait_variant::make(StateDataSource: Send)]
-pub(crate) trait LocalStateDataSource {
-    async fn get_decided_state(&self) -> Arc<ValidatedState>;
-    async fn get_undecided_state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>>;
+pub(crate) trait CatchupDataSource {
+    /// Get the state of the requested `account`.
+    ///
+    /// The state is fetched from a snapshot at the given height and view, which _must_ correspond!
+    /// `height` is provided to simplify lookups for backends where data is not indexed by view.
+    /// This function is intended to be used for catchup, so `view` should be no older than the last
+    /// decided view.
+    fn get_account(
+        &self,
+        _height: u64,
+        _view: ViewNumber,
+        _account: Address,
+    ) -> impl Send + Future<Output = anyhow::Result<AccountQueryData>> {
+        // Merklized state catchup is only supported by persistence backends that provide merklized
+        // state storage. This default implementation is overridden for those that do. Otherwise,
+        // catchup can still be provided by fetching undecided merklized state from consensus
+        // memory.
+        async {
+            bail!("merklized state catchup is not supported for this data source");
+        }
+    }
+
+    /// Get the blocks Merkle tree frontier.
+    ///
+    /// The state is fetched from a snapshot at the given height and view, which _must_ correspond!
+    /// `height` is provided to simplify lookups for backends where data is not indexed by view.
+    /// This function is intended to be used for catchup, so `view` should be no older than the last
+    /// decided view.
+    fn get_frontier(
+        &self,
+        _height: u64,
+        _view: ViewNumber,
+    ) -> impl Send + Future<Output = anyhow::Result<BlocksFrontier>> {
+        // Merklized state catchup is only supported by persistence backends that provide merklized
+        // state storage. This default implementation is overridden for those that do. Otherwise,
+        // catchup can still be provided by fetching undecided merklized state from consensus
+        // memory.
+        async {
+            bail!("merklized state catchup is not supported for this data source");
+        }
+    }
 }
+
+impl CatchupDataSource for MetricsDataSource {}
 
 #[cfg(test)]
 pub(crate) mod testing {
     use super::super::Options;
     use super::*;
-    use crate::persistence::SequencerPersistence;
-    use std::fmt::Debug;
 
     #[async_trait]
     pub(crate) trait TestableSequencerDataSource: SequencerDataSource {
-        type Storage;
-        type Persistence: Debug + SequencerPersistence;
+        type Storage: Sync;
 
         async fn create_storage() -> Self::Storage;
-        async fn connect(storage: &Self::Storage) -> Self::Persistence;
+        fn persistence_options(storage: &Self::Storage) -> Self::Options;
         fn options(storage: &Self::Storage, opt: Options) -> Options;
     }
 }

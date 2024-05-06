@@ -10,7 +10,7 @@ use futures::{
 };
 use hotshot::{
     traits::{
-        election::static_committee::{GeneralStaticCommittee, StaticElectionConfig},
+        election::static_committee::GeneralStaticCommittee,
         implementations::{NetworkingMetricsValue, WebServerNetwork},
     },
     types::{SignatureKey, SystemContextHandle},
@@ -69,10 +69,10 @@ pub mod non_permissioned;
 pub mod permissioned;
 
 // It runs the api service for the builder
-pub fn run_builder_api_service(url: Url, source: Arc<RwLock<ProxyGlobalState<SeqTypes>>>) {
+pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     // it is to serve hotshot
     let builder_api = hotshot_builder_api::builder::define_api::<
-        Arc<RwLock<ProxyGlobalState<SeqTypes>>>,
+        ProxyGlobalState<SeqTypes>,
         SeqTypes,
         Version01,
     >(&HotshotBuilderApiOptions::default())
@@ -80,14 +80,13 @@ pub fn run_builder_api_service(url: Url, source: Arc<RwLock<ProxyGlobalState<Seq
 
     // it enables external clients to submit txn to the builder's private mempool
     let private_mempool_api = hotshot_builder_api::builder::submit_api::<
-        Arc<RwLock<ProxyGlobalState<SeqTypes>>>,
+        ProxyGlobalState<SeqTypes>,
         SeqTypes,
         Version01,
     >(&HotshotBuilderApiOptions::default())
     .expect("Failed to construct the builder API for private mempool txns");
 
-    let mut app: App<Arc<RwLock<ProxyGlobalState<SeqTypes>>>, BuilderApiError> =
-        App::with_state(source);
+    let mut app: App<ProxyGlobalState<SeqTypes>, BuilderApiError> = App::with_state(source);
 
     app.register_module("block_info", builder_api)
         .expect("Failed to register the builder API");
@@ -153,7 +152,7 @@ pub mod testing {
         state_signature::StateSignatureMemStorage, ChainConfig,
     };
     use sequencer::{Event, Transaction};
-    use std::{num::NonZeroUsize, time::Duration};
+    use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
 
     use crate::non_permissioned::BuilderConfig;
     use crate::permissioned::{init_hotshot, BuilderContext};
@@ -166,12 +165,11 @@ pub mod testing {
     };
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use serde::{Deserialize, Serialize};
-    type ElectionConfig = StaticElectionConfig;
     use snafu::{guide::feature_flags, *};
 
     #[derive(Clone)]
     pub struct HotShotTestConfig {
-        pub config: HotShotConfig<PubKey, ElectionConfig>,
+        pub config: HotShotConfig<PubKey>,
         priv_keys_staking_nodes: Vec<BLSPrivKey>,
         priv_keys_non_staking_nodes: Vec<BLSPrivKey>,
         staking_nodes_state_key_pairs: Vec<StateKeyPair>,
@@ -207,22 +205,18 @@ pub mod testing {
 
             let builder_url = hotshot_builder_url();
 
-            let config: HotShotConfig<PubKey, ElectionConfig> = HotShotConfig {
+            let config: HotShotConfig<PubKey> = HotShotConfig {
                 execution_type: ExecutionType::Continuous,
                 num_nodes_with_stake: NonZeroUsize::new(num_nodes_with_stake).unwrap(),
                 num_nodes_without_stake,
-                min_transactions: 1,
-                max_transactions: 10000.try_into().unwrap(),
-                known_nodes_with_stake,
+                known_da_nodes: known_nodes_with_stake.clone(),
+                known_nodes_with_stake: known_nodes_with_stake.clone(),
                 known_nodes_without_stake: known_nodes_without_stake_pub_keys,
                 next_view_timeout: Duration::from_secs(5).as_millis() as u64,
                 timeout_ratio: (10, 11),
                 round_start_delay: Duration::from_millis(1).as_millis() as u64,
                 start_delay: Duration::from_millis(1).as_millis() as u64,
                 num_bootstrap: 1usize,
-                propose_min_round_time: Duration::from_secs(0),
-                propose_max_round_time: Duration::from_secs(1),
-                election_config: None,
                 da_staked_committee_size: num_nodes_with_stake,
                 da_non_staked_committee_size: num_nodes_without_stake,
                 my_own_validator_config: Default::default(),
@@ -230,6 +224,11 @@ pub mod testing {
                 view_sync_timeout: Duration::from_secs(5),
                 fixed_leader_for_gpuvid: 0,
                 builder_url,
+                builder_timeout: Duration::from_secs(1),
+                start_threshold: (
+                    known_nodes_with_stake.clone().len() as u64,
+                    known_nodes_with_stake.clone().len() as u64,
+                ),
             };
 
             Self {
@@ -308,6 +307,7 @@ pub mod testing {
                         .stake_amount
                         .as_u64(),
                     state_key_pair: self.staking_nodes_state_key_pairs[i].clone(),
+                    is_da: true,
                 }
             } else {
                 ValidatorConfig {
@@ -315,6 +315,7 @@ pub mod testing {
                     private_key: self.priv_keys_non_staking_nodes[i].clone(),
                     stake_value: 0,
                     state_key_pair: self.non_staking_nodes_state_key_pairs[i].clone(),
+                    is_da: true,
                 }
             }
         }
@@ -391,6 +392,7 @@ pub mod testing {
             };
 
             let node_state = NodeState::new(
+                i as u64,
                 ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
                 MockStateCatchup::default(),
@@ -528,6 +530,7 @@ pub mod testing {
         ) -> Self {
             // setup the instance state
             let node_state = NodeState::new(
+                u64::MAX,
                 ChainConfig::default(),
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
@@ -556,6 +559,8 @@ pub mod testing {
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
                 15,
+                Duration::from_millis(500),
+                0,
             )
             .await
             .unwrap();
@@ -587,6 +592,7 @@ pub mod testing {
         ) -> Self {
             // setup the instance state
             let node_state = NodeState::new(
+                node_id,
                 ChainConfig::default(),
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
@@ -617,6 +623,8 @@ pub mod testing {
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
                 15,
+                Duration::from_millis(500),
+                0,
             )
             .await
             .unwrap();
@@ -694,9 +702,12 @@ mod test {
             handle.hotshot.start_consensus().await;
         }
 
+        let genesis_state = NodeState::mock();
         let mut parent = {
             // TODO refactor repeated code from other tests
-            let (genesis_payload, genesis_ns_table) = Payload::genesis();
+            let (genesis_payload, genesis_ns_table) =
+                Payload::from_transactions([], Arc::new(genesis_state.clone()))
+                    .expect("unable to create genesis payload");
             let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
@@ -705,7 +716,6 @@ mod test {
                     .expect("unable to encode genesis payload");
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
-            let genesis_state = NodeState::mock();
             Header::genesis(
                 &genesis_state,
                 genesis_commitment,

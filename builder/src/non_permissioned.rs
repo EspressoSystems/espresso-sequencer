@@ -63,6 +63,7 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
 ) -> anyhow::Result<NodeState> {
     let l1_client = L1Client::new(l1_params.url, Address::default());
     let instance_state = NodeState::new(
+        u64::MAX, // dummy node ID, only used for debugging
         ChainConfig::default(),
         l1_client,
         Arc::new(StatePeers::<Ver>::from_urls(state_peers)),
@@ -81,6 +82,8 @@ impl BuilderConfig {
         hotshot_builder_apis_url: Url,
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
+        maximize_txns_count_timeout_duration: Duration,
+        base_fee: u64,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
@@ -98,11 +101,12 @@ impl BuilderConfig {
         // builder api request channel
         let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
 
-        // builder api response channel
-        let (res_sender, res_receiver) = unbounded();
+        let (genesis_payload, genesis_ns_table) =
+            Payload::from_transactions([], Arc::new(instance_state.clone()))
+                .expect("genesis payload construction failed");
 
-        let (genesis_payload, genesis_ns_table) = Payload::genesis();
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
+
         let vid_commitment = {
             // TODO we should not need to collect payload bytes just to compute vid_commitment
             let payload_bytes = genesis_payload
@@ -114,11 +118,11 @@ impl BuilderConfig {
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
             req_sender,
-            res_receiver,
             tx_sender.clone(),
-            instance_state.clone(),
             vid_commitment,
             bootstrapped_view,
+            bootstrapped_view,
+            buffered_view_num_count as u64,
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
@@ -138,10 +142,12 @@ impl BuilderConfig {
             qc_receiver,
             req_receiver,
             global_state_clone,
-            res_sender,
             NonZeroUsize::new(1).unwrap(),
             bootstrapped_view,
-            buffered_view_num_count,
+            buffered_view_num_count as u64,
+            maximize_txns_count_timeout_duration,
+            base_fee,
+            Arc::new(instance_state),
         );
 
         // spawn the builder event loop
@@ -156,9 +162,8 @@ impl BuilderConfig {
             max_api_timeout_duration,
         );
 
-        let proxy_global_api_state = Arc::new(RwLock::new(proxy_global_state));
         // start the hotshot api service
-        run_builder_api_service(hotshot_builder_apis_url.clone(), proxy_global_api_state);
+        run_builder_api_service(hotshot_builder_apis_url.clone(), proxy_global_state);
 
         // create a client for it
         // Start Client for the event streaming api
@@ -189,7 +194,6 @@ impl BuilderConfig {
                 qc_sender,
                 decide_sender,
                 subscribed_events,
-                instance_state,
             )
             .await;
         });
@@ -326,10 +330,12 @@ mod test {
         // sleep and wait for builder service to startup
         async_sleep(Duration::from_millis(3000)).await;
 
+        let test_view_num = 0;
+
         // test getting available blocks
         let available_block_info = match builder_client
             .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
-                "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+                "block_info/availableblocks/{parent_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -356,7 +362,7 @@ mod test {
         // Test claiming blocks
         let _available_block_data = match builder_client
             .get::<AvailableBlockData<SeqTypes>>(&format!(
-                "block_info/claimblock/{builder_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+                "block_info/claimblock/{builder_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -373,7 +379,7 @@ mod test {
         // Test claiming block header input
         let _available_block_header = match builder_client
             .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
-                "block_info/claimheaderinput/{builder_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+                "block_info/claimheaderinput/{builder_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await

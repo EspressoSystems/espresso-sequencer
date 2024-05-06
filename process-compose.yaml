@@ -7,7 +7,6 @@ environment:
   - ESPRESSO_SEQUENCER_L1_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER_L1_PORT
   - ESPRESSO_DEMO_L1_HTTP_PROVIDER=$ESPRESSO_SEQUENCER_L1_PROVIDER
   - ESPRESSO_STATE_RELAY_SERVER_URL=http://localhost:$ESPRESSO_STATE_RELAY_SERVER_PORT
-
 processes:
   # Cheating a bit here but since we don't usually have to debug go-ethereum
   # it's using the docker compose service which is a bit easier.
@@ -88,6 +87,7 @@ processes:
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_0
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_0
       - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
+      - ESPRESSO_SEQUENCER_IS_DA=true
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -127,6 +127,7 @@ processes:
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_1
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_1
       - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
+      - ESPRESSO_SEQUENCER_IS_DA=true
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -163,6 +164,7 @@ processes:
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_2
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_2
       - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
+      - ESPRESSO_SEQUENCER_IS_DA=true
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -396,6 +398,9 @@ processes:
 
   nasty-client:
     command: nasty-client
+    environment:
+      # Point the nasty client at sequencer1, the only one running the state API.
+      - ESPRESSO_SEQUENCER_URL=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
     depends_on:
       sequencer0:
         condition: process_healthy

@@ -300,38 +300,45 @@ pub async fn deploy(
         .with_chain_id(chain_id);
     let owner = wallet.address();
     let l1 = Arc::new(SignerMiddleware::new(provider, wallet));
+    // As a sanity check, check that the deployer address has some balance of ETH it can use to pay
+    // gas.
+    let balance = l1.get_balance(owner, None).await?;
+    ensure!(
+        balance > 0.into(),
+        "deployer account {owner:#x} is not funded!"
+    );
+    tracing::info!(%balance, "deploying from address {owner:#x}");
 
     contracts
         .deploy_tx(Contract::HotShot, HotShot::deploy(l1.clone(), ())?)
         .await?;
-    if use_mock_contract {
-        // LightClientMock is a non-upgradable contract, thus directly initialize
-        // it via its constructor
+
+    // Deploy the upgradable light client contract first, then initialize it through a proxy contract
+    let lc_address = if use_mock_contract {
         contracts
             .deploy_fn(Contract::LightClient, |contracts| {
                 deploy_mock_light_client_contract(l1.clone(), contracts, None).boxed()
             })
-            .await?;
+            .await?
     } else {
-        // LightClient is a upgradable contract, thus deploy first,
-        // then initialize it through a proxy contract
-        let lc_address = contracts
+        contracts
             .deploy_fn(Contract::LightClient, |contracts| {
                 deploy_light_client_contract(l1.clone(), contracts).boxed()
             })
-            .await?;
-        let light_client = LightClient::new(lc_address, l1.clone());
+            .await?
+    };
+    let light_client = LightClient::new(lc_address, l1.clone());
 
-        let data = light_client
-            .initialize(genesis.into(), u32::MAX, owner)
-            .calldata()
-            .context("calldata for initialize transaction not available")?;
-        contracts
-            .deploy_tx(
-                Contract::LightClientProxy,
-                ERC1967Proxy::deploy(l1.clone(), (lc_address, data))?,
-            )
-            .await?;
-    }
+    let data = light_client
+        .initialize(genesis.into(), u32::MAX, owner)
+        .calldata()
+        .context("calldata for initialize transaction not available")?;
+    contracts
+        .deploy_tx(
+            Contract::LightClientProxy,
+            ERC1967Proxy::deploy(l1.clone(), (lc_address, data))?,
+        )
+        .await?;
+
     Ok(contracts)
 }

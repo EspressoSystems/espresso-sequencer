@@ -24,7 +24,7 @@ use vbs::version::StaticVersionType;
 
 use crate::{
     network, persistence::SequencerPersistence, state_signature::StateSigner,
-    static_stake_table_commitment, ElectionConfig, Node, NodeState, PubKey, SeqTypes, Transaction,
+    static_stake_table_commitment, Node, NodeState, PubKey, SeqTypes, Transaction,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 /// The consensus handle
@@ -41,10 +41,6 @@ pub struct SequencerContext<
     /// The consensus handle
     #[derivative(Debug = "ignore")]
     handle: Consensus<N, P>,
-
-    /// Index of this sequencer node
-    #[allow(dead_code)]
-    node_index: u64,
 
     /// Context for generating state signatures.
     state_signer: Arc<StateSigner<Ver>>,
@@ -67,16 +63,15 @@ pub struct SequencerContext<
 impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
     SequencerContext<N, P, Ver>
 {
-    #[tracing::instrument(skip_all, fields(node_id))]
+    #[tracing::instrument(skip_all, fields(node_id = instance_state.node_id))]
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
-        config: HotShotConfig<PubKey, ElectionConfig>,
+        config: HotShotConfig<PubKey>,
         instance_state: NodeState,
         persistence: P,
         networks: Networks<SeqTypes, Node<N, P>>,
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
-        node_id: u64,
         stake_table_capacity: usize,
         _: Ver,
     ) -> anyhow::Result<Self> {
@@ -90,27 +85,30 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             .set(pub_key.to_string());
         metrics
             .create_gauge("node_index".into(), None)
-            .set(node_id as usize);
+            .set(instance_state.node_id as usize);
 
         // Load saved consensus state from storage.
         let initializer = persistence
             .load_consensus_state(instance_state.clone())
             .await?;
 
-        let election_config = GeneralStaticCommittee::<SeqTypes, PubKey>::default_election_config(
-            config.num_nodes_with_stake.get() as u64,
-            0,
-        );
-        let membership = GeneralStaticCommittee::create_election(
+        let committee_membership = GeneralStaticCommittee::create_election(
             config.known_nodes_with_stake.clone(),
-            election_config.clone(),
+            config.known_nodes_with_stake.clone(),
             0,
         );
+
+        let da_membership = GeneralStaticCommittee::create_election(
+            config.known_nodes_with_stake.clone(),
+            config.known_da_nodes.clone(),
+            0,
+        );
+
         let memberships = Memberships {
-            quorum_membership: membership.clone(),
-            da_membership: membership.clone(),
-            vid_membership: membership.clone(),
-            view_sync_membership: membership.clone(),
+            quorum_membership: committee_membership.clone(),
+            da_membership,
+            vid_membership: committee_membership.clone(),
+            view_sync_membership: committee_membership.clone(),
         };
 
         let stake_table_commit =
@@ -127,7 +125,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         let handle = SystemContext::init(
             config.my_own_validator_config.public_key,
             config.my_own_validator_config.private_key.clone(),
-            node_id,
+            instance_state.node_id,
             config,
             memberships,
             networks,
@@ -146,7 +144,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         Ok(Self::new(
             handle,
             persistence,
-            node_id,
             state_signer,
             event_streamer,
             instance_state,
@@ -157,7 +154,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     fn new(
         handle: Consensus<N, P>,
         persistence: Arc<RwLock<P>>,
-        node_index: u64,
         state_signer: StateSigner<Ver>,
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
         node_state: NodeState,
@@ -166,7 +162,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
         let mut ctx = Self {
             handle,
-            node_index,
             state_signer: Arc::new(state_signer),
             tasks: Default::default(),
             detached: false,
@@ -238,7 +233,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         if let Some(orchestrator_client) = &self.wait_for_orchestrator {
             tracing::warn!("waiting for orchestrated start");
             orchestrator_client
-                .wait_for_all_nodes_ready(self.node_index)
+                .wait_for_all_nodes_ready(self.node_state.node_id)
                 .await;
         }
         tracing::warn!("starting consensus");

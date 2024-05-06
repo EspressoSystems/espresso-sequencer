@@ -46,30 +46,30 @@ dotenvy = "0.15"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.48" }
 # Hotshot imports
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.43" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.12" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.48" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.17" }
 hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.12" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.18" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.48" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.16" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.48" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
-hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.43" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.12" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.48" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.48" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.48" }
+hotshot-web-server = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.48" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
   "runtime-async-std",
   "global-permits",
-], tag = "0.2.4", package = "cdn-broker" }
+], tag = "0.3", package = "cdn-broker" }
 cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
   "runtime-async-std",
   "global-permits",
-], tag = "0.2.4", package = "cdn-marshal" }
+], tag = "0.3", package = "cdn-marshal" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.4", features = [
   "test-apis",
@@ -88,7 +88,6 @@ tagged-base64 = "0.4"
 tide-disco = "0.6"
 time = "0.3"
 tracing = "0.1"
-trait-variant = "0.1"
 bytesize = "1.3"
 itertools = "0.12"
 rand_chacha = "0.3"

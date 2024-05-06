@@ -96,7 +96,6 @@ toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = "0.3.18"
 trait-set = "0.3.0"
-trait-variant = { workspace = true }
 typenum = { version = "1.15.0", default-features = false, features = [
     "no_std",
 ] }

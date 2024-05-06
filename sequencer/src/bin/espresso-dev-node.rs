@@ -8,9 +8,9 @@ use ethers::types::Address;
 use futures::FutureExt;
 use sequencer::{
     api::options,
+    api::test_helpers::TestNetwork,
     hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
     persistence,
-    test_helpers::TestNetwork,
     testing::TestConfig,
 };
 use sequencer_utils::{
@@ -98,7 +98,7 @@ async fn main() -> anyhow::Result<()> {
 
     let network = TestNetwork::new(
         options,
-        [persistence::no_storage::NoStorage; TestConfig::NUM_NODES],
+        [persistence::no_storage::Options; TestConfig::NUM_NODES],
         url.clone(),
     )
     .await;

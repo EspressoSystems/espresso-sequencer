@@ -8,10 +8,8 @@
 //! an extension that node operators can opt into. This module defines the minimum level of
 //! persistence which is _required_ to run a node.
 
-use crate::{
-    ElectionConfig, Header, Leaf, NodeState, PubKey, SeqTypes, ValidatedState, ViewNumber,
-};
-use anyhow::{ensure, Context};
+use crate::{Leaf, NodeState, PubKey, SeqTypes, StateCatchup, ValidatedState, ViewNumber};
+use anyhow::{bail, ensure, Context};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use committable::Committable;
@@ -33,18 +31,27 @@ pub mod fs;
 pub mod no_storage;
 pub mod sql;
 
-pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey, ElectionConfig>;
+pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey>;
 
 #[async_trait]
-pub trait PersistenceOptions: Clone {
+pub trait PersistenceOptions: Clone + Send + Sync + 'static {
     type Persistence: SequencerPersistence;
 
     async fn create(self) -> anyhow::Result<Self::Persistence>;
     async fn reset(self) -> anyhow::Result<()>;
+
+    async fn create_catchup_provider(self) -> anyhow::Result<Arc<dyn StateCatchup>> {
+        self.create().await?.into_catchup_provider()
+    }
 }
 
 #[async_trait]
-pub trait SequencerPersistence: Send + Sync + 'static {
+pub trait SequencerPersistence: Sized + Send + Sync + 'static {
+    /// Use this storage as a state catchup backend, if supported.
+    fn into_catchup_provider(self) -> anyhow::Result<Arc<dyn StateCatchup>> {
+        bail!("state catchup is not implemented for this persistence type");
+    }
+
     /// Load the orchestrator config from storage.
     ///
     /// Returns `None` if no config exists (we are joining a network for the first time). Fails with
@@ -82,9 +89,6 @@ pub trait SequencerPersistence: Send + Sync + 'static {
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>>;
 
-    /// Load the validated state after `header`, if available.
-    async fn load_validated_state(&self, header: &Header) -> anyhow::Result<ValidatedState>;
-
     /// Load the latest known consensus state.
     ///
     /// Returns an initializer to resume HotShot from the latest saved state (or start from genesis,
@@ -107,7 +111,7 @@ pub trait SequencerPersistence: Send + Sync + 'static {
                 ViewNumber::genesis()
             }
         };
-        let (leaf, high_qc, validated_state) = match self
+        let (leaf, high_qc) = match self
             .load_anchor_leaf()
             .await
             .context("loading anchor leaf")?
@@ -122,29 +126,14 @@ pub trait SequencerPersistence: Send + Sync + 'static {
                         high_qc.view_number
                     )
                 );
-
-                let validated_state = match self.load_validated_state(leaf.get_block_header()).await
-                {
-                    Ok(validated_state) => Some(Arc::new(validated_state)),
-                    Err(err) => {
-                        tracing::error!(
-                            "unable to load validated state, will need to catchup: {err:#}"
-                        );
-                        None
-                    }
-                };
-
-                (leaf, high_qc, validated_state)
+                (leaf, high_qc)
             }
             None => {
                 tracing::info!("no saved leaf, starting from genesis leaf");
-                (
-                    Leaf::genesis(&state),
-                    QuorumCertificate::genesis(&state),
-                    Some(Arc::new(ValidatedState::genesis(&state).0)),
-                )
+                (Leaf::genesis(&state), QuorumCertificate::genesis(&state))
             }
         };
+        let validated_state = Some(Arc::new(ValidatedState::genesis(&state).0));
 
         // We start from the view following the maximum view between `highest_voted_view` and
         // `leaf.view_number`. This prevents double votes from starting in a view in which we had

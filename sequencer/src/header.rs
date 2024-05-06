@@ -246,7 +246,11 @@ impl Header {
 impl BlockHeader<SeqTypes> for Header {
     #[tracing::instrument(
         skip_all,
-        fields(view = ?parent_leaf.get_view_number(), height = parent_leaf.get_block_header().height),
+        fields(
+            node_id = instance_state.node_id,
+            view = ?parent_leaf.get_view_number(),
+            height = parent_leaf.get_block_header().height,
+        ),
     )]
     async fn new(
         parent_state: &ValidatedState,
@@ -257,6 +261,9 @@ impl BlockHeader<SeqTypes> for Header {
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
         builder_fee: BuilderFee<SeqTypes>,
     ) -> Self {
+        let height = parent_leaf.get_height();
+        let view = parent_leaf.get_view_number();
+
         let mut validated_state = parent_state.clone();
 
         // Validate the builder's signature, recovering their fee account address so that we can
@@ -294,7 +301,12 @@ impl BlockHeader<SeqTypes> for Header {
         let missing_accounts = parent_state
             .forgotten_accounts(accounts.chain(l1_deposits.iter().map(|info| info.account())));
         if !missing_accounts.is_empty() {
-            tracing::warn!("fetching missing accounts {missing_accounts:?} from peers");
+            tracing::warn!(
+                height,
+                ?view,
+                ?missing_accounts,
+                "fetching missing accounts from peers"
+            );
 
             // Fetch missing fee state entries
             // Unwrapping here is okay as we retry until we get the accounts or until the task is canceled.
@@ -302,7 +314,8 @@ impl BlockHeader<SeqTypes> for Header {
                 .peers
                 .as_ref()
                 .fetch_accounts(
-                    parent_leaf.get_view_number(),
+                    height,
+                    view,
                     parent_state.fee_merkle_tree.commitment(),
                     missing_accounts,
                 )
@@ -320,12 +333,11 @@ impl BlockHeader<SeqTypes> for Header {
 
         // Ensure merkle tree has frontier
         if validated_state.need_to_fetch_blocks_mt_frontier() {
-            let view = parent_leaf.get_view_number();
-            tracing::warn!("fetching block frontier for view {view:?} from peers");
+            tracing::warn!(height, ?view, "fetching block frontier from peers");
             instance_state
                 .peers
                 .as_ref()
-                .remember_blocks_merkle_tree(view, &mut validated_state.block_merkle_tree)
+                .remember_blocks_merkle_tree(height, view, &mut validated_state.block_merkle_tree)
                 .await
                 .expect("failed to remember proof");
         }

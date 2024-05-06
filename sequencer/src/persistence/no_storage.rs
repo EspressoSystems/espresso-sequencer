@@ -2,8 +2,7 @@
 #![cfg(any(test, feature = "testing"))]
 
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Header, Leaf, SeqTypes, ValidatedState, ViewNumber};
-use anyhow::bail;
+use crate::{Leaf, SeqTypes, ViewNumber};
 use async_trait::async_trait;
 use hotshot_types::{
     data::{DAProposal, VidDisperseShare},
@@ -95,9 +94,5 @@ impl SequencerPersistence for NoStorage {
         _action: HotShotAction,
     ) -> anyhow::Result<()> {
         Ok(())
-    }
-
-    async fn load_validated_state(&self, _header: &Header) -> anyhow::Result<ValidatedState> {
-        bail!("state persistence not implemented");
     }
 }

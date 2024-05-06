@@ -1,4 +1,4 @@
-use super::data_source::{Provider, SequencerDataSource};
+use super::data_source::{CatchupDataSource, Provider, SequencerDataSource};
 use crate::{persistence::fs::Options, SeqTypes};
 use async_trait::async_trait;
 use hotshot_query_service::data_source::FileSystemDataSource;
@@ -24,31 +24,26 @@ impl SequencerDataSource for DataSource {
     }
 }
 
+impl CatchupDataSource for DataSource {}
+
 #[cfg(test)]
 mod impl_testable_data_source {
     use super::*;
-    use crate::{
-        api::{self, data_source::testing::TestableSequencerDataSource},
-        persistence::{fs, PersistenceOptions},
-    };
+    use crate::api::{self, data_source::testing::TestableSequencerDataSource};
     use tempfile::TempDir;
 
     #[async_trait]
     impl TestableSequencerDataSource for DataSource {
         type Storage = TempDir;
-        type Persistence = fs::Persistence;
 
         async fn create_storage() -> Self::Storage {
             TempDir::new().unwrap()
         }
 
-        async fn connect(storage: &Self::Storage) -> Self::Persistence {
+        fn persistence_options(storage: &Self::Storage) -> Self::Options {
             Options {
                 path: storage.path().into(),
             }
-            .create()
-            .await
-            .unwrap()
         }
 
         fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
