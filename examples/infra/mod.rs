@@ -13,14 +13,14 @@ use async_compatibility_layer::{
     logging::{setup_backtrace, setup_logging},
 };
 use async_trait::async_trait;
-use cdn_broker::reexports::{crypto::signature::KeyPair, message::Topic};
+use cdn_broker::reexports::crypto::signature::KeyPair;
 use chrono::Utc;
 use clap::{value_parser, Arg, Command, Parser};
 use futures::StreamExt;
 use hotshot::{
     traits::{
         implementations::{
-            derive_libp2p_peer_id, CombinedNetworks, Libp2pNetwork, PushCdnNetwork,
+            derive_libp2p_peer_id, CombinedNetworks, Libp2pNetwork, PushCdnNetwork, Topic,
             WrappedSignatureKey,
         },
         BlockPayload, NodeImplementation,
@@ -642,7 +642,7 @@ where
                 .cdn_marshal_address
                 .clone()
                 .expect("`cdn_marshal_address` needs to be supplied for a push CDN run"),
-            topics.iter().map(ToString::to_string).collect(),
+            topics,
             keypair,
         )
         .expect("failed to create network");

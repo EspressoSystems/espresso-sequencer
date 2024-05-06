@@ -21,7 +21,7 @@ use cdn_client::{
     reexports::{
         connection::protocols::Quic,
         crypto::signature::{Serializable, SignatureScheme},
-        message::{Broadcast, Direct, Message as PushCdnMessage, Topic},
+        message::{Broadcast, Direct, Message as PushCdnMessage},
     },
     Client, Config as ClientConfig,
 };
@@ -153,6 +153,15 @@ pub struct PushCdnNetwork<TYPES: NodeType> {
     is_paused: Arc<AtomicBool>,
 }
 
+/// The enum for the topics we can subscribe to in the Push CDN
+#[repr(u8)]
+pub enum Topic {
+    /// The global topic
+    Global = 0,
+    /// The DA topic
+    DA = 1,
+}
+
 impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
     /// Create a new `PushCdnNetwork` (really a client) from a marshal endpoint, a list of initial
     /// topics we are interested in, and our wrapped keypair that we use to authenticate with the
@@ -162,19 +171,13 @@ impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
     /// If we fail to build the config
     pub fn new(
         marshal_endpoint: String,
-        topics: Vec<String>,
+        topics: Vec<Topic>,
         keypair: KeyPair<WrappedSignatureKey<TYPES::SignatureKey>>,
     ) -> anyhow::Result<Self> {
-        // Transform topics to our internal representation
-        let mut computed_topics: Vec<Topic> = Vec::new();
-        for topic in topics {
-            computed_topics.push(topic.try_into()?);
-        }
-
         // Build config
         let config = ClientConfig {
             endpoint: marshal_endpoint,
-            subscribed_topics: computed_topics,
+            subscribed_topics: topics.into_iter().map(|t| t as u8).collect(),
             keypair,
             use_local_authority: true,
         };
@@ -220,7 +223,7 @@ impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
         // TODO: check if we need to print this error
         if self
             .client
-            .send_broadcast_message(vec![topic], serialized_message)
+            .send_broadcast_message(vec![topic as u8], serialized_message)
             .await
             .is_err()
         {
@@ -362,9 +365,9 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
 
                     // Calculate if we're DA or not
                     let topics = if node_id < da_committee_size as u64 {
-                        vec![Topic::DA, Topic::Global]
+                        vec![Topic::DA as u8, Topic::Global as u8]
                     } else {
-                        vec![Topic::Global]
+                        vec![Topic::Global as u8]
                     };
 
                     // Configure our client
