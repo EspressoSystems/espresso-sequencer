@@ -10,7 +10,7 @@ use ethers::{
     types::{Address, BlockId, U256},
 };
 use futures::stream::StreamExt;
-use jf_primitives::merkle_tree::{
+use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Node},
     MerkleTreeScheme,
 };

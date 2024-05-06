@@ -126,7 +126,7 @@ async fn main() -> anyhow::Result<()> {
         chain_id: opt.chain_id.into(),
         max_block_size: opt.max_block_size,
         base_fee: opt.base_fee.into(),
-        fee_contract: None,
+        ..Default::default()
     };
     let instance_state =
         build_instance_state(l1_params, opt.state_peers, chain_config, sequencer_version).unwrap();

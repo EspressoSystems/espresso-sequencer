@@ -19,6 +19,7 @@
         "chain_id": "0x8a19",
         "max_block_size": 10240,
         "base_fee": "0x0",
-        "fee_contract": "0xa15bb66138824a1c7167f5e85b957d04dd34e468"
+        "fee_contract": "0xa15bb66138824a1c7167f5e85b957d04dd34e468",
+        "fee_burn_account": "0x0000000000000000000000000000000000000000"
     } } }
 }

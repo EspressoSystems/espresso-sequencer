@@ -33,7 +33,8 @@ use jf_merkle_tree::{
     prelude::{LightWeightSHA3MerkleTree, MerkleProof, Sha3Digest, Sha3Node},
     universal_merkle_tree::UniversalMerkleTree,
     AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
-    LookupResult, MerkleCommitment, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
+    LookupResult, MerkleCommitment, MerkleTreeScheme, PersistentUniversalMerkleTreeScheme,
+    ToTraversalPath, UniversalMerkleTreeScheme,
 };
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
@@ -90,6 +91,14 @@ impl ValidatedState {
         self.fee_merkle_tree.update(account, amount).unwrap();
     }
 
+    pub fn balance(&mut self, account: FeeAccount) -> Option<FeeAmount> {
+        match self.fee_merkle_tree.lookup(account) {
+            LookupResult::Ok(balance, _) => Some(*balance),
+            LookupResult::NotFound(_) => Some(0.into()),
+            LookupResult::NotInMemory => None,
+        }
+    }
+
     /// Find accounts that are not in memory.
     ///
     /// As an optimization we could try to apply updates and return the
@@ -135,11 +144,14 @@ impl ValidatedState {
             })?)
     }
 
-    /// Charge a fee to an account.
-    pub fn charge_fee(&mut self, fee_info: FeeInfo) -> anyhow::Result<()> {
+    /// Charge a fee to an account, transferring the funds to the burn account.
+    pub fn burn_fee(&mut self, fee_info: FeeInfo, burn: FeeAccount) -> anyhow::Result<()> {
+        let fee_state = self.fee_merkle_tree.clone();
+
+        // Deduct the fee from the paying account.
         let FeeInfo { account, amount } = fee_info;
         let mut err = None;
-        let res = self.fee_merkle_tree.update_with(account, |balance| {
+        let fee_state = fee_state.persistent_update_with(account, |balance| {
             let balance = balance.copied();
             let Some(updated) = balance.unwrap_or_default().checked_sub(&amount) else {
                 // Return an error without updating the account.
@@ -157,17 +169,21 @@ impl ValidatedState {
                 Some(updated)
             }
         })?;
-        // Check if we were unable to do the update because the required Merkle path is missing.
-        ensure!(
-            res.expect_not_in_memory().is_err(),
-            format!("missing account state for {account}")
-        );
-        // Fail if there was an error during `update_with`, otherwise succeed.
+
+        // Fail if there was an error during `persistent_update_with` (e.g. insufficient balance).
         if let Some(err) = err {
-            Err(err)
-        } else {
-            Ok(())
+            return Err(err);
         }
+
+        // If we successfully deducted the fee from the source account, increment the balance of the
+        // burn account.
+        let fee_state = fee_state.persistent_update_with(burn, |balance| {
+            Some(balance.copied().unwrap_or_default() + amount)
+        })?;
+
+        // If the whole update was successful, update the original state.
+        self.fee_merkle_tree = fee_state;
+        Ok(())
     }
 }
 
@@ -262,9 +278,10 @@ fn charge_fee(
     state: &mut ValidatedState,
     delta: &mut Delta,
     fee_info: FeeInfo,
+    burn: FeeAccount,
 ) -> anyhow::Result<()> {
-    state.charge_fee(fee_info)?;
-    delta.fees_delta.insert(fee_info.account);
+    state.burn_fee(fee_info, burn)?;
+    delta.fees_delta.extend([fee_info.account, burn]);
     Ok(())
 }
 
@@ -523,7 +540,7 @@ impl<T> SequencerStateDataSource for T where
 }
 
 impl ValidatedState {
-    async fn apply_header(
+    pub(crate) async fn apply_header(
         &self,
         instance: &NodeState,
         parent_leaf: &Leaf,
@@ -536,11 +553,16 @@ impl ValidatedState {
 
         let mut validated_state = self.clone();
 
-        let accounts = std::iter::once(proposed_header.fee_info.account);
-
-        // Find missing state entries
+        // Find missing fee state entries. We will need to use the builder account which is paying a
+        // fee and the burn account which is receiving it, plus any counts receiving deposits in
+        // this block.
         let missing_accounts = self.forgotten_accounts(
-            accounts.chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
+            [
+                proposed_header.fee_info.account,
+                instance.chain_config().fee_burn_account,
+            ]
+            .into_iter()
+            .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
         );
 
         let parent_height = parent_leaf.get_height();
@@ -598,7 +620,12 @@ impl ValidatedState {
         let mut validated_state =
             apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
 
-        charge_fee(&mut validated_state, &mut delta, proposed_header.fee_info)?;
+        charge_fee(
+            &mut validated_state,
+            &mut delta,
+            proposed_header.fee_info,
+            instance.chain_config().fee_burn_account,
+        )?;
 
         Ok((validated_state, delta))
     }
@@ -629,7 +656,7 @@ pub async fn get_l1_deposits(
 }
 
 #[must_use]
-pub fn apply_proposal(
+fn apply_proposal(
     validated_state: &ValidatedState,
     delta: &mut Delta,
     parent_leaf: &Leaf,
@@ -902,6 +929,14 @@ impl From<u64> for FeeAmount {
 impl CheckedSub for FeeAmount {
     fn checked_sub(&self, v: &Self) -> Option<Self> {
         self.0.checked_sub(v.0).map(FeeAmount)
+    }
+}
+
+impl FromStr for FeeAmount {
+    type Err = <U256 as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.parse()?))
     }
 }
 
@@ -1179,7 +1214,7 @@ mod test {
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use hotshot_types::vid::vid_scheme;
-    use jf_primitives::vid::VidScheme;
+    use jf_vid::VidScheme;
 
     #[test]
     fn test_fee_proofs() {
@@ -1266,5 +1301,45 @@ mod test {
         let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
             .unwrap_err();
         tracing::info!(%err, "task failed successfully");
+    }
+
+    #[test]
+    fn test_burn_fee() {
+        setup_logging();
+        setup_backtrace();
+
+        let src = FeeAccount::generated_from_seed_indexed([0; 32], 0).0;
+        let dst = FeeAccount::generated_from_seed_indexed([0; 32], 1).0;
+        let amt = FeeAmount::from(1);
+
+        let fee_info = FeeInfo::new(src, amt);
+
+        let new_state = || {
+            let mut state = ValidatedState::default();
+            state.prefund_account(src, amt);
+            state
+        };
+
+        tracing::info!("test successful burn");
+        let mut state = new_state();
+        state.burn_fee(fee_info, dst).unwrap();
+        assert_eq!(state.balance(src), Some(0.into()));
+        assert_eq!(state.balance(dst), Some(amt));
+
+        tracing::info!("test insufficient balance");
+        state.burn_fee(fee_info, dst).unwrap_err();
+        assert_eq!(state.balance(src), Some(0.into()));
+        assert_eq!(state.balance(dst), Some(amt));
+
+        tracing::info!("test src not in memory");
+        let mut state = new_state();
+        state.fee_merkle_tree.forget(src).expect_ok().unwrap();
+        state.burn_fee(fee_info, dst).unwrap_err();
+
+        tracing::info!("test dst not in memory");
+        let mut state = new_state();
+        state.prefund_account(dst, amt);
+        state.fee_merkle_tree.forget(dst).expect_ok().unwrap();
+        state.burn_fee(fee_info, dst).unwrap_err();
     }
 }

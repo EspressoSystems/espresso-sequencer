@@ -9,7 +9,7 @@ use sequencer::{
     api::{self, data_source::DataSourceOptions},
     init_node,
     options::{Modules, Options},
-    persistence, BuilderParams, ChainConfig, L1Params, NetworkParams,
+    persistence, BuilderParams, L1Params, NetworkParams,
 };
 use vbs::version::StaticVersionType;
 
@@ -50,12 +50,6 @@ where
 {
     let (private_staking_key, private_state_key) = opt.private_keys()?;
     let stake_table_capacity = opt.stake_table_capacity;
-    let chain_config = ChainConfig {
-        chain_id: opt.chain_id.into(),
-        max_block_size: opt.max_block_size,
-        base_fee: opt.base_fee.into(),
-        fee_contract: opt.fee_contract_address,
-    };
     let l1_params = L1Params {
         url: opt.l1_provider_url,
         finalized_block: opt.l1_genesis,
@@ -130,7 +124,7 @@ where
                                 l1_params,
                                 stake_table_capacity,
                                 bind_version,
-                                chain_config,
+                                opt.chain_config,
                                 opt.is_da,
                             )
                             .await
@@ -151,7 +145,7 @@ where
                 l1_params,
                 stake_table_capacity,
                 bind_version,
-                chain_config,
+                opt.chain_config,
                 opt.is_da,
             )
             .await?
