@@ -247,15 +247,14 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
-    let l1_client = L1Client::new(
-        l1_params.url,
-        Address::default(),
-        l1_params.events_max_block_range,
-    );
-
+    let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
     let instance_state = NodeState::new(
         node_index,
-        ChainConfig::new(0, max_block_size, base_fee),
+        ChainConfig {
+            max_block_size,
+            base_fee: base_fee.into(),
+            ..Default::default()
+        },
         l1_client,
         Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
     );
@@ -447,7 +446,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             maximize_txns_count_timeout_duration,
             instance_state
                 .chain_config()
-                .base_fee()
+                .base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),

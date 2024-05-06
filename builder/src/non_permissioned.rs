@@ -63,11 +63,7 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
     chain_config: ChainConfig,
     _: Ver,
 ) -> anyhow::Result<NodeState> {
-    let l1_client = L1Client::new(
-        l1_params.url,
-        Address::default(),
-        l1_params.events_max_block_range,
-    );
+    let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
     let instance_state = NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
         chain_config,
@@ -91,6 +87,16 @@ impl BuilderConfig {
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
     ) -> anyhow::Result<Self> {
+        tracing::info!(
+            address = %builder_key_pair.fee_account(),
+            ?bootstrapped_view,
+            %channel_capacity,
+            ?max_api_timeout_duration,
+            buffered_view_num_count,
+            ?maximize_txns_count_timeout_duration,
+            "initializing builder",
+        );
+
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
 
@@ -153,7 +159,7 @@ impl BuilderConfig {
             maximize_txns_count_timeout_duration,
             instance_state
                 .chain_config()
-                .base_fee()
+                .base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),

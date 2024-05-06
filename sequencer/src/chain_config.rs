@@ -1,7 +1,7 @@
 use crate::state::FeeAmount;
 use committable::{Commitment, Committable};
 use derive_more::{From, Into};
-use ethers::types::U256;
+use ethers::types::{Address, U256};
 use itertools::Either;
 use sequencer_utils::impl_to_fixed_bytes;
 use serde::{Deserialize, Serialize};
@@ -11,8 +11,8 @@ pub struct ChainId(U256);
 
 impl_to_fixed_bytes!(ChainId, U256);
 
-impl From<u16> for ChainId {
-    fn from(id: u16) -> Self {
+impl From<u64> for ChainId {
+    fn from(id: u64) -> Self {
         Self(id.into())
     }
 }
@@ -21,46 +21,27 @@ impl From<u16> for ChainId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ChainConfig {
     /// Espresso chain ID
-    chain_id: ChainId,
+    pub chain_id: ChainId,
     /// Maximum size in bytes of a block
-    max_block_size: u64,
+    pub max_block_size: u64,
     /// Minimum fee in WEI per byte of payload
-    base_fee: FeeAmount,
+    pub base_fee: FeeAmount,
+    /// Fee contract address on L1.
+    ///
+    /// This is optional so that fees can easily be toggled on/off, with no need to deploy a
+    /// contract when they are off. In a future release, after fees are switched on and thoroughly
+    /// tested, this may be made mandatory.
+    pub fee_contract: Option<Address>,
 }
 
 impl Default for ChainConfig {
     fn default() -> Self {
-        Self::new(
-            U256::from(35353), // arbitrarily chosen chain ID
-            10240,             // 10 kB max_block_size
-            0,                 // no fees
-        )
-    }
-}
-
-impl ChainConfig {
-    pub fn new(
-        chain_id: impl Into<ChainId>,
-        max_block_size: u64,
-        base_fee: impl Into<FeeAmount>,
-    ) -> Self {
         Self {
-            chain_id: chain_id.into(),
-            max_block_size,
-            base_fee: base_fee.into(),
+            chain_id: U256::from(35353).into(), // arbitrarily chosen chain ID
+            max_block_size: 10240,
+            base_fee: 0.into(),
+            fee_contract: None,
         }
-    }
-
-    pub fn chain_id(&self) -> ChainId {
-        self.chain_id
-    }
-
-    pub fn max_block_size(&self) -> u64 {
-        self.max_block_size
-    }
-
-    pub fn base_fee(&self) -> FeeAmount {
-        self.base_fee
     }
 }
 
@@ -70,11 +51,16 @@ impl Committable for ChainConfig {
     }
 
     fn commit(&self) -> Commitment<Self> {
-        committable::RawCommitmentBuilder::new(&Self::tag())
+        let comm = committable::RawCommitmentBuilder::new(&Self::tag())
             .fixed_size_field("chain_id", &self.chain_id.to_fixed_bytes())
             .u64_field("max_block_size", self.max_block_size)
-            .fixed_size_field("base_fee", &self.base_fee.to_fixed_bytes())
-            .finalize()
+            .fixed_size_field("base_fee", &self.base_fee.to_fixed_bytes());
+        let comm = if let Some(addr) = self.fee_contract {
+            comm.u64_field("fee_contract", 1).fixed_size_bytes(&addr.0)
+        } else {
+            comm.u64_field("fee_contract", 0)
+        };
+        comm.finalize()
     }
 }
 
@@ -127,7 +113,12 @@ mod tests {
             max_block_size,
             ..
         } = chain_config;
-        let other_config = ChainConfig::new(chain_id, max_block_size, 1);
+        let other_config = ChainConfig {
+            chain_id,
+            max_block_size,
+            base_fee: 1.into(),
+            fee_contract: None,
+        };
         assert!(chain_config != other_config);
     }
 

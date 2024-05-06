@@ -44,7 +44,7 @@ struct NonPermissionedBuilderOptions {
 
     /// Unique identifier for this instance of the sequencer network.
     #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
-    chain_id: u16,
+    chain_id: u64,
 
     /// Maximum size in bytes of a block
     #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE", value_parser = parse_size)]
@@ -115,7 +115,6 @@ async fn main() -> anyhow::Result<()> {
         url: opt.l1_provider_url,
         finalized_block: None,
         events_max_block_range: 10000,
-        fee_contract_address: Default::default(),
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
@@ -123,7 +122,12 @@ async fn main() -> anyhow::Result<()> {
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
-    let chain_config = ChainConfig::new(opt.chain_id, opt.max_block_size, opt.base_fee);
+    let chain_config = ChainConfig {
+        chain_id: opt.chain_id.into(),
+        max_block_size: opt.max_block_size,
+        base_fee: opt.base_fee.into(),
+        fee_contract: None,
+    };
     let instance_state =
         build_instance_state(l1_params, opt.state_peers, chain_config, sequencer_version).unwrap();
 

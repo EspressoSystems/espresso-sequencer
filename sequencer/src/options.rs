@@ -45,7 +45,7 @@ use url::Url;
 pub struct Options {
     /// Unique identifier for this instance of the sequencer network.
     #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
-    pub chain_id: u16,
+    pub chain_id: u64,
 
     /// URL of the HotShot orchestrator.
     #[clap(
@@ -174,7 +174,7 @@ pub struct Options {
 
     /// Address of the L1 contract used to bridge fee tokens into Espresso.
     #[clap(long, env = "ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
-    pub fee_contract_address: Address,
+    pub fee_contract_address: Option<Address>,
 
     /// Peer nodes use to fetch missing state
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]

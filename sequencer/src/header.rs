@@ -283,6 +283,7 @@ impl BlockHeader<SeqTypes> for Header {
         builder_fee: BuilderFee<SeqTypes>,
         _vid_common: VidCommon,
     ) -> Result<Self, Self::Error> {
+        let chain_config = instance_state.chain_config;
         let height = parent_leaf.get_height();
         let view = parent_leaf.get_view_number();
 
@@ -305,10 +306,13 @@ impl BlockHeader<SeqTypes> for Header {
         // Fetch the latest L1 snapshot.
         let l1_snapshot = instance_state.l1_client().snapshot().await;
         // Fetch the new L1 deposits between parent and current finalized L1 block.
-        let l1_deposits = if let Some(block_info) = l1_snapshot.finalized {
+        let l1_deposits = if let (Some(addr), Some(block_info)) =
+            (chain_config.fee_contract, l1_snapshot.finalized)
+        {
             instance_state
                 .l1_client
                 .get_finalized_deposits(
+                    addr,
                     parent_leaf
                         .get_block_header()
                         .l1_finalized
@@ -373,7 +377,7 @@ impl BlockHeader<SeqTypes> for Header {
             builder_fee.fee_signature,
             OffsetDateTime::now_utc().unix_timestamp() as u64,
             validated_state,
-            instance_state.chain_config,
+            chain_config,
         )?)
     }
 
@@ -762,7 +766,10 @@ mod test_headers {
 
         let result = validate_proposal(
             &state,
-            ChainConfig::new(U256::zero(), 0u64, U256::zero()),
+            ChainConfig {
+                chain_id: U256::zero().into(),
+                ..Default::default()
+            },
             &parent_leaf,
             &proposal,
             &vid_common,
@@ -810,11 +817,8 @@ mod test_headers {
         setup_backtrace();
 
         let anvil = Anvil::new().block_time(1u32).spawn();
-        let mut genesis_state = NodeState::mock().with_l1(L1Client::new(
-            anvil.endpoint().parse().unwrap(),
-            Address::default(),
-            1,
-        ));
+        let mut genesis_state =
+            NodeState::mock().with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1));
 
         let genesis = GenesisForTest::default();
         let vid_common = vid_scheme(1).disperse([]).unwrap().common;
@@ -876,7 +880,7 @@ mod test_headers {
         let mut proposal_state = parent_state.clone();
         for fee_info in genesis_state
             .l1_client
-            .get_finalized_deposits(None, 0)
+            .get_finalized_deposits(Address::default(), None, 0)
             .await
         {
             proposal_state.insert_fee_deposit(fee_info).unwrap();

@@ -50,12 +50,16 @@ where
 {
     let (private_staking_key, private_state_key) = opt.private_keys()?;
     let stake_table_capacity = opt.stake_table_capacity;
-    let chain_config = ChainConfig::new(opt.chain_id, opt.max_block_size, opt.base_fee);
+    let chain_config = ChainConfig {
+        chain_id: opt.chain_id.into(),
+        max_block_size: opt.max_block_size,
+        base_fee: opt.base_fee.into(),
+        fee_contract: opt.fee_contract_address,
+    };
     let l1_params = L1Params {
         url: opt.l1_provider_url,
         finalized_block: opt.l1_genesis,
         events_max_block_range: opt.l1_events_max_block_range,
-        fee_contract_address: opt.fee_contract_address,
     };
     let builder_params = BuilderParams {
         prefunded_accounts: opt.prefunded_builder_accounts,

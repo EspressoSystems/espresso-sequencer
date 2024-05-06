@@ -205,7 +205,7 @@ pub fn validate_proposal(
     // validate block size and fee
     let block_size = VidSchemeType::get_payload_byte_len(vid_common) as u64;
     anyhow::ensure!(
-        block_size < expected_chain_config.max_block_size(),
+        block_size < expected_chain_config.max_block_size,
         anyhow::anyhow!(
             "Invalid Payload Size: local={:?}, proposal={:?}",
             expected_chain_config,
@@ -213,10 +213,10 @@ pub fn validate_proposal(
         )
     );
     anyhow::ensure!(
-        proposal.fee_info.amount() >= expected_chain_config.base_fee() * block_size,
+        proposal.fee_info.amount() >= expected_chain_config.base_fee * block_size,
         format!(
             "insufficient fee: block_size={block_size}, base_fee={:?}, proposed_fee={:?}",
-            expected_chain_config.base_fee(),
+            expected_chain_config.base_fee,
             proposal.fee_info.amount()
         )
     );
@@ -609,10 +609,13 @@ pub async fn get_l1_deposits(
     header: &Header,
     parent_leaf: &Leaf,
 ) -> Vec<FeeInfo> {
-    if let Some(block_info) = header.l1_finalized {
+    if let (Some(addr), Some(block_info)) =
+        (instance.chain_config.fee_contract, header.l1_finalized)
+    {
         instance
             .l1_client
             .get_finalized_deposits(
+                addr,
                 parent_leaf
                     .get_block_header()
                     .l1_finalized
@@ -1227,8 +1230,11 @@ mod test {
         let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
 
         let state = ValidatedState::default();
-        let instance =
-            NodeState::mock().with_chain_config(ChainConfig::new(0, MAX_BLOCK_SIZE as u64, 0));
+        let instance = NodeState::mock().with_chain_config(ChainConfig {
+            max_block_size: MAX_BLOCK_SIZE as u64,
+            base_fee: 0.into(),
+            ..Default::default()
+        });
         let parent = Leaf::genesis(&instance);
         let header = parent.get_block_header();
 
@@ -1248,11 +1254,11 @@ mod test {
         let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
 
         let state = ValidatedState::default();
-        let instance = NodeState::mock().with_chain_config(ChainConfig::new(
-            0,
+        let instance = NodeState::mock().with_chain_config(ChainConfig {
+            base_fee: 1000.into(), // High base fee
             max_block_size,
-            1000, // High base fee
-        ));
+            ..Default::default()
+        });
         let parent = Leaf::genesis(&instance);
         let header = parent.get_block_header();
 
