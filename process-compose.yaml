@@ -417,6 +417,7 @@ processes:
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=root
+      - POSTGRES_DB=espresso-sequencer
     readiness_probe:
       exec:
         command: pg_isready -h localhost -p $ESPRESSO_SEQUENCER_DB_PORT

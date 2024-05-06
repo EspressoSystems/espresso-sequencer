@@ -466,6 +466,7 @@ services:
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=root
+      - POSTGRES_DB=espresso-sequencer
     healthcheck:
       # Postgres can be falsely "ready" once before running init scripts.
       # See https://github.com/docker-library/postgres/issues/146 for discussion.
