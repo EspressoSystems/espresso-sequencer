@@ -340,10 +340,13 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
-    use hotshot_types::{traits::BlockPayload, vid::vid_scheme};
+    use hotshot_types::{
+        traits::{block_contents::TestableBlock, BlockPayload},
+        vid::vid_scheme,
+    };
     use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
     use rand::RngCore;
-    use std::{collections::HashMap, marker::PhantomData, ops::Range, sync::Arc};
+    use std::{collections::HashMap, marker::PhantomData, ops::Range};
 
     const NUM_STORAGE_NODES: usize = 10;
 
@@ -351,42 +354,34 @@ mod test {
     fn enforce_max_block_size() {
         let mut rng = jf_utils::test_rng();
         let max_block_size = 1000u64;
-        let chain_config = ChainConfig::new(1, max_block_size, 1);
         let payload_size = 10;
         let n_txs = max_block_size / payload_size;
+        let chain_config = ChainConfig::new(1, max_block_size, 1);
 
-        let len = max_block_size;
-        // let mut txs: Vec<Transaction> = vec![];
         let mut txs = (0..n_txs)
             .map(|_| Transaction::of_size(&mut rng, payload_size.try_into().unwrap()))
             .collect::<Vec<Transaction>>();
 
-        // should panic b/c txs size > max_block_size
         txs.push(Transaction::of_size(
             &mut rng,
             payload_size.try_into().unwrap(),
         ));
-        Payload::<TxTableEntryWord>::from_txs(txs, &chain_config).unwrap();
 
-        // should panic b/c txs size = max_block_size
+        // The final 2 txns will be ommitted
+        let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
+        assert_eq!(payload.txn_count(), txs.len() as u64 - 2u64);
+
+        // The final txn will be ommitted
         txs.pop();
-        Payload::<TxTableEntryWord>::from_txs(txs, &chain_config).unwrap();
+        let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
+        assert_eq!(payload.txn_count(), txs.len() as u64 - 1u64);
 
-        // should succeed b/c txs size < max_block_size
+        // All txns will be included.
         txs.pop();
-        Payload::<TxTableEntryWord>::from_txs(txs, &chain_config).unwrap();
+        dbg!(txs.len());
+        let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
 
-        // let mut block_size = 0u64;
-        // loop {
-        //     if block_size < max_block_size {
-        //         let tx = Transaction::of_size(&mut rng, max_block_size / 100);
-        //         block_size += tx.payload().len() as u64;
-        //         txs.push(tx);
-        //     } else {
-        //         break;
-        //     }
-        // }
-        Payload::<TxTableEntryWord>::from_txs(txs, &chain_config).unwrap();
+        assert_eq!(payload.txn_count(), txs.len() as u64);
     }
 
     #[test]
