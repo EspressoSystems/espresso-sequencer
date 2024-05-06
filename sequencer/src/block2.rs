@@ -14,6 +14,7 @@ use tx_proof::TxProof;
 mod iter;
 mod ns_proof;
 mod ns_table;
+mod num_txs;
 mod payload_bytes;
 mod tx_proof;
 

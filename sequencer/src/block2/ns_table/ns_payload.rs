@@ -1,6 +1,7 @@
 use crate::{
     block2::{
         ns_table::ns_iter::NsIndex,
+        num_txs::NumTxs,
         payload_bytes::{
             num_txs_as_bytes, tx_offset_as_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
         },
@@ -11,8 +12,11 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use tx_iter::{TxIndex, TxIter};
 
-pub mod num_txs;
 pub mod tx_iter;
+
+/// TODO explain: ZST to unlock visibility in other modules. can only be
+/// constructed in this module.
+pub struct A(());
 
 // TODO move all the modules from inside ns_table back up to block2?
 // TODO move this to ns_table.rs so we can construct a `Payload` there and keep `NsTable` fields private?
@@ -102,6 +106,26 @@ impl NsPayload {
             *ns_id,
             self.0[self.tx_payload_range_relative(index)].to_vec(),
         )
+    }
+
+    /// Number of txs in this namespace.
+    ///
+    /// Returns the minimum of:
+    /// - The number of txs declared in the tx table
+    /// - The maximum number of tx table entries that could fit in the namespace
+    ///   payload.
+    pub fn num_txs(&self) -> usize {
+        std::cmp::min(
+            // Number of txs declared in the tx table
+            self.read_num_txs().as_usize(A(())),
+            // Max number of tx table entries that could fit in the namespace payload
+            self.0.len().saturating_sub(NUM_TXS_BYTE_LEN) / TX_OFFSET_BYTE_LEN,
+        )
+    }
+
+    /// Read the number of txs declared in the tx table.
+    pub fn read_num_txs(&self) -> NumTxs {
+        NumTxs::from_bytes(A(()), &self.0[..self.num_txs_byte_len()])
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::block2::{
-    ns_table::ns_payload::NsPayload,
+    ns_table::ns_payload,
     payload_bytes::{num_txs_as_bytes, num_txs_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -42,6 +42,9 @@ impl NumTxs {
 
     /// Infallible serialization.
     ///
+    /// TODO used only in [`tx_proof`] module. Delete this method and make
+    /// everyone use serde if they want bytes?
+    ///
     /// TODO what's the idiomatic way to return an abstraction over a reference
     /// vs owned value? eg. Suppose in the future the underlying representation
     /// of a [`NumTxs`] switches from `usize` to `[u8; N]`. In that case I
@@ -56,26 +59,13 @@ impl NumTxs {
     pub fn as_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
         num_txs_as_bytes(self.0)
     }
-}
 
-impl NsPayload {
-    /// Number of txs in this namespace.
-    ///
-    /// Returns the minimum of:
-    /// - The number of txs declared in the tx table
-    /// - The maximum number of tx table entries that could fit in the namespace
-    ///   payload.
-    pub fn num_txs(&self) -> usize {
-        std::cmp::min(
-            // Number of txs declared in the tx table
-            self.read_num_txs().0,
-            // Max number of tx table entries that could fit in the namespace payload
-            self.0.len().saturating_sub(NUM_TXS_BYTE_LEN) / TX_OFFSET_BYTE_LEN,
-        )
+    /// TODO explain: [`ns_payload::A`] arg allows access to this method only
+    /// from within [`ns_payload`] module.
+    pub fn from_bytes(_: ns_payload::A, bytes: &[u8]) -> Self {
+        Self(num_txs_from_bytes(bytes))
     }
-
-    /// Read the number of txs declared in the tx table.
-    pub fn read_num_txs(&self) -> NumTxs {
-        NumTxs(num_txs_from_bytes(&self.0[..self.num_txs_byte_len()]))
+    pub fn as_usize(&self, _: ns_payload::A) -> usize {
+        self.0
     }
 }

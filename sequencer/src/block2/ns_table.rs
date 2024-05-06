@@ -43,6 +43,8 @@ impl NsTable {
     }
 
     /// Read the number of namespaces declared in the namespace table.
+    ///
+    /// TODO newtype for return type like [`NumTxs`]?
     fn read_num_nss(&self) -> usize {
         num_nss_from_bytes(&self.0[..self.num_nss_byte_len()])
     }

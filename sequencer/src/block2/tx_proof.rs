@@ -2,12 +2,10 @@ use crate::{
     block2::{
         iter::Index,
         ns_table::{
-            ns_payload::{
-                num_txs::NumTxs,
-                tx_iter::{tx_table_entries::TxTableEntries, TxIndex},
-            },
+            ns_payload::tx_iter::{tx_table_entries::TxTableEntries, TxIndex},
             ns_payload_range::NsPayloadRange,
         },
+        num_txs::NumTxs,
         Payload,
     },
     Transaction,
