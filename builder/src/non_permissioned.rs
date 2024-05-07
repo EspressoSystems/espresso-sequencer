@@ -102,9 +102,8 @@ impl BuilderConfig {
         // builder api request channel
         let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
 
-        let (genesis_payload, genesis_ns_table) =
-            Payload::from_transactions([], Arc::new(instance_state.clone()))
-                .expect("genesis payload construction failed");
+        let (genesis_payload, genesis_ns_table) = Payload::from_transactions([], &instance_state)
+            .expect("genesis payload construction failed");
 
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
 
@@ -166,23 +165,27 @@ impl BuilderConfig {
         // start the hotshot api service
         run_builder_api_service(hotshot_builder_apis_url.clone(), proxy_global_state);
 
-        // create a client for it
-        // Start Client for the event streaming api
+        let events_url = hotshot_events_api_url
+            .clone()
+            .join("hotshot-events/events")
+            .unwrap();
+
         tracing::info!(
             "Running permissionless builder against hotshot events API at {}",
-            hotshot_events_api_url.to_string()
+            events_url.to_string()
         );
 
         // spawn the builder service
         async_spawn(async move {
-            run_non_permissioned_standalone_builder_service(
+            let res = run_non_permissioned_standalone_builder_service(
                 tx_sender,
                 da_sender,
                 qc_sender,
                 decide_sender,
-                hotshot_events_api_url,
+                events_url,
             )
             .await;
+            tracing::error!(?res, "builder service exited")
         });
 
         tracing::info!("Builder init finished");

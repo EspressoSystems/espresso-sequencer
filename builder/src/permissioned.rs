@@ -13,7 +13,7 @@ use hotshot::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
             derive_libp2p_peer_id, CombinedNetworks, KeyPair, Libp2pNetwork,
-            NetworkingMetricsValue, PushCdnNetwork, WebServerNetwork, WrappedSignatureKey,
+            NetworkingMetricsValue, PushCdnNetwork, Topic, WrappedSignatureKey,
         },
     },
     types::{SignatureKey, SystemContextHandle},
@@ -188,7 +188,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Initialize the push CDN network (and perform the initial connection)
     let cdn_network = PushCdnNetwork::new(
         network_params.cdn_endpoint,
-        vec!["Global".into(), "DA".into()],
+        vec![Topic::Global, Topic::DA],
         KeyPair {
             public_key: WrappedSignatureKey(my_config.public_key),
             private_key: my_config.private_key.clone(),
@@ -400,9 +400,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         // builder api request channel
         let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
 
-        let (genesis_payload, genesis_ns_table) =
-            Payload::from_transactions([], Arc::new(instance_state.clone()))
-                .expect("genesis payload construction failed");
+        let (genesis_payload, genesis_ns_table) = Payload::from_transactions([], &instance_state)
+            .expect("genesis payload construction failed");
 
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
 

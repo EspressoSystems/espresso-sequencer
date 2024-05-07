@@ -35,7 +35,7 @@ use hotshot::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
             derive_libp2p_peer_id, KeyPair, MemoryNetwork, NetworkingMetricsValue, PushCdnNetwork,
-            WrappedSignatureKey,
+            Topic, WrappedSignatureKey,
         },
     },
     types::SignatureKey,
@@ -202,6 +202,20 @@ impl NodeState {
     }
 }
 
+// This allows us to turn on `Default` on InstanceState trait
+// which is used in `HotShot` by `TestBuilderImplementation`.
+#[cfg(any(test, feature = "testing"))]
+impl Default for NodeState {
+    fn default() -> Self {
+        Self::new(
+            1u64,
+            ChainConfig::default(),
+            L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
+            catchup::mock::MockStateCatchup::default(),
+        )
+    }
+}
+
 impl InstanceState for NodeState {}
 
 impl NodeType for SeqTypes {
@@ -334,9 +348,9 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     // If we are a DA node, we need to subscribe to the DA topic
     let topics = {
-        let mut topics = vec!["Global".into()];
+        let mut topics = vec![Topic::Global];
         if is_da {
-            topics.push("DA".into());
+            topics.push(Topic::DA);
         }
         topics
     };
@@ -792,7 +806,7 @@ mod test {
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], Arc::new(NodeState::mock())).unwrap();
+                Payload::from_transactions([], &NodeState::mock()).unwrap();
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload
