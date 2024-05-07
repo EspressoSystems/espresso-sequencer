@@ -14,9 +14,19 @@ use serde::{Deserialize, Serialize};
 pub struct A(());
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct NsTable(pub(super) Vec<u8>); // TODO remove pub(super)
+pub struct NsTable(Vec<u8>);
 
 impl NsTable {
+    /// TODO restrict visibility?
+    pub fn from_bytes(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+
+    /// Access the bytes of this [`NsTable`].
+    pub fn as_byte_slice(&self) -> &[u8] {
+        &self.0
+    }
+
     /// The number of bytes used to encode the number of entries in the
     /// namespace table.
     ///

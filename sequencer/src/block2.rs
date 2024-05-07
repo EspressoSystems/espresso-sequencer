@@ -72,7 +72,7 @@ impl BlockPayload for Payload {
         Ok((
             Self {
                 payload,
-                ns_table: NsTable(ns_table.clone()),
+                ns_table: NsTable::from_bytes(ns_table.clone()),
             },
             ns_table,
         ))
@@ -84,7 +84,7 @@ impl BlockPayload for Payload {
     {
         Self {
             payload: encoded_transactions.into_iter().collect(),
-            ns_table: NsTable(ns_table.clone()), // TODO don't clone ns_table
+            ns_table: NsTable::from_bytes(ns_table.clone()), // TODO don't clone ns_table
         }
     }
 
@@ -109,11 +109,12 @@ impl BlockPayload for Payload {
 
     // TODO change `BlockPayload` trait: remove arg `Self::Metadata`
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
+        let ns_table_bytes = self.ns_table.as_byte_slice();
         let mut digest = sha2::Sha256::new();
         digest.update((self.payload.len() as u64).to_le_bytes());
-        digest.update((self.ns_table.0.len() as u64).to_le_bytes());
+        digest.update((ns_table_bytes.len() as u64).to_le_bytes());
         digest.update(&self.payload);
-        digest.update(&self.ns_table.0);
+        digest.update(ns_table_bytes);
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
 

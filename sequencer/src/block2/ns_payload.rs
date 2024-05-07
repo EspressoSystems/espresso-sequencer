@@ -153,7 +153,7 @@ impl NsPayload {
     /// namespace_byte_len`.
     ///
     /// Panics if `index >= self.num_txs()`.
-    pub fn tx_payload_range_relative(&self, index: &TxIndex) -> Range<usize> {
+    fn tx_payload_range_relative(&self, index: &TxIndex) -> Range<usize> {
         let tx_table_byte_len = self.read_num_txs().tx_table_byte_len_unchecked();
         self.read_tx_table_entries(index)
             .as_range(tx_table_byte_len, self.0.len())
@@ -198,6 +198,7 @@ mod ns_payload_owned {
     }
 }
 
+// TODO move to where `Payload` is defined.
 impl Payload {
     /// TODO panics if index out of bounds
     pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {

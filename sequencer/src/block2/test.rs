@@ -29,15 +29,18 @@ fn basic_correctness() {
         let block = Payload::from_transactions(test.all_txs()).unwrap().0;
         tracing::info!(
             "ns_table {:?}, payload {:?}",
-            block.ns_table.0,
+            block.ns_table.as_byte_slice(),
             block.payload
         );
+
+        // TODO temporary until we remove `meta` arg from `QueryablePayload` trait
+        let meta = block.ns_table.as_byte_slice().to_vec();
 
         // test correct number of nss, txs
         assert_eq!(block.ns_table.num_namespaces(), test.nss.len());
         assert_eq!(block.ns_table.iter().count(), test.nss.len());
-        assert_eq!(block.len(&block.ns_table.0), all_txs.len());
-        assert_eq!(block.iter(&block.ns_table.0).count(), all_txs.len());
+        assert_eq!(block.len(&meta), all_txs.len());
+        assert_eq!(block.iter(&meta).count(), all_txs.len());
 
         tracing::info!("all_txs {:?}", all_txs);
 
@@ -47,7 +50,7 @@ fn basic_correctness() {
         };
 
         // test iterate over all txs
-        for tx_index in block.iter(&block.ns_table.0) {
+        for tx_index in block.iter(&meta) {
             let tx = block.transaction(&tx_index).unwrap();
             tracing::info!("tx {:?}, {:?}", tx_index, tx);
 
