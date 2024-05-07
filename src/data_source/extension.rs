@@ -298,14 +298,6 @@ where
     ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>> {
         self.data_source.get_path(snapshot, key).await
     }
-
-    async fn keys(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<Vec<State::Key>> {
-        self.data_source.keys(snapshot).await
-    }
-
-    async fn get_snapshot(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<State> {
-        self.data_source.get_snapshot(snapshot).await
-    }
 }
 
 #[async_trait]

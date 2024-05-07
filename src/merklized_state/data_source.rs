@@ -48,25 +48,6 @@ where
         snapshot: Snapshot<Types, State, ARITY>,
         key: State::Key,
     ) -> QueryResult<MerkleProof<State::Entry, State::Key, State::T, ARITY>>;
-
-    /// List all keys in the given snapshot of the state.
-    ///
-    /// This includes all keys _known to_ the snapshot, or in other words all keys for which
-    /// [`get_path`](Self::get_path) will successfully return a [`MerkleProof`]. In particular this
-    /// may include keys which are _not present_ in the Merklized state, but whose absence is
-    /// specifically known to the dadtabase, such as keys which were inserted in a previous snapshot
-    /// and then deleted. For these keys, [`get_path`](Self::get_path) will return a non-membership
-    /// proof; for all other keys it will return a membership proof.
-    async fn keys(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<Vec<State::Key>>;
-
-    /// Load a complete snapshot of the given state.
-    ///
-    /// The result is a complete Merkle tree, which can be queried for any entry, present or absent,
-    /// and will always successfully return either a presence or absence proof.
-    ///
-    /// This function may be extremely expensive, so should be used infrequently, for example at
-    /// initialization time only.
-    async fn get_snapshot(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<State>;
 }
 
 /// This trait defines methods for updating the storage with the merkle tree state.

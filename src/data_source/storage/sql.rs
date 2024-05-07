@@ -84,7 +84,7 @@ use std::{
 use tokio_postgres::{
     config::Host,
     tls::TlsConnect,
-    types::{private::BytesMut, to_sql_checked, BorrowToSql, FromSql, ToSql, Type},
+    types::{BorrowToSql, ToSql},
     Client, NoTls, Row, ToStatement,
 };
 
@@ -1219,27 +1219,32 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
         let name = State::state_type();
         let block_number = block_number as i64;
 
-        let mut traversal_path = traversal_path.iter();
+        let mut traversal_path = traversal_path.iter().map(|n| *n as i32);
         let txn = self.transaction().await?;
 
         // All the nodes are collected here, They depend on the hash ids which are returned after
         // hashes are upserted in the db
         let mut nodes = Vec::new();
+        let mut hashset = HashSet::new();
 
         for node in path.iter() {
             match node {
                 MerkleNode::Empty => {
-                    let ltree_path = LTree::from(traversal_path.clone());
                     let index = serde_json::to_value(pos.clone()).map_err(ParseError::Serde)?;
-
+                    // The node path represents the sequence of nodes from the root down to a specific node.
+                    // Therefore, the traversal path needs to be reversed
+                    // The root node path is an empty array.
+                    let node_path = traversal_path.clone().rev().collect();
                     nodes.push((
                         Node {
-                            pos: ltree_path,
+                            path: node_path,
                             index: Some(index),
                             ..Default::default()
                         },
+                        None,
                         [0_u8; 32].to_vec(),
                     ));
+                    hashset.insert([0_u8; 32].to_vec());
                 }
                 MerkleNode::ForgettenSubtree { .. } => {
                     return Err(QueryError::Error {
@@ -1253,20 +1258,23 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                         .serialize_compressed(&mut leaf_commit)
                         .map_err(ParseError::Serialize)?;
 
-                    let ltree_path = LTree::from(traversal_path.clone());
+                    let path = traversal_path.clone().rev().collect();
 
-                    let index = serde_json::to_value(pos).map_err(ParseError::Serde)?;
+                    let index = serde_json::to_value(pos.clone()).map_err(ParseError::Serde)?;
                     let entry = serde_json::to_value(elem).map_err(ParseError::Serde)?;
 
                     nodes.push((
                         Node {
-                            pos: ltree_path,
+                            path,
                             index: Some(index),
                             entry: Some(entry),
                             ..Default::default()
                         },
-                        leaf_commit,
+                        None,
+                        leaf_commit.clone(),
                     ));
+
+                    hashset.insert(leaf_commit);
                 }
                 MerkleNode::Branch { value, children } => {
                     // Get hash
@@ -1300,32 +1308,20 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                         }
                     }
 
-                    let (params, batch_hash_insert_stmt) =
-                        HashTableRow::build_batch_insert(&children_values);
-
-                    // Batch insert all the child hashes
-                    let children_hash_ids = txn
-                        .client
-                        .query(&batch_hash_insert_stmt, &params[..])
-                        .await
-                        .map_err(|e| QueryError::Error {
-                            message: format!("failed to batch insert children hashes {e}"),
-                        })?
-                        .iter()
-                        .map(|r| r.get(0))
-                        .collect();
-
                     // insert internal node
-                    let ltree_path = LTree::from(traversal_path.clone());
+                    let path = traversal_path.clone().rev().collect();
                     nodes.push((
                         Node {
-                            pos: ltree_path,
-                            children: Some(children_hash_ids),
+                            path,
+                            children: None,
                             children_bitvec: Some(children_bitvec),
                             ..Default::default()
                         },
-                        branch_hash,
+                        Some(children_values.clone()),
+                        branch_hash.clone(),
                     ));
+                    hashset.insert(branch_hash);
+                    hashset.extend(children_values);
                 }
             }
 
@@ -1334,8 +1330,8 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
             traversal_path.next();
         }
         // We build a hashset to avoid duplicate entries
-        let hashset: HashSet<Vec<u8>> = nodes.iter().map(|(_, h)| h.clone()).collect();
         let hashes = hashset.into_iter().collect::<Vec<Vec<u8>>>();
+
         // insert all the hashes into database
         // It returns all the ids inserted in the order they were inserted
         // We use the hash ids to insert all the nodes
@@ -1354,11 +1350,25 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
             .collect();
 
         // Updates the node fields
-        for (node, hash) in &mut nodes {
+        for (node, children, hash) in &mut nodes {
             node.created = block_number;
-            node.hash_id = *nodes_hash_ids.get(&*hash).ok_or(QueryError::NotFound)?;
+            node.hash_id = *nodes_hash_ids.get(&*hash).ok_or(QueryError::Error {
+                message: "Missing node hash".to_string(),
+            })?;
+
+            if let Some(children) = children {
+                let children_hashes = children
+                    .iter()
+                    .map(|c| nodes_hash_ids.get(c).copied())
+                    .collect::<Option<Vec<i32>>>()
+                    .ok_or(QueryError::Error {
+                        message: "Missing child hash".to_string(),
+                    })?;
+
+                node.children = Some(children_hashes);
+            }
         }
-        let nodes = nodes.into_iter().map(|(n, _)| n).collect::<Vec<_>>();
+        let nodes = nodes.into_iter().map(|(n, _, _)| n).collect::<Vec<_>>();
         let (params, batch_stmt) = Node::build_batch_insert(name, &nodes);
 
         // Batch insert all the child hashes
@@ -1396,28 +1406,15 @@ where
         let tree_height = State::tree_height();
 
         // Get the traversal path of the index
-        let traversal_path = State::Key::to_traversal_path(&key, tree_height)
-            .into_iter()
-            .map(|x| x as i64)
-            .collect::<Vec<_>>();
+        let traversal_path = State::Key::to_traversal_path(&key, tree_height);
         let (created, merkle_commitment) = self.snapshot_info(snapshot).await?;
 
         // Get all the nodes in the path to the index.
         // Order by pos DESC is to return nodes from the leaf to the root
-        let nodes = self
-            .query(
-                &format!(
-                    "SELECT DISTINCT ON (pos) *
-                    FROM {state_type}
-                    WHERE pos @> $1 and created <= $2
-                    ORDER BY pos DESC , created DESC;"
-                ),
-                [
-                    sql_param(&LTree::from(traversal_path.iter())),
-                    sql_param(&created),
-                ],
-            )
-            .await?;
+
+        let (params, stmt) = build_get_path_query(state_type, traversal_path.clone(), created);
+
+        let nodes = self.query(&stmt, params).await?;
 
         let nodes: Vec<_> = nodes.map(|res| Node::try_from(res?)).try_collect().await?;
 
@@ -1548,13 +1545,13 @@ where
                             })
                             .collect::<QueryResult<Vec<_>>>()?;
 
-                        if data[*branch as usize] != val {
+                        if data[*branch] != val {
                             // This can only happen if data is missing: we have an old version of
                             // one of the nodes in the path, which is why it is not matching up with
                             // its parent.
                             tracing::warn!(
                                 ?key,
-                                parent = ?data[*branch as usize],
+                                parent = ?data[*branch],
                                 child = ?val,
                                 branch = %*branch,
                                 %created,
@@ -1586,55 +1583,6 @@ where
             pos: key,
             proof: proof_path.into(),
         })
-    }
-
-    async fn keys(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<Vec<State::Key>> {
-        let state_type = State::state_type();
-
-        // Identify the snapshot.
-        let created = self.snapshot_info(snapshot).await?.0;
-
-        // Get all the nodes which correspond to an entry, ie have a non-NULL index field.
-        let rows = self
-            .query(
-                &format!(
-                    "SELECT DISTINCT ON (pos) index
-                    FROM {state_type}
-                    WHERE created <= $1 AND index IS NOT NULL
-                    ORDER BY pos, created DESC;"
-                ),
-                [sql_param(&created)],
-            )
-            .await?;
-        rows.map(|row| {
-            let row = row.map_err(|err| QueryError::Error {
-                message: format!("failed to fetch key: {err:#}"),
-            })?;
-            serde_json::from_value(row.get("index")).map_err(|err| QueryError::Error {
-                message: format!("failed to deserialize key: {err:#}"),
-            })
-        })
-        .try_collect()
-        .await
-    }
-
-    async fn get_snapshot(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<State> {
-        // Identify the snapshot.
-        let commit = self.snapshot_info(snapshot).await?.1;
-
-        // Create a completely sparse snapshot from the header, as a starting point.
-        let mut state = State::from_commitment(commit);
-        // Remember each path into the tree.
-        for key in self.keys(snapshot).await? {
-            let path = self.get_path(snapshot, key.clone()).await?;
-            state
-                .insert_path(key.clone(), &path)
-                .map_err(|err| QueryError::Error {
-                    message: format!("invalid path for key {key:?}: {err:#}"),
-                })?;
-        }
-
-        Ok(state)
     }
 }
 
@@ -1791,7 +1739,7 @@ impl From<ParseError> for QueryError {
 // Represents a row in a state table
 #[derive(Debug, Default, Clone)]
 struct Node {
-    pos: LTree,
+    path: Vec<i32>,
     created: i64,
     hash_id: i32,
     children: Option<Vec<i32>>,
@@ -1809,7 +1757,7 @@ impl Node {
             .iter()
             .flat_map(|n| {
                 [
-                    &n.pos as &(dyn ToSql + Sync),
+                    &n.path as &(dyn ToSql + Sync),
                     &n.created,
                     &n.hash_id,
                     &n.children,
@@ -1821,13 +1769,13 @@ impl Node {
             .collect();
 
         let stmt = format!(
-                "INSERT INTO {name} (pos, created, hash_id, children, children_bitvec, index, entry) values {} ON CONFLICT (pos, created) 
+                "INSERT INTO {name} (path, created, hash_id, children, children_bitvec, index, entry) values {} ON CONFLICT (path, created) 
                 DO UPDATE SET hash_id = EXCLUDED.hash_id, children = EXCLUDED.children, children_bitvec = EXCLUDED.children_bitvec, 
-                index = EXCLUDED.index, entry = EXCLUDED.entry RETURNING pos",
+                index = EXCLUDED.index, entry = EXCLUDED.entry RETURNING path",
                 (1..params.len()+1)
                 .tuples()
-                    .format_with(", ", |(pos, created, id, children, bitmap, i, e), f| 
-                    { f(&format_args!("(${pos}, ${created}, ${id}, ${children}, ${bitmap}, ${i}, ${e})")) }),
+                    .format_with(", ", |(path, created, id, children, bitmap, i, e), f| 
+                    { f(&format_args!("(${path}, ${created}, ${id}, ${children}, ${bitmap}, ${i}, ${e})")) }),
             );
 
         (params, stmt)
@@ -1839,8 +1787,8 @@ impl TryFrom<Row> for Node {
     type Error = QueryError;
     fn try_from(row: Row) -> Result<Self, Self::Error> {
         Ok(Self {
-            pos: row.try_get(0).map_err(|e| QueryError::Error {
-                message: format!("failed to get column pos: {e}"),
+            path: row.try_get(0).map_err(|e| QueryError::Error {
+                message: format!("failed to get column path: {e}"),
             })?,
             created: row.try_get(1).map_err(|e| QueryError::Error {
                 message: format!("failed to get column created: {e}"),
@@ -3003,58 +2951,6 @@ fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
     param
 }
 
-/// LTree SQL data type
-///
-/// The traversal path in a merkle tree is from the leaf to the root.
-/// The LTREE path is created by reversing the traversal path.
-/// Root node is represented as an empty LTree
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct LTree(String);
-
-impl<I, Iter: Iterator<Item = I> + DoubleEndedIterator> From<Iter> for LTree
-where
-    I: Display + Clone,
-{
-    fn from(iter: Iter) -> Self {
-        Self(itertools::intersperse(iter.map(|x| x.to_string()).rev(), ".".to_string()).collect())
-    }
-}
-
-impl ToSql for LTree {
-    fn to_sql(
-        &self,
-        ty: &postgres::types::Type,
-        out: &mut BytesMut,
-    ) -> Result<postgres::types::IsNull, Box<dyn std::error::Error + Sync + Send>>
-    where
-        Self: Sized,
-    {
-        <String as ToSql>::to_sql(&self.0, ty, out)
-    }
-
-    fn accepts(ty: &postgres::types::Type) -> bool
-    where
-        Self: Sized,
-    {
-        <String as ToSql>::accepts(ty)
-    }
-
-    to_sql_checked!();
-}
-
-impl<'a> FromSql<'a> for LTree {
-    fn from_sql(
-        ty: &Type,
-        raw: &'a [u8],
-    ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
-        <String as FromSql>::from_sql(ty, raw).map(LTree)
-    }
-
-    fn accepts(ty: &Type) -> bool {
-        <String as FromSql>::accepts(ty)
-    }
-}
-
 // tokio-postgres is written in terms of the tokio AsyncRead/AsyncWrite traits. However, these
 // traits do not require any specifics of the tokio runtime. Thus we can implement them using the
 // async_std TcpStream type, and have a stream which is compatible with tokio-postgres but will run
@@ -3120,6 +3016,38 @@ impl tokio::io::AsyncWrite for TcpStream {
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         Pin::new(&mut self.0).poll_close(cx)
     }
+}
+
+fn build_get_path_query(
+    table: &'static str,
+    traversal_path: Vec<usize>,
+    created: i64,
+) -> (Vec<Box<(dyn ToSql + Send + Sync)>>, String) {
+    let mut traversal_path = traversal_path.into_iter().map(|x| x as i32);
+
+    // Since the 'created' parameter is common to all queries,
+    // we place it at the first position in the 'params' vector.
+    // We iterate through the path vector skipping the first element after each iteration
+    let mut params: Vec<Box<(dyn ToSql + Send + Sync)>> = vec![Box::new(created)];
+    let len = traversal_path.len();
+    let mut queries = Vec::new();
+
+    for i in 0..=len {
+        let node_path = traversal_path.clone().rev().collect::<Vec<_>>();
+
+        let query = format!(
+            "(SELECT * FROM {table} WHERE path = ${} AND created <= $1 ORDER BY created DESC LIMIT 1)",
+            i + 2
+        );
+
+        queries.push(query);
+        params.push(Box::new(node_path));
+        traversal_path.next();
+    }
+
+    let mut final_query: String = queries.join(" UNION ");
+    final_query.push_str("ORDER BY path DESC");
+    (params, final_query)
 }
 
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
@@ -3259,7 +3187,7 @@ pub mod testing {
         
             CREATE TABLE {name}
             (
-                pos LTREE NOT NULL, 
+                path integer[] NOT NULL, 
                 created BIGINT NOT NULL,
                 hash_id INT NOT NULL REFERENCES hash (id),
                 children INT[],
@@ -3267,8 +3195,8 @@ pub mod testing {
                 index JSONB,
                 entry JSONB 
             );
-            ALTER TABLE {name} ADD CONSTRAINT {name}_pk PRIMARY KEY (pos, created);
-            CREATE INDEX {name}_path ON {name} USING GIST (pos);"
+            ALTER TABLE {name} ADD CONSTRAINT {name}_pk PRIMARY KEY (path, created);
+            CREATE INDEX {name}_created ON {name} (created);"
             )
         }
     }
@@ -3636,12 +3564,17 @@ mod test {
         // update saved state height
         storage.set_last_state_height(2).await.unwrap();
 
+        let node_path = traversal_path
+            .into_iter()
+            .rev()
+            .map(|n| n as i32)
+            .collect::<Vec<_>>();
+
         // Find all the nodes of Index 0 in table
-        let ltree_path = LTree::from(traversal_path.iter());
         let rows = storage
             .query(
-                "SELECT * from test_tree where pos = $1 ORDER BY created",
-                [sql_param(&ltree_path)],
+                "SELECT * from test_tree where path = $1 ORDER BY created",
+                [sql_param(&node_path)],
             )
             .await
             .unwrap();
@@ -4045,14 +3978,20 @@ mod test {
         .expect("failed to insert nodes");
 
         // Deleting one internal node
+        let node_path = traversal_path
+            .iter()
+            .skip(1)
+            .rev()
+            .map(|n| *n as i32)
+            .collect::<Vec<_>>();
         let rows = storage
             .client
             .execute_raw(
                 &format!(
-                    "DELETE FROM {} WHERE created = 2 and pos = $1",
+                    "DELETE FROM {} WHERE created = 2 and path = $1",
                     MockMerkleTree::state_type()
                 ),
-                [sql_param(&(LTree::from(traversal_path[1..].iter())))],
+                [sql_param(&node_path)],
             )
             .await
             .expect("failed to delete internal node");
@@ -4171,9 +4110,9 @@ mod test {
 
             // Check that we can get a correct path for each key that we touched.
             let snapshot = Snapshot::<_, MockMerkleTree, 8>::Index(block_height);
-            let loaded = storage.get_snapshot(snapshot).await.unwrap();
+
             for (key, val) in expected {
-                let proof = match loaded.universal_lookup(key) {
+                let proof = match tree.universal_lookup(key) {
                     LookupResult::Ok(_, proof) => proof,
                     LookupResult::NotFound(proof) => proof,
                     LookupResult::NotInMemory => panic!("failed to find key {key}"),
@@ -4191,7 +4130,7 @@ mod test {
             }
 
             // Check that we can even get a non-membership proof for a key that we never touched.
-            let proof = match loaded.universal_lookup(RESERVED_KEY) {
+            let proof = match tree.universal_lookup(RESERVED_KEY) {
                 LookupResult::Ok(_, proof) => proof,
                 LookupResult::NotFound(proof) => proof,
                 LookupResult::NotInMemory => panic!("failed to find reserved key {RESERVED_KEY}"),
