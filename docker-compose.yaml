@@ -479,7 +479,7 @@ services:
   block-explorer:
     image: ghcr.io/espressosystems/espresso-block-explorer:release-cappuccino
     ports:
-      - "3000:3000"
+      - "$ESPRESSO_BLOCK_EXPLORER_PORT:3000"
     environment:
       - QUERY_SERVICE_URI:http://localhost:$ESPRESSO_SEQUENCER1_API_PORT/v0/
     depends_on:
