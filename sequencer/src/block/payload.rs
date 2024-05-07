@@ -171,7 +171,6 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
             }
 
             if block_size > chain_config.max_block_size() {
-                dbg!(block_size);
                 break;
             }
 
@@ -369,21 +368,19 @@ mod test {
         let payload_size = 6;
         // `tx_size` is payload + table entry size
         let tx_size = (payload_size + size_of::<TxTableEntry>()) as u64;
+        // check our sanity
         assert_eq!(tx_size, 10);
 
         let n_txs = target_payload_total as u64 / tx_size;
-        dbg!(n_txs);
         let chain_config = ChainConfig::new(1, max_block_size, 1);
 
-        dbg!(size_of::<TxTableEntry>());
-
         let mut txs = (0..n_txs)
-            .map(|_| Transaction::of_size(payload_size.try_into().unwrap()))
+            .map(|_| Transaction::of_size(payload_size.unwrap()))
             .collect::<Vec<Transaction>>();
 
         assert_eq!(txs.len(), 100);
 
-        txs.push(Transaction::of_size(payload_size.try_into().unwrap()));
+        txs.push(Transaction::of_size(payload_size.unwrap()));
 
         // The final txn will be omitted
         let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
@@ -391,8 +388,6 @@ mod test {
             .iter()
             .map(|tx| tx.payload().len() + size_of::<TxTableEntry>())
             .sum();
-        dbg!(txs_len + size_of::<TxTableEntry>());
-        dbg!(payload.txn_count() * tx_size);
         assert_eq!(payload.txn_count(), txs.len() as u64 - 1u64);
 
         txs.pop();
