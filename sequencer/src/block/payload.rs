@@ -166,7 +166,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
             block_size += (tx.payload().len() + size_of::<TxTableEntry>()) as u64;
 
             // block_size is updated when we encounter a new namespace
-            if namespaces.contains_key(&tx.namespace()) {
+            if !namespaces.contains_key(&tx.namespace()) {
                 block_size += size_of::<TxTableEntry>() as u64;
             }
 
