@@ -1219,7 +1219,7 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
         let name = State::state_type();
         let block_number = block_number as i64;
 
-        let mut traversal_path = traversal_path.iter();
+        let mut traversal_path = traversal_path.iter().map(|n| *n as i32);
         let txn = self.transaction().await?;
 
         // All the nodes are collected here, They depend on the hash ids which are returned after
@@ -1234,7 +1234,7 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                     // The node path represents the sequence of nodes from the root down to a specific node.
                     // Therefore, the traversal path needs to be reversed
                     // The root node path is an empty array.
-                    let node_path = traversal_path.clone().rev().map(|n| *n as i32).collect();
+                    let node_path = traversal_path.clone().rev().collect();
                     nodes.push((
                         Node {
                             path: node_path,
@@ -1258,7 +1258,7 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                         .serialize_compressed(&mut leaf_commit)
                         .map_err(ParseError::Serialize)?;
 
-                    let path = traversal_path.clone().rev().map(|n| *n as i32).collect();
+                    let path = traversal_path.clone().rev().collect();
 
                     let index = serde_json::to_value(pos.clone()).map_err(ParseError::Serde)?;
                     let entry = serde_json::to_value(elem).map_err(ParseError::Serde)?;
@@ -1309,7 +1309,7 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                     }
 
                     // insert internal node
-                    let path = traversal_path.clone().rev().map(|n| *n as i32).collect();
+                    let path = traversal_path.clone().rev().collect();
                     nodes.push((
                         Node {
                             path,
@@ -3072,7 +3072,7 @@ fn build_get_path_query(
     traversal_path: Vec<usize>,
     created: i64,
 ) -> (Vec<Box<(dyn ToSql + Send + Sync)>>, String) {
-    let mut traversal_path = traversal_path.into_iter();
+    let mut traversal_path = traversal_path.into_iter().map(|x| x as i32);
 
     // Since the 'created' parameter is common to all queries,
     // we place it at the first position in the 'params' vector.
@@ -3082,11 +3082,7 @@ fn build_get_path_query(
     let mut queries = Vec::new();
 
     for i in 0..=len {
-        let node_path = traversal_path
-            .clone()
-            .rev()
-            .map(|x| x as i32)
-            .collect::<Vec<_>>();
+        let node_path = traversal_path.clone().rev().collect::<Vec<_>>();
 
         let query = format!(
             "(SELECT * FROM {table} WHERE path = ${} AND created <= $1 ORDER BY created DESC LIMIT 1)",
@@ -4031,8 +4027,9 @@ mod test {
         .expect("failed to insert nodes");
 
         // Deleting one internal node
-        let node_path = traversal_path[1..]
+        let node_path = traversal_path
             .iter()
+            .skip(1)
             .rev()
             .map(|n| *n as i32)
             .collect::<Vec<_>>();
