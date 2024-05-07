@@ -17,6 +17,8 @@ use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::default::Default;
+use std::mem::size_of;
+use std::ops::AddAssign;
 use std::{collections::HashMap, fmt::Display};
 use trait_set::trait_set;
 
@@ -159,13 +161,17 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
             raw_payload: vec![],
             ns_table: NameSpaceTable::default(),
         };
+
         let mut block_size = 0u64;
         for tx in txs.into_iter() {
-            block_size += tx.payload().len() as u64;
+            block_size += (tx.payload().len() + size_of::<TxTableEntry>()) as u64;
+
+            // block_size is updated when we encounter new namespaces
+            Payload::<TableWord>::update_namespace_with_tx(&mut namespaces, tx, &mut block_size);
+
             if block_size >= chain_config.max_block_size() {
                 break;
             }
-            Payload::<TableWord>::update_namespace_with_tx(&mut namespaces, tx);
         }
 
         structured_payload.generate_raw_payload(namespaces)?;
@@ -175,14 +181,18 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     fn update_namespace_with_tx(
         namespaces: &mut HashMap<NamespaceId, NamespaceInfo>,
         tx: <Payload<TxTableEntryWord> as BlockPayload>::Transaction,
+        block_size: &mut u64,
     ) {
         let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().unwrap(); // TODO (Philippe) error handling
 
-        let namespace = namespaces.entry(tx.namespace()).or_insert(NamespaceInfo {
-            tx_table: Vec::new(),
-            tx_bodies: Vec::new(),
-            tx_bytes_end: TxTableEntry::zero(),
-            tx_table_len: TxTableEntry::zero(),
+        let namespace = namespaces.entry(tx.namespace()).or_insert_with(|| {
+            block_size.add_assign(size_of::<TxTableEntry>() as u64);
+            NamespaceInfo {
+                tx_table: Vec::new(),
+                tx_bodies: Vec::new(),
+                tx_bytes_end: TxTableEntry::zero(),
+                tx_table_len: TxTableEntry::zero(),
+            }
         });
 
         namespace
@@ -354,8 +364,11 @@ mod test {
     fn enforce_max_block_size() {
         let mut rng = jf_utils::test_rng();
         let max_block_size = 1000u64;
-        let payload_size = 10;
-        let n_txs = max_block_size / payload_size;
+        let payload_size = 6u64;
+        let tx_size = payload_size + std::mem::size_of::<TxTableEntry>() as u64;
+        assert_eq!(tx_size as u64, 10);
+
+        let n_txs = max_block_size / tx_size;
         let chain_config = ChainConfig::new(1, max_block_size, 1);
 
         let mut txs = (0..n_txs)
@@ -369,15 +382,16 @@ mod test {
 
         // The final 2 txns will be omitted
         let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
+        let total: usize = txs.iter().map(|tx| tx.payload().len()).sum();
         assert_eq!(payload.txn_count(), txs.len() as u64 - 2u64);
 
-        // The final txn will be omitted
         txs.pop();
+        // The final txn will be omitted
         let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
         assert_eq!(payload.txn_count(), txs.len() as u64 - 1u64);
 
-        // All txns will be included.
         txs.pop();
+        // All txns will be included.
         let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
 
         assert_eq!(payload.txn_count(), txs.len() as u64);
