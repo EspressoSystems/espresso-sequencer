@@ -5,8 +5,8 @@ use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
 use hotshot_types::data::ViewNumber;
 use hotshot_types::traits::node_implementation::ConsensusTime;
-use sequencer::eth_signature_key::EthKeyPair;
 use sequencer::L1Params;
+use sequencer::{eth_signature_key::EthKeyPair, options::parse_size};
 use snafu::Snafu;
 use std::num::NonZeroUsize;
 use std::{str::FromStr, time::Duration};
@@ -41,6 +41,10 @@ struct NonPermissionedBuilderOptions {
     /// Peer nodes use to fetch missing state
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
     state_peers: Vec<Url>,
+
+    /// Maximum size in bytes of a block
+    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE", value_parser = parse_size)]
+    pub max_block_size: u64,
 
     /// Port to run the builder server on.
     #[clap(short, long, env = "ESPRESSO_BUILDER_SERVER_PORT")]
@@ -108,8 +112,13 @@ async fn main() -> anyhow::Result<()> {
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
-    let instance_state =
-        build_instance_state(l1_params, opt.state_peers, sequencer_version).unwrap();
+    let instance_state = build_instance_state(
+        l1_params,
+        opt.state_peers,
+        opt.max_block_size,
+        sequencer_version,
+    )
+    .unwrap();
 
     let api_response_timeout_duration = opt.max_api_timeout_duration;
 

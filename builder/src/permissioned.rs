@@ -144,6 +144,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     is_da: bool,
     maximize_txns_count_timeout_duration: Duration,
     base_fee: u64,
+    max_block_size: u64,
 ) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -252,7 +253,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     let instance_state = NodeState::new(
         node_index,
-        ChainConfig::default(),
+        ChainConfig::new(0, max_block_size, 0),
         l1_client,
         Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
     );
