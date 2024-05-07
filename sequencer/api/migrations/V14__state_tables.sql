@@ -15,7 +15,7 @@ CREATE TABLE fee_merkle_tree (
 ALTER TABLE 
   fee_merkle_tree 
 ADD 
-  CONSTRAINT fee_merkle_tree_pk PRIMARY KEY (pos, created);
+  CONSTRAINT fee_merkle_tree_pk PRIMARY KEY (path, created);
 
 CREATE INDEX fee_merkle_tree_created ON fee_merkle_tree (created);
 
@@ -32,6 +32,6 @@ CREATE TABLE block_merkle_tree (
 ALTER TABLE 
   block_merkle_tree 
 ADD 
-  CONSTRAINT block_merkle_tree_pk PRIMARY KEY (pos, created);
+  CONSTRAINT block_merkle_tree_pk PRIMARY KEY (path, created);
 
 CREATE INDEX block_merkle_tree_created ON block_merkle_tree (created);
