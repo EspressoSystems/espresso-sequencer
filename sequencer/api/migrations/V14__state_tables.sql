@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS hash (
 );
 
 CREATE TABLE fee_merkle_tree (
-  pos LTREE NOT NULL, 
+  path INTEGER[] NOT NULL, 
   created BIGINT NOT NULL, 
   hash_id INT NOT NULL REFERENCES hash (id), 
   children INT[], 
@@ -17,10 +17,10 @@ ALTER TABLE
 ADD 
   CONSTRAINT fee_merkle_tree_pk PRIMARY KEY (pos, created);
 
-CREATE INDEX fee_merkle_tree_path ON fee_merkle_tree USING GIST (pos);
+CREATE INDEX fee_merkle_tree_created ON fee_merkle_tree (created);
 
 CREATE TABLE block_merkle_tree (
-  pos LTREE NOT NULL, 
+  pos INTEGER[] NOT NULL, 
   created BIGINT NOT NULL, 
   hash_id INT NOT NULL REFERENCES hash (id), 
   children INT[], 
@@ -34,4 +34,4 @@ ALTER TABLE
 ADD 
   CONSTRAINT block_merkle_tree_pk PRIMARY KEY (pos, created);
 
-CREATE INDEX block_merkle_tree_path ON block_merkle_tree USING GIST (pos);
+CREATE INDEX block_merkle_tree_created ON block_merkle_tree (created);
