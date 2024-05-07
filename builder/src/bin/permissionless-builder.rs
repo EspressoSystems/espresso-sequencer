@@ -54,6 +54,10 @@ struct NonPermissionedBuilderOptions {
     #[clap(short, long, env = "ESPRESSO_BUILDER_CHANNEL_CAPACITY")]
     channel_capacity: NonZeroUsize,
 
+    /// NETWORK INITIAL NODE COUNT
+    #[clap(short, long, env = "ESPRESSO_BUILDER_INIT_NODE_COUNT")]
+    node_count: NonZeroUsize,
+
     /// The amount of time a builder can wait before timing out a request to the API.
     #[clap(
         short,
@@ -122,6 +126,7 @@ async fn main() -> anyhow::Result<()> {
         builder_key_pair,
         bootstrapped_view,
         opt.channel_capacity,
+        opt.node_count,
         instance_state,
         opt.hotshot_event_streaming_url,
         builder_server_url,

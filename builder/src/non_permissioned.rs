@@ -77,6 +77,7 @@ impl BuilderConfig {
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         channel_capacity: NonZeroUsize,
+        node_count: NonZeroUsize,
         instance_state: NodeState,
         hotshot_events_api_url: Url,
         hotshot_builder_apis_url: Url,
@@ -142,7 +143,7 @@ impl BuilderConfig {
             qc_receiver,
             req_receiver,
             global_state_clone,
-            NonZeroUsize::new(1).unwrap(),
+            node_count,
             bootstrapped_view,
             buffered_view_num_count as u64,
             maximize_txns_count_timeout_duration,
@@ -168,23 +169,9 @@ impl BuilderConfig {
         // create a client for it
         // Start Client for the event streaming api
         tracing::info!(
-            "Builder client connecting to hotshot events API at {}",
+            "Running permissionless builder against hotshot events API at {}",
             hotshot_events_api_url.to_string()
         );
-        let client = Client::<EventStreamApiError, Version01>::new(hotshot_events_api_url.clone());
-
-        assert!(client.connect(None).await);
-
-        tracing::info!("Builder client connected to the hotshot events api");
-
-        // client subscrive to hotshot events
-        let subscribed_events = client
-            .socket("hotshot-events/events")
-            .subscribe::<BuilderEvent<SeqTypes>>()
-            .await
-            .unwrap();
-
-        tracing::info!("Builder client subscribed to hotshot events");
 
         // spawn the builder service
         async_spawn(async move {
@@ -193,7 +180,7 @@ impl BuilderConfig {
                 da_sender,
                 qc_sender,
                 decide_sender,
-                subscribed_events,
+                hotshot_events_api_url,
             )
             .await;
         });
