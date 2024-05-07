@@ -1,5 +1,5 @@
 use crate::block2::{
-    ns_table::ns_payload,
+    ns_payload,
     payload_bytes::{tx_offset_as_bytes, TX_OFFSET_BYTE_LEN},
 };
 use std::ops::Range;

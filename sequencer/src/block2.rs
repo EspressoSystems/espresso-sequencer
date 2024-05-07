@@ -4,7 +4,7 @@ use commit::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{traits::BlockPayload, utils::BuilderCommitment};
 use iter::{Index, Iter};
-use ns_table::ns_payload::NamespacePayloadBuilder;
+use ns_payload::NamespacePayloadBuilder;
 use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -13,6 +13,7 @@ use tx_proof::TxProof;
 
 mod iter;
 mod ns_iter;
+mod ns_payload;
 mod ns_proof;
 mod ns_table;
 mod num_txs;

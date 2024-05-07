@@ -1,8 +1,5 @@
 use crate::{
-    block2::{
-        ns_table::{ns_payload::NsPayloadOwned, NsTable},
-        Payload,
-    },
+    block2::{ns_payload::NsPayloadOwned, ns_table::NsTable, Payload},
     NamespaceId, Transaction,
 };
 use hotshot_types::vid::{

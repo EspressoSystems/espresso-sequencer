@@ -6,7 +6,6 @@ use crate::NamespaceId;
 use serde::{Deserialize, Serialize};
 
 // TODO do these all need to be pub?
-pub mod ns_payload;
 pub mod ns_payload_range;
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]

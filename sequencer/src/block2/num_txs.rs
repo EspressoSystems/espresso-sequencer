@@ -1,5 +1,5 @@
 use crate::block2::{
-    ns_table::ns_payload,
+    ns_payload,
     payload_bytes::{num_txs_as_bytes, num_txs_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
