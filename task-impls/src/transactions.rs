@@ -26,7 +26,7 @@ use hotshot_types::{
     utils::ViewInner,
     vid::VidCommitment,
 };
-use tracing::{debug, error, instrument};
+use tracing::{debug, error, instrument, warn};
 use vbs::version::StaticVersionType;
 
 use crate::{
@@ -159,7 +159,7 @@ impl<
                     .await;
                 } else {
                     // If we couldn't get a block, send an empty block
-                    error!(
+                    warn!(
                         "Failed to get a block for view {:?}, proposing empty block",
                         view
                     );
@@ -280,7 +280,7 @@ impl<
 
                 // We failed to get a block
                 Ok(Err(err)) => {
-                    error!(%err, "Couldn't get a block");
+                    tracing::warn!(%err, "Couldn't get a block");
                     // pause a bit
                     async_sleep(Duration::from_millis(100)).await;
                     continue;

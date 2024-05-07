@@ -55,6 +55,9 @@ pub struct Consensus<TYPES: NodeType> {
     /// View number that is currently on.
     cur_view: TYPES::Time,
 
+    /// View we proposed in last.  To prevent duplicate proposals
+    pub last_proposed_view: TYPES::Time,
+
     /// last view had a successful decide event
     pub last_decided_view: TYPES::Time,
 
@@ -281,6 +284,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             saved_da_certs: HashMap::new(),
             cur_view,
             last_decided_view,
+            last_proposed_view: last_decided_view,
             saved_leaves,
             saved_payloads,
             locked_view,

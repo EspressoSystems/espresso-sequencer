@@ -1,5 +1,8 @@
-use hotshot::tasks::task_state::CreateTaskState;
+#![cfg(feature = "dependency-tasks")]
+
+use hotshot::{tasks::task_state::CreateTaskState, types::SystemContextHandle};
 use hotshot_example_types::{
+    block_types::TestMetadata,
     node_types::{MemoryImpl, TestTypes},
     state_types::TestInstanceState,
 };
@@ -7,12 +10,18 @@ use hotshot_task_impls::{events::HotShotEvent::*, quorum_proposal::QuorumProposa
 use hotshot_testing::{
     predicates::event::quorum_proposal_send,
     script::{run_test_script, TestScriptStage},
+    task_helpers::{build_cert, key_pair_for_id},
     task_helpers::{build_system_handle, vid_scheme_from_view_number},
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
-    data::{ViewChangeEvidence, ViewNumber},
+    consensus::{CommitmentAndMetadata, ProposalDependencyData},
+    data::null_block,
+    data::{VidDisperseShare, ViewChangeEvidence, ViewNumber},
+    message::Proposal,
+    simple_certificate::{TimeoutCertificate, ViewSyncFinalizeCertificate2},
     simple_vote::ViewSyncFinalizeData,
+    simple_vote::{TimeoutData, TimeoutVote, ViewSyncFinalizeVote},
     traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
@@ -34,7 +43,26 @@ fn make_payload_commitment(
     vid.commit_only(&encoded_transactions).unwrap()
 }
 
-#[cfg(feature = "dependency-tasks")]
+async fn insert_vid_shares_for_view(
+    view: <TestTypes as NodeType>::Time,
+    handle: &SystemContextHandle<TestTypes, MemoryImpl>,
+    vid: (
+        Vec<Proposal<TestTypes, VidDisperseShare<TestTypes>>>,
+        <TestTypes as NodeType>::SignatureKey,
+    ),
+) {
+    let consensus = handle.get_consensus();
+    let mut consensus = consensus.write().await;
+
+    // `create_and_send_proposal` depends on the `vid_shares` obtaining a vid dispersal.
+    // to avoid needing to spin up the vote task, we can just insert it in here.
+    consensus
+        .vid_shares
+        .entry(view)
+        .or_default()
+        .insert(vid.1, vid.0[0].clone());
+}
+
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
@@ -45,22 +73,27 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle(1).await.0;
+    let node_id = 1;
+    let handle = build_system_handle(node_id).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-    let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(1));
+    let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(node_id));
 
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
     let mut leaves = Vec::new();
+    let mut vids = Vec::new();
     for view in (&mut generator).take(2) {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
         leaves.push(view.leaf.clone());
+        vids.push(view.vid_proposal.clone());
     }
+
+    insert_vid_shares_for_view(ViewNumber::new(node_id), &handle, vids[0].clone()).await;
 
     let cert = proposals[0].data.justify_qc.clone();
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
@@ -88,7 +121,6 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
     run_test_script(script, quorum_proposal_task_state).await;
 }
 
-#[cfg(feature = "dependency-tasks")]
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
@@ -114,11 +146,15 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
     let mut leaves = Vec::new();
+    let mut vids = Vec::new();
     for view in (&mut generator).take(3) {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
         leaves.push(view.leaf.clone());
+        vids.push(view.vid_proposal.clone());
     }
+
+    insert_vid_shares_for_view(ViewNumber::new(node_id), &handle, vids[2].clone()).await;
     let consensus = handle.get_consensus();
     let mut consensus = consensus.write().await;
 
@@ -184,20 +220,23 @@ async fn test_quorum_proposal_task_qc_timeout() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle(2).await.0;
+    let node_id = 2;
+    let handle = build_system_handle(node_id).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-    let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(2));
+    let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(node_id));
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
 
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
+    let mut vids = Vec::new();
     for view in (&mut generator).take(1) {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
+        vids.push(view.vid_proposal.clone());
     }
     let timeout_data = TimeoutData {
         view: ViewNumber::new(1),
@@ -206,8 +245,10 @@ async fn test_quorum_proposal_task_qc_timeout() {
     for view in (&mut generator).take(1) {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
+        vids.push(view.vid_proposal.clone());
     }
 
+    insert_vid_shares_for_view(ViewNumber::new(node_id), &handle, vids[1].clone()).await;
     // Get the proposal cert out for the view sync input
     let cert = match proposals[1].data.proposal_certificate.clone().unwrap() {
         ViewChangeEvidence::Timeout(tc) => tc,
@@ -250,32 +291,37 @@ async fn test_quorum_proposal_task_view_sync() {
 
     // We need to propose as the leader for view 2, otherwise we get caught up with the special
     // case in the genesis view.
-    let handle = build_system_handle(2).await.0;
+    let node_id = 2;
+    let handle = build_system_handle(node_id).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-    let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(2));
+    let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(node_id));
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
 
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
+    let mut vids = Vec::new();
     for view in (&mut generator).take(1) {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
+        vids.push(view.vid_proposal.clone());
     }
 
     let view_sync_finalize_data = ViewSyncFinalizeData {
         relay: 2,
-        round: ViewNumber::new(2),
+        round: ViewNumber::new(node_id),
     };
     generator.add_view_sync_finalize(view_sync_finalize_data);
     for view in (&mut generator).take(1) {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
+        vids.push(view.vid_proposal.clone());
     }
 
+    insert_vid_shares_for_view(ViewNumber::new(node_id), &handle, vids[1].clone()).await;
     // Get the proposal cert out for the view sync input
     let cert = match proposals[1].data.proposal_certificate.clone().unwrap() {
         ViewChangeEvidence::ViewSync(vsc) => vsc,
@@ -310,36 +356,32 @@ async fn test_quorum_proposal_task_view_sync() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_task_propose_now() {
-    use hotshot_example_types::block_types::TestMetadata;
-    use hotshot_testing::task_helpers::{build_cert, key_pair_for_id};
-    use hotshot_types::{
-        consensus::{CommitmentAndMetadata, ProposalDependencyData},
-        data::null_block,
-        simple_certificate::{TimeoutCertificate, ViewSyncFinalizeCertificate2},
-        simple_vote::{TimeoutData, TimeoutVote, ViewSyncFinalizeVote},
-    };
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle(2).await.0;
-    let (private_key, public_key) = key_pair_for_id(2);
+    let node_id = 2;
+    let handle = build_system_handle(node_id).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-    let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(2));
+    let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(node_id));
 
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
+    let mut vids = Vec::new();
     for view in (&mut generator).take(1) {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
+        vids.push(view.vid_proposal.clone());
     }
     for view in (&mut generator).take(1) {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
+        vids.push(view.vid_proposal.clone());
     }
+
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
     // proposal dependency data - quorum proposal and cert
     let pdd_qp = ProposalDependencyData {
@@ -358,6 +400,52 @@ async fn test_quorum_proposal_task_propose_now() {
             ),
     };
 
+    let view_qp = TestScriptStage {
+        inputs: vec![ProposeNow(ViewNumber::new(node_id), pdd_qp)],
+        outputs: vec![quorum_proposal_send()],
+        asserts: vec![],
+    };
+
+    let quorum_proposal_task_state =
+        QuorumProposalTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+    insert_vid_shares_for_view(ViewNumber::new(node_id), &handle, vids[1].clone()).await;
+
+    let script = vec![view_qp];
+    run_test_script(script, quorum_proposal_task_state).await;
+}
+
+#[cfg(test)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+async fn test_quorum_proposal_task_propose_now_timeout() {
+    async_compatibility_layer::logging::setup_logging();
+    async_compatibility_layer::logging::setup_backtrace();
+
+    let node_id = 2;
+    let handle = build_system_handle(node_id).await.0;
+    let (private_key, public_key) = key_pair_for_id(node_id);
+    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
+    let da_membership = handle.hotshot.memberships.da_membership.clone();
+
+    let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(node_id));
+
+    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
+
+    let mut proposals = Vec::new();
+    let mut leaders = Vec::new();
+    let mut vids = Vec::new();
+    for view in (&mut generator).take(1) {
+        proposals.push(view.quorum_proposal.clone());
+        leaders.push(view.leader_public_key);
+        vids.push(view.vid_proposal.clone());
+    }
+    for view in (&mut generator).take(1) {
+        proposals.push(view.quorum_proposal.clone());
+        leaders.push(view.leader_public_key);
+        vids.push(view.vid_proposal.clone());
+    }
+
+    let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
     // proposal dependency data - timeout cert
     let pdd_timeout = ProposalDependencyData {
         commitment_and_metadata: CommitmentAndMetadata {
@@ -385,6 +473,52 @@ async fn test_quorum_proposal_task_propose_now() {
             )),
     };
 
+    let view_timeout = TestScriptStage {
+        inputs: vec![ProposeNow(ViewNumber::new(node_id), pdd_timeout)],
+        outputs: vec![quorum_proposal_send()],
+        asserts: vec![],
+    };
+
+    let quorum_proposal_task_state =
+        QuorumProposalTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+    insert_vid_shares_for_view(ViewNumber::new(node_id), &handle, vids[1].clone()).await;
+
+    let script = vec![view_timeout];
+    run_test_script(script, quorum_proposal_task_state).await;
+}
+#[cfg(test)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+async fn test_quorum_proposal_task_propose_now_view_sync() {
+    async_compatibility_layer::logging::setup_logging();
+    async_compatibility_layer::logging::setup_backtrace();
+
+    let node_id = 2;
+    let handle = build_system_handle(node_id).await.0;
+    let (private_key, public_key) = key_pair_for_id(node_id);
+    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
+    let da_membership = handle.hotshot.memberships.da_membership.clone();
+
+    let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(node_id));
+
+    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
+
+    let mut proposals = Vec::new();
+    let mut leaders = Vec::new();
+    let mut vids = Vec::new();
+    for view in (&mut generator).take(1) {
+        proposals.push(view.quorum_proposal.clone());
+        leaders.push(view.leader_public_key);
+        vids.push(view.vid_proposal.clone());
+    }
+    for view in (&mut generator).take(1) {
+        proposals.push(view.quorum_proposal.clone());
+        leaders.push(view.leader_public_key);
+        vids.push(view.vid_proposal.clone());
+    }
+
+    let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
+
     // proposal dependency data - view sync cert
     let pdd_view_sync = ProposalDependencyData {
         commitment_and_metadata: CommitmentAndMetadata {
@@ -407,37 +541,24 @@ async fn test_quorum_proposal_task_propose_now() {
                     round: ViewNumber::new(1),
                 },
                 &quorum_membership,
-                ViewNumber::new(2),
+                ViewNumber::new(node_id),
                 &public_key,
                 &private_key,
             )),
     };
 
-    let view_qp = TestScriptStage {
-        inputs: vec![ProposeNow(ViewNumber::new(2), pdd_qp)],
-        outputs: vec![quorum_proposal_send()],
-        asserts: vec![],
-    };
-
-    let view_timeout = TestScriptStage {
-        inputs: vec![ProposeNow(ViewNumber::new(2), pdd_timeout)],
-        outputs: vec![quorum_proposal_send()],
-        asserts: vec![],
-    };
-
     let view_view_sync = TestScriptStage {
-        inputs: vec![ProposeNow(ViewNumber::new(2), pdd_view_sync)],
+        inputs: vec![ProposeNow(ViewNumber::new(node_id), pdd_view_sync)],
         outputs: vec![quorum_proposal_send()],
         asserts: vec![],
     };
 
-    for stage in vec![view_qp, view_timeout, view_view_sync] {
-        let quorum_proposal_task_state =
-            QuorumProposalTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+    let quorum_proposal_task_state =
+        QuorumProposalTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+    insert_vid_shares_for_view(ViewNumber::new(node_id), &handle, vids[1].clone()).await;
 
-        let script = vec![stage];
-        run_test_script(script, quorum_proposal_task_state).await;
-    }
+    let script = vec![view_view_sync];
+    run_test_script(script, quorum_proposal_task_state).await;
 }
 
 #[cfg(test)]

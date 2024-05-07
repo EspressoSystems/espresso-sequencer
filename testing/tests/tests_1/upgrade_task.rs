@@ -167,12 +167,14 @@ async fn test_consensus_task_upgrade() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 /// Test that we correctly form and include an `UpgradeCertificate` when receiving votes.
 async fn test_upgrade_and_consensus_task() {
+    use std::sync::Arc;
+
     use hotshot_testing::task_helpers::build_system_handle;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle(2).await.0;
+    let handle = build_system_handle(3).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -221,7 +223,7 @@ async fn test_upgrade_and_consensus_task() {
 
     let upgrade_votes = other_handles
         .iter()
-        .map(|h| views[1].create_upgrade_vote(upgrade_data.clone(), &h.0));
+        .map(|h| views[2].create_upgrade_vote(upgrade_data.clone(), &h.0));
 
     let consensus_state = ConsensusTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
     let mut upgrade_state = UpgradeTaskState::<
@@ -242,18 +244,24 @@ async fn test_upgrade_and_consensus_task() {
             DACertificateRecv(dacs[0].clone()),
         ],
         upgrade_vote_recvs,
-        vec![QuorumProposalRecv(proposals[1].clone(), leaders[1])],
+        vec![QuorumProposalRecv(proposals[1].clone(), leaders[1]),
+        DACertificateRecv(dacs[1].clone()),
+        VIDShareRecv(get_vid_share(&vids[1].0, handle.get_public_key())),
+        ],
         vec![
-            DACertificateRecv(dacs[1].clone()),
+            VIDShareRecv(get_vid_share(&vids[2].0, handle.get_public_key())),
             SendPayloadCommitmentAndMetadata(
                 vids[2].0[0].data.payload_commitment,
                 proposals[2].data.block_header.builder_commitment.clone(),
                 TestMetadata,
-                ViewNumber::new(2),
-                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
-                    .unwrap(),
+                ViewNumber::new(3),
+                null_block::builder_fee(
+                    quorum_membership.total_nodes(),
+                    &TestInstanceState {},
+                )
+                .unwrap(),
             ),
-            QCFormed(either::Either::Left(proposals[1].data.justify_qc.clone())),
+            QCFormed(either::Either::Left(proposals[2].data.justify_qc.clone())),
         ],
     ];
 
@@ -276,6 +284,7 @@ async fn test_upgrade_and_consensus_task() {
                 output_asserts: vec![
                     exact::<TestTypes>(ViewChange(ViewNumber::new(2))),
                     quorum_proposal_validated::<TestTypes>(),
+                    quorum_vote_send(),
                 ],
                 task_state_asserts: vec![],
             },
@@ -481,6 +490,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
         ],
         vec![
             DACertificateRecv(dacs[5].clone()),
+            VIDShareRecv(get_vid_share(&vids[5].0, handle.get_public_key())),
             SendPayloadCommitmentAndMetadata(
                 vids[5].0[0].data.payload_commitment,
                 proposals[5].data.block_header.builder_commitment.clone(),

@@ -27,10 +27,9 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, warn};
 
 #[cfg(feature = "dependency-tasks")]
-use crate::consensus::proposal_helpers::handle_quorum_proposal_validated;
+use crate::consensus::helpers::handle_quorum_proposal_validated;
 use crate::{
-    consensus::proposal_helpers::publish_proposal_if_able, events::HotShotEvent,
-    helpers::cancel_task,
+    consensus::helpers::publish_proposal_if_able, events::HotShotEvent, helpers::cancel_task,
 };
 
 /// Proposal dependency types. These types represent events that precipitate a proposal.
@@ -186,8 +185,8 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
             self.round_start_delay,
             None,
             None,
-            &mut commit_and_metadata,
-            &mut None,
+            commit_and_metadata,
+            None,
             Arc::clone(&self.instance_state),
         )
         .await

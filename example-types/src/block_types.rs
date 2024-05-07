@@ -13,7 +13,7 @@ use hotshot_types::{
         BlockPayload, ValidatedState,
     },
     utils::BuilderCommitment,
-    vid::VidCommitment,
+    vid::{VidCommitment, VidCommon},
 };
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
@@ -203,6 +203,7 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
         builder_commitment: BuilderCommitment,
         _metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
         _builder_fee: BuilderFee<TYPES>,
+        _vid_common: VidCommon,
     ) -> Result<Self, Self::Error> {
         let parent = parent_leaf.get_block_header();
 

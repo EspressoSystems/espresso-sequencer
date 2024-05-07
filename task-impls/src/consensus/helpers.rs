@@ -14,11 +14,13 @@ use async_std::task::JoinHandle;
 use chrono::Utc;
 use committable::Committable;
 use futures::FutureExt;
+#[cfg(not(feature = "dependency-tasks"))]
+use hotshot_types::simple_vote::QuorumData;
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, Consensus, View},
     data::{null_block, Leaf, QuorumProposal, ViewChangeEvidence},
     event::{Event, EventType, LeafInfo},
-    message::Proposal,
+    message::{GeneralConsensusMessage, Proposal},
     simple_certificate::UpgradeCertificate,
     traits::{
         block_contents::BlockHeader,
@@ -58,25 +60,11 @@ async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
     consensus: Arc<RwLock<Consensus<TYPES>>>,
     decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
     quorum_membership: Arc<TYPES::Membership>,
-    parent_state: Arc<TYPES::ValidatedState>,
     view_leader_key: TYPES::SignatureKey,
     event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     sender: TYPES::SignatureKey,
     event_sender: Sender<Event<TYPES>>,
-    storage: Arc<RwLock<impl Storage<TYPES>>>,
-    instance_state: Arc<TYPES::InstanceState>,
 ) -> Result<()> {
-    let (validated_state, state_delta) = parent_state
-        .validate_and_apply_header(
-            instance_state.as_ref(),
-            &parent_leaf,
-            &proposal.data.block_header.clone(),
-        )
-        .await
-        .context("Block header doesn't extend the proposal!")?;
-
-    let state = Arc::new(validated_state);
-    let delta = Arc::new(state_delta);
     let view = proposal.data.get_view_number();
 
     let proposed_leaf = Leaf::from_quorum_proposal(&proposal.data);
@@ -164,31 +152,9 @@ async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
 
     let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
 
-    consensus.validated_state_map.insert(
-        view,
-        View {
-            view_inner: ViewInner::Leaf {
-                leaf: proposed_leaf.commit(),
-                state: Arc::clone(&state),
-                delta: Some(Arc::clone(&delta)),
-            },
-        },
-    );
     consensus
         .saved_leaves
         .insert(proposed_leaf.commit(), proposed_leaf.clone());
-
-    if let Err(e) = storage
-        .write()
-        .await
-        .update_undecided_state(
-            consensus.saved_leaves.clone(),
-            consensus.validated_state_map.clone(),
-        )
-        .await
-    {
-        warn!("Couldn't store undecided state.  Error: {:?}", e);
-    }
 
     Ok(())
 }
@@ -210,6 +176,15 @@ pub async fn create_and_send_proposal<TYPES: NodeType>(
     round_start_delay: u64,
     instance_state: Arc<TYPES::InstanceState>,
 ) {
+    let consensus_read = consensus.read().await;
+    let Some(Some(vid_share)) = consensus_read
+        .vid_shares
+        .get(&view)
+        .map(|shares| shares.get(&public_key))
+    else {
+        error!("Cannot propopse without our VID share, view {:?}", view);
+        return;
+    };
     let block_header = match TYPES::BlockHeader::new(
         state.as_ref(),
         instance_state.as_ref(),
@@ -218,6 +193,7 @@ pub async fn create_and_send_proposal<TYPES: NodeType>(
         commitment_and_metadata.builder_commitment,
         commitment_and_metadata.metadata,
         commitment_and_metadata.fee,
+        vid_share.data.common.clone(),
     )
     .await
     {
@@ -227,6 +203,7 @@ pub async fn create_and_send_proposal<TYPES: NodeType>(
             return;
         }
     };
+    drop(consensus_read);
 
     let proposal = QuorumProposal {
         block_header,
@@ -257,7 +234,10 @@ pub async fn create_and_send_proposal<TYPES: NodeType>(
         "Sending null proposal for view {:?}",
         proposed_leaf.get_view_number(),
     );
-
+    if consensus.read().await.last_proposed_view >= view {
+        return;
+    }
+    consensus.write().await.last_proposed_view = view;
     async_sleep(Duration::from_millis(round_start_delay)).await;
     broadcast_event(
         Arc::new(HotShotEvent::QuorumProposalSend(
@@ -338,7 +318,7 @@ pub fn validate_proposal_view_and_certs<TYPES: NodeType>(
 }
 
 /// Gets the parent leaf and state from the parent of a proposal, returning an [`anyhow::Error`] if not.
-pub async fn get_parent_leaf_and_state<TYPES: NodeType>(
+pub(crate) async fn get_parent_leaf_and_state<TYPES: NodeType>(
     cur_view: TYPES::Time,
     view: TYPES::Time,
     quorum_membership: Arc<TYPES::Membership>,
@@ -399,7 +379,7 @@ pub async fn get_parent_leaf_and_state<TYPES: NodeType>(
 /// case proposal scenario.
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::too_many_arguments)]
-async fn publish_proposal_from_upgrade_cert<TYPES: NodeType>(
+pub(crate) async fn publish_proposal_from_upgrade_cert<TYPES: NodeType>(
     cur_view: TYPES::Time,
     view: TYPES::Time,
     sender: Sender<Arc<HotShotEvent<TYPES>>>,
@@ -464,7 +444,7 @@ async fn publish_proposal_from_upgrade_cert<TYPES: NodeType>(
 /// Send a proposal for the view `view` from the latest high_qc given an upgrade cert. This is the
 /// standard case proposal scenario.
 #[allow(clippy::too_many_arguments)]
-async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
+pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
     cur_view: TYPES::Time,
     view: TYPES::Time,
     sender: Sender<Arc<HotShotEvent<TYPES>>>,
@@ -475,8 +455,8 @@ async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
     delay: u64,
     formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
     decided_upgrade_cert: Option<UpgradeCertificate<TYPES>>,
-    commitment_and_metadata: &mut Option<CommitmentAndMetadata<TYPES>>,
-    proposal_cert: &mut Option<ViewChangeEvidence<TYPES>>,
+    commitment_and_metadata: Option<CommitmentAndMetadata<TYPES>>,
+    proposal_cert: Option<ViewChangeEvidence<TYPES>>,
     instance_state: Arc<TYPES::InstanceState>,
 ) -> Result<JoinHandle<()>> {
     let (parent_leaf, state) = get_parent_leaf_and_state(
@@ -515,7 +495,7 @@ async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
     // FIXME - This is not great, and will be fixed later.
     // If it's > July, 2024 and this is still here, something has gone horribly wrong.
     let cnm = commitment_and_metadata
-        .take()
+        .clone()
         .context("Cannot propose because we don't have the VID payload commitment and metadata")?;
 
     ensure!(
@@ -541,9 +521,6 @@ async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
         .await;
     });
 
-    *proposal_cert = None;
-    *commitment_and_metadata = None;
-
     Ok(create_and_send_proposal_handle)
 }
 
@@ -561,8 +538,8 @@ pub async fn publish_proposal_if_able<TYPES: NodeType>(
     delay: u64,
     formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
     decided_upgrade_cert: Option<UpgradeCertificate<TYPES>>,
-    commitment_and_metadata: &mut Option<CommitmentAndMetadata<TYPES>>,
-    proposal_cert: &mut Option<ViewChangeEvidence<TYPES>>,
+    commitment_and_metadata: Option<CommitmentAndMetadata<TYPES>>,
+    proposal_cert: Option<ViewChangeEvidence<TYPES>>,
     instance_state: Arc<TYPES::InstanceState>,
 ) -> Result<JoinHandle<()>> {
     if let Some(upgrade_cert) = decided_upgrade_cert {
@@ -693,7 +670,7 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
     consensus_write.update_high_qc_if_new(justify_qc.clone());
 
     // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
-    let Some((parent_leaf, parent_state)) = parent else {
+    let Some((parent_leaf, _parent_state)) = parent else {
         warn!(
             "Proposal's parent missing from storage with commitment: {:?}",
             justify_qc.get_data().leaf_commit
@@ -771,8 +748,8 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
                         task_state.round_start_delay,
                         task_state.formed_upgrade_certificate.clone(),
                         task_state.decided_upgrade_cert.clone(),
-                        &mut task_state.payload_commitment_and_metadata,
-                        &mut task_state.proposal_cert,
+                        task_state.payload_commitment_and_metadata.clone(),
+                        task_state.proposal_cert.clone(),
                         Arc::clone(&task_state.instance_state),
                     )
                     .await?;
@@ -805,13 +782,10 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
                 Arc::clone(&task_state.consensus),
                 task_state.decided_upgrade_cert.clone(),
                 Arc::clone(&task_state.quorum_membership),
-                Arc::clone(&parent_state),
                 view_leader_key,
                 event_stream.clone(),
                 sender,
                 task_state.output_event_stream.clone(),
-                Arc::clone(&task_state.storage),
-                Arc::clone(&task_state.instance_state),
             )
             .map(AnyhowTracing::err_as_debug),
         ));
@@ -951,7 +925,7 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
                 true
             },
         ) {
-            error!("view publish error {e}");
+            debug!("view publish error {e}");
         }
     }
 
@@ -1033,8 +1007,6 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
             == task_state.public_key
             && consensus.high_qc().view_number
                 == task_state.current_proposal.clone().unwrap().view_number;
-        // todo get rid of this clone
-        let qc = consensus.high_qc().clone();
 
         drop(consensus);
         if new_decide_reached {
@@ -1045,20 +1017,219 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
                 "Attempting to publish proposal after voting; now in view: {}",
                 *new_view
             );
-            if let Err(e) = task_state
-                .publish_proposal(qc.view_number + 1, event_stream.clone())
-                .await
-            {
-                debug!("Failed to propose; error = {e:#}");
-            };
+            task_state.vote_and_publish_proposal(
+                proposal.get_view_number(),
+                new_view,
+                proposal.clone(),
+                event_stream,
+            );
+        } else {
+            task_state.current_proposal = Some(proposal.clone());
+            task_state.spawn_vote_task(view, event_stream);
         }
-
-        ensure!(
-            task_state.vote_if_able(&event_stream).await,
-            "Failed to vote"
-        );
-        task_state.current_proposal = None;
     }
 
     Ok(())
+}
+
+/// TEMPORARY TYPE: Dummy type for sending the vote.
+#[cfg(feature = "dependency-tasks")]
+type TemporaryVoteInfo<TYPES> = PhantomData<TYPES>;
+
+/// TEMPORARY TYPE: Private key, latest decided upgrade certificate, committee membership, and
+/// event stream, for sending the vote.
+#[cfg(not(feature = "dependency-tasks"))]
+type TemporaryVoteInfo<TYPES> = (
+    <<TYPES as NodeType>::SignatureKey as SignatureKey>::PrivateKey,
+    Option<UpgradeCertificate<TYPES>>,
+    Arc<<TYPES as NodeType>::Membership>,
+    Sender<Arc<HotShotEvent<TYPES>>>,
+);
+
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
+#[allow(unused_variables)]
+/// Check if we are able to vote, like whether the proposal is valid,
+/// whether we have DAC and VID share, and if so, vote.
+pub async fn update_state_and_vote_if_able<TYPES: NodeType, I: NodeImplementation<TYPES>>(
+    cur_view: TYPES::Time,
+    proposal: QuorumProposal<TYPES>,
+    public_key: TYPES::SignatureKey,
+    consensus: Arc<RwLock<Consensus<TYPES>>>,
+    storage: Arc<RwLock<I::Storage>>,
+    quorum_membership: Arc<TYPES::Membership>,
+    instance_state: Arc<TYPES::InstanceState>,
+    vote_info: TemporaryVoteInfo<TYPES>,
+) -> bool {
+    #[cfg(not(feature = "dependency-tasks"))]
+    use hotshot_types::simple_vote::QuorumVote;
+
+    if !quorum_membership.has_stake(&public_key) {
+        debug!(
+            "We were not chosen for consensus committee on {:?}",
+            cur_view
+        );
+        return false;
+    }
+
+    let consensus = consensus.upgradable_read().await;
+    // Only vote if you has seen the VID share for this view
+    let Some(vid_shares) = consensus.vid_shares.get(&proposal.view_number) else {
+        debug!(
+            "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
+            proposal.view_number
+        );
+        return false;
+    };
+    let Some(vid_share) = vid_shares.get(&public_key).cloned() else {
+        debug!("we have not seen our VID share yet");
+        return false;
+    };
+
+    #[cfg(not(feature = "dependency-tasks"))]
+    {
+        if let Some(upgrade_cert) = &vote_info.1 {
+            if upgrade_cert.in_interim(cur_view)
+                && Some(proposal.block_header.payload_commitment())
+                    != null_block::commitment(quorum_membership.total_nodes())
+            {
+                info!("Refusing to vote on proposal because it does not have a null commitment, and we are between versions. Expected:\n\n{:?}\n\nActual:{:?}", null_block::commitment(quorum_membership.total_nodes()), Some(proposal.block_header.payload_commitment()));
+                return false;
+            }
+        }
+    }
+
+    // Only vote if you have the DA cert
+    // ED Need to update the view number this is stored under?
+    let Some(cert) = consensus.saved_da_certs.get(&cur_view) else {
+        return false;
+    };
+
+    let view = cert.view_number;
+    // TODO: do some of this logic without the vote token check, only do that when voting.
+    let justify_qc = proposal.justify_qc.clone();
+    let parent = consensus
+        .saved_leaves
+        .get(&justify_qc.get_data().leaf_commit)
+        .cloned();
+
+    // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
+    let Some(parent) = parent else {
+        warn!(
+            "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
+            justify_qc.get_data().leaf_commit,
+            proposal.view_number,
+        );
+        return false;
+    };
+    let (Some(parent_state), _) = consensus.get_state_and_delta(parent.get_view_number()) else {
+        warn!("Parent state not found! Consensus internally inconsistent");
+        return false;
+    };
+    let Ok((validated_state, state_delta)) = parent_state
+        .validate_and_apply_header(
+            instance_state.as_ref(),
+            &parent,
+            &proposal.block_header.clone(),
+            vid_share.data.common.clone(),
+        )
+        .await
+    else {
+        warn!("Block header doesn't extend the proposal!");
+        return false;
+    };
+
+    let state = Arc::new(validated_state);
+    let delta = Arc::new(state_delta);
+    let parent_commitment = parent.commit();
+
+    let proposed_leaf = Leaf::from_quorum_proposal(&proposal);
+    if proposed_leaf.get_parent_commitment() != parent_commitment {
+        return false;
+    }
+
+    let message: GeneralConsensusMessage<TYPES>;
+
+    #[cfg(not(feature = "dependency-tasks"))]
+    {
+        // Validate the DAC.
+        message = if cert.is_valid_cert(vote_info.2.as_ref()) {
+            // Validate the block payload commitment for non-genesis DAC.
+            if cert.get_data().payload_commit != proposal.block_header.payload_commitment() {
+                error!(
+                    "Block payload commitment does not equal da cert payload commitment. View = {}",
+                    *view
+                );
+                return false;
+            }
+            if let Ok(vote) = QuorumVote::<TYPES>::create_signed_vote(
+                QuorumData {
+                    leaf_commit: proposed_leaf.commit(),
+                },
+                view,
+                &public_key,
+                &vote_info.0,
+            ) {
+                GeneralConsensusMessage::<TYPES>::Vote(vote)
+            } else {
+                error!("Unable to sign quorum vote!");
+                return false;
+            }
+        } else {
+            error!(
+                "Invalid DAC in proposal! Skipping proposal. {:?} cur view is: {:?}",
+                cert, cur_view
+            );
+            return false;
+        };
+    }
+
+    let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
+    consensus.validated_state_map.insert(
+        cur_view,
+        View {
+            view_inner: ViewInner::Leaf {
+                leaf: proposed_leaf.commit(),
+                state: Arc::clone(&state),
+                delta: Some(Arc::clone(&delta)),
+            },
+        },
+    );
+
+    if let Err(e) = storage
+        .write()
+        .await
+        .update_undecided_state(
+            consensus.saved_leaves.clone(),
+            consensus.validated_state_map.clone(),
+        )
+        .await
+    {
+        warn!("Couldn't store undecided state.  Error: {:?}", e);
+    }
+
+    #[cfg(not(feature = "dependency-tasks"))]
+    {
+        if let GeneralConsensusMessage::Vote(vote) = message {
+            debug!(
+                "Sending vote to next quorum leader {:?}",
+                vote.get_view_number() + 1
+            );
+            // Add to the storage that we have received the VID disperse for a specific view
+            if let Err(e) = storage.write().await.append_vid(&vid_share).await {
+                error!(
+                    "Failed to store VID Disperse Proposal with error {:?}, aborting vote",
+                    e
+                );
+                return false;
+            }
+            broadcast_event(Arc::new(HotShotEvent::QuorumVoteSend(vote)), &vote_info.3).await;
+            return true;
+        }
+        debug!(
+            "Received VID share, but couldn't find DAC cert for view {:?}",
+            *proposal.get_view_number(),
+        );
+    }
+    false
 }

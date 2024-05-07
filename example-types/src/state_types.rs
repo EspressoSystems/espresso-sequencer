@@ -10,6 +10,7 @@ use hotshot_types::{
         states::{InstanceState, StateDelta, TestableState, ValidatedState},
         BlockPayload,
     },
+    vid::VidCommon,
 };
 use serde::{Deserialize, Serialize};
 
@@ -73,6 +74,7 @@ impl<TYPES: NodeType> ValidatedState<TYPES> for TestValidatedState {
         _instance: &Self::Instance,
         _parent_leaf: &Leaf<TYPES>,
         _proposed_header: &TYPES::BlockHeader,
+        _vid_common: VidCommon,
     ) -> Result<(Self, Self::Delta), Self::Error> {
         Ok((
             TestValidatedState {

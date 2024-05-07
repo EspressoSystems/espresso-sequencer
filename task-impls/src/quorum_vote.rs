@@ -1,5 +1,9 @@
-use std::{collections::HashMap, sync::Arc};
-
+#[cfg(feature = "dependency-tasks")]
+use crate::consensus::helpers::update_state_and_vote_if_able;
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, cancel_task},
+};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
@@ -27,14 +31,12 @@ use hotshot_types::{
     vote::{Certificate, HasViewNumber},
 };
 use jf_primitives::vid::VidScheme;
+#[cfg(feature = "dependency-tasks")]
+use std::marker::PhantomData;
+use std::{collections::HashMap, sync::Arc};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, trace, warn};
-
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
-};
 
 /// Vote dependency types.
 #[derive(Debug, PartialEq)]
@@ -50,29 +52,42 @@ enum VoteDependency {
 }
 
 /// Handler for the vote dependency.
-struct VoteDependencyHandle<TYPES: NodeType, S: Storage<TYPES>> {
+#[allow(dead_code)]
+struct VoteDependencyHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Public key.
     pub public_key: TYPES::SignatureKey,
     /// Private Key.
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+    /// Reference to consensus. The replica will require a write lock on this.
+    consensus: Arc<RwLock<Consensus<TYPES>>>,
+    /// Immutable instance state
+    instance_state: Arc<TYPES::InstanceState>,
+    /// Membership for Quorum certs/votes.
+    quorum_membership: Arc<TYPES::Membership>,
     /// Reference to the storage.
-    pub storage: Arc<RwLock<S>>,
+    pub storage: Arc<RwLock<I::Storage>>,
     /// View number to vote on.
     view_number: TYPES::Time,
     /// Event sender.
     sender: Sender<Arc<HotShotEvent<TYPES>>>,
 }
-impl<TYPES: NodeType, S: Storage<TYPES> + 'static> HandleDepOutput
-    for VoteDependencyHandle<TYPES, S>
+
+impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> HandleDepOutput
+    for VoteDependencyHandle<TYPES, I>
 {
     type Output = Vec<Arc<HotShotEvent<TYPES>>>;
+    #[allow(clippy::too_many_lines)]
     async fn handle_dep_result(self, res: Self::Output) {
+        #[allow(unused_variables)]
+        let mut cur_proposal = None;
         let mut payload_commitment = None;
         let mut leaf = None;
         let mut disperse_share = None;
         for event in res {
             match event.as_ref() {
+                #[allow(unused_assignments)]
                 HotShotEvent::QuorumProposalValidated(proposal, parent_leaf) => {
+                    cur_proposal = Some(proposal.clone());
                     let proposal_payload_comm = proposal.block_header.payload_commitment();
                     if let Some(comm) = payload_commitment {
                         if proposal_payload_comm != comm {
@@ -127,6 +142,27 @@ impl<TYPES: NodeType, S: Storage<TYPES> + 'static> HandleDepOutput
             &self.sender,
         )
         .await;
+
+        #[cfg(feature = "dependency-tasks")]
+        {
+            let Some(proposal) = cur_proposal else {
+                error!("No proposal received, but it should be.");
+                return;
+            };
+            // For this vote task, we'll update the state in storage without voting in this function,
+            // then vote later.
+            update_state_and_vote_if_able::<TYPES, I>(
+                self.view_number,
+                proposal,
+                self.public_key.clone(),
+                self.consensus,
+                Arc::clone(&self.storage),
+                self.quorum_membership,
+                self.instance_state,
+                PhantomData,
+            )
+            .await;
+        }
 
         // Create and send the vote.
         let Some(leaf) = leaf else {
@@ -312,9 +348,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
 
         let dependency_task = DependencyTask::new(
             dependency_chain,
-            VoteDependencyHandle {
+            VoteDependencyHandle::<TYPES, I> {
                 public_key: self.public_key.clone(),
                 private_key: self.private_key.clone(),
+                consensus: Arc::clone(&self.consensus),
+                instance_state: Arc::clone(&self.instance_state),
+                quorum_membership: Arc::clone(&self.quorum_membership),
                 storage: Arc::clone(&self.storage),
                 view_number,
                 sender: event_sender.clone(),

@@ -311,7 +311,7 @@ where
                         }
                     }
                     Err(e) => {
-                        panic!("Error Joining the test task {:?}", e);
+                        tracing::error!("Error Joining the test task {:?}", e);
                     }
                 }
             }

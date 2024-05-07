@@ -24,7 +24,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, warn};
 
 use crate::{
-    consensus::proposal_helpers::{get_parent_leaf_and_state, handle_quorum_proposal_recv},
+    consensus::helpers::{get_parent_leaf_and_state, handle_quorum_proposal_recv},
     events::HotShotEvent,
     helpers::{broadcast_event, cancel_task},
 };

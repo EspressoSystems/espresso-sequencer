@@ -361,9 +361,9 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
     ) -> Option<Leaf<TYPES>> {
         self.success_nodes.insert(idx as u64, result.clone());
 
-        let maybe_leaf = result.0.into_iter().last();
-        if let Some(leaf_info) = maybe_leaf.clone() {
-            let leaf = leaf_info.leaf;
+        let maybe_leaf = result.0.first();
+        if let Some(leaf_info) = maybe_leaf {
+            let leaf = &leaf_info.leaf;
             match self.leaf_map.entry(leaf.clone()) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
                     *o.get_mut() += 1;
@@ -394,7 +394,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
                     }
                 }
             }
-            return Some(leaf);
+            return Some(leaf.clone());
         }
         None
     }
@@ -441,6 +441,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
 
         if check_block && self.block_map.len() != 1 {
             self.status = ViewStatus::Err(OverallSafetyTaskErr::InconsistentBlocks);
+            error!("Check blocks failed.  Block map IS: {:?}", self.block_map);
             return;
         }
 

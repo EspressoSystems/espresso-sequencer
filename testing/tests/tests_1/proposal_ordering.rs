@@ -35,7 +35,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let node_id = 2;
+    let node_id = 3;
     let handle = build_system_handle(node_id).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
@@ -56,7 +56,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     let mut votes = Vec::new();
     let mut dacs = Vec::new();
     let mut vids = Vec::new();
-    for view in (&mut generator).take(2) {
+    for view in (&mut generator).take(3) {
         proposals.push(view.quorum_proposal.clone());
         votes.push(view.create_quorum_vote(&handle));
         leaders.push(view.leader_public_key);
@@ -82,7 +82,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     };
 
     // Node 2 is the leader up next, so we form the QC for it.
-    let cert = proposals[1].data.justify_qc.clone();
+    let cert = proposals[2].data.justify_qc.clone();
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
     let inputs = vec![
         QuorumProposalRecv(proposals[1].clone(), leaders[1]),
@@ -97,14 +97,17 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
         ),
     ];
 
-    let view_2_inputs = permute_input_with_index_order(inputs, input_permutation);
+    let mut view_2_inputs = permute_input_with_index_order(inputs, input_permutation);
+    view_2_inputs.insert(0, DACertificateRecv(dacs[1].clone()));
+    view_2_inputs.insert(0, VIDShareRecv(get_vid_share(&vids[2].0, handle.get_public_key())));
+    view_2_inputs.insert(0, VIDShareRecv(get_vid_share(&vids[1].0, handle.get_public_key())));
 
     // This stage transitions from view 1 to view 2.
     let view_2 = TestScriptStage {
         inputs: view_2_inputs,
         outputs: vec![
             exact(ViewChange(ViewNumber::new(2))),
-            all_predicates(vec![quorum_proposal_validated(), quorum_proposal_send()]),
+            all_predicates(vec![exact(QuorumVoteSend(votes[1].clone())), quorum_proposal_validated(), quorum_proposal_send()]),
         ],
         // We should end on view 2.
         asserts: vec![],
