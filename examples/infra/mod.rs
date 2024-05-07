@@ -387,7 +387,7 @@ pub trait RunDA<
         // as the known da nodes
         let da_membership = <TYPES as NodeType>::Membership::create_election(
             known_nodes_with_stake.clone(),
-            known_nodes_with_stake,
+            config.config.known_da_nodes.clone(),
             config.config.fixed_leader_for_gpuvid,
         );
 
