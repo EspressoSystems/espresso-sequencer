@@ -185,7 +185,10 @@ impl BuilderConfig {
                 events_url,
             )
             .await;
-            tracing::error!(?res, "builder service exited")
+            tracing::error!(?res, "builder service exited");
+            if res.is_err() {
+                panic!("Builder should restart.");
+            }
         });
 
         tracing::info!("Builder init finished");
