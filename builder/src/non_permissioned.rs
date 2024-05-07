@@ -119,7 +119,6 @@ impl BuilderConfig {
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
 
         let vid_commitment = {
-            // TODO we should not need to collect payload bytes just to compute vid_commitment
             let payload_bytes = genesis_payload
                 .encode()
                 .expect("unable to encode genesis payload");

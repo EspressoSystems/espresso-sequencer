@@ -24,7 +24,10 @@ use hotshot_query_service::{
 use hotshot_types::{
     data::{BlockError, ViewNumber},
     traits::{
-        node_implementation::ConsensusTime, signature_key::BuilderSignatureKey, states::StateDelta,
+        block_contents::{BlockHeader, BuilderFee},
+        node_implementation::ConsensusTime,
+        signature_key::BuilderSignatureKey,
+        states::StateDelta,
     },
     vid::{VidCommon, VidSchemeType},
 };
@@ -291,13 +294,18 @@ fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
     let signature = proposed_header
         .builder_signature
         .ok_or_else(|| anyhow::anyhow!("Builder signature not found"))?;
-    let msg = proposed_header.fee_message().context("invalid fee")?;
+    let fee_amount = proposed_header.fee_info.amount().as_u64().context(format!(
+        "fee amount out of range: {:?}",
+        proposed_header.fee_info.amount()
+    ))?;
     // verify signature
     anyhow::ensure!(
-        proposed_header
-            .fee_info
-            .account
-            .validate_builder_signature(&signature, msg.as_ref()),
+        proposed_header.fee_info.account.validate_fee_signature(
+            &signature,
+            fee_amount,
+            proposed_header.metadata(),
+            &proposed_header.payload_commitment()
+        ),
         "Invalid Builder Signature"
     );
 
@@ -870,6 +878,15 @@ impl FeeInfo {
 
     pub fn amount(&self) -> FeeAmount {
         self.amount
+    }
+}
+
+impl From<BuilderFee<SeqTypes>> for FeeInfo {
+    fn from(fee: BuilderFee<SeqTypes>) -> Self {
+        Self {
+            amount: fee.fee_amount.into(),
+            account: fee.fee_account,
+        }
     }
 }
 
