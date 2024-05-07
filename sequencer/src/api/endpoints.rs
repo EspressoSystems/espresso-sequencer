@@ -207,6 +207,7 @@ where
 
     api.get("account", |req, state| {
         async move {
+            tracing::info!("catchup account");
             let height = req
                 .integer_param("height")
                 .map_err(Error::from_request_error)?;

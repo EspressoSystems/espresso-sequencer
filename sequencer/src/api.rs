@@ -173,6 +173,7 @@ impl<
         account: Address,
     ) -> anyhow::Result<AccountQueryData> {
         // Check if we have the desired state in memory.
+        tracing::info!("get account from memory");
         match self.as_ref().get_account(height, view, account).await {
             Ok(account) => return Ok(account),
             Err(err) => {
@@ -181,6 +182,7 @@ impl<
         }
 
         // Try storage.
+        tracing::info!("get account from storage");
         self.inner().get_account(height, view, account).await
     }
 
@@ -209,14 +211,12 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
         view: ViewNumber,
         account: Address,
     ) -> anyhow::Result<AccountQueryData> {
-        let state = self
-            .consensus()
-            .await
-            .get_state(view)
-            .await
-            .context(format!(
-                "state not available for height {height}, view {view:?}"
-            ))?;
+        let consensus = self.consensus().await;
+        tracing::info!("get_state");
+        let state = consensus.get_state(view).await.context(format!(
+            "state not available for height {height}, view {view:?}"
+        ))?;
+        tracing::info!("get proof");
         let (proof, balance) = FeeAccountProof::prove(&state.fee_merkle_tree, account).context(
             format!("account {account} not available for height {height}, view {view:?}"),
         )?;
@@ -544,14 +544,21 @@ mod test_helpers {
                 {
                     break;
                 }
+                tracing::info!(
+                    block_height = leaf_chain.first().unwrap().leaf.get_block_header().height,
+                    "waiting for 3 blocks"
+                );
             }
         }
 
         // Stop consensus running on the node so we freeze the decided and undecided states.
+        tracing::info!("stopping consensus");
         network.server.consensus_mut().shut_down().await;
+        tracing::info!("stopped consensus");
 
         // Undecided fee state: absent account.
         let leaf = network.server.consensus().get_decided_leaf().await;
+        tracing::info!(?leaf, "decided leaf");
         let height = leaf.get_height() + 1;
         let view = leaf.get_view_number() + 1;
         let res = client
