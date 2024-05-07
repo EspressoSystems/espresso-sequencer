@@ -1225,6 +1225,7 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
         // All the nodes are collected here, They depend on the hash ids which are returned after
         // hashes are upserted in the db
         let mut nodes = Vec::new();
+        let mut hashset = HashSet::new();
 
         for node in path.iter() {
             match node {
@@ -1240,8 +1241,10 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                             index: Some(index),
                             ..Default::default()
                         },
+                        None,
                         [0_u8; 32].to_vec(),
                     ));
+                    hashset.insert([0_u8; 32].to_vec());
                 }
                 MerkleNode::ForgettenSubtree { .. } => {
                     return Err(QueryError::Error {
@@ -1267,8 +1270,11 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                             entry: Some(entry),
                             ..Default::default()
                         },
-                        leaf_commit,
+                        None,
+                        leaf_commit.clone(),
                     ));
+
+                    hashset.insert(leaf_commit);
                 }
                 MerkleNode::Branch { value, children } => {
                     // Get hash
@@ -1302,32 +1308,20 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
                         }
                     }
 
-                    let (params, batch_hash_insert_stmt) =
-                        HashTableRow::build_batch_insert(&children_values);
-
-                    // Batch insert all the child hashes
-                    let children_hash_ids = txn
-                        .client
-                        .query(&batch_hash_insert_stmt, &params[..])
-                        .await
-                        .map_err(|e| QueryError::Error {
-                            message: format!("failed to batch insert children hashes {e}"),
-                        })?
-                        .iter()
-                        .map(|r| r.get(0))
-                        .collect();
-
                     // insert internal node
                     let path = traversal_path.clone().rev().map(|n| *n as i32).collect();
                     nodes.push((
                         Node {
                             path,
-                            children: Some(children_hash_ids),
+                            children: None,
                             children_bitvec: Some(children_bitvec),
                             ..Default::default()
                         },
-                        branch_hash,
+                        Some(children_values.clone()),
+                        branch_hash.clone(),
                     ));
+                    hashset.insert(branch_hash);
+                    hashset.extend(children_values);
                 }
             }
 
@@ -1336,8 +1330,8 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
             traversal_path.next();
         }
         // We build a hashset to avoid duplicate entries
-        let hashset: HashSet<Vec<u8>> = nodes.iter().map(|(_, h)| h.clone()).collect();
         let hashes = hashset.into_iter().collect::<Vec<Vec<u8>>>();
+
         // insert all the hashes into database
         // It returns all the ids inserted in the order they were inserted
         // We use the hash ids to insert all the nodes
@@ -1356,11 +1350,25 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
             .collect();
 
         // Updates the node fields
-        for (node, hash) in &mut nodes {
+        for (node, children, hash) in &mut nodes {
             node.created = block_number;
-            node.hash_id = *nodes_hash_ids.get(&*hash).ok_or(QueryError::NotFound)?;
+            node.hash_id = *nodes_hash_ids.get(&*hash).ok_or(QueryError::Error {
+                message: "Missing node hash".to_string(),
+            })?;
+
+            if let Some(children) = children {
+                let children_hashes = children
+                    .iter()
+                    .map(|c| nodes_hash_ids.get(c).copied())
+                    .collect::<Option<Vec<i32>>>()
+                    .ok_or(QueryError::Error {
+                        message: "Missing child hash".to_string(),
+                    })?;
+
+                node.children = Some(children_hashes);
+            }
         }
-        let nodes = nodes.into_iter().map(|(n, _)| n).collect::<Vec<_>>();
+        let nodes = nodes.into_iter().map(|(n, _, _)| n).collect::<Vec<_>>();
         let (params, batch_stmt) = Node::build_batch_insert(name, &nodes);
 
         // Batch insert all the child hashes
