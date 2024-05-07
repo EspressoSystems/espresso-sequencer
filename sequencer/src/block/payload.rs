@@ -18,7 +18,6 @@ use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::default::Default;
 use std::mem::size_of;
-use std::ops::AddAssign;
 use std::{collections::HashMap, fmt::Display};
 use trait_set::trait_set;
 
@@ -166,12 +165,17 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
         for tx in txs.into_iter() {
             block_size += (tx.payload().len() + size_of::<TxTableEntry>()) as u64;
 
-            // block_size is updated when we encounter new namespaces
-            Payload::<TableWord>::update_namespace_with_tx(&mut namespaces, tx, &mut block_size);
+            // block_size is updated when we encounter a new namespace
+            if namespaces.get(&tx.namespace()).is_none() {
+                block_size += size_of::<TxTableEntry>() as u64;
+            }
 
-            if block_size >= chain_config.max_block_size() {
+            if block_size > chain_config.max_block_size() {
+                dbg!(block_size);
                 break;
             }
+
+            Payload::<TableWord>::update_namespace_with_tx(&mut namespaces, tx);
         }
 
         structured_payload.generate_raw_payload(namespaces)?;
@@ -181,18 +185,14 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     fn update_namespace_with_tx(
         namespaces: &mut HashMap<NamespaceId, NamespaceInfo>,
         tx: <Payload<TxTableEntryWord> as BlockPayload>::Transaction,
-        block_size: &mut u64,
     ) {
         let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().unwrap(); // TODO (Philippe) error handling
 
-        let namespace = namespaces.entry(tx.namespace()).or_insert_with(|| {
-            block_size.add_assign(size_of::<TxTableEntry>() as u64);
-            NamespaceInfo {
-                tx_table: Vec::new(),
-                tx_bodies: Vec::new(),
-                tx_bytes_end: TxTableEntry::zero(),
-                tx_table_len: TxTableEntry::zero(),
-            }
+        let namespace = namespaces.entry(tx.namespace()).or_insert(NamespaceInfo {
+            tx_table: Vec::new(),
+            tx_bodies: Vec::new(),
+            tx_bytes_end: TxTableEntry::zero(),
+            tx_table_len: TxTableEntry::zero(),
         });
 
         namespace
@@ -356,38 +356,43 @@ mod test {
     };
     use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
     use rand::RngCore;
-    use std::{collections::HashMap, marker::PhantomData, ops::Range};
+    use std::{collections::HashMap, marker::PhantomData, mem::size_of, ops::Range};
 
     const NUM_STORAGE_NODES: usize = 10;
 
     #[test]
     fn enforce_max_block_size() {
-        let mut rng = jf_utils::test_rng();
-        let max_block_size = 1000u64;
-        let payload_size = 6u64;
-        let tx_size = payload_size + std::mem::size_of::<TxTableEntry>() as u64;
-        assert_eq!(tx_size as u64, 10);
+        // sum of all payloads + table entry of each
+        let target_payload_total = 1000usize;
+        // include name space entry in max_block_size
+        let max_block_size = (target_payload_total + size_of::<TxTableEntry>()) as u64;
+        let payload_size = 6;
+        // `tx_size` is payload + table entry size
+        let tx_size = (payload_size + size_of::<TxTableEntry>()) as u64;
+        assert_eq!(tx_size, 10);
 
-        let n_txs = max_block_size / tx_size;
+        let n_txs = target_payload_total as u64 / tx_size;
+        dbg!(n_txs);
         let chain_config = ChainConfig::new(1, max_block_size, 1);
 
+        dbg!(size_of::<TxTableEntry>());
+
         let mut txs = (0..n_txs)
-            .map(|_| Transaction::of_size(&mut rng, payload_size.try_into().unwrap()))
+            .map(|_| Transaction::of_size(payload_size.try_into().unwrap()))
             .collect::<Vec<Transaction>>();
 
-        txs.push(Transaction::of_size(
-            &mut rng,
-            payload_size.try_into().unwrap(),
-        ));
+        assert_eq!(txs.len(), 100);
 
-        // The final 2 txns will be omitted
-        let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
-        let total: usize = txs.iter().map(|tx| tx.payload().len()).sum();
-        assert_eq!(payload.txn_count(), txs.len() as u64 - 2u64);
+        txs.push(Transaction::of_size(payload_size.try_into().unwrap()));
 
-        txs.pop();
         // The final txn will be omitted
         let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
+        let txs_len: usize = txs
+            .iter()
+            .map(|tx| tx.payload().len() + size_of::<TxTableEntry>())
+            .sum();
+        dbg!(txs_len + size_of::<TxTableEntry>());
+        dbg!(payload.txn_count() * tx_size);
         assert_eq!(payload.txn_count(), txs.len() as u64 - 1u64);
 
         txs.pop();

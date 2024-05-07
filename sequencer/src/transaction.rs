@@ -77,10 +77,9 @@ impl Transaction {
     }
     #[cfg(any(test, feature = "testing"))]
     /// Useful for when we want to test size of transaction(s)
-    pub fn of_size(rng: &mut dyn rand::RngCore, len: usize) -> Self {
-        use rand::Rng;
+    pub fn of_size(len: usize) -> Self {
         Self::new(
-            NamespaceId(rng.gen_range(0..10)),
+            NamespaceId(0),
             (0..len).map(|_| rand::random::<u8>()).collect::<Vec<_>>(),
         )
     }
