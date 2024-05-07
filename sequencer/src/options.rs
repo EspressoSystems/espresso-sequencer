@@ -69,7 +69,6 @@ pub struct Options {
 
     /// The address to bind to for Libp2p (in `host:port` form)
     #[clap(
-        short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS",
         default_value = "0.0.0.0:1769"
@@ -79,7 +78,6 @@ pub struct Options {
     /// The address we advertise to other nodes as being a Libp2p endpoint.
     /// Should be supplied in `host:port` form.
     #[clap(
-        short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS",
         default_value = "localhost:1769"
@@ -88,7 +86,6 @@ pub struct Options {
 
     /// URL of the Light Client State Relay Server
     #[clap(
-        short,
         long,
         env = "ESPRESSO_STATE_RELAY_SERVER_URL",
         default_value = "http://localhost:8083"
@@ -112,7 +109,7 @@ pub struct Options {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY",
-        conflicts_with = "key_file"
+        conflicts_with = "KEY_FILE"
     )]
     #[derivative(Debug = "ignore")]
     pub private_staking_key: Option<BLSPrivKey>,
@@ -123,7 +120,7 @@ pub struct Options {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY",
-        conflicts_with = "key_file"
+        conflicts_with = "KEY_FILE"
     )]
     #[derivative(Debug = "ignore")]
     pub private_state_key: Option<StateSignKey>,
@@ -169,7 +166,7 @@ pub struct Options {
     pub state_peers: Vec<Url>,
 
     /// Stake table capacity for the prover circuit
-    #[clap(short, long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
     pub stake_table_capacity: usize,
 
     /// Maximum size in bytes of a block

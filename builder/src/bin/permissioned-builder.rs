@@ -46,7 +46,6 @@ pub struct PermissionedBuilderOptions {
 
     /// The address to bind to for Libp2p (in `host:port` form)
     #[clap(
-        short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS",
         default_value = "0.0.0.0:1769"
@@ -56,7 +55,6 @@ pub struct PermissionedBuilderOptions {
     /// The address we advertise to other nodes as being a Libp2p endpoint.
     /// Should be supplied in `host:port` form.
     #[clap(
-        short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS",
         default_value = "localhost:1769"
@@ -65,7 +63,6 @@ pub struct PermissionedBuilderOptions {
 
     /// URL of the Light Client State Relay Server
     #[clap(
-        short,
         long,
         env = "ESPRESSO_STATE_RELAY_SERVER_URL",
         default_value = "http://localhost:8083"
@@ -99,7 +96,7 @@ pub struct PermissionedBuilderOptions {
     #[clap(
         long,
         env = "ESPRESSO_BUILDER_PRIVATE_STAKING_KEY",
-        conflicts_with = "key_file"
+        conflicts_with = "KEY_FILE"
     )]
     pub private_staking_key: Option<BLSPrivKey>,
 
@@ -109,7 +106,7 @@ pub struct PermissionedBuilderOptions {
     #[clap(
         long,
         env = "ESPRESSO_BUILDER_PRIVATE_STATE_KEY",
-        conflicts_with = "key_file"
+        conflicts_with = "KEY_FILE"
     )]
     pub private_state_key: Option<StateSignKey>,
 
@@ -164,7 +161,6 @@ pub struct PermissionedBuilderOptions {
 
     /// The number of views to buffer before a builder garbage collects its state
     #[clap(
-        short,
         long,
         env = "ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT",
         default_value = "15"
@@ -176,12 +172,7 @@ pub struct PermissionedBuilderOptions {
     pub is_da: bool,
 
     /// Base Fee for a block
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE",
-        default_value = "0"
-    )]
+    #[clap(long, env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE", default_value = "0")]
     base_fee: u64,
 }
 
