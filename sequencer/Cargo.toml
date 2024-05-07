@@ -15,6 +15,10 @@ hotshot-query-service = { workspace = true, features = ["testing"] }
 rand = "0.8.5"
 tempfile = "3.9.0"
 
+[build-dependencies]
+anyhow = { workspace = true }
+vergen = { workspace = true }
+
 [dependencies]
 anyhow = { workspace = true }
 ark-bls12-381 = { workspace = true }

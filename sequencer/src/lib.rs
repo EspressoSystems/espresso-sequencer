@@ -277,6 +277,11 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     chain_config: ChainConfig,
     is_da: bool,
 ) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
+    // Expose commit hash via status API.
+    metrics
+        .create_label("revision".into())
+        .set(env!("VERGEN_GIT_SHA").into());
+
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,

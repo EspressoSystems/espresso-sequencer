@@ -95,6 +95,7 @@ serde = { version = "1.0.195", features = ["derive"] }
 toml = "0.8"
 url = "2.3"
 vbs = "0.1"
+vergen = { version = "8.3", features = ["git", "gitcl"] }
 zeroize = "1.7"
 committable = "0.2"
 portpicker = "0.1.1"
