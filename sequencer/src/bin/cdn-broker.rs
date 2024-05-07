@@ -70,7 +70,7 @@ struct Args {
     ca_key_path: Option<String>,
 
     /// The seed for broker key generation
-    #[arg(short, long, default_value_t = 0)]
+    #[arg(short, long, default_value_t = 0, env = "ESPRESSO_CDN_BROKER_KEY_SEED")]
     key_seed: u64,
 }
 #[async_std::main]
