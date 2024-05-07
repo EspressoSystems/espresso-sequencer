@@ -166,7 +166,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
             block_size += (tx.payload().len() + size_of::<TxTableEntry>()) as u64;
 
             // block_size is updated when we encounter a new namespace
-            if namespaces.get(&tx.namespace()).is_none() {
+            if namespaces.contains_key(&tx.namespace()) {
                 block_size += size_of::<TxTableEntry>() as u64;
             }
 
@@ -375,19 +375,15 @@ mod test {
         let chain_config = ChainConfig::new(1, max_block_size, 1);
 
         let mut txs = (0..n_txs)
-            .map(|_| Transaction::of_size(payload_size.unwrap()))
+            .map(|_| Transaction::of_size(payload_size))
             .collect::<Vec<Transaction>>();
 
         assert_eq!(txs.len(), 100);
 
-        txs.push(Transaction::of_size(payload_size.unwrap()));
+        txs.push(Transaction::of_size(payload_size));
 
         // The final txn will be omitted
         let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
-        let txs_len: usize = txs
-            .iter()
-            .map(|tx| tx.payload().len() + size_of::<TxTableEntry>())
-            .sum();
         assert_eq!(payload.txn_count(), txs.len() as u64 - 1u64);
 
         txs.pop();
