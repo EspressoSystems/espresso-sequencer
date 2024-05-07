@@ -368,7 +368,7 @@ impl BlockHeader<SeqTypes> for Header {
             validated_state,
             instance_state.chain_config,
         )
-        .map_err(|e| InvalidBlockHeader::new(e.to_string()))
+        .map_err(|e| InvalidBlockHeader::new(format!("{e:#}")))
     }
 
     fn genesis(
