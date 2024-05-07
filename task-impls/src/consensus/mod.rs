@@ -35,7 +35,10 @@ use hotshot_types::{traits::storage::Storage, vote::Certificate};
 use jf_primitives::vid::VidScheme;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-use tracing::{debug, error, info, instrument, warn};
+#[cfg(not(feature = "dependency-tasks"))]
+use tracing::info;
+
+use tracing::{debug, error, instrument, warn};
 use vbs::version::Version;
 
 #[cfg(not(feature = "dependency-tasks"))]
@@ -237,6 +240,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
 
     /// Spawn a vote task for the given view.  Will try to vote
     /// and emit a `QuorumVoteSend` event we should vote on the current proposal
+    #[cfg(not(feature = "dependency-tasks"))]
     fn spawn_vote_task(
         &mut self,
         view: TYPES::Time,
