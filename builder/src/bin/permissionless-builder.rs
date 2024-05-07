@@ -66,7 +66,6 @@ struct NonPermissionedBuilderOptions {
 
     /// The number of views to buffer before a builder garbage collects its state
     #[clap(
-        short,
         long,
         env = "ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT",
         default_value = "15"
@@ -74,12 +73,7 @@ struct NonPermissionedBuilderOptions {
     buffer_view_num_count: usize,
 
     /// Base Fee for a block
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE",
-        default_value = "0"
-    )]
+    #[clap(long, env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE", default_value = "0")]
     base_fee: u64,
 }
 
