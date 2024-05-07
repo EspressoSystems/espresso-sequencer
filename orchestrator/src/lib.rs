@@ -283,6 +283,10 @@ where
         libp2p_address: Option<Multiaddr>,
         libp2p_public_key: Option<PeerId>,
     ) -> Result<(u64, bool), ServerError> {
+        if let Some((node_index, is_da)) = self.pub_posted.get(pubkey) {
+            return Ok((*node_index, *is_da));
+        }
+
         if !self.accepting_new_keys {
             return Err(ServerError {
                 status: tide_disco::StatusCode::Forbidden,
@@ -290,10 +294,6 @@ where
                     "Network has been started manually, and is no longer registering new keys."
                         .to_string(),
             });
-        }
-
-        if let Some((node_index, is_da)) = self.pub_posted.get(pubkey) {
-            return Ok((*node_index, *is_da));
         }
 
         let node_index = self.pub_posted.len() as u64;
