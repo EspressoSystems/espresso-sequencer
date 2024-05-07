@@ -277,10 +277,16 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     chain_config: ChainConfig,
     is_da: bool,
 ) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
-    // Expose commit hash via status API.
+    // Expose git information via status API.
     metrics
-        .create_label("revision".into())
+        .create_label("git_rev".into())
         .set(env!("VERGEN_GIT_SHA").into());
+    metrics
+        .create_label("git_desc".into())
+        .set(env!("VERGEN_GIT_DESCRIBE").into());
+    metrics
+        .create_label("git_timestamp".into())
+        .set(env!("VERGEN_GIT_COMMIT_TIMESTAMP").into());
 
     // Orchestrator client
     let validator_args = ValidatorArgs {
