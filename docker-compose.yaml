@@ -477,7 +477,7 @@ services:
       retries: 20
 
   block-explorer:
-    image: ghcr.io/espressosystems/espresso-block-explorer:release-cappuccino
+    image: ghcr.io/espressosystems/espresso-block-explorer:main
     ports:
       - "$ESPRESSO_BLOCK_EXPLORER_PORT:3000"
     environment:

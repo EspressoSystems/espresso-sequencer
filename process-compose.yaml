@@ -432,7 +432,7 @@ processes:
       failure_threshold: 20
 
   block-explorer:
-    command: docker run --rm -p $ESPRESSO_BLOCK_EXPLORER_PORT:3000 -e QUERY_SERVICE_URI --platform=linux/amd64 ghcr.io/espressosystems/espresso-block-explorer:release-cappuccino
+    command: docker run --rm -p $ESPRESSO_BLOCK_EXPLORER_PORT:3000 -e QUERY_SERVICE_URI --platform=linux/amd64 ghcr.io/espressosystems/espresso-block-explorer:main
     depends_on:
       sequencer1:
         condition: process_healthy
