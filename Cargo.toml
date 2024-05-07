@@ -47,7 +47,6 @@ ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.50" }
-
 # Hotshot imports
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.50" }
 hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.18" }

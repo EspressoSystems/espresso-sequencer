@@ -49,7 +49,7 @@ services:
   # different parts of the CDN
   keydb:
     image: docker.io/eqalpha/keydb:latest
-    command: ["--requirepass", "changemeplease!!"]
+    command: [ "--requirepass", "changemeplease!!" ]
     healthcheck:
       # Attempt to PING the database
       test: keydb-cli --pass changemeplease!! --raw incr PING
@@ -67,7 +67,7 @@ services:
       - cdn-marshal
       - -d
       - redis://:changemeplease!!@keydb:6379
-      - -b 
+      - -b
       - $ESPRESSO_CDN_SERVER_PORT
       - -m
       - 0.0.0.0:$ESPRESSO_CDN_SERVER_METRICS_PORT
@@ -81,16 +81,16 @@ services:
       - RUST_LOG
       - ESPRESSO_CDN_SERVER_METRICS_PORT
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main
-    command: 
-    - cdn-broker
-    - -d
-    - redis://:changemeplease!!@keydb:6379
-    - --public-advertise-endpoint
-    - broker-0:1738
-    - --private-advertise-endpoint
-    - broker-0:1739
-    - -m
-    - 0.0.0.0:$ESPRESSO_CDN_SERVER_METRICS_PORT
+    command:
+      - cdn-broker
+      - -d
+      - redis://:changemeplease!!@keydb:6379
+      - --public-advertise-endpoint
+      - broker-0:1738
+      - --private-advertise-endpoint
+      - broker-0:1739
+      - -m
+      - 0.0.0.0:$ESPRESSO_CDN_SERVER_METRICS_PORT
     depends_on:
       keydb:
         condition: service_healthy
@@ -101,16 +101,16 @@ services:
       - RUST_LOG
       - ESPRESSO_CDN_SERVER_METRICS_PORT
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main
-    command: 
-    - cdn-broker
-    - -d
-    - redis://:changemeplease!!@keydb:6379
-    - --public-advertise-endpoint
-    - broker-1:1738
-    - --private-advertise-endpoint
-    - broker-1:1739
-    - -m
-    - 0.0.0.0:$ESPRESSO_CDN_SERVER_METRICS_PORT
+    command:
+      - cdn-broker
+      - -d
+      - redis://:changemeplease!!@keydb:6379
+      - --public-advertise-endpoint
+      - broker-1:1738
+      - --private-advertise-endpoint
+      - broker-1:1739
+      - -m
+      - 0.0.0.0:$ESPRESSO_CDN_SERVER_METRICS_PORT
     depends_on:
       keydb:
         condition: service_healthy
@@ -122,10 +122,10 @@ services:
       - RUST_LOG
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
     image: ghcr.io/espressosystems/espresso-sequencer/cdn-whitelist:main
-    command: 
-    - cdn-whitelist
-    - -d
-    - redis://:changemeplease!!@keydb:6379
+    command:
+      - cdn-whitelist
+      - -d
+      - redis://:changemeplease!!@keydb:6379
     depends_on:
       keydb:
         condition: service_healthy
@@ -437,6 +437,7 @@ services:
       - ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW
       - ESPRESSO_BUILDER_WEBSERVER_RESPONSE_TIMEOUT_DURATION
       - ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT
+      - ESPRESSO_BUILDER_INIT_NODE_COUNT
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT

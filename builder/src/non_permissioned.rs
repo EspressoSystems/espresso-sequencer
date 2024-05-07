@@ -77,6 +77,7 @@ impl BuilderConfig {
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         channel_capacity: NonZeroUsize,
+        node_count: NonZeroUsize,
         instance_state: NodeState,
         hotshot_events_api_url: Url,
         hotshot_builder_apis_url: Url,
@@ -141,7 +142,7 @@ impl BuilderConfig {
             qc_receiver,
             req_receiver,
             global_state_clone,
-            NonZeroUsize::new(1).unwrap(),
+            node_count,
             bootstrapped_view,
             buffered_view_num_count as u64,
             maximize_txns_count_timeout_duration,
@@ -164,11 +165,17 @@ impl BuilderConfig {
         // start the hotshot api service
         run_builder_api_service(hotshot_builder_apis_url.clone(), proxy_global_state);
 
-        // spawn the builder service
         let events_url = hotshot_events_api_url
             .clone()
             .join("hotshot-events/events")
             .unwrap();
+
+        tracing::info!(
+            "Running permissionless builder against hotshot events API at {}",
+            events_url.to_string()
+        );
+
+        // spawn the builder service
         async_spawn(async move {
             let res = run_non_permissioned_standalone_builder_service(
                 tx_sender,
@@ -178,7 +185,10 @@ impl BuilderConfig {
                 events_url,
             )
             .await;
-            tracing::error!(?res, "builder service exited")
+            tracing::error!(?res, "builder service exited");
+            if res.is_err() {
+                panic!("Builder should restart.");
+            }
         });
 
         tracing::info!("Builder init finished");

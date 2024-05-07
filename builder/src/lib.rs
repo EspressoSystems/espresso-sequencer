@@ -549,10 +549,13 @@ pub mod testing {
             // A new builder can use this view number to start building blocks from this view number
             let bootstrapped_view = ViewNumber::new(0);
 
+            let node_count = NonZeroUsize::new(HotShotTestConfig::total_nodes()).unwrap();
+
             let builder_config = BuilderConfig::init(
                 key_pair,
                 bootstrapped_view,
                 channel_capacity,
+                node_count,
                 node_state,
                 hotshot_events_streaming_api_url,
                 hotshot_builder_api_url,
