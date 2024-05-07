@@ -6,6 +6,7 @@ use crate::{
             num_txs_as_bytes, tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN,
             TX_OFFSET_BYTE_LEN,
         },
+        tx_iter::{TxIndex, TxIter},
         tx_table_entries::TxTableEntries,
         Payload,
     },
@@ -13,9 +14,6 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
-use tx_iter::{TxIndex, TxIter};
-
-pub mod tx_iter;
 
 /// TODO explain: ZST to unlock visibility in other modules. can only be
 /// constructed in this module.

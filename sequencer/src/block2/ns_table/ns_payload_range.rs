@@ -1,7 +1,8 @@
 use crate::block2::{
-    ns_table::{ns_payload::tx_iter::TxIndex, NsIndex, NsTable},
+    ns_table::{NsIndex, NsTable},
     num_txs::NumTxs,
     payload_bytes::NUM_TXS_BYTE_LEN,
+    tx_iter::TxIndex,
     tx_table_entries::TxTableEntries,
 };
 use serde::{Deserialize, Serialize};

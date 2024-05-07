@@ -1,6 +1,6 @@
 use crate::block2::{
     ns_iter::{NsIndex, NsIter},
-    ns_table::ns_payload::tx_iter::{TxIndex, TxIter},
+    tx_iter::{TxIndex, TxIter},
     Payload,
 };
 use serde::{Deserialize, Serialize};
