@@ -1,19 +1,13 @@
-//! An orchestrator using libp2p
-
-/// types used for this example
-pub mod types;
+//! A orchestrator using the web server
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot_example_types::state_types::TestTypes;
 use tracing::instrument;
 
-use crate::{
-    infra::{read_orchestrator_init_config, run_orchestrator, OrchestratorArgs},
-    types::{DANetwork, NodeImpl, QuorumNetwork},
-};
+use crate::infra::{read_orchestrator_init_config, run_orchestrator, OrchestratorArgs};
 
 /// general infra used for this example
-#[path = "../infra/mod.rs"]
+#[path = "./infra/mod.rs"]
 pub mod infra;
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::main(flavor = "multi_thread"))]
@@ -23,9 +17,7 @@ async fn main() {
     setup_logging();
     setup_backtrace();
     let (config, orchestrator_url) = read_orchestrator_init_config::<TestTypes>();
-    run_orchestrator::<TestTypes, DANetwork, QuorumNetwork, NodeImpl>(OrchestratorArgs::<
-        TestTypes,
-    > {
+    run_orchestrator::<TestTypes>(OrchestratorArgs::<TestTypes> {
         url: orchestrator_url.clone(),
         config: config.clone(),
     })

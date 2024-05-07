@@ -301,12 +301,7 @@ pub fn load_config_from_file<TYPES: NodeType>(
 }
 
 /// Runs the orchestrator
-pub async fn run_orchestrator<
-    TYPES: NodeType,
-    DACHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
-    QUORUMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
-    NODE: NodeImplementation<TYPES>,
->(
+pub async fn run_orchestrator<TYPES: NodeType>(
     OrchestratorArgs { url, config }: OrchestratorArgs<TYPES>,
 ) {
     println!("Starting orchestrator",);

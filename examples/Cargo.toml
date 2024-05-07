@@ -21,7 +21,12 @@ hotshot-testing = ["hotshot/hotshot-testing"]
 randomized-leader-election = []
 fixed-leader-election = []
 
-# libp2p
+# Common
+[[example]]
+name = "orchestrator"
+path = "orchestrator.rs"
+
+# Libp2p
 [[example]]
 name = "validator-libp2p"
 path = "libp2p/validator.rs"
@@ -31,14 +36,10 @@ name = "multi-validator-libp2p"
 path = "libp2p/multi-validator.rs"
 
 [[example]]
-name = "orchestrator-libp2p"
-path = "libp2p/orchestrator.rs"
-
-[[example]]
 name = "all-libp2p"
 path = "libp2p/all.rs"
 
-# combined
+# Combined
 [[example]]
 name = "all-combined"
 path = "combined/all.rs"

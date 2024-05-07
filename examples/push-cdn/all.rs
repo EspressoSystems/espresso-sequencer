@@ -35,12 +35,7 @@ async fn main() {
     let (config, orchestrator_url) = read_orchestrator_init_config::<TestTypes>();
 
     // Start the orhcestrator
-    async_spawn(run_orchestrator::<
-        TestTypes,
-        DANetwork,
-        QuorumNetwork,
-        NodeImpl,
-    >(OrchestratorArgs {
+    async_spawn(run_orchestrator::<TestTypes>(OrchestratorArgs {
         url: orchestrator_url.clone(),
         config: config.clone(),
     }));
