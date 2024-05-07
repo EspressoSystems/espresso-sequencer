@@ -5,7 +5,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use committable::Commitment;
+use anyhow::{ensure, Result};
+use committable::{Commitment, Committable};
 use displaydoc::Display;
 use tracing::{debug, error};
 
@@ -43,14 +44,14 @@ pub type VidShares<TYPES> = BTreeMap<
 #[derive(custom_debug::Debug)]
 pub struct Consensus<TYPES: NodeType> {
     /// The validated states that are currently loaded in memory.
-    pub validated_state_map: BTreeMap<TYPES::Time, View<TYPES>>,
+    validated_state_map: BTreeMap<TYPES::Time, View<TYPES>>,
 
     /// All the VID shares we've received for current and future views.
-    pub vid_shares: VidShares<TYPES>,
+    vid_shares: VidShares<TYPES>,
 
     /// All the DA certs we've received for current and future views.
     /// view -> DA cert
-    pub saved_da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
+    saved_da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
 
     /// View number that is currently on.
     cur_view: TYPES::Time,
@@ -64,7 +65,7 @@ pub struct Consensus<TYPES: NodeType> {
     /// Map of leaf hash -> leaf
     /// - contains undecided leaves
     /// - includes the MOST RECENT decided leaf
-    pub saved_leaves: CommitmentMap<Leaf<TYPES>>,
+    saved_leaves: CommitmentMap<Leaf<TYPES>>,
 
     /// Saved payloads.
     ///
@@ -300,24 +301,76 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         self.cur_view
     }
 
-    /// Update the current view.
-    pub fn update_view_if_new(&mut self, view_number: TYPES::Time) {
-        if view_number > self.cur_view {
-            self.cur_view = view_number;
-        }
-    }
-
     /// Get the high QC.
     pub fn high_qc(&self) -> &QuorumCertificate<TYPES> {
         &self.high_qc
     }
 
+    /// Get the validated state map.
+    pub fn validated_state_map(&self) -> &BTreeMap<TYPES::Time, View<TYPES>> {
+        &self.validated_state_map
+    }
+
+    /// Get the saved leaves.
+    pub fn saved_leaves(&self) -> &CommitmentMap<Leaf<TYPES>> {
+        &self.saved_leaves
+    }
+
+    /// Get the vid shares.
+    pub fn vid_shares(&self) -> &VidShares<TYPES> {
+        &self.vid_shares
+    }
+
+    /// Get the saved DA certs.
+    pub fn saved_da_certs(&self) -> &HashMap<TYPES::Time, DACertificate<TYPES>> {
+        &self.saved_da_certs
+    }
+
+    /// Update the current view.
+    /// # Errors
+    /// Can return an error when the new view_number is not higher than the existing view number.
+    pub fn update_view(&mut self, view_number: TYPES::Time) -> Result<()> {
+        ensure!(view_number > self.cur_view);
+        self.cur_view = view_number;
+        Ok(())
+    }
+
+    /// Update the validated state map with a new view_number/view combo.
+    pub fn update_validated_state_map(&mut self, view_number: TYPES::Time, view: View<TYPES>) {
+        self.validated_state_map.insert(view_number, view);
+    }
+
+    /// Update the saved leaves with a new leaf.
+    pub fn update_saved_leaves(&mut self, leaf: Leaf<TYPES>) {
+        self.saved_leaves.insert(leaf.commit(), leaf);
+    }
+
     /// Update the high QC if given a newer one.
-    pub fn update_high_qc_if_new(&mut self, high_qc: QuorumCertificate<TYPES>) {
-        if high_qc.view_number > self.high_qc.view_number {
-            debug!("Updating high QC");
-            self.high_qc = high_qc;
-        }
+    /// # Errors
+    /// Can return an error when the provided high_qc is not newer than the existing entry.
+    pub fn update_high_qc(&mut self, high_qc: QuorumCertificate<TYPES>) -> Result<()> {
+        ensure!(high_qc.view_number > self.high_qc.view_number);
+        debug!("Updating high QC");
+        self.high_qc = high_qc;
+
+        Ok(())
+    }
+
+    /// Add a new entry to the vid_shares map.
+    pub fn update_vid_shares(
+        &mut self,
+        view_number: TYPES::Time,
+        disperse: Proposal<TYPES, VidDisperseShare<TYPES>>,
+    ) {
+        self.vid_shares
+            .entry(view_number)
+            .or_default()
+            .insert(disperse.data.recipient_key.clone(), disperse);
+    }
+
+    /// Add a new entry to the da_certs map.
+    pub fn update_saved_da_certs(&mut self, view_number: TYPES::Time, cert: DACertificate<TYPES>) {
+        self.saved_da_certs.insert(view_number, cert);
     }
 
     /// gather information from the parent chain of leaves

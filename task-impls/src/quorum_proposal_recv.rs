@@ -138,7 +138,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
                     let view = current_proposal.get_view_number();
                     self.cancel_tasks(proposal.data.get_view_number()).await;
                     let consensus = self.consensus.read().await;
-                    let Some(vid_shares) = consensus.vid_shares.get(&view) else {
+                    let Some(vid_shares) = consensus.vid_shares().get(&view) else {
                         debug!(
                                 "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
                                 view
@@ -150,7 +150,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
                         return;
                     };
                     let Some(da_cert) = consensus
-                        .saved_da_certs
+                        .saved_da_certs()
                         .get(&current_proposal.get_view_number())
                     else {
                         debug!(

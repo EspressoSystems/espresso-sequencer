@@ -56,11 +56,7 @@ async fn insert_vid_shares_for_view(
 
     // `create_and_send_proposal` depends on the `vid_shares` obtaining a vid dispersal.
     // to avoid needing to spin up the vote task, we can just insert it in here.
-    consensus
-        .vid_shares
-        .entry(view)
-        .or_default()
-        .insert(vid.1, vid.0[0].clone());
+    consensus.update_vid_shares(view, vid.0[0].clone());
 }
 
 #[cfg(test)]
@@ -164,7 +160,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
 
     // First, insert a parent view whose leaf commitment will be returned in the lower function
     // call.
-    consensus.validated_state_map.insert(
+    consensus.update_validated_state_map(
         ViewNumber::new(2),
         View {
             view_inner: ViewInner::Leaf {
@@ -177,9 +173,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
 
     // Match an entry into the saved leaves for the parent commitment, returning the generated leaf
     // for this call.
-    consensus
-        .saved_leaves
-        .insert(leaves[1].get_parent_commitment(), leaves[1].clone());
+    consensus.update_saved_leaves(leaves[1].clone());
 
     // Release the write lock before proceeding with the test
     drop(consensus);

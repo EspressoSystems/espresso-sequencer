@@ -128,7 +128,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
     ) -> Option<Proposal<TYPES, VidDisperseShare<TYPES>>> {
         let consensus = self.consensus.upgradable_read().await;
         let contained = consensus
-            .vid_shares
+            .vid_shares()
             .get(&view)
             .is_some_and(|m| m.contains_key(key));
         if !contained {
@@ -138,19 +138,13 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
             let shares = VidDisperseShare::from_vid_disperse(vid);
             let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
             for share in shares {
-                let s = share.clone();
-                let key: <TYPES as NodeType>::SignatureKey = s.recipient_key;
                 if let Some(prop) = share.to_proposal(&self.private_key) {
-                    consensus
-                        .vid_shares
-                        .entry(view)
-                        .or_default()
-                        .insert(key, prop);
+                    consensus.update_vid_shares(view, prop);
                 }
             }
-            return consensus.vid_shares.get(&view)?.get(key).cloned();
+            return consensus.vid_shares().get(&view)?.get(key).cloned();
         }
-        consensus.vid_shares.get(&view)?.get(key).cloned()
+        consensus.vid_shares().get(&view)?.get(key).cloned()
     }
 
     /// Handle the request contained in the message. Returns the response we should send

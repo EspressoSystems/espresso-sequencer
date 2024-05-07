@@ -199,9 +199,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // Ensure this view is in the view map for garbage collection, but do not overwrite if
                 // there is already a view there: the replica task may have inserted a `Leaf` view which
                 // contains strictly more information.
-                consensus.validated_state_map.entry(view).or_insert(View {
-                    view_inner: ViewInner::DA { payload_commitment },
-                });
+                if !consensus.validated_state_map().contains_key(&view) {
+                    consensus.update_validated_state_map(
+                        view,
+                        View {
+                            view_inner: ViewInner::DA { payload_commitment },
+                        },
+                    );
+                }
 
                 // Record the payload we have promised to make available.
                 consensus

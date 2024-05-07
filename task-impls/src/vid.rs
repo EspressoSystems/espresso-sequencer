@@ -75,14 +75,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 let shares = VidDisperseShare::from_vid_disperse(vid_disperse.clone());
                 let mut consensus = self.consensus.write().await;
                 for share in shares {
-                    let s = share.clone();
-                    let key: <TYPES as NodeType>::SignatureKey = s.recipient_key;
-                    if let Some(prop) = share.to_proposal(&self.private_key) {
-                        consensus
-                            .vid_shares
-                            .entry(*view_number)
-                            .or_default()
-                            .insert(key, prop);
+                    if let Some(disperse) = share.to_proposal(&self.private_key) {
+                        consensus.update_vid_shares(*view_number, disperse);
                     }
                 }
 

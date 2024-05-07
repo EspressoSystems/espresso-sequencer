@@ -152,9 +152,7 @@ async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
 
     let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
 
-    consensus
-        .saved_leaves
-        .insert(proposed_leaf.commit(), proposed_leaf.clone());
+    consensus.update_saved_leaves(proposed_leaf);
 
     Ok(())
 }
@@ -178,7 +176,7 @@ pub async fn create_and_send_proposal<TYPES: NodeType>(
 ) {
     let consensus_read = consensus.read().await;
     let Some(Some(vid_share)) = consensus_read
-        .vid_shares
+        .vid_shares()
         .get(&view)
         .map(|shares| shares.get(&public_key))
     else {
@@ -332,7 +330,7 @@ pub(crate) async fn get_parent_leaf_and_state<TYPES: NodeType>(
 
     let consensus = consensus.read().await;
     let parent_view_number = &consensus.high_qc().get_view_number();
-    let parent_view = consensus.validated_state_map.get(parent_view_number).context(
+    let parent_view = consensus.validated_state_map().get(parent_view_number).context(
         format!("Couldn't find parent view in state map, waiting for replica to see proposal; parent_view_number: {}", **parent_view_number)
     )?;
 
@@ -351,7 +349,7 @@ pub(crate) async fn get_parent_leaf_and_state<TYPES: NodeType>(
     }
 
     let leaf = consensus
-        .saved_leaves
+        .saved_leaves()
         .get(&leaf_commitment)
         .context("Failed to find high QC of parent")?;
 
@@ -363,7 +361,7 @@ pub(crate) async fn get_parent_leaf_and_state<TYPES: NodeType>(
     // Walk back until we find a decide
     if !reached_decided {
         debug!("We have not reached decide from view {:?}", cur_view);
-        while let Some(next_parent_leaf) = consensus.saved_leaves.get(&next_parent_hash) {
+        while let Some(next_parent_leaf) = consensus.saved_leaves().get(&next_parent_hash) {
             if next_parent_leaf.get_view_number() <= consensus.last_decided_view {
                 break;
             }
@@ -639,7 +637,7 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
 
     // Get the parent leaf and state.
     let parent = match consensus_read
-        .saved_leaves
+        .saved_leaves()
         .get(&justify_qc.get_data().leaf_commit)
         .cloned()
     {
@@ -667,7 +665,9 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
 
     let mut consensus_write = RwLockUpgradableReadGuard::upgrade(consensus_read).await;
 
-    consensus_write.update_high_qc_if_new(justify_qc.clone());
+    if let Err(e) = consensus_write.update_high_qc(justify_qc.clone()) {
+        tracing::trace!("{e:?}");
+    }
 
     // Justify qc's leaf commitment is not the same as the parent's leaf commitment, but it should be (in this case)
     let Some((parent_leaf, _parent_state)) = parent else {
@@ -683,7 +683,7 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
             ),
         );
 
-        consensus_write.validated_state_map.insert(
+        consensus_write.update_validated_state_map(
             view,
             View {
                 view_inner: ViewInner::Leaf {
@@ -693,17 +693,16 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
                 },
             },
         );
-        consensus_write
-            .saved_leaves
-            .insert(leaf.commit(), leaf.clone());
+
+        consensus_write.update_saved_leaves(leaf.clone());
 
         if let Err(e) = task_state
             .storage
             .write()
             .await
             .update_undecided_state(
-                consensus_write.saved_leaves.clone(),
-                consensus_write.validated_state_map.clone(),
+                consensus_write.saved_leaves().clone(),
+                consensus_write.validated_state_map().clone(),
             )
             .await
         {
@@ -899,7 +898,7 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
                     // Get the VID share at the leaf's view number, corresponding to our key
                     // (if one exists)
                     let vid_share = consensus
-                        .vid_shares
+                        .vid_shares()
                         .get(&leaf.get_view_number())
                         .unwrap_or(&HashMap::new())
                         .get(&task_state.public_key)
@@ -1074,7 +1073,7 @@ pub async fn update_state_and_vote_if_able<TYPES: NodeType, I: NodeImplementatio
 
     let consensus = consensus.upgradable_read().await;
     // Only vote if you has seen the VID share for this view
-    let Some(vid_shares) = consensus.vid_shares.get(&proposal.view_number) else {
+    let Some(vid_shares) = consensus.vid_shares().get(&proposal.view_number) else {
         debug!(
             "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
             proposal.view_number
@@ -1101,7 +1100,7 @@ pub async fn update_state_and_vote_if_able<TYPES: NodeType, I: NodeImplementatio
 
     // Only vote if you have the DA cert
     // ED Need to update the view number this is stored under?
-    let Some(cert) = consensus.saved_da_certs.get(&cur_view) else {
+    let Some(cert) = consensus.saved_da_certs().get(&cur_view) else {
         return false;
     };
 
@@ -1109,7 +1108,7 @@ pub async fn update_state_and_vote_if_able<TYPES: NodeType, I: NodeImplementatio
     // TODO: do some of this logic without the vote token check, only do that when voting.
     let justify_qc = proposal.justify_qc.clone();
     let parent = consensus
-        .saved_leaves
+        .saved_leaves()
         .get(&justify_qc.get_data().leaf_commit)
         .cloned();
 
@@ -1185,7 +1184,7 @@ pub async fn update_state_and_vote_if_able<TYPES: NodeType, I: NodeImplementatio
     }
 
     let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
-    consensus.validated_state_map.insert(
+    consensus.update_validated_state_map(
         cur_view,
         View {
             view_inner: ViewInner::Leaf {
@@ -1200,8 +1199,8 @@ pub async fn update_state_and_vote_if_able<TYPES: NodeType, I: NodeImplementatio
         .write()
         .await
         .update_undecided_state(
-            consensus.saved_leaves.clone(),
-            consensus.validated_state_map.clone(),
+            consensus.saved_leaves().clone(),
+            consensus.validated_state_map().clone(),
         )
         .await
     {

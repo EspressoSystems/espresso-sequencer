@@ -432,8 +432,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                 self.consensus
                     .write()
                     .await
-                    .saved_da_certs
-                    .insert(view, cert.clone());
+                    .update_saved_da_certs(view, cert.clone());
 
                 broadcast_event(
                     Arc::new(HotShotEvent::DACertificateValidated(cert.clone())),
@@ -489,10 +488,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                 self.consensus
                     .write()
                     .await
-                    .vid_shares
-                    .entry(view)
-                    .or_default()
-                    .insert(disperse.data.recipient_key.clone(), disperse.clone());
+                    .update_vid_shares(view, disperse.clone());
 
                 if disperse.data.recipient_key != self.public_key {
                     debug!("Got a Valid VID share but it's not for our key");

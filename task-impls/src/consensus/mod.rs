@@ -503,7 +503,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     }
 
                     let mut consensus = self.consensus.write().await;
-                    consensus.update_high_qc_if_new(qc.clone());
+                    if let Err(e) = consensus.update_high_qc(qc.clone()) {
+                        tracing::trace!("{e:?}");
+                    }
 
                     drop(consensus);
                     debug!(
@@ -540,8 +542,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                 self.consensus
                     .write()
                     .await
-                    .saved_da_certs
-                    .insert(view, cert.clone());
+                    .update_saved_da_certs(view, cert.clone());
                 let Some(proposal) = self.current_proposal.clone() else {
                     return;
                 };
@@ -578,10 +579,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                 self.consensus
                     .write()
                     .await
-                    .vid_shares
-                    .entry(view)
-                    .or_default()
-                    .insert(disperse.data.recipient_key.clone(), disperse.clone());
+                    .update_vid_shares(view, disperse.clone());
                 if disperse.data.recipient_key != self.public_key {
                     return;
                 }

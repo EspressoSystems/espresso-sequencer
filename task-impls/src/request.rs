@@ -134,7 +134,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
     /// Creates the srequest structures for all types that are needed.
     async fn build_requests(&self, view: TYPES::Time, _: Ver) -> Vec<RequestKind<TYPES>> {
         let mut reqs = Vec::new();
-        if !self.state.read().await.vid_shares.contains_key(&view) {
+        if !self.state.read().await.vid_shares().contains_key(&view) {
             reqs.push(RequestKind::VID(view, self.public_key.clone()));
         }
         // TODO request other things
@@ -266,7 +266,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DelayedRequester<TYPES, I> {
     async fn cancel_vid(&self, req: &VidRequest<TYPES>) -> bool {
         let view = req.0;
         let state = self.state.read().await;
-        state.vid_shares.contains_key(&view) && state.cur_view() > view
+        state.vid_shares().contains_key(&view) && state.cur_view() > view
     }
 
     /// Transform a response into a `HotShotEvent`
