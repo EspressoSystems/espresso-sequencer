@@ -35,7 +35,7 @@ use hotshot::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
             derive_libp2p_peer_id, KeyPair, MemoryNetwork, NetworkingMetricsValue, PushCdnNetwork,
-            WrappedSignatureKey,
+            Topic, WrappedSignatureKey,
         },
     },
     types::SignatureKey,
@@ -348,9 +348,9 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     // If we are a DA node, we need to subscribe to the DA topic
     let topics = {
-        let mut topics = vec!["Global".into()];
+        let mut topics = vec![Topic::Global];
         if is_da {
-            topics.push("DA".into());
+            topics.push(Topic::DA);
         }
         topics
     };

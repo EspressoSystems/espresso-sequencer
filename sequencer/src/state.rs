@@ -26,6 +26,7 @@ use hotshot_types::{
     traits::{
         node_implementation::ConsensusTime, signature_key::BuilderSignatureKey, states::StateDelta,
     },
+    vid::{VidCommon, VidSchemeType},
 };
 use itertools::Itertools;
 use jf_primitives::merkle_tree::{
@@ -39,6 +40,7 @@ use jf_primitives::{
         AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme,
         ForgetableUniversalMerkleTreeScheme, LookupResult, MerkleCommitment, MerkleTreeScheme,
     },
+    vid::VidScheme,
 };
 use num_traits::CheckedSub;
 use sequencer_utils::impl_to_fixed_bytes;
@@ -186,17 +188,12 @@ impl ValidatedState {
     }
 }
 
-// TODO remove this, data will come from HotShot:
-// https://github.com/EspressoSystems/HotShot/issues/2744
-fn get_proposed_payload_size() -> u64 {
-    1
-}
-
 pub fn validate_proposal(
     state: &ValidatedState,
     expected_chain_config: ChainConfig,
     parent_leaf: &Leaf,
     proposal: &Header,
+    vid_common: &VidCommon,
 ) -> anyhow::Result<()> {
     let parent_header = parent_leaf.get_block_header();
 
@@ -211,7 +208,8 @@ pub fn validate_proposal(
     );
 
     anyhow::ensure!(
-        get_proposed_payload_size() < expected_chain_config.max_block_size(),
+        (VidSchemeType::get_payload_byte_len(vid_common) as u64)
+            < expected_chain_config.max_block_size(),
         anyhow::anyhow!(
             "Invalid Payload Size: local={:?}, proposal={:?}",
             expected_chain_config,
@@ -673,6 +671,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         instance: &Self::Instance,
         parent_leaf: &Leaf,
         proposed_header: &Header,
+        vid_common: VidCommon,
     ) -> Result<(Self, Self::Delta), Self::Error> {
         //validate builder fee
         if let Err(err) = validate_builder_fee(proposed_header) {
@@ -693,6 +692,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
             instance.chain_config,
             parent_leaf,
             proposed_header,
+            &vid_common,
         ) {
             tracing::error!("invalid proposal: {err:#}");
             return Err(BlockError::InvalidBlockHeader);
