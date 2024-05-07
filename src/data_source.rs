@@ -573,7 +573,6 @@ pub mod node_tests {
         vid::{vid_scheme, VidSchemeType},
     };
     use jf_primitives::vid::VidScheme;
-    use std::sync::Arc;
 
     #[async_std::test]
     pub async fn test_sync_status<D: TestableDataSource>() {
@@ -721,7 +720,7 @@ pub mod node_tests {
             // computing the total size.
             let (payload, metadata) = TestBlockPayload::from_transactions(
                 [mock_transaction(vec![i as u8 % 2])],
-                Arc::new(TestInstanceState {}),
+                &TestInstanceState {},
             )
             .unwrap();
             let encoded = payload.encode().unwrap();
