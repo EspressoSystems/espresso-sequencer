@@ -1,8 +1,6 @@
 use crate::block2::{
-    ns_table::ns_payload::{tx_iter::TxIndex, NsPayload},
-    payload_bytes::{
-        tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
-    },
+    ns_table::ns_payload,
+    payload_bytes::{tx_offset_as_bytes, TX_OFFSET_BYTE_LEN},
 };
 use std::ops::Range;
 
@@ -16,8 +14,8 @@ pub struct TxTableEntries {
 /// Manual [`serde`] impl for [`TxTableEntries`].
 mod tx_table_entries_serde {
     use crate::block2::{
-        ns_table::ns_payload::tx_iter::tx_table_entries::TxTableEntries,
         payload_bytes::{tx_offset_as_bytes, tx_offset_from_bytes, TX_OFFSET_BYTE_LEN},
+        tx_table_entries::TxTableEntries,
     };
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -76,43 +74,10 @@ impl TxTableEntries {
         let start = self.prev.unwrap_or(0).saturating_add(translate).min(end);
         start..end
     }
-}
 
-/// TODO try to move all these impl blocks up to their struct defs.
-impl NsPayload {
-    /// Read the `index`th and `(index-1)`th entries from the tx table.
-    ///
-    /// TODO Panics if `index >= self.num_txs()`?
-    pub fn read_tx_table_entries(&self, index: &TxIndex) -> TxTableEntries {
-        let cur = self.read_tx_offset(index);
-        let prev = if index.0 == 0 {
-            None
-        } else {
-            let prev_index = TxIndex(&index.0 - 1);
-            Some(self.read_tx_offset(&prev_index))
-        };
-        TxTableEntries { cur, prev }
-    }
-
-    /// Read the `index`th entry from the tx table.
-    ///
-    /// TODO newtype for return type?
-    fn read_tx_offset(&self, index: &TxIndex) -> usize {
-        let start = index.0 * TX_OFFSET_BYTE_LEN + NUM_TXS_BYTE_LEN;
-        tx_offset_from_bytes(&self.0[start..start + TX_OFFSET_BYTE_LEN])
-    }
-
-    /// Read data on the `index`th tx from the tx table, sanitize that data
-    /// into a valid range relative to the beginning of this namespace's
-    /// payload.
-    ///
-    /// Returned range guaranteed to satisfy `start <= end <=
-    /// namespace_byte_len`.
-    ///
-    /// Panics if `index >= self.num_txs()`.
-    pub fn tx_payload_range_relative(&self, index: &TxIndex) -> Range<usize> {
-        let tx_table_byte_len = self.read_num_txs().tx_table_byte_len_unchecked();
-        self.read_tx_table_entries(index)
-            .as_range(tx_table_byte_len, self.0.len())
+    /// TODO explain: [`ns_payload::A`] arg allows access to this method only
+    /// from within [`ns_payload`] module.
+    pub fn new(_: ns_payload::A, cur: usize, prev: Option<usize>) -> Self {
+        Self { cur, prev }
     }
 }

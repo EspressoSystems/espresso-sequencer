@@ -1,5 +1,5 @@
 use crate::block2::{
-    ns_table::ns_payload::NsPayload,
+    ns_table::ns_payload::{self, NsPayload},
     payload_bytes::{
         num_txs_as_bytes, num_txs_from_bytes, NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN,
         TX_OFFSET_BYTE_LEN,
@@ -7,8 +7,6 @@ use crate::block2::{
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
-
-pub mod tx_table_entries;
 
 /// Index for an entry in a tx table.
 ///
@@ -101,6 +99,19 @@ impl TxIndex {
     /// TODO same question as [`NumTxs::as_bytes`]
     pub fn as_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
         num_txs_as_bytes(self.0)
+    }
+
+    /// Return a decremented [`TxIndex`].
+    pub fn prev(&self, _: ns_payload::A) -> Option<Self> {
+        if self.0 == 0 {
+            None
+        } else {
+            Some(Self(self.0 - 1))
+        }
+    }
+
+    pub fn as_usize(&self, _: ns_payload::A) -> usize {
+        self.0
     }
 }
 

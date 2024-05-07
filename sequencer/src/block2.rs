@@ -18,6 +18,7 @@ mod ns_table;
 mod num_txs;
 mod payload_bytes;
 mod tx_proof;
+mod tx_table_entries;
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {

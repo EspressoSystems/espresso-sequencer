@@ -3,13 +3,16 @@ use crate::{
         ns_iter::NsIndex,
         num_txs::NumTxs,
         payload_bytes::{
-            num_txs_as_bytes, tx_offset_as_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
+            num_txs_as_bytes, tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN,
+            TX_OFFSET_BYTE_LEN,
         },
+        tx_table_entries::TxTableEntries,
         Payload,
     },
     NamespaceId, Transaction,
 };
 use serde::{Deserialize, Serialize};
+use std::ops::Range;
 use tx_iter::{TxIndex, TxIter};
 
 pub mod tx_iter;
@@ -126,6 +129,36 @@ impl NsPayload {
     /// Read the number of txs declared in the tx table.
     pub fn read_num_txs(&self) -> NumTxs {
         NumTxs::from_bytes(A(()), &self.0[..self.num_txs_byte_len()])
+    }
+    /// Read the `index`th and `(index-1)`th entries from the tx table.
+    ///
+    /// TODO Panics if `index >= self.num_txs()`?
+    pub fn read_tx_table_entries(&self, index: &TxIndex) -> TxTableEntries {
+        let cur = self.read_tx_offset(index);
+        let prev = index.prev(A(())).map(|prev| self.read_tx_offset(&prev));
+        TxTableEntries::new(A(()), cur, prev)
+    }
+
+    /// Read the `index`th entry from the tx table.
+    ///
+    /// TODO newtype for return type?
+    fn read_tx_offset(&self, index: &TxIndex) -> usize {
+        let start = index.as_usize(A(())) * TX_OFFSET_BYTE_LEN + NUM_TXS_BYTE_LEN;
+        tx_offset_from_bytes(&self.0[start..start + TX_OFFSET_BYTE_LEN])
+    }
+
+    /// Read data on the `index`th tx from the tx table, sanitize that data
+    /// into a valid range relative to the beginning of this namespace's
+    /// payload.
+    ///
+    /// Returned range guaranteed to satisfy `start <= end <=
+    /// namespace_byte_len`.
+    ///
+    /// Panics if `index >= self.num_txs()`.
+    pub fn tx_payload_range_relative(&self, index: &TxIndex) -> Range<usize> {
+        let tx_table_byte_len = self.read_num_txs().tx_table_byte_len_unchecked();
+        self.read_tx_table_entries(index)
+            .as_range(tx_table_byte_len, self.0.len())
     }
 }
 
