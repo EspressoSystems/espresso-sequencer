@@ -151,6 +151,7 @@ impl<
                             block_view,
                             BuilderFee {
                                 fee_amount: blocks_initial_info.offered_fee,
+                                fee_account: block_data.sender,
                                 fee_signature: block_header.fee_signature,
                             },
                         )),

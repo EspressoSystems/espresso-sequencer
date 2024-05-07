@@ -161,7 +161,9 @@ pub const GENESIS_VID_NUM_STORAGE_NODES: usize = 1;
 pub struct BuilderFee<TYPES: NodeType> {
     /// Proposed fee amount
     pub fee_amount: u64,
-    /// Signature over fee amount
+    /// Account authorizing the fee.
+    pub fee_account: TYPES::BuilderSignatureKey,
+    /// Signature over fee amount by `fee_account`.
     pub fee_signature: <TYPES::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,
 }
 

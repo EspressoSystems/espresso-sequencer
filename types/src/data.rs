@@ -740,7 +740,7 @@ pub mod null_block {
         /// Arbitrary fee amount, this block doesn't actually come from a builder
         const FEE_AMOUNT: u64 = 0;
 
-        let (_, priv_key) =
+        let (pub_key, priv_key) =
             <TYPES::BuilderSignatureKey as BuilderSignatureKey>::generated_from_seed_indexed(
                 [0_u8; 32], 0,
             );
@@ -756,6 +756,7 @@ pub mod null_block {
         ) {
             Ok(sig) => Some(BuilderFee {
                 fee_amount: FEE_AMOUNT,
+                fee_account: pub_key,
                 fee_signature: sig,
             }),
             Err(_) => None,
