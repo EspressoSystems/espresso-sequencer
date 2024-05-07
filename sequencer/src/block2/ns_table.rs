@@ -1,9 +1,17 @@
 use crate::block2::{
     ns_iter::{NsIndex, NsIter},
-    payload_bytes::{num_nss_from_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN},
+    ns_payload_range::NsPayloadRange,
+    payload_bytes::{
+        ns_id_from_bytes, ns_offset_from_bytes, num_nss_from_bytes, NS_ID_BYTE_LEN,
+        NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
+    },
 };
 use crate::NamespaceId;
 use serde::{Deserialize, Serialize};
+
+/// TODO explain: ZST to unlock visibility in other modules. can only be
+/// constructed in this module.
+pub struct A(());
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct NsTable(pub(super) Vec<u8>); // TODO remove pub(super)
@@ -60,5 +68,48 @@ impl NsTable {
         // to consume an iterator. If performance is a concern then we could
         // cache this count on construction of `Payload`.
         self.iter().count()
+    }
+
+    /// Read the namespace id from the `index`th entry from the namespace table.
+    ///
+    /// Panics if `index >= self.num_nss()`.
+    pub fn read_ns_id(&self, index: &NsIndex) -> NamespaceId {
+        let start =
+            index.as_usize(A(())) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
+        ns_id_from_bytes(&self.0[start..start + NS_ID_BYTE_LEN])
+    }
+
+    /// Read the namespace offset from the `index`th entry from the namespace table.
+    ///
+    /// Panics if `index >= self.num_nss()`.
+    pub fn read_ns_offset(&self, index: &NsIndex) -> usize {
+        // TODO refactor repeated index gymnastics code from `read_ns_id`
+        let start = index.as_usize(A(())) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN)
+            + NUM_NSS_BYTE_LEN
+            + NS_ID_BYTE_LEN;
+        ns_offset_from_bytes(&self.0[start..start + NS_OFFSET_BYTE_LEN])
+    }
+
+    /// Read subslice range for the `index`th namespace from the namespace
+    /// table.
+    ///
+    /// It is the responsibility of the caller to ensure that the `index`th
+    /// entry is not a duplicate of a previous entry. Otherwise the returned
+    /// range will be invalid. (Can the caller even create his own `NsIndex`??)
+    ///
+    /// Returned range guaranteed to satisfy `start <= end <=
+    /// payload_byte_len`.
+    ///
+    /// TODO remove `payload_byte_len` arg and do not check `end`?
+    ///
+    /// Panics if `index >= self.num_nss()`.
+    pub fn ns_payload_range(&self, index: &NsIndex, payload_byte_len: usize) -> NsPayloadRange {
+        let end = self.read_ns_offset(index).min(payload_byte_len);
+        let start = index
+            .prev(A(()))
+            .map(|prev| self.read_ns_offset(&prev))
+            .unwrap_or(0)
+            .min(end);
+        NsPayloadRange::new(A(()), start, end)
     }
 }

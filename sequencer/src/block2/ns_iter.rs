@@ -1,10 +1,7 @@
 use crate::{
     block2::{
-        payload_bytes::{
-            ns_id_from_bytes, ns_offset_from_bytes, num_nss_as_bytes, num_nss_from_bytes,
-            NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
-        },
-        NsTable,
+        ns_table::{self, NsTable},
+        payload_bytes::{num_nss_as_bytes, num_nss_from_bytes, NUM_NSS_BYTE_LEN},
     },
     NamespaceId,
 };
@@ -26,6 +23,19 @@ impl NsIndex {
     pub fn as_bytes(&self) -> [u8; NUM_NSS_BYTE_LEN] {
         num_nss_as_bytes(self.0)
     }
+
+    pub fn as_usize(&self, _: ns_table::A) -> usize {
+        self.0
+    }
+
+    /// Return a decremented [`NsIndex`].
+    pub fn prev(&self, _: ns_table::A) -> Option<Self> {
+        if self.0 == 0 {
+            None
+        } else {
+            Some(Self(self.0 - 1))
+        }
+    }
 }
 
 // TODO so much boilerplate for serde
@@ -45,39 +55,6 @@ impl<'de> Deserialize<'de> for NsIndex {
     {
         <[u8; NUM_NSS_BYTE_LEN] as Deserialize>::deserialize(deserializer)
             .map(|bytes: [u8; NUM_NSS_BYTE_LEN]| NsIndex(num_nss_from_bytes(&bytes)))
-    }
-}
-
-impl NsTable {
-    /// Read the namespace id from the `index`th entry from the namespace table.
-    ///
-    /// Panics if `index >= self.num_nss()`.
-    pub fn read_ns_id(&self, index: &NsIndex) -> NamespaceId {
-        let start = index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
-        ns_id_from_bytes(&self.0[start..start + NS_ID_BYTE_LEN])
-    }
-
-    /// Read the namespace offset from the `index`th entry from the namespace table.
-    ///
-    /// Panics if `index >= self.num_nss()`.
-    pub fn read_ns_offset(&self, index: &NsIndex) -> usize {
-        // TODO refactor repeated index gymnastics code from `read_ns_id`
-        let start =
-            index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
-        ns_offset_from_bytes(&self.0[start..start + NS_OFFSET_BYTE_LEN])
-    }
-
-    /// Read the namespace offset from the `(index-1)`th entry from the
-    /// namespace table. Returns `None` if `index` is zero.
-    ///
-    /// Panics if `index >= self.num_nss()`.
-    pub fn read_ns_offset_prev(&self, index: &NsIndex) -> Option<usize> {
-        if index.0 == 0 {
-            None
-        } else {
-            let prev_index = NsIndex(index.0 - 1);
-            Some(self.read_ns_offset(&prev_index))
-        }
     }
 }
 
