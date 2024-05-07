@@ -1584,55 +1584,6 @@ where
             proof: proof_path.into(),
         })
     }
-
-    async fn keys(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<Vec<State::Key>> {
-        let state_type = State::state_type();
-
-        // Identify the snapshot.
-        let created = self.snapshot_info(snapshot).await?.0;
-
-        // Get all the nodes which correspond to an entry, ie have a non-NULL index field.
-        let rows = self
-            .query(
-                &format!(
-                    "SELECT DISTINCT ON (path) index
-                    FROM {state_type}
-                    WHERE created <= $1 AND index IS NOT NULL
-                    ORDER BY path, created DESC;"
-                ),
-                [sql_param(&created)],
-            )
-            .await?;
-        rows.map(|row| {
-            let row = row.map_err(|err| QueryError::Error {
-                message: format!("failed to fetch key: {err:#}"),
-            })?;
-            serde_json::from_value(row.get("index")).map_err(|err| QueryError::Error {
-                message: format!("failed to deserialize key: {err:#}"),
-            })
-        })
-        .try_collect()
-        .await
-    }
-
-    async fn get_snapshot(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<State> {
-        // Identify the snapshot.
-        let commit = self.snapshot_info(snapshot).await?.1;
-
-        // Create a completely sparse snapshot from the header, as a starting point.
-        let mut state = State::from_commitment(commit);
-        // Remember each path into the tree.
-        for key in self.keys(snapshot).await? {
-            let path = self.get_path(snapshot, key.clone()).await?;
-            state
-                .insert_path(key.clone(), &path)
-                .map_err(|err| QueryError::Error {
-                    message: format!("invalid path for key {key:?}: {err:#}"),
-                })?;
-        }
-
-        Ok(state)
-    }
 }
 
 #[async_trait]
@@ -3245,7 +3196,7 @@ pub mod testing {
                 entry JSONB 
             );
             ALTER TABLE {name} ADD CONSTRAINT {name}_pk PRIMARY KEY (path, created);
-            CREATE INDEX {name}_created ON {name} (path);"
+            CREATE INDEX {name}_created ON {name} (created);"
             )
         }
     }
@@ -4159,9 +4110,9 @@ mod test {
 
             // Check that we can get a correct path for each key that we touched.
             let snapshot = Snapshot::<_, MockMerkleTree, 8>::Index(block_height);
-            let loaded = storage.get_snapshot(snapshot).await.unwrap();
+
             for (key, val) in expected {
-                let proof = match loaded.universal_lookup(key) {
+                let proof = match tree.universal_lookup(key) {
                     LookupResult::Ok(_, proof) => proof,
                     LookupResult::NotFound(proof) => proof,
                     LookupResult::NotInMemory => panic!("failed to find key {key}"),
@@ -4179,7 +4130,7 @@ mod test {
             }
 
             // Check that we can even get a non-membership proof for a key that we never touched.
-            let proof = match loaded.universal_lookup(RESERVED_KEY) {
+            let proof = match tree.universal_lookup(RESERVED_KEY) {
                 LookupResult::Ok(_, proof) => proof,
                 LookupResult::NotFound(proof) => proof,
                 LookupResult::NotInMemory => panic!("failed to find reserved key {RESERVED_KEY}"),

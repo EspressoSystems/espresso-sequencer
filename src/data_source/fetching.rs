@@ -596,26 +596,6 @@ where
             .get_path(snapshot, key)
             .await
     }
-
-    async fn keys(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<Vec<State::Key>> {
-        self.fetcher
-            .storage
-            .read()
-            .await
-            .storage
-            .keys(snapshot)
-            .await
-    }
-
-    async fn get_snapshot(&self, snapshot: Snapshot<Types, State, ARITY>) -> QueryResult<State> {
-        self.fetcher
-            .storage
-            .read()
-            .await
-            .storage
-            .get_snapshot(snapshot)
-            .await
-    }
 }
 
 #[async_trait]
