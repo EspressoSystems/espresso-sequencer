@@ -20,7 +20,7 @@ ADD
 CREATE INDEX fee_merkle_tree_created ON fee_merkle_tree (created);
 
 CREATE TABLE block_merkle_tree (
-  pos INTEGER[] NOT NULL, 
+  path INTEGER[] NOT NULL, 
   created BIGINT NOT NULL, 
   hash_id INT NOT NULL REFERENCES hash (id), 
   children INT[], 
