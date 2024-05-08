@@ -34,17 +34,9 @@ pub struct TxProof {
     payload_proof_tx: Option<SmallRangeProofType>,
 }
 
+/// `impl Payload` here instead of where [`Payload`] is defined so that code for
+/// tx proof creation and verification is in the same place.
 impl Payload {
-    pub fn transaction(&self, index: &Index) -> Option<Transaction> {
-        // TODO check index.ns() in bounds
-        // TODO don't copy the tx bytes into the return value
-        // https://github.com/EspressoSystems/hotshot-query-service/issues/267
-        Some(
-            self.ns_payload(index.ns())
-                .export_tx(&self.ns_table.read_ns_id(index.ns()), index.tx()),
-        )
-    }
-
     pub fn transaction_with_proof(
         &self,
         index: &Index,

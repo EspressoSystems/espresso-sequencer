@@ -33,6 +33,8 @@ struct NsProofExistence {
     ns_proof: LargeRangeProofType,
 }
 
+/// `impl Payload` here instead of where [`Payload`] is defined so that code for
+/// namespace proof creation and verification is in the same place.
 impl Payload {
     /// Returns the payload bytes for namespace `ns_id`, along with a proof of
     /// correctness for those bytes.

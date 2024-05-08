@@ -110,7 +110,7 @@ impl NsTable {
     /// Returned range guaranteed to satisfy `start <= end <=
     /// payload_byte_len`.
     ///
-    /// TODO remove `payload_byte_len` arg and do not check `end`?
+    /// TODO newtype for `payload_byte_len` arg?
     ///
     /// Panics if `index >= self.num_nss()`.
     pub fn ns_payload_range(&self, index: &NsIndex, payload_byte_len: usize) -> NsPayloadRange {

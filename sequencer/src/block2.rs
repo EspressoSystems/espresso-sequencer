@@ -4,7 +4,8 @@ use commit::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{traits::BlockPayload, utils::BuilderCommitment};
 use iter::{Index, Iter};
-use ns_payload::NamespacePayloadBuilder;
+use ns_iter::NsIndex;
+use ns_payload::{NamespacePayloadBuilder, NsPayload};
 use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -163,6 +164,27 @@ impl Display for Payload {
 impl Committable for Payload {
     fn commit(&self) -> commit::Commitment<Self> {
         todo!()
+    }
+}
+
+impl Payload {
+    pub fn transaction(&self, index: &Index) -> Option<Transaction> {
+        // TODO check index.ns() in bounds
+        // TODO don't copy the tx bytes into the return value
+        // https://github.com/EspressoSystems/hotshot-query-service/issues/267
+        Some(
+            self.ns_payload(index.ns())
+                .export_tx(&self.ns_table.read_ns_id(index.ns()), index.tx()),
+        )
+    }
+
+    /// TODO panics if index out of bounds
+    pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
+        let range = self
+            .ns_table
+            .ns_payload_range(index, self.payload.len())
+            .as_range();
+        NsPayload::new(&self.payload[range])
     }
 }
 

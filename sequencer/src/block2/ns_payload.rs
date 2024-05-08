@@ -1,6 +1,5 @@
 use crate::{
     block2::{
-        ns_iter::NsIndex,
         num_txs::NumTxs,
         payload_bytes::{
             num_txs_as_bytes, tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN,
@@ -8,7 +7,6 @@ use crate::{
         },
         tx_iter::{TxIndex, TxIter},
         tx_table_entries::TxTableEntries,
-        Payload,
     },
     NamespaceId, Transaction,
 };
@@ -170,9 +168,8 @@ mod ns_payload_owned {
     use std::ops::Deref;
 
     impl NsPayload {
-        // pub(super) because I want it private to this file, but I also want to
-        // contain this boilerplate code in its on module.ß
-        pub(super) fn new(p: &[u8]) -> &NsPayload {
+        /// TODO restrict visibility
+        pub fn new(p: &[u8]) -> &NsPayload {
             unsafe { &*(p as *const [u8] as *const NsPayload) }
         }
     }
@@ -195,17 +192,5 @@ mod ns_payload_owned {
         fn to_owned(&self) -> NsPayloadOwned {
             NsPayloadOwned(self.0.to_owned())
         }
-    }
-}
-
-// TODO move to where `Payload` is defined.
-impl Payload {
-    /// TODO panics if index out of bounds
-    pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
-        let range = self
-            .ns_table
-            .ns_payload_range(index, self.payload.len())
-            .as_range();
-        NsPayload::new(&self.payload[range])
     }
 }
