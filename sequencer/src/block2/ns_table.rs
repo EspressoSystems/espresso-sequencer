@@ -3,7 +3,7 @@ use crate::block2::{
     ns_payload_range::NsPayloadRange,
     payload,
     payload_bytes::{
-        ns_id_from_bytes, usize_from_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
+        u64_from_bytes, usize_from_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
     },
 };
 use crate::NamespaceId;
@@ -74,7 +74,11 @@ impl NsTable {
     pub fn read_ns_id(&self, index: &NsIndex) -> NamespaceId {
         let start =
             index.as_usize(A(())) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
-        ns_id_from_bytes(&self.0[start..start + NS_ID_BYTE_LEN])
+
+        // TODO hack to deserialize `NamespaceId` from `NS_ID_BYTE_LEN` bytes
+        NamespaceId::from(u64_from_bytes::<NS_ID_BYTE_LEN>(
+            &self.0[start..start + NS_ID_BYTE_LEN],
+        ))
     }
 
     /// Read the namespace offset from the `index`th entry from the namespace table.

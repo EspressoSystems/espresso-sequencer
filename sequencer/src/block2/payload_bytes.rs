@@ -1,6 +1,5 @@
 //! Low-level utils for reading from and writing to the binary block payload.
 
-use crate::NamespaceId;
 use paste::paste;
 use std::mem::size_of;
 
@@ -9,29 +8,6 @@ pub const TX_OFFSET_BYTE_LEN: usize = 4;
 pub const NUM_NSS_BYTE_LEN: usize = NUM_TXS_BYTE_LEN;
 pub const NS_OFFSET_BYTE_LEN: usize = TX_OFFSET_BYTE_LEN;
 pub const NS_ID_BYTE_LEN: usize = 4;
-
-/// Serialize `ns_id` into [`NS_ID_BYTE_LEN`] bytes.
-///
-/// # Panics
-/// If `ns_id` cannot fit into [`NS_ID_BYTE_LEN`] bytes.
-///
-/// TODO I'm cheating by converting `NamespaceId` via `u64::from`, which is
-/// available only because `NamespaceId` derives `From`. (Not sure it should
-/// be doing that. What's the point of the newtype?). Maybe I should instead
-/// use serialization provided by `NamespaceId`? The problem is that
-/// serialization is not ergonomic compared to mine here, which is
-/// infallible and returns a constant-size array.
-pub fn ns_id_as_bytes(ns_id: NamespaceId) -> [u8; NS_ID_BYTE_LEN] {
-    u64_to_bytes(u64::from(ns_id))
-}
-
-/// Deserialize `bytes` into a [`NamespaceId`].
-///
-/// # Panics
-/// If `bytes.len()` exceeds [`NS_ID_BYTE_LEN`].
-pub fn ns_id_from_bytes(bytes: &[u8]) -> NamespaceId {
-    NamespaceId::from(u64_from_bytes::<NS_ID_BYTE_LEN>(bytes))
-}
 
 // Use an ugly macro because it's difficult or impossible to be generic over
 // primitive types such as `usize`, `u64`.
