@@ -10,14 +10,6 @@ pub const NUM_NSS_BYTE_LEN: usize = NUM_TXS_BYTE_LEN;
 pub const NS_OFFSET_BYTE_LEN: usize = TX_OFFSET_BYTE_LEN;
 pub const NS_ID_BYTE_LEN: usize = 4;
 
-/// Deserialize `bytes` into a count of transactions (`usize`).
-///
-/// # Panics
-/// If `bytes.len()` exceeds [`NUM_TXS_BYTE_LEN`].
-pub fn num_txs_from_bytes(bytes: &[u8]) -> usize {
-    usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes)
-}
-
 /// Serialize `tx_offset` into [`TX_OFFSET_BYTE_LEN`] bytes.
 ///
 /// # Panics

@@ -1,6 +1,6 @@
 use crate::block2::{
     ns_payload,
-    payload_bytes::{num_txs_from_bytes, usize_to_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
+    payload_bytes::{usize_from_bytes, usize_to_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -25,7 +25,7 @@ impl<'de> Deserialize<'de> for NumTxs {
         D: Deserializer<'de>,
     {
         <[u8; NUM_TXS_BYTE_LEN] as Deserialize>::deserialize(deserializer)
-            .map(|bytes: [u8; NUM_TXS_BYTE_LEN]| NumTxs(num_txs_from_bytes(&bytes)))
+            .map(|bytes| NumTxs(usize_from_bytes::<NUM_TXS_BYTE_LEN>(&bytes)))
     }
 }
 
@@ -34,6 +34,8 @@ impl NumTxs {
     ///
     /// "Unchecked" because this quantity might exceed the byte length of
     /// the namespace in which it resides.
+    ///
+    /// TODO move up to ns_payload or ns_payload_range?
     pub fn tx_table_byte_len_unchecked(&self) -> usize {
         self.0
             .saturating_mul(TX_OFFSET_BYTE_LEN)
@@ -63,7 +65,7 @@ impl NumTxs {
     /// TODO explain: [`ns_payload::A`] arg allows access to this method only
     /// from within [`ns_payload`] module.
     pub fn from_bytes(_: ns_payload::A, bytes: &[u8]) -> Self {
-        Self(num_txs_from_bytes(bytes))
+        Self(usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes))
     }
     pub fn from_usize(_: ns_payload::A, n: usize) -> Self {
         Self(n)

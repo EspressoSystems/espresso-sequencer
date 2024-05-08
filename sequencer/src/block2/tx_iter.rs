@@ -1,6 +1,6 @@
 use crate::block2::{
     ns_payload::{self, NsPayload},
-    payload_bytes::{num_txs_from_bytes, usize_to_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
+    payload_bytes::{usize_from_bytes, usize_to_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
@@ -29,7 +29,7 @@ impl<'de> Deserialize<'de> for TxIndex {
         D: Deserializer<'de>,
     {
         <[u8; NUM_TXS_BYTE_LEN] as Deserialize>::deserialize(deserializer)
-            .map(|bytes: [u8; NUM_TXS_BYTE_LEN]| TxIndex(num_txs_from_bytes(&bytes)))
+            .map(|bytes| TxIndex(usize_from_bytes::<NUM_TXS_BYTE_LEN>(&bytes)))
     }
 }
 
