@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use bincode::config::Options;
 use cdn_broker::reexports::{
     connection::{protocols::Tcp, NoMiddleware, TrustedMiddleware, UntrustedMiddleware},
-    def::{ConnectionDef, RunDef},
+    def::{ConnectionDef, RunDef, Topic as TopicTrait},
     discovery::{Embedded, Redis},
 };
 #[cfg(feature = "hotshot-testing")]
@@ -44,6 +44,7 @@ use hotshot_types::{
     utils::bincode_opts,
     BoxSyncFuture,
 };
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 #[cfg(feature = "hotshot-testing")]
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::{error, warn};
@@ -101,6 +102,7 @@ impl<TYPES: NodeType> RunDef for ProductionDef<TYPES> {
     type User = UserDef<TYPES>;
     type Broker = BrokerDef<TYPES>;
     type DiscoveryClientType = Redis;
+    type Topic = Topic;
 }
 
 /// The user definition for the Push CDN.
@@ -139,6 +141,7 @@ impl<TYPES: NodeType> RunDef for TestingDef<TYPES> {
     type User = UserDef<TYPES>;
     type Broker = BrokerDef<TYPES>;
     type DiscoveryClientType = Embedded;
+    type Topic = Topic;
 }
 
 /// A communication channel to the Push CDN, which is a collection of brokers and a marshal
@@ -155,12 +158,17 @@ pub struct PushCdnNetwork<TYPES: NodeType> {
 
 /// The enum for the topics we can subscribe to in the Push CDN
 #[repr(u8)]
+#[derive(IntoPrimitive, TryFromPrimitive, Clone, PartialEq, Eq)]
 pub enum Topic {
     /// The global topic
     Global = 0,
     /// The DA topic
     DA = 1,
 }
+
+/// Implement the `TopicTrait` for our `Topic` enum. We need this to filter
+/// topics that are not implemented at the application level.
+impl TopicTrait for Topic {}
 
 impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
     /// Create a new `PushCdnNetwork` (really a client) from a marshal endpoint, a list of initial
