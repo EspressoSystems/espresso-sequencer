@@ -3,8 +3,7 @@ use crate::{
         num_txs::NumTxs,
         payload,
         payload_bytes::{
-            num_txs_as_bytes, tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN,
-            TX_OFFSET_BYTE_LEN,
+            tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
         },
         tx_iter::{TxIndex, TxIter},
         tx_table_entries::TxTableEntries,
@@ -39,8 +38,8 @@ impl NamespacePayloadBuilder {
         let mut result = Vec::with_capacity(
             NUM_TXS_BYTE_LEN + self.tx_table_entries.len() + self.tx_bodies.len(),
         );
-        let num_txs = self.tx_table_entries.len() / TX_OFFSET_BYTE_LEN;
-        result.extend(num_txs_as_bytes(num_txs));
+        let num_txs = NumTxs::from_usize(A(()), self.tx_table_entries.len() / TX_OFFSET_BYTE_LEN);
+        result.extend(num_txs.as_bytes());
         result.extend(self.tx_table_entries);
         result.extend(self.tx_bodies);
         result

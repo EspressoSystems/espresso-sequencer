@@ -1,6 +1,6 @@
 use crate::block2::{
     ns_payload,
-    payload_bytes::{num_txs_as_bytes, num_txs_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
+    payload_bytes::{num_txs_from_bytes, usize_to_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -57,13 +57,16 @@ impl NumTxs {
     /// if they want an owned value, but I guess we can rely on the compiler to
     /// optimize away any `borrow().clone()` right?
     pub fn as_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
-        num_txs_as_bytes(self.0)
+        usize_to_bytes(self.0)
     }
 
     /// TODO explain: [`ns_payload::A`] arg allows access to this method only
     /// from within [`ns_payload`] module.
     pub fn from_bytes(_: ns_payload::A, bytes: &[u8]) -> Self {
         Self(num_txs_from_bytes(bytes))
+    }
+    pub fn from_usize(_: ns_payload::A, n: usize) -> Self {
+        Self(n)
     }
     pub fn as_usize(&self, _: ns_payload::A) -> usize {
         self.0

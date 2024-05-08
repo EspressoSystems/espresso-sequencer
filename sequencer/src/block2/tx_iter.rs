@@ -1,6 +1,6 @@
 use crate::block2::{
     ns_payload::{self, NsPayload},
-    payload_bytes::{num_txs_as_bytes, num_txs_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
+    payload_bytes::{num_txs_from_bytes, usize_to_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
@@ -95,7 +95,7 @@ impl TxIndex {
     ///
     /// TODO same question as [`NumTxs::as_bytes`]
     pub fn as_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
-        num_txs_as_bytes(self.0)
+        usize_to_bytes(self.0)
     }
 
     /// Return a decremented [`TxIndex`].

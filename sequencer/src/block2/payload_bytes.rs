@@ -10,14 +10,6 @@ pub const NUM_NSS_BYTE_LEN: usize = NUM_TXS_BYTE_LEN;
 pub const NS_OFFSET_BYTE_LEN: usize = TX_OFFSET_BYTE_LEN;
 pub const NS_ID_BYTE_LEN: usize = 4;
 
-/// Serialize `num_txs` into [`NUM_TXS_BYTE_LEN`] bytes.
-///
-/// # Panics
-/// If `num_txs` cannot fit into [`NUM_TXS_BYTE_LEN`] bytes.
-pub fn num_txs_as_bytes(num_txs: usize) -> [u8; NUM_TXS_BYTE_LEN] {
-    usize_to_bytes(num_txs)
-}
-
 /// Deserialize `bytes` into a count of transactions (`usize`).
 ///
 /// # Panics
@@ -107,7 +99,7 @@ macro_rules! uint_bytes_impl {
                 ///
                 /// # Panics
                 /// If `n` cannot fit into `BYTE_LEN` bytes.
-                fn [<$T _to_bytes>]<const BYTE_LEN: usize>(n: $T) -> [u8; BYTE_LEN] {
+                pub fn [<$T _to_bytes>]<const BYTE_LEN: usize>(n: $T) -> [u8; BYTE_LEN] {
                     if size_of::<$T>() > BYTE_LEN {
                         assert!(
                             n <= [<$T _max_from_byte_len>](BYTE_LEN),
@@ -127,7 +119,7 @@ macro_rules! uint_bytes_impl {
                 ///
                 /// # Panics
                 /// If `bytes.len()` is too large to fit into a `$T`.
-                fn [<$T _from_bytes>]<const BYTE_LEN: usize>(bytes: &[u8]) -> $T {
+                pub fn [<$T _from_bytes>]<const BYTE_LEN: usize>(bytes: &[u8]) -> $T {
                     assert!(bytes.len() <= BYTE_LEN, "bytes len {} exceeds BYTE_LEN {BYTE_LEN}", bytes.len());
                     assert!(
                         BYTE_LEN <= size_of::<$T>(),
