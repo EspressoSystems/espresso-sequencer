@@ -470,9 +470,13 @@ impl<
                 }
 
                 self.num_timeouts_tracked += 1;
+                let leader = self.membership.get_leader(view_number);
                 error!(
-                    "Num timeouts tracked since last view change is {}. View {} timed out",
-                    self.num_timeouts_tracked, *view_number
+                    %leader,
+                    leader_mnemonic = cdn_proto::mnemonic(&leader),
+                    view_number = *view_number,
+                    num_timeouts_tracked = self.num_timeouts_tracked,
+                    "view timed out",
                 );
 
                 if self.num_timeouts_tracked >= 3 {

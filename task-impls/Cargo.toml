@@ -18,6 +18,7 @@ async-lock = { workspace = true }
 async-trait = { workspace = true }
 bincode = { workspace = true }
 bitvec = { workspace = true }
+cdn-proto = { workspace = true }
 chrono = "0.4"
 committable = { workspace = true }
 either = { workspace = true }
