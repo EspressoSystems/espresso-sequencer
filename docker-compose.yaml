@@ -177,15 +177,18 @@ services:
     ports:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
       - "$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT"
-    # Run the full API server with all modules, default storage
-    command: sequencer -- http -- query -- catchup -- status -- submit -- hotshot-events
+    # Run the full API server with all modules, Postgres storage
+    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- submit -- hotshot-events
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_CDN_ENDPOINT
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer1:$ESPRESSO_SEQUENCER_API_PORT
-      - ESPRESSO_SEQUENCER_STORAGE_PATH
+      - ESPRESSO_SEQUENCER_POSTGRES_HOST=sequencer-db-0
+      - ESPRESSO_SEQUENCER_POSTGRES_USER=root
+      - ESPRESSO_SEQUENCER_POSTGRES_PASSWORD=password
+      - ESPRESSO_SEQUENCER_POSTGRES_DATABASE=sequencer
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - ESPRESSO_STATE_RELAY_SERVER_URL
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_0
@@ -204,7 +207,7 @@ services:
         condition: service_healthy
       demo-l1-network:
         condition: service_healthy
-      sequencer-db:
+      sequencer-db-0:
         condition: service_healthy
       state-relay-server:
         condition: service_healthy
@@ -226,7 +229,7 @@ services:
       - ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_API_PEERS=http://sequencer2:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer2:$ESPRESSO_SEQUENCER_API_PORT
-      - ESPRESSO_SEQUENCER_POSTGRES_HOST=sequencer-db
+      - ESPRESSO_SEQUENCER_POSTGRES_HOST=sequencer-db-1
       - ESPRESSO_SEQUENCER_POSTGRES_USER=root
       - ESPRESSO_SEQUENCER_POSTGRES_PASSWORD=password
       - ESPRESSO_SEQUENCER_POSTGRES_DATABASE=sequencer
@@ -247,6 +250,8 @@ services:
       orchestrator:
         condition: service_healthy
       demo-l1-network:
+        condition: service_healthy
+      sequencer-db-1:
         condition: service_healthy
       state-relay-server:
         condition: service_healthy
@@ -461,11 +466,28 @@ services:
       sequencer0:
         condition: service_healthy
 
-  sequencer-db:
+  sequencer-db-0:
     image: postgres
     user: postgres
     ports:
-      - "$ESPRESSO_SEQUENCER_DB_PORT:5432"
+      - "$ESPRESSO_SEQUENCER0_DB_PORT:5432"
+    environment:
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_USER=root
+      - POSTGRES_DB=sequencer
+    healthcheck:
+      # Postgres can be falsely "ready" once before running init scripts.
+      # See https://github.com/docker-library/postgres/issues/146 for discussion.
+      test: "pg_isready -U root && sleep 1 && pg_isready -U root"
+      interval: 5s
+      timeout: 4s
+      retries: 20
+
+  sequencer-db-1:
+    image: postgres
+    user: postgres
+    ports:
+      - "$ESPRESSO_SEQUENCER1_DB_PORT:5432"
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=root
