@@ -191,10 +191,7 @@ impl Payload {
 
     /// TODO panics if index out of bounds
     pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
-        let range = self
-            .ns_table
-            .ns_payload_range(index, self.payload.len())
-            .as_range();
+        let range = self.ns_payload_range(index).as_range();
         NsPayload::new(A(()), &self.payload[range])
     }
 
