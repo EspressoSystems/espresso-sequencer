@@ -24,7 +24,6 @@
 //! * summary statistics
 
 use crate::api::load_api;
-use clap::Args;
 use derive_more::From;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
@@ -39,20 +38,14 @@ pub(crate) mod data_source;
 
 pub use data_source::*;
 
-#[derive(Args, Default)]
+#[derive(Default)]
 pub struct Options {
-    #[arg(long = "status-api-path", env = "HOTSHOT_STATUS_API_PATH")]
     pub api_path: Option<PathBuf>,
 
     /// Additional API specification files to merge with `status-api-path`.
     ///
     /// These optional files may contain route definitions for application-specific routes that have
     /// been added as extensions to the basic status API.
-    #[arg(
-        long = "status-extension",
-        env = "HOTSHOT_STATUS_EXTENSIONS",
-        value_delimiter = ','
-    )]
     pub extensions: Vec<toml::Value>,
 }
 

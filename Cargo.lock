@@ -1542,12 +1542,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98cc8fbded0c607b7ba9dd60cd98df59af97e84d24e49c8557331cfc26d301ce"
 
 [[package]]
-name = "cld"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "021080b0a3dbefcf1c1f0b3ad6a923b81f16801d874ec338c168ac0b0762baf5"
-
-[[package]]
 name = "color-eyre"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3308,7 +3302,7 @@ dependencies = [
 
 [[package]]
 name = "hotshot-query-service"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -3321,7 +3315,6 @@ dependencies = [
  "bit-vec",
  "chrono",
  "clap",
- "cld",
  "committable",
  "custom_debug 0.6.1",
  "derivative",
