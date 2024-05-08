@@ -66,7 +66,7 @@ impl BlockPayload for Payload {
         Ok((
             Self {
                 payload,
-                ns_table: NsTable::from_bytes(ns_table.clone()),
+                ns_table: NsTable::from_bytes(A(()), ns_table.clone()),
             },
             ns_table,
         ))
@@ -78,7 +78,7 @@ impl BlockPayload for Payload {
     {
         Self {
             payload: encoded_transactions.into_iter().collect(),
-            ns_table: NsTable::from_bytes(ns_table.clone()), // TODO don't clone ns_table
+            ns_table: NsTable::from_bytes(A(()), ns_table.clone()), // TODO don't clone ns_table
         }
     }
 
@@ -160,6 +160,10 @@ impl Committable for Payload {
     }
 }
 
+/// TODO explain: ZST to unlock visibility in other modules. can only be
+/// constructed in this module.
+pub struct A(());
+
 impl Payload {
     pub fn transaction(&self, index: &Index) -> Option<Transaction> {
         // TODO check index.ns() in bounds
@@ -186,7 +190,7 @@ impl Payload {
             .ns_table
             .ns_payload_range(index, self.payload.len())
             .as_range();
-        NsPayload::new(&self.payload[range])
+        NsPayload::new(A(()), &self.payload[range])
     }
 
     /// TODO panics if index out of bounds

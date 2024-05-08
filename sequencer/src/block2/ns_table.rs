@@ -1,6 +1,7 @@
 use crate::block2::{
     ns_iter::{NsIndex, NsIter},
     ns_payload_range::NsPayloadRange,
+    payload,
     payload_bytes::{
         ns_id_from_bytes, ns_offset_from_bytes, num_nss_from_bytes, NS_ID_BYTE_LEN,
         NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
@@ -17,8 +18,7 @@ pub struct A(());
 pub struct NsTable(Vec<u8>);
 
 impl NsTable {
-    /// TODO restrict visibility?
-    pub fn from_bytes(bytes: Vec<u8>) -> Self {
+    pub fn from_bytes(_: payload::A, bytes: Vec<u8>) -> Self {
         Self(bytes)
     }
 

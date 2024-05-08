@@ -1,6 +1,7 @@
 use crate::{
     block2::{
         num_txs::NumTxs,
+        payload,
         payload_bytes::{
             num_txs_as_bytes, tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN,
             TX_OFFSET_BYTE_LEN,
@@ -78,6 +79,10 @@ pub struct NsPayload([u8]);
 pub struct NsPayloadOwned(Vec<u8>);
 
 impl NsPayload {
+    pub fn new(_: payload::A, bytes: &[u8]) -> &NsPayload {
+        NsPayload::new_private(bytes)
+    }
+
     /// Number of bytes used to encode the number of txs in the tx table.
     ///
     /// Returns the minimum of [`NUM_TXS_BYTE_LEN`] and the byte length of the
@@ -168,8 +173,9 @@ mod ns_payload_owned {
     use std::ops::Deref;
 
     impl NsPayload {
-        /// TODO restrict visibility
-        pub fn new(p: &[u8]) -> &NsPayload {
+        // pub(super) because I want it visible everywhere in this file but I
+        // also want this boilerplate code quarrantined in `ns_payload_owned`.
+        pub(super) fn new_private(p: &[u8]) -> &NsPayload {
             unsafe { &*(p as *const [u8] as *const NsPayload) }
         }
     }
@@ -177,7 +183,7 @@ mod ns_payload_owned {
     impl Deref for NsPayloadOwned {
         type Target = NsPayload;
         fn deref(&self) -> &NsPayload {
-            NsPayload::new(&self.0)
+            NsPayload::new_private(&self.0)
         }
     }
 
