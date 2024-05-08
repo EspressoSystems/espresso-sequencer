@@ -1,6 +1,5 @@
 use crate::block2::{
-    ns_table, num_txs::NumTxs, payload_bytes::NUM_TXS_BYTE_LEN, tx_iter::TxIndex,
-    tx_table_entries::TxTableEntries,
+    ns_table, num_txs::NumTxs, tx_iter::TxIndex, tx_table_entries::TxTableEntries, NUM_TXS_BYTE_LEN,
 };
 use serde::{Deserialize, Serialize};
 use std::ops::Range;

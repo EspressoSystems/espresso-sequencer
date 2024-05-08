@@ -1,7 +1,4 @@
-use crate::block2::{
-    ns_payload,
-    payload_bytes::{usize_to_bytes, TX_OFFSET_BYTE_LEN},
-};
+use crate::block2::{ns_payload, payload_bytes::usize_to_bytes, TX_OFFSET_BYTE_LEN};
 use std::ops::Range;
 
 /// manual serde as a byte array.
@@ -14,8 +11,9 @@ pub struct TxTableEntries {
 /// Manual [`serde`] impl for [`TxTableEntries`].
 mod tx_table_entries_serde {
     use crate::block2::{
-        payload_bytes::{usize_from_bytes, usize_to_bytes, TX_OFFSET_BYTE_LEN},
+        payload_bytes::{usize_from_bytes, usize_to_bytes},
         tx_table_entries::TxTableEntries,
+        TX_OFFSET_BYTE_LEN,
     };
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 

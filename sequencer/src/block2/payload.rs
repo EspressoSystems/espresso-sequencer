@@ -5,10 +5,9 @@ use crate::{
         ns_payload::{NamespacePayloadBuilder, NsPayload},
         ns_payload_range::NsPayloadRange,
         ns_table::NsTable,
-        payload_bytes::{
-            u64_to_bytes, usize_to_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
-        },
+        payload_bytes::{u64_to_bytes, usize_to_bytes},
         tx_proof::TxProof,
+        NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
     },
     NamespaceId, Transaction,
 };

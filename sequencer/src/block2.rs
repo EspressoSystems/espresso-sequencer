@@ -13,5 +13,11 @@ mod tx_table_entries;
 
 pub use ns_proof::NsProof;
 
+const NUM_TXS_BYTE_LEN: usize = 4;
+const TX_OFFSET_BYTE_LEN: usize = 4;
+const NUM_NSS_BYTE_LEN: usize = NUM_TXS_BYTE_LEN;
+const NS_OFFSET_BYTE_LEN: usize = TX_OFFSET_BYTE_LEN;
+const NS_ID_BYTE_LEN: usize = 4;
+
 #[cfg(test)]
 mod test;

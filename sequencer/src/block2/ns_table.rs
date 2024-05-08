@@ -2,9 +2,8 @@ use crate::block2::{
     ns_iter::{NsIndex, NsIter},
     ns_payload_range::NsPayloadRange,
     payload,
-    payload_bytes::{
-        u64_from_bytes, usize_from_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
-    },
+    payload_bytes::{u64_from_bytes, usize_from_bytes},
+    NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
 };
 use crate::NamespaceId;
 use serde::{Deserialize, Serialize};

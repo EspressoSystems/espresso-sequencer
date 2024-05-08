@@ -1,7 +1,8 @@
 use crate::{
     block2::{
         ns_table::{self, NsTable},
-        payload_bytes::{usize_from_bytes, usize_to_bytes, NUM_NSS_BYTE_LEN},
+        payload_bytes::{usize_from_bytes, usize_to_bytes},
+        NUM_NSS_BYTE_LEN,
     },
     NamespaceId,
 };

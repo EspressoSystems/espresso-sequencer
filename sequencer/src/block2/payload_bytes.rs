@@ -3,12 +3,6 @@
 use paste::paste;
 use std::mem::size_of;
 
-pub const NUM_TXS_BYTE_LEN: usize = 4;
-pub const TX_OFFSET_BYTE_LEN: usize = 4;
-pub const NUM_NSS_BYTE_LEN: usize = NUM_TXS_BYTE_LEN;
-pub const NS_OFFSET_BYTE_LEN: usize = TX_OFFSET_BYTE_LEN;
-pub const NS_ID_BYTE_LEN: usize = 4;
-
 // Use an ugly macro because it's difficult or impossible to be generic over
 // primitive types such as `usize`, `u64`.
 macro_rules! uint_bytes_impl {
