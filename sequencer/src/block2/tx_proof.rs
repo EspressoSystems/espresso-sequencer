@@ -34,23 +34,19 @@ pub struct TxProof {
     payload_proof_tx: Option<SmallRangeProofType>,
 }
 
-/// `impl Payload` here instead of where [`Payload`] is defined so that code for
-/// tx proof creation and verification is in the same place.
-impl Payload {
-    pub fn transaction_with_proof(
-        &self,
+impl TxProof {
+    pub fn new(
+        payload: &Payload,
         index: &Index,
         common: &VidCommon,
-    ) -> Option<(Transaction, TxProof)> {
-        if self.payload.len() != VidSchemeType::get_payload_byte_len(common) {
+    ) -> Option<(Transaction, Self)> {
+        if payload.as_byte_slice().len() != VidSchemeType::get_payload_byte_len(common) {
             return None; // error: common inconsistent with self
         }
 
         // TODO check index.ns() in bounds
-        let ns_payload = self.ns_payload(index.ns());
-        let ns_payload_range = self
-            .ns_table
-            .ns_payload_range(index.ns(), self.payload.len());
+        let ns_payload = payload.ns_payload(index.ns());
+        let ns_payload_range = payload.ns_payload_range(index.ns());
 
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
 
@@ -58,7 +54,7 @@ impl Payload {
         // proof of correctness.
         let payload_num_txs = ns_payload.read_num_txs();
         let payload_proof_num_txs = vid
-            .payload_proof(&self.payload, ns_payload_range.num_txs_range())
+            .payload_proof(payload.as_byte_slice(), ns_payload_range.num_txs_range())
             .ok()?;
 
         // Read the tx table entries for this tx and compute a proof of
@@ -75,7 +71,7 @@ impl Payload {
             //     &self.payload[range.clone()]
             // );
 
-            vid.payload_proof(&self.payload, range).ok()?
+            vid.payload_proof(payload.as_byte_slice(), range).ok()?
         };
 
         // Read the tx payload and compute a proof of correctness.
@@ -96,18 +92,18 @@ impl Payload {
                 index.ns(),
                 index.tx(),
                 range,
-                &self.payload[range.clone()]
+                &payload.as_byte_slice()[range.clone()]
             );
 
             if range.is_empty() {
                 None
             } else {
-                Some(vid.payload_proof(&self.payload, range).ok()?)
+                Some(vid.payload_proof(payload.as_byte_slice(), range).ok()?)
             }
         };
 
         Some((
-            self.transaction(index)?,
+            payload.transaction(index)?,
             TxProof {
                 ns_payload_range,
                 payload_num_txs,
@@ -119,9 +115,7 @@ impl Payload {
             },
         ))
     }
-}
 
-impl TxProof {
     // - Returns `None` if an error occurred.
     // - `bool` result, or should we use `Result<(),()>` ?
     //

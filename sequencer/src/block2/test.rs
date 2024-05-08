@@ -1,5 +1,7 @@
-use super::Payload;
-use crate::{block2::ns_proof::NsProof, NamespaceId, Transaction};
+use crate::{
+    block2::{ns_proof::NsProof, tx_proof::TxProof, Payload},
+    NamespaceId, Transaction,
+};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot::traits::BlockPayload;
 use hotshot_query_service::availability::QueryablePayload;
@@ -59,9 +61,7 @@ fn basic_correctness() {
             assert_eq!(tx, test_tx);
 
             let tx_proof = {
-                let (tx2, tx_proof) = block
-                    .transaction_with_proof(&tx_index, &vid_common)
-                    .unwrap();
+                let (tx2, tx_proof) = TxProof::new(&block, &tx_index, &vid_common).unwrap();
                 assert_eq!(tx, tx2);
                 tx_proof
             };
