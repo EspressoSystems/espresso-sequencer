@@ -14,7 +14,7 @@ pub struct TxTableEntries {
 /// Manual [`serde`] impl for [`TxTableEntries`].
 mod tx_table_entries_serde {
     use crate::block2::{
-        payload_bytes::{tx_offset_from_bytes, usize_to_bytes, TX_OFFSET_BYTE_LEN},
+        payload_bytes::{usize_from_bytes, usize_to_bytes, TX_OFFSET_BYTE_LEN},
         tx_table_entries::TxTableEntries,
     };
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -45,8 +45,10 @@ mod tx_table_entries_serde {
         {
             <TxTableEntriesSerde as Deserialize>::deserialize(deserializer).map(|x| {
                 TxTableEntries {
-                    cur: tx_offset_from_bytes(&x.cur),
-                    prev: x.prev.map(|bytes| tx_offset_from_bytes(&bytes)),
+                    cur: usize_from_bytes::<TX_OFFSET_BYTE_LEN>(&x.cur),
+                    prev: x
+                        .prev
+                        .map(|bytes| usize_from_bytes::<TX_OFFSET_BYTE_LEN>(&bytes)),
                 }
             })
         }
@@ -60,7 +62,7 @@ impl TxTableEntries {
     /// the tx table according to whether [`self`] was derived from the first
     /// entry in the table. See [`TxIndex::tx_table_entries_range_relative`].
     ///
-    /// TODO same question as [`NumTxs::as_bytes`]
+    /// Returned bytes differ from [`serde`] serialization.
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(TX_OFFSET_BYTE_LEN.saturating_mul(2));
         if let Some(prev) = self.prev {

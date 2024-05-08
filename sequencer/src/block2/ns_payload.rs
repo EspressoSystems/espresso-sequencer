@@ -2,9 +2,7 @@ use crate::{
     block2::{
         num_txs::NumTxs,
         payload,
-        payload_bytes::{
-            tx_offset_from_bytes, usize_to_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
-        },
+        payload_bytes::{usize_from_bytes, usize_to_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
         tx_iter::{TxIndex, TxIter},
         tx_table_entries::TxTableEntries,
     },
@@ -144,7 +142,7 @@ impl NsPayload {
     /// TODO newtype for return type?
     fn read_tx_offset(&self, index: &TxIndex) -> usize {
         let start = index.as_usize(A(())) * TX_OFFSET_BYTE_LEN + NUM_TXS_BYTE_LEN;
-        tx_offset_from_bytes(&self.0[start..start + TX_OFFSET_BYTE_LEN])
+        usize_from_bytes::<TX_OFFSET_BYTE_LEN>(&self.0[start..start + TX_OFFSET_BYTE_LEN])
     }
 
     /// Read data on the `index`th tx from the tx table, sanitize that data
