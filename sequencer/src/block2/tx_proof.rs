@@ -1,7 +1,7 @@
 use crate::{
     block2::{
-        iter::Index, ns_payload_range::NsPayloadRange, num_txs::NumTxs, tx_iter::TxIndex,
-        tx_table_entries::TxTableEntries, Payload,
+        iter::Index, ns_payload_range::NsPayloadRange, num_txs::NumTxs, payload::Payload,
+        tx_iter::TxIndex, tx_table_entries::TxTableEntries,
     },
     Transaction,
 };

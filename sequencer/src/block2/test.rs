@@ -1,5 +1,5 @@
 use crate::{
-    block2::{ns_proof::NsProof, tx_proof::TxProof, Payload},
+    block2::{ns_proof::NsProof, payload::Payload, tx_proof::TxProof},
     NamespaceId, Transaction,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -31,23 +31,23 @@ fn basic_correctness() {
         let block = Payload::from_transactions(test.all_txs()).unwrap().0;
         tracing::info!(
             "ns_table {:?}, payload {:?}",
-            block.ns_table.as_byte_slice(),
-            block.payload
+            block.ns_table().as_byte_slice(),
+            block.as_byte_slice()
         );
 
         // TODO temporary until we remove `meta` arg from `QueryablePayload` trait
-        let meta = block.ns_table.as_byte_slice().to_vec();
+        let meta = block.ns_table().as_byte_slice().to_vec();
 
         // test correct number of nss, txs
-        assert_eq!(block.ns_table.num_namespaces(), test.nss.len());
-        assert_eq!(block.ns_table.iter().count(), test.nss.len());
+        assert_eq!(block.ns_table().num_namespaces(), test.nss.len());
+        assert_eq!(block.ns_table().iter().count(), test.nss.len());
         assert_eq!(block.len(&meta), all_txs.len());
         assert_eq!(block.iter(&meta).count(), all_txs.len());
 
         tracing::info!("all_txs {:?}", all_txs);
 
         let (vid_commit, vid_common) = {
-            let disperse_data = vid.disperse(&block.payload).unwrap();
+            let disperse_data = vid.disperse(block.as_byte_slice()).unwrap();
             (disperse_data.commit, disperse_data.common)
         };
 
@@ -73,8 +73,12 @@ fn basic_correctness() {
         );
 
         // test iterate over all namespaces
-        assert_eq!(block.ns_table.num_namespaces(), test.nss.len());
-        for ns_id in block.ns_table.iter().map(|i| block.ns_table.read_ns_id(&i)) {
+        assert_eq!(block.ns_table().num_namespaces(), test.nss.len());
+        for ns_id in block
+            .ns_table()
+            .iter()
+            .map(|i| block.ns_table().read_ns_id(&i))
+        {
             tracing::info!("test ns_id {ns_id}");
 
             let txs = test
@@ -88,7 +92,7 @@ fn basic_correctness() {
             assert!(ns_proof.is_existence());
 
             let (ns_proof_txs, ns_proof_ns_id) = ns_proof
-                .verify_namespace_proof(&block.ns_table, &vid_commit, &vid_common)
+                .verify_namespace_proof(block.ns_table(), &vid_commit, &vid_common)
                 .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id));
 
             assert_eq!(ns_proof_ns_id, ns_id);

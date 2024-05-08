@@ -1,7 +1,7 @@
 use crate::block2::{
     ns_iter::{NsIndex, NsIter},
+    payload::Payload,
     tx_iter::{TxIndex, TxIter},
-    Payload,
 };
 use serde::{Deserialize, Serialize};
 use std::iter::Peekable;
@@ -44,7 +44,7 @@ pub struct Iter<'a> {
 impl<'a> Iter<'a> {
     pub fn new(block: &'a Payload) -> Self {
         Self {
-            ns_iter: NsIter::new(&block.ns_table).peekable(),
+            ns_iter: NsIter::new(block.ns_table()).peekable(),
             tx_iter: None,
             block,
         }
