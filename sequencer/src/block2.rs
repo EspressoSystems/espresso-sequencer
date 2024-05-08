@@ -1,4 +1,4 @@
-use self::ns_table::NsTable;
+use self::{ns_payload_range::NsPayloadRange, ns_table::NsTable};
 use crate::{NamespaceId, Transaction};
 use commit::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
@@ -23,6 +23,8 @@ mod payload_bytes;
 mod tx_iter;
 mod tx_proof;
 mod tx_table_entries;
+
+pub use ns_proof::NsProof;
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {
@@ -178,6 +180,12 @@ impl Payload {
         )
     }
 
+    pub fn as_byte_slice(&self) -> &[u8] {
+        &self.payload
+    }
+
+    // lots of manual delegation boo!
+
     /// TODO panics if index out of bounds
     pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
         let range = self
@@ -185,6 +193,15 @@ impl Payload {
             .ns_payload_range(index, self.payload.len())
             .as_range();
         NsPayload::new(&self.payload[range])
+    }
+
+    /// TODO panics if index out of bounds
+    pub fn ns_payload_range(&self, index: &NsIndex) -> NsPayloadRange {
+        self.ns_table.ns_payload_range(index, self.payload.len())
+    }
+
+    pub fn find_ns_id(&self, ns_id: &NamespaceId) -> Option<NsIndex> {
+        self.ns_table.find_ns_id(ns_id)
     }
 }
 

@@ -1,5 +1,5 @@
 use super::Payload;
-use crate::{NamespaceId, Transaction};
+use crate::{block2::ns_proof::NsProof, NamespaceId, Transaction};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot::traits::BlockPayload;
 use hotshot_query_service::availability::QueryablePayload;
@@ -82,8 +82,7 @@ fn basic_correctness() {
                 .remove(&ns_id)
                 .expect("block ns_id missing from test");
 
-            let ns_proof = block
-                .namespace_with_proof(ns_id, &vid_common)
+            let ns_proof = NsProof::new(&block, ns_id, &vid_common)
                 .expect("namespace_with_proof should succeed");
 
             assert!(ns_proof.is_existence());

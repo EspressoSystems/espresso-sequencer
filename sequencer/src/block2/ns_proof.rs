@@ -33,30 +33,26 @@ struct NsProofExistence {
     ns_proof: LargeRangeProofType,
 }
 
-/// `impl Payload` here instead of where [`Payload`] is defined so that code for
-/// namespace proof creation and verification is in the same place.
-impl Payload {
+impl NsProof {
     /// Returns the payload bytes for namespace `ns_id`, along with a proof of
     /// correctness for those bytes.
-    pub fn namespace_with_proof(&self, ns_id: NamespaceId, common: &VidCommon) -> Option<NsProof> {
-        if self.payload.len() != VidSchemeType::get_payload_byte_len(common) {
+    pub fn new(payload: &Payload, ns_id: NamespaceId, common: &VidCommon) -> Option<NsProof> {
+        if payload.as_byte_slice().len() != VidSchemeType::get_payload_byte_len(common) {
             return None; // error: vid_common inconsistent with self
         }
-        let Some(ns_index) = self.ns_table.find_ns_id(&ns_id) else {
+        let Some(ns_index) = payload.find_ns_id(&ns_id) else {
             // ns_id does not exist
             return Some(NsProof {
                 ns_id,
                 existence: None,
             });
         };
-        let ns_payload = self.ns_payload(&ns_index).to_owned();
+        let ns_payload = payload.ns_payload(&ns_index).to_owned();
         let ns_proof = {
-            let ns_payload_range = self
-                .ns_table
-                .ns_payload_range(&ns_index, self.payload.len())
-                .as_range();
+            let ns_payload_range = payload.ns_payload_range(&ns_index).as_range();
             let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
-            vid.payload_proof(&self.payload, ns_payload_range).ok()? // error: failure to make a payload proof
+            vid.payload_proof(payload.as_byte_slice(), ns_payload_range)
+                .ok()? // error: failure to make a payload proof
         };
 
         Some(NsProof {
@@ -67,8 +63,7 @@ impl Payload {
             }),
         })
     }
-}
-impl NsProof {
+
     /// Verify a [`NsProof`] against a payload commitment.
     ///
     /// TODO the only way to verify `ns_id` is to look it up in the ns_table,
