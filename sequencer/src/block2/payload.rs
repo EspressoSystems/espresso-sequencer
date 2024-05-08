@@ -5,7 +5,7 @@ use crate::{
         ns_payload::{NamespacePayloadBuilder, NsPayload},
         ns_payload_range::NsPayloadRange,
         ns_table::NsTable,
-        payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, usize_to_bytes, NUM_NSS_BYTE_LEN},
+        payload_bytes::{ns_id_as_bytes, usize_to_bytes, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN},
         tx_proof::TxProof,
     },
     NamespaceId, Transaction,
@@ -61,7 +61,7 @@ impl BlockPayload for Payload {
         for (ns_id, namespace) in namespaces {
             payload.extend(namespace.into_bytes());
             ns_table.extend(ns_id_as_bytes(ns_id));
-            ns_table.extend(ns_offset_as_bytes(payload.len()));
+            ns_table.extend(usize_to_bytes::<NS_OFFSET_BYTE_LEN>(payload.len()));
         }
         Ok((
             Self {

@@ -10,14 +10,6 @@ pub const NUM_NSS_BYTE_LEN: usize = NUM_TXS_BYTE_LEN;
 pub const NS_OFFSET_BYTE_LEN: usize = TX_OFFSET_BYTE_LEN;
 pub const NS_ID_BYTE_LEN: usize = 4;
 
-/// Serialize `ns_offset` into [`NS_OFFSET_BYTE_LEN`] bytes.
-///
-/// # Panics
-/// If `ns_offset` cannot fit into [`NS_OFFSET_BYTE_LEN`] bytes.
-pub fn ns_offset_as_bytes(ns_offset: usize) -> [u8; NS_OFFSET_BYTE_LEN] {
-    usize_to_bytes(ns_offset)
-}
-
 /// Deserialize `bytes` into a namespace offset (`usize`).
 ///
 /// # Panics
