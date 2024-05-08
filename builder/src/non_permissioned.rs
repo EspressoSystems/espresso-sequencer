@@ -59,12 +59,13 @@ pub struct BuilderConfig {
 pub fn build_instance_state<Ver: StaticVersionType + 'static>(
     l1_params: L1Params,
     state_peers: Vec<Url>,
+    max_block_size: u64,
     _: Ver,
 ) -> anyhow::Result<NodeState> {
     let l1_client = L1Client::new(l1_params.url, Address::default());
     let instance_state = NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
-        ChainConfig::default(),
+        ChainConfig::new(0, max_block_size, 0),
         l1_client,
         Arc::new(StatePeers::<Ver>::from_urls(state_peers)),
     );

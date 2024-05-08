@@ -12,7 +12,7 @@ use hotshot_types::traits::metrics::NoMetrics;
 use hotshot_types::traits::node_implementation::ConsensusTime;
 use sequencer::eth_signature_key::EthKeyPair;
 use sequencer::persistence::no_storage::NoStorage;
-use sequencer::{BuilderParams, L1Params, NetworkParams};
+use sequencer::{options::parse_size, BuilderParams, L1Params, NetworkParams};
 use snafu::Snafu;
 use std::net::ToSocketAddrs;
 use std::num::NonZeroUsize;
@@ -128,6 +128,10 @@ pub struct PermissionedBuilderOptions {
     /// Peer nodes use to fetch missing state
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
     pub state_peers: Vec<Url>,
+
+    /// Maximum size in bytes of a block
+    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE", value_parser = parse_size)]
+    pub max_block_size: u64,
 
     /// Port to run the builder server on.
     #[clap(short, long, env = "ESPRESSO_BUILDER_SERVER_PORT")]
@@ -286,6 +290,7 @@ async fn main() -> anyhow::Result<()> {
         opt.is_da,
         txn_timeout_duration,
         opt.base_fee,
+        opt.max_block_size,
     )
     .await?;
 
