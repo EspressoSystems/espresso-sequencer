@@ -17,7 +17,6 @@
 //! If any parent state is missing then the partial snapshot can not be queried.
 use std::{fmt::Display, path::PathBuf};
 
-use clap::Args;
 use derive_more::From;
 use futures::FutureExt;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -33,23 +32,14 @@ use crate::{api::load_api, QueryError};
 pub(crate) mod data_source;
 pub use data_source::*;
 
-#[derive(Args, Default)]
+#[derive(Default)]
 pub struct Options {
-    #[arg(
-        long = "merklized-state-api-path",
-        env = "HOTSHOT_MERKLIZED_STATE_API_PATH"
-    )]
     pub api_path: Option<PathBuf>,
 
     /// Additional API specification files to merge with `merklized-state-api-path`.
     ///
     /// These optional files may contain route definitions for application-specific routes that have
     /// been added as extensions to the basic status API.
-    #[arg(
-        long = "merklized-state-extension",
-        env = "HOTSHOT_MERKLIZED_STATE_EXTENSIONS",
-        value_delimiter = ','
-    )]
     pub extensions: Vec<toml::Value>,
 }
 

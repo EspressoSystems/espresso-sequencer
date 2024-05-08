@@ -21,7 +21,6 @@
 //! return the expected counts.
 
 use crate::{api::load_api, QueryError};
-use clap::Args;
 use derive_more::From;
 use futures::FutureExt;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -37,20 +36,14 @@ pub(crate) mod query_data;
 pub use data_source::*;
 pub use query_data::*;
 
-#[derive(Args, Default)]
+#[derive(Default)]
 pub struct Options {
-    #[arg(long = "node-api-path", env = "HOTSHOT_NODE_API_PATH")]
     pub api_path: Option<PathBuf>,
 
     /// Additional API specification files to merge with `node-api-path`.
     ///
     /// These optional files may contain route definitions for application-specific routes that have
     /// been added as extensions to the basic node API.
-    #[arg(
-        long = "node-extension",
-        env = "HOTSHOT_NODE_EXTENSIONS",
-        value_delimiter = ','
-    )]
     pub extensions: Vec<toml::Value>,
 }
 

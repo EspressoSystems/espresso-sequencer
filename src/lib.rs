@@ -474,15 +474,11 @@ impl QueryError {
 
 pub type QueryResult<T> = Result<T, QueryError>;
 
-#[derive(clap::Args, Default)]
+#[derive(Default)]
 pub struct Options {
-    #[clap(flatten)]
     pub availability: availability::Options,
-    #[clap(flatten)]
     pub node: node::Options,
-    #[clap(flatten)]
     pub status: status::Options,
-    #[clap(short, long, default_value = "8080")]
     pub port: u16,
 }
 

@@ -27,14 +27,12 @@
 //! the [node](crate::node) API.
 
 use crate::{api::load_api, Payload};
-use clap::Args;
-use cld::ClDuration;
 use derive_more::From;
 use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 use snafu::{OptionExt, Snafu};
-use std::{fmt::Display, path::PathBuf, str::FromStr, time::Duration};
+use std::{fmt::Display, path::PathBuf, time::Duration};
 use tide_disco::{api::ApiError, method::ReadState, Api, RequestError, StatusCode};
 use vbs::version::StaticVersionType;
 
@@ -45,9 +43,7 @@ pub use data_source::*;
 pub use fetch::Fetch;
 pub use query_data::*;
 
-#[derive(Args, Default)]
 pub struct Options {
-    #[arg(long = "availability-api-path", env = "HOTSHOT_AVAILABILITY_API_PATH")]
     pub api_path: Option<PathBuf>,
 
     /// Timeout for failing requests due to missing data.
@@ -55,37 +51,28 @@ pub struct Options {
     /// If data needed to respond to a request is missing, it can (in some cases) be fetched from an
     /// external provider. This parameter controls how long the request handler will wait for
     /// missing data to be fetched before giving up and failing the request.
-    #[arg(
-        long = "availability-fetch-timeout",
-        env = "HOTSHOT_AVAILABILITY_FETCH_TIMEOUT",
-        default_value = "500ms",
-        value_parser = parse_duration,
-    )]
     pub fetch_timeout: Duration,
 
     /// Additional API specification files to merge with `availability-api-path`.
     ///
     /// These optional files may contain route definitions for application-specific routes that have
     /// been added as extensions to the basic availability API.
-    #[arg(
-        long = "availability-extension",
-        env = "HOTSHOT_AVAILABILITY_EXTENSIONS",
-        value_delimiter = ','
-    )]
     pub extensions: Vec<toml::Value>,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            api_path: None,
+            fetch_timeout: Duration::from_millis(500),
+            extensions: vec![],
+        }
+    }
 }
 
 #[derive(Clone, Debug, Snafu)]
 struct ParseDurationError {
     reason: String,
-}
-
-fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
-    ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError {
-            reason: err.to_string(),
-        })
 }
 
 #[derive(Clone, Debug, From, Snafu, Deserialize, Serialize)]
