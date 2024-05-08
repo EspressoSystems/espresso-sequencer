@@ -1,6 +1,6 @@
 use crate::block2::{
     ns_payload,
-    payload_bytes::{usize_from_bytes, usize_to_bytes},
+    uint_bytes::{usize_from_bytes, usize_to_bytes},
     NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

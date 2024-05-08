@@ -2,9 +2,9 @@ use crate::{
     block2::{
         num_txs::NumTxs,
         payload,
-        payload_bytes::{usize_from_bytes, usize_to_bytes},
         tx_iter::{TxIndex, TxIter},
         tx_table_entries::TxTableEntries,
+        uint_bytes::{usize_from_bytes, usize_to_bytes},
         NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
     },
     NamespaceId, Transaction,
