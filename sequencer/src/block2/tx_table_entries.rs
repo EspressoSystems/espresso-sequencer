@@ -1,6 +1,6 @@
 use crate::block2::{
     ns_payload,
-    payload_bytes::{tx_offset_as_bytes, TX_OFFSET_BYTE_LEN},
+    payload_bytes::{usize_to_bytes, TX_OFFSET_BYTE_LEN},
 };
 use std::ops::Range;
 
@@ -14,7 +14,7 @@ pub struct TxTableEntries {
 /// Manual [`serde`] impl for [`TxTableEntries`].
 mod tx_table_entries_serde {
     use crate::block2::{
-        payload_bytes::{tx_offset_as_bytes, tx_offset_from_bytes, TX_OFFSET_BYTE_LEN},
+        payload_bytes::{tx_offset_from_bytes, usize_to_bytes, TX_OFFSET_BYTE_LEN},
         tx_table_entries::TxTableEntries,
     };
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -31,8 +31,8 @@ mod tx_table_entries_serde {
             S: Serializer,
         {
             TxTableEntriesSerde {
-                cur: tx_offset_as_bytes(self.cur),
-                prev: self.prev.map(tx_offset_as_bytes),
+                cur: usize_to_bytes(self.cur),
+                prev: self.prev.map(usize_to_bytes),
             }
             .serialize(serializer)
         }
@@ -56,13 +56,17 @@ mod tx_table_entries_serde {
 impl TxTableEntries {
     /// Infallible serialization.
     ///
+    /// Returned bytes contain either one entry or two consecutive entries of
+    /// the tx table according to whether [`self`] was derived from the first
+    /// entry in the table. See [`TxIndex::tx_table_entries_range_relative`].
+    ///
     /// TODO same question as [`NumTxs::as_bytes`]
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(TX_OFFSET_BYTE_LEN.saturating_mul(2));
         if let Some(prev) = self.prev {
-            bytes.extend(tx_offset_as_bytes(prev));
+            bytes.extend(usize_to_bytes::<TX_OFFSET_BYTE_LEN>(prev));
         }
-        bytes.extend(tx_offset_as_bytes(self.cur));
+        bytes.extend(usize_to_bytes::<TX_OFFSET_BYTE_LEN>(self.cur));
         bytes
     }
 

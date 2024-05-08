@@ -3,7 +3,7 @@ use crate::{
         num_txs::NumTxs,
         payload,
         payload_bytes::{
-            tx_offset_as_bytes, tx_offset_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
+            tx_offset_from_bytes, usize_to_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
         },
         tx_iter::{TxIndex, TxIter},
         tx_table_entries::TxTableEntries,
@@ -30,7 +30,7 @@ impl NamespacePayloadBuilder {
     pub fn append_tx(&mut self, tx: Transaction) {
         self.tx_bodies.extend(tx.into_payload());
         self.tx_table_entries
-            .extend(tx_offset_as_bytes(self.tx_bodies.len()));
+            .extend(usize_to_bytes::<TX_OFFSET_BYTE_LEN>(self.tx_bodies.len()));
     }
 
     /// Serialize to bytes and consume self.
