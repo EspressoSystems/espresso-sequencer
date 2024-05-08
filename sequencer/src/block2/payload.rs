@@ -5,7 +5,7 @@ use crate::{
         ns_payload::{NamespacePayloadBuilder, NsPayload},
         ns_payload_range::NsPayloadRange,
         ns_table::NsTable,
-        payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes},
+        payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, usize_to_bytes, NUM_NSS_BYTE_LEN},
         tx_proof::TxProof,
     },
     NamespaceId, Transaction,
@@ -57,7 +57,7 @@ impl BlockPayload for Payload {
         // build block payload and namespace table
         // TODO building the ns_table here breaks abstraction
         let mut payload = Vec::new();
-        let mut ns_table = Vec::from(num_nss_as_bytes(namespaces.len()));
+        let mut ns_table = Vec::from(usize_to_bytes::<NUM_NSS_BYTE_LEN>(namespaces.len()));
         for (ns_id, namespace) in namespaces {
             payload.extend(namespace.into_bytes());
             ns_table.extend(ns_id_as_bytes(ns_id));

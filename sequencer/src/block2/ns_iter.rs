@@ -1,7 +1,7 @@
 use crate::{
     block2::{
         ns_table::{self, NsTable},
-        payload_bytes::{num_nss_as_bytes, num_nss_from_bytes, NUM_NSS_BYTE_LEN},
+        payload_bytes::{num_nss_from_bytes, usize_to_bytes, NUM_NSS_BYTE_LEN},
     },
     NamespaceId,
 };
@@ -21,7 +21,7 @@ impl NsIndex {
     ///
     /// TODO same question as [`NumTxs::as_bytes`]
     pub fn as_bytes(&self) -> [u8; NUM_NSS_BYTE_LEN] {
-        num_nss_as_bytes(self.0)
+        usize_to_bytes(self.0)
     }
 
     pub fn as_usize(&self, _: ns_table::A) -> usize {
