@@ -17,6 +17,7 @@
 //!   will still be able to propose on time.
 
 use crate::state::FeeInfo;
+use anyhow::Context;
 use async_std::task::sleep;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::prelude::*;
@@ -109,6 +110,22 @@ impl L1Client {
         let (head, finalized) = join!(self.get_block_number(), self.get_finalized_block());
         L1Snapshot { head, finalized }
     }
+
+    /// Get information about the given block.
+    pub async fn get_block(&self, number: u64) -> anyhow::Result<L1BlockInfo> {
+        let block = self
+            .provider
+            .get_block(number)
+            .await?
+            .context(format!("no block {number}"))?;
+        let hash = block.hash.context(format!("block {number} has no hash"))?;
+        Ok(L1BlockInfo {
+            number,
+            hash,
+            timestamp: block.timestamp,
+        })
+    }
+
     /// Proxy to `Provider.get_block_number`.
     async fn get_block_number(&self) -> u64 {
         loop {

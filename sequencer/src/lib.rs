@@ -159,6 +159,7 @@ pub struct NodeState {
     l1_client: L1Client,
     peers: Arc<dyn StateCatchup>,
     genesis_state: ValidatedState,
+    l1_genesis: Option<L1BlockInfo>,
 }
 
 impl NodeState {
@@ -174,6 +175,7 @@ impl NodeState {
             l1_client,
             peers: Arc::new(catchup),
             genesis_state: Default::default(),
+            l1_genesis: None,
         }
     }
 
@@ -277,6 +279,7 @@ pub struct BuilderParams {
 
 pub struct L1Params {
     pub url: Url,
+    pub finalized_block: Option<u64>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -436,11 +439,16 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     }
 
     let l1_client = L1Client::new(l1_params.url, Address::default());
+    let l1_genesis = match l1_params.finalized_block {
+        Some(block) => Some(l1_client.get_block(block).await?),
+        None => None,
+    };
 
     let instance_state = NodeState {
         chain_config,
         l1_client,
         genesis_state,
+        l1_genesis,
         peers: catchup::local_and_remote(
             persistence_opt,
             StatePeers::<Ver>::from_urls(network_params.state_peers),

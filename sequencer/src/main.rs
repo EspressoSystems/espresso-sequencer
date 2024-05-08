@@ -53,6 +53,7 @@ where
     let chain_config = ChainConfig::new(opt.chain_id, opt.max_block_size, opt.base_fee);
     let l1_params = L1Params {
         url: opt.l1_provider_url,
+        finalized_block: opt.l1_genesis,
     };
     let builder_params = BuilderParams {
         prefunded_accounts: opt.prefunded_builder_accounts,

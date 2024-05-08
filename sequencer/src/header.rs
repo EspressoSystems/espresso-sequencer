@@ -397,7 +397,7 @@ impl BlockHeader<SeqTypes> for Header {
             height: 0,
             timestamp: 0,
             l1_head: 0,
-            l1_finalized: None,
+            l1_finalized: instance_state.l1_genesis,
             payload_commitment,
             builder_commitment,
             ns_table,
