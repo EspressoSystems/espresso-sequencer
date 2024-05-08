@@ -3,8 +3,7 @@ use crate::block2::{
     ns_payload_range::NsPayloadRange,
     payload,
     payload_bytes::{
-        ns_id_from_bytes, ns_offset_from_bytes, usize_from_bytes, NS_ID_BYTE_LEN,
-        NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
+        ns_id_from_bytes, usize_from_bytes, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
     },
 };
 use crate::NamespaceId;
@@ -82,11 +81,10 @@ impl NsTable {
     ///
     /// Panics if `index >= self.num_nss()`.
     pub fn read_ns_offset(&self, index: &NsIndex) -> usize {
-        // TODO refactor repeated index gymnastics code from `read_ns_id`
         let start = index.as_usize(A(())) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN)
             + NUM_NSS_BYTE_LEN
             + NS_ID_BYTE_LEN;
-        ns_offset_from_bytes(&self.0[start..start + NS_OFFSET_BYTE_LEN])
+        usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.0[start..start + NS_OFFSET_BYTE_LEN])
     }
 
     /// Read subslice range for the `index`th namespace from the namespace
