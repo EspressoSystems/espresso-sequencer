@@ -3,7 +3,7 @@ use crate::block2::{
     ns_payload_range::NsPayloadRange,
     payload,
     payload_bytes::{
-        ns_id_from_bytes, ns_offset_from_bytes, num_nss_from_bytes, NS_ID_BYTE_LEN,
+        ns_id_from_bytes, ns_offset_from_bytes, usize_from_bytes, NS_ID_BYTE_LEN,
         NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
     },
 };
@@ -27,18 +27,6 @@ impl NsTable {
         &self.0
     }
 
-    /// The number of bytes used to encode the number of entries in the
-    /// namespace table.
-    ///
-    /// Returns the minimum of [`NUM_NSS_BYTE_LEN`] and the byte length of the
-    /// entire namespace table.
-    ///
-    /// In all nontrivial cases this quantity is [`NUM_NSS_BYTE_LEN`]. Anything
-    /// else is a degenerate case.
-    fn num_nss_byte_len(&self) -> usize {
-        NUM_NSS_BYTE_LEN.min(self.0.len())
-    }
-
     /// The number of entries in the namespace table, including all duplicate
     /// namespace IDs.
     ///
@@ -59,7 +47,8 @@ impl NsTable {
     ///
     /// TODO newtype for return type like [`NumTxs`]?
     fn read_num_nss(&self) -> usize {
-        num_nss_from_bytes(&self.0[..self.num_nss_byte_len()])
+        let num_nss_byte_len = NUM_NSS_BYTE_LEN.min(self.0.len());
+        usize_from_bytes::<NUM_NSS_BYTE_LEN>(&self.0[..num_nss_byte_len])
     }
 
     /// Search the namespace table for the ns_index belonging to `ns_id`.

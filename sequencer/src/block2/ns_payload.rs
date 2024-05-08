@@ -80,17 +80,6 @@ impl NsPayload {
         NsPayload::new_private(bytes)
     }
 
-    /// Number of bytes used to encode the number of txs in the tx table.
-    ///
-    /// Returns the minimum of [`NUM_TXS_BYTE_LEN`] and the byte length of the
-    /// entire namespace payload.
-    ///
-    /// In all nontrivial cases this quantity is [`NUM_TXS_BYTE_LEN`]. Anything
-    /// else is a degenerate case.
-    fn num_txs_byte_len(&self) -> usize {
-        NUM_TXS_BYTE_LEN.min(self.0.len())
-    }
-
     /// Access the bytes of this [`NsPayload`].
     pub fn as_byte_slice(&self) -> &[u8] {
         &self.0
@@ -126,7 +115,8 @@ impl NsPayload {
 
     /// Read the number of txs declared in the tx table.
     pub fn read_num_txs(&self) -> NumTxs {
-        NumTxs::from_bytes(A(()), &self.0[..self.num_txs_byte_len()])
+        let num_txs_byte_len = NUM_TXS_BYTE_LEN.min(self.0.len());
+        NumTxs::from_bytes(A(()), &self.0[..num_txs_byte_len])
     }
     /// Read the `index`th and `(index-1)`th entries from the tx table.
     ///

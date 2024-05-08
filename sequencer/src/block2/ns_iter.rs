@@ -1,7 +1,7 @@
 use crate::{
     block2::{
         ns_table::{self, NsTable},
-        payload_bytes::{num_nss_from_bytes, usize_to_bytes, NUM_NSS_BYTE_LEN},
+        payload_bytes::{usize_from_bytes, usize_to_bytes, NUM_NSS_BYTE_LEN},
     },
     NamespaceId,
 };
@@ -53,8 +53,9 @@ impl<'de> Deserialize<'de> for NsIndex {
     where
         D: Deserializer<'de>,
     {
-        <[u8; NUM_NSS_BYTE_LEN] as Deserialize>::deserialize(deserializer)
-            .map(|bytes: [u8; NUM_NSS_BYTE_LEN]| NsIndex(num_nss_from_bytes(&bytes)))
+        <[u8; NUM_NSS_BYTE_LEN] as Deserialize>::deserialize(deserializer).map(
+            |bytes: [u8; NUM_NSS_BYTE_LEN]| NsIndex(usize_from_bytes::<NUM_NSS_BYTE_LEN>(&bytes)),
+        )
     }
 }
 
