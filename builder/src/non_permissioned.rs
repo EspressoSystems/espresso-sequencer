@@ -62,7 +62,11 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
     max_block_size: u64,
     _: Ver,
 ) -> anyhow::Result<NodeState> {
-    let l1_client = L1Client::new(l1_params.url, Address::default());
+    let l1_client = L1Client::new(
+        l1_params.url,
+        Address::default(),
+        l1_params.events_max_block_range,
+    );
     let instance_state = NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
         ChainConfig::new(0, max_block_size, 0),

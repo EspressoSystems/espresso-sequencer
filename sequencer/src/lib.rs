@@ -184,7 +184,11 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
+            L1Client::new(
+                "http://localhost:3331".parse().unwrap(),
+                Address::default(),
+                10000,
+            ),
             catchup::mock::MockStateCatchup::default(),
         )
     }
@@ -212,7 +216,11 @@ impl Default for NodeState {
         Self::new(
             1u64,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
+            L1Client::new(
+                "http://localhost:3331".parse().unwrap(),
+                Address::default(),
+                10000,
+            ),
             catchup::mock::MockStateCatchup::default(),
         )
     }
@@ -280,6 +288,7 @@ pub struct BuilderParams {
 pub struct L1Params {
     pub url: Url,
     pub finalized_block: Option<u64>,
+    pub events_max_block_range: u64,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -438,7 +447,11 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
-    let l1_client = L1Client::new(l1_params.url, Address::default());
+    let l1_client = L1Client::new(
+        l1_params.url,
+        Address::default(),
+        l1_params.events_max_block_range,
+    );
     let l1_genesis = match l1_params.finalized_block {
         Some(block) => Some(l1_client.get_block(block).await?),
         None => None,
@@ -672,7 +685,11 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 ChainConfig::default(),
-                L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
+                L1Client::new(
+                    self.anvil.endpoint().parse().unwrap(),
+                    Address::default(),
+                    10000,
+                ),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
             )
             .with_genesis(state);

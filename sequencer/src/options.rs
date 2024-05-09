@@ -160,6 +160,14 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_L1_GENESIS")]
     pub l1_genesis: Option<u64>,
 
+    /// Maximum number of L1 blocks that can be scanned for events in a single query.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_EVENTS_MAX_BLOCK_RANGE",
+        default_value = "10000"
+    )]
+    pub l1_events_max_block_range: u64,
+
     /// Whether or not we are a DA node.
     #[clap(long, env = "ESPRESSO_SEQUENCER_IS_DA", action)]
     pub is_da: bool,

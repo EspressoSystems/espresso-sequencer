@@ -813,6 +813,7 @@ mod test_headers {
         let mut genesis_state = NodeState::mock().with_l1(L1Client::new(
             anvil.endpoint().parse().unwrap(),
             Address::default(),
+            1,
         ));
 
         let genesis = GenesisForTest::default();

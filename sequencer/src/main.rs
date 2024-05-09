@@ -54,6 +54,7 @@ where
     let l1_params = L1Params {
         url: opt.l1_provider_url,
         finalized_block: opt.l1_genesis,
+        events_max_block_range: opt.l1_events_max_block_range,
     };
     let builder_params = BuilderParams {
         prefunded_accounts: opt.prefunded_builder_accounts,
