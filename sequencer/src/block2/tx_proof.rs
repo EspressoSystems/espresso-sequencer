@@ -36,12 +36,16 @@ pub struct TxProof {
 
 impl TxProof {
     pub fn new(
-        payload: &Payload,
         index: &Index,
+        payload: &Payload,
         common: &VidCommon,
     ) -> Option<(Transaction, Self)> {
         if payload.as_byte_slice().len() != VidSchemeType::get_payload_byte_len(common) {
             return None; // error: common inconsistent with self
+        }
+
+        if !payload.ns_table().in_bounds(index.ns()) {
+            return None; // error: ns index out of bounds
         }
 
         // TODO check index.ns() in bounds

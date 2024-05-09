@@ -40,7 +40,7 @@ impl NsProof {
         if payload.as_byte_slice().len() != VidSchemeType::get_payload_byte_len(common) {
             return None; // error: vid_common inconsistent with self
         }
-        let Some(ns_index) = payload.find_ns_id(&ns_id) else {
+        let Some(ns_index) = payload.ns_table().find_ns_id(&ns_id) else {
             // ns_id does not exist
             return Some(NsProof {
                 ns_id,

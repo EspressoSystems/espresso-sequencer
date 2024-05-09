@@ -25,20 +25,19 @@ impl NsTable {
         &self.0
     }
 
-    /// The number of entries in the namespace table, including all duplicate
-    /// namespace IDs.
-    ///
-    /// Returns the minimum of:
-    /// - The number of namespaces declared in the ns table
-    /// - The maximum number of entries that could fit into the namespace table.
-    pub fn num_nss_with_duplicates(&self) -> usize {
-        std::cmp::min(
+    /// Does the `index`th entry exist in the namespace table?
+    pub fn in_bounds(&self, index: &NsIndex) -> bool {
+        // The number of entries in the namespace table, including all duplicate
+        // namespace IDs.
+        let num_nss_with_duplicates = std::cmp::min(
             // Number of namespaces declared in the ns table
             self.read_num_nss(),
             // Max number of entries that could fit in the namespace table
             self.0.len().saturating_sub(NUM_NSS_BYTE_LEN)
                 / NS_ID_BYTE_LEN.saturating_add(NS_OFFSET_BYTE_LEN),
-        )
+        );
+
+        index.as_usize(A(())) < num_nss_with_duplicates
     }
 
     /// Read the number of namespaces declared in the namespace table.

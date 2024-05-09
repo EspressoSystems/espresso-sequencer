@@ -198,8 +198,4 @@ impl Payload {
     pub fn ns_payload_range(&self, index: &NsIndex) -> NsPayloadRange {
         self.ns_table.ns_payload_range(index, self.payload.len())
     }
-
-    pub fn find_ns_id(&self, ns_id: &NamespaceId) -> Option<NsIndex> {
-        self.ns_table.find_ns_id(ns_id)
-    }
 }

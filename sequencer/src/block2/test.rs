@@ -61,7 +61,7 @@ fn basic_correctness() {
             assert_eq!(tx, test_tx);
 
             let tx_proof = {
-                let (tx2, tx_proof) = TxProof::new(&block, &tx_index, &vid_common).unwrap();
+                let (tx2, tx_proof) = TxProof::new(&tx_index, &block, &vid_common).unwrap();
                 assert_eq!(tx, tx2);
                 tx_proof
             };

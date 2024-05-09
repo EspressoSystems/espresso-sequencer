@@ -64,7 +64,6 @@ impl<'de> Deserialize<'de> for NsIndex {
 pub struct NsIter<'a> {
     cur_index: usize,
     repeat_nss: HashSet<NamespaceId>,
-    num_nss_with_duplicates: usize,
     ns_table: &'a NsTable,
 }
 
@@ -73,7 +72,6 @@ impl<'a> NsIter<'a> {
         Self {
             cur_index: 0,
             repeat_nss: HashSet::new(),
-            num_nss_with_duplicates: ns_table.num_nss_with_duplicates(),
             ns_table,
         }
     }
@@ -83,9 +81,12 @@ impl<'a> Iterator for NsIter<'a> {
     type Item = NsIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.cur_index < self.num_nss_with_duplicates {
-            let result = NsIndex(self.cur_index);
-            let ns_id = self.ns_table.read_ns_id(&result);
+        loop {
+            let candidate_result = NsIndex(self.cur_index);
+            if !self.ns_table.in_bounds(&candidate_result) {
+                break None;
+            }
+            let ns_id = self.ns_table.read_ns_id(&candidate_result);
             self.cur_index += 1;
 
             // skip duplicate namespace IDs
@@ -93,8 +94,7 @@ impl<'a> Iterator for NsIter<'a> {
                 continue;
             }
 
-            return Some(result);
+            break Some(candidate_result);
         }
-        None
     }
 }
