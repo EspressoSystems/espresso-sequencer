@@ -1,5 +1,6 @@
-//! Low-level utils for reading from and writing to the binary block payload.
-
+//! Serialization (and deserialization) of primitive unsigned integer types to
+//! (and from) an arbitrary fixed-length byte array.
+//!
 use paste::paste;
 use std::mem::size_of;
 
@@ -16,7 +17,7 @@ macro_rules! uint_bytes_impl {
                 pub fn [<$T _to_bytes>]<const BYTE_LEN: usize>(n: $T) -> [u8; BYTE_LEN] {
                     if size_of::<$T>() > BYTE_LEN {
                         assert!(
-                            n <= [<$T _max_from_byte_len>](BYTE_LEN),
+                            [<$T _fits>](n, BYTE_LEN),
                             "n {n} cannot fit into {BYTE_LEN} bytes"
                         );
                         n.to_le_bytes()[..BYTE_LEN].try_into().unwrap() // panic is impossible
@@ -46,13 +47,18 @@ macro_rules! uint_bytes_impl {
                 }
 
                 /// Return the largest `$T` value that can fit into `byte_len` bytes.
-                const fn [<$T _max_from_byte_len>](byte_len: usize) -> $T {
+                pub const fn [<$T _max_from_byte_len>](byte_len: usize) -> $T {
                     if byte_len >= size_of::<$T>() {
                         $T::MAX
                     } else {
                         // overflow cannot occur because `byte_len < size_of::<$T>()`
                         (1 << (byte_len * 8)) - 1
                     }
+                }
+
+                /// Can `n` fit into `byte_len` bytes?
+                pub const fn [<$T _fits>](n: $T, byte_len: usize) -> bool {
+                    n <= [<$T _max_from_byte_len>](byte_len)
                 }
             }
         };
