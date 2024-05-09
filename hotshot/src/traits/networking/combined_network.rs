@@ -285,7 +285,7 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
     async fn request_data<T: NodeType, VER: 'static + StaticVersionType>(
         &self,
         request: Message<TYPES>,
-        recipient: TYPES::SignatureKey,
+        recipient: &TYPES::SignatureKey,
         bind_version: VER,
     ) -> Result<ResponseMessage<T>, NetworkError> {
         self.secondary()

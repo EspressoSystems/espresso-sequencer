@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
     marker::PhantomData,
-    sync::Arc,
+    sync::{atomic::AtomicBool, Arc},
 };
 
 use async_trait::async_trait;
@@ -49,6 +49,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: StaticVersionType> Create
             private_key: handle.private_key().clone(),
             _phantom: PhantomData,
             id: handle.hotshot.id,
+            shutdown_flag: Arc::new(AtomicBool::new(false)),
         }
     }
 }

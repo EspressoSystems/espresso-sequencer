@@ -144,6 +144,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     {
         boxed_sync(async move {
             self.hotshot.networks.shut_down_networks().await;
+            // this is required because `SystemContextHandle` holds an inactive receiver and
+            // `broadcast_direct` below can wait indefinitely
+            self.internal_event_stream.0.set_await_active(false);
+            let _ = self
+                .internal_event_stream
+                .0
+                .broadcast_direct(Arc::new(HotShotEvent::Shutdown))
+                .await;
             self.registry.shutdown().await;
         })
     }

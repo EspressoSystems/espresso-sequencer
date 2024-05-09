@@ -316,7 +316,7 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
     async fn request_data<TYPES: NodeType, VER: StaticVersionType + 'static>(
         &self,
         _request: M,
-        _recipient: K,
+        _recipient: &K,
         _bind_version: VER,
     ) -> Result<ResponseMessage<TYPES>, NetworkError> {
         Err(NetworkError::UnimplementedFeature)

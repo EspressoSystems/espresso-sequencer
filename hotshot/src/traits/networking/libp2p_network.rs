@@ -794,7 +794,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
     async fn request_data<TYPES: NodeType, VER: 'static + StaticVersionType>(
         &self,
         request: M,
-        recipient: K,
+        recipient: &K,
         bind_version: VER,
     ) -> Result<ResponseMessage<TYPES>, NetworkError> {
         self.wait_for_ready().await;

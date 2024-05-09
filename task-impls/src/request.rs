@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 use async_broadcast::Sender;
@@ -58,6 +59,8 @@ pub struct NetworkRequestState<
     pub _phantom: PhantomData<fn(&Ver)>,
     /// The node's id
     pub id: u64,
+    /// A flag indicating that `HotShotEvent::Shutdown` has been received
+    pub shutdown_flag: Arc<AtomicBool>,
 }
 
 /// Alias for a signature
@@ -93,7 +96,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
                 }
                 None
             }
-            HotShotEvent::Shutdown => Some(HotShotTaskCompleted),
+            HotShotEvent::Shutdown => {
+                task.state().set_shutdown_flag();
+                Some(HotShotTaskCompleted)
+            }
             _ => None,
         }
     }
@@ -109,6 +115,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
                 | HotShotEvent::QuorumProposalValidated(..)
                 | HotShotEvent::ViewChange(_)
         )
+    }
+
+    async fn shutdown(&mut self) {
+        self.set_shutdown_flag();
     }
 }
 
@@ -165,6 +175,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
             sender,
             delay: self.delay,
             recipients,
+            shutdown_flag: Arc::clone(&self.shutdown_flag),
         };
         let Ok(data) = Serializer::<Ver>::serialize(&request) else {
             tracing::error!("Failed to serialize request!");
@@ -177,6 +188,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
         };
         debug!("Requesting data: {:?}", request);
         async_spawn(requester.run::<Ver>(request, signature));
+    }
+
+    /// Signals delayed requesters to finish
+    fn set_shutdown_flag(&self) {
+        self.shutdown_flag.store(true, Ordering::Relaxed);
     }
 }
 
@@ -194,6 +210,8 @@ struct DelayedRequester<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     delay: Duration,
     /// The peers we will request in a random order
     recipients: Vec<TYPES::SignatureKey>,
+    /// A flag indicating that `HotShotEvent::Shutdown` has been received
+    shutdown_flag: Arc<AtomicBool>,
 }
 
 /// Wrapper for the info in a VID request
@@ -203,7 +221,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DelayedRequester<TYPES, I> {
     /// Wait the delay, then try to complete the request.  Iterates over peers
     /// until the request is completed, or the data is no longer needed.
     async fn run<Ver: StaticVersionType + 'static>(
-        mut self,
+        self,
         request: RequestKind<TYPES>,
         signature: Signature<TYPES>,
     ) {
@@ -221,18 +239,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DelayedRequester<TYPES, I> {
 
     /// Handle sending a VID Share request, runs the loop until the data exists
     async fn do_vid<Ver: StaticVersionType + 'static>(
-        &mut self,
+        &self,
         req: VidRequest<TYPES>,
         signature: Signature<TYPES>,
     ) {
         let message = make_vid(&req, signature);
+        let mut recipients_it = self.recipients.iter().cycle();
 
-        while !self.recipients.is_empty() && !self.cancel_vid(&req).await {
+        while !self.cancel_vid(&req).await {
             match async_timeout(
                 REQUEST_TIMEOUT,
                 self.network.request_data::<TYPES, Ver>(
                     message.clone(),
-                    self.recipients.pop().unwrap(),
+                    recipients_it.next().unwrap(),
                     Ver::instance(),
                 ),
             )
@@ -266,7 +285,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DelayedRequester<TYPES, I> {
     async fn cancel_vid(&self, req: &VidRequest<TYPES>) -> bool {
         let view = req.0;
         let state = self.state.read().await;
-        state.vid_shares().contains_key(&view) && state.cur_view() > view
+        self.shutdown_flag.load(Ordering::Relaxed)
+            || state.vid_shares().contains_key(&view)
+            || state.cur_view() > view
     }
 
     /// Transform a response into a `HotShotEvent`

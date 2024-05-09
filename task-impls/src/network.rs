@@ -20,7 +20,7 @@ use hotshot_types::{
     },
     vote::{HasViewNumber, Vote},
 };
-use tracing::{debug, error, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 use vbs::version::Version;
 
 use crate::{
@@ -234,7 +234,7 @@ impl<
 
     fn should_shutdown(event: &Self::Event) -> bool {
         if matches!(event.as_ref(), HotShotEvent::Shutdown) {
-            error!("Network Task received Shutdown event");
+            info!("Network Task received Shutdown event");
             return true;
         }
         false
