@@ -48,10 +48,13 @@ impl TxProof {
             return None; // error: ns index out of bounds
         }
 
-        // TODO check index.ns() in bounds
         let ns_payload = payload.ns_payload(index.ns());
-        let ns_payload_range = payload.ns_payload_range(index.ns());
 
+        if !ns_payload.in_bounds(index.tx()) {
+            return None; // error: tx index out of bounds
+        }
+
+        let ns_payload_range = payload.ns_payload_range(index.ns());
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
 
         // Read the tx table len from this namespace's tx table and compute a
@@ -80,14 +83,6 @@ impl TxProof {
 
         // Read the tx payload and compute a proof of correctness.
         let payload_proof_tx = {
-            // TODO sucks that I need ns_payload AND ns_payload_range here.
-            // should be able to get this with less...
-            //
-            // TODO I'm re-reading the tx_payload_range here... because I want automatic translaction by ns_payload_range?
-            // In `verify` I don't have this luxury; Perhaps I should instead compute the tx_payload_range the same way I do in `verify`?
-            // let range = ns_payload.tx_payload_range(index.tx(), &ns_payload_range);
-
-            // TODO (i) payload_xxx should be a newtype(usize) that serializes to bytes
             let range =
                 ns_payload_range.tx_payload_range(&payload_num_txs, &payload_tx_table_entries);
 

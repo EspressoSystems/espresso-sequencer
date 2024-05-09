@@ -114,6 +114,11 @@ impl NsPayload {
         )
     }
 
+    /// Does the `index`th entry exist in the tx table?
+    pub fn in_bounds(&self, index: &TxIndex) -> bool {
+        index.as_usize(A(())) < self.num_txs()
+    }
+
     /// Read the number of txs declared in the tx table.
     pub fn read_num_txs(&self) -> NumTxs {
         let num_txs_byte_len = NUM_TXS_BYTE_LEN.min(self.0.len());
