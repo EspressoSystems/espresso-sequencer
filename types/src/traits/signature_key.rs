@@ -7,7 +7,7 @@ use std::{
 use bitvec::prelude::*;
 use ethereum_types::U256;
 use jf_primitives::{errors::PrimitivesError, vid::VidScheme};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tagged_base64::TaggedBase64;
 
 use super::EncodeBytes;
@@ -154,7 +154,7 @@ pub trait BuilderSignatureKey:
     + Debug
     + Hash
     + Serialize
-    + for<'a> Deserialize<'a>
+    + DeserializeOwned
     + PartialEq
     + Eq
     + PartialOrd
