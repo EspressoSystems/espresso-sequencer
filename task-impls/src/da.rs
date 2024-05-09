@@ -335,7 +335,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 | HotShotEvent::DAVoteRecv(_)
                 | HotShotEvent::Shutdown
                 | HotShotEvent::BlockRecv(_, _, _, _)
-                | HotShotEvent::Timeout(_)
                 | HotShotEvent::ViewChange(_)
                 | HotShotEvent::DAProposalValidated(_, _)
         )
