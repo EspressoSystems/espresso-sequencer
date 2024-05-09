@@ -76,7 +76,7 @@ use sequencer::{
     state::FeeAccount,
     state::ValidatedState,
     state_signature::{static_stake_table_commitment, StateSigner},
-    BuilderParams, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey, SeqTypes,
+    Genesis, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey, SeqTypes,
 };
 use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
@@ -127,9 +127,9 @@ pub struct BuilderContext<
 
 #[allow(clippy::too_many_arguments)]
 pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
+    genesis: Genesis,
     network_params: NetworkParams,
     metrics: &dyn Metrics,
-    builder_params: BuilderParams,
     l1_params: L1Params,
     hotshot_builder_api_url: Url,
     eth_key_pair: EthKeyPair,
@@ -141,8 +141,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     buffered_view_num_count: usize,
     is_da: bool,
     maximize_txns_count_timeout_duration: Duration,
-    base_fee: u64,
-    max_block_size: u64,
 ) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -242,22 +240,21 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let _ = NetworkingMetricsValue::new(metrics);
 
     let mut genesis_state = ValidatedState::default();
-    for address in builder_params.prefunded_accounts {
-        tracing::warn!("Prefunding account {:?} for demo", address);
-        genesis_state.prefund_account(address.into(), U256::max_value().into());
+    for (address, amount) in genesis.accounts {
+        tracing::warn!(%address, %amount, "Prefunding account for demo");
+        genesis_state.prefund_account(address, amount);
     }
 
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
-    let instance_state = NodeState::new(
-        node_index,
-        ChainConfig {
-            max_block_size,
-            base_fee: base_fee.into(),
-            ..Default::default()
-        },
+
+    let instance_state = NodeState {
+        chain_config: genesis.chain_config,
         l1_client,
-        Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
-    );
+        genesis_state,
+        l1_genesis: genesis.l1_finalized,
+        peers: Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
+        node_id: node_index,
+    };
 
     let stake_table_commit =
         static_stake_table_commitment(&config.config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
@@ -441,8 +438,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             NonZeroUsize::new(1).unwrap(),
             maximize_txns_count_timeout_duration,
             instance_state
-                .chain_config()
-                .base_fee
+                .chain_config
+                .base_fee()
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),

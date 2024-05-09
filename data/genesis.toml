@@ -1,0 +1,9 @@
+[stake_table]
+capacity = 10
+
+[chain_config]
+chain_id = 0
+base_fee = '1 wei'
+max_block_size = '1mb'
+fee_recipient = '0x0000000000000000000000000000000000000000'
+fee_contract = '0xa15bb66138824a1c7167f5e85b957d04dd34e468'

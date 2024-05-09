@@ -35,8 +35,8 @@ use hotshot_types::{
     utils::BuilderCommitment,
 };
 use sequencer::{
-    catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, BuilderParams,
-    ChainConfig, L1Params, NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes,
+    catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, ChainConfig, L1Params,
+    NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes,
 };
 
 use hotshot_events_service::{
@@ -59,9 +59,9 @@ pub struct BuilderConfig {
 }
 
 pub fn build_instance_state<Ver: StaticVersionType + 'static>(
+    chain_config: ChainConfig,
     l1_params: L1Params,
     state_peers: Vec<Url>,
-    chain_config: ChainConfig,
     _: Ver,
 ) -> anyhow::Result<NodeState> {
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
@@ -154,8 +154,8 @@ impl BuilderConfig {
             node_count,
             maximize_txns_count_timeout_duration,
             instance_state
-                .chain_config()
-                .base_fee
+                .chain_config
+                .base_fee()
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),

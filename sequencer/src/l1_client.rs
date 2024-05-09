@@ -40,6 +40,12 @@ pub struct L1BlockInfo {
     pub hash: H256,
 }
 
+impl L1BlockInfo {
+    pub fn from_toml(toml: &toml::Value) -> anyhow::Result<Self> {
+        Ok(toml::from_str(&toml::to_string(toml)?)?)
+    }
+}
+
 impl PartialOrd for L1BlockInfo {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -318,7 +324,7 @@ mod test {
         // Test that nothing funky is happening to the provider when
         // passed along in state.
         let state = NodeState::mock().with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1));
-        let version = state.l1_client().provider.client_version().await.unwrap();
+        let version = state.l1_client.provider.client_version().await.unwrap();
         assert_eq!("anvil/v0.2.0", version);
 
         // compare response of underlying provider w/ `get_block_number`

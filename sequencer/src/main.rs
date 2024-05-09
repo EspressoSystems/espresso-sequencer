@@ -9,7 +9,7 @@ use sequencer::{
     api::{self, data_source::DataSourceOptions},
     init_node,
     options::{Modules, Options},
-    persistence, BuilderParams, L1Params, NetworkParams,
+    persistence, Genesis, L1Params, NetworkParams,
 };
 use vbs::version::StaticVersionType;
 
@@ -48,15 +48,13 @@ async fn init_with_storage<S, Ver: StaticVersionType + 'static>(
 where
     S: DataSourceOptions,
 {
+    let genesis = Genesis::from_file(&opt.genesis_file)?;
+    tracing::info!(?genesis, "genesis");
+
     let (private_staking_key, private_state_key) = opt.private_keys()?;
-    let stake_table_capacity = opt.stake_table_capacity;
     let l1_params = L1Params {
         url: opt.l1_provider_url,
-        finalized_block: opt.l1_genesis,
         events_max_block_range: opt.l1_events_max_block_range,
-    };
-    let builder_params = BuilderParams {
-        prefunded_accounts: opt.prefunded_builder_accounts,
     };
 
     // Parse supplied Libp2p addresses to their socket form
@@ -123,14 +121,12 @@ where
                     move |metrics| {
                         async move {
                             init_node(
+                                genesis,
                                 network_params,
                                 &*metrics,
                                 storage_opt,
-                                builder_params,
                                 l1_params,
-                                stake_table_capacity,
                                 bind_version,
-                                opt.chain_config,
                                 opt.is_da,
                             )
                             .await
@@ -144,14 +140,12 @@ where
         }
         None => {
             init_node(
+                genesis,
                 network_params,
                 &NoMetrics,
                 storage_opt,
-                builder_params,
                 l1_params,
-                stake_table_capacity,
                 bind_version,
-                opt.chain_config,
                 opt.is_da,
             )
             .await?

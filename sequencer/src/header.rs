@@ -295,7 +295,7 @@ impl BlockHeader<SeqTypes> for Header {
         let mut validated_state = parent_state.clone();
 
         // Fetch the latest L1 snapshot.
-        let l1_snapshot = instance_state.l1_client().snapshot().await;
+        let l1_snapshot = instance_state.l1_client.snapshot().await;
         // Fetch the new L1 deposits between parent and current finalized L1 block.
         let l1_deposits = if let (Some(addr), Some(block_info)) =
             (chain_config.fee_contract, l1_snapshot.finalized)

@@ -569,7 +569,7 @@ impl ValidatedState {
         let missing_accounts = self.forgotten_accounts(
             [
                 proposed_header.fee_info.account,
-                instance.chain_config().fee_recipient,
+                instance.chain_config.fee_recipient,
             ]
             .into_iter()
             .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
@@ -634,7 +634,7 @@ impl ValidatedState {
             &mut validated_state,
             &mut delta,
             proposed_header.fee_info,
-            instance.chain_config().fee_recipient,
+            instance.chain_config.fee_recipient,
         )?;
 
         Ok((validated_state, delta))
@@ -978,6 +978,43 @@ impl FeeAmount {
             Some(self.0.as_u64())
         } else {
             None
+        }
+    }
+
+    pub fn from_toml(toml: &toml::Value) -> anyhow::Result<Self> {
+        match toml {
+            toml::Value::String(s) => {
+                // Interpret the integer as hex if the string starts with 0x.
+                let (s, hex) = match s.strip_prefix("0x") {
+                    Some(s) => (s, true),
+                    None => (s.as_str(), false),
+                };
+                // Strip an optional non-numeric suffix, which will be interpreted as a unit.
+                let (s, multiplier) = match s.split_once(char::is_whitespace) {
+                    Some((s, unit)) => {
+                        let multiplier = match unit.to_lowercase().as_str() {
+                            "wei" => 1u64,
+                            "gwei" => 1_000_000_000,
+                            "eth" | "ether" => 1_000_000_000_000_000_000,
+                            unit => bail!("unrecognized unit {unit}"),
+                        };
+                        (s, multiplier)
+                    }
+                    None => (s, 1),
+                };
+                // Parse the base amount as an integer.
+                let base = if hex {
+                    s.parse()?
+                } else {
+                    U256::from_dec_str(s)?
+                };
+
+                Ok(Self(base * multiplier))
+            }
+            toml::Value::Integer(n) => Ok(u64::try_from(*n)
+                .context("must be an unsigned integer")?
+                .into()),
+            _ => bail!("must be an integer or an integral string"),
         }
     }
 }

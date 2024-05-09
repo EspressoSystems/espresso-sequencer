@@ -2,7 +2,7 @@ use crate::{
     options::parse_size,
     state::{FeeAccount, FeeAmount},
 };
-use clap::Args;
+use anyhow::{bail, Context};
 use committable::{Commitment, Committable};
 use derive_more::{From, Into};
 use ethers::types::{Address, U256};
@@ -28,43 +28,48 @@ impl From<u64> for ChainId {
     }
 }
 
-impl FromStr for ChainId {
-    type Err = <u64 as FromStr>::Err;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(u64::from_str(s)?.into())
+impl ChainId {
+    pub fn from_toml(toml: &toml::Value) -> anyhow::Result<Self> {
+        if let Some(s) = toml.as_str() {
+            if s.starts_with("0x") {
+                Ok(Self(U256::from_str(s)?))
+            } else {
+                Ok(Self(U256::from_dec_str(s)?))
+            }
+        } else if let Some(n) = toml.as_integer() {
+            Ok(u64::try_from(n)
+                .context("must be an unsigned integer")?
+                .into())
+        } else {
+            bail!("must be an integer or an integral string");
+        }
     }
 }
 
 /// Global variables for an Espresso blockchain.
-#[derive(Args, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ChainConfig {
     /// Espresso chain ID
-    #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
     pub chain_id: ChainId,
+
     /// Maximum size in bytes of a block
-    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE", default_value = "30mb", value_parser = parse_size)]
     pub max_block_size: u64,
+
     /// Minimum fee in WEI per byte of payload
-    #[clap(long, env = "ESPRESSO_SEQUENCER_BASE_FEE", default_value = "0")]
     pub base_fee: FeeAmount,
+
     /// Fee contract address on L1.
     ///
     /// This is optional so that fees can easily be toggled on/off, with no need to deploy a
     /// contract when they are off. In a future release, after fees are switched on and thoroughly
     /// tested, this may be made mandatory.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
     pub fee_contract: Option<Address>,
+
     /// Account that receives sequencing fees.
     ///
     /// This account in the Espresso fee ledger will always receive every fee paid in Espresso,
     /// regardless of whether or not their is a `fee_contract` deployed. Once deployed, the fee
     /// contract can decide what to do with tokens locked in this account in Espresso.
-    #[clap(
-        long,
-        env = "ESPRESSO_SEQUENCER_FEE_RECIPIENT",
-        default_value = "0x0000000000000000000000000000000000000000"
-    )]
     pub fee_recipient: FeeAccount,
 }
 
@@ -77,6 +82,55 @@ impl Default for ChainConfig {
             fee_contract: None,
             fee_recipient: Default::default(),
         }
+    }
+}
+
+impl ChainConfig {
+    pub fn from_toml(toml: &toml::Value) -> anyhow::Result<Self> {
+        let cfg = toml.as_table().context("must be table")?;
+        let chain_id = ChainId::from_toml(cfg.get("chain_id").context("missing chain_id")?)
+            .context("invalid chain ID")?;
+        let max_block_size = match cfg
+            .get("max_block_size")
+            .context("missing max_block_size")?
+        {
+            toml::Value::String(s) => parse_size(s).context("invalid max block size")?,
+            toml::Value::Integer(n) => (*n)
+                .try_into()
+                .context("max_block_size must be an unsigned integer")?,
+            _ => bail!("max_block_size must be an integer or an integral string"),
+        };
+        let base_fee = FeeAmount::from_toml(cfg.get("base_fee").context("missing base_fee")?)
+            .context("invalid base fee")?;
+        let fee_contract = match cfg.get("fee_contract") {
+            Some(toml::Value::String(s)) => {
+                Some(s.parse().context("invalid fee_contract address")?)
+            }
+            Some(_) => bail!("fee_contract must be an address string"),
+            None => None,
+        };
+        let fee_recipient = cfg
+            .get("fee_recipient")
+            .context("missing fee_recipient")?
+            .as_str()
+            .context("fee_recipient must be an address string")?
+            .parse()
+            .context("invalid fee_recipient")?;
+        Ok(Self {
+            chain_id,
+            max_block_size,
+            base_fee,
+            fee_contract,
+            fee_recipient,
+        })
+    }
+
+    pub fn max_block_size(&self) -> u64 {
+        self.max_block_size
+    }
+
+    pub fn base_fee(&self) -> FeeAmount {
+        self.base_fee
     }
 }
 
