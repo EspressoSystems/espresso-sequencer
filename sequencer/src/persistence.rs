@@ -103,11 +103,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             .context("loading last voted view")?
         {
             Some(view) => {
-                tracing::info!(?view, "starting from saved view");
+                tracing::error!(?view, "starting from saved view");
                 view
             }
             None => {
-                tracing::info!("no saved view, starting from genesis");
+                tracing::error!("no saved view, starting from genesis");
                 ViewNumber::genesis()
             }
         };
@@ -135,11 +135,14 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         };
         let validated_state = Some(Arc::new(ValidatedState::genesis(&state).0));
 
-        // We start from the view following the maximum view between `highest_voted_view` and
-        // `leaf.view_number`. This prevents double votes from starting in a view in which we had
-        // already voted before the restart, and prevents unnecessary catchup from starting in a
-        // view earlier than the anchor leaf.
-        let view = max(highest_voted_view, leaf.get_view_number()) + 1;
+        // If we are not starting from genesis, we start from the view following the maximum view
+        // between `highest_voted_view` and `leaf.view_number`. This prevents double votes from
+        // starting in a view in which we had already voted before the restart, and prevents
+        // unnecessary catchup from starting in a view earlier than the anchor leaf.
+        let mut view = max(highest_voted_view, leaf.get_view_number());
+        if view != ViewNumber::genesis() {
+            view += 1;
+        }
 
         tracing::info!(?leaf, ?view, ?high_qc, "loaded consensus state");
         Ok(HotShotInitializer::from_reload(
