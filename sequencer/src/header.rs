@@ -397,7 +397,7 @@ impl BlockHeader<SeqTypes> for Header {
             height: 0,
             timestamp: 0,
             l1_head: 0,
-            l1_finalized: None,
+            l1_finalized: instance_state.l1_genesis,
             payload_commitment,
             builder_commitment,
             ns_table,
@@ -813,6 +813,7 @@ mod test_headers {
         let mut genesis_state = NodeState::mock().with_l1(L1Client::new(
             anvil.endpoint().parse().unwrap(),
             Address::default(),
+            1,
         ));
 
         let genesis = GenesisForTest::default();

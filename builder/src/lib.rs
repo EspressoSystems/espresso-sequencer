@@ -393,7 +393,11 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 ChainConfig::default(),
-                L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
+                L1Client::new(
+                    self.anvil.endpoint().parse().unwrap(),
+                    Address::default(),
+                    1,
+                ),
                 MockStateCatchup::default(),
             )
             .with_genesis(ValidatedState::default());
@@ -534,6 +538,7 @@ pub mod testing {
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),
+                    1,
                 ),
                 MockStateCatchup::default(),
             )
@@ -599,6 +604,7 @@ pub mod testing {
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),
+                    1,
                 ),
                 MockStateCatchup::default(),
             )

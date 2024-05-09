@@ -226,6 +226,8 @@ async fn main() -> anyhow::Result<()> {
 
     let l1_params = L1Params {
         url: opt.l1_provider_url,
+        finalized_block: None,
+        events_max_block_range: 10000,
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;

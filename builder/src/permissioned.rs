@@ -249,7 +249,11 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
-    let l1_client = L1Client::new(l1_params.url, Address::default());
+    let l1_client = L1Client::new(
+        l1_params.url,
+        Address::default(),
+        l1_params.events_max_block_range,
+    );
 
     let instance_state = NodeState::new(
         node_index,

@@ -156,6 +156,18 @@ pub struct Options {
     #[derivative(Debug(format_with = "Display::fmt"))]
     pub l1_provider_url: Url,
 
+    /// L1 block number from which to start the Espresso chain.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_GENESIS")]
+    pub l1_genesis: Option<u64>,
+
+    /// Maximum number of L1 blocks that can be scanned for events in a single query.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_EVENTS_MAX_BLOCK_RANGE",
+        default_value = "10000"
+    )]
+    pub l1_events_max_block_range: u64,
+
     /// Whether or not we are a DA node.
     #[clap(long, env = "ESPRESSO_SEQUENCER_IS_DA", action)]
     pub is_da: bool,
