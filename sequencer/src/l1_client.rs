@@ -209,8 +209,8 @@ impl L1Client {
                     )
                     .deposit_filter()
                     .address(address.into())
-                    .from_block(prev)
-                    .to_block(new_finalized)
+                    .from_block(from)
+                    .to_block(to)
                     .query()
                     .await
                     {
@@ -259,15 +259,18 @@ async fn get_finalized_block<P: JsonRpcClient>(
 #[cfg(test)]
 mod test {
 
-    use std::ops::Add;
-
     use super::*;
     use crate::NodeState;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use contract_bindings::fee_contract::FeeContract;
     use ethers::utils::{parse_ether, Anvil};
+    use std::ops::Add;
 
     #[async_std::test]
     async fn test_l1_block_fetching() -> anyhow::Result<()> {
+        setup_logging();
+        setup_backtrace();
+
         // Test l1_client methods against `ethers::Provider`. There is
         // also some sanity testing demonstrating `Anvil` availability.
         let anvil = Anvil::new().block_time(1u32).spawn();
@@ -307,6 +310,9 @@ mod test {
 
     #[async_std::test]
     async fn test_get_finalized_deposits() -> anyhow::Result<()> {
+        setup_logging();
+        setup_backtrace();
+
         // how many deposits will we make
         let deposits = 5;
         let deploy_txn_count = 2;
@@ -390,7 +396,7 @@ mod test {
             .get_finalized_deposits(None, deposits + deploy_txn_count)
             .await;
 
-        assert_eq!(deposits as usize, pending.len());
+        assert_eq!(deposits as usize, pending.len(), "{pending:?}");
         assert_eq!(&wallet_address, &pending[0].account().into());
         assert_eq!(
             U256::from(1500000000000000000u64),
