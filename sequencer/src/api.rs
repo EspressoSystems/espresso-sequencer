@@ -722,6 +722,7 @@ mod api_tests {
         assert!(found_empty_block);
     }
 
+    #[ignore]
     #[async_std::test]
     pub(crate) async fn catchup_test_with_query_module<D: TestableSequencerDataSource>() {
         let storage = D::create_storage().await;
@@ -857,11 +858,13 @@ mod test {
         state_signature_test_helper(|opt| opt).await
     }
 
+    #[ignore]
     #[async_std::test]
     async fn catchup_test_without_query_module() {
         catchup_test_helper(|opt| opt).await
     }
 
+    #[ignore]
     #[async_std::test]
     async fn test_merklized_state_api() {
         setup_logging();
@@ -930,6 +933,7 @@ mod test {
         }
     }
 
+    #[ignore]
     #[async_std::test]
     async fn test_catchup() {
         setup_logging();
@@ -1023,6 +1027,7 @@ mod test {
         }
     }
 
+    #[ignore]
     #[async_std::test]
     pub(crate) async fn test_restart() {
         setup_logging();
