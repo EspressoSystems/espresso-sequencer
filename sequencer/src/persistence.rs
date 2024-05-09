@@ -103,11 +103,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             .context("loading last voted view")?
         {
             Some(view) => {
-                tracing::error!(?view, "starting from saved view");
+                tracing::info!(?view, "starting from saved view");
                 view
             }
             None => {
-                tracing::error!("no saved view, starting from genesis");
+                tracing::info!("no saved view, starting from genesis");
                 ViewNumber::genesis()
             }
         };
