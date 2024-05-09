@@ -166,17 +166,9 @@ impl BuilderConfig {
         // start the hotshot api service
         run_builder_api_service(hotshot_builder_apis_url.clone(), proxy_global_state);
 
-        let events_url = hotshot_events_api_url
-            .clone()
-            .join("hotshot-events/events")
-            .unwrap();
-
-        tracing::info!(
-            "Running permissionless builder against hotshot events API at {}",
-            events_url.to_string()
-        );
-
         // spawn the builder service
+        let events_url = hotshot_events_api_url.clone();
+        tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
         async_spawn(async move {
             let res = run_non_permissioned_standalone_builder_service(
                 tx_sender,
