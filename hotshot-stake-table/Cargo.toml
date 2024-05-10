@@ -15,7 +15,9 @@ ark-std = { workspace = true }
 digest = { workspace = true }
 ethereum-types = { workspace = true }
 hotshot-types = { path = "../types" }
-jf-primitives = { workspace = true }
+jf-crhf = { workspace = true }
+jf-signature = { workspace = true, features = ["bls", "schnorr"] }
+jf-rescue = { workspace = true }
 jf-utils = { workspace = true }
 serde = { workspace = true, features = ["rc"] }
 tagged-base64 = { workspace = true }
@@ -26,7 +28,7 @@ rand_chacha = { workspace = true }
 [features]
 default = ["parallel"]
 std = ["ark-std/std", "ark-serialize/std", "ark-ff/std"]
-parallel = ["jf-primitives/parallel", "jf-utils/parallel", "ark-ff/parallel"]
+parallel = ["jf-utils/parallel", "ark-ff/parallel"]
 
 [lints]
 workspace = true

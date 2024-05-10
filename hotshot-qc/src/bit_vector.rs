@@ -16,10 +16,7 @@ use hotshot_types::traits::{
     qc::QuorumCertificate,
     stake_table::{SnapshotVersion, StakeTableScheme},
 };
-use jf_primitives::{
-    errors::{PrimitivesError, PrimitivesError::ParameterError},
-    signatures::AggregateableSignatureSchemes,
-};
+use jf_signature::AggregateableSignatureSchemes;
 use serde::{Deserialize, Serialize};
 use typenum::U32;
 
@@ -203,7 +200,7 @@ where
 mod tests {
     use hotshot_stake_table::mt_based::StakeTable;
     use hotshot_types::traits::stake_table::StakeTableScheme;
-    use jf_primitives::signatures::{
+    use jf_signature::{
         bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair},
         SignatureScheme,
     };

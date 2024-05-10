@@ -32,7 +32,7 @@ use hotshot_types::{
 #[cfg(not(feature = "dependency-tasks"))]
 use hotshot_types::{traits::storage::Storage, vote::Certificate};
 #[cfg(not(feature = "dependency-tasks"))]
-use jf_primitives::vid::VidScheme;
+use jf_vid::VidScheme;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 #[cfg(not(feature = "dependency-tasks"))]

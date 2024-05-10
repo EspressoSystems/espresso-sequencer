@@ -15,8 +15,9 @@ ark-std = { workspace = true }
 bitvec = { workspace = true }
 ethereum-types = { workspace = true }
 generic-array = { workspace = true }
-hotshot-types = { workspace = true }
-jf-primitives = { workspace = true }
+hotshot-types = { path = "../types" }
+jf-signature = { workspace = true }
+jf-rescue = { workspace = true, features = ["gadgets"] }
 jf-relation = { workspace = true }
 jf-utils = { workspace = true }
 serde = { workspace = true }
@@ -28,7 +29,10 @@ hotshot-stake-table = { path = "../hotshot-stake-table" }
 [features]
 default = ["parallel"]
 std = ["ark-std/std"]
-parallel = ["jf-primitives/parallel", "jf-utils/parallel"]
+parallel = [
+    "jf-utils/parallel", "jf-rescue/parallel",
+    "jf-signature/parallel", "jf-relation/parallel"
+]
 
 [lints]
 workspace = true

@@ -4,10 +4,8 @@ use ark_std::{collections::HashMap, hash::Hash, rand::SeedableRng};
 use digest::crypto_common::rand_core::CryptoRngCore;
 use ethereum_types::{U256, U512};
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme};
-use jf_primitives::{
-    crhf::{VariableLengthRescueCRHF, CRHF},
-    rescue::RescueParameter,
-};
+use jf_crhf::CRHF;
+use jf_rescue::{crhf::VariableLengthRescueCRHF, RescueParameter};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -385,8 +383,9 @@ mod tests {
     use ark_std::{rand::SeedableRng, vec::Vec};
     use ethereum_types::U256;
     use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme};
-    use jf_primitives::signatures::{
-        bls_over_bn254::BLSOverBN254CurveSignatureScheme, SchnorrSignatureScheme, SignatureScheme,
+    use jf_signature::{
+        bls_over_bn254::BLSOverBN254CurveSignatureScheme, schnorr::SchnorrSignatureScheme,
+        SignatureScheme,
     };
 
     use super::{

@@ -4,9 +4,10 @@ use std::{
     hash::Hash,
 };
 
+use ark_serialize::SerializationError;
 use bitvec::prelude::*;
 use ethereum_types::U256;
-use jf_primitives::{errors::PrimitivesError, vid::VidScheme};
+use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tagged_base64::TaggedBase64;
 
@@ -110,7 +111,7 @@ pub trait SignatureKey:
     /// # Errors
     ///
     /// Will return `Err` if deserialization fails
-    fn from_bytes(bytes: &[u8]) -> Result<Self, PrimitivesError>;
+    fn from_bytes(bytes: &[u8]) -> Result<Self, SerializationError>;
 
     /// Generate a new key pair
     fn generated_from_seed_indexed(seed: [u8; 32], index: u64) -> (Self, Self::PrivateKey);

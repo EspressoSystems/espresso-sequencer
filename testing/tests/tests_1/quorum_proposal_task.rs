@@ -29,7 +29,7 @@ use hotshot_types::{
     utils::BuilderCommitment,
     vid::VidSchemeType,
 };
-use jf_primitives::vid::VidScheme;
+use jf_vid::VidScheme;
 use sha2::Digest;
 
 fn make_payload_commitment(

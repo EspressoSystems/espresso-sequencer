@@ -31,7 +31,8 @@ hotshot-task = { path = "../task" }
 hotshot-task-impls = { path = "../task-impls", version = "0.5.36", default-features = false }
 hotshot-types = { path = "../types" }
 hotshot-builder-api = { path = "../builder-api" }
-jf-primitives = { workspace = true }
+jf-signature = { workspace = true }
+jf-vid = { workspace = true }
 portpicker = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }

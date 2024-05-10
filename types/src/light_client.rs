@@ -6,7 +6,7 @@ use ark_ed_on_bn254::EdwardsConfig as Config;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ethereum_types::U256;
-use jf_primitives::signatures::schnorr;
+use jf_signature::schnorr;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ pub type CircuitField = ark_ed_on_bn254::Fq;
 pub type LightClientState = GenericLightClientState<CircuitField>;
 /// Signature scheme
 pub type StateSignatureScheme =
-    jf_primitives::signatures::schnorr::SchnorrSignatureScheme<ark_ed_on_bn254::EdwardsConfig>;
+    jf_signature::schnorr::SchnorrSignatureScheme<ark_ed_on_bn254::EdwardsConfig>;
 /// Signatures
 pub type StateSignature = schnorr::Signature<Config>;
 /// Verification key for verifying state signatures

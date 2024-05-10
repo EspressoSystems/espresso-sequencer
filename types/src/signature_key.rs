@@ -1,14 +1,12 @@
 //! Types and structs for the hotshot signature keys
 
+use ark_serialize::SerializationError;
 use bitvec::{slice::BitSlice, vec::BitVec};
 use ethereum_types::U256;
 use generic_array::GenericArray;
-use jf_primitives::{
-    errors::PrimitivesError,
-    signatures::{
-        bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair, SignKey, VerKey},
-        SignatureScheme,
-    },
+use jf_signature::{
+    bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair, SignKey, VerKey},
+    SignatureError, SignatureScheme,
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -38,7 +36,7 @@ impl SignatureKey for BLSPubKey {
     type PureAssembledSignatureType =
         <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature;
     type QCType = (Self::PureAssembledSignatureType, BitVec);
-    type SignError = PrimitivesError;
+    type SignError = SignatureError;
 
     #[instrument(skip(self))]
     fn validate(&self, signature: &Self::PureAssembledSignatureType, data: &[u8]) -> bool {
@@ -69,10 +67,8 @@ impl SignatureKey for BLSPubKey {
         buf
     }
 
-    fn from_bytes(bytes: &[u8]) -> Result<Self, PrimitivesError> {
-        Ok(ark_serialize::CanonicalDeserialize::deserialize_compressed(
-            bytes,
-        )?)
+    fn from_bytes(bytes: &[u8]) -> Result<Self, SerializationError> {
+        ark_serialize::CanonicalDeserialize::deserialize_compressed(bytes)
     }
 
     fn generated_from_seed_indexed(seed: [u8; 32], index: u64) -> (Self, Self::PrivateKey) {
@@ -138,7 +134,7 @@ pub type BuilderKey = BLSPubKey;
 impl BuilderSignatureKey for BuilderKey {
     type BuilderPrivateKey = BLSPrivKey;
     type BuilderSignature = <BLSOverBN254CurveSignatureScheme as SignatureScheme>::Signature;
-    type SignError = PrimitivesError;
+    type SignError = SignatureError;
 
     fn sign_builder_message(
         private_key: &Self::BuilderPrivateKey,

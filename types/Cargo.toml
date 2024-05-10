@@ -23,7 +23,7 @@ bitvec = { workspace = true }
 blake3 = { workspace = true }
 committable = { workspace = true }
 custom_debug = { workspace = true }
-digest = { workspace = true }
+digest = { workspace = true, features = ["rand_core"] }
 either = { workspace = true }
 espresso-systems-common = { workspace = true }
 ethereum-types = { workspace = true }
@@ -43,8 +43,9 @@ time = { workspace = true }
 tracing = { workspace = true }
 typenum = { workspace = true }
 derivative = "2"
-jf-primitives = { workspace = true }
-jf-plonk = { workspace = true }
+jf-vid = { workspace = true }
+jf-pcs = { workspace = true }
+jf-signature = { workspace = true, features = ["schnorr"] }
 jf-utils = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
@@ -58,8 +59,8 @@ url = { workspace = true }
 serde_json = { workspace = true }
 
 [features]
-gpu-vid = ["jf-primitives/gpu-vid"]
-test-srs = ["jf-primitives/test-srs"]
+gpu-vid = ["jf-vid/gpu-vid"]
+test-srs = ["jf-vid/test-srs"]
 
 [target.'cfg(all(async_executor_impl = "async-std"))'.dependencies]
 async-std = { workspace = true }

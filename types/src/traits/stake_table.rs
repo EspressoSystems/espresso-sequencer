@@ -1,10 +1,8 @@
 //! Trait for stake table data structures
 
-use ark_std::{rand::SeedableRng, string::ToString, vec::Vec};
+use ark_std::{rand::SeedableRng, vec::Vec};
 use digest::crypto_common::rand_core::CryptoRngCore;
 use displaydoc::Display;
-use jf_plonk::errors::PlonkError;
-use jf_primitives::errors::PrimitivesError;
 
 /// Snapshots of the stake table
 pub enum SnapshotVersion {
@@ -220,16 +218,3 @@ pub enum StakeTableError {
 }
 
 impl ark_std::error::Error for StakeTableError {}
-
-impl From<StakeTableError> for PrimitivesError {
-    fn from(value: StakeTableError) -> Self {
-        // FIXME: (alex) should we define a PrimitivesError::General()?
-        Self::ParameterError(value.to_string())
-    }
-}
-
-impl From<StakeTableError> for PlonkError {
-    fn from(value: StakeTableError) -> Self {
-        Self::PrimitiveError(PrimitivesError::ParameterError(value.to_string()))
-    }
-}

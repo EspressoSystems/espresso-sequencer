@@ -12,7 +12,7 @@ use std::{
 };
 
 use committable::{Commitment, Committable};
-use jf_primitives::vid::{precomputable::Precomputable, VidScheme};
+use jf_vid::{precomputable::Precomputable, VidScheme};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::signature_key::BuilderSignatureKey;

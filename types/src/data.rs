@@ -16,7 +16,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bincode::Options;
 use committable::{Commitment, CommitmentBoundsArkless, Committable, RawCommitmentBuilder};
 use derivative::Derivative;
-use jf_primitives::vid::VidDisperse as JfVidDisperse;
+use jf_vid::VidDisperse as JfVidDisperse;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -703,7 +703,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
 pub mod null_block {
     #![allow(missing_docs)]
 
-    use jf_primitives::vid::VidScheme;
+    use jf_vid::VidScheme;
     use memoize::memoize;
 
     use crate::{

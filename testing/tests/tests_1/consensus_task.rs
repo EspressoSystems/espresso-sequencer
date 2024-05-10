@@ -26,7 +26,7 @@ use hotshot_types::{
     traits::{election::Membership, node_implementation::ConsensusTime},
     utils::BuilderCommitment,
 };
-use jf_primitives::vid::VidScheme;
+use jf_vid::VidScheme;
 use sha2::Digest;
 
 #[cfg(test)]

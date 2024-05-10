@@ -17,7 +17,7 @@ use hotshot_types::{
         BlockPayload,
     },
 };
-use jf_primitives::vid::VidScheme;
+use jf_vid::VidScheme;
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]

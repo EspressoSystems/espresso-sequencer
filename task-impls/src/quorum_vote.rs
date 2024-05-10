@@ -30,7 +30,7 @@ use hotshot_types::{
     vid::vid_scheme,
     vote::{Certificate, HasViewNumber},
 };
-use jf_primitives::vid::VidScheme;
+use jf_vid::VidScheme;
 #[cfg(feature = "dependency-tasks")]
 use std::marker::PhantomData;
 use std::{collections::HashMap, sync::Arc};

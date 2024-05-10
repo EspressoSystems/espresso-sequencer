@@ -7,7 +7,7 @@ use ark_std::{
 };
 use bitvec::prelude::*;
 use generic_array::{ArrayLength, GenericArray};
-use jf_primitives::{errors::PrimitivesError, signatures::AggregateableSignatureSchemes};
+use jf_signature::{AggregateableSignatureSchemes, SignatureError};
 use serde::{Deserialize, Serialize};
 
 /// Trait for validating a QC built from different signatures on the same message
@@ -47,7 +47,7 @@ pub trait QuorumCertificateScheme<
         sk: &A::SigningKey,
         msg: M,
         prng: &mut R,
-    ) -> Result<A::Signature, PrimitivesError> {
+    ) -> Result<A::Signature, SignatureError> {
         A::sign(pp, sk, msg, prng)
     }
 
@@ -64,7 +64,7 @@ pub trait QuorumCertificateScheme<
         qc_pp: &Self::QCProverParams,
         signers: &BitSlice,
         sigs: &[A::Signature],
-    ) -> Result<Self::QC, PrimitivesError>;
+    ) -> Result<Self::QC, SignatureError>;
 
     /// Checks an aggregated signature over some message provided as input
     /// * `qc_vp` - public parameters for validating the QC
@@ -80,7 +80,7 @@ pub trait QuorumCertificateScheme<
         qc_vp: &Self::QCVerifierParams,
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
         qc: &Self::QC,
-    ) -> Result<Self::QuorumSize, PrimitivesError>;
+    ) -> Result<Self::QuorumSize, SignatureError>;
 
     /// Trace the list of signers given a qc.
     ///
@@ -91,5 +91,5 @@ pub trait QuorumCertificateScheme<
         qc_vp: &Self::QCVerifierParams,
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
         qc: &Self::QC,
-    ) -> Result<Vec<A::VerificationKey>, PrimitivesError>;
+    ) -> Result<Vec<A::VerificationKey>, SignatureError>;
 }

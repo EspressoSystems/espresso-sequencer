@@ -1,7 +1,8 @@
 //! Config file for stake table
 use ark_ff::PrimeField;
 use ark_std::vec;
-use jf_primitives::{crhf::FixedLengthRescueCRHF, signatures::bls_over_bn254};
+use jf_rescue::crhf::FixedLengthRescueCRHF;
+use jf_signature::bls_over_bn254;
 
 use crate::utils::ToFields;
 

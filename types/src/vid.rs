@@ -11,20 +11,18 @@
 use std::{fmt::Debug, ops::Range};
 
 use ark_bn254::Bn254;
-use jf_primitives::{
-    pcs::{
-        prelude::{UnivariateKzgPCS, UnivariateUniversalParams},
-        PolynomialCommitmentScheme,
+use jf_pcs::{
+    prelude::{UnivariateKzgPCS, UnivariateUniversalParams},
+    PolynomialCommitmentScheme,
+};
+use jf_vid::{
+    advz::{
+        self,
+        payload_prover::{LargeRangeProof, SmallRangeProof},
     },
-    vid::{
-        advz::{
-            self,
-            payload_prover::{LargeRangeProof, SmallRangeProof},
-        },
-        payload_prover::{PayloadProver, Statement},
-        precomputable::Precomputable,
-        VidDisperse, VidResult, VidScheme,
-    },
+    payload_prover::{PayloadProver, Statement},
+    precomputable::Precomputable,
+    VidDisperse, VidResult, VidScheme,
 };
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};

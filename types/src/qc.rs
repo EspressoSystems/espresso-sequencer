@@ -12,10 +12,7 @@ use ark_std::{
 use bitvec::prelude::*;
 use ethereum_types::U256;
 use generic_array::GenericArray;
-use jf_primitives::{
-    errors::{PrimitivesError, PrimitivesError::ParameterError},
-    signatures::AggregateableSignatureSchemes,
-};
+use jf_signature::{AggregateableSignatureSchemes, SignatureError};
 use serde::{Deserialize, Serialize};
 use typenum::U32;
 
@@ -62,7 +59,7 @@ where
         sk: &A::SigningKey,
         msg: M,
         prng: &mut R,
-    ) -> Result<A::Signature, PrimitivesError> {
+    ) -> Result<A::Signature, SignatureError> {
         A::sign(pp, sk, msg, prng)
     }
 
@@ -70,9 +67,9 @@ where
         qc_pp: &Self::QCProverParams,
         signers: &BitSlice,
         sigs: &[A::Signature],
-    ) -> Result<Self::QC, PrimitivesError> {
+    ) -> Result<Self::QC, SignatureError> {
         if signers.len() != qc_pp.stake_entries.len() {
-            return Err(ParameterError(format!(
+            return Err(SignatureError::ParameterError(format!(
                 "bit vector len {} != the number of stake entries {}",
                 signers.len(),
                 qc_pp.stake_entries.len(),
@@ -91,7 +88,7 @@ where
                     }
                 });
         if total_weight < qc_pp.threshold {
-            return Err(ParameterError(format!(
+            return Err(SignatureError::ParameterError(format!(
                 "total_weight {} less than threshold {}",
                 total_weight, qc_pp.threshold,
             )));
@@ -103,7 +100,7 @@ where
             }
         }
         if ver_keys.len() != sigs.len() {
-            return Err(ParameterError(format!(
+            return Err(SignatureError::ParameterError(format!(
                 "the number of ver_keys {} != the number of partial signatures {}",
                 ver_keys.len(),
                 sigs.len(),
@@ -118,10 +115,10 @@ where
         qc_vp: &Self::QCVerifierParams,
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
         qc: &Self::QC,
-    ) -> Result<Self::QuorumSize, PrimitivesError> {
+    ) -> Result<Self::QuorumSize, SignatureError> {
         let (sig, signers) = qc;
         if signers.len() != qc_vp.stake_entries.len() {
-            return Err(ParameterError(format!(
+            return Err(SignatureError::ParameterError(format!(
                 "signers bit vector len {} != the number of stake entries {}",
                 signers.len(),
                 qc_vp.stake_entries.len(),
@@ -140,7 +137,7 @@ where
                     }
                 });
         if total_weight < qc_vp.threshold {
-            return Err(ParameterError(format!(
+            return Err(SignatureError::ParameterError(format!(
                 "total_weight {} less than threshold {}",
                 total_weight, qc_vp.threshold,
             )));
@@ -160,10 +157,10 @@ where
         qc_vp: &Self::QCVerifierParams,
         message: &GenericArray<<A>::MessageUnit, Self::MessageLength>,
         qc: &Self::QC,
-    ) -> Result<Vec<<A>::VerificationKey>, PrimitivesError> {
+    ) -> Result<Vec<<A>::VerificationKey>, SignatureError> {
         let (_sig, signers) = qc;
         if signers.len() != qc_vp.stake_entries.len() {
-            return Err(ParameterError(format!(
+            return Err(SignatureError::ParameterError(format!(
                 "signers bit vector len {} != the number of stake entries {}",
                 signers.len(),
                 qc_vp.stake_entries.len(),
@@ -185,7 +182,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use jf_primitives::signatures::{
+    use jf_signature::{
         bls_over_bn254::{BLSOverBN254CurveSignatureScheme, KeyPair},
         SignatureScheme,
     };

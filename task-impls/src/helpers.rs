@@ -8,7 +8,7 @@ use hotshot_types::{
     traits::{election::Membership, node_implementation::NodeType},
     vid::{vid_scheme, VidPrecomputeData},
 };
-use jf_primitives::vid::{precomputable::Precomputable, VidScheme};
+use jf_vid::{precomputable::Precomputable, VidScheme};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::{spawn_blocking, JoinHandle};
 

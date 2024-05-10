@@ -30,7 +30,7 @@ use hotshot_types::{
     vid::{vid_scheme, VidCommitment, VidSchemeType},
     vote::{Certificate, HasViewNumber, Vote},
 };
-use jf_primitives::vid::VidScheme;
+use jf_vid::VidScheme;
 use serde::Serialize;
 
 use crate::test_builder::TestDescription;
