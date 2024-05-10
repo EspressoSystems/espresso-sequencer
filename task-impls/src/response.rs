@@ -134,7 +134,8 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
         if !contained {
             let txns = consensus.saved_payloads().get(&view)?;
             let vid =
-                calculate_vid_disperse(Arc::clone(txns), &Arc::clone(&self.quorum), view).await;
+                calculate_vid_disperse(Arc::clone(txns), &Arc::clone(&self.quorum), view, None)
+                    .await;
             let shares = VidDisperseShare::from_vid_disperse(vid);
             let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
             for share in shares {

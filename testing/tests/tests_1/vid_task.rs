@@ -17,7 +17,7 @@ use hotshot_types::{
         BlockPayload,
     },
 };
-use jf_vid::VidScheme;
+use jf_vid::{precomputable::Precomputable, VidScheme};
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
@@ -42,6 +42,7 @@ async fn test_vid_task() {
     let builder_commitment = payload.builder_commitment(&metadata);
     let encoded_transactions = Arc::from(TestTransaction::encode(&transactions).unwrap());
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
+    let (_, vid_precompute) = vid.commit_only_precompute(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;
 
     let signature = <TestTypes as NodeType>::SignatureKey::sign(
@@ -89,6 +90,7 @@ async fn test_vid_task() {
         TestMetadata,
         ViewNumber::new(2),
         null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {}).unwrap(),
+        vid_precompute,
     ));
     input.push(HotShotEvent::BlockReady(
         vid_disperse.clone(),

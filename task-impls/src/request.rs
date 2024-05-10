@@ -1,5 +1,11 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::{marker::PhantomData, sync::Arc, time::Duration};
+use std::{
+    marker::PhantomData,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use async_broadcast::Sender;
 use async_compatibility_layer::art::{async_sleep, async_spawn, async_timeout};

@@ -37,7 +37,6 @@ use jf_vid::VidScheme;
 use tokio::task::JoinHandle;
 #[cfg(not(feature = "dependency-tasks"))]
 use tracing::info;
-
 use tracing::{debug, error, instrument, warn};
 use vbs::version::Version;
 

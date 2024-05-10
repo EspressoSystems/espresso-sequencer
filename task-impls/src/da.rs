@@ -273,7 +273,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 return None;
             }
-            HotShotEvent::BlockRecv(encoded_transactions, metadata, view, _fee) => {
+            HotShotEvent::BlockRecv(encoded_transactions, metadata, view, _fee, _vid_precomp) => {
                 let view = *view;
 
                 // quick hash the encoded txns with sha256
@@ -336,7 +336,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
             HotShotEvent::DAProposalRecv(_, _)
                 | HotShotEvent::DAVoteRecv(_)
                 | HotShotEvent::Shutdown
-                | HotShotEvent::BlockRecv(_, _, _, _)
+                | HotShotEvent::BlockRecv(_, _, _, _, _)
                 | HotShotEvent::ViewChange(_)
                 | HotShotEvent::DAProposalValidated(_, _)
         )

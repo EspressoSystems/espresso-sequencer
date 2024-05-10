@@ -15,7 +15,7 @@ use hotshot_types::{
     },
     traits::{block_contents::BuilderFee, node_implementation::NodeType, BlockPayload},
     utils::BuilderCommitment,
-    vid::VidCommitment,
+    vid::{VidCommitment, VidPrecomputeData},
     vote::VoteDependencyData,
 };
 use vbs::version::Version;
@@ -121,6 +121,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
         <TYPES::BlockPayload as BlockPayload>::Metadata,
         TYPES::Time,
         BuilderFee<TYPES>,
+        VidPrecomputeData,
     ),
     /// Event when the transactions task has a block formed
     BlockReady(VidDisperse<TYPES>, TYPES::Time),

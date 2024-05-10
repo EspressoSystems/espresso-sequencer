@@ -3,10 +3,7 @@
 
 use std::time::Duration;
 
-use hotshot::{
-    tasks::{task_state::CreateTaskState},
-    types::SystemContextHandle,
-};
+use hotshot::{tasks::task_state::CreateTaskState, types::SystemContextHandle};
 use hotshot_example_types::{
     block_types::{TestMetadata, TestTransaction},
     node_types::{MemoryImpl, TestTypes},
@@ -244,9 +241,10 @@ async fn test_upgrade_and_consensus_task() {
             DACertificateRecv(dacs[0].clone()),
         ],
         upgrade_vote_recvs,
-        vec![QuorumProposalRecv(proposals[1].clone(), leaders[1]),
-        DACertificateRecv(dacs[1].clone()),
-        VIDShareRecv(get_vid_share(&vids[1].0, handle.get_public_key())),
+        vec![
+            QuorumProposalRecv(proposals[1].clone(), leaders[1]),
+            DACertificateRecv(dacs[1].clone()),
+            VIDShareRecv(get_vid_share(&vids[1].0, handle.get_public_key())),
         ],
         vec![
             VIDShareRecv(get_vid_share(&vids[2].0, handle.get_public_key())),
@@ -255,11 +253,8 @@ async fn test_upgrade_and_consensus_task() {
                 proposals[2].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(3),
-                null_block::builder_fee(
-                    quorum_membership.total_nodes(),
-                    &TestInstanceState {},
-                )
-                .unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
+                    .unwrap(),
             ),
             QCFormed(either::Either::Left(proposals[2].data.justify_qc.clone())),
         ],

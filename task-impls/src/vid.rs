@@ -61,7 +61,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
         match event.as_ref() {
-            HotShotEvent::BlockRecv(encoded_transactions, metadata, view_number, fee) => {
+            HotShotEvent::BlockRecv(
+                encoded_transactions,
+                metadata,
+                view_number,
+                fee,
+                precompute_data,
+            ) => {
                 let payload =
                     <TYPES as NodeType>::BlockPayload::from_bytes(encoded_transactions, metadata);
                 let builder_commitment = payload.builder_commitment(metadata);
@@ -69,6 +75,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     Arc::clone(encoded_transactions),
                     &Arc::clone(&self.membership),
                     *view_number,
+                    Some(precompute_data.clone()),
                 )
                 .await;
                 let payload_commitment = vid_disperse.payload_commitment;
@@ -177,7 +184,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         !matches!(
             event.as_ref(),
             HotShotEvent::Shutdown
-                | HotShotEvent::BlockRecv(_, _, _, _)
+                | HotShotEvent::BlockRecv(_, _, _, _, _)
                 | HotShotEvent::BlockReady(_, _)
                 | HotShotEvent::ViewChange(_)
         )
