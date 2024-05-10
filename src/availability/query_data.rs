@@ -22,7 +22,7 @@ use hotshot_types::{
     },
     vid::{vid_scheme, VidCommitment},
 };
-use jf_primitives::vid::VidScheme;
+use jf_vid::VidScheme;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use snafu::{ensure, Snafu};
 use std::fmt::Debug;

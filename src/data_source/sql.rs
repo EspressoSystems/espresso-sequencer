@@ -428,7 +428,7 @@ mod test {
     };
     use hotshot_example_types::state_types::TestInstanceState;
     use hotshot_types::vid::vid_scheme;
-    use jf_primitives::vid::VidScheme;
+    use jf_vid::VidScheme;
 
     type D = SqlDataSource<MockTypes, NoFetching>;
 
