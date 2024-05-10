@@ -74,4 +74,12 @@ impl NumTxs {
     pub fn as_usize(&self, _: ns_payload::A) -> usize {
         self.0
     }
+    /// TODO restrict visibility only to NsPayload2
+    pub fn from_bytes2(bytes: &[u8]) -> Self {
+        Self(usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes))
+    }
+    /// TODO restrict visibility only to NsPayloadRange2
+    pub fn as_usize2(&self) -> usize {
+        self.0
+    }
 }
