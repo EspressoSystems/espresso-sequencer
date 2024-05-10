@@ -53,5 +53,5 @@ jobs:
       - name: Test
         run: |
           cargo test --workspace --release --all-features --no-run
-          cargo test --workspace --release --all-features --verbose -- --test-threads 2
+          cargo test --workspace --release --all-features --verbose -- --nocapture --test-threads 2
         timeout-minutes: 60
