@@ -32,7 +32,7 @@ use hotshot_types::{
     traits::node_implementation::NodeType,
 };
 
-use jf_primitives::merkle_tree::{
+use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Digest, Sha3Node},
     universal_merkle_tree::UniversalMerkleTree,
     ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,

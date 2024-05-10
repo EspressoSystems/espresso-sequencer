@@ -28,7 +28,7 @@ use hotshot_types::{
     },
     vid::vid_scheme,
 };
-use jf_primitives::vid::VidScheme;
+use jf_vid::VidScheme;
 use std::{error::Error, fmt::Debug, iter::once};
 
 /// An extension trait for types which implement the update trait for each API module.

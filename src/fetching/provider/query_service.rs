@@ -23,7 +23,7 @@ use hotshot_types::{
     traits::{node_implementation::NodeType, BlockPayload},
     vid::{vid_scheme, VidSchemeType},
 };
-use jf_primitives::vid::VidScheme;
+use jf_vid::VidScheme;
 use surf_disco::{Client, Url};
 use vbs::version::StaticVersionType;
 

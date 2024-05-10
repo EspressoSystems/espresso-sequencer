@@ -572,7 +572,7 @@ pub mod node_tests {
         traits::block_contents::{vid_commitment, BlockPayload},
         vid::{vid_scheme, VidSchemeType},
     };
-    use jf_primitives::vid::VidScheme;
+    use jf_vid::VidScheme;
 
     #[async_std::test]
     pub async fn test_sync_status<D: TestableDataSource>() {

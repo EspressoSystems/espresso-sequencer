@@ -110,7 +110,7 @@ use futures::{
     stream::{self, BoxStream, Stream, StreamExt},
 };
 use hotshot_types::traits::node_implementation::NodeType;
-use jf_primitives::merkle_tree::{prelude::MerkleProof, MerkleTreeScheme};
+use jf_merkle_tree::{prelude::MerkleProof, MerkleTreeScheme};
 
 use std::{
     cmp::min,

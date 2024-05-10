@@ -63,7 +63,7 @@ use hotshot_types::{
     },
 };
 use itertools::{izip, Itertools};
-use jf_primitives::merkle_tree::{
+use jf_merkle_tree::{
     prelude::{MerkleNode, MerkleProof},
     DigestAlgorithm, MerkleCommitment, ToTraversalPath,
 };
@@ -3207,7 +3207,7 @@ pub mod testing {
 mod test {
 
     use hotshot_example_types::state_types::TestInstanceState;
-    use jf_primitives::merkle_tree::{
+    use jf_merkle_tree::{
         universal_merkle_tree::UniversalMerkleTree, LookupResult, UniversalMerkleTreeScheme,
     };
     use rand::{seq::IteratorRandom, RngCore};
@@ -3454,7 +3454,7 @@ mod test {
 
     use crate::data_source::VersionedDataSource;
 
-    use jf_primitives::merkle_tree::MerkleTreeScheme;
+    use jf_merkle_tree::MerkleTreeScheme;
 
     #[async_std::test]
     async fn test_merklized_state_storage() {

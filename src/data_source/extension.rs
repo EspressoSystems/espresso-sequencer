@@ -29,7 +29,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
-use jf_primitives::merkle_tree::prelude::MerkleProof;
+use jf_merkle_tree::prelude::MerkleProof;
 use std::ops::RangeBounds;
 
 /// Wrapper to add extensibility to an existing data source.
