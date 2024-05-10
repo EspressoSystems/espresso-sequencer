@@ -41,10 +41,8 @@ use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::service::{GlobalState, ProxyGlobalState};
-use jf_primitives::{
-    merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
-    signatures::bls_over_bn254::VerKey,
-};
+use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
+use jf_signature::bls_over_bn254::VerKey;
 use sequencer::catchup::mock::MockStateCatchup;
 use sequencer::state_signature::StakeTableCommitmentType;
 use sequencer::{

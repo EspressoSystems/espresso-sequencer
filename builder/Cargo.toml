@@ -30,7 +30,8 @@ hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { path = "../hotshot-state-prover" }
 hotshot-types = { workspace = true }
-jf-primitives = { workspace = true }
+jf-merkle-tree = { workspace = true }
+jf-signature = { workspace = true, features = ["bls"] }
 portpicker = { workspace = true }
 rand = "0.8.5"
 sequencer = { path = "../sequencer", features = ["testing"] }

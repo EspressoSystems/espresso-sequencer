@@ -9,7 +9,7 @@ use hotshot::traits::BlockPayload;
 use hotshot_types::vid::{
     vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType,
 };
-use jf_primitives::vid::{
+use jf_vid::{
     payload_prover::{PayloadProver, Statement},
     VidScheme,
 };
@@ -353,7 +353,7 @@ mod test {
         traits::{block_contents::TestableBlock, BlockPayload},
         vid::vid_scheme,
     };
-    use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
+    use jf_vid::{payload_prover::PayloadProver, VidScheme};
     use rand::RngCore;
     use std::{collections::HashMap, marker::PhantomData, mem::size_of, ops::Range};
 

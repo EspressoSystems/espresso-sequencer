@@ -23,21 +23,22 @@ use hotshot_types::{
     traits::stake_table::SnapshotVersion,
 };
 use itertools::izip;
+use jf_pcs::prelude::UnivariateUniversalParams;
 use jf_plonk::proof_system::{PlonkKzgSnark, UniversalSNARK};
 use jf_plonk::transcript::SolidityTranscript;
-use jf_primitives::pcs::prelude::UnivariateUniversalParams;
-use jf_primitives::signatures::schnorr::Signature;
-use jf_primitives::signatures::{
-    bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey as BLSVerKey},
-    SchnorrSignatureScheme, SignatureScheme,
-};
 use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
+use jf_signature::schnorr::Signature;
+use jf_signature::{
+    bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey as BLSVerKey},
+    schnorr::SchnorrSignatureScheme,
+    SignatureScheme,
+};
 use jf_utils::test_rng;
 use std::collections::HashMap;
 
 type F = ark_ed_on_bn254::Fq;
-type SchnorrVerKey = jf_primitives::signatures::schnorr::VerKey<EdwardsConfig>;
-type SchnorrSignKey = jf_primitives::signatures::schnorr::SignKey<ark_ed_on_bn254::Fr>;
+type SchnorrVerKey = jf_signature::schnorr::VerKey<EdwardsConfig>;
+type SchnorrSignKey = jf_signature::schnorr::SignKey<ark_ed_on_bn254::Fr>;
 
 /// Stake table capacity used for testing
 pub const STAKE_TABLE_CAPACITY: usize = 10;

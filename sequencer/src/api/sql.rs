@@ -18,7 +18,7 @@ use hotshot_query_service::{
     merklized_state::{MerklizedStateDataSource, Snapshot},
 };
 use hotshot_types::data::ViewNumber;
-use jf_primitives::merkle_tree::{prelude::MerkleNode, MerkleTreeScheme};
+use jf_merkle_tree::{prelude::MerkleNode, MerkleTreeScheme};
 
 pub type DataSource = SqlDataSource<SeqTypes, Provider>;
 

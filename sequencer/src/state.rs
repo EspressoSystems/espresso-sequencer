@@ -29,19 +29,13 @@ use hotshot_types::{
     vid::{VidCommon, VidSchemeType},
 };
 use itertools::Itertools;
-use jf_primitives::merkle_tree::{
-    prelude::MerkleProof, ToTraversalPath, UniversalMerkleTreeScheme,
+use jf_merkle_tree::{
+    prelude::{LightWeightSHA3MerkleTree, MerkleProof, Sha3Digest, Sha3Node},
+    universal_merkle_tree::UniversalMerkleTree,
+    AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
+    LookupResult, MerkleCommitment, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
 };
-use jf_primitives::{
-    errors::PrimitivesError,
-    merkle_tree::{
-        prelude::{LightWeightSHA3MerkleTree, Sha3Digest, Sha3Node},
-        universal_merkle_tree::UniversalMerkleTree,
-        AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme,
-        ForgetableUniversalMerkleTreeScheme, LookupResult, MerkleCommitment, MerkleTreeScheme,
-    },
-    vid::VidScheme,
-};
+use jf_vid::VidScheme;
 use num_traits::CheckedSub;
 use sequencer_utils::impl_to_fixed_bytes;
 use serde::{Deserialize, Serialize};
@@ -133,11 +127,12 @@ impl ValidatedState {
     pub fn insert_fee_deposit(
         &mut self,
         fee_info: FeeInfo,
-    ) -> Result<LookupResult<FeeAmount, (), ()>, PrimitivesError> {
-        self.fee_merkle_tree
+    ) -> anyhow::Result<LookupResult<FeeAmount, (), ()>> {
+        Ok(self
+            .fee_merkle_tree
             .update_with(fee_info.account, |balance| {
                 Some(balance.cloned().unwrap_or_default().add(fee_info.amount))
-            })
+            })?)
     }
 
     /// Charge a fee to an account.

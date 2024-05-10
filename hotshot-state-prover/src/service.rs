@@ -33,10 +33,10 @@ use hotshot_types::{
     traits::signature_key::StakeTableEntryType,
 };
 
+use jf_pcs::prelude::UnivariateUniversalParams;
 use jf_plonk::errors::PlonkError;
-use jf_primitives::constants::CS_ID_SCHNORR;
-use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_relation::Circuit as _;
+use jf_signature::constants::CS_ID_SCHNORR;
 use std::{
     iter,
     time::{Duration, Instant},
@@ -484,7 +484,7 @@ mod test {
     };
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
-    use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
+    use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
     use sequencer_utils::deployer;
 
