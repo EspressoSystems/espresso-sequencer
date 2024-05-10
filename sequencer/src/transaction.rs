@@ -2,7 +2,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use committable::{Commitment, Committable};
 use derive_more::{Display, From, Into};
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
-use jf_primitives::merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
+use jf_merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
 use serde::{Deserialize, Serialize};
 
 #[derive(

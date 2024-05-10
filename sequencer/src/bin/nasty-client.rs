@@ -35,12 +35,10 @@ use hotshot_types::{
     traits::metrics::{Counter, Gauge, Metrics as _},
     vid::{vid_scheme, VidSchemeType},
 };
-use jf_primitives::{
-    merkle_tree::{
-        ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
-    },
-    vid::VidScheme,
+use jf_merkle_tree::{
+    ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
+use jf_vid::VidScheme;
 use rand::{seq::SliceRandom, RngCore};
 use sequencer::{
     api::endpoints::NamespaceProofQueryData,

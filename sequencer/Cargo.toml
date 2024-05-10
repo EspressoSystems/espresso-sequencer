@@ -67,7 +67,11 @@ hotshot-types = { workspace = true }
 include_dir = "0.7"
 itertools = { workspace = true }
 
-jf-primitives = { workspace = true }
+jf-signature = { workspace = true, features = ["bls", "schnorr"] }
+jf-merkle-tree = { workspace = true }
+jf-crhf = { workspace = true }
+jf-vid = { workspace = true }
+jf-rescue = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 lazy_static = "1.4"
 num-traits = "0.2.18"

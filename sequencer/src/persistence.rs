@@ -222,7 +222,7 @@ mod persistence_tests {
     use hotshot::types::SignatureKey;
     use hotshot::{traits::BlockPayload, types::BLSPubKey};
     use hotshot_types::{event::HotShotAction, vid::vid_scheme};
-    use jf_primitives::vid::VidScheme;
+    use jf_vid::VidScheme;
     use rand::{RngCore, SeedableRng};
     use sha2::{Digest, Sha256};
     use testing::TestablePersistence;

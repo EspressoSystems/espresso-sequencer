@@ -46,39 +46,52 @@ dotenvy = "0.15"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.50" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.51" }
 # Hotshot imports
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.50" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.18" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.19" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.50" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.19" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.50" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.51" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "cl/jf-update" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.20" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.51" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.20" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.51" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.50" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.50" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.50" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.51" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.51" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.51" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
   "runtime-async-std",
   "global-permits",
-], tag = "0.3.2", package = "cdn-broker" }
+], tag = "0.3.6", package = "cdn-broker" }
 cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
   "runtime-async-std",
   "global-permits",
-], tag = "0.3.2", package = "cdn-marshal" }
+], tag = "0.3.6", package = "cdn-marshal" }
 
-jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.4", features = [
+jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
   "test-apis",
 ] }
-jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.4", features = [
+jf-crhf = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
+jf-merkle-tree = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
   "std",
 ] }
-jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.4", features = [
+jf-signature = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
   "std",
 ] }
-jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.4" }
+jf-pcs = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
+  "std", "parallel"
+] }
+jf-vid = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
+  "std", "parallel"
+] }
+jf-rescue = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
+  "std", "parallel"
+] }
+jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
+  "std",
+] }
+jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
 snafu = "0.8"
 strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.6"

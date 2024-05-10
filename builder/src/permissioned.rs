@@ -63,10 +63,8 @@ use hotshot_builder_core::{
     },
 };
 use hotshot_state_prover;
-use jf_primitives::{
-    merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
-    signatures::bls_over_bn254::VerKey,
-};
+use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
+use jf_signature::bls_over_bn254::VerKey;
 use sequencer::state_signature::StakeTableCommitmentType;
 use sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, ChainConfig};
 use sequencer::{

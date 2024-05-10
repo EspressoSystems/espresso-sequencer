@@ -19,7 +19,7 @@ use hotshot_types::{
     utils::BuilderCommitment,
     vid::{VidCommitment, VidCommon},
 };
-use jf_primitives::merkle_tree::prelude::*;
+use jf_merkle_tree::prelude::*;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use time::OffsetDateTime;
@@ -465,7 +465,7 @@ mod test_headers {
         utils::Anvil,
     };
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
-    use jf_primitives::vid::VidScheme;
+    use jf_vid::VidScheme;
 
     #[derive(Debug, Default)]
     #[must_use]

@@ -41,7 +41,7 @@ pub mod cdn {
             NoMiddleware, TrustedMiddleware, UntrustedMiddleware,
         },
         crypto::signature::{Serializable, SignatureScheme},
-        def::{ConnectionDef, RunDef},
+        def::{ConnectionDef, RunDef, Topic},
         discovery::{Embedded, Redis},
     };
     use hotshot::types::SignatureKey;
@@ -88,6 +88,31 @@ pub mod cdn {
         }
     }
 
+    /// An implementation of `Topic` for testing purposes.
+    #[derive(Clone, PartialEq, Eq)]
+    pub enum TestTopic {
+        Global = 0,
+        DA = 1,
+    }
+    impl From<u8> for TestTopic {
+        fn from(value: u8) -> Self {
+            if value == 0 {
+                TestTopic::Global
+            } else {
+                TestTopic::DA
+            }
+        }
+    }
+    impl From<TestTopic> for u8 {
+        fn from(value: TestTopic) -> u8 {
+            match value {
+                TestTopic::Global => 0,
+                TestTopic::DA => 1,
+            }
+        }
+    }
+    impl Topic for TestTopic {}
+
     /// The production run definition for the Push CDN.
     /// Uses the real protocols and a Redis discovery client.
     pub struct ProductionDef<TYPES: NodeType>(PhantomData<TYPES>);
@@ -95,6 +120,7 @@ pub mod cdn {
         type User = UserDef<TYPES>;
         type Broker = BrokerDef<TYPES>;
         type DiscoveryClientType = Redis;
+        type Topic = TestTopic;
     }
 
     /// The user definition for the Push CDN.
@@ -133,5 +159,6 @@ pub mod cdn {
         type User = UserDef<TYPES>;
         type Broker = BrokerDef<TYPES>;
         type DiscoveryClientType = Embedded;
+        type Topic = TestTopic;
     }
 }
