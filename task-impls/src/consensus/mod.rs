@@ -646,6 +646,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                 }
 
                 if let Some(cert) = &self.proposal_cert {
+                    if !cert.is_valid_for_view(&view) {
+                        self.proposal_cert = None;
+                        info!("Failed to propose off SendPayloadCommitmentAndMetadata because we had view change evidence, but it was not current.");
+                        return;
+                    }
                     match cert {
                         ViewChangeEvidence::Timeout(tc) => {
                             if self.quorum_membership.get_leader(tc.get_view_number() + 1)
