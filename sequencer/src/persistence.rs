@@ -19,13 +19,15 @@ use hotshot::{
     HotShotInitializer,
 };
 use hotshot_types::{
+    consensus::CommitmentMap,
     data::{DAProposal, VidDisperseShare},
     event::{HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::node_implementation::ConsensusTime,
+    utils::View,
 };
-use std::cmp::max;
+use std::{cmp::max, collections::BTreeMap};
 
 pub mod fs;
 pub mod no_storage;
@@ -79,6 +81,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     /// Load the latest leaf saved with [`save_anchor_leaf`](Self::save_anchor_leaf).
     async fn load_anchor_leaf(&self)
         -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>>;
+
+    /// Load undecided state saved by consensus before we shut down.
+    async fn load_undecided_state(
+        &self,
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>>;
 
     async fn load_vid_share(
         &self,
@@ -144,15 +151,28 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             view += 1;
         }
 
-        tracing::info!(?leaf, ?view, ?high_qc, "loaded consensus state");
+        let (undecided_leaves, undecided_state) = self
+            .load_undecided_state()
+            .await
+            .context("loading undecided state")?
+            .unwrap_or_default();
+
+        tracing::info!(
+            ?leaf,
+            ?view,
+            ?high_qc,
+            ?undecided_leaves,
+            ?undecided_state,
+            "loaded consensus state"
+        );
         Ok(HotShotInitializer::from_reload(
             leaf,
             state,
             validated_state,
             view,
             high_qc,
-            Default::default(),
-            Default::default(),
+            undecided_leaves.into_values().collect(),
+            undecided_state,
         ))
     }
 
@@ -195,6 +215,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         &mut self,
         view: ViewNumber,
         action: HotShotAction,
+    ) -> anyhow::Result<()>;
+    async fn update_undecided_state(
+        &mut self,
+        leaves: CommitmentMap<Leaf>,
+        state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()>;
 }
 
