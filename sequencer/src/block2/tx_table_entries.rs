@@ -84,4 +84,7 @@ impl TxTableEntries {
     pub fn new(_: ns_payload::A, cur: usize, prev: Option<usize>) -> Self {
         Self { cur, prev }
     }
+    pub fn new2(cur: usize, prev: Option<usize>) -> Self {
+        Self { cur, prev }
+    }
 }

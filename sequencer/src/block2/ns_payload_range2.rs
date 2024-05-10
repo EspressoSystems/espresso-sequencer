@@ -5,7 +5,7 @@
 use std::ops::Range;
 
 use super::{
-    newtypes::{NumTxsRangeRelative, TxOffsetRangeRelative},
+    newtypes::{NumTxsRangeRelative, TxTableEntriesRangeRelative},
     num_txs::NumTxs,
     tx_iter::TxIndex,
     NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
@@ -46,13 +46,22 @@ impl NsPayloadRange2 {
         )
     }
 
+    pub fn tx_table_entries_range_relative(&self, index: &TxIndex) -> TxTableEntriesRangeRelative {
+        // TODO move this code out of `TxIndex`
+        TxTableEntriesRangeRelative(index.tx_table_entries_range_relative())
+    }
+
+    pub fn tx_table_entries_range(&self, index: &TxIndex) -> Range<usize> {
+        self.translate(self.tx_table_entries_range_relative(index).0)
+    }
+
     // TODO is `tx_offset_range_relative` needed, or can we go straight to
     // `tx_entries_range_relative`? If it is needed, do I need a
     // `tx_offset_range` method?
-    pub fn tx_offset_range_relative(&self, index: &TxIndex) -> TxOffsetRangeRelative {
-        let start = index.as_usize2() * TX_OFFSET_BYTE_LEN + NUM_TXS_BYTE_LEN;
-        TxOffsetRangeRelative(start..start + TX_OFFSET_BYTE_LEN)
-    }
+    // pub fn tx_offset_range_relative(&self, index: &TxIndex) -> TxOffsetRangeRelative {
+    //     let start = index.as_usize2() * TX_OFFSET_BYTE_LEN + NUM_TXS_BYTE_LEN;
+    //     TxOffsetRangeRelative(start..start + TX_OFFSET_BYTE_LEN)
+    // }
 
     // private helpers
     fn translate(&self, range: Range<usize>) -> Range<usize> {

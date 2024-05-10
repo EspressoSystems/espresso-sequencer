@@ -38,10 +38,15 @@ pub struct TxProof {
 
 pub struct TxProof2 {
     ns_payload_range: NsPayloadRange2,
+    tx_index: TxIndex,
 
     // Number of txs declared in the tx table
     payload_num_txs: NumTxs,
     payload_proof_num_txs: SmallRangeProofType,
+
+    // Tx table entries for this tx
+    payload_tx_table_entries: TxTableEntries,
+    payload_proof_tx_table_entries: SmallRangeProofType,
 }
 
 impl TxProof2 {
@@ -61,12 +66,24 @@ impl TxProof2 {
             .payload_proof(payload.as_byte_slice(), ns_payload_range.num_txs_range())
             .ok()?;
 
+        // Read the tx table entries for this tx and compute a proof of
+        // correctness.
+        let payload_tx_table_entries =
+            ns_payload.read(ns_payload_range.tx_table_entries_range_relative(index.tx()));
+        let payload_proof_tx_table_entries = {
+            let range = ns_payload_range.tx_table_entries_range(index.tx());
+            vid.payload_proof(payload.as_byte_slice(), range).ok()?
+        };
+
         Some((
             payload.transaction(index)?,
             TxProof2 {
                 ns_payload_range,
+                tx_index: index.tx().clone(),
                 payload_num_txs,
                 payload_proof_num_txs,
+                payload_tx_table_entries,
+                payload_proof_tx_table_entries,
             },
         ))
     }
@@ -91,6 +108,42 @@ impl TxProof2 {
                         common,
                     },
                     &self.payload_proof_num_txs,
+                )
+                .ok()?
+                .is_err()
+            {
+                return Some(false);
+            }
+        }
+
+        // Verify proof for tx table entries
+        {
+            // TODO this is the only place we use `self.tx_index`. But if we
+            // want to eliminate it then we need another way to get the
+            // tx_table_entries_range -> so we'd have to replace `tx_index` with
+            // a new range for tx_table entries, which is no improvement.
+            // Basically `tx_index` is a way to compress this range.
+            let range = self.ns_payload_range.tx_table_entries_range(&self.tx_index);
+
+            // concatenate the two table entry payloads
+            let payload_subslice = &self.payload_tx_table_entries.as_bytes();
+
+            // tracing::info!(
+            //     "verify: tx_index {:?}, tx_table_entries_range {:?}, content {:?}",
+            //     self.tx_index,
+            //     range,
+            //     payload_subslice
+            // );
+
+            if vid
+                .payload_verify(
+                    Statement {
+                        payload_subslice,
+                        range,
+                        commit,
+                        common,
+                    },
+                    &self.payload_proof_tx_table_entries,
                 )
                 .ok()?
                 .is_err()
