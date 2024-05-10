@@ -5,14 +5,17 @@ use async_trait::async_trait;
 use clap::Parser;
 
 use hotshot_types::{
+    consensus::CommitmentMap,
     data::{DAProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::node_implementation::ConsensusTime,
+    utils::View,
     vote::HasViewNumber,
 };
 use std::{
+    collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
@@ -68,6 +71,10 @@ impl Persistence {
 
     fn da_dir_path(&self) -> PathBuf {
         self.0.join("da")
+    }
+
+    fn undecided_state_path(&self) -> PathBuf {
+        self.0.join("undecided_state")
     }
 
     /// Overwrite a file if a condition is met.
@@ -234,6 +241,17 @@ impl SequencerPersistence for Persistence {
         Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
     }
 
+    async fn load_undecided_state(
+        &self,
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
+        let path = self.undecided_state_path();
+        if !path.is_file() {
+            return Ok(None);
+        }
+        let bytes = fs::read(&path).context("read")?;
+        Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
+    }
+
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
@@ -345,6 +363,25 @@ impl SequencerPersistence for Persistence {
             },
             |mut file| {
                 file.write_all(&view.get_u64().to_le_bytes())?;
+                Ok(())
+            },
+        )
+    }
+    async fn update_undecided_state(
+        &mut self,
+        leaves: CommitmentMap<Leaf>,
+        state: BTreeMap<ViewNumber, View<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        self.replace(
+            &self.undecided_state_path(),
+            |_| {
+                // Always overwrite the previous file.
+                Ok(true)
+            },
+            |mut file| {
+                let bytes =
+                    bincode::serialize(&(leaves, state)).context("serializing undecided state")?;
+                file.write_all(&bytes)?;
                 Ok(())
             },
         )

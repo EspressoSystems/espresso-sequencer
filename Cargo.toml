@@ -111,3 +111,12 @@ vergen = { version = "8.3", features = ["git", "gitcl"] }
 zeroize = "1.7"
 committable = "0.2"
 portpicker = "0.1.1"
+
+[patch."https://github.com/EspressoSystems/HotShot.git"]
+hotshot = { path = "../HotShot/crates/hotshot" }
+hotshot-builder-api = { path = "../HotShot/crates/builder-api" }
+hotshot-orchestrator = { path = "../HotShot/crates/orchestrator" }
+hotshot-stake-table = { path = "../HotShot/crates/hotshot-stake-table" }
+hotshot-task = { path = "../HotShot/crates/task" }
+hotshot-testing = { path = "../HotShot/crates/testing" }
+hotshot-types = { path = "../HotShot/crates/types" }

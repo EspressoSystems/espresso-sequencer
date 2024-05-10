@@ -4,6 +4,7 @@ use crate::{
     options::parse_duration,
     Leaf, SeqTypes, ViewNumber,
 };
+use anyhow::Context;
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use clap::Parser;
@@ -17,14 +18,16 @@ use hotshot_query_service::data_source::{
     VersionedDataSource,
 };
 use hotshot_types::{
+    consensus::CommitmentMap,
     data::{DAProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::node_implementation::ConsensusTime,
+    utils::View,
     vote::HasViewNumber,
 };
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Derivative, Default)]
@@ -363,6 +366,25 @@ impl SequencerPersistence for Persistence {
         Ok(Some((leaf, qc)))
     }
 
+    async fn load_undecided_state(
+        &self,
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
+        let Some(row) = self
+            .query_opt_static("SELECT leaves, state FROM undecided_state WHERE id = 0")
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        let leaves_bytes: Vec<u8> = row.get("leaves");
+        let leaves = bincode::deserialize(&leaves_bytes)?;
+
+        let state_bytes: Vec<u8> = row.get("state");
+        let state = bincode::deserialize(&state_bytes)?;
+
+        Ok(Some((leaves, state)))
+    }
+
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
@@ -460,6 +482,33 @@ impl SequencerPersistence for Persistence {
             async move {
                 tx.execute_one_with_retries(stmt, [view.get_u64() as i64])
                     .await?;
+                Ok(())
+            }
+            .boxed()
+        })
+        .await
+    }
+    async fn update_undecided_state(
+        &mut self,
+        leaves: CommitmentMap<Leaf>,
+        state: BTreeMap<ViewNumber, View<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let leaves_bytes = bincode::serialize(&leaves).context("serializing leaves")?;
+        let state_bytes = bincode::serialize(&state).context("serializing state")?;
+
+        transaction(self, |mut tx| {
+            async move {
+                tx.upsert(
+                    "undecided_state",
+                    ["id", "leaves", "state"],
+                    ["id"],
+                    [[
+                        sql_param(&0i32),
+                        sql_param(&leaves_bytes),
+                        sql_param(&state_bytes),
+                    ]],
+                )
+                .await?;
                 Ok(())
             }
             .boxed()
