@@ -8,6 +8,11 @@ package "Espresso Sequencer Network" as Network {
     }
 }
 
+'CDN Layout
+Broker -> KeyDB: state
+KeyDB -> Marshal: state
+Nodes <-> CDN: consensus\nmessages
+
 package "Espresso Sequencer" as Espresso {
     database "Postgres" as DB
     package "Sequencer Node" as Seq {
@@ -21,7 +26,11 @@ package "Espresso Sequencer" as Espresso {
             portout Submit
             portout "Hotshot\nEvents\nStream" as Events
         }
-        component Broadcast
+        component "Networking"{
+            component Libp2p
+            component "CDN Client"
+        }
+
         component "State Signer" as Signer {
         }
     }
@@ -31,7 +40,8 @@ package "Espresso Sequencer" as Espresso {
 }
 
 Nodes -up-> Catchup
-Nodes <-up-> Broadcast: consensus\nmessages
+Nodes <-up-> Libp2p: consensus\nmessages
+"CDN Client" <-> CDN: consensus\nmessages
 
 QS -> DB
 'QS -[hidden]left-> Signer
@@ -127,4 +137,3 @@ L2_1_Prover <-down- L2_1_State : Read State
 ' L2 -[hidden]d-> L1
 ' Seq -[hidden]u-> L2
 ' Seq -[hidden]d-> L1
-@enduml
