@@ -5,7 +5,7 @@
 use std::ops::Range;
 
 use super::{
-    newtypes::{NumTxsRange, NumTxsRangeRelative, TxOffsetRangeRelative},
+    newtypes::{NumTxsRangeRelative, TxOffsetRangeRelative},
     num_txs::NumTxs,
     tx_iter::TxIndex,
     NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
@@ -15,13 +15,20 @@ use super::{
 pub struct NsPayloadRange2(Range<usize>);
 
 impl NsPayloadRange2 {
+    pub fn new(start: usize, end: usize) -> Self {
+        Self(start..end)
+    }
+    pub fn as_range(&self) -> Range<usize> {
+        self.0.clone()
+    }
+
     // TODO visibility: used only in NsPayload, TxIndex, TxTableEntries,...
     pub fn num_txs_range_relative(&self) -> NumTxsRangeRelative {
         NumTxsRangeRelative(0..NUM_TXS_BYTE_LEN.min(self.0.len()))
     }
 
-    pub fn num_txs_range(&self) -> NumTxsRange {
-        NumTxsRange(self.translate(self.num_txs_range_relative().0))
+    pub fn num_txs_range(&self) -> Range<usize> {
+        self.translate(self.num_txs_range_relative().0)
     }
 
     /// Number of txs in this namespace.

@@ -18,6 +18,7 @@ mod uint_bytes;
 pub use ns_payload2::NsPayload2;
 pub use ns_payload_range2::NsPayloadRange2;
 pub use ns_proof::NsProof;
+pub use tx_proof::TxProof2;
 
 const NUM_TXS_BYTE_LEN: usize = 4;
 const TX_OFFSET_BYTE_LEN: usize = 4;

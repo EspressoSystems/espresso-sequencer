@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::{collections::HashMap, fmt::Display};
 
+use super::{NsPayload2, NsPayloadRange2};
+
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {
     // Concatenated payload bytes for each namespace
@@ -194,8 +196,17 @@ impl Payload {
         NsPayload::new(A(()), &self.payload[range])
     }
 
+    pub fn ns_payload2(&self, index: &NsIndex) -> &NsPayload2 {
+        let range = self.ns_payload_range2(index).as_range();
+        NsPayload2::new(&self.payload[range])
+    }
+
     /// TODO panics if index out of bounds
     pub fn ns_payload_range(&self, index: &NsIndex) -> NsPayloadRange {
         self.ns_table.ns_payload_range(index, self.payload.len())
+    }
+
+    pub fn ns_payload_range2(&self, index: &NsIndex) -> NsPayloadRange2 {
+        self.ns_table.ns_payload_range2(index, self.payload.len())
     }
 }

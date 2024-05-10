@@ -13,6 +13,8 @@ use jf_primitives::vid::{
 };
 use serde::{Deserialize, Serialize};
 
+use super::NsPayloadRange2;
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxProof {
     // Naming conventions for this struct's fields:
@@ -32,6 +34,73 @@ pub struct TxProof {
     // This tx's payload bytes.
     // `None` if this tx has zero length.
     payload_proof_tx: Option<SmallRangeProofType>,
+}
+
+pub struct TxProof2 {
+    ns_payload_range: NsPayloadRange2,
+
+    // Number of txs declared in the tx table
+    payload_num_txs: NumTxs,
+    payload_proof_num_txs: SmallRangeProofType,
+}
+
+impl TxProof2 {
+    pub fn new2(
+        index: &Index,
+        payload: &Payload,
+        common: &VidCommon,
+    ) -> Option<(Transaction, Self)> {
+        let ns_payload = payload.ns_payload2(index.ns());
+        let ns_payload_range = payload.ns_payload_range2(index.ns());
+        let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
+
+        // Read the tx table len from this namespace's tx table and compute a
+        // proof of correctness.
+        let payload_num_txs = ns_payload.read(ns_payload_range.num_txs_range_relative());
+        let payload_proof_num_txs = vid
+            .payload_proof(payload.as_byte_slice(), ns_payload_range.num_txs_range())
+            .ok()?;
+
+        Some((
+            payload.transaction(index)?,
+            TxProof2 {
+                ns_payload_range,
+                payload_num_txs,
+                payload_proof_num_txs,
+            },
+        ))
+    }
+
+    pub fn verify(
+        &self,
+        _tx: &Transaction,
+        commit: &VidCommitment,
+        common: &VidCommon,
+    ) -> Option<bool> {
+        VidSchemeType::is_consistent(commit, common).ok()?;
+        let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
+
+        // Verify proof for tx table len
+        {
+            if vid
+                .payload_verify(
+                    Statement {
+                        payload_subslice: &self.payload_num_txs.as_bytes(),
+                        range: self.ns_payload_range.num_txs_range(),
+                        commit,
+                        common,
+                    },
+                    &self.payload_proof_num_txs,
+                )
+                .ok()?
+                .is_err()
+            {
+                return Some(false);
+            }
+        }
+
+        Some(true)
+    }
 }
 
 impl TxProof {
