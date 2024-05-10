@@ -111,6 +111,9 @@ impl TxIndex {
     pub fn as_usize(&self, _: ns_payload::A) -> usize {
         self.0
     }
+    pub fn as_usize2(&self) -> usize {
+        self.0
+    }
 }
 
 pub struct TxIter(Range<usize>);

@@ -5,8 +5,9 @@
 use std::ops::Range;
 
 use super::{
-    newtypes::{NumTxsRange, NumTxsRangeRelative},
+    newtypes::{NumTxsRange, NumTxsRangeRelative, TxOffsetRangeRelative},
     num_txs::NumTxs,
+    tx_iter::TxIndex,
     NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
 
@@ -36,6 +37,14 @@ impl NsPayloadRange2 {
             // Max number of tx table entries that could fit in the namespace payload
             self.0.len().saturating_sub(NUM_TXS_BYTE_LEN) / TX_OFFSET_BYTE_LEN,
         )
+    }
+
+    // TODO is `tx_offset_range_relative` needed, or can we go straight to
+    // `tx_entries_range_relative`? If it is needed, do I need a
+    // `tx_offset_range` method?
+    pub fn tx_offset_range_relative(&self, index: &TxIndex) -> TxOffsetRangeRelative {
+        let start = index.as_usize2() * TX_OFFSET_BYTE_LEN + NUM_TXS_BYTE_LEN;
+        TxOffsetRangeRelative(start..start + TX_OFFSET_BYTE_LEN)
     }
 
     // private helpers
