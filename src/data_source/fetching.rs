@@ -95,7 +95,7 @@ use crate::{
     status::StatusDataSource,
     task::BackgroundTask,
     types::HeightIndexed,
-    Header, Payload, QueryResult, VidShare,
+    Header, Payload, QueryResult, Transaction, VidShare,
 };
 use anyhow::Context;
 use async_std::{
@@ -720,6 +720,7 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
+    Transaction<Types>: explorer::traits::ExplorerTransaction,
     S: ExplorerStorage<Types> + Send + Sync,
     P: Send + Sync,
 {

@@ -1889,6 +1889,7 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
+    crate::Transaction<Types>: explorer::traits::ExplorerTransaction,
     BalanceAmount<Types>: Into<explorer::monetary_value::MonetaryValue>,
 {
     async fn get_block_summaries(

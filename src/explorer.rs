@@ -19,7 +19,7 @@ pub(crate) mod traits;
 use self::errors::InvalidLimit;
 use crate::availability::{QueryableHeader, QueryablePayload};
 use crate::data_source::storage::ExplorerStorage;
-use crate::{api::load_api, Header, Payload};
+use crate::{api::load_api, Header, Payload, Transaction};
 
 pub use currency::*;
 use futures::FutureExt;
@@ -150,6 +150,7 @@ impl<Types: NodeType> From<query_data::TransactionDetailResponse<Types>>
 pub struct TransactionSummariesResponse<Types: NodeType>
 where
     Header<Types>: ExplorerHeader<Types>,
+    Transaction<Types>: ExplorerTransaction,
 {
     pub transaction_summaries: Vec<TransactionSummary<Types>>,
 }
@@ -157,6 +158,7 @@ where
 impl<Types: NodeType> From<Vec<TransactionSummary<Types>>> for TransactionSummariesResponse<Types>
 where
     Header<Types>: ExplorerHeader<Types>,
+    Transaction<Types>: ExplorerTransaction,
 {
     fn from(transaction_summaries: Vec<TransactionSummary<Types>>) -> Self {
         Self {
@@ -172,6 +174,7 @@ where
 pub struct ExplorerSummaryResponse<Types: NodeType>
 where
     Header<Types>: ExplorerHeader<Types>,
+    Transaction<Types>: ExplorerTransaction,
 {
     pub explorer_summary: ExplorerSummary<Types>,
 }
@@ -179,6 +182,7 @@ where
 impl<Types: NodeType> From<ExplorerSummary<Types>> for ExplorerSummaryResponse<Types>
 where
     Header<Types>: ExplorerHeader<Types>,
+    Transaction<Types>: ExplorerTransaction,
 {
     fn from(explorer_summary: ExplorerSummary<Types>) -> Self {
         Self { explorer_summary }
@@ -192,6 +196,7 @@ where
 pub struct SearchResultResponse<Types: NodeType>
 where
     Header<Types>: ExplorerHeader<Types>,
+    Transaction<Types>: ExplorerTransaction,
 {
     pub search_results: SearchResult<Types>,
 }
@@ -199,6 +204,7 @@ where
 impl<Types: NodeType> From<SearchResult<Types>> for SearchResultResponse<Types>
 where
     Header<Types>: ExplorerHeader<Types>,
+    Transaction<Types>: ExplorerTransaction,
 {
     fn from(search_results: SearchResult<Types>) -> Self {
         Self { search_results }
@@ -234,6 +240,7 @@ pub fn define_api<State, Types: NodeType, Ver: StaticVersionType + 'static>(
 where
     State: 'static + Send + Sync + ReadState,
     Header<Types>: ExplorerHeader<Types> + QueryableHeader<Types>,
+    Transaction<Types>: ExplorerTransaction,
     Payload<Types>: QueryablePayload,
     <State as ReadState>::State: Send + Sync + ExplorerStorage<Types>,
 {

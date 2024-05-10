@@ -17,7 +17,7 @@ use crate::{
         PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
         UpdateAvailabilityData, VidCommonQueryData,
     },
-    explorer::{self, ExplorerHeader},
+    explorer::{self, ExplorerHeader, ExplorerTransaction},
     merklized_state::{
         MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence, Snapshot,
         UpdateStateData,
@@ -25,7 +25,7 @@ use crate::{
     metrics::PrometheusMetrics,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     status::StatusDataSource,
-    Header, Payload, QueryResult, VidShare,
+    Header, Payload, QueryResult, Transaction, VidShare,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -343,6 +343,7 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
     Header<Types>: ExplorerHeader<Types> + QueryableHeader<Types>,
+    Transaction<Types>: ExplorerTransaction,
 {
     async fn get_block_detail(
         &self,

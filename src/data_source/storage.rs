@@ -31,7 +31,7 @@ use crate::{
         VidCommonQueryData,
     },
     data_source::VersionedDataSource,
-    explorer, Header, Payload, QueryResult,
+    explorer, Header, Payload, QueryResult, Transaction,
 };
 use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
@@ -124,6 +124,7 @@ pub trait ExplorerStorage<Types>
 where
     Types: NodeType,
     Header<Types>: explorer::traits::ExplorerHeader<Types> + QueryableHeader<Types>,
+    Transaction<Types>: explorer::traits::ExplorerTransaction,
     Payload<Types>: QueryablePayload,
 {
     /// `get_block_detail` is a method that retrieves the details of a specific

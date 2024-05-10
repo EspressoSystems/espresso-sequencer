@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use crate::explorer::traits::ExplorerHeader;
+use crate::explorer::traits::{ExplorerHeader, ExplorerTransaction};
 use crate::merklized_state::MerklizedState;
 use crate::{
     availability::{QueryableHeader, QueryablePayload},
@@ -79,9 +79,13 @@ impl ExplorerHeader<MockTypes> for MockHeader {
     fn namespace_ids(&self) -> Vec<Self::NamespaceId> {
         vec![0]
     }
+}
 
-    fn namespace_ids_for_offset(&self, _offset: usize) -> Vec<Self::NamespaceId> {
-        vec![0]
+impl ExplorerTransaction for MockTransaction {
+    type NamespaceId = u64;
+
+    fn namespace_id(&self) -> Self::NamespaceId {
+        0
     }
 }
 
