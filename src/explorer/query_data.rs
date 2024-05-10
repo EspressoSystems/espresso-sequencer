@@ -13,7 +13,7 @@
 use super::{
     errors::{BadQuery, ExplorerAPIError, InvalidLimit, NotFound, QueryError, Unimplemented},
     monetary_value::MonetaryValue,
-    traits::ExplorerHeader,
+    traits::{ExplorerHeader, ExplorerTransaction},
 };
 use crate::{
     availability::{BlockQueryData, QueryableHeader, QueryablePayload, TransactionHash},
@@ -142,7 +142,8 @@ impl<'de> Deserialize<'de> for Timestamp {
 }
 
 pub type WalletAddress<Types> = <Header<Types> as ExplorerHeader<Types>>::WalletAddress;
-pub type NamespaceId<Types> = <Header<Types> as ExplorerHeader<Types>>::NamespaceId;
+pub type BlockNamespaceId<Types> = <Header<Types> as ExplorerHeader<Types>>::NamespaceId;
+pub type TransactionNamespaceId<Types> = <Transaction<Types> as ExplorerTransaction>::NamespaceId;
 pub type ProposerId<Types> = <Header<Types> as ExplorerHeader<Types>>::ProposerId;
 pub type BalanceAmount<Types> = <Header<Types> as ExplorerHeader<Types>>::BalanceAmount;
 
@@ -325,9 +326,10 @@ pub struct TransactionDetailResponse<Types: NodeType> {
 pub struct TransactionSummary<Types: NodeType>
 where
     Header<Types>: ExplorerHeader<Types>,
+    Transaction<Types>: ExplorerTransaction,
 {
     pub hash: TransactionHash<Types>,
-    pub rollups: Vec<NamespaceId<Types>>,
+    pub rollups: Vec<TransactionNamespaceId<Types>>,
     pub height: u64,
     pub offset: u64,
     pub num_transactions: u64,
@@ -344,6 +346,7 @@ where
     BlockQueryData<Types>: HeightIndexed,
     Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types> + ExplorerHeader<Types>,
+    Transaction<Types>: ExplorerTransaction,
 {
     type Error = TimestampConversionError;
 
@@ -362,7 +365,7 @@ where
             offset: offset as u64,
             num_transactions: block.num_transactions,
             time: Timestamp(time::OffsetDateTime::from_unix_timestamp(seconds)?),
-            rollups: block.header.namespace_ids_for_offset(offset),
+            rollups: vec![transaction.namespace_id()],
         })
     }
 }
@@ -484,6 +487,7 @@ pub struct ExplorerHistograms {
 pub struct ExplorerSummary<Types: NodeType>
 where
     Header<Types>: ExplorerHeader<Types>,
+    Transaction<Types>: ExplorerTransaction,
 {
     pub latest_block: BlockDetail<Types>,
     pub genesis_overview: GenesisOverview,
@@ -501,6 +505,7 @@ where
 pub struct SearchResult<Types: NodeType>
 where
     Header<Types>: ExplorerHeader<Types>,
+    Transaction<Types>: ExplorerTransaction,
 {
     pub blocks: Vec<BlockSummary<Types>>,
     pub transactions: Vec<TransactionSummary<Types>>,

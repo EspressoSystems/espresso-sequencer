@@ -54,8 +54,17 @@ pub trait ExplorerHeader<Types: NodeType>: BlockHeader<Types> {
 
     /// A collection of namespace ids that are contained within the block header.
     fn namespace_ids(&self) -> Vec<Self::NamespaceId>;
+}
 
-    /// A collection of namespace ids that are contained within the individual
-    /// transactions for a block.
-    fn namespace_ids_for_offset(&self, offset: usize) -> Vec<Self::NamespaceId>;
+/// ExplorerTransaction is a trait that allows the Explorer API to be able to
+/// retrieve a namespace id from a transaction.  This is necessary for the
+/// Explorer API to be able to display the namespace id for a
+/// TransactionSummary.
+pub trait ExplorerTransaction {
+    /// NamespaceId is a type that represents the id of a namespace.  It does
+    /// not indicate how this namespace id is represented, just that there is
+    /// a representation of it that adheres to the trait restrictions specified.
+    type NamespaceId: Clone + Debug + Serialize + DeserializeOwned + Send + Sync + PartialEq + Eq;
+
+    fn namespace_id(&self) -> Self::NamespaceId;
 }
