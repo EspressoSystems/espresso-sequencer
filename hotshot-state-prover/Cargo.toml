@@ -31,12 +31,12 @@ hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-types = { workspace = true }
 itertools = { workspace = true }
-jf-plonk = { workspace = true }
-jf-signature = { workspace = true, features = ["schnorr", "bls", "gadgets"] }
-jf-rescue = { workspace = true, features = ["gadgets"] }
-jf-pcs = { workspace = true }
 jf-crhf = { workspace = true }
+jf-pcs = { workspace = true }
+jf-plonk = { workspace = true }
 jf-relation = { workspace = true }
+jf-rescue = { workspace = true, features = ["gadgets"] }
+jf-signature = { workspace = true, features = ["schnorr", "bls", "gadgets"] }
 jf-utils = { workspace = true }
 rand_chacha = { workspace = true }
 sequencer-utils = { path = "../utils" }

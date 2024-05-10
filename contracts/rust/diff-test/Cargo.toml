@@ -23,10 +23,10 @@ hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { path = "../../../hotshot-state-prover" }
 hotshot-types = { workspace = true }
 itertools = { workspace = true }
-jf-plonk = { workspace = true }
-jf-signature = { workspace = true }
 jf-pcs = { workspace = true }
+jf-plonk = { workspace = true }
 jf-relation = { workspace = true }
+jf-signature = { workspace = true }
 jf-utils = { workspace = true }
 sha3 = { version = "0.10.8", default-features = false }
 

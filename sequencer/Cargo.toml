@@ -66,13 +66,13 @@ hotshot-testing = { workspace = true, optional = true }
 hotshot-types = { workspace = true }
 include_dir = "0.7"
 itertools = { workspace = true }
+jf-crhf = { workspace = true }
+jf-merkle-tree = { workspace = true }
+jf-rescue = { workspace = true }
 
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
-jf-merkle-tree = { workspace = true }
-jf-crhf = { workspace = true }
-jf-vid = { workspace = true }
-jf-rescue = { workspace = true }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
+jf-vid = { workspace = true }
 lazy_static = "1.4"
 num-traits = "0.2.18"
 portpicker = { workspace = true }
