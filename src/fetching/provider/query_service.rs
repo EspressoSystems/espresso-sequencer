@@ -167,7 +167,9 @@ mod test {
 
     use crate::{
         api::load_api,
-        availability::{define_api, AvailabilityDataSource, Fetch, UpdateAvailabilityData},
+        availability::{
+            define_api, AvailabilityDataSource, Fetch, TransactionQueryData, UpdateAvailabilityData,
+        },
         data_source::{
             sql::{self, SqlDataSource},
             storage::sql::testing::TmpDb,
@@ -320,7 +322,7 @@ mod test {
         // * An unknown transaction.
         fetches.push(
             data_source
-                .get_block_with_transaction(mock_transaction(vec![]).commit())
+                .get_transaction(mock_transaction(vec![]).commit())
                 .await
                 .map(ignore),
         );
@@ -727,7 +729,7 @@ mod test {
         // and works without a fetcher; we don't trigger fetches for transactions that we don't know
         // exist.
         let tx = mock_transaction(vec![1, 2, 3]);
-        let fut = data_source.get_block_with_transaction(tx.commit()).await;
+        let fut = data_source.get_transaction(tx.commit()).await;
 
         // Sequence the transaction.
         network.submit_transaction(tx.clone()).await;
@@ -748,20 +750,16 @@ mod test {
         };
         tracing::info!("transaction included in block {}", block.height());
 
-        let (fetched_block, tx_ix) = fut.await;
-        assert_eq!(block, fetched_block);
+        let fetched_tx = fut.await;
         assert_eq!(
-            tx,
-            *fetched_block.transaction(&tx_ix).unwrap().transaction()
+            fetched_tx,
+            TransactionQueryData::with_hash(&block, tx.commit()).unwrap()
         );
 
         // Future queries for this transaction resolve immediately.
         assert_eq!(
-            (fetched_block, tx_ix),
-            data_source
-                .get_block_with_transaction(tx.commit())
-                .await
-                .await
+            fetched_tx,
+            data_source.get_transaction(tx.commit()).await.await
         );
     }
 

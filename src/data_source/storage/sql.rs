@@ -16,8 +16,8 @@ use super::{pruning::PrunedHeightStorage, AvailabilityStorage, ExplorerStorage};
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
-        QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
-        VidCommonQueryData,
+        QueryablePayload, TransactionHash, TransactionIndex, TransactionQueryData,
+        UpdateAvailabilityData, VidCommonQueryData,
     },
     data_source::{
         storage::pruning::{PruneStorage, PrunerCfg, PrunerConfig},
@@ -42,7 +42,8 @@ use crate::{
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     task::BackgroundTask,
     types::HeightIndexed,
-    Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult, VidShare,
+    ErrorSnafu, Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult,
+    VidShare,
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use async_std::{net::ToSocketAddrs, sync::Arc, task::sleep};
@@ -805,10 +806,10 @@ where
         Ok(rows.map(|res| parse_vid_common(res?)).collect().await)
     }
 
-    async fn get_block_with_transaction(
+    async fn get_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
+    ) -> QueryResult<TransactionQueryData<Types>> {
         // ORDER BY ASC ensures that if there are duplicate transactions, we return the first
         // one.
         let query = format!(
@@ -822,19 +823,15 @@ where
         );
         let row = self.query_one(&query, &[&hash.to_string()]).await?;
 
-        // Extract the transaction index.
-        let index = row.try_get("tx_index").map_err(|err| QueryError::Error {
-            message: format!("error extracting transaction index from query results: {err}"),
-        })?;
-        let index: TransactionIndex<Types> =
-            serde_json::from_value(index).map_err(|err| QueryError::Error {
-                message: format!("malformed transaction index: {err}"),
-            })?;
-
         // Extract the block.
         let block = parse_block(row)?;
 
-        Ok((block, index))
+        TransactionQueryData::with_hash(&block, hash).context(ErrorSnafu {
+            message: format!(
+                "transaction index inconsistent: block {} contains no transaction {hash}",
+                block.height()
+            ),
+        })
     }
 }
 

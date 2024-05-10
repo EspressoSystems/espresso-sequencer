@@ -267,7 +267,7 @@
 //! # use hotshot_query_service::{Header, QueryResult, VidShare};
 //! # use hotshot_query_service::availability::{
 //! #   AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-//! #   PayloadQueryData, TransactionHash, TransactionIndex, VidCommonQueryData,
+//! #   PayloadQueryData, TransactionHash, TransactionQueryData, VidCommonQueryData,
 //! # };
 //! # use hotshot_query_service::metrics::PrometheusMetrics;
 //! # use hotshot_query_service::node::{
@@ -319,7 +319,7 @@
 //! #   async fn get_vid_common<ID>(&self, id: ID) -> Fetch<VidCommonQueryData<AppTypes>>
 //! #   where
 //! #       ID: Into<BlockId<AppTypes>> + Send + Sync { todo!() }
-//! #   async fn get_block_with_transaction(&self, hash: TransactionHash<AppTypes>) -> Fetch<(BlockQueryData<AppTypes>, TransactionIndex<AppTypes>)> { todo!() }
+//! #   async fn get_transaction(&self, hash: TransactionHash<AppTypes>) -> Fetch<TransactionQueryData<AppTypes>> { todo!() }
 //! #   async fn get_leaf_range<R>(&self, range: R) -> Self::LeafRange<R>
 //! #   where
 //! #       R: RangeBounds<usize> + Send { todo!() }
@@ -460,6 +460,7 @@ pub enum QueryError {
     Missing,
     /// There was an error while trying to fetch the requested resource.
     #[snafu(display("Failed to fetch requested resource: {message}"))]
+    #[snafu(context(suffix(ErrorSnafu)))]
     Error { message: String },
 }
 
@@ -546,7 +547,7 @@ mod test {
     use crate::{
         availability::{
             AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-            PayloadQueryData, TransactionHash, TransactionIndex, UpdateAvailabilityData,
+            PayloadQueryData, TransactionHash, TransactionQueryData, UpdateAvailabilityData,
             VidCommonQueryData,
         },
         metrics::PrometheusMetrics,
@@ -652,11 +653,11 @@ mod test {
         {
             self.hotshot_qs.get_vid_common_range(range).await
         }
-        async fn get_block_with_transaction(
+        async fn get_transaction(
             &self,
             hash: TransactionHash<MockTypes>,
-        ) -> Fetch<(BlockQueryData<MockTypes>, TransactionIndex<MockTypes>)> {
-            self.hotshot_qs.get_block_with_transaction(hash).await
+        ) -> Fetch<TransactionQueryData<MockTypes>> {
+            self.hotshot_qs.get_transaction(hash).await
         }
     }
 

@@ -81,7 +81,7 @@ use super::{
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-        PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
+        PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionQueryData,
         UpdateAvailabilityData, VidCommonQueryData,
     },
     explorer,
@@ -540,10 +540,10 @@ where
         self.fetcher.clone().get_range(range)
     }
 
-    async fn get_block_with_transaction(
+    async fn get_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> Fetch<(BlockQueryData<Types>, TransactionIndex<Types>)> {
+    ) -> Fetch<TransactionQueryData<Types>> {
         self.fetcher.get(TransactionRequest::from(hash)).await
     }
 }

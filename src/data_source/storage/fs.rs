@@ -23,13 +23,13 @@ use crate::{
         data_source::{BlockId, LeafId, UpdateAvailabilityData},
         query_data::{
             BlockHash, BlockQueryData, LeafHash, LeafQueryData, PayloadQueryData, QueryableHeader,
-            QueryablePayload, TransactionHash, TransactionIndex, VidCommonQueryData,
+            QueryablePayload, TransactionHash, TransactionQueryData, VidCommonQueryData,
         },
     },
     data_source::VersionedDataSource,
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     types::HeightIndexed,
-    Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, VidCommitment, VidShare,
+    ErrorSnafu, Header, MissingSnafu, NotFoundSnafu, Payload, QueryResult, VidCommitment, VidShare,
 };
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
@@ -60,7 +60,7 @@ where
     index_by_leaf_hash: HashMap<LeafHash<Types>, u64>,
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
     index_by_payload_hash: HashMap<VidCommitment, u64>,
-    index_by_txn_hash: HashMap<TransactionHash<Types>, (u64, TransactionIndex<Types>)>,
+    index_by_txn_hash: HashMap<TransactionHash<Types>, u64>,
     index_by_time: BTreeMap<u64, Vec<u64>>,
     num_transactions: usize,
     payload_size: usize,
@@ -191,8 +191,8 @@ where
             payload_size += block.size() as usize;
 
             let height = block.height();
-            for (txn_ix, txn) in block.enumerate() {
-                update_index_by_hash(&mut index_by_txn_hash, txn.commit(), (height, txn_ix));
+            for (_, txn) in block.enumerate() {
+                update_index_by_hash(&mut index_by_txn_hash, txn.commit(), height);
             }
         }
 
@@ -388,13 +388,17 @@ where
             .collect())
     }
 
-    async fn get_block_with_transaction(
+    async fn get_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
-        let (height, ix) = self.index_by_txn_hash.get(&hash).context(NotFoundSnafu)?;
+    ) -> QueryResult<TransactionQueryData<Types>> {
+        let height = self.index_by_txn_hash.get(&hash).context(NotFoundSnafu)?;
         let block = self.get_block((*height as usize).into()).await?;
-        Ok((block, ix.clone()))
+        TransactionQueryData::with_hash(&block, hash).context(ErrorSnafu {
+            message: format!(
+                "transaction index inconsistent: block {height} contains no transaction {hash}"
+            ),
+        })
     }
 }
 
@@ -437,12 +441,8 @@ where
         }
         self.num_transactions += block.len();
         self.payload_size += block.size() as usize;
-        for (txn_ix, txn) in block.enumerate() {
-            update_index_by_hash(
-                &mut self.index_by_txn_hash,
-                txn.commit(),
-                (block.height(), txn_ix),
-            );
+        for (_, txn) in block.enumerate() {
+            update_index_by_hash(&mut self.index_by_txn_hash, txn.commit(), block.height());
         }
         Ok(())
     }

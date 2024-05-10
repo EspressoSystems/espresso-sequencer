@@ -14,7 +14,7 @@ use super::{storage::ExplorerStorage, VersionedDataSource};
 use crate::{
     availability::{
         AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
-        PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionIndex,
+        PayloadQueryData, QueryableHeader, QueryablePayload, TransactionHash, TransactionQueryData,
         UpdateAvailabilityData, VidCommonQueryData,
     },
     explorer::{self, ExplorerHeader, ExplorerTransaction},
@@ -199,11 +199,11 @@ where
     {
         self.data_source.get_vid_common_range(range).await
     }
-    async fn get_block_with_transaction(
+    async fn get_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> Fetch<(BlockQueryData<Types>, TransactionIndex<Types>)> {
-        self.data_source.get_block_with_transaction(hash).await
+    ) -> Fetch<TransactionQueryData<Types>> {
+        self.data_source.get_transaction(hash).await
     }
 }
 

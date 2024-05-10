@@ -389,40 +389,34 @@ where
         })?
         .get("get_transaction", move |req, state| {
             async move {
-                let (block, index) = match req.opt_blob_param("hash")? {
+                match req.opt_blob_param("hash")? {
                     Some(hash) => state
-                        .get_block_with_transaction(hash)
+                        .get_transaction(hash)
                         .await
                         .with_timeout(timeout)
                         .await
                         .context(FetchTransactionSnafu {
                             resource: hash.to_string(),
-                        })?,
+                        }),
                     None => {
-                        let height = req.integer_param("height")?;
-                        let id = BlockId::Number(height);
+                        let height: u64 = req.integer_param("height")?;
                         let block = state
-                            .get_block(id)
+                            .get_block(height as usize)
                             .await
                             .with_timeout(timeout)
                             .await
                             .context(FetchBlockSnafu {
-                                resource: id.to_string(),
+                                resource: height.to_string(),
                             })?;
-                        let i = req.integer_param("index")?;
-                        let index = block.payload().nth(block.metadata(), i).context(
-                            InvalidTransactionIndexSnafu {
-                                height: height as u64,
-                                index: i as u64,
-                            },
-                        )?;
-                        (block, index)
+                        let i: u64 = req.integer_param("index")?;
+                        let index = block
+                            .payload()
+                            .nth(block.metadata(), i as usize)
+                            .context(InvalidTransactionIndexSnafu { height, index: i })?;
+                        TransactionQueryData::new(&block, index, i)
+                            .context(InvalidTransactionIndexSnafu { height, index: i })
                     }
-                };
-                Ok(block
-                    .transaction(&index)
-                    // The computation of `index` above should ensure that it is a valid index.
-                    .unwrap())
+                }
             }
             .boxed()
         })?
@@ -693,8 +687,9 @@ mod test {
                     .send()
                     .await
                     .unwrap();
-                assert_eq!(txn.height(), i);
+                assert_eq!(txn.block_height(), i);
                 assert_eq!(txn.block_hash(), block.hash());
+                assert_eq!(txn.index(), j as u64);
                 assert_eq!(txn.hash(), txn_from_block.commit());
                 assert_eq!(txn.transaction(), &txn_from_block);
                 // We should be able to look up the transaction by hash. Note that for duplicate

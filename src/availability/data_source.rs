@@ -14,7 +14,7 @@ use super::{
     fetch::Fetch,
     query_data::{
         BlockHash, BlockQueryData, LeafHash, LeafQueryData, PayloadQueryData, QueryablePayload,
-        TransactionHash, TransactionIndex, VidCommonQueryData,
+        TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
 };
 use crate::{Payload, VidCommitment, VidShare};
@@ -163,12 +163,11 @@ where
     where
         R: RangeBounds<usize> + Send + 'static;
 
-    /// Returns the block containing a transaction with the given `hash` and the transaction's
-    /// position in the block.
-    async fn get_block_with_transaction(
+    /// Returns the transaction with the given `hash`.
+    async fn get_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> Fetch<(BlockQueryData<Types>, TransactionIndex<Types>)>;
+    ) -> Fetch<TransactionQueryData<Types>>;
 
     async fn subscribe_blocks(&self, from: usize) -> BoxStream<'static, BlockQueryData<Types>> {
         self.get_block_range(from..)

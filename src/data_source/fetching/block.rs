@@ -18,8 +18,7 @@ use super::{
 };
 use crate::{
     availability::{
-        BlockId, BlockQueryData, PayloadQueryData, QueryablePayload, TransactionHash,
-        UpdateAvailabilityData,
+        BlockId, BlockQueryData, PayloadQueryData, QueryablePayload, UpdateAvailabilityData,
     },
     data_source::{storage::AvailabilityStorage, VersionedDataSource},
     fetching::{
@@ -33,62 +32,12 @@ use crate::{
 use async_std::sync::{Arc, RwLockReadGuard};
 use async_trait::async_trait;
 use derivative::Derivative;
-use derive_more::{Display, From};
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
 use std::{cmp::Ordering, future::IntoFuture, iter::once, ops::RangeBounds};
 
 pub(super) type PayloadFetcher<Types, S, P> =
     fetching::Fetcher<request::PayloadRequest, PayloadCallback<Types, S, P>>;
-
-/// A request to fetch a block.
-///
-/// Blocks can be requested either directly by their [`BlockId`], or indirectly, by requesting a
-/// block containing a particular transaction.
-#[derive(Derivative, From, Display)]
-#[derivative(Ord = "feature_allow_slow_enum")]
-#[derivative(
-    Copy(bound = ""),
-    Debug(bound = ""),
-    PartialEq(bound = ""),
-    Eq(bound = ""),
-    Ord(bound = ""),
-    Hash(bound = "")
-)]
-pub(super) enum BlockRequest<Types>
-where
-    Types: NodeType,
-{
-    Id(BlockId<Types>),
-    WithTransaction(TransactionHash<Types>),
-}
-
-impl<Types> From<usize> for BlockRequest<Types>
-where
-    Types: NodeType,
-{
-    fn from(i: usize) -> Self {
-        Self::Id(i.into())
-    }
-}
-
-impl<Types> Clone for BlockRequest<Types>
-where
-    Types: NodeType,
-{
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<Types> PartialOrd for BlockRequest<Types>
-where
-    Types: NodeType,
-{
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
 
 impl<Types> FetchRequest for BlockId<Types>
 where
@@ -103,33 +52,19 @@ where
     }
 }
 
-impl<Types> FetchRequest for BlockRequest<Types>
-where
-    Types: NodeType,
-{
-    fn might_exist(self, block_height: usize, pruned_height: Option<usize>) -> bool {
-        if let BlockRequest::Id(id) = self {
-            id.might_exist(block_height, pruned_height)
-        } else {
-            true
-        }
-    }
-}
-
 #[async_trait]
 impl<Types> Fetchable<Types> for BlockQueryData<Types>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
 {
-    type Request = BlockRequest<Types>;
+    type Request = BlockId<Types>;
 
     fn satisfies(&self, req: Self::Request) -> bool {
         match req {
-            BlockRequest::Id(BlockId::Number(n)) => self.height() == n as u64,
-            BlockRequest::Id(BlockId::Hash(h)) => self.hash() == h,
-            BlockRequest::Id(BlockId::PayloadHash(h)) => self.payload_hash() == h,
-            BlockRequest::WithTransaction(h) => self.transaction_by_hash(h).is_some(),
+            BlockId::Number(n) => self.height() == n as u64,
+            BlockId::Hash(h) => self.hash() == h,
+            BlockId::PayloadHash(h) => self.payload_hash() == h,
         }
     }
 
@@ -163,12 +98,7 @@ where
     where
         S: AvailabilityStorage<Types>,
     {
-        match req {
-            BlockRequest::Id(id) => storage.storage.get_block(id).await,
-            BlockRequest::WithTransaction(h) => {
-                Ok(storage.storage.get_block_with_transaction(h).await?.0)
-            }
-        }
+        storage.storage.get_block(req).await
     }
 }
 
@@ -178,7 +108,7 @@ where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
 {
-    type RangedRequest = BlockRequest<Types>;
+    type RangedRequest = BlockId<Types>;
 
     async fn load_range<S, R>(
         storage: &NotifyStorage<Types, S>,
@@ -255,7 +185,7 @@ where
     {
         storage
             .block_notifier
-            .wait_for(move |block| block.satisfies(req.into()))
+            .wait_for(move |block| block.satisfies(req))
             .await
             .into_future()
             .map(|block| block.map(PayloadQueryData::from))
@@ -273,7 +203,7 @@ where
         // We don't have storage for the payload alone, only the whole block. So if we need to fetch
         // the payload, we just fetch the whole block (which may end up fetching only the payload,
         // if that's all that's needed to complete the block).
-        BlockQueryData::active_fetch(fetcher, storage, req.into()).await
+        BlockQueryData::active_fetch(fetcher, storage, req).await
     }
 
     async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>

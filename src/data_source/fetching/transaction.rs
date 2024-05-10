@@ -14,7 +14,7 @@
 
 use super::{AvailabilityProvider, FetchRequest, Fetchable, Fetcher, NotifyStorage};
 use crate::{
-    availability::{BlockQueryData, QueryablePayload, TransactionHash, TransactionIndex},
+    availability::{QueryablePayload, TransactionHash, TransactionQueryData},
     data_source::storage::AvailabilityStorage,
     Payload, QueryResult,
 };
@@ -30,7 +30,7 @@ pub(super) struct TransactionRequest<Types: NodeType>(TransactionHash<Types>);
 impl<Types: NodeType> FetchRequest for TransactionRequest<Types> {}
 
 #[async_trait]
-impl<Types> Fetchable<Types> for (BlockQueryData<Types>, TransactionIndex<Types>)
+impl<Types> Fetchable<Types> for TransactionQueryData<Types>
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload,
@@ -38,7 +38,7 @@ where
     type Request = TransactionRequest<Types>;
 
     fn satisfies(&self, req: Self::Request) -> bool {
-        self.0.transaction_by_hash(req.0).is_some()
+        req.0 == self.hash()
     }
 
     async fn passive_fetch<S>(
@@ -48,19 +48,16 @@ where
     where
         S: AvailabilityStorage<Types>,
     {
+        // Any block might satisfy the request; we won't know until we receive a new payload and
+        // check if it contains the desired transaction.
         let wait_block = storage
             .block_notifier
-            .wait_for(move |block| block.satisfies(req.0.into()))
+            .wait_for(move |block| block.transaction_by_hash(req.0).is_some())
             .await;
 
         async move {
             let block = wait_block.await?;
-
-            // This `unwrap` is safe, `wait_for` only returns blocks which satisfy the request, and
-            // in this case that means the block must contain the requested transaction.
-            let ix = block.transaction_by_hash(req.0).unwrap();
-
-            Some((block, ix))
+            Self::with_hash(&block, req.0)
         }
         .boxed()
     }
@@ -73,16 +70,16 @@ where
         S: AvailabilityStorage<Types> + 'static,
         P: AvailabilityProvider<Types>,
     {
-        // We don't actively fetch blocks when requested by transaction, because without the block
-        // payload, we have no way of knowing whether a block with such a transaction actually
-        // exists, and we don't want to bother peers with requests for non-existant blocks.
-        tracing::debug!("not fetching block with unknown transaction {req:?}");
+        // We don't actively fetch transactions, because without a satisfying block payload, we have
+        // no way of knowing whether a block with such a transaction actually exists, and we don't
+        // want to bother peers with requests for non-existant transactions.
+        tracing::debug!("not fetching unknown transaction {req:?}");
     }
 
     async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        storage.storage.get_block_with_transaction(req.0).await
+        storage.storage.get_transaction(req.0).await
     }
 }
