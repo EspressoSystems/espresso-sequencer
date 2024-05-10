@@ -172,7 +172,7 @@ async fn test_combined_network_half_dc() {
         // allow more time to pass in CI
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
-                duration: Duration::from_secs(120),
+                duration: Duration::from_secs(220),
             },
         ),
         ..TestDescription::default_multiple_rounds()
