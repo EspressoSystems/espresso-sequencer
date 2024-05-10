@@ -534,7 +534,7 @@ pub trait RunDA<
         }
         let consensus_lock = context.hotshot.get_consensus();
         let consensus = consensus_lock.read().await;
-        let total_num_views = usize::try_from(consensus.locked_view.get_u64()).unwrap();
+        let total_num_views = usize::try_from(consensus.locked_view().get_u64()).unwrap();
         // `failed_num_views` could include uncommitted views
         let failed_num_views = total_num_views - num_successful_commits;
         // When posting to the orchestrator, note that the total number of views also include un-finalized views.

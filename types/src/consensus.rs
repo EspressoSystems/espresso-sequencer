@@ -57,10 +57,13 @@ pub struct Consensus<TYPES: NodeType> {
     cur_view: TYPES::Time,
 
     /// View we proposed in last.  To prevent duplicate proposals
-    pub last_proposed_view: TYPES::Time,
+    last_proposed_view: TYPES::Time,
 
     /// last view had a successful decide event
-    pub last_decided_view: TYPES::Time,
+    last_decided_view: TYPES::Time,
+
+    /// The `locked_qc` view number
+    locked_view: TYPES::Time,
 
     /// Map of leaf hash -> leaf
     /// - contains undecided leaves
@@ -70,10 +73,7 @@ pub struct Consensus<TYPES: NodeType> {
     /// Saved payloads.
     ///
     /// Encoded transactions for every view if we got a payload for that view.
-    pub saved_payloads: BTreeMap<TYPES::Time, Arc<[u8]>>,
-
-    /// The `locked_qc` view number
-    pub locked_view: TYPES::Time,
+    saved_payloads: BTreeMap<TYPES::Time, Arc<[u8]>>,
 
     /// the highqc per spec
     high_qc: QuorumCertificate<TYPES>,
@@ -87,10 +87,10 @@ pub struct Consensus<TYPES: NodeType> {
     ///
     /// Certificates received from other nodes will get reattached regardless of this fields,
     /// since they will be present in the leaf we propose off of.
-    pub dontuse_formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
+    dontuse_formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
 
     /// most recent decided upgrade certificate
-    pub dontuse_decided_upgrade_cert: Option<UpgradeCertificate<TYPES>>,
+    dontuse_decided_upgrade_cert: Option<UpgradeCertificate<TYPES>>,
 }
 
 /// Contains several `ConsensusMetrics` that we're interested in from the consensus interfaces
@@ -272,10 +272,10 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     pub fn new(
         validated_state_map: BTreeMap<TYPES::Time, View<TYPES>>,
         cur_view: TYPES::Time,
+        locked_view: TYPES::Time,
         last_decided_view: TYPES::Time,
         saved_leaves: CommitmentMap<Leaf<TYPES>>,
         saved_payloads: BTreeMap<TYPES::Time, Arc<[u8]>>,
-        locked_view: TYPES::Time,
         high_qc: QuorumCertificate<TYPES>,
         metrics: Arc<ConsensusMetricsValue>,
     ) -> Self {
@@ -286,9 +286,9 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             cur_view,
             last_decided_view,
             last_proposed_view: last_decided_view,
+            locked_view,
             saved_leaves,
             saved_payloads,
-            locked_view,
             high_qc,
             metrics,
             dontuse_decided_upgrade_cert: None,
@@ -299,6 +299,16 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// Get the current view.
     pub fn cur_view(&self) -> TYPES::Time {
         self.cur_view
+    }
+
+    /// Get the last decided view.
+    pub fn last_decided_view(&self) -> TYPES::Time {
+        self.last_decided_view
+    }
+
+    /// Get the locked view.
+    pub fn locked_view(&self) -> TYPES::Time {
+        self.locked_view
     }
 
     /// Get the high QC.
@@ -316,6 +326,11 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         &self.saved_leaves
     }
 
+    /// Get the saved payloads.
+    pub fn saved_payloads(&self) -> &BTreeMap<TYPES::Time, Arc<[u8]>> {
+        &self.saved_payloads
+    }
+
     /// Get the vid shares.
     pub fn vid_shares(&self) -> &VidShares<TYPES> {
         &self.vid_shares
@@ -330,8 +345,50 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// # Errors
     /// Can return an error when the new view_number is not higher than the existing view number.
     pub fn update_view(&mut self, view_number: TYPES::Time) -> Result<()> {
-        ensure!(view_number > self.cur_view);
+        ensure!(
+            view_number > self.cur_view,
+            "New view isn't newer than the current view."
+        );
         self.cur_view = view_number;
+        Ok(())
+    }
+
+    /// Update the last proposed view.
+    ///
+    /// # Errors
+    /// Can return an error when the new view_number is not higher than the existing proposed view number.
+    pub fn update_last_proposed_view(&mut self, view_number: TYPES::Time) -> Result<()> {
+        ensure!(
+            view_number > self.last_proposed_view,
+            "New view isn't newer than the previously proposed view."
+        );
+        self.last_proposed_view = view_number;
+        Ok(())
+    }
+
+    /// Update the last decided view.
+    ///
+    /// # Errors
+    /// Can return an error when the new view_number is not higher than the existing decided view number.
+    pub fn update_last_decided_view(&mut self, view_number: TYPES::Time) -> Result<()> {
+        ensure!(
+            view_number > self.last_decided_view,
+            "New view isn't newer than the previously decided view."
+        );
+        self.last_decided_view = view_number;
+        Ok(())
+    }
+
+    /// Update the locked view.
+    ///
+    /// # Errors
+    /// Can return an error when the new view_number is not higher than the existing locked view number.
+    pub fn update_locked_view(&mut self, view_number: TYPES::Time) -> Result<()> {
+        ensure!(
+            view_number > self.locked_view,
+            "New view isn't newer than the previously locked view."
+        );
+        self.locked_view = view_number;
         Ok(())
     }
 
@@ -345,11 +402,31 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         self.saved_leaves.insert(leaf.commit(), leaf);
     }
 
+    /// Update the saved payloads with a new encoded transaction.
+    ///
+    /// # Errors
+    /// Can return an error when there's an existing payload corresponding to the same view number.
+    pub fn update_saved_payloads(
+        &mut self,
+        view_number: TYPES::Time,
+        encoded_transaction: Arc<[u8]>,
+    ) -> Result<()> {
+        ensure!(
+            !self.saved_payloads.contains_key(&view_number),
+            "Payload with the same view already exists."
+        );
+        self.saved_payloads.insert(view_number, encoded_transaction);
+        Ok(())
+    }
+
     /// Update the high QC if given a newer one.
     /// # Errors
     /// Can return an error when the provided high_qc is not newer than the existing entry.
     pub fn update_high_qc(&mut self, high_qc: QuorumCertificate<TYPES>) -> Result<()> {
-        ensure!(high_qc.view_number > self.high_qc.view_number);
+        ensure!(
+            high_qc.view_number > self.high_qc.view_number,
+            "High QC with an equal or higher view exists."
+        );
         debug!("Updating high QC");
         self.high_qc = high_qc;
 
@@ -371,6 +448,11 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// Add a new entry to the da_certs map.
     pub fn update_saved_da_certs(&mut self, view_number: TYPES::Time, cert: DACertificate<TYPES>) {
         self.saved_da_certs.insert(view_number, cert);
+    }
+
+    /// Update the most recent decided upgrade certificate.
+    pub fn update_dontuse_decided_upgrade_cert(&mut self, cert: Option<UpgradeCertificate<TYPES>>) {
+        self.dontuse_decided_upgrade_cert = cert;
     }
 
     /// gather information from the parent chain of leaves

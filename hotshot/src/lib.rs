@@ -271,11 +271,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             validated_state_map,
             anchored_leaf.get_view_number(),
             anchored_leaf.get_view_number(),
-            saved_leaves,
-            saved_payloads,
             // TODO this is incorrect
             // https://github.com/EspressoSystems/HotShot/issues/560
             anchored_leaf.get_view_number(),
+            saved_leaves,
+            saved_payloads,
             initializer.high_qc,
             Arc::clone(&consensus_metrics),
         );

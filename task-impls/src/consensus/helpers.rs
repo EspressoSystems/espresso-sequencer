@@ -96,18 +96,18 @@ async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
 
     // Liveness check.
     let read_consensus = consensus.read().await;
-    let liveness_check = justify_qc.get_view_number() > read_consensus.locked_view;
+    let liveness_check = justify_qc.get_view_number() > read_consensus.locked_view();
 
     // Safety check.
     // Check if proposal extends from the locked leaf.
     let outcome = read_consensus.visit_leaf_ancestors(
         justify_qc.get_view_number(),
-        Terminator::Inclusive(read_consensus.locked_view),
+        Terminator::Inclusive(read_consensus.locked_view()),
         false,
         |leaf, _, _| {
             // if leaf view no == locked view no then we're done, report success by
             // returning true
-            leaf.get_view_number() != read_consensus.locked_view
+            leaf.get_view_number() != read_consensus.locked_view()
         },
     );
     let safety_check = outcome.is_ok();
@@ -124,7 +124,7 @@ async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
             .await;
         }
 
-        format!("Failed safety and liveness check \n High QC is {:?}  Proposal QC is {:?}  Locked view is {:?}", read_consensus.high_qc(), proposal.data.clone(), read_consensus.locked_view)
+        format!("Failed safety and liveness check \n High QC is {:?}  Proposal QC is {:?}  Locked view is {:?}", read_consensus.high_qc(), proposal.data.clone(), read_consensus.locked_view())
     });
 
     // We accept the proposal, notify the application layer
@@ -228,10 +228,10 @@ pub async fn create_and_send_proposal<TYPES: NodeType>(
         "Sending null proposal for view {:?}",
         proposed_leaf.get_view_number(),
     );
-    if consensus.read().await.last_proposed_view >= view {
+    if let Err(e) = consensus.write().await.update_last_proposed_view(view) {
+        tracing::trace!("{e:?}");
         return;
     }
-    consensus.write().await.last_proposed_view = view;
     async_sleep(Duration::from_millis(round_start_delay)).await;
     broadcast_event(
         Arc::new(HotShotEvent::QuorumProposalSend(
@@ -349,7 +349,7 @@ pub(crate) async fn get_parent_leaf_and_state<TYPES: NodeType>(
         .get(&leaf_commitment)
         .context("Failed to find high QC of parent")?;
 
-    let reached_decided = leaf.get_view_number() == consensus.last_decided_view;
+    let reached_decided = leaf.get_view_number() == consensus.last_decided_view();
     let parent_leaf = leaf.clone();
     let original_parent_hash = parent_leaf.commit();
     let mut next_parent_hash = original_parent_hash;
@@ -358,7 +358,7 @@ pub(crate) async fn get_parent_leaf_and_state<TYPES: NodeType>(
     if !reached_decided {
         debug!("We have not reached decide from view {:?}", cur_view);
         while let Some(next_parent_leaf) = consensus.saved_leaves().get(&next_parent_hash) {
-            if next_parent_leaf.get_view_number() <= consensus.last_decided_view {
+            if next_parent_leaf.get_view_number() <= consensus.last_decided_view() {
                 break;
             }
             next_parent_hash = next_parent_leaf.get_parent_commitment();
@@ -709,10 +709,10 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
         // still vote if the liveness check succeeds.
         #[cfg(not(feature = "dependency-tasks"))]
         {
-            let liveness_check = justify_qc.get_view_number() > consensus_write.locked_view;
+            let liveness_check = justify_qc.get_view_number() > consensus_write.locked_view();
 
             let high_qc = consensus_write.high_qc().clone();
-            let locked_view = consensus_write.locked_view;
+            let locked_view = consensus_write.locked_view();
 
             drop(consensus_write);
 
@@ -812,8 +812,8 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
     #[allow(unused_mut)]
     #[allow(unused_variables)]
     let mut decided_upgrade_cert: Option<UpgradeCertificate<TYPES>> = None;
-    let mut new_anchor_view = consensus.last_decided_view;
-    let mut new_locked_view = consensus.locked_view;
+    let mut new_anchor_view = consensus.last_decided_view();
+    let mut new_locked_view = consensus.locked_view();
     let mut last_view_number_visited = view;
     let mut new_commit_reached: bool = false;
     let mut new_decide_reached = false;
@@ -821,7 +821,7 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
     let mut leaf_views = Vec::new();
     let mut leafs_decided = Vec::new();
     let mut included_txns = HashSet::new();
-    let old_anchor_view = consensus.last_decided_view;
+    let old_anchor_view = consensus.last_decided_view();
     let parent_view = proposal.justify_qc.get_view_number();
     let mut current_chain_length = 0usize;
     if parent_view + 1 == view {
@@ -881,7 +881,7 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
                     // If the block payload is available for this leaf, include it in
                     // the leaf chain that we send to the client.
                     if let Some(encoded_txns) =
-                        consensus.saved_payloads.get(&leaf.get_view_number())
+                        consensus.saved_payloads().get(&leaf.get_view_number())
                     {
                         let payload = BlockPayload::from_bytes(
                             encoded_txns,
@@ -933,13 +933,15 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
 
     let mut consensus = task_state.consensus.write().await;
     if new_commit_reached {
-        consensus.locked_view = new_locked_view;
+        if let Err(e) = consensus.update_locked_view(new_locked_view) {
+            tracing::trace!("{e:?}");
+        }
     }
 
     // This is ALWAYS None if "dependency-tasks" is not active.
     #[cfg(feature = "dependency-tasks")]
     {
-        consensus.dontuse_decided_upgrade_cert = decided_upgrade_cert;
+        consensus.update_dontuse_decided_upgrade_cert(decided_upgrade_cert);
     }
 
     drop(consensus);
@@ -977,7 +979,7 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
     if new_decide_reached {
         let decide_sent = broadcast_event(
             Event {
-                view_number: task_state.consensus.read().await.last_decided_view,
+                view_number: task_state.consensus.read().await.last_decided_view(),
                 event: EventType::Decide {
                     leaf_chain: Arc::new(leaf_views),
                     qc: Arc::new(new_decide_qc.unwrap()),
@@ -988,9 +990,11 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
         );
         let mut consensus = task_state.consensus.write().await;
 
-        let old_anchor_view = consensus.last_decided_view;
+        let old_anchor_view = consensus.last_decided_view();
         consensus.collect_garbage(old_anchor_view, new_anchor_view);
-        consensus.last_decided_view = new_anchor_view;
+        if let Err(e) = consensus.update_last_decided_view(new_anchor_view) {
+            tracing::trace!("{e:?}");
+        }
         consensus
             .metrics
             .last_decided_time
@@ -999,16 +1003,16 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
         consensus
             .metrics
             .last_decided_view
-            .set(usize::try_from(consensus.last_decided_view.get_u64()).unwrap());
+            .set(usize::try_from(consensus.last_decided_view().get_u64()).unwrap());
         let cur_number_of_views_per_decide_event = {
             #[cfg(not(feature = "dependency-tasks"))]
             {
-                *task_state.cur_view - consensus.last_decided_view.get_u64()
+                *task_state.cur_view - consensus.last_decided_view().get_u64()
             }
 
             #[cfg(feature = "dependency-tasks")]
             {
-                *task_state.latest_proposed_view - consensus.last_decided_view.get_u64()
+                *task_state.latest_proposed_view - consensus.last_decided_view().get_u64()
             }
         };
         consensus
@@ -1016,7 +1020,10 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
             .number_of_views_per_decide_event
             .add_point(cur_number_of_views_per_decide_event as f64);
 
-        debug!("Sending Decide for view {:?}", consensus.last_decided_view);
+        debug!(
+            "Sending Decide for view {:?}",
+            consensus.last_decided_view()
+        );
         drop(consensus);
         debug!("Decided txns len {:?}", included_txns_set.len());
         decide_sent.await;
