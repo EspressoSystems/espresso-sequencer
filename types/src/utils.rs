@@ -12,6 +12,7 @@ use bincode::{
 };
 use committable::Commitment;
 use digest::OutputSizeUser;
+use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use tagged_base64::tagged;
 use typenum::Unsigned;
@@ -23,7 +24,8 @@ use crate::{
 };
 
 /// A view's state
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(bound = "")]
 pub enum ViewInner<TYPES: NodeType> {
     /// A pending view with an available block but not leaf proposal yet.
     ///
@@ -133,7 +135,8 @@ impl<TYPES: NodeType> Deref for View<TYPES> {
 }
 
 /// This exists so we can perform state transitions mutably
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(bound = "")]
 pub struct View<TYPES: NodeType> {
     /// The view data. Wrapped in a struct so we can mutate
     pub view_inner: ViewInner<TYPES>,
