@@ -134,8 +134,6 @@ processes:
         condition: process_healthy
       marshal_0:
         condition: process_healthy
-      permissionless-builder:
-        condition: process_healthy
       deploy-sequencer-contracts:
         condition: process_completed
 
