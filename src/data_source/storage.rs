@@ -27,7 +27,7 @@
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
-        QueryablePayload, TransactionHash, TransactionIndex, UpdateAvailabilityData,
+        QueryablePayload, TransactionHash, TransactionQueryData, UpdateAvailabilityData,
         VidCommonQueryData,
     },
     data_source::VersionedDataSource,
@@ -104,10 +104,10 @@ where
     where
         R: RangeBounds<usize> + Send + 'static;
 
-    async fn get_block_with_transaction(
+    async fn get_transaction(
         &self,
         hash: TransactionHash<Types>,
-    ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)>;
+    ) -> QueryResult<TransactionQueryData<Types>>;
 }
 
 /// An interface for querying Data and Statistics from the HotShot Blockchain.

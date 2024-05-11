@@ -16,7 +16,7 @@ use super::AvailabilityStorage;
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryablePayload,
-        TransactionHash, TransactionIndex, UpdateAvailabilityData, VidCommonQueryData,
+        TransactionHash, TransactionQueryData, UpdateAvailabilityData, VidCommonQueryData,
     },
     data_source::{
         storage::pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
@@ -118,10 +118,10 @@ where
         Err(QueryError::Missing)
     }
 
-    async fn get_block_with_transaction(
+    async fn get_transaction(
         &self,
         _hash: TransactionHash<Types>,
-    ) -> QueryResult<(BlockQueryData<Types>, TransactionIndex<Types>)> {
+    ) -> QueryResult<TransactionQueryData<Types>> {
         Err(QueryError::Missing)
     }
 }
@@ -436,15 +436,13 @@ pub mod testing {
             }
         }
 
-        /// Returns the block containing a transaction with the given `hash` and the transaction's
-        /// position in the block.
-        async fn get_block_with_transaction(
+        async fn get_transaction(
             &self,
             hash: TransactionHash<MockTypes>,
-        ) -> Fetch<(BlockQueryData<MockTypes>, TransactionIndex<MockTypes>)> {
+        ) -> Fetch<TransactionQueryData<MockTypes>> {
             match self {
-                Self::Sql(data_source) => data_source.get_block_with_transaction(hash).await,
-                Self::NoStorage(data_source) => data_source.get_block_with_transaction(hash).await,
+                Self::Sql(data_source) => data_source.get_transaction(hash).await,
+                Self::NoStorage(data_source) => data_source.get_transaction(hash).await,
             }
         }
     }

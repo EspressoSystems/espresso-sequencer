@@ -242,10 +242,11 @@ Returns
 ```
 {
     "transaction": application-specific transaction type,
-    "block_hash": TaggedBase64,
-    "proof": application-specific proof type,
-    "height": integer,
+    "index": integer,
     "hash": TaggedBase64,
+    "proof": application-specific proof type,
+    "block_hash": TaggedBase64,
+    "block_height": integer,
 }
 ```
 """

@@ -81,7 +81,7 @@ pub trait QueryablePayload: traits::BlockPayload {
     /// the transaction belongs not only to the block but to a section of the block dedicated to a
     /// specific rollup), otherws may prove something substantially weaker (for example, a trusted
     /// query service may use `()` for the proof).
-    type InclusionProof: Clone + Debug + PartialEq + Eq + Serialize + DeserializeOwned;
+    type InclusionProof: Clone + Debug + PartialEq + Eq + Serialize + DeserializeOwned + Send + Sync;
 
     /// The number of transactions in the block.
     fn len(&self, meta: &Self::Metadata) -> usize;
@@ -327,15 +327,8 @@ impl<Types: NodeType> BlockQueryData<Types>
 where
     Payload<Types>: QueryablePayload,
 {
-    pub fn transaction(&self, i: &TransactionIndex<Types>) -> Option<TransactionQueryData<Types>> {
-        let (transaction, proof) = self.payload.transaction_with_proof(self.metadata(), i)?;
-        Some(TransactionQueryData {
-            transaction: transaction.clone(),
-            block_hash: self.hash(),
-            proof,
-            height: self.height(),
-            hash: transaction.commit(),
-        })
+    pub fn transaction(&self, ix: &TransactionIndex<Types>) -> Option<Transaction<Types>> {
+        self.payload().transaction(self.metadata(), ix)
     }
 
     pub fn transaction_by_hash(
@@ -475,28 +468,78 @@ where
     Payload<Types>: QueryablePayload,
 {
     transaction: Transaction<Types>,
-    block_hash: BlockHash<Types>,
-    proof: TransactionInclusionProof<Types>,
-    height: u64,
     hash: TransactionHash<Types>,
+    index: u64,
+    proof: TransactionInclusionProof<Types>,
+    block_hash: BlockHash<Types>,
+    block_height: u64,
 }
 
 impl<Types: NodeType> TransactionQueryData<Types>
 where
     Payload<Types>: QueryablePayload,
 {
+    pub(crate) fn new(
+        block: &BlockQueryData<Types>,
+        i: TransactionIndex<Types>,
+        index: u64,
+    ) -> Option<Self> {
+        let (transaction, proof) = block
+            .payload()
+            .transaction_with_proof(block.metadata(), &i)?;
+        Some(Self {
+            hash: transaction.commit(),
+            transaction,
+            index,
+            proof,
+            block_hash: block.hash(),
+            block_height: block.height(),
+        })
+    }
+
+    pub(crate) fn with_hash(
+        block: &BlockQueryData<Types>,
+        hash: TransactionHash<Types>,
+    ) -> Option<Self> {
+        block
+            .enumerate()
+            .enumerate()
+            .find_map(|(i, (index, tx))| {
+                if tx.commit() == hash {
+                    Some(Self::new(block, index, i as u64))
+                } else {
+                    None
+                }
+            })
+            .flatten()
+    }
+
+    /// The underlying transaction data.
     pub fn transaction(&self) -> &Transaction<Types> {
         &self.transaction
     }
 
-    pub fn height(&self) -> u64 {
-        self.height
-    }
-
+    /// The hash of this transaction.
     pub fn hash(&self) -> TransactionHash<Types> {
         self.hash
     }
 
+    /// The (0-based) position of this transaction within its block.
+    pub fn index(&self) -> u64 {
+        self.index
+    }
+
+    /// A proof of inclusion of this transaction in its block.
+    pub fn proof(&self) -> &TransactionInclusionProof<Types> {
+        &self.proof
+    }
+
+    /// The height of the block containing this transaction.
+    pub fn block_height(&self) -> u64 {
+        self.block_height
+    }
+
+    /// The hash of the block containing this transaction.
     pub fn block_hash(&self) -> BlockHash<Types> {
         self.block_hash
     }

@@ -91,7 +91,7 @@ where
         S: AvailabilityStorage<Types> + 'static,
         P: AvailabilityProvider<Types>,
     {
-        fetch_header_and_then(storage, req.0.into(), HeaderCallback::VidCommon { fetcher }).await
+        fetch_header_and_then(storage, req.0, HeaderCallback::VidCommon { fetcher }).await
     }
 
     async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
