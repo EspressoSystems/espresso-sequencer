@@ -1633,7 +1633,7 @@ impl SqlStorage {
                     .query_one(
                         &format!(
                             "SELECT height FROM Header  where
-                             data->>'{header_state_commitment_field}' = $1"
+                             {header_state_commitment_field} = $1"
                         ),
                         &[&commit.to_string()],
                     )
@@ -1646,7 +1646,7 @@ impl SqlStorage {
                 let row = self
                     .query_one(
                         &format!(
-                            "SELECT data->>'{header_state_commitment_field}' AS root_commmitment
+                            "SELECT {header_state_commitment_field} AS root_commmitment
                              FROM header
                              WHERE height = $1"
                         ),
