@@ -3183,6 +3183,11 @@ pub mod testing {
                 value BYTEA  NOT NULL UNIQUE
             );
         
+
+            ALTER TABLE header
+            ADD column test_merkle_tree_root text
+            GENERATED ALWAYS as (data->>'test_merkle_tree_root') STORED;
+
             CREATE TABLE {name}
             (
                 path integer[] NOT NULL, 
@@ -3252,11 +3257,11 @@ mod test {
         // The SQL commands used here will fail if not run in order.
         let migrations = vec![
             Migration::unapplied(
-                "V13__create_test_table.sql",
+                "V23__create_test_table.sql",
                 "ALTER TABLE test ADD COLUMN data INTEGER;",
             )
             .unwrap(),
-            Migration::unapplied("V12__create_test_table.sql", "CREATE TABLE test ();").unwrap(),
+            Migration::unapplied("V22__create_test_table.sql", "CREATE TABLE test ();").unwrap(),
         ];
         connect(true, migrations.clone()).await.unwrap();
 
@@ -3477,7 +3482,7 @@ mod test {
             let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()});
             storage
                 .query_opt(
-                    "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
+                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
                     [
                         sql_param(&(block_height as i64)),
                         sql_param(&format!("randomHash{i}")),
@@ -3536,7 +3541,7 @@ mod test {
         let test_data = serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()});
         storage
             .query_opt(
-                "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
+                "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
                 [
                     sql_param(&(2_i64)),
                     sql_param(&"randomstring"),
@@ -3635,7 +3640,7 @@ mod test {
         // insert the header with merkle commitment
         storage
                 .query_opt(
-                    "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
+                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
                     [
                         sql_param(&(block_height as i64)),
                         sql_param(&"randomString"),
@@ -3694,7 +3699,7 @@ mod test {
         // Insert the new header
         storage
         .query_opt(
-            "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
+            "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
             [
                 sql_param(&2_i64),
                 sql_param(&"randomString2"),
@@ -3752,7 +3757,7 @@ mod test {
             // Insert a dummy header
             storage
                 .query_opt(
-                    "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3)",
+                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3)",
                     [
                         sql_param(&(i as i64)),
                         sql_param(&format!("hash{i}")),
@@ -3809,7 +3814,7 @@ mod test {
         // insert the header with merkle commitment
         storage
                 .query_opt(
-                    "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
+                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
                     [
                         sql_param(&(block_height as i64)),
                         sql_param(&"randomString"),
@@ -3872,7 +3877,7 @@ mod test {
             // insert the header with merkle commitment
             storage
                     .query_opt(
-                        "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
+                        "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
                         [
                             sql_param(&(block_height as i64)),
                             sql_param(&format!("randomString{i}")),
@@ -3927,7 +3932,7 @@ mod test {
         // insert the header with merkle commitment
         storage
                 .query_opt(
-                    "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
+                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
                     [
                         sql_param(&(block_height as i64)),
                         sql_param(&"randomStringgg"),
@@ -3957,7 +3962,7 @@ mod test {
         // insert the header with merkle commitment
         storage
                 .query_opt(
-                    "INSERT INTO HEADER VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
+                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 't', 0, $3) ON CONFLICT(height) DO UPDATE set data = excluded.data",
                     [
                         sql_param(&(2_i64)),
                         sql_param(&"randomHashString"),
@@ -4081,7 +4086,7 @@ mod test {
             // insert the header with merkle commitment
             storage
             .query_opt(
-                "INSERT INTO HEADER VALUES ($1, $2, 'hash', 0, $3)",
+                "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES ($1, $2, 'hash', 0, $3)",
                 [
                     sql_param(&(block_height as i64)),
                     sql_param(&format!("hash{block_height}")),
@@ -4183,7 +4188,7 @@ mod test {
             // Insert a header with the tree commitment.
             storage
                 .query_opt(
-                    "INSERT INTO HEADER VALUES (0, 'hash', 'hash', 0, $1)",
+                    "INSERT INTO HEADER(height, hash, payload_hash, timestamp, data) VALUES (0, 'hash', 'hash', 0, $1)",
                     [
                         sql_param(&serde_json::json!({ MockMerkleTree::header_state_commitment_field() : serde_json::to_value(test_tree.commitment()).unwrap()})),
                     ],
