@@ -26,9 +26,9 @@ docker-stop-rm:
 anvil *args:
     docker run -p 127.0.0.1:8545:8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
 
-test:
+test *args:
     cargo build --bin diff-test --release
-    cargo test --release --all-features
+    cargo test --release --all-features {{args}}
 
 # Helpful shortcuts for local development
 dev-orchestrator:

@@ -1,6 +1,5 @@
 {
     "rust-analyzer.server.extraEnv": {
-        "CARGO_TARGET_DIR": "target/vscode_rust_analyzer",
-        "RUSTFLAGS": " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
+        "CARGO_TARGET_DIR": "target/vscode_rust_analyzer"
     },
 }
