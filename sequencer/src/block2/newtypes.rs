@@ -55,6 +55,13 @@ impl AsPayloadBytes<'_> for TxTableEntries {
 
 pub struct NumTxs2(usize);
 
+impl NumTxs2 {
+    // TODO can I get rid of this?
+    pub fn as_usize(&self) -> usize {
+        self.0
+    }
+}
+
 impl AsPayloadBytes<'_> for NumTxs2 {
     fn to_payload_bytes(&self) -> impl AsRef<[u8]> {
         usize_to_bytes::<NUM_TXS_BYTE_LEN>(self.0)

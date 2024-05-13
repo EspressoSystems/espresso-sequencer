@@ -65,14 +65,29 @@ impl TxProof2 {
         payload: &Payload,
         common: &VidCommon,
     ) -> Option<(Transaction, Self)> {
-        let ns_payload = payload.ns_payload2(index.ns());
-        let ns_payload_range = payload.ns_payload_range2(index.ns());
+        let payload_byte_len = payload.as_byte_slice().len(); // TODO newtype?
+
+        if payload_byte_len != VidSchemeType::get_payload_byte_len(common) {
+            return None; // error: common inconsistent with self
+        }
+        if !payload.ns_table().in_bounds(index.ns()) {
+            return None; // error: ns index out of bounds
+        }
+        // check tx index below
+
+        let ns_payload_range = payload
+            .ns_table()
+            .ns_payload_range2(index.ns(), payload_byte_len);
+        let ns_payload = payload.read_ns_payload(&ns_payload_range);
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
 
         // Read the tx table len from this namespace's tx table and compute a
         // proof of correctness.
         let num_txs_range = NumTxsRange2::new(ns_payload_range.byte_len());
         let payload_num_txs = ns_payload.read(&num_txs_range);
+        if !ns_payload_range.in_bounds(index.tx(), &payload_num_txs) {
+            return None; // error: tx index out of bounds
+        }
         let payload_proof_num_txs = vid
             .payload_proof(
                 payload.as_byte_slice(),
@@ -138,6 +153,8 @@ impl TxProof2 {
     ) -> Option<bool> {
         VidSchemeType::is_consistent(commit, common).ok()?;
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
+
+        // TODO check `self.tx_index` in bounds
 
         // Verify proof for tx table len
         {
