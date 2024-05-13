@@ -21,19 +21,19 @@ pub struct TxTableEntriesRangeRelative(pub Range<usize>);
 
 // TODO replace array return type with `impl AsRef<[u8]>` to accommodate
 // variable-size return types eg `TxTableEntries`
-pub trait AsPayloadBytes<const BYTE_LEN: usize> {
-    fn to_payload_bytes(&self) -> [u8; BYTE_LEN];
+pub trait AsPayloadBytes {
+    fn to_payload_bytes(&self) -> impl AsRef<[u8]>;
     fn from_payload_bytes(bytes: &[u8]) -> Self;
 }
 
 // TODO impl serde for any T that impls AsBytes
 
-pub trait PayloadBytesRange<const BYTE_LEN: usize> {
-    type Output: AsPayloadBytes<BYTE_LEN>;
+pub trait PayloadBytesRange {
+    type Output: AsPayloadBytes;
     fn range(&self) -> Range<usize>;
 }
 
-impl AsPayloadBytes<NUM_TXS_BYTE_LEN> for NumTxs {
+impl AsPayloadBytes for NumTxs {
     fn to_payload_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
         self.as_bytes() // TODO just impl it directly
     }
@@ -43,7 +43,7 @@ impl AsPayloadBytes<NUM_TXS_BYTE_LEN> for NumTxs {
     }
 }
 
-impl PayloadBytesRange<NUM_TXS_BYTE_LEN> for NumTxsRangeRelative {
+impl PayloadBytesRange for NumTxsRangeRelative {
     type Output = NumTxs;
 
     fn range(&self) -> Range<usize> {
@@ -52,7 +52,7 @@ impl PayloadBytesRange<NUM_TXS_BYTE_LEN> for NumTxsRangeRelative {
 }
 
 const TEMP: usize = 2 * TX_OFFSET_BYTE_LEN;
-impl AsPayloadBytes<TEMP> for TxTableEntries {
+impl AsPayloadBytes for TxTableEntries {
     fn to_payload_bytes(&self) -> [u8; TEMP] {
         todo!()
     }
@@ -74,10 +74,22 @@ impl AsPayloadBytes<TEMP> for TxTableEntries {
     }
 }
 
-impl PayloadBytesRange<TEMP> for TxTableEntriesRangeRelative {
+impl PayloadBytesRange for TxTableEntriesRangeRelative {
     type Output = TxTableEntries;
 
     fn range(&self) -> Range<usize> {
         self.0.clone()
     }
 }
+
+// WIP WIP
+
+// pub struct NumTxs2(usize);
+// pub struct NumTxsRange2(Range<usize>);
+
+// impl NumTxsRange2 {
+//     // TODO newtype for `ns_payload_byte_len`?
+//     pub fn new(ns_payload_byte_len: usize) -> Self {
+//         Self(0..NUM_TXS_BYTE_LEN.min(ns_payload_byte_len))
+//     }
+// }
