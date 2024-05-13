@@ -281,7 +281,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
     tracing::info!("Start syncing light client state.");
 
     let bundle = fetch_latest_state(relay_server_client).await?;
-    tracing::info!("Bundle accumulated: {}", bundle.accumulated_weight);
+    tracing::info!("Bundle accumulated weight: {}", bundle.accumulated_weight);
     tracing::info!("Latest HotShot block height: {}", bundle.state.block_height);
     let old_state = read_contract_state(config).await?;
     tracing::info!(
