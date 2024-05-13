@@ -1,7 +1,24 @@
-use super::data_source::{Provider, SequencerDataSource};
-use crate::{persistence::sql::Options, SeqTypes};
+use super::{
+    data_source::{CatchupDataSource, Provider, SequencerDataSource},
+    AccountQueryData, BlocksFrontier,
+};
+use crate::{
+    persistence::sql::Options,
+    state::{BlockMerkleTree, FeeAccountProof, FeeMerkleTree},
+    SeqTypes,
+};
+use anyhow::{bail, Context};
 use async_trait::async_trait;
-use hotshot_query_service::data_source::sql::{Config, SqlDataSource};
+use ethers::prelude::Address;
+use hotshot_query_service::{
+    data_source::{
+        sql::{Config, SqlDataSource},
+        storage::SqlStorage,
+    },
+    merklized_state::{MerklizedStateDataSource, Snapshot},
+};
+use hotshot_types::data::ViewNumber;
+use jf_merkle_tree::{prelude::MerkleNode, MerkleTreeScheme};
 
 pub type DataSource = SqlDataSource<SeqTypes, Provider>;
 
@@ -19,14 +36,71 @@ impl SequencerDataSource for DataSource {
     }
 }
 
+impl CatchupDataSource for SqlStorage {
+    async fn get_account(
+        &self,
+        height: u64,
+        _view: ViewNumber,
+        account: Address,
+    ) -> anyhow::Result<AccountQueryData> {
+        let proof = self
+            .get_path(
+                Snapshot::<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>::Index(height),
+                account.into(),
+            )
+            .await
+            .context(format!("fetching account {account}; height {height}"))?;
+
+        match proof.proof.first().context(format!(
+            "empty proof for account {account}; height {height}"
+        ))? {
+            MerkleNode::Leaf { pos, elem, .. } => Ok(AccountQueryData {
+                balance: (*elem).into(),
+                proof: FeeAccountProof::presence(*pos, proof),
+            }),
+
+            MerkleNode::Empty => Ok(AccountQueryData {
+                balance: 0_u64.into(),
+                proof: FeeAccountProof::absence(account.into(), proof),
+            }),
+            _ => {
+                bail!("Invalid proof");
+            }
+        }
+    }
+
+    async fn get_frontier(&self, height: u64, _view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+        self.get_path(
+            Snapshot::<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>::Index(height),
+            height - 1,
+        )
+        .await
+        .context(format!("fetching frontier at height {height}"))
+    }
+}
+
+impl CatchupDataSource for DataSource {
+    async fn get_account(
+        &self,
+        height: u64,
+        view: ViewNumber,
+        account: Address,
+    ) -> anyhow::Result<AccountQueryData> {
+        (*self.storage().await)
+            .get_account(height, view, account)
+            .await
+    }
+
+    async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
+        self.storage().await.get_frontier(height, view).await
+    }
+}
+
 #[cfg(test)]
 mod impl_testable_data_source {
     use super::*;
-    use crate::{
-        api::{self, data_source::testing::TestableSequencerDataSource},
-        persistence::PersistenceOptions,
-    };
-    use hotshot_query_service::data_source::storage::sql::{testing::TmpDb, SqlStorage};
+    use crate::api::{self, data_source::testing::TestableSequencerDataSource};
+    use hotshot_query_service::data_source::storage::sql::testing::TmpDb;
 
     fn tmp_options(db: &TmpDb) -> Options {
         Options {
@@ -41,14 +115,13 @@ mod impl_testable_data_source {
     #[async_trait]
     impl TestableSequencerDataSource for DataSource {
         type Storage = TmpDb;
-        type Persistence = SqlStorage;
 
         async fn create_storage() -> Self::Storage {
             TmpDb::init().await
         }
 
-        async fn connect(storage: &Self::Storage) -> Self::Persistence {
-            tmp_options(storage).create().await.unwrap()
+        fn persistence_options(storage: &Self::Storage) -> Self::Options {
+            tmp_options(storage)
         }
 
         fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {

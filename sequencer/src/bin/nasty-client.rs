@@ -35,10 +35,16 @@ use hotshot_types::{
     traits::metrics::{Counter, Gauge, Metrics as _},
     vid::{vid_scheme, VidSchemeType},
 };
-use jf_primitives::vid::VidScheme;
+use jf_merkle_tree::{
+    ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
+};
+use jf_vid::VidScheme;
 use rand::{seq::SliceRandom, RngCore};
 use sequencer::{
-    api::endpoints::NamespaceProofQueryData, options::parse_duration, Header, SeqTypes,
+    api::endpoints::NamespaceProofQueryData,
+    options::parse_duration,
+    state::{BlockMerkleTree, FeeMerkleTree},
+    Header, SeqTypes,
 };
 use serde::de::DeserializeOwned;
 use std::{
@@ -185,6 +191,22 @@ struct ActionDistribution {
         default_value = "3"
     )]
     weight_query_namespace: u8,
+
+    /// The weight of "query block state" actions in the random distribution.
+    #[clap(
+        long,
+        env = "ESPRESSO_NASTY_CLIENT_WEIGHT_QUERY_BLOCK_STATE",
+        default_value = "3"
+    )]
+    weight_query_block_state: u8,
+
+    /// The weight of "query fee state" actions in the random distribution.
+    #[clap(
+        long,
+        env = "ESPRESSO_NASTY_CLIENT_WEIGHT_QUERY_FEE_STATE",
+        default_value = "3"
+    )]
+    weight_query_fee_state: u8,
 }
 
 impl ActionDistribution {
@@ -196,6 +218,8 @@ impl ActionDistribution {
             ActionDiscriminants::PollStream => self.weight_poll_stream,
             ActionDiscriminants::QueryWindow => self.weight_query_window,
             ActionDiscriminants::QueryNamespace => self.weight_query_namespace,
+            ActionDiscriminants::QueryBlockState => self.weight_query_block_state,
+            ActionDiscriminants::QueryFeeState => self.weight_query_fee_state,
         }
     }
 }
@@ -209,6 +233,8 @@ struct Metrics {
     poll_stream_actions: HashMap<Resource, Box<dyn Counter>>,
     query_window_actions: Box<dyn Counter>,
     query_namespace_actions: Box<dyn Counter>,
+    query_block_state_actions: Box<dyn Counter>,
+    query_fee_state_actions: Box<dyn Counter>,
 }
 
 impl Metrics {
@@ -275,6 +301,10 @@ impl Metrics {
             query_window_actions: registry.create_counter("query_window_actions".into(), None),
             query_namespace_actions: registry
                 .create_counter("query_namespace_actions".into(), None),
+            query_block_state_actions: registry
+                .create_counter("query_block_state_actions".into(), None),
+            query_fee_state_actions: registry
+                .create_counter("query_fee_state_actions".into(), None),
         }
     }
 }
@@ -701,6 +731,196 @@ impl ResourceManager<Header> {
         self.metrics.query_window_actions.add(1);
         Ok(())
     }
+
+    async fn query_block_state(&self, block: u64, index: u64) -> anyhow::Result<()> {
+        let (block, index) = match self.adjust_index(block).await? {
+            0 | 1 => {
+                // The block state at height 0 is empty, so to have a valid query just adjust to
+                // querying at height 1. At height 1, the only valid index to query is 0.
+                (1, 0)
+            }
+            block => {
+                // At any other height, all indices between 0 and `block - 1` are valid to query.
+                (block, index % (block - 1))
+            }
+        };
+
+        // Get the header of the state snapshot we're going to query and the block commitment we're
+        // going to look up from the Merkle tree, so we can later verify our results.
+        let block_header = self
+            .retry(info_span!("get block header", block), || async {
+                self.client
+                    .get::<Header>(&format!("availability/header/{block}"))
+                    .send()
+                    .await
+                    .context(format!("getting header {block}"))
+            })
+            .await?;
+        let index_header = self
+            .retry(info_span!("get index header", index), || async {
+                self.client
+                    .get::<Header>(&format!("availability/header/{index}"))
+                    .send()
+                    .await
+                    .context(format!("getting header {index}"))
+            })
+            .await?;
+
+        // Get a Merkle proof for the block commitment at position `index` from state `block`.
+        let proof = self
+            .retry(info_span!("get block proof", block, index), || async {
+                self.client
+                    .get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>(&format!(
+                        "block-state/{block}/{index}"
+                    ))
+                    .send()
+                    .await
+                    .context(format!("getting merkle proof {block},{index}"))
+            })
+            .await?;
+
+        // Check that the proof proves inclusion of `index_header` at position `index` relative to
+        // `block_header`.
+        BlockMerkleTree::verify(block_header.block_merkle_tree_root.digest(), index, &proof)
+            .context("malformed merkle proof")?
+            .or_else(|_| bail!("invalid merkle proof"))?;
+        ensure!(
+            proof.elem() == Some(&index_header.commit()),
+            "merkle proof is for wrong element: {:?} != {:?}",
+            proof.elem(),
+            index_header.commit()
+        );
+
+        // Look up the proof a different way, by state commitment, and check that we get the same
+        // proof.
+        let proof2 = self
+            .retry(
+                info_span!(
+                    "get block proof by state commitment",
+                    block,
+                    index,
+                    commitment = %block_header.block_merkle_tree_root,
+                ),
+                || async {
+                    self.client
+                        .get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>(&format!(
+                            "block-state/commit/{}/{index}",
+                            block_header.block_merkle_tree_root,
+                        ))
+                        .send()
+                        .await
+                        .context(format!(
+                            "getting merkle proof {},{index}",
+                            block_header.block_merkle_tree_root
+                        ))
+                },
+            )
+            .await?;
+        ensure!(
+            proof2 == proof,
+            "got a different proof when querying by commitment, {proof2:?} != {proof:?}"
+        );
+
+        self.metrics.query_block_state_actions.add(1);
+        Ok(())
+    }
+
+    async fn query_fee_state(&self, block: u64, builder: u64) -> anyhow::Result<()> {
+        let block = self.adjust_index(block).await?;
+        let builder = if block == 0 { 0 } else { builder % block };
+
+        // Get the header of block `builder` so we can get an address (the builder account) to
+        // query.
+        let builder_header = self
+            .retry(info_span!("get builder header", builder), || async {
+                self.client
+                    .get::<Header>(&format!("availability/header/{builder}"))
+                    .send()
+                    .await
+                    .context(format!("getting header {builder}"))
+            })
+            .await?;
+        let builder_address = builder_header.fee_info.account();
+
+        // Get the header of the state snapshot we're going to query so we can later verify our
+        // results.
+        let block_header = self
+            .retry(info_span!("get block header", block), || async {
+                self.client
+                    .get::<Header>(&format!("availability/header/{block}"))
+                    .send()
+                    .await
+                    .context(format!("getting header {block}"))
+            })
+            .await?;
+
+        // Get a Merkle proof for the fee state of `builder_address` from state `block`.
+        let proof = self
+            .retry(
+                info_span!("get account proof", block, %builder_address),
+                || async {
+                    self.client
+                        .get::<<FeeMerkleTree as MerkleTreeScheme>::MembershipProof>(&format!(
+                            "fee-state/{block}/{builder_address}"
+                        ))
+                        .send()
+                        .await
+                        .context(format!("getting merkle proof {block},{builder_address}"))
+                },
+            )
+            .await?;
+
+        // Check that the proof is valid relative to `builder_header`.
+        if proof.elem().is_some() {
+            FeeMerkleTree::verify(
+                block_header.fee_merkle_tree_root.digest(),
+                builder_address,
+                &proof,
+            )
+            .context("malformed membership proof")?
+            .or_else(|_| bail!("invalid membership proof"))?;
+        } else {
+            ensure!(
+                FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root)
+                    .non_membership_verify(builder_address, &proof)
+                    .context("malformed non-membership proof")?,
+                "invalid non-membership proof"
+            );
+        }
+
+        // Look up the proof a different way, by state commitment, and check that we get the same
+        // proof.
+        let proof2 = self
+            .retry(
+                info_span!(
+                    "get account proof by state commitment",
+                    block,
+                    %builder_address,
+                    commitment = %block_header.fee_merkle_tree_root,
+                ),
+                || async {
+                    self.client
+                        .get::<<FeeMerkleTree as MerkleTreeScheme>::MembershipProof>(&format!(
+                            "fee-state/commit/{}/{builder_address}",
+                            block_header.fee_merkle_tree_root,
+                        ))
+                        .send()
+                        .await
+                        .context(format!(
+                            "getting merkle proof {},{builder_address}",
+                            block_header.fee_merkle_tree_root
+                        ))
+                },
+            )
+            .await?;
+        ensure!(
+            proof2 == proof,
+            "got a different proof when querying by commitment, {proof2:?} != {proof:?}"
+        );
+
+        self.metrics.query_fee_state_actions.add(1);
+        Ok(())
+    }
 }
 
 impl ResourceManager<BlockQueryData<SeqTypes>> {
@@ -820,6 +1040,16 @@ enum Action {
         block: u64,
         namespace: usize,
     },
+    QueryBlockState {
+        block: u64,
+        index: u64,
+    },
+    QueryFeeState {
+        block: u64,
+        // The index of the block whose builder address should be looked up. This leads to more
+        // realistic queries than just randomly generating addresses.
+        builder: u64,
+    },
 }
 
 impl Action {
@@ -852,6 +1082,14 @@ impl Action {
             ActionDiscriminants::QueryNamespace => Self::QueryNamespace {
                 block: rng.next_u64(),
                 namespace: rng.next_u32() as usize,
+            },
+            ActionDiscriminants::QueryBlockState => Self::QueryBlockState {
+                block: rng.next_u64(),
+                index: rng.next_u64(),
+            },
+            ActionDiscriminants::QueryFeeState => Self::QueryFeeState {
+                block: rng.next_u64(),
+                builder: rng.next_u64(),
             },
         }
     }
@@ -916,6 +1154,12 @@ impl Client {
             }
             Action::QueryNamespace { block, namespace } => {
                 self.blocks.query_namespace(block, namespace).await
+            }
+            Action::QueryBlockState { block, index } => {
+                self.headers.query_block_state(block, index).await
+            }
+            Action::QueryFeeState { block, builder } => {
+                self.headers.query_fee_state(block, builder).await
             }
         }
     }

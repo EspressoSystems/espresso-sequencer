@@ -8,10 +8,8 @@
 //! an extension that node operators can opt into. This module defines the minimum level of
 //! persistence which is _required_ to run a node.
 
-use crate::{
-    ElectionConfig, Header, Leaf, NodeState, PubKey, SeqTypes, ValidatedState, ViewNumber,
-};
-use anyhow::{ensure, Context};
+use crate::{Leaf, NodeState, PubKey, SeqTypes, StateCatchup, ValidatedState, ViewNumber};
+use anyhow::{bail, ensure, Context};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use committable::Committable;
@@ -21,30 +19,41 @@ use hotshot::{
     HotShotInitializer,
 };
 use hotshot_types::{
+    consensus::CommitmentMap,
     data::{DAProposal, VidDisperseShare},
     event::{HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::node_implementation::ConsensusTime,
+    utils::View,
 };
-use std::cmp::max;
+use std::{cmp::max, collections::BTreeMap};
 
 pub mod fs;
 pub mod no_storage;
 pub mod sql;
 
-pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey, ElectionConfig>;
+pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey>;
 
 #[async_trait]
-pub trait PersistenceOptions: Clone {
+pub trait PersistenceOptions: Clone + Send + Sync + 'static {
     type Persistence: SequencerPersistence;
 
     async fn create(self) -> anyhow::Result<Self::Persistence>;
     async fn reset(self) -> anyhow::Result<()>;
+
+    async fn create_catchup_provider(self) -> anyhow::Result<Arc<dyn StateCatchup>> {
+        self.create().await?.into_catchup_provider()
+    }
 }
 
 #[async_trait]
-pub trait SequencerPersistence: Send + Sync + 'static {
+pub trait SequencerPersistence: Sized + Send + Sync + 'static {
+    /// Use this storage as a state catchup backend, if supported.
+    fn into_catchup_provider(self) -> anyhow::Result<Arc<dyn StateCatchup>> {
+        bail!("state catchup is not implemented for this persistence type");
+    }
+
     /// Load the orchestrator config from storage.
     ///
     /// Returns `None` if no config exists (we are joining a network for the first time). Fails with
@@ -73,6 +82,11 @@ pub trait SequencerPersistence: Send + Sync + 'static {
     async fn load_anchor_leaf(&self)
         -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>>;
 
+    /// Load undecided state saved by consensus before we shut down.
+    async fn load_undecided_state(
+        &self,
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>>;
+
     async fn load_vid_share(
         &self,
         view: ViewNumber,
@@ -81,9 +95,6 @@ pub trait SequencerPersistence: Send + Sync + 'static {
         &self,
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>>;
-
-    /// Load the validated state after `header`, if available.
-    async fn load_validated_state(&self, header: &Header) -> anyhow::Result<ValidatedState>;
 
     /// Load the latest known consensus state.
     ///
@@ -107,7 +118,7 @@ pub trait SequencerPersistence: Send + Sync + 'static {
                 ViewNumber::genesis()
             }
         };
-        let (leaf, high_qc, validated_state) = match self
+        let (leaf, high_qc) = match self
             .load_anchor_leaf()
             .await
             .context("loading anchor leaf")?
@@ -122,45 +133,46 @@ pub trait SequencerPersistence: Send + Sync + 'static {
                         high_qc.view_number
                     )
                 );
-
-                let validated_state = match self.load_validated_state(leaf.get_block_header()).await
-                {
-                    Ok(validated_state) => Some(Arc::new(validated_state)),
-                    Err(err) => {
-                        tracing::error!(
-                            "unable to load validated state, will need to catchup: {err:#}"
-                        );
-                        None
-                    }
-                };
-
-                (leaf, high_qc, validated_state)
+                (leaf, high_qc)
             }
             None => {
                 tracing::info!("no saved leaf, starting from genesis leaf");
-                (
-                    Leaf::genesis(&state),
-                    QuorumCertificate::genesis(&state),
-                    Some(Arc::new(ValidatedState::genesis(&state).0)),
-                )
+                (Leaf::genesis(&state), QuorumCertificate::genesis(&state))
             }
         };
+        let validated_state = Some(Arc::new(ValidatedState::genesis(&state).0));
 
-        // We start from the view following the maximum view between `highest_voted_view` and
-        // `leaf.view_number`. This prevents double votes from starting in a view in which we had
-        // already voted before the restart, and prevents unnecessary catchup from starting in a
-        // view earlier than the anchor leaf.
-        let view = max(highest_voted_view, leaf.get_view_number()) + 1;
+        // If we are not starting from genesis, we start from the view following the maximum view
+        // between `highest_voted_view` and `leaf.view_number`. This prevents double votes from
+        // starting in a view in which we had already voted before the restart, and prevents
+        // unnecessary catchup from starting in a view earlier than the anchor leaf.
+        let mut view = max(highest_voted_view, leaf.get_view_number());
+        if view != ViewNumber::genesis() {
+            view += 1;
+        }
 
-        tracing::info!(?leaf, ?view, ?high_qc, "loaded consensus state");
+        let (undecided_leaves, undecided_state) = self
+            .load_undecided_state()
+            .await
+            .context("loading undecided state")?
+            .unwrap_or_default();
+
+        tracing::info!(
+            ?leaf,
+            ?view,
+            ?high_qc,
+            ?undecided_leaves,
+            ?undecided_state,
+            "loaded consensus state"
+        );
         Ok(HotShotInitializer::from_reload(
             leaf,
             state,
             validated_state,
             view,
             high_qc,
-            Default::default(),
-            Default::default(),
+            undecided_leaves.into_values().collect(),
+            undecided_state,
         ))
     }
 
@@ -204,6 +216,11 @@ pub trait SequencerPersistence: Send + Sync + 'static {
         view: ViewNumber,
         action: HotShotAction,
     ) -> anyhow::Result<()>;
+    async fn update_undecided_state(
+        &mut self,
+        leaves: CommitmentMap<Leaf>,
+        state: BTreeMap<ViewNumber, View<SeqTypes>>,
+    ) -> anyhow::Result<()>;
 }
 
 #[cfg(test)]
@@ -230,7 +247,7 @@ mod persistence_tests {
     use hotshot::types::SignatureKey;
     use hotshot::{traits::BlockPayload, types::BLSPubKey};
     use hotshot_types::{event::HotShotAction, vid::vid_scheme};
-    use jf_primitives::vid::VidScheme;
+    use jf_vid::VidScheme;
     use rand::{RngCore, SeedableRng};
     use sha2::{Digest, Sha256};
     use testing::TestablePersistence;

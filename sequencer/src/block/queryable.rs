@@ -3,7 +3,7 @@ use crate::block::payload::Payload;
 use crate::block::tables::TxTable;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::vid::{vid_scheme, SmallRangeProofType};
-use jf_primitives::vid::payload_prover::{PayloadProver, Statement};
+use jf_vid::payload_prover::{PayloadProver, Statement};
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 

@@ -27,6 +27,5 @@ node_modules/
 cache
 
 **/*.bin
-
 # yarn cache
 yarn.lock

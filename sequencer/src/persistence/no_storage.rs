@@ -2,15 +2,17 @@
 #![cfg(any(test, feature = "testing"))]
 
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Header, Leaf, SeqTypes, ValidatedState, ViewNumber};
-use anyhow::bail;
+use crate::{Leaf, SeqTypes, ViewNumber};
 use async_trait::async_trait;
 use hotshot_types::{
+    consensus::CommitmentMap,
     data::{DAProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
+    utils::View,
 };
+use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Options;
@@ -63,6 +65,12 @@ impl SequencerPersistence for NoStorage {
         Ok(None)
     }
 
+    async fn load_undecided_state(
+        &self,
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
+        Ok(None)
+    }
+
     async fn load_da_proposal(
         &self,
         _view: ViewNumber,
@@ -96,8 +104,11 @@ impl SequencerPersistence for NoStorage {
     ) -> anyhow::Result<()> {
         Ok(())
     }
-
-    async fn load_validated_state(&self, _header: &Header) -> anyhow::Result<ValidatedState> {
-        bail!("state persistence not implemented");
+    async fn update_undecided_state(
+        &mut self,
+        _leaves: CommitmentMap<Leaf>,
+        _state: BTreeMap<ViewNumber, View<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
     }
 }

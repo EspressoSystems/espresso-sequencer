@@ -378,6 +378,7 @@ mod test {
         let node_state = NodeState::mock().with_l1(L1Client::new(
             anvil.provider().url().clone(),
             Address::default(),
+            1,
         ));
 
         for i in 0..num_batches {
@@ -450,6 +451,7 @@ mod test {
         let node_state = NodeState::mock().with_l1(L1Client::new(
             anvil.provider().url().clone(),
             Address::default(),
+            1,
         ));
         data.leaves.push(Some(mock_leaf(0, &node_state)));
 
@@ -514,6 +516,7 @@ mod test {
         let node_state = NodeState::mock().with_l1(L1Client::new(
             anvil.provider().url().clone(),
             Address::default(),
+            1,
         ));
 
         // Create a sequence of leaves, some of which are missing.

@@ -15,6 +15,10 @@ hotshot-query-service = { workspace = true, features = ["testing"] }
 rand = "0.8.5"
 tempfile = "3.9.0"
 
+[build-dependencies]
+anyhow = { workspace = true }
+vergen = { workspace = true }
+
 [dependencies]
 anyhow = { workspace = true }
 ark-bls12-381 = { workspace = true }
@@ -60,12 +64,15 @@ hotshot-task = { workspace = true }
 # Dependencies for feature `testing`
 hotshot-testing = { workspace = true, optional = true }
 hotshot-types = { workspace = true }
-hotshot-web-server = { workspace = true }
 include_dir = "0.7"
 itertools = { workspace = true }
+jf-crhf = { workspace = true }
+jf-merkle-tree = { workspace = true }
+jf-rescue = { workspace = true }
 
-jf-primitives = { workspace = true }
+jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
+jf-vid = { workspace = true }
 lazy_static = "1.4"
 num-traits = "0.2.18"
 portpicker = { workspace = true }
@@ -89,7 +96,6 @@ toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = "0.3.18"
 trait-set = "0.3.0"
-trait-variant = { workspace = true }
 typenum = { version = "1.15.0", default-features = false, features = [
     "no_std",
 ] }

@@ -53,6 +53,8 @@ where
     let chain_config = ChainConfig::new(opt.chain_id, opt.max_block_size, opt.base_fee);
     let l1_params = L1Params {
         url: opt.l1_provider_url,
+        finalized_block: opt.l1_genesis,
+        events_max_block_range: opt.l1_events_max_block_range,
     };
     let builder_params = BuilderParams {
         prefunded_accounts: opt.prefunded_builder_accounts,
@@ -89,61 +91,63 @@ where
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
     let ctx = match modules.http {
-        Some(opt) => {
+        Some(http_opt) => {
             // Add optional API modules as requested.
-            let mut opt = api::Options::from(opt);
+            let mut http_opt = api::Options::from(http_opt);
             if let Some(query) = modules.query {
-                opt = storage_opt.enable_query_module(opt, query);
+                http_opt = storage_opt.enable_query_module(http_opt, query);
             }
             if let Some(submit) = modules.submit {
-                opt = opt.submit(submit);
+                http_opt = http_opt.submit(submit);
             }
             if let Some(status) = modules.status {
-                opt = opt.status(status);
+                http_opt = http_opt.status(status);
             }
             if let Some(state) = modules.state {
-                opt = opt.state(state);
+                http_opt = http_opt.state(state);
             }
             if let Some(catchup) = modules.catchup {
-                opt = opt.catchup(catchup);
+                http_opt = http_opt.catchup(catchup);
             }
             if let Some(hotshot_events) = modules.hotshot_events {
-                opt = opt.hotshot_events(hotshot_events);
+                http_opt = http_opt.hotshot_events(hotshot_events);
             }
 
-            let storage = storage_opt.create().await?;
-            opt.serve(
-                move |metrics| {
-                    async move {
-                        init_node(
-                            network_params,
-                            &*metrics,
-                            storage,
-                            builder_params,
-                            l1_params,
-                            stake_table_capacity,
-                            bind_version,
-                            chain_config,
-                        )
-                        .await
-                        .unwrap()
-                    }
-                    .boxed()
-                },
-                bind_version,
-            )
-            .await?
+            http_opt
+                .serve(
+                    move |metrics| {
+                        async move {
+                            init_node(
+                                network_params,
+                                &*metrics,
+                                storage_opt,
+                                builder_params,
+                                l1_params,
+                                stake_table_capacity,
+                                bind_version,
+                                chain_config,
+                                opt.is_da,
+                            )
+                            .await
+                            .unwrap()
+                        }
+                        .boxed()
+                    },
+                    bind_version,
+                )
+                .await?
         }
         None => {
             init_node(
                 network_params,
                 &NoMetrics,
-                storage_opt.create().await?,
+                storage_opt,
                 builder_params,
                 l1_params,
                 stake_table_capacity,
                 bind_version,
                 chain_config,
+                opt.is_da,
             )
             .await?
         }

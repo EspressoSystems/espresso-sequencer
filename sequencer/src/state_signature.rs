@@ -20,11 +20,10 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use jf_primitives::{
-    crhf::{VariableLengthRescueCRHF, CRHF},
-    errors::PrimitivesError,
-    signatures::SignatureScheme,
-};
+use jf_crhf::CRHF;
+use jf_rescue::crhf::VariableLengthRescueCRHF;
+use jf_rescue::RescueError;
+use jf_signature::SignatureScheme;
 use std::collections::{HashMap, VecDeque};
 use surf_disco::{Client, Url};
 use tide_disco::error::ServerError;
@@ -138,7 +137,7 @@ impl<Ver: StaticVersionType> StateSigner<Ver> {
     }
 }
 
-fn hash_bytes_to_field(bytes: &[u8]) -> Result<CircuitField, PrimitivesError> {
+fn hash_bytes_to_field(bytes: &[u8]) -> Result<CircuitField, RescueError> {
     // make sure that `mod_order` won't happen.
     let bytes_len = ((<CircuitField as PrimeField>::MODULUS_BIT_SIZE + 7) / 8 - 1) as usize;
     let elem = bytes
@@ -151,7 +150,7 @@ fn hash_bytes_to_field(bytes: &[u8]) -> Result<CircuitField, PrimitivesError> {
 fn form_light_client_state(
     leaf: &Leaf,
     stake_table_comm: &StakeTableCommitmentType,
-) -> Result<LightClientState, PrimitivesError> {
+) -> anyhow::Result<LightClientState> {
     let header = leaf.get_block_header();
     let mut block_comm_root_bytes = vec![];
     header

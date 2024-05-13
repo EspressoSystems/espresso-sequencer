@@ -5,8 +5,8 @@ use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
 use hotshot_types::data::ViewNumber;
 use hotshot_types::traits::node_implementation::ConsensusTime;
-use sequencer::eth_signature_key::EthKeyPair;
 use sequencer::L1Params;
+use sequencer::{eth_signature_key::EthKeyPair, options::parse_size};
 use snafu::Snafu;
 use std::num::NonZeroUsize;
 use std::{str::FromStr, time::Duration};
@@ -42,6 +42,10 @@ struct NonPermissionedBuilderOptions {
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
     state_peers: Vec<Url>,
 
+    /// Maximum size in bytes of a block
+    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE", value_parser = parse_size)]
+    pub max_block_size: u64,
+
     /// Port to run the builder server on.
     #[clap(short, long, env = "ESPRESSO_BUILDER_SERVER_PORT")]
     port: u16,
@@ -53,6 +57,10 @@ struct NonPermissionedBuilderOptions {
     /// BUILDER CHANNEL CAPACITY
     #[clap(short, long, env = "ESPRESSO_BUILDER_CHANNEL_CAPACITY")]
     channel_capacity: NonZeroUsize,
+
+    /// NETWORK INITIAL NODE COUNT
+    #[clap(short, long, env = "ESPRESSO_BUILDER_INIT_NODE_COUNT")]
+    node_count: NonZeroUsize,
 
     /// The amount of time a builder can wait before timing out a request to the API.
     #[clap(
@@ -66,12 +74,15 @@ struct NonPermissionedBuilderOptions {
 
     /// The number of views to buffer before a builder garbage collects its state
     #[clap(
-        short,
         long,
         env = "ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT",
         default_value = "15"
     )]
     buffer_view_num_count: usize,
+
+    /// Base Fee for a block
+    #[clap(long, env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE", default_value = "0")]
+    base_fee: u64,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -98,6 +109,8 @@ async fn main() -> anyhow::Result<()> {
 
     let l1_params = L1Params {
         url: opt.l1_provider_url,
+        finalized_block: None,
+        events_max_block_range: 10000,
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
@@ -105,10 +118,18 @@ async fn main() -> anyhow::Result<()> {
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
-    let instance_state =
-        build_instance_state(l1_params, opt.state_peers, sequencer_version).unwrap();
+    let instance_state = build_instance_state(
+        l1_params,
+        opt.state_peers,
+        opt.max_block_size,
+        sequencer_version,
+    )
+    .unwrap();
 
     let api_response_timeout_duration = opt.max_api_timeout_duration;
+
+    // make the txn timeout as 1/4 of the api_response_timeout_duration
+    let txn_timeout_duration = api_response_timeout_duration / 4;
 
     let buffer_view_num_count = opt.buffer_view_num_count;
 
@@ -116,11 +137,14 @@ async fn main() -> anyhow::Result<()> {
         builder_key_pair,
         bootstrapped_view,
         opt.channel_capacity,
+        opt.node_count,
         instance_state,
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,
         buffer_view_num_count,
+        txn_timeout_duration,
+        opt.base_fee,
     )
     .await;
 

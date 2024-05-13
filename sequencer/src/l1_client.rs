@@ -17,12 +17,20 @@
 //!   will still be able to propose on time.
 
 use crate::state::FeeInfo;
+use anyhow::Context;
 use async_std::task::sleep;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::prelude::*;
-use futures::join;
+use futures::{
+    join,
+    stream::{self, StreamExt},
+};
 use serde::{Deserialize, Serialize};
-use std::{cmp::Ordering, sync::Arc, time::Duration};
+use std::{
+    cmp::{min, Ordering},
+    sync::Arc,
+    time::Duration,
+};
 use url::Url;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -93,15 +101,18 @@ pub struct L1Client {
     provider: Provider<Http>,
     /// `Address` of fee contract.
     _address: Address,
+    /// Maximum number of L1 blocks that can be scanned for events in a single query.
+    events_max_block_range: u64,
 }
 
 impl L1Client {
     /// Instantiate an `L1Client` for a given `Url`.
-    pub fn new(url: Url, contract_address: Address) -> Self {
+    pub fn new(url: Url, contract_address: Address, events_max_block_range: u64) -> Self {
         Self {
             retry_delay: Duration::from_secs(1),
             provider: Provider::new(Http::new(url)),
             _address: contract_address,
+            events_max_block_range,
         }
     }
     /// Get a snapshot from the l1.
@@ -109,6 +120,22 @@ impl L1Client {
         let (head, finalized) = join!(self.get_block_number(), self.get_finalized_block());
         L1Snapshot { head, finalized }
     }
+
+    /// Get information about the given block.
+    pub async fn get_block(&self, number: u64) -> anyhow::Result<L1BlockInfo> {
+        let block = self
+            .provider
+            .get_block(number)
+            .await?
+            .context(format!("no block {number}"))?;
+        let hash = block.hash.context(format!("block {number} has no hash"))?;
+        Ok(L1BlockInfo {
+            number,
+            hash,
+            timestamp: block.timestamp,
+        })
+    }
+
     /// Proxy to `Provider.get_block_number`.
     async fn get_block_number(&self) -> u64 {
         loop {
@@ -142,7 +169,7 @@ impl L1Client {
     ) -> Vec<FeeInfo> {
         // No new blocks have been finalized, therefore there are no
         // new deposits.
-        if prev_finalized == Some(new_finalized) {
+        if prev_finalized >= Some(new_finalized) {
             return vec![];
         }
 
@@ -150,27 +177,53 @@ impl L1Client {
         // haven't processed *any* blocks yet.
         let prev = prev_finalized.map(|prev| prev + 1).unwrap_or(0);
 
-        // query for deposit events, loop until successful.
-        let events = loop {
-            match contract_bindings::fee_contract::FeeContract::new(
-                self._address,
-                Arc::new(&self.provider),
-            )
-            .deposit_filter()
-            .address(self._address.into())
-            .from_block(prev)
-            .to_block(new_finalized)
-            .query()
-            .await
-            {
-                Ok(events) => break events,
-                Err(e) => {
-                    tracing::warn!("Fee Event Error: {}", e);
-                    sleep(self.retry_delay).await;
+        // Divide the range `prev_finalized..=new_finalized` into chunks of size
+        // `events_max_block_range`.
+        let mut start = prev;
+        let end = new_finalized;
+        let chunk_size = self.events_max_block_range;
+        let chunks = std::iter::from_fn(move || {
+            let chunk_end = min(start + chunk_size - 1, end);
+            if chunk_end < start {
+                return None;
+            }
+
+            let chunk = (start, chunk_end);
+            start = chunk_end + 1;
+            Some(chunk)
+        });
+
+        // Fetch events for each chunk.
+        let events = stream::iter(chunks).then(|(from, to)| {
+            let address = self._address;
+            let provider = self.provider.clone();
+            let retry_delay = self.retry_delay;
+            async move {
+                tracing::debug!(from, to, "fetch events in range");
+
+                // query for deposit events, loop until successful.
+                loop {
+                    match contract_bindings::fee_contract::FeeContract::new(
+                        address,
+                        Arc::new(&provider),
+                    )
+                    .deposit_filter()
+                    .address(address.into())
+                    .from_block(from)
+                    .to_block(to)
+                    .query()
+                    .await
+                    {
+                        Ok(events) => break stream::iter(events),
+                        Err(err) => {
+                            tracing::warn!(from, to, %err, "Fee Event Error");
+                            sleep(retry_delay).await;
+                        }
+                    }
                 }
             }
-        };
-        events.into_iter().map(Into::into).collect()
+        });
+        events.flatten().map(FeeInfo::from).collect().await
     }
 }
 
@@ -206,19 +259,22 @@ async fn get_finalized_block<P: JsonRpcClient>(
 #[cfg(test)]
 mod test {
 
-    use std::ops::Add;
-
     use super::*;
     use crate::NodeState;
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use contract_bindings::fee_contract::FeeContract;
     use ethers::utils::{parse_ether, Anvil};
+    use std::ops::Add;
 
     #[async_std::test]
     async fn test_l1_block_fetching() -> anyhow::Result<()> {
+        setup_logging();
+        setup_backtrace();
+
         // Test l1_client methods against `ethers::Provider`. There is
         // also some sanity testing demonstrating `Anvil` availability.
         let anvil = Anvil::new().block_time(1u32).spawn();
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), Address::default());
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), Address::default(), 1);
         let provider = &l1_client.provider;
 
         let version = provider.client_version().await.unwrap();
@@ -229,6 +285,7 @@ mod test {
         let state = NodeState::mock().with_l1(L1Client::new(
             anvil.endpoint().parse().unwrap(),
             Address::default(),
+            1,
         ));
         let version = state.l1_client().provider.client_version().await.unwrap();
         assert_eq!("anvil/v0.2.0", version);
@@ -253,13 +310,16 @@ mod test {
 
     #[async_std::test]
     async fn test_get_finalized_deposits() -> anyhow::Result<()> {
+        setup_logging();
+        setup_backtrace();
+
         // how many deposits will we make
         let deposits = 5;
         let deploy_txn_count = 2;
 
         let anvil = Anvil::new().spawn();
         let wallet_address = anvil.addresses().first().cloned().unwrap();
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), Address::default());
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), Address::default(), 1);
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
         // In order to deposit we need a provider that can sign.
@@ -327,6 +387,7 @@ mod test {
         let l1_client = L1Client::new(
             anvil.endpoint().parse().unwrap(),
             fee_contract_proxy.address(),
+            1,
         );
         // Set prev deposits to `None` so `Filter` will start at block
         // 0. The test would also succeed if we pass `0` (b/c first
@@ -335,7 +396,7 @@ mod test {
             .get_finalized_deposits(None, deposits + deploy_txn_count)
             .await;
 
-        assert_eq!(deposits as usize, pending.len());
+        assert_eq!(deposits as usize, pending.len(), "{pending:?}");
         assert_eq!(&wallet_address, &pending[0].account().into());
         assert_eq!(
             U256::from(1500000000000000000u64),
