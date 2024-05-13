@@ -111,7 +111,6 @@ use futures::{
 };
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_merkle_tree::{prelude::MerkleProof, MerkleTreeScheme};
-
 use std::{
     cmp::min,
     fmt::{Debug, Display},
@@ -119,6 +118,7 @@ use std::{
     ops::{Bound, Deref, DerefMut, Range, RangeBounds},
     time::Duration,
 };
+use tracing::Instrument;
 
 mod block;
 mod header;
@@ -139,6 +139,7 @@ pub struct Builder<Types, S, P> {
     range_chunk_size: usize,
     minor_scan_interval: Duration,
     major_scan_interval: usize,
+    major_scan_offset: usize,
     proactive_range_chunk_size: Option<usize>,
     proactive_fetching: bool,
     _types: PhantomData<Types>,
@@ -160,6 +161,9 @@ impl<Types, S, P> Builder<Types, S, P> {
             // usability. We run them rarely, once every 60 minor scans, or once every hour by
             // default.
             major_scan_interval: 60,
+            // Major scan offset can be used when starting multiple nodes at the same time, so they
+            // don't all pause for a major scan together.
+            major_scan_offset: 0,
             proactive_range_chunk_size: None,
             proactive_fetching: true,
             _types: Default::default(),
@@ -197,6 +201,20 @@ impl<Types, S, P> Builder<Types, S, P> {
     /// See [proactive fetching](self#proactive-fetching).
     pub fn with_major_scan_interval(mut self, interval: usize) -> Self {
         self.major_scan_interval = interval;
+        self
+    }
+
+    /// Set the offset (denominated in [minor scans](Self::with_minor_scan_interval)) before the
+    /// first major proactive fetching scan.
+    ///
+    /// This is useful when starting multiple nodes at the same time: major proactive scans can have
+    /// a measurable impact on the performance of the node for a brief time while the scan is
+    /// running, so it may be desirable to prevent a group of nodes from all doing major scans at
+    /// the same time. This can be achieved by giving each node a different `major_scan_offset`.
+    ///
+    /// See also [proactive fetching](self#proactive-fetching).
+    pub fn with_major_scan_offset(mut self, offset: usize) -> Self {
+        self.major_scan_offset = offset;
         self
     }
 
@@ -355,6 +373,7 @@ where
         let proactive_fetching = builder.proactive_fetching;
         let minor_interval = builder.minor_scan_interval;
         let major_interval = builder.major_scan_interval;
+        let major_offset = builder.major_scan_offset;
         let proactive_range_chunk_size = builder
             .proactive_range_chunk_size
             .unwrap_or(builder.range_chunk_size);
@@ -366,6 +385,7 @@ where
                 fetcher.clone().proactive_scan(
                     minor_interval,
                     major_interval,
+                    major_offset,
                     proactive_range_chunk_size,
                 ),
             ))
@@ -1157,59 +1177,75 @@ where
         self: Arc<Self>,
         minor_interval: Duration,
         major_interval: usize,
+        major_offset: usize,
         chunk_size: usize,
     ) {
         let mut prev_height = 0;
 
         for i in 0.. {
-            let (minimum_block_height, block_height) = {
-                let storage = self.storage.read().await;
-                // Get the pruned height or default to 0 if it is not set.
-                // We will start looking for missing blocks from the pruned height.
-                let pruned_height = storage.pruned_height.unwrap_or(0) as usize;
-                // Get the block height; we will look for any missing blocks up to `block_height`.
-                let block_height = storage.height as usize;
-                (pruned_height, block_height)
-            };
+            let major = i % major_interval == major_offset % major_interval;
+            let span = tracing::warn_span!("proactive scan", i, major, prev_height);
+            async {
+                let (minimum_block_height, block_height) = {
+                    let storage = self.storage.read().await;
+                    // Get the pruned height or default to 0 if it is not set.
+                    // We will start looking for missing blocks from the pruned height.
+                    let pruned_height = storage.pruned_height.unwrap_or(0) as usize;
+                    // Get the block height; we will look for any missing blocks up to
+                    // `block_height`.
+                    let block_height = storage.height as usize;
+                    (pruned_height, block_height)
+                };
 
-            // In a major scan, we fetch all blocks between 0 and `block_height`. In minor scans
-            // (much more frequent) we fetch blocks that are missing since the last scan.
-            let start = if i % major_interval == 0 {
-                minimum_block_height
-            } else {
-                prev_height
-            };
-            tracing::info!("starting proactive scan {i} of blocks from {start}-{block_height}");
-            prev_height = block_height;
+                // In a major scan, we fetch all blocks between 0 and `block_height`. In minor scans
+                // (much more frequent) we fetch blocks that are missing since the last scan.
+                let start = if major {
+                    // We log major scans at WARN level, since they happen infrequently and can have
+                    // a measurable impact on performance while running. This also serves as a
+                    // useful progress heartbeat.
+                    tracing::warn!(
+                        start = minimum_block_height,
+                        block_height,
+                        "starting major scan"
+                    );
+                    minimum_block_height
+                } else {
+                    tracing::info!(start = prev_height, block_height, "starting minor scan");
+                    prev_height
+                };
+                prev_height = block_height;
 
-            // Iterate over all blocks that we should have. Merely iterating over the `Fetch`es
-            // without awaiting them is enough to trigger active fetches of missing blocks, since
-            // we always trigger an active fetch when fetching by block number. Moreover, fetching
-            // the block is enough to trigger an active fetch of the corresponding leaf if it too is
-            // missing.
-            //
-            // The chunking behavior of `get_range` automatically ensures that, no matter how big
-            // the range is, we will release the read lock on storage every `chunk_size` items, so
-            // we don't starve out would-be writers.
-            let mut blocks = self
-                .clone()
-                .get_range_with_chunk_size::<_, BlockQueryData<Types>>(
-                    chunk_size,
-                    start..block_height,
-                );
-            while blocks.next().await.is_some() {}
-            // We have to trigger a separate fetch of the VID data, since this is fetched
-            // independently of the block payload.
-            let mut vid = self
-                .clone()
-                .get_range_with_chunk_size::<_, VidCommonQueryData<Types>>(
-                    chunk_size,
-                    start..block_height,
-                );
-            while vid.next().await.is_some() {}
+                // Iterate over all blocks that we should have. Merely iterating over the `Fetch`es
+                // without awaiting them is enough to trigger active fetches of missing blocks,
+                // since we always trigger an active fetch when fetching by block number. Moreover,
+                // fetching the block is enough to trigger an active fetch of the corresponding leaf
+                // if it too is missing.
+                //
+                // The chunking behavior of `get_range` automatically ensures that, no matter how
+                // big the range is, we will release the read lock on storage every `chunk_size`
+                // items, so we don't starve out would-be writers.
+                let mut blocks = self
+                    .clone()
+                    .get_range_with_chunk_size::<_, BlockQueryData<Types>>(
+                        chunk_size,
+                        start..block_height,
+                    );
+                while blocks.next().await.is_some() {}
+                // We have to trigger a separate fetch of the VID data, since this is fetched
+                // independently of the block payload.
+                let mut vid = self
+                    .clone()
+                    .get_range_with_chunk_size::<_, VidCommonQueryData<Types>>(
+                        chunk_size,
+                        start..block_height,
+                    );
+                while vid.next().await.is_some() {}
 
-            tracing::info!("completed proactive scan {i} of blocks from {start}-{block_height}, will scan again in {minor_interval:?}");
-            sleep(minor_interval).await;
+                tracing::info!("completed proactive scan, will scan again in {minor_interval:?}");
+                sleep(minor_interval).await;
+            }
+            .instrument(span)
+            .await;
         }
     }
 }
