@@ -462,6 +462,11 @@ impl ExplorerHeader<SeqTypes> for Header {
         self.fee_info.amount()
     }
 
+    /// reward_balance at the moment is only implemented as a stub, as block
+    /// rewards have not yet been implemented.
+    ///
+    /// TODO: update implementation when rewards have been created / supported.
+    ///       Issue: https://github.com/EspressoSystems/espresso-sequencer/issues/1453
     fn reward_balance(&self) -> Self::BalanceAmount {
         FeeAmount::from(0)
     }
