@@ -5,7 +5,6 @@ use crate::{
         ns_payload::{NamespacePayloadBuilder, NsPayload},
         ns_payload_range::NsPayloadRange,
         ns_table::NsTable,
-        tx_proof::TxProof,
         uint_bytes::{u64_to_bytes, usize_to_bytes},
         NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
     },
@@ -18,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::{collections::HashMap, fmt::Display};
 
-use super::{NsPayload2, NsPayloadRange2};
+use super::{NsPayload2, NsPayloadRange2, TxProof2};
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {
@@ -129,7 +128,7 @@ impl QueryablePayload for Payload {
     // TODO change `QueryablePayload` trait: remove `Ord` bound from `TransactionIndex`
     type TransactionIndex = Index;
     type Iter<'a> = Iter<'a>;
-    type InclusionProof = TxProof;
+    type InclusionProof = TxProof2;
 
     // TODO change `QueryablePayload` trait: remove arg `Self::Metadata`
     fn len(&self, _meta: &Self::Metadata) -> usize {

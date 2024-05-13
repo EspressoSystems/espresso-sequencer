@@ -1,9 +1,5 @@
 use crate::{
-    block2::{
-        ns_proof::NsProof,
-        payload::Payload,
-        tx_proof::{TxProof, TxProof2},
-    },
+    block2::{ns_proof::NsProof, payload::Payload, tx_proof::TxProof2},
     NamespaceId, Transaction,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -64,14 +60,6 @@ fn basic_correctness() {
             let test_tx = all_txs.remove(all_txs.iter().position(|t| t == &tx).unwrap());
             assert_eq!(tx, test_tx);
 
-            let tx_proof = {
-                let (tx2, tx_proof) = TxProof::new(&tx_index, &block, &vid_common).unwrap();
-                assert_eq!(tx, tx2);
-                tx_proof
-            };
-            assert!(tx_proof.verify(&tx, &vid_commit, &vid_common).unwrap());
-
-            // TODO temporary WIP
             let tx_proof2 = {
                 let (tx2, tx_proof) = TxProof2::new2(&tx_index, &block, &vid_common).unwrap();
                 assert_eq!(tx, tx2);
