@@ -4,12 +4,7 @@
 
 use std::ops::Range;
 
-use super::{
-    newtypes::{NumTxsRangeRelative, TxTableEntriesRangeRelative},
-    num_txs::NumTxs,
-    tx_iter::TxIndex,
-    NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
-};
+use super::{num_txs::NumTxs, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct NsPayloadRange2(Range<usize>);
@@ -22,13 +17,14 @@ impl NsPayloadRange2 {
         self.0.clone()
     }
 
-    // TODO visibility: used only in NsPayload, TxIndex, TxTableEntries,...
-    pub fn num_txs_range_relative(&self) -> NumTxsRangeRelative {
-        NumTxsRangeRelative(0..NUM_TXS_BYTE_LEN.min(self.0.len()))
+    // TODO replace NsPayloadRange with 2 types: NsPayloadByteLen, NsPayloadOffset?
+    /// TODO newtype for return type?
+    pub fn byte_len(&self) -> usize {
+        self.0.len()
     }
-
-    pub fn num_txs_range(&self) -> Range<usize> {
-        self.translate(self.num_txs_range_relative().0)
+    /// TODO newtype for return type?
+    pub fn offset(&self) -> usize {
+        self.0.start
     }
 
     /// Number of txs in this namespace.
@@ -46,15 +42,6 @@ impl NsPayloadRange2 {
         )
     }
 
-    pub fn tx_table_entries_range_relative(&self, index: &TxIndex) -> TxTableEntriesRangeRelative {
-        // TODO move this code out of `TxIndex`
-        TxTableEntriesRangeRelative(index.tx_table_entries_range_relative())
-    }
-
-    pub fn tx_table_entries_range(&self, index: &TxIndex) -> Range<usize> {
-        self.translate(self.tx_table_entries_range_relative(index).0)
-    }
-
     // TODO is `tx_offset_range_relative` needed, or can we go straight to
     // `tx_entries_range_relative`? If it is needed, do I need a
     // `tx_offset_range` method?
@@ -64,7 +51,7 @@ impl NsPayloadRange2 {
     // }
 
     // private helpers
-    fn translate(&self, range: Range<usize>) -> Range<usize> {
-        range.start + self.0.start..range.end + self.0.start
-    }
+    // fn translate(&self, range: Range<usize>) -> Range<usize> {
+    //     range.start + self.0.start..range.end + self.0.start
+    // }
 }

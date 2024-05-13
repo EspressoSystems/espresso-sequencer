@@ -13,7 +13,13 @@ use jf_primitives::vid::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::NsPayloadRange2;
+use super::{
+    newtypes::{
+        AsPayloadBytes, NumTxs2, NumTxsRange2, PayloadBytesRange, TxTableEntries2,
+        TxTableEntriesRange2,
+    },
+    NsPayloadRange2,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxProof {
@@ -41,11 +47,11 @@ pub struct TxProof2 {
     tx_index: TxIndex,
 
     // Number of txs declared in the tx table
-    payload_num_txs: NumTxs,
+    payload_num_txs: NumTxs2,
     payload_proof_num_txs: SmallRangeProofType,
 
     // Tx table entries for this tx
-    payload_tx_table_entries: TxTableEntries,
+    payload_tx_table_entries: TxTableEntries2,
     payload_proof_tx_table_entries: SmallRangeProofType,
 }
 
@@ -61,18 +67,25 @@ impl TxProof2 {
 
         // Read the tx table len from this namespace's tx table and compute a
         // proof of correctness.
-        let payload_num_txs = ns_payload.read(ns_payload_range.num_txs_range_relative());
+        let num_txs_range = NumTxsRange2::new(ns_payload_range.byte_len());
+        let payload_num_txs = ns_payload.read(&num_txs_range);
         let payload_proof_num_txs = vid
-            .payload_proof(payload.as_byte_slice(), ns_payload_range.num_txs_range())
+            .payload_proof(
+                payload.as_byte_slice(),
+                num_txs_range.block_payload_range(ns_payload_range.offset()),
+            )
             .ok()?;
 
         // Read the tx table entries for this tx and compute a proof of
         // correctness.
-        let payload_tx_table_entries =
-            ns_payload.read(ns_payload_range.tx_table_entries_range_relative(index.tx()));
+        let tx_table_entries_range = TxTableEntriesRange2::new(index.tx());
+        let payload_tx_table_entries = ns_payload.read(&tx_table_entries_range);
         let payload_proof_tx_table_entries = {
-            let range = ns_payload_range.tx_table_entries_range(index.tx());
-            vid.payload_proof(payload.as_byte_slice(), range).ok()?
+            vid.payload_proof(
+                payload.as_byte_slice(),
+                tx_table_entries_range.block_payload_range(ns_payload_range.offset()),
+            )
+            .ok()?
         };
 
         Some((
@@ -102,8 +115,9 @@ impl TxProof2 {
             if vid
                 .payload_verify(
                     Statement {
-                        payload_subslice: &self.payload_num_txs.as_bytes(),
-                        range: self.ns_payload_range.num_txs_range(),
+                        payload_subslice: self.payload_num_txs.to_payload_bytes().as_ref(),
+                        range: NumTxsRange2::new(self.ns_payload_range.byte_len())
+                            .block_payload_range(self.ns_payload_range.offset()),
                         commit,
                         common,
                     },
@@ -118,28 +132,12 @@ impl TxProof2 {
 
         // Verify proof for tx table entries
         {
-            // TODO this is the only place we use `self.tx_index`. But if we
-            // want to eliminate it then we need another way to get the
-            // tx_table_entries_range -> so we'd have to replace `tx_index` with
-            // a new range for tx_table entries, which is no improvement.
-            // Basically `tx_index` is a way to compress this range.
-            let range = self.ns_payload_range.tx_table_entries_range(&self.tx_index);
-
-            // concatenate the two table entry payloads
-            let payload_subslice = &self.payload_tx_table_entries.as_bytes();
-
-            // tracing::info!(
-            //     "verify: tx_index {:?}, tx_table_entries_range {:?}, content {:?}",
-            //     self.tx_index,
-            //     range,
-            //     payload_subslice
-            // );
-
             if vid
                 .payload_verify(
                     Statement {
-                        payload_subslice,
-                        range,
+                        payload_subslice: self.payload_tx_table_entries.to_payload_bytes().as_ref(),
+                        range: TxTableEntriesRange2::new(&self.tx_index)
+                            .block_payload_range(self.ns_payload_range.offset()),
                         commit,
                         common,
                     },

@@ -12,11 +12,11 @@ impl NsPayload2 {
         unsafe { &*(bytes as *const [u8] as *const NsPayload2) }
     }
 
-    pub fn read<T>(&self, range: T) -> T::Output
+    pub fn read<T>(&self, range: &T) -> T::Output
     where
         T: PayloadBytesRange,
     {
-        <T::Output as AsPayloadBytes>::from_payload_bytes(&self.0[range.range()])
+        <T::Output as AsPayloadBytes>::from_payload_bytes(&self.0[range.ns_payload_range()])
     }
 
     // TODO write helper wrappers for `NsPayloadRange`, eg `num_txs()`?
