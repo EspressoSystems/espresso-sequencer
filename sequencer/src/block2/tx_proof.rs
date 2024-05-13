@@ -18,7 +18,7 @@ use super::{
         AsPayloadBytes, NumTxs2, NumTxsRange2, PayloadBytesRange, TxTableEntries2,
         TxTableEntriesRange2,
     },
-    NsPayloadRange2,
+    ns_table::NsTable,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -43,7 +43,6 @@ pub struct TxProof {
 }
 
 pub struct TxProof2 {
-    ns_payload_range: NsPayloadRange2,
     tx_index: TxIndex,
 
     // Number of txs declared in the tx table
@@ -134,7 +133,6 @@ impl TxProof2 {
         Some((
             payload.transaction(index)?,
             TxProof2 {
-                ns_payload_range,
                 tx_index: index.tx().clone(),
                 payload_num_txs,
                 payload_proof_num_txs,
@@ -147,14 +145,21 @@ impl TxProof2 {
 
     pub fn verify(
         &self,
+        ns_table: &NsTable,
         tx: &Transaction,
         commit: &VidCommitment,
         common: &VidCommon,
     ) -> Option<bool> {
         VidSchemeType::is_consistent(commit, common).ok()?;
+        let Some(ns_index) = ns_table.find_ns_id(&tx.namespace()) else {
+            return None; // error: ns id does not exist
+        };
+        let ns_payload_range =
+            ns_table.ns_payload_range2(&ns_index, VidSchemeType::get_payload_byte_len(common));
+        if !ns_payload_range.in_bounds(&self.tx_index, &self.payload_num_txs) {
+            return None; // error: tx index out of bounds
+        }
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
-
-        // TODO check `self.tx_index` in bounds
 
         // Verify proof for tx table len
         {
@@ -162,8 +167,8 @@ impl TxProof2 {
                 .payload_verify(
                     Statement {
                         payload_subslice: self.payload_num_txs.to_payload_bytes().as_ref(),
-                        range: NumTxsRange2::new(self.ns_payload_range.byte_len())
-                            .block_payload_range(self.ns_payload_range.offset()),
+                        range: NumTxsRange2::new(ns_payload_range.byte_len())
+                            .block_payload_range(ns_payload_range.offset()),
                         commit,
                         common,
                     },
@@ -183,7 +188,7 @@ impl TxProof2 {
                     Statement {
                         payload_subslice: self.payload_tx_table_entries.to_payload_bytes().as_ref(),
                         range: TxTableEntriesRange2::new(&self.tx_index)
-                            .block_payload_range(self.ns_payload_range.offset()),
+                            .block_payload_range(ns_payload_range.offset()),
                         commit,
                         common,
                     },
@@ -201,9 +206,9 @@ impl TxProof2 {
             let range = TxPayloadRange::new(
                 &self.payload_num_txs,
                 &self.payload_tx_table_entries,
-                self.ns_payload_range.byte_len(),
+                ns_payload_range.byte_len(),
             )
-            .block_payload_range(self.ns_payload_range.offset());
+            .block_payload_range(ns_payload_range.offset());
 
             tracing::info!(
                 "verify: tx_index {:?}, tx_payload_range {:?}, content {:?}",
