@@ -1,18 +1,39 @@
-use std::ops::Range;
-
 use super::{
     tx_iter::TxIndex,
     tx_table_entries::TxTableEntries,
     uint_bytes::{usize_from_bytes, usize_to_bytes},
     NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::ops::Range;
 
 pub trait AsPayloadBytes<'a> {
     fn to_payload_bytes(&self) -> impl AsRef<[u8]>;
     fn from_payload_bytes(bytes: &'a [u8]) -> Self;
 }
 
-// TODO impl serde for any T that impls AsBytes
+macro_rules! as_payload_bytes_serde_impl {
+    ($T:ty) => {
+        impl Serialize for $T {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                self.to_payload_bytes().as_ref().serialize(serializer)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $T {
+            fn deserialize<D>(deserializer: D) -> Result<$T, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                <&[u8] as Deserialize>::deserialize(deserializer)
+                    .map(|bytes| <$T>::from_payload_bytes(bytes))
+            }
+        }
+    };
+}
 
 pub trait PayloadBytesRange {
     type Output<'a>: AsPayloadBytes<'a>;
@@ -53,7 +74,9 @@ impl AsPayloadBytes<'_> for TxTableEntries {
 
 // WIP WIP
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NumTxs2(usize);
+as_payload_bytes_serde_impl!(NumTxs2);
 
 impl NumTxs2 {
     // TODO can I get rid of this?
@@ -93,10 +116,12 @@ impl PayloadBytesRange for NumTxsRange2 {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TxTableEntries2 {
     cur: usize,
     prev: Option<usize>,
 }
+as_payload_bytes_serde_impl!(TxTableEntries2);
 
 impl TxTableEntries2 {
     const TWO_ENTRIES_BYTE_LEN: usize = 2 * TX_OFFSET_BYTE_LEN;

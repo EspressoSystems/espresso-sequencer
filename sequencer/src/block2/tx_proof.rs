@@ -42,7 +42,11 @@ pub struct TxProof {
     payload_proof_tx: Option<SmallRangeProofType>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TxProof2 {
+    // Naming conventions for this struct's fields:
+    // - `payload_x`: bytes from the payload
+    // - `payload_proof_x`: a proof of those bytes from the payload
     tx_index: TxIndex,
 
     // Number of txs declared in the tx table
