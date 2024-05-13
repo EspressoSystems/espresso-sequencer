@@ -9,7 +9,7 @@ use hotshot_example_types::{
 use hotshot_task_impls::{events::HotShotEvent, vid::VIDTaskState};
 use hotshot_testing::task_helpers::{build_system_handle, vid_scheme_from_view_number};
 use hotshot_types::{
-    data::{null_block, DAProposal, VidDisperse, VidDisperseShare, ViewNumber},
+    data::{null_block, DaProposal, VidDisperse, VidDisperseShare, ViewNumber},
     traits::{
         consensus_api::ConsensusApi,
         election::Membership,
@@ -50,7 +50,7 @@ async fn test_vid_task() {
         payload_commitment.as_ref(),
     )
     .expect("Failed to sign block payload!");
-    let proposal: DAProposal<TestTypes> = DAProposal {
+    let proposal: DaProposal<TestTypes> = DaProposal {
         encoded_transactions: encoded_transactions.clone(),
         metadata: TestMetadata,
         view_number: ViewNumber::new(2),

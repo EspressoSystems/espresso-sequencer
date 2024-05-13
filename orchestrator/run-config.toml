@@ -47,8 +47,8 @@ start_threshold = [
     8,
     10,
 ]
-staked_committee_nodes = 10
-non_staked_committee_nodes = 0
+staked_da_nodes = 10
+non_staked_da_nodes = 0
 fixed_leader_for_gpuvid = 1
 next_view_timeout = 30000
 timeout_ratio = [

@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use super::node_implementation::NodeType;
 use crate::{
     consensus::{CommitmentMap, View},
-    data::{DAProposal, Leaf, VidDisperseShare},
+    data::{DaProposal, Leaf, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -23,7 +23,7 @@ pub trait Storage<TYPES: NodeType>: Send + Sync + Clone {
     /// Add a proposal to the stored VID proposals.
     async fn append_vid(&self, proposal: &Proposal<TYPES, VidDisperseShare<TYPES>>) -> Result<()>;
     /// Add a proposal to the stored DA proposals.
-    async fn append_da(&self, proposal: &Proposal<TYPES, DAProposal<TYPES>>) -> Result<()>;
+    async fn append_da(&self, proposal: &Proposal<TYPES, DaProposal<TYPES>>) -> Result<()>;
     /// Record a HotShotAction taken.
     async fn record_action(&self, view: TYPES::Time, action: HotShotAction) -> Result<()>;
     /// Update the current high QC in storage.

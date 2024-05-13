@@ -10,9 +10,7 @@ use hotshot_task::dependency::{Dependency, EventDependency};
 use hotshot_types::{
     consensus::Consensus,
     data::VidDisperseShare,
-    message::{
-        CommitteeConsensusMessage, DataMessage, Message, MessageKind, Proposal, SequencingMessage,
-    },
+    message::{DaConsensusMessage, DataMessage, Message, MessageKind, Proposal, SequencingMessage},
     traits::{
         election::Membership,
         network::{DataRequest, RequestKind, ResponseChannel, ResponseMessage},
@@ -157,12 +155,11 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
                 let Some(share) = self.get_or_calc_vid_share(view, &pub_key).await else {
                     return self.make_msg(ResponseMessage::NotFound);
                 };
-                let seq_msg =
-                    SequencingMessage::Committee(CommitteeConsensusMessage::VidDisperseMsg(share));
+                let seq_msg = SequencingMessage::Da(DaConsensusMessage::VidDisperseMsg(share));
                 self.make_msg(ResponseMessage::Found(seq_msg))
             }
             // TODO impl for DA Proposal: https://github.com/EspressoSystems/HotShot/issues/2651
-            RequestKind::DAProposal(_view) => self.make_msg(ResponseMessage::NotFound),
+            RequestKind::DaProposal(_view) => self.make_msg(ResponseMessage::NotFound),
         }
     }
 

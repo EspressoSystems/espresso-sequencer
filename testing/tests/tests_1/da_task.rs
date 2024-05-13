@@ -6,7 +6,7 @@ use hotshot_example_types::{
     node_types::{MemoryImpl, TestTypes},
     state_types::TestInstanceState,
 };
-use hotshot_task_impls::{da::DATaskState, events::HotShotEvent::*};
+use hotshot_task_impls::{da::DaTaskState, events::HotShotEvent::*};
 use hotshot_testing::{
     predicates::event::exact,
     script::{run_test_script, TestScriptStage},
@@ -15,7 +15,7 @@ use hotshot_testing::{
 };
 use hotshot_types::{
     data::{null_block, ViewNumber},
-    simple_vote::DAData,
+    simple_vote::DaData,
     traits::{
         block_contents::precompute_vid_commitment, election::Membership,
         node_implementation::ConsensusTime,
@@ -52,7 +52,7 @@ async fn test_da_task() {
     for view in (&mut generator).take(1) {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
-        votes.push(view.create_da_vote(DAData { payload_commit }, &handle));
+        votes.push(view.create_da_vote(DaData { payload_commit }, &handle));
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
     }
@@ -62,7 +62,7 @@ async fn test_da_task() {
     for view in (&mut generator).take(1) {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
-        votes.push(view.create_da_vote(DAData { payload_commit }, &handle));
+        votes.push(view.create_da_vote(DaData { payload_commit }, &handle));
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
     }
@@ -81,21 +81,21 @@ async fn test_da_task() {
                 precompute,
             ),
         ],
-        outputs: vec![exact(DAProposalSend(proposals[1].clone(), leaders[1]))],
+        outputs: vec![exact(DaProposalSend(proposals[1].clone(), leaders[1]))],
         asserts: vec![],
     };
 
     // Run view 2 and validate proposal.
     let view_2 = TestScriptStage {
-        inputs: vec![DAProposalRecv(proposals[1].clone(), leaders[1])],
+        inputs: vec![DaProposalRecv(proposals[1].clone(), leaders[1])],
         outputs: vec![
-            exact(DAProposalValidated(proposals[1].clone(), leaders[1])),
-            exact(DAVoteSend(votes[1].clone())),
+            exact(DaProposalValidated(proposals[1].clone(), leaders[1])),
+            exact(DaVoteSend(votes[1].clone())),
         ],
         asserts: vec![],
     };
 
-    let da_state = DATaskState::<TestTypes, MemoryImpl, SystemContextHandle<TestTypes, MemoryImpl>>::create_from(&handle).await;
+    let da_state = DaTaskState::<TestTypes, MemoryImpl, SystemContextHandle<TestTypes, MemoryImpl>>::create_from(&handle).await;
     let stages = vec![view_1, view_2];
 
     run_test_script(stages, da_state).await;
@@ -134,7 +134,7 @@ async fn test_da_task_storage_failure() {
     for view in (&mut generator).take(1) {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
-        votes.push(view.create_da_vote(DAData { payload_commit }, &handle));
+        votes.push(view.create_da_vote(DaData { payload_commit }, &handle));
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
     }
@@ -144,7 +144,7 @@ async fn test_da_task_storage_failure() {
     for view in (&mut generator).take(1) {
         proposals.push(view.da_proposal.clone());
         leaders.push(view.leader_public_key);
-        votes.push(view.create_da_vote(DAData { payload_commit }, &handle));
+        votes.push(view.create_da_vote(DaData { payload_commit }, &handle));
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
     }
@@ -163,27 +163,27 @@ async fn test_da_task_storage_failure() {
                 precompute,
             ),
         ],
-        outputs: vec![exact(DAProposalSend(proposals[1].clone(), leaders[1]))],
+        outputs: vec![exact(DaProposalSend(proposals[1].clone(), leaders[1]))],
         asserts: vec![],
     };
 
     // Run view 2 and validate proposal.
     let view_2 = TestScriptStage {
-        inputs: vec![DAProposalRecv(proposals[1].clone(), leaders[1])],
-        outputs: vec![exact(DAProposalValidated(proposals[1].clone(), leaders[1]))],
+        inputs: vec![DaProposalRecv(proposals[1].clone(), leaders[1])],
+        outputs: vec![exact(DaProposalValidated(proposals[1].clone(), leaders[1]))],
         asserts: vec![],
     };
 
     // Run view 3 and propose.
     let view_3 = TestScriptStage {
-        inputs: vec![DAProposalValidated(proposals[1].clone(), leaders[1])],
+        inputs: vec![DaProposalValidated(proposals[1].clone(), leaders[1])],
         outputs: vec![
             /* No vote was sent due to the storage failure */
         ],
         asserts: vec![],
     };
 
-    let da_state = DATaskState::<TestTypes, MemoryImpl, SystemContextHandle<TestTypes, MemoryImpl>>::create_from(&handle).await;
+    let da_state = DaTaskState::<TestTypes, MemoryImpl, SystemContextHandle<TestTypes, MemoryImpl>>::create_from(&handle).await;
     let stages = vec![view_1, view_2, view_3];
 
     run_test_script(stages, da_state).await;

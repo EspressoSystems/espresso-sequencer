@@ -14,7 +14,7 @@ use tracing::instrument;
 
 use crate::{
     infra::{read_orchestrator_init_config, run_orchestrator, OrchestratorArgs},
-    types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun},
+    types::{DaNetwork, NodeImpl, QuorumNetwork, ThisRun},
 };
 
 /// general infra used for this example
@@ -48,7 +48,7 @@ async fn main() {
         );
         let orchestrator_url = orchestrator_url.clone();
         let node = async_spawn(async move {
-            infra::main_entry_point::<TestTypes, DANetwork, QuorumNetwork, NodeImpl, ThisRun>(
+            infra::main_entry_point::<TestTypes, DaNetwork, QuorumNetwork, NodeImpl, ThisRun>(
                 ValidatorArgs {
                     url: orchestrator_url,
                     advertise_address: Some(advertise_address),

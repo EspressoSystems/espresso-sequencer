@@ -324,14 +324,14 @@ fn calculate_num_tx_per_round(
 
 /// Defines the behavior of a "run" of the network with a given configuration
 #[async_trait]
-pub trait RunDA<
+pub trait RunDa<
     TYPES: NodeType<InstanceState = TestInstanceState>,
     DANET: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
     QUORUMNET: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
     NODE: NodeImplementation<
         TYPES,
         QuorumNetwork = QUORUMNET,
-        CommitteeNetwork = DANET,
+        DaNetwork = DANET,
         Storage = TestStorage<TYPES>,
     >,
 > where
@@ -602,10 +602,10 @@ impl<
         NODE: NodeImplementation<
             TYPES,
             QuorumNetwork = PushCdnNetwork<TYPES>,
-            CommitteeNetwork = PushCdnNetwork<TYPES>,
+            DaNetwork = PushCdnNetwork<TYPES>,
             Storage = TestStorage<TYPES>,
         >,
-    > RunDA<TYPES, PushCdnNetwork<TYPES>, PushCdnNetwork<TYPES>, NODE> for PushCdnDaRun<TYPES>
+    > RunDa<TYPES, PushCdnNetwork<TYPES>, PushCdnNetwork<TYPES>, NODE> for PushCdnDaRun<TYPES>
 where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
@@ -668,7 +668,7 @@ where
 // Libp2p
 
 /// Represents a libp2p-based run
-pub struct Libp2pDARun<TYPES: NodeType> {
+pub struct Libp2pDaRun<TYPES: NodeType> {
     /// the network configuration
     config: NetworkConfig<TYPES::SignatureKey>,
     /// quorum channel
@@ -688,16 +688,16 @@ impl<
         NODE: NodeImplementation<
             TYPES,
             QuorumNetwork = Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
-            CommitteeNetwork = Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
+            DaNetwork = Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
             Storage = TestStorage<TYPES>,
         >,
     >
-    RunDA<
+    RunDa<
         TYPES,
         Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
         Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
         NODE,
-    > for Libp2pDARun<TYPES>
+    > for Libp2pDaRun<TYPES>
 where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
@@ -707,7 +707,7 @@ where
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey>,
         libp2p_advertise_address: Option<SocketAddr>,
-    ) -> Libp2pDARun<TYPES> {
+    ) -> Libp2pDaRun<TYPES> {
         // Extrapolate keys for ease of use
         let keys = config.clone().config.my_own_validator_config;
         let public_key = keys.public_key;
@@ -743,7 +743,7 @@ where
         // Wait for the network to be ready
         libp2p_network.wait_for_ready().await;
 
-        Libp2pDARun {
+        Libp2pDaRun {
             config,
             quorum_channel: libp2p_network.clone(),
             da_channel: libp2p_network,
@@ -766,7 +766,7 @@ where
 // Combined network
 
 /// Represents a combined-network-based run
-pub struct CombinedDARun<TYPES: NodeType> {
+pub struct CombinedDaRun<TYPES: NodeType> {
     /// the network configuration
     config: NetworkConfig<TYPES::SignatureKey>,
     /// quorum channel
@@ -786,10 +786,10 @@ impl<
         NODE: NodeImplementation<
             TYPES,
             QuorumNetwork = CombinedNetworks<TYPES>,
-            CommitteeNetwork = CombinedNetworks<TYPES>,
+            DaNetwork = CombinedNetworks<TYPES>,
             Storage = TestStorage<TYPES>,
         >,
-    > RunDA<TYPES, CombinedNetworks<TYPES>, CombinedNetworks<TYPES>, NODE> for CombinedDARun<TYPES>
+    > RunDa<TYPES, CombinedNetworks<TYPES>, CombinedNetworks<TYPES>, NODE> for CombinedDaRun<TYPES>
 where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock,
@@ -799,10 +799,10 @@ where
     async fn initialize_networking(
         config: NetworkConfig<TYPES::SignatureKey>,
         libp2p_advertise_address: Option<SocketAddr>,
-    ) -> CombinedDARun<TYPES> {
+    ) -> CombinedDaRun<TYPES> {
         // Initialize our Libp2p network
-        let libp2p_da_run: Libp2pDARun<TYPES> =
-            <Libp2pDARun<TYPES> as RunDA<
+        let libp2p_da_run: Libp2pDaRun<TYPES> =
+            <Libp2pDaRun<TYPES> as RunDa<
                 TYPES,
                 Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
                 Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
@@ -812,7 +812,7 @@ where
 
         // Initialize our CDN network
         let cdn_da_run: PushCdnDaRun<TYPES> =
-            <PushCdnDaRun<TYPES> as RunDA<
+            <PushCdnDaRun<TYPES> as RunDa<
                 TYPES,
                 PushCdnNetwork<TYPES>,
                 PushCdnNetwork<TYPES>,
@@ -839,7 +839,7 @@ where
         );
 
         // Return the run configuration
-        CombinedDARun {
+        CombinedDaRun {
             config,
             quorum_channel,
             da_channel,
@@ -874,10 +874,10 @@ pub async fn main_entry_point<
     NODE: NodeImplementation<
         TYPES,
         QuorumNetwork = QUORUMCHANNEL,
-        CommitteeNetwork = DACHANNEL,
+        DaNetwork = DACHANNEL,
         Storage = TestStorage<TYPES>,
     >,
-    RUNDA: RunDA<TYPES, DACHANNEL, QUORUMCHANNEL, NODE>,
+    RUNDA: RunDa<TYPES, DACHANNEL, QUORUMCHANNEL, NODE>,
 >(
     args: ValidatorArgs,
 ) where

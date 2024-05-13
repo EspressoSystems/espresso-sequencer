@@ -571,10 +571,10 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     #[serde(skip)]
     /// The known non-staking nodes'
     pub known_nodes_without_stake: Vec<KEY>,
-    /// Number of staking committee nodes
-    pub staked_committee_nodes: usize,
-    /// Number of non-staking committee nodes
-    pub non_staked_committee_nodes: usize,
+    /// Number of staking DA nodes
+    pub staked_da_nodes: usize,
+    /// Number of non-staking DA nodes
+    pub non_staked_da_nodes: usize,
     /// Number of fixed leaders for GPU VID
     pub fixed_leader_for_gpuvid: usize,
     /// Base duration for next-view timeout, in milliseconds
@@ -663,8 +663,8 @@ impl<KEY: SignatureKey> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY> {
             known_nodes_with_stake: val.known_nodes_with_stake,
             known_nodes_without_stake: val.known_nodes_without_stake,
             my_own_validator_config: val.my_own_validator_config,
-            da_staked_committee_size: val.staked_committee_nodes,
-            da_non_staked_committee_size: val.non_staked_committee_nodes,
+            da_staked_committee_size: val.staked_da_nodes,
+            da_non_staked_committee_size: val.non_staked_da_nodes,
             fixed_leader_for_gpuvid: val.fixed_leader_for_gpuvid,
             next_view_timeout: val.next_view_timeout,
             view_sync_timeout: val.view_sync_timeout,
@@ -704,7 +704,7 @@ impl<KEY: SignatureKey> From<ValidatorConfigFile> for HotShotConfig<KEY> {
 impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
     fn default() -> Self {
         // The default number of nodes is 5
-        let staked_committee_nodes: usize = 5;
+        let staked_da_nodes: usize = 5;
 
         // Aggregate the DA nodes
         let mut known_da_nodes = Vec::new();
@@ -715,7 +715,7 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
                     ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1, false);
 
                 // Add to DA nodes based on index
-                if node_id < staked_committee_nodes as u64 {
+                if node_id < staked_da_nodes as u64 {
                     known_da_nodes.push(cur_validator_config.get_public_config());
                     cur_validator_config.is_da = true;
                 }
@@ -731,9 +731,9 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
             my_own_validator_config: ValidatorConfig::default(),
             known_nodes_with_stake: gen_known_nodes_with_stake,
             known_nodes_without_stake: vec![],
-            staked_committee_nodes,
+            staked_da_nodes,
             known_da_nodes,
-            non_staked_committee_nodes: 0,
+            non_staked_da_nodes: 0,
             fixed_leader_for_gpuvid: 1,
             next_view_timeout: 10000,
             view_sync_timeout: Duration::from_millis(1000),

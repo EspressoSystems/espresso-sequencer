@@ -68,12 +68,7 @@ impl<
     > TestTaskState for SpinningTask<TYPES, I>
 where
     I: TestableNodeImplementation<TYPES>,
-    I: NodeImplementation<
-        TYPES,
-        QuorumNetwork = N,
-        CommitteeNetwork = N,
-        Storage = TestStorage<TYPES>,
-    >,
+    I: NodeImplementation<TYPES, QuorumNetwork = N, DaNetwork = N, Storage = TestStorage<TYPES>>,
 {
     type Message = Event<TYPES>;
 

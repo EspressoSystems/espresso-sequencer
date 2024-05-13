@@ -6,7 +6,7 @@ use std::{
 
 use async_trait::async_trait;
 use hotshot_task_impls::{
-    builder::BuilderClient, consensus::ConsensusTaskState, da::DATaskState,
+    builder::BuilderClient, consensus::ConsensusTaskState, da::DaTaskState,
     quorum_proposal::QuorumProposalTaskState, quorum_proposal_recv::QuorumProposalRecvTaskState,
     quorum_vote::QuorumVoteTaskState, request::NetworkRequestState,
     transactions::TransactionTaskState, upgrade::UpgradeTaskState, vid::VIDTaskState,
@@ -101,12 +101,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
-    for DATaskState<TYPES, I, SystemContextHandle<TYPES, I>>
+    for DaTaskState<TYPES, I, SystemContextHandle<TYPES, I>>
 {
     async fn create_from(
         handle: &SystemContextHandle<TYPES, I>,
-    ) -> DATaskState<TYPES, I, SystemContextHandle<TYPES, I>> {
-        DATaskState {
+    ) -> DaTaskState<TYPES, I, SystemContextHandle<TYPES, I>> {
+        DaTaskState {
             api: handle.clone(),
             consensus: handle.hotshot.get_consensus(),
             da_membership: handle.hotshot.memberships.da_membership.clone().into(),
@@ -206,10 +206,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
             quorum_network: Arc::clone(&handle.hotshot.networks.quorum_network),
-            committee_network: Arc::clone(&handle.hotshot.networks.da_network),
+            da_network: Arc::clone(&handle.hotshot.networks.da_network),
             timeout_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
-            committee_membership: handle.hotshot.memberships.da_membership.clone().into(),
+            da_membership: handle.hotshot.memberships.da_membership.clone().into(),
             storage: Arc::clone(&handle.storage),
         }
     }
@@ -230,7 +230,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             latest_voted_view: handle.get_cur_view().await,
             vote_dependencies: HashMap::new(),
             quorum_network: Arc::clone(&handle.hotshot.networks.quorum_network),
-            committee_network: Arc::clone(&handle.hotshot.networks.da_network),
+            da_network: Arc::clone(&handle.hotshot.networks.da_network),
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             da_membership: handle.hotshot.memberships.da_membership.clone().into(),
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),
@@ -252,7 +252,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             latest_proposed_view: handle.get_cur_view().await,
             propose_dependencies: HashMap::new(),
             quorum_network: Arc::clone(&handle.hotshot.networks.quorum_network),
-            committee_network: Arc::clone(&handle.hotshot.networks.da_network),
+            da_network: Arc::clone(&handle.hotshot.networks.da_network),
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),
             consensus,
             instance_state: handle.hotshot.get_instance_state(),

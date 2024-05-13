@@ -12,13 +12,13 @@ use derivative::Derivative;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{
-    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare},
+    data::{DaProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare},
     simple_certificate::{
-        DACertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
+        DaCertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
         ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
-        DAVote, QuorumVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
+        DaVote, QuorumVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
         ViewSyncPreCommitVote,
     },
     traits::{
@@ -184,20 +184,20 @@ pub enum GeneralConsensusMessage<TYPES: NodeType> {
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Hash, Eq)]
 #[serde(bound(deserialize = "", serialize = ""))]
 /// Messages related to the sequencing consensus protocol for the DA committee.
-pub enum CommitteeConsensusMessage<TYPES: NodeType> {
+pub enum DaConsensusMessage<TYPES: NodeType> {
     /// Proposal for data availability committee
-    DAProposal(Proposal<TYPES, DAProposal<TYPES>>),
+    DaProposal(Proposal<TYPES, DaProposal<TYPES>>),
 
     /// vote for data availability committee
-    DAVote(DAVote<TYPES>),
+    DaVote(DaVote<TYPES>),
 
     /// Certificate data is available
-    DACertificate(DACertificate<TYPES>),
+    DaCertificate(DaCertificate<TYPES>),
 
     /// Initiate VID dispersal.
     ///
-    /// Like [`DAProposal`]. Use `Msg` suffix to distinguish from `VidDisperse`.
-    /// TODO this variant should not be a [`CommitteeConsensusMessage`] because <https://github.com/EspressoSystems/HotShot/issues/1696>
+    /// Like [`DaProposal`]. Use `Msg` suffix to distinguish from `VidDisperse`.
+    /// TODO this variant should not be a [`DaConsensusMessage`] because <https://github.com/EspressoSystems/HotShot/issues/1696>
     VidDisperseMsg(Proposal<TYPES, VidDisperseShare<TYPES>>),
 }
 
@@ -209,7 +209,7 @@ pub enum SequencingMessage<TYPES: NodeType> {
     General(GeneralConsensusMessage<TYPES>),
 
     /// Messages related to the sequencing consensus protocol for the DA committee.
-    Committee(CommitteeConsensusMessage<TYPES>),
+    Da(DaConsensusMessage<TYPES>),
 }
 
 impl<TYPES: NodeType> SequencingMessage<TYPES> {
@@ -249,20 +249,16 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                     GeneralConsensusMessage::UpgradeVote(message) => message.get_view_number(),
                 }
             }
-            SequencingMessage::Committee(committee_message) => {
-                match committee_message {
-                    CommitteeConsensusMessage::DAProposal(p) => {
+            SequencingMessage::Da(da_message) => {
+                match da_message {
+                    DaConsensusMessage::DaProposal(p) => {
                         // view of leader in the leaf when proposal
                         // this should match replica upon receipt
                         p.data.get_view_number()
                     }
-                    CommitteeConsensusMessage::DAVote(vote_message) => {
-                        vote_message.get_view_number()
-                    }
-                    CommitteeConsensusMessage::DACertificate(cert) => cert.view_number,
-                    CommitteeConsensusMessage::VidDisperseMsg(disperse) => {
-                        disperse.data.get_view_number()
-                    }
+                    DaConsensusMessage::DaVote(vote_message) => vote_message.get_view_number(),
+                    DaConsensusMessage::DaCertificate(cert) => cert.view_number,
+                    DaConsensusMessage::VidDisperseMsg(disperse) => disperse.data.get_view_number(),
                 }
             }
         }
@@ -291,11 +287,11 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                 GeneralConsensusMessage::UpgradeProposal(_) => MessagePurpose::UpgradeProposal,
                 GeneralConsensusMessage::UpgradeVote(_) => MessagePurpose::UpgradeVote,
             },
-            SequencingMessage::Committee(committee_message) => match committee_message {
-                CommitteeConsensusMessage::DAProposal(_) => MessagePurpose::Proposal,
-                CommitteeConsensusMessage::DAVote(_) => MessagePurpose::Vote,
-                CommitteeConsensusMessage::DACertificate(_) => MessagePurpose::DAC,
-                CommitteeConsensusMessage::VidDisperseMsg(_) => MessagePurpose::VidDisperse,
+            SequencingMessage::Da(da_message) => match da_message {
+                DaConsensusMessage::DaProposal(_) => MessagePurpose::Proposal,
+                DaConsensusMessage::DaVote(_) => MessagePurpose::Vote,
+                DaConsensusMessage::DaCertificate(_) => MessagePurpose::DAC,
+                DaConsensusMessage::VidDisperseMsg(_) => MessagePurpose::VidDisperse,
             },
         }
     }

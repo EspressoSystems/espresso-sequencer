@@ -68,7 +68,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     let view_1 = TestScriptStage {
         inputs: vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
-            DACertificateRecv(dacs[0].clone()),
+            DaCertificateRecv(dacs[0].clone()),
             VIDShareRecv(get_vid_share(&vids[0].0, handle.get_public_key())),
         ],
         outputs: vec![
@@ -98,7 +98,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     ];
 
     let mut view_2_inputs = permute_input_with_index_order(inputs, input_permutation);
-    view_2_inputs.insert(0, DACertificateRecv(dacs[1].clone()));
+    view_2_inputs.insert(0, DaCertificateRecv(dacs[1].clone()));
     view_2_inputs.insert(
         0,
         VIDShareRecv(get_vid_share(&vids[2].0, handle.get_public_key())),

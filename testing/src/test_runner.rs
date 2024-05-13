@@ -120,12 +120,7 @@ impl<
     > TestRunner<TYPES, I, N>
 where
     I: TestableNodeImplementation<TYPES>,
-    I: NodeImplementation<
-        TYPES,
-        QuorumNetwork = N,
-        CommitteeNetwork = N,
-        Storage = TestStorage<TYPES>,
-    >,
+    I: NodeImplementation<TYPES, QuorumNetwork = N, DaNetwork = N, Storage = TestStorage<TYPES>>,
 {
     /// execute test
     ///

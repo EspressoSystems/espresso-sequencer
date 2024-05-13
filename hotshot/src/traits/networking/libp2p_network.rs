@@ -458,9 +458,9 @@ impl<M: NetworkMsg, K: SignatureKey> Libp2pNetwork<M, K> {
         bootstrap_addrs: BootstrapAddrs,
         id: usize,
         // HACK
-        committee_pks: BTreeSet<K>,
+        quorum_public_keys: BTreeSet<K>,
         #[cfg(feature = "hotshot-testing")] reliability_config: Option<Box<dyn NetworkReliability>>,
-        da_pks: BTreeSet<K>,
+        da_public_keys: BTreeSet<K>,
         is_da: bool,
     ) -> Result<Libp2pNetwork<M, K>, NetworkError> {
         // Error if there were no bootstrap nodes specified
@@ -487,8 +487,8 @@ impl<M: NetworkMsg, K: SignatureKey> Libp2pNetwork<M, K> {
         pubkey_pid_map.insert(pk.clone(), network_handle.peer_id());
 
         let mut topic_map = BiHashMap::new();
-        topic_map.insert(committee_pks, QC_TOPIC.to_string());
-        topic_map.insert(da_pks, "DA".to_string());
+        topic_map.insert(quorum_public_keys, QC_TOPIC.to_string());
+        topic_map.insert(da_public_keys, "DA".to_string());
 
         let topic_map = RwLock::new(topic_map);
 

@@ -8,14 +8,14 @@ use hotshot_example_types::{
     state_types::TestInstanceState,
 };
 use hotshot_types::{
-    data::{DAProposal, Leaf, QuorumProposal, VidDisperseShare, ViewChangeEvidence, ViewNumber},
+    data::{DaProposal, Leaf, QuorumProposal, VidDisperseShare, ViewChangeEvidence, ViewNumber},
     message::Proposal,
     simple_certificate::{
-        DACertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
+        DaCertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
         ViewSyncFinalizeCertificate2,
     },
     simple_vote::{
-        DAData, DAVote, QuorumData, QuorumVote, TimeoutData, TimeoutVote, UpgradeProposalData,
+        DaData, DaVote, QuorumData, QuorumVote, TimeoutData, TimeoutVote, UpgradeProposalData,
         UpgradeVote, ViewSyncFinalizeData, ViewSyncFinalizeVote,
     },
     traits::{
@@ -32,7 +32,7 @@ use crate::task_helpers::{
 
 #[derive(Clone)]
 pub struct TestView {
-    pub da_proposal: Proposal<TestTypes, DAProposal<TestTypes>>,
+    pub da_proposal: Proposal<TestTypes, DaProposal<TestTypes>>,
     pub quorum_proposal: Proposal<TestTypes, QuorumProposal<TestTypes>>,
     pub leaf: Leaf<TestTypes>,
     pub view_number: ViewNumber,
@@ -43,7 +43,7 @@ pub struct TestView {
         <TestTypes as NodeType>::SignatureKey,
     ),
     pub leader_public_key: <TestTypes as NodeType>::SignatureKey,
-    pub da_certificate: DACertificate<TestTypes>,
+    pub da_certificate: DaCertificate<TestTypes>,
     pub transactions: Vec<TestTransaction>,
     upgrade_data: Option<UpgradeProposalData<TestTypes>>,
     formed_upgrade_certificate: Option<UpgradeCertificate<TestTypes>>,
@@ -108,7 +108,7 @@ impl TestView {
             <TestTypes as NodeType>::SignatureKey::sign(&private_key, &encoded_transactions_hash)
                 .expect("Failed to sign block payload");
 
-        let da_proposal_inner = DAProposal::<TestTypes> {
+        let da_proposal_inner = DaProposal::<TestTypes> {
             encoded_transactions: encoded_transactions.clone(),
             metadata: TestMetadata,
             view_number: genesis_view,
@@ -314,7 +314,7 @@ impl TestView {
             <TestTypes as NodeType>::SignatureKey::sign(&private_key, &encoded_transactions_hash)
                 .expect("Failed to sign block payload");
 
-        let da_proposal_inner = DAProposal::<TestTypes> {
+        let da_proposal_inner = DaProposal::<TestTypes> {
             encoded_transactions: encoded_transactions.clone(),
             metadata: TestMetadata,
             view_number: next_view,
@@ -383,16 +383,16 @@ impl TestView {
 
     pub fn create_da_vote(
         &self,
-        data: DAData,
+        data: DaData,
         handle: &SystemContextHandle<TestTypes, MemoryImpl>,
-    ) -> DAVote<TestTypes> {
-        DAVote::create_signed_vote(
+    ) -> DaVote<TestTypes> {
+        DaVote::create_signed_vote(
             data,
             self.view_number,
             handle.public_key(),
             handle.private_key(),
         )
-        .expect("Failed to sign DAData")
+        .expect("Failed to sign DaData")
     }
 }
 

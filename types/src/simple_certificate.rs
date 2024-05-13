@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     data::serialize_signature2,
     simple_vote::{
-        DAData, QuorumData, TimeoutData, UpgradeProposalData, ViewSyncCommitData,
+        DaData, QuorumData, TimeoutData, UpgradeProposalData, ViewSyncCommitData,
         ViewSyncFinalizeData, ViewSyncPreCommitData, Voteable,
     },
     traits::{
@@ -197,8 +197,8 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
 
 /// Type alias for a `QuorumCertificate`, which is a `SimpleCertificate` of `QuorumVotes`
 pub type QuorumCertificate<TYPES> = SimpleCertificate<TYPES, QuorumData<TYPES>, SuccessThreshold>;
-/// Type alias for a DA certificate over `DAData`
-pub type DACertificate<TYPES> = SimpleCertificate<TYPES, DAData, SuccessThreshold>;
+/// Type alias for a DA certificate over `DaData`
+pub type DaCertificate<TYPES> = SimpleCertificate<TYPES, DaData, SuccessThreshold>;
 /// Type alias for a Timeout certificate over a view number
 pub type TimeoutCertificate<TYPES> = SimpleCertificate<TYPES, TimeoutData<TYPES>, SuccessThreshold>;
 /// Type alias for a `ViewSyncPreCommit` certificate over a view number

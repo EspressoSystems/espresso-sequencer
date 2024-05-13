@@ -91,7 +91,7 @@ pub enum TransmitType<TYPES: NodeType> {
     /// broadcast the message to all
     Broadcast,
     /// broadcast to DA committee
-    DACommitteeBroadcast,
+    DaCommitteeBroadcast,
 }
 
 /// Error type for networking
@@ -209,7 +209,7 @@ pub enum RequestKind<TYPES: NodeType> {
     /// Request VID data by our key and the VID commitment
     VID(TYPES::Time, TYPES::SignatureKey),
     /// Request a DA proposal for a certain view
-    DAProposal(TYPES::Time),
+    DaProposal(TYPES::Time),
 }
 
 /// A response for a request.  `SequencingMessage` is the same as other network messages

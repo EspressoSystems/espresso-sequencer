@@ -41,11 +41,11 @@ async fn test_quorum_vote_task_success() {
     let view_success = TestScriptStage {
         inputs: vec![
             QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
-            DACertificateRecv(dacs[1].clone()),
+            DaCertificateRecv(dacs[1].clone()),
             VIDShareRecv(vids[1].0[0].clone()),
         ],
         outputs: vec![
-            exact(DACertificateValidated(dacs[1].clone())),
+            exact(DaCertificateValidated(dacs[1].clone())),
             exact(VIDShareValidated(vids[1].0[0].clone())),
             exact(QuorumVoteDependenciesValidated(ViewNumber::new(2))),
             quorum_vote_send(),
@@ -155,18 +155,18 @@ async fn test_quorum_vote_task_miss_dependency() {
     let view_no_vid = TestScriptStage {
         inputs: vec![
             QuorumProposalValidated(proposals[1].data.clone(), leaves[1].clone()),
-            DACertificateRecv(dacs[1].clone()),
+            DaCertificateRecv(dacs[1].clone()),
         ],
-        outputs: vec![exact(DACertificateValidated(dacs[1].clone()))],
+        outputs: vec![exact(DaCertificateValidated(dacs[1].clone()))],
         asserts: vec![],
     };
     let view_no_quorum_proposal = TestScriptStage {
         inputs: vec![
-            DACertificateRecv(dacs[2].clone()),
+            DaCertificateRecv(dacs[2].clone()),
             VIDShareRecv(get_vid_share(&vids[2].0, handle.get_public_key())),
         ],
         outputs: vec![
-            exact(DACertificateValidated(dacs[2].clone())),
+            exact(DaCertificateValidated(dacs[2].clone())),
             exact(VIDShareValidated(vids[2].0[0].clone())),
         ],
         asserts: vec![],

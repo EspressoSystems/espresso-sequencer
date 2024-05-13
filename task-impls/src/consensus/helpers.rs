@@ -1071,10 +1071,7 @@ pub async fn update_state_and_vote_if_able<TYPES: NodeType, I: NodeImplementatio
     use hotshot_types::simple_vote::QuorumVote;
 
     if !quorum_membership.has_stake(&public_key) {
-        debug!(
-            "We were not chosen for consensus committee on {:?}",
-            cur_view
-        );
+        debug!("We were not chosen for quorum committee on {:?}", cur_view);
         return false;
     }
 

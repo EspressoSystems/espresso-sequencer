@@ -113,7 +113,7 @@ impl std::ops::Sub<u64> for ViewNumber {
 
 /// A proposal to start providing data availability for a block.
 #[derive(custom_debug::Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
-pub struct DAProposal<TYPES: NodeType> {
+pub struct DaProposal<TYPES: NodeType> {
     /// Encoded transactions in the block to be applied.
     pub encoded_transactions: Arc<[u8]>,
     /// Metadata of the block to be applied.
@@ -137,7 +137,7 @@ where
 
 /// VID dispersal data
 ///
-/// Like [`DAProposal`].
+/// Like [`DaProposal`].
 ///
 /// TODO move to vid.rs?
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
@@ -318,7 +318,7 @@ pub struct QuorumProposal<TYPES: NodeType> {
     pub proposal_certificate: Option<ViewChangeEvidence<TYPES>>,
 }
 
-impl<TYPES: NodeType> HasViewNumber<TYPES> for DAProposal<TYPES> {
+impl<TYPES: NodeType> HasViewNumber<TYPES> for DaProposal<TYPES> {
     fn get_view_number(&self) -> TYPES::Time {
         self.view_number
     }

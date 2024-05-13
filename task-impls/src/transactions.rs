@@ -233,7 +233,7 @@ impl<
                     .get(&prev_view)
                     .and_then(|view| match view.view_inner {
                         // For a view for which we have a Leaf stored
-                        ViewInner::DA { payload_commitment } => Some(payload_commitment),
+                        ViewInner::Da { payload_commitment } => Some(payload_commitment),
                         ViewInner::Leaf { leaf, .. } => consensus
                             .saved_leaves()
                             .get(&leaf)

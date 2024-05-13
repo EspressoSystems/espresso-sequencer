@@ -128,7 +128,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         self.hotshot.get_consensus()
     }
 
-    /// Block the underlying quorum (and committee) networking interfaces until node is
+    /// Block the underlying quorum (and DA) networking interfaces until node is
     /// successfully initialized into the networks.
     pub async fn wait_for_networks_ready(&self) {
         self.hotshot.networks.wait_for_networks_ready().await;

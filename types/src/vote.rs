@@ -14,7 +14,7 @@ use tracing::error;
 use crate::{
     data::{Leaf, QuorumProposal, VidDisperseShare},
     message::Proposal,
-    simple_certificate::{DACertificate, Threshold},
+    simple_certificate::{DaCertificate, Threshold},
     simple_vote::Voteable,
     traits::{
         election::Membership,
@@ -198,5 +198,5 @@ pub struct VoteDependencyData<TYPES: NodeType> {
     pub disperse_share: Proposal<TYPES, VidDisperseShare<TYPES>>,
 
     /// The DA certificate.
-    pub da_cert: DACertificate<TYPES>,
+    pub da_cert: DaCertificate<TYPES>,
 }

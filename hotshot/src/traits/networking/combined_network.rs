@@ -128,7 +128,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
                 SequencingMessage::General(general_consensus_message) => {
                     matches!(general_consensus_message, GeneralConsensusMessage::Vote(_))
                 }
-                SequencingMessage::Committee(_) => true,
+                SequencingMessage::Da(_) => true,
             },
             MessageKind::Data(_) => false,
         }

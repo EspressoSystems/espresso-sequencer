@@ -7,11 +7,11 @@ use async_std::task::spawn_blocking;
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::{Consensus, View},
-    data::DAProposal,
+    data::DaProposal,
     event::{Event, EventType},
     message::Proposal,
-    simple_certificate::DACertificate,
-    simple_vote::{DAData, DAVote},
+    simple_certificate::DaCertificate,
+    simple_vote::{DaData, DaVote},
     traits::{
         block_contents::vid_commitment,
         consensus_api::ConsensusApi,
@@ -40,7 +40,7 @@ use crate::{
 type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>;
 
 /// Tracks state of a DA task
-pub struct DATaskState<
+pub struct DaTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
@@ -63,10 +63,10 @@ pub struct DATaskState<
     pub quorum_membership: Arc<TYPES::Membership>,
 
     /// Network for DA
-    pub da_network: Arc<I::CommitteeNetwork>,
+    pub da_network: Arc<I::DaNetwork>,
 
     /// The current vote collection task, if there is one.
-    pub vote_collector: RwLock<VoteCollectorOption<TYPES, DAVote<TYPES>, DACertificate<TYPES>>>,
+    pub vote_collector: RwLock<VoteCollectorOption<TYPES, DaVote<TYPES>, DaCertificate<TYPES>>>,
 
     /// This Nodes public key
     pub public_key: TYPES::SignatureKey,
@@ -82,7 +82,7 @@ pub struct DATaskState<
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
-    DATaskState<TYPES, I, A>
+    DaTaskState<TYPES, I, A>
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "DA Main Task", level = "error")]
@@ -92,7 +92,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
         event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Option<HotShotTaskCompleted> {
         match event.as_ref() {
-            HotShotEvent::DAProposalRecv(proposal, sender) => {
+            HotShotEvent::DaProposalRecv(proposal, sender) => {
                 let sender = sender.clone();
                 debug!(
                     "DA proposal received for view: {:?}",
@@ -104,7 +104,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // Allow a DA proposal that is one view older, in case we have voted on a quorum
                 // proposal and updated the view.
                 // `self.cur_view` should be at least 1 since there is a view change before getting
-                // the `DAProposalRecv` event. Otherwise, the view number subtraction below will
+                // the `DaProposalRecv` event. Otherwise, the view number subtraction below will
                 // cause an overflow error.
                 // TODO ED Come back to this - we probably don't need this, but we should also never receive a DAC where this fails, investigate block ready so it doesn't make one for the genesis block
 
@@ -139,17 +139,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 broadcast_event(
-                    Arc::new(HotShotEvent::DAProposalValidated(proposal.clone(), sender)),
+                    Arc::new(HotShotEvent::DaProposalValidated(proposal.clone(), sender)),
                     &event_stream,
                 )
                 .await;
             }
-            HotShotEvent::DAProposalValidated(proposal, sender) => {
+            HotShotEvent::DaProposalValidated(proposal, sender) => {
                 // Proposal is fresh and valid, notify the application layer
                 self.api
                     .send_event(Event {
                         view_number: self.cur_view,
-                        event: EventType::DAProposal {
+                        event: EventType::DaProposal {
                             proposal: proposal.clone(),
                             sender: sender.clone(),
                         },
@@ -179,8 +179,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 let view = proposal.data.get_view_number();
                 // Generate and send vote
-                let Ok(vote) = DAVote::create_signed_vote(
-                    DAData {
+                let Ok(vote) = DaVote::create_signed_vote(
+                    DaData {
                         payload_commit: payload_commitment,
                     },
                     view,
@@ -193,7 +193,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 debug!("Sending vote to the DA leader {:?}", vote.get_view_number());
 
-                broadcast_event(Arc::new(HotShotEvent::DAVoteSend(vote)), &event_stream).await;
+                broadcast_event(Arc::new(HotShotEvent::DaVoteSend(vote)), &event_stream).await;
                 let mut consensus = self.consensus.write().await;
 
                 // Ensure this view is in the view map for garbage collection, but do not overwrite if
@@ -203,7 +203,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     consensus.update_validated_state_map(
                         view,
                         View {
-                            view_inner: ViewInner::DA { payload_commitment },
+                            view_inner: ViewInner::Da { payload_commitment },
                         },
                     );
                 }
@@ -215,12 +215,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     tracing::trace!("{e:?}");
                 }
             }
-            HotShotEvent::DAVoteRecv(ref vote) => {
+            HotShotEvent::DaVoteRecv(ref vote) => {
                 debug!("DA vote recv, Main Task {:?}", vote.get_view_number());
                 // Check if we are the leader and the vote is from the sender.
                 let view = vote.get_view_number();
                 if self.da_membership.get_leader(view) != self.public_key {
-                    error!("We are not the committee leader for view {} are we leader for next view? {}", *view, self.da_membership.get_leader(view + 1) == self.public_key);
+                    error!("We are not the DA committee leader for view {} are we leader for next view? {}", *view, self.da_membership.get_leader(view + 1) == self.public_key);
                     return None;
                 }
                 let mut collector = self.vote_collector.write().await;
@@ -236,8 +236,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     };
                     *collector = create_vote_accumulator::<
                         TYPES,
-                        DAVote<TYPES>,
-                        DACertificate<TYPES>,
+                        DaVote<TYPES>,
+                        DaCertificate<TYPES>,
                     >(&info, vote.clone(), event, &event_stream)
                     .await;
                 } else {
@@ -287,7 +287,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 };
 
-                let data: DAProposal<TYPES> = DAProposal {
+                let data: DaProposal<TYPES> = DaProposal {
                     encoded_transactions: Arc::clone(encoded_transactions),
                     metadata: metadata.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
@@ -301,7 +301,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 };
 
                 broadcast_event(
-                    Arc::new(HotShotEvent::DAProposalSend(
+                    Arc::new(HotShotEvent::DaProposalSend(
                         message.clone(),
                         self.public_key.clone(),
                     )),
@@ -324,7 +324,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
 /// task state implementation for DA Task
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TaskState
-    for DATaskState<TYPES, I, A>
+    for DaTaskState<TYPES, I, A>
 {
     type Event = Arc<HotShotEvent<TYPES>>;
 
@@ -333,12 +333,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
     fn filter(&self, event: &Arc<HotShotEvent<TYPES>>) -> bool {
         !matches!(
             event.as_ref(),
-            HotShotEvent::DAProposalRecv(_, _)
-                | HotShotEvent::DAVoteRecv(_)
+            HotShotEvent::DaProposalRecv(_, _)
+                | HotShotEvent::DaVoteRecv(_)
                 | HotShotEvent::Shutdown
                 | HotShotEvent::BlockRecv(_, _, _, _, _)
                 | HotShotEvent::ViewChange(_)
-                | HotShotEvent::DAProposalValidated(_, _)
+                | HotShotEvent::DaProposalValidated(_, _)
         )
     }
 

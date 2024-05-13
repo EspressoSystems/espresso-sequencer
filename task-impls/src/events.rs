@@ -3,14 +3,14 @@ use std::sync::Arc;
 use either::Either;
 use hotshot_types::{
     consensus::ProposalDependencyData,
-    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare},
+    data::{DaProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare},
     message::Proposal,
     simple_certificate::{
-        DACertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
+        DaCertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
         ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
-        DAVote, QuorumVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
+        DaVote, QuorumVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
         ViewSyncPreCommitVote,
     },
     traits::{block_contents::BuilderFee, node_implementation::NodeType, BlockPayload},
@@ -41,15 +41,15 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// Send a timeout vote to the network; emitted by consensus task replicas
     TimeoutVoteSend(TimeoutVote<TYPES>),
     /// A DA proposal has been received from the network; handled by the DA task
-    DAProposalRecv(Proposal<TYPES, DAProposal<TYPES>>, TYPES::SignatureKey),
+    DaProposalRecv(Proposal<TYPES, DaProposal<TYPES>>, TYPES::SignatureKey),
     /// A DA proposal has been validated; handled by the DA task and VID task
-    DAProposalValidated(Proposal<TYPES, DAProposal<TYPES>>, TYPES::SignatureKey),
+    DaProposalValidated(Proposal<TYPES, DaProposal<TYPES>>, TYPES::SignatureKey),
     /// A DA vote has been received by the network; handled by the DA task
-    DAVoteRecv(DAVote<TYPES>),
+    DaVoteRecv(DaVote<TYPES>),
     /// A Data Availability Certificate (DAC) has been recieved by the network; handled by the consensus task
-    DACertificateRecv(DACertificate<TYPES>),
+    DaCertificateRecv(DaCertificate<TYPES>),
     /// A DAC is validated.
-    DACertificateValidated(DACertificate<TYPES>),
+    DaCertificateValidated(DaCertificate<TYPES>),
     /// Send a quorum proposal to the network; emitted by the leader in the consensus task
     QuorumProposalSend(Proposal<TYPES, QuorumProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a quorum vote to the next leader; emitted by a replica in the consensus task after seeing a valid quorum proposal
@@ -59,13 +59,13 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// A quorum proposal with the given parent leaf is validated.
     QuorumProposalValidated(QuorumProposal<TYPES>, Leaf<TYPES>),
     /// Send a DA proposal to the DA committee; emitted by the DA leader (which is the same node as the leader of view v + 1) in the DA task
-    DAProposalSend(Proposal<TYPES, DAProposal<TYPES>>, TYPES::SignatureKey),
+    DaProposalSend(Proposal<TYPES, DaProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a DA vote to the DA leader; emitted by DA committee members in the DA task after seeing a valid DA proposal
-    DAVoteSend(DAVote<TYPES>),
+    DaVoteSend(DaVote<TYPES>),
     /// The next leader has collected enough votes to form a QC; emitted by the next leader in the consensus task; an internal event only
     QCFormed(Either<QuorumCertificate<TYPES>, TimeoutCertificate<TYPES>>),
     /// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
-    DACSend(DACertificate<TYPES>, TYPES::SignatureKey),
+    DacSend(DaCertificate<TYPES>, TYPES::SignatureKey),
     /// The current view has changed; emitted by the replica in the consensus task or replica in the view sync task; received by almost all other tasks
     ViewChange(TYPES::Time),
     /// Timeout for the view sync protocol; emitted by a replica in the view sync task
@@ -129,11 +129,11 @@ pub enum HotShotEvent<TYPES: NodeType> {
     LeafDecided(Vec<Leaf<TYPES>>),
     /// Send VID shares to VID storage nodes; emitted by the DA leader
     ///
-    /// Like [`HotShotEvent::DAProposalSend`].
+    /// Like [`HotShotEvent::DaProposalSend`].
     VidDisperseSend(Proposal<TYPES, VidDisperse<TYPES>>, TYPES::SignatureKey),
     /// Vid disperse share has been received from the network; handled by the consensus task
     ///
-    /// Like [`HotShotEvent::DAProposalRecv`].
+    /// Like [`HotShotEvent::DaProposalRecv`].
     VIDShareRecv(Proposal<TYPES, VidDisperseShare<TYPES>>),
     /// VID share data is validated.
     VIDShareValidated(Proposal<TYPES, VidDisperseShare<TYPES>>),

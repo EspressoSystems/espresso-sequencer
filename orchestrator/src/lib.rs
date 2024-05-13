@@ -313,7 +313,7 @@ where
         // We add the node to the DA committee depending on either its node index or whether it requested membership.
         //
         // Since we issue `node_index` incrementally, if we are deciding DA membership by node_index
-        // we only need to check that the committee is not yet full.
+        // we only need to check that the DA committee is not yet full.
         //
         // Note: this logically simplifies to (self.config.indexed_da || da_requested) && !da_full,
         // but writing it that way makes it a little less clear to me.

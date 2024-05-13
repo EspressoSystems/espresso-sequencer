@@ -5,7 +5,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    data::{DAProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare},
+    data::{DaProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare},
     error::HotShotError,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -146,9 +146,9 @@ pub enum EventType<TYPES: NodeType> {
     },
     /// DA proposal was received from the network
     /// or submitted to the network by us
-    DAProposal {
+    DaProposal {
         /// Contents of the proposal
-        proposal: Proposal<TYPES, DAProposal<TYPES>>,
+        proposal: Proposal<TYPES, DaProposal<TYPES>>,
         /// Public key of the leader submitting the proposal
         sender: TYPES::SignatureKey,
     },
@@ -179,7 +179,7 @@ pub enum HotShotAction {
     /// DA proposal was sent
     DAPropose,
     /// DA vote was sent
-    DAVote,
+    DaVote,
     /// DA certificate was sent
     DACert,
     /// VID shares were sent

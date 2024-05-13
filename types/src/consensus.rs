@@ -16,7 +16,7 @@ use crate::{
     error::HotShotError,
     message::Proposal,
     simple_certificate::{
-        DACertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
+        DaCertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
         ViewSyncFinalizeCertificate2,
     },
     traits::{
@@ -51,7 +51,7 @@ pub struct Consensus<TYPES: NodeType> {
 
     /// All the DA certs we've received for current and future views.
     /// view -> DA cert
-    saved_da_certs: HashMap<TYPES::Time, DACertificate<TYPES>>,
+    saved_da_certs: HashMap<TYPES::Time, DaCertificate<TYPES>>,
 
     /// View number that is currently on.
     cur_view: TYPES::Time,
@@ -337,7 +337,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Get the saved DA certs.
-    pub fn saved_da_certs(&self) -> &HashMap<TYPES::Time, DACertificate<TYPES>> {
+    pub fn saved_da_certs(&self) -> &HashMap<TYPES::Time, DaCertificate<TYPES>> {
         &self.saved_da_certs
     }
 
@@ -446,7 +446,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Add a new entry to the da_certs map.
-    pub fn update_saved_da_certs(&mut self, view_number: TYPES::Time, cert: DACertificate<TYPES>) {
+    pub fn update_saved_da_certs(&mut self, view_number: TYPES::Time, cert: DaCertificate<TYPES>) {
         self.saved_da_certs.insert(view_number, cert);
     }
 

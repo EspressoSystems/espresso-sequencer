@@ -48,7 +48,7 @@ pub trait NodeImplementation<TYPES: NodeType>:
     type QuorumNetwork: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>;
 
     /// Network for those in the DA committee
-    type CommitteeNetwork: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>;
+    type DaNetwork: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>;
 
     /// Storage for DA layer interactions
     type Storage: Storage<TYPES>;
@@ -98,7 +98,7 @@ where
     TYPES::ValidatedState: TestableState<TYPES>,
     TYPES::BlockPayload: TestableBlock,
     I::QuorumNetwork: TestableNetworkingImplementation<TYPES>,
-    I::CommitteeNetwork: TestableNetworkingImplementation<TYPES>,
+    I::DaNetwork: TestableNetworkingImplementation<TYPES>,
 {
     fn state_create_random_transaction(
         state: Option<&TYPES::ValidatedState>,

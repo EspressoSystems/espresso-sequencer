@@ -8,21 +8,21 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::infra::Libp2pDARun;
+use crate::infra::Libp2pDaRun;
 
 /// dummy struct so we can choose types
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
 /// convenience type alias
-pub type DANetwork = Libp2pNetwork<Message<TestTypes>, <TestTypes as NodeType>::SignatureKey>;
+pub type DaNetwork = Libp2pNetwork<Message<TestTypes>, <TestTypes as NodeType>::SignatureKey>;
 /// convenience type alias
 pub type QuorumNetwork = Libp2pNetwork<Message<TestTypes>, <TestTypes as NodeType>::SignatureKey>;
 
 impl NodeImplementation<TestTypes> for NodeImpl {
     type QuorumNetwork = QuorumNetwork;
-    type CommitteeNetwork = DANetwork;
+    type DaNetwork = DaNetwork;
     type Storage = TestStorage<TestTypes>;
 }
 /// convenience type alias
-pub type ThisRun = Libp2pDARun<TestTypes>;
+pub type ThisRun = Libp2pDaRun<TestTypes>;

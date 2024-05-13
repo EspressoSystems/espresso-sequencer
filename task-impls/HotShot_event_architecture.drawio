@@ -111,7 +111,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="WsWUFxSsiAewtnnMHRLG-27" value="DAProposalRecv" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="WsWUFxSsiAewtnnMHRLG-26">
+        <mxCell id="WsWUFxSsiAewtnnMHRLG-27" value="DaProposalRecv" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="WsWUFxSsiAewtnnMHRLG-26">
           <mxGeometry x="-0.2182" relative="1" as="geometry">
             <mxPoint x="-41" y="-47" as="offset" />
           </mxGeometry>
@@ -124,7 +124,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="WsWUFxSsiAewtnnMHRLG-29" value="DAVoteRecv" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="WsWUFxSsiAewtnnMHRLG-28">
+        <mxCell id="WsWUFxSsiAewtnnMHRLG-29" value="DaVoteRecv" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="WsWUFxSsiAewtnnMHRLG-28">
           <mxGeometry x="0.3745" y="-1" relative="1" as="geometry">
             <mxPoint x="-27" y="53" as="offset" />
           </mxGeometry>
@@ -136,7 +136,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="WsWUFxSsiAewtnnMHRLG-31" value="DACSend" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="WsWUFxSsiAewtnnMHRLG-30">
+        <mxCell id="WsWUFxSsiAewtnnMHRLG-31" value="DacSend" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="WsWUFxSsiAewtnnMHRLG-30">
           <mxGeometry x="-0.2838" y="2" relative="1" as="geometry">
             <mxPoint x="31" y="25" as="offset" />
           </mxGeometry>
@@ -162,7 +162,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="WsWUFxSsiAewtnnMHRLG-33" value="DAVoteSend" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=none;" vertex="1" connectable="0" parent="WsWUFxSsiAewtnnMHRLG-32">
+        <mxCell id="WsWUFxSsiAewtnnMHRLG-33" value="DaVoteSend" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];labelBackgroundColor=none;" vertex="1" connectable="0" parent="WsWUFxSsiAewtnnMHRLG-32">
           <mxGeometry x="0.5582" y="-1" relative="1" as="geometry">
             <mxPoint x="28" y="109" as="offset" />
           </mxGeometry>

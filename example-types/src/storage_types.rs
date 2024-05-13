@@ -8,7 +8,7 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DAProposal, Leaf, VidDisperseShare},
+    data::{DaProposal, Leaf, VidDisperseShare},
     message::Proposal,
     traits::{node_implementation::NodeType, storage::Storage},
     utils::View,
@@ -22,7 +22,7 @@ type VidShares<TYPES> = HashMap<
 #[derive(Clone, Debug)]
 pub struct TestStorageState<TYPES: NodeType> {
     vids: VidShares<TYPES>,
-    das: HashMap<TYPES::Time, Proposal<TYPES, DAProposal<TYPES>>>,
+    das: HashMap<TYPES::Time, Proposal<TYPES, DaProposal<TYPES>>>,
 }
 
 impl<TYPES: NodeType> Default for TestStorageState<TYPES> {
@@ -65,7 +65,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
         Ok(())
     }
 
-    async fn append_da(&self, proposal: &Proposal<TYPES, DAProposal<TYPES>>) -> Result<()> {
+    async fn append_da(&self, proposal: &Proposal<TYPES, DaProposal<TYPES>>) -> Result<()> {
         if self.should_return_err {
             bail!("Failed to append VID proposal to storage");
         }

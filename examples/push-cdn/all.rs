@@ -15,7 +15,7 @@ use hotshot_types::traits::node_implementation::NodeType;
 
 use crate::{
     infra::{read_orchestrator_init_config, run_orchestrator, OrchestratorArgs},
-    types::{DANetwork, NodeImpl, QuorumNetwork, ThisRun},
+    types::{DaNetwork, NodeImpl, QuorumNetwork, ThisRun},
 };
 
 /// The infra implementation
@@ -118,7 +118,7 @@ async fn main() {
     for _ in 0..(config.config.num_nodes_with_stake.get()) {
         let orchestrator_url = orchestrator_url.clone();
         let node = async_spawn(async move {
-            infra::main_entry_point::<TestTypes, DANetwork, QuorumNetwork, NodeImpl, ThisRun>(
+            infra::main_entry_point::<TestTypes, DaNetwork, QuorumNetwork, NodeImpl, ThisRun>(
                 ValidatorArgs {
                     url: orchestrator_url,
                     advertise_address: None,

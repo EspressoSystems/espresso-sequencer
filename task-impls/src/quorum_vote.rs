@@ -45,7 +45,7 @@ use crate::{
 enum VoteDependency {
     /// For the `QuroumProposalValidated` event after validating `QuorumProposalRecv`.
     QuorumProposal,
-    /// For the `DACertificateRecv` event.
+    /// For the `DaCertificateRecv` event.
     Dac,
     /// For the `VIDShareRecv` event.
     Vid,
@@ -107,7 +107,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> HandleDepOutput
                     }
                     leaf = Some(proposed_leaf);
                 }
-                HotShotEvent::DACertificateValidated(cert) => {
+                HotShotEvent::DaCertificateValidated(cert) => {
                     let cert_payload_comm = cert.get_data().payload_commit;
                     if let Some(comm) = payload_commitment {
                         if cert_payload_comm != comm {
@@ -228,7 +228,7 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub quorum_network: Arc<I::QuorumNetwork>,
 
     /// Network for DA committee
-    pub committee_network: Arc<I::CommitteeNetwork>,
+    pub da_network: Arc<I::DaNetwork>,
 
     /// Membership for Quorum certs/votes.
     pub quorum_membership: Arc<TYPES::Membership>,
@@ -268,7 +268,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                         }
                     }
                     VoteDependency::Dac => {
-                        if let HotShotEvent::DACertificateValidated(cert) = event {
+                        if let HotShotEvent::DaCertificateValidated(cert) = event {
                             cert.view_number
                         } else {
                             return false;
@@ -418,7 +418,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                     Some(Arc::clone(&event)),
                 );
             }
-            HotShotEvent::DACertificateRecv(cert) => {
+            HotShotEvent::DaCertificateRecv(cert) => {
                 let view = cert.view_number;
                 trace!("Received DAC for view {}", *view);
                 if view <= self.latest_voted_view {
@@ -437,7 +437,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                     .update_saved_da_certs(view, cert.clone());
 
                 broadcast_event(
-                    Arc::new(HotShotEvent::DACertificateValidated(cert.clone())),
+                    Arc::new(HotShotEvent::DaCertificateValidated(cert.clone())),
                     &event_sender.clone(),
                 )
                 .await;
@@ -522,7 +522,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for QuorumVoteTask
     fn filter(&self, event: &Arc<HotShotEvent<TYPES>>) -> bool {
         !matches!(
             event.as_ref(),
-            HotShotEvent::DACertificateRecv(_)
+            HotShotEvent::DaCertificateRecv(_)
                 | HotShotEvent::VIDShareRecv(..)
                 | HotShotEvent::QuorumVoteDependenciesValidated(_)
                 | HotShotEvent::VoteNow(..)

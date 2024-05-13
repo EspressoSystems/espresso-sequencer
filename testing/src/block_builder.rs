@@ -484,7 +484,7 @@ impl<TYPES: NodeType> BuilderTask<TYPES> for SimpleBuilderTask<TYPES> {
                             }
                             self.blocks.write().await.clear();
                         }
-                        EventType::DAProposal { proposal, .. } => {
+                        EventType::DaProposal { proposal, .. } => {
                             let payload = TYPES::BlockPayload::from_bytes(
                                 &proposal.data.encoded_transactions,
                                 &proposal.data.metadata,
