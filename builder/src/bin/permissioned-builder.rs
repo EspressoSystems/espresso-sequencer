@@ -12,7 +12,7 @@ use hotshot_types::traits::metrics::NoMetrics;
 use hotshot_types::traits::node_implementation::ConsensusTime;
 use sequencer::eth_signature_key::EthKeyPair;
 use sequencer::persistence::no_storage::NoStorage;
-use sequencer::{BuilderParams, L1Params, NetworkParams};
+use sequencer::{options::parse_size, BuilderParams, L1Params, NetworkParams};
 use snafu::Snafu;
 use std::net::ToSocketAddrs;
 use std::num::NonZeroUsize;
@@ -46,7 +46,6 @@ pub struct PermissionedBuilderOptions {
 
     /// The address to bind to for Libp2p (in `host:port` form)
     #[clap(
-        short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS",
         default_value = "0.0.0.0:1769"
@@ -56,7 +55,6 @@ pub struct PermissionedBuilderOptions {
     /// The address we advertise to other nodes as being a Libp2p endpoint.
     /// Should be supplied in `host:port` form.
     #[clap(
-        short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS",
         default_value = "localhost:1769"
@@ -65,7 +63,6 @@ pub struct PermissionedBuilderOptions {
 
     /// URL of the Light Client State Relay Server
     #[clap(
-        short,
         long,
         env = "ESPRESSO_STATE_RELAY_SERVER_URL",
         default_value = "http://localhost:8083"
@@ -99,7 +96,7 @@ pub struct PermissionedBuilderOptions {
     #[clap(
         long,
         env = "ESPRESSO_BUILDER_PRIVATE_STAKING_KEY",
-        conflicts_with = "key_file"
+        conflicts_with = "KEY_FILE"
     )]
     pub private_staking_key: Option<BLSPrivKey>,
 
@@ -109,7 +106,7 @@ pub struct PermissionedBuilderOptions {
     #[clap(
         long,
         env = "ESPRESSO_BUILDER_PRIVATE_STATE_KEY",
-        conflicts_with = "key_file"
+        conflicts_with = "KEY_FILE"
     )]
     pub private_state_key: Option<StateSignKey>,
 
@@ -131,6 +128,10 @@ pub struct PermissionedBuilderOptions {
     /// Peer nodes use to fetch missing state
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
     pub state_peers: Vec<Url>,
+
+    /// Maximum size in bytes of a block
+    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE", value_parser = parse_size)]
+    pub max_block_size: u64,
 
     /// Port to run the builder server on.
     #[clap(short, long, env = "ESPRESSO_BUILDER_SERVER_PORT")]
@@ -164,7 +165,6 @@ pub struct PermissionedBuilderOptions {
 
     /// The number of views to buffer before a builder garbage collects its state
     #[clap(
-        short,
         long,
         env = "ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT",
         default_value = "15"
@@ -176,12 +176,7 @@ pub struct PermissionedBuilderOptions {
     pub is_da: bool,
 
     /// Base Fee for a block
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE",
-        default_value = "0"
-    )]
+    #[clap(long, env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE", default_value = "0")]
     base_fee: u64,
 }
 
@@ -231,6 +226,8 @@ async fn main() -> anyhow::Result<()> {
 
     let l1_params = L1Params {
         url: opt.l1_provider_url,
+        finalized_block: None,
+        events_max_block_range: 10000,
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
@@ -295,6 +292,7 @@ async fn main() -> anyhow::Result<()> {
         opt.is_da,
         txn_timeout_duration,
         opt.base_fee,
+        opt.max_block_size,
     )
     .await?;
 

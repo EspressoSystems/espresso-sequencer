@@ -2,7 +2,7 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use committable::{Commitment, Committable};
 use derive_more::{Display, From, Into};
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
-use jf_primitives::merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
+use jf_merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
 use serde::{Deserialize, Serialize};
 
 #[derive(
@@ -72,6 +72,14 @@ impl Transaction {
         let len = rng.gen_range(0..100);
         Self::new(
             NamespaceId(rng.gen_range(0..10)),
+            (0..len).map(|_| rand::random::<u8>()).collect::<Vec<_>>(),
+        )
+    }
+    #[cfg(any(test, feature = "testing"))]
+    /// Useful for when we want to test size of transaction(s)
+    pub fn of_size(len: usize) -> Self {
+        Self::new(
+            NamespaceId(0),
             (0..len).map(|_| rand::random::<u8>()).collect::<Vec<_>>(),
         )
     }

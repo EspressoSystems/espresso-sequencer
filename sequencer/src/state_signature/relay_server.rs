@@ -8,7 +8,7 @@ use hotshot_stake_table::vec_based::config::FieldType;
 use hotshot_types::light_client::{
     StateSignature, StateSignatureScheme, StateSignaturesBundle, StateVerKey,
 };
-use jf_primitives::signatures::SignatureScheme;
+use jf_signature::SignatureScheme;
 use std::{
     collections::{BTreeSet, HashMap},
     path::PathBuf,

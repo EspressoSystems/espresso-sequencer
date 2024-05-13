@@ -59,12 +59,17 @@ pub struct BuilderConfig {
 pub fn build_instance_state<Ver: StaticVersionType + 'static>(
     l1_params: L1Params,
     state_peers: Vec<Url>,
+    max_block_size: u64,
     _: Ver,
 ) -> anyhow::Result<NodeState> {
-    let l1_client = L1Client::new(l1_params.url, Address::default());
+    let l1_client = L1Client::new(
+        l1_params.url,
+        Address::default(),
+        l1_params.events_max_block_range,
+    );
     let instance_state = NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
-        ChainConfig::default(),
+        ChainConfig::new(0, max_block_size, 0),
         l1_client,
         Arc::new(StatePeers::<Ver>::from_urls(state_peers)),
     );
@@ -77,6 +82,7 @@ impl BuilderConfig {
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         channel_capacity: NonZeroUsize,
+        node_count: NonZeroUsize,
         instance_state: NodeState,
         hotshot_events_api_url: Url,
         hotshot_builder_apis_url: Url,
@@ -101,9 +107,8 @@ impl BuilderConfig {
         // builder api request channel
         let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
 
-        let (genesis_payload, genesis_ns_table) =
-            Payload::from_transactions([], Arc::new(instance_state.clone()))
-                .expect("genesis payload construction failed");
+        let (genesis_payload, genesis_ns_table) = Payload::from_transactions([], &instance_state)
+            .expect("genesis payload construction failed");
 
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
 
@@ -142,7 +147,7 @@ impl BuilderConfig {
             qc_receiver,
             req_receiver,
             global_state_clone,
-            NonZeroUsize::new(1).unwrap(),
+            node_count,
             bootstrapped_view,
             buffered_view_num_count as u64,
             maximize_txns_count_timeout_duration,
@@ -165,37 +170,22 @@ impl BuilderConfig {
         // start the hotshot api service
         run_builder_api_service(hotshot_builder_apis_url.clone(), proxy_global_state);
 
-        // create a client for it
-        // Start Client for the event streaming api
-        tracing::info!(
-            "Builder client connecting to hotshot events API at {}",
-            hotshot_events_api_url.to_string()
-        );
-        let client = Client::<EventStreamApiError, Version01>::new(hotshot_events_api_url.clone());
-
-        assert!(client.connect(None).await);
-
-        tracing::info!("Builder client connected to the hotshot events api");
-
-        // client subscrive to hotshot events
-        let subscribed_events = client
-            .socket("hotshot-events/events")
-            .subscribe::<BuilderEvent<SeqTypes>>()
-            .await
-            .unwrap();
-
-        tracing::info!("Builder client subscribed to hotshot events");
-
         // spawn the builder service
+        let events_url = hotshot_events_api_url.clone();
+        tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
         async_spawn(async move {
-            run_non_permissioned_standalone_builder_service(
+            let res = run_non_permissioned_standalone_builder_service(
                 tx_sender,
                 da_sender,
                 qc_sender,
                 decide_sender,
-                subscribed_events,
+                events_url,
             )
             .await;
+            tracing::error!(?res, "builder service exited");
+            if res.is_err() {
+                panic!("Builder should restart.");
+            }
         });
 
         tracing::info!("Builder init finished");

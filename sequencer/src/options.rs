@@ -69,7 +69,6 @@ pub struct Options {
 
     /// The address to bind to for Libp2p (in `host:port` form)
     #[clap(
-        short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS",
         default_value = "0.0.0.0:1769"
@@ -79,7 +78,6 @@ pub struct Options {
     /// The address we advertise to other nodes as being a Libp2p endpoint.
     /// Should be supplied in `host:port` form.
     #[clap(
-        short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS",
         default_value = "localhost:1769"
@@ -88,7 +86,6 @@ pub struct Options {
 
     /// URL of the Light Client State Relay Server
     #[clap(
-        short,
         long,
         env = "ESPRESSO_STATE_RELAY_SERVER_URL",
         default_value = "http://localhost:8083"
@@ -112,7 +109,7 @@ pub struct Options {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY",
-        conflicts_with = "key_file"
+        conflicts_with = "KEY_FILE"
     )]
     #[derivative(Debug = "ignore")]
     pub private_staking_key: Option<BLSPrivKey>,
@@ -123,7 +120,7 @@ pub struct Options {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY",
-        conflicts_with = "key_file"
+        conflicts_with = "KEY_FILE"
     )]
     #[derivative(Debug = "ignore")]
     pub private_state_key: Option<StateSignKey>,
@@ -159,6 +156,18 @@ pub struct Options {
     #[derivative(Debug(format_with = "Display::fmt"))]
     pub l1_provider_url: Url,
 
+    /// L1 block number from which to start the Espresso chain.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_GENESIS")]
+    pub l1_genesis: Option<u64>,
+
+    /// Maximum number of L1 blocks that can be scanned for events in a single query.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_EVENTS_MAX_BLOCK_RANGE",
+        default_value = "10000"
+    )]
+    pub l1_events_max_block_range: u64,
+
     /// Whether or not we are a DA node.
     #[clap(long, env = "ESPRESSO_SEQUENCER_IS_DA", action)]
     pub is_da: bool,
@@ -169,7 +178,7 @@ pub struct Options {
     pub state_peers: Vec<Url>,
 
     /// Stake table capacity for the prover circuit
-    #[clap(short, long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
     pub stake_table_capacity: usize,
 
     /// Maximum size in bytes of a block

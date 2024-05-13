@@ -10,8 +10,7 @@ use futures::{
 };
 use hotshot::{
     traits::{
-        election::static_committee::GeneralStaticCommittee,
-        implementations::{NetworkingMetricsValue, WebServerNetwork},
+        election::static_committee::GeneralStaticCommittee, implementations::NetworkingMetricsValue,
     },
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
@@ -42,10 +41,8 @@ use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::service::{GlobalState, ProxyGlobalState};
-use jf_primitives::{
-    merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
-    signatures::bls_over_bn254::VerKey,
-};
+use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
+use jf_signature::bls_over_bn254::VerKey;
 use sequencer::catchup::mock::MockStateCatchup;
 use sequencer::state_signature::StakeTableCommitmentType;
 use sequencer::{
@@ -394,7 +391,11 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 ChainConfig::default(),
-                L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
+                L1Client::new(
+                    self.anvil.endpoint().parse().unwrap(),
+                    Address::default(),
+                    1,
+                ),
                 MockStateCatchup::default(),
             )
             .with_genesis(ValidatedState::default());
@@ -535,6 +536,7 @@ pub mod testing {
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),
+                    1,
                 ),
                 MockStateCatchup::default(),
             )
@@ -550,10 +552,13 @@ pub mod testing {
             // A new builder can use this view number to start building blocks from this view number
             let bootstrapped_view = ViewNumber::new(0);
 
+            let node_count = NonZeroUsize::new(HotShotTestConfig::total_nodes()).unwrap();
+
             let builder_config = BuilderConfig::init(
                 key_pair,
                 bootstrapped_view,
                 channel_capacity,
+                node_count,
                 node_state,
                 hotshot_events_streaming_api_url,
                 hotshot_builder_api_url,
@@ -597,6 +602,7 @@ pub mod testing {
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
                     Address::default(),
+                    1,
                 ),
                 MockStateCatchup::default(),
             )
@@ -706,7 +712,7 @@ mod test {
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], Arc::new(genesis_state.clone()))
+                Payload::from_transactions([], &genesis_state)
                     .expect("unable to create genesis payload");
             let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
             let genesis_commitment = {

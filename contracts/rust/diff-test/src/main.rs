@@ -17,17 +17,16 @@ use hotshot_state_prover::mock_ledger::{
     gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY,
 };
 use itertools::multiunzip;
+use jf_pcs::prelude::Commitment;
 use jf_plonk::proof_system::structs::{Proof, VerifyingKey};
 use jf_plonk::proof_system::PlonkKzgSnark;
 use jf_plonk::{
     testing_apis::Verifier,
     transcript::{PlonkTranscript, SolidityTranscript},
 };
-use jf_primitives::constants::CS_ID_BLS_BN254;
-use jf_primitives::pcs::prelude::Commitment;
-use jf_primitives::signatures::bls_over_bn254::Signature;
-use jf_primitives::signatures::bls_over_bn254::{hash_to_curve, KeyPair as BLSKeyPair};
-use jf_primitives::signatures::schnorr::KeyPair as SchnorrKeyPair;
+use jf_signature::bls_over_bn254::{hash_to_curve, KeyPair as BLSKeyPair, Signature};
+use jf_signature::constants::CS_ID_BLS_BN254;
+use jf_signature::schnorr::KeyPair as SchnorrKeyPair;
 use sha3::Keccak256;
 
 #[derive(Parser)]

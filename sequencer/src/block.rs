@@ -1,13 +1,12 @@
-use std::sync::Arc;
-
 use crate::{BlockBuildingSnafu, NodeState, Transaction};
 use committable::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
-use hotshot_types::traits::{states::InstanceState, BlockPayload};
+use hotshot_types::traits::BlockPayload;
 use hotshot_types::utils::BuilderCommitment;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use snafu::OptionExt;
+use std::sync::Arc;
 
 pub mod entry;
 pub mod payload;
@@ -24,6 +23,7 @@ pub type NsTable = NameSpaceTable<TxTableEntryWord>;
 impl BlockPayload for Payload<TxTableEntryWord> {
     type Error = crate::Error;
     type Transaction = Transaction;
+    type Instance = NodeState;
     type Metadata = NsTable;
 
     /// Returns (Self, metadata).
@@ -48,9 +48,9 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     /// TODO(746) refactor and make pretty "table" code for tx, namespace tables?
     fn from_transactions(
         txs: impl IntoIterator<Item = Self::Transaction>,
-        _state: Arc<dyn InstanceState>,
+        instance_state: &Self::Instance,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
-        let payload = Payload::from_txs(txs)?;
+        let payload = Payload::from_txs(txs, &instance_state.chain_config)?;
         let ns_table = payload.get_ns_table().clone(); // TODO don't clone ns_table
         Some((payload, ns_table)).context(BlockBuildingSnafu)
     }
@@ -69,7 +69,7 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         // use the mock NodeState. A future update to HotShot should
         // make a change there to remove the need for this workaround.
 
-        Self::from_transactions([], Arc::new(NodeState::mock())).unwrap()
+        Self::from_transactions([], &NodeState::mock()).unwrap()
     }
 
     fn encode(&self) -> Result<Arc<[u8]>, Self::Error> {

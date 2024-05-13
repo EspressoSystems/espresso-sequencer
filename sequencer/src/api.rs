@@ -21,7 +21,7 @@ use hotshot::types::{Event, SystemContextHandle};
 use hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
-use jf_primitives::merkle_tree::MerkleTreeScheme;
+use jf_merkle_tree::MerkleTreeScheme;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use vbs::version::StaticVersionType;
@@ -282,7 +282,7 @@ mod test_helpers {
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
     };
     use itertools::izip;
-    use jf_primitives::merkle_tree::{MerkleCommitment, MerkleTreeScheme};
+    use jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -815,7 +815,7 @@ mod test {
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
     };
-    use jf_primitives::merkle_tree::prelude::{MerkleProof, Sha3Node};
+    use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
