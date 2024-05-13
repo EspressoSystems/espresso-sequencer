@@ -1,0 +1,7 @@
+{
+  "approvalProcessId": "a0dd5bf1-9766-4a2f-94b1-2a7ceb0dc5be",
+  "approvalType": "Gnosis Safe",
+  "multisig": "0xc56fA6505d10bF322e01327e22479DE78C3Bf1cE",
+  "proxyAddress": "0xbC781a2BCcdac8F65EF10EA85D765CA240D1789b",
+  "salt": 12
+}

@@ -17,6 +17,7 @@ target/
 
 # vscode stuff
 .vscode/settings.json
+.vscode/ltex.dictionary*
 
 node_modules/
 
@@ -26,3 +27,6 @@ node_modules/
 cache
 
 **/*.bin
+
+# yarn cache
+yarn.lock

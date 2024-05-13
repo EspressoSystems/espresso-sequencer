@@ -18,8 +18,8 @@ settings.
 
 1. Create a multisig wallet using [Safe](https://app.safe.global/welcome/accounts) on the network you'd like to deploy
    to.
-2. In OpenZeppelin Defender, create an Approval Process that requires the multisig wallet you created above.
-   `Manage > Approval Processes`
+2. In [OpenZeppelin Defender](https://www.openzeppelin.com/defender), create an Approval Process that requires the
+   multisig wallet you created above. `Manage > Approval Processes`
 3. In OpenZeppelin Defender, create a deployment environment and use the approval process created in Step 2. Be sure to
    copy the Defender secret and key, that is shown at the end of this step, into the .env file.
 
