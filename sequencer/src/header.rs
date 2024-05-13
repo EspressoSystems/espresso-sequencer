@@ -476,16 +476,6 @@ impl ExplorerHeader<SeqTypes> for Header {
 
         result
     }
-
-    fn namespace_ids_for_offset(&self, offset: usize) -> Vec<Self::NamespaceId> {
-        let l = self.ns_table.len();
-        if offset >= l {
-            return vec![];
-        }
-
-        let (ns_id, _) = self.ns_table.get_table_entry(offset);
-        vec![ns_id]
-    }
 }
 
 #[cfg(test)]
