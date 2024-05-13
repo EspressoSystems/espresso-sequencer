@@ -1,7 +1,7 @@
 use crate::{
     block2::{
-        iter::Index, ns_payload_range::NsPayloadRange, num_txs::NumTxs, payload::Payload,
-        tx_iter::TxIndex, tx_table_entries::TxTableEntries,
+        iter::Index, newtypes::TxPayloadRange, ns_payload_range::NsPayloadRange, num_txs::NumTxs,
+        payload::Payload, tx_iter::TxIndex, tx_table_entries::TxTableEntries,
     },
     Transaction,
 };
@@ -53,6 +53,10 @@ pub struct TxProof2 {
     // Tx table entries for this tx
     payload_tx_table_entries: TxTableEntries2,
     payload_proof_tx_table_entries: SmallRangeProofType,
+
+    // This tx's payload bytes.
+    // `None` if this tx has zero length.
+    payload_proof_tx: Option<SmallRangeProofType>,
 }
 
 impl TxProof2 {
@@ -88,6 +92,30 @@ impl TxProof2 {
             .ok()?
         };
 
+        // Read the tx payload and compute a proof of correctness.
+        let payload_proof_tx = {
+            let range = TxPayloadRange::new(
+                &payload_num_txs,
+                &payload_tx_table_entries,
+                ns_payload_range.byte_len(),
+            )
+            .block_payload_range(ns_payload_range.offset());
+
+            tracing::info!(
+                "prove: (ns,tx) ({:?},{:?}), tx_payload_range {:?}, content {:?}",
+                index.ns(),
+                index.tx(),
+                range,
+                &payload.as_byte_slice()[range.clone()]
+            );
+
+            if range.is_empty() {
+                None
+            } else {
+                Some(vid.payload_proof(payload.as_byte_slice(), range).ok()?)
+            }
+        };
+
         Some((
             payload.transaction(index)?,
             TxProof2 {
@@ -97,13 +125,14 @@ impl TxProof2 {
                 payload_proof_num_txs,
                 payload_tx_table_entries,
                 payload_proof_tx_table_entries,
+                payload_proof_tx,
             },
         ))
     }
 
     pub fn verify(
         &self,
-        _tx: &Transaction,
+        tx: &Transaction,
         commit: &VidCommitment,
         common: &VidCommon,
     ) -> Option<bool> {
@@ -147,6 +176,55 @@ impl TxProof2 {
                 .is_err()
             {
                 return Some(false);
+            }
+        }
+
+        // Verify proof for tx payload
+        {
+            let range = TxPayloadRange::new(
+                &self.payload_num_txs,
+                &self.payload_tx_table_entries,
+                self.ns_payload_range.byte_len(),
+            )
+            .block_payload_range(self.ns_payload_range.offset());
+
+            tracing::info!(
+                "verify: tx_index {:?}, tx_payload_range {:?}, content {:?}",
+                self.tx_index,
+                range,
+                tx.payload()
+            );
+
+            match (&self.payload_proof_tx, range.is_empty()) {
+                (Some(proof), false) => {
+                    if vid
+                        .payload_verify(
+                            Statement {
+                                payload_subslice: tx.payload(),
+                                range,
+                                commit,
+                                common,
+                            },
+                            proof,
+                        )
+                        .ok()?
+                        .is_err()
+                    {
+                        return Some(false);
+                    }
+                }
+                (None, true) => {} // 0-length tx, nothing to verify
+                (None, false) => {
+                    tracing::info!(
+                        "tx verify: missing proof for nonempty tx payload range {:?}",
+                        range
+                    );
+                    return None;
+                }
+                (Some(_), true) => {
+                    tracing::info!("tx verify: unexpected proof for empty tx payload range");
+                    return None;
+                }
             }
         }
 
