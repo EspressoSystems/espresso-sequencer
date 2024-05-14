@@ -147,7 +147,7 @@ pub struct MockNodeImpl;
 
 impl NodeImplementation<MockTypes> for MockNodeImpl {
     type QuorumNetwork = MockNetwork;
-    type CommitteeNetwork = MockNetwork;
+    type DaNetwork = MockNetwork;
     type Storage = MockStorage;
 }
 

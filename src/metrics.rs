@@ -15,8 +15,8 @@
 use hotshot_types::traits::metrics;
 use itertools::Itertools;
 use prometheus::{
-    core::{AtomicU64, Collector, GenericCounter, GenericGauge},
-    Encoder, Opts, TextEncoder,
+    core::{AtomicU64, GenericCounter, GenericCounterVec, GenericGauge, GenericGaugeVec},
+    Encoder, HistogramVec, Opts, Registry, TextEncoder,
 };
 use snafu::Snafu;
 use std::collections::HashMap;
@@ -29,7 +29,7 @@ pub enum MetricsError {
     },
     NoSuchMetric {
         namespace: Vec<String>,
-        label: String,
+        name: String,
     },
     Prometheus {
         source: prometheus::Error,
@@ -39,59 +39,6 @@ pub enum MetricsError {
 impl From<prometheus::Error> for MetricsError {
     fn from(source: prometheus::Error) -> Self {
         Self::Prometheus { source }
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-struct Registry {
-    prometheus: prometheus::Registry,
-    // There is nothing in the Prometheus standard corresponding to our notion of a [Label] (which
-    // is like a gauge whose value is text). As a workaround we serialize labels using special
-    // Prometheus comments, like `# LABEL <name> "<text>"`. `labels` collects _all_ labels (as a map
-    // from fully-qualified name to label value) in this tree of metric groups.
-    //
-    // We store all the labels here, rather than storing the labels for each sub-group in the
-    // appropriate [PrometheusMetrics], to match the behavior of Prometheus-native metrics, where
-    // all metrics from any related subgroup are serialied when [PrometheusMetrics::prometheus] is
-    // called on any subgroup.
-    labels: Arc<RwLock<HashMap<Vec<String>, Label>>>,
-}
-
-impl Registry {
-    fn register(&self, metric: Box<dyn Collector>) {
-        self.prometheus.register(metric).unwrap();
-    }
-
-    fn register_label(&self, fq_name: Vec<String>, value: Label) {
-        self.labels.write().unwrap().insert(fq_name, value);
-    }
-
-    fn get_label(&self, fq_name: &[String]) -> Option<Label> {
-        self.labels.read().unwrap().get(fq_name).cloned()
-    }
-
-    fn export(&self) -> Result<String, MetricsError> {
-        // First write all the labels as Prometheus comments.
-        let mut labels = self
-            .labels
-            .read()
-            .unwrap()
-            .iter()
-            .map(|(fq_name, label)| format!("# LABEL {} {}", fq_name.iter().join("_"), label.get()))
-            .join("\n");
-        labels.push('\n');
-
-        // Now append the Prometheus metrics.
-        let mut buffer = labels.into_bytes();
-        let encoder = TextEncoder::new();
-        let metric_families = self.prometheus.gather();
-        encoder.encode(&metric_families, &mut buffer)?;
-        String::from_utf8(buffer).map_err(|err| MetricsError::Prometheus {
-            source: prometheus::Error::Msg(format!(
-                "could not convert Prometheus output to UTF-8: {}",
-                err
-            )),
-        })
     }
 }
 
@@ -122,34 +69,40 @@ pub struct PrometheusMetrics {
     counters: Arc<RwLock<HashMap<String, Counter>>>,
     gauges: Arc<RwLock<HashMap<String, Gauge>>>,
     histograms: Arc<RwLock<HashMap<String, Histogram>>>,
+    counter_families: Arc<RwLock<HashMap<String, CounterFamily>>>,
+    gauge_families: Arc<RwLock<HashMap<String, GaugeFamily>>>,
+    histogram_families: Arc<RwLock<HashMap<String, HistogramFamily>>>,
 }
 
 impl PrometheusMetrics {
     /// Get a counter in this sub-group by name.
-    pub fn get_counter(&self, label: &str) -> Result<Counter, MetricsError> {
-        self.get_metric(&self.counters, label)
+    pub fn get_counter(&self, name: &str) -> Result<Counter, MetricsError> {
+        self.get_metric(&self.counters, name)
     }
 
     /// Get a gauge in this sub-group by name.
-    pub fn get_gauge(&self, label: &str) -> Result<Gauge, MetricsError> {
-        self.get_metric(&self.gauges, label)
+    pub fn get_gauge(&self, name: &str) -> Result<Gauge, MetricsError> {
+        self.get_metric(&self.gauges, name)
     }
 
     /// Get a histogram in this sub-group by name.
-    pub fn get_histogram(&self, label: &str) -> Result<Histogram, MetricsError> {
-        self.get_metric(&self.histograms, label)
+    pub fn get_histogram(&self, name: &str) -> Result<Histogram, MetricsError> {
+        self.get_metric(&self.histograms, name)
     }
 
-    /// Get a label in this sub-group by name.
-    pub fn get_label(&self, name: &str) -> Result<Label, MetricsError> {
-        let mut fq_name = self.namespace.clone();
-        fq_name.push(name.to_string());
-        self.metrics
-            .get_label(&fq_name)
-            .ok_or_else(|| MetricsError::NoSuchMetric {
-                namespace: self.namespace.clone(),
-                label: name.to_string(),
-            })
+    /// Get a counter family in this sub-group by name.
+    pub fn get_counter_family(&self, name: &str) -> Result<CounterFamily, MetricsError> {
+        self.get_metric(&self.counter_families, name)
+    }
+
+    /// Get a gauge family in this sub-group by name.
+    pub fn gauge_family(&self, name: &str) -> Result<GaugeFamily, MetricsError> {
+        self.get_metric(&self.gauge_families, name)
+    }
+
+    /// Get a histogram family in this sub-group by name.
+    pub fn get_histogram_family(&self, name: &str) -> Result<HistogramFamily, MetricsError> {
+        self.get_metric(&self.histogram_families, name)
     }
 
     /// Get a (possibly nested) subgroup of this group by its path.
@@ -181,22 +134,22 @@ impl PrometheusMetrics {
     fn get_metric<M: Clone>(
         &self,
         metrics: &Arc<RwLock<HashMap<String, M>>>,
-        label: &str,
+        name: &str,
     ) -> Result<M, MetricsError> {
         metrics
             .read()
             .unwrap()
-            .get(label)
+            .get(name)
             .cloned()
             .ok_or_else(|| MetricsError::NoSuchMetric {
                 namespace: self.namespace.clone(),
-                label: label.to_string(),
+                name: name.to_string(),
             })
     }
 
-    fn metric_opts(&self, label: String, unit_label: Option<String>) -> Opts {
-        let help = unit_label.unwrap_or_else(|| label.clone());
-        let mut opts = Opts::new(label, help);
+    fn metric_opts(&self, name: String, unit_label: Option<String>) -> Opts {
+        let help = unit_label.unwrap_or_else(|| name.clone());
+        let mut opts = Opts::new(name, help);
         let mut group_names = self.namespace.iter();
         if let Some(namespace) = group_names.next() {
             opts = opts
@@ -211,45 +164,92 @@ impl tide_disco::metrics::Metrics for PrometheusMetrics {
     type Error = MetricsError;
 
     fn export(&self) -> Result<String, Self::Error> {
-        self.metrics.export()
+        let encoder = TextEncoder::new();
+        let metric_families = self.metrics.gather();
+        let mut buffer = vec![];
+        encoder.encode(&metric_families, &mut buffer)?;
+        String::from_utf8(buffer).map_err(|err| MetricsError::Prometheus {
+            source: prometheus::Error::Msg(format!(
+                "could not convert Prometheus output to UTF-8: {}",
+                err
+            )),
+        })
     }
 }
 
 impl metrics::Metrics for PrometheusMetrics {
     fn create_counter(
         &self,
-        label: String,
+        name: String,
         unit_label: Option<String>,
     ) -> Box<dyn metrics::Counter> {
-        let counter = Counter::new(&self.metrics, self.metric_opts(label.clone(), unit_label));
-        self.counters
-            .write()
-            .unwrap()
-            .insert(label, counter.clone());
+        let counter = Counter::new(&self.metrics, self.metric_opts(name.clone(), unit_label));
+        self.counters.write().unwrap().insert(name, counter.clone());
         Box::new(counter)
     }
 
-    fn create_gauge(&self, label: String, unit_label: Option<String>) -> Box<dyn metrics::Gauge> {
-        let gauge = Gauge::new(&self.metrics, self.metric_opts(label.clone(), unit_label));
-        self.gauges.write().unwrap().insert(label, gauge.clone());
+    fn create_gauge(&self, name: String, unit_label: Option<String>) -> Box<dyn metrics::Gauge> {
+        let gauge = Gauge::new(&self.metrics, self.metric_opts(name.clone(), unit_label));
+        self.gauges.write().unwrap().insert(name, gauge.clone());
         Box::new(gauge)
     }
 
     fn create_histogram(
         &self,
-        label: String,
+        name: String,
         unit_label: Option<String>,
     ) -> Box<dyn metrics::Histogram> {
-        let histogram = Histogram::new(&self.metrics, self.metric_opts(label.clone(), unit_label));
+        let histogram = Histogram::new(&self.metrics, self.metric_opts(name.clone(), unit_label));
         self.histograms
             .write()
             .unwrap()
-            .insert(label, histogram.clone());
+            .insert(name, histogram.clone());
         Box::new(histogram)
     }
 
-    fn create_label(&self, name: String) -> Box<dyn metrics::Label> {
-        Box::new(Label::new(&self.metrics, self.metric_opts(name, None)))
+    fn create_text(&self, name: String) {
+        self.create_gauge(name, None).set(1);
+    }
+
+    fn counter_family(&self, name: String, labels: Vec<String>) -> Box<dyn metrics::CounterFamily> {
+        let family =
+            CounterFamily::new(&self.metrics, self.metric_opts(name.clone(), None), &labels);
+        self.counter_families
+            .write()
+            .unwrap()
+            .insert(name, family.clone());
+        Box::new(family)
+    }
+
+    fn gauge_family(&self, name: String, labels: Vec<String>) -> Box<dyn metrics::GaugeFamily> {
+        let family = GaugeFamily::new(&self.metrics, self.metric_opts(name.clone(), None), &labels);
+        self.gauge_families
+            .write()
+            .unwrap()
+            .insert(name, family.clone());
+        Box::new(family)
+    }
+
+    fn histogram_family(
+        &self,
+        name: String,
+        labels: Vec<String>,
+    ) -> Box<dyn metrics::HistogramFamily> {
+        let family =
+            HistogramFamily::new(&self.metrics, self.metric_opts(name.clone(), None), &labels);
+        self.histogram_families
+            .write()
+            .unwrap()
+            .insert(name, family.clone());
+        Box::new(family)
+    }
+
+    fn text_family(&self, name: String, labels: Vec<String>) -> Box<dyn metrics::TextFamily> {
+        Box::new(TextFamily::new(
+            &self.metrics,
+            self.metric_opts(name.clone(), None),
+            &labels,
+        ))
     }
 
     fn subgroup(&self, subgroup_name: String) -> Box<dyn metrics::Metrics> {
@@ -279,7 +279,7 @@ pub struct Counter(GenericCounter<AtomicU64>);
 impl Counter {
     fn new(registry: &Registry, opts: Opts) -> Self {
         let counter = GenericCounter::with_opts(opts).unwrap();
-        registry.register(Box::new(counter.clone()));
+        registry.register(Box::new(counter.clone())).unwrap();
         Self(counter)
     }
 
@@ -301,7 +301,7 @@ pub struct Gauge(GenericGauge<AtomicU64>);
 impl Gauge {
     fn new(registry: &Registry, opts: Opts) -> Self {
         let gauge = GenericGauge::with_opts(opts).unwrap();
-        registry.register(Box::new(gauge.clone()));
+        registry.register(Box::new(gauge.clone())).unwrap();
         Self(gauge)
     }
 
@@ -331,7 +331,7 @@ pub struct Histogram(prometheus::Histogram);
 impl Histogram {
     fn new(registry: &Registry, opts: Opts) -> Self {
         let histogram = prometheus::Histogram::with_opts(opts.into()).unwrap();
-        registry.register(Box::new(histogram.clone()));
+        registry.register(Box::new(histogram.clone())).unwrap();
         Self(histogram)
     }
 
@@ -354,33 +354,91 @@ impl metrics::Histogram for Histogram {
     }
 }
 
-/// A [Label](metrics::Label) metric.
+/// A [CounterFamily](metrics::CounterFamily) metric.
 #[derive(Clone, Debug)]
-pub struct Label(Arc<RwLock<String>>);
+pub struct CounterFamily(GenericCounterVec<AtomicU64>);
 
-impl Label {
-    fn new(registry: &Registry, opts: Opts) -> Self {
-        let label = Self(Default::default());
-        let mut fq_name = vec![];
-        if !opts.namespace.is_empty() {
-            fq_name.extend(opts.namespace.split('_').map(String::from));
-        }
-        if !opts.subsystem.is_empty() {
-            fq_name.extend(opts.subsystem.split('_').map(String::from));
-        }
-        fq_name.push(opts.name.clone());
-        registry.register_label(fq_name, label.clone());
-        label
+impl CounterFamily {
+    fn new(registry: &Registry, opts: Opts, labels: &[String]) -> Self {
+        let labels = labels.iter().map(String::as_str).collect::<Vec<_>>();
+        let family = GenericCounterVec::new(opts, &labels).unwrap();
+        registry.register(Box::new(family.clone())).unwrap();
+        Self(family)
     }
 
-    pub fn get(&self) -> String {
-        self.0.read().unwrap().clone()
+    pub fn get(&self, label_values: &[impl AsRef<str>]) -> Counter {
+        let labels = label_values.iter().map(AsRef::as_ref).collect::<Vec<_>>();
+        Counter(self.0.get_metric_with_label_values(&labels).unwrap())
     }
 }
 
-impl metrics::Label for Label {
-    fn set(&self, value: String) {
-        *self.0.write().unwrap() = value;
+impl metrics::MetricsFamily<Box<dyn metrics::Counter>> for CounterFamily {
+    fn create(&self, labels: Vec<String>) -> Box<dyn metrics::Counter> {
+        Box::new(self.get(&labels))
+    }
+}
+
+/// A [GaugeFamily](metrics::GaugeFamily) metric.
+#[derive(Clone, Debug)]
+pub struct GaugeFamily(GenericGaugeVec<AtomicU64>);
+
+impl GaugeFamily {
+    fn new(registry: &Registry, opts: Opts, labels: &[String]) -> Self {
+        let labels = labels.iter().map(String::as_str).collect::<Vec<_>>();
+        let family = GenericGaugeVec::new(opts, &labels).unwrap();
+        registry.register(Box::new(family.clone())).unwrap();
+        Self(family)
+    }
+
+    pub fn get(&self, label_values: &[impl AsRef<str>]) -> Gauge {
+        let labels = label_values.iter().map(AsRef::as_ref).collect::<Vec<_>>();
+        Gauge(self.0.get_metric_with_label_values(&labels).unwrap())
+    }
+}
+
+impl metrics::MetricsFamily<Box<dyn metrics::Gauge>> for GaugeFamily {
+    fn create(&self, labels: Vec<String>) -> Box<dyn metrics::Gauge> {
+        Box::new(self.get(&labels))
+    }
+}
+
+/// A [HistogramFamily](metrics::HistogramFamily) metric.
+#[derive(Clone, Debug)]
+pub struct HistogramFamily(HistogramVec);
+
+impl HistogramFamily {
+    fn new(registry: &Registry, opts: Opts, labels: &[String]) -> Self {
+        let labels = labels.iter().map(String::as_str).collect::<Vec<_>>();
+        let family = HistogramVec::new(opts.into(), &labels).unwrap();
+        registry.register(Box::new(family.clone())).unwrap();
+        Self(family)
+    }
+
+    pub fn get(&self, label_values: &[impl AsRef<str>]) -> Histogram {
+        let labels = label_values.iter().map(AsRef::as_ref).collect::<Vec<_>>();
+        Histogram(self.0.get_metric_with_label_values(&labels).unwrap())
+    }
+}
+
+impl metrics::MetricsFamily<Box<dyn metrics::Histogram>> for HistogramFamily {
+    fn create(&self, labels: Vec<String>) -> Box<dyn metrics::Histogram> {
+        Box::new(self.get(&labels))
+    }
+}
+
+/// A [TextFamily](metrics::TextFamily) metric.
+#[derive(Clone, Debug)]
+pub struct TextFamily(GaugeFamily);
+
+impl TextFamily {
+    fn new(registry: &Registry, opts: Opts, labels: &[String]) -> Self {
+        Self(GaugeFamily::new(registry, opts, labels))
+    }
+}
+
+impl metrics::MetricsFamily<()> for TextFamily {
+    fn create(&self, labels: Vec<String>) {
+        self.0.create(labels).set(1);
     }
 }
 
@@ -401,13 +459,12 @@ mod test {
         let counter = metrics.create_counter("counter".into(), None);
         let gauge = metrics.create_gauge("gauge".into(), None);
         let histogram = metrics.create_histogram("histogram".into(), None);
-        let label = metrics.create_label("label".into());
+        metrics.create_text("text".into());
 
         // Set the metric values.
         counter.add(20);
         gauge.set(42);
         histogram.add_point(20f64);
-        label.set("value".into());
 
         // Check the values.
         assert_eq!(metrics.get_counter("counter").unwrap().get(), 20);
@@ -418,13 +475,11 @@ mod test {
         );
         assert_eq!(metrics.get_histogram("histogram").unwrap().sum(), 20f64);
         assert_eq!(metrics.get_histogram("histogram").unwrap().mean(), 20f64);
-        assert_eq!(metrics.get_label("label").unwrap().get(), "value");
 
         // Set the metric values again, to be sure they update properly.
         counter.add(22);
         gauge.set(100);
         histogram.add_point(22f64);
-        label.set("another".into());
 
         // Check the updated values.
         assert_eq!(metrics.get_counter("counter").unwrap().get(), 42);
@@ -435,7 +490,6 @@ mod test {
         );
         assert_eq!(metrics.get_histogram("histogram").unwrap().sum(), 42f64);
         assert_eq!(metrics.get_histogram("histogram").unwrap().mean(), 21f64);
-        assert_eq!(metrics.get_label("label").unwrap().get(), "another");
 
         // Export to a Prometheus string.
         let string = metrics.export().unwrap();
@@ -445,7 +499,7 @@ mod test {
         assert!(lines.contains(&"gauge 100"));
         assert!(lines.contains(&"histogram_sum 42"));
         assert!(lines.contains(&"histogram_count 2"));
-        assert!(lines.contains(&"# LABEL label another"));
+        assert!(lines.contains(&"text 1"));
     }
 
     #[test]
@@ -456,9 +510,8 @@ mod test {
         let subgroup1 = metrics.subgroup("subgroup1".into());
         let subgroup2 = subgroup1.subgroup("subgroup2".into());
         let counter = subgroup2.create_counter("counter".into(), None);
-        let label = subgroup2.create_label("label".into());
+        subgroup2.create_text("text".into());
         counter.add(42);
-        label.set("value".into());
 
         // Check namespacing.
         assert_eq!(
@@ -511,33 +564,56 @@ mod test {
             .lines()
             .contains(&"subgroup1_subgroup2_counter 42"));
 
-        // Check different ways of accessing the label.
-        assert_eq!(
-            metrics
-                .get_subgroup(["subgroup1", "subgroup2"])
-                .unwrap()
-                .get_label("label")
-                .unwrap()
-                .get(),
-            "value"
-        );
-        assert_eq!(
-            metrics
-                .get_subgroup(["subgroup1"])
-                .unwrap()
-                .get_subgroup(["subgroup2"])
-                .unwrap()
-                .get_label("label")
-                .unwrap()
-                .get(),
-            "value"
-        );
-
-        // Check fully-qualified label name in export.
+        // Check fully-qualified text name in export.
         assert!(metrics
             .export()
             .unwrap()
             .lines()
-            .contains(&"# LABEL subgroup1_subgroup2_label value"));
+            .contains(&"subgroup1_subgroup2_text 1"));
+    }
+
+    #[test]
+    fn test_labels() {
+        setup_test();
+
+        let metrics = PrometheusMetrics::default();
+
+        let http_count = metrics.counter_family("http".into(), vec!["method".into()]);
+        let get_count = http_count.create(vec!["GET".into()]);
+        let post_count = http_count.create(vec!["POST".into()]);
+        get_count.add(1);
+        post_count.add(2);
+
+        metrics
+            .text_family("version".into(), vec!["semver".into(), "rev".into()])
+            .create(vec!["0.1.0".into(), "d1b650a7".into()]);
+
+        assert_eq!(
+            metrics
+                .get_counter_family("http")
+                .unwrap()
+                .get(&["GET"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            metrics
+                .get_counter_family("http")
+                .unwrap()
+                .get(&["POST"])
+                .get(),
+            2
+        );
+
+        // Export to a Prometheus string.
+        let string = metrics.export().unwrap();
+        // Make sure the output makes sense.
+        let lines = string.lines().collect::<Vec<_>>();
+        assert!(lines.contains(&"http{method=\"GET\"} 1"), "{lines:?}");
+        assert!(lines.contains(&"http{method=\"POST\"} 2"), "{lines:?}");
+        assert!(
+            lines.contains(&"version{rev=\"d1b650a7\",semver=\"0.1.0\"} 1"),
+            "{lines:?}"
+        );
     }
 }
