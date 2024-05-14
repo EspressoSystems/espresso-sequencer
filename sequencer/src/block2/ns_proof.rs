@@ -1,5 +1,5 @@
 use crate::{
-    block2::{ns_payload::NsPayloadOwned, ns_table::NsTable, payload::Payload},
+    block2::{ns_table::NsTable, payload::Payload},
     NamespaceId, Transaction,
 };
 use hotshot_types::vid::{
@@ -10,6 +10,8 @@ use jf_primitives::vid::{
     VidScheme,
 };
 use serde::{Deserialize, Serialize};
+
+use super::ns_payload2::NsPayloadOwned2;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct NsProof {
@@ -29,7 +31,7 @@ impl NsProof {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 struct NsProofExistence {
     // TODO `#[serde(with = "base64_bytes")]` screws up serde for `NsPayloadOwned`.
-    ns_payload: NsPayloadOwned,
+    ns_payload: NsPayloadOwned2,
     ns_proof: LargeRangeProofType,
 }
 
@@ -37,6 +39,8 @@ impl NsProof {
     /// Returns the payload bytes for namespace `ns_id`, along with a proof of
     /// correctness for those bytes.
     pub fn new(payload: &Payload, ns_id: NamespaceId, common: &VidCommon) -> Option<NsProof> {
+        let payload_byte_len = payload.as_byte_slice().len(); // TODO newtype?
+
         if payload.as_byte_slice().len() != VidSchemeType::get_payload_byte_len(common) {
             return None; // error: vid_common inconsistent with self
         }
@@ -47,19 +51,19 @@ impl NsProof {
                 existence: None,
             });
         };
-        let ns_payload = payload.ns_payload(&ns_index).to_owned();
-        let ns_proof = {
-            let ns_payload_range = payload.ns_payload_range(&ns_index).as_range();
-            let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
-            vid.payload_proof(payload.as_byte_slice(), ns_payload_range)
-                .ok()? // error: failure to make a payload proof
-        };
+
+        let ns_payload_range = payload
+            .ns_table()
+            .ns_payload_range2(&ns_index, payload_byte_len);
+        let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
 
         Some(NsProof {
             ns_id,
             existence: Some(NsProofExistence {
-                ns_payload,
-                ns_proof,
+                ns_payload: payload.read_ns_payload(&ns_payload_range).to_owned(),
+                ns_proof: vid
+                    .payload_proof(payload.as_byte_slice(), ns_payload_range.as_range())
+                    .ok()?,
             }),
         })
     }

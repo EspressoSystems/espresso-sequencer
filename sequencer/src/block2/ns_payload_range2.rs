@@ -13,6 +13,7 @@ impl NsPayloadRange2 {
     pub fn new(start: usize, end: usize) -> Self {
         Self(start..end)
     }
+    // TODO replace with equivalent of `PayloadBytesRange::block_payload_range`
     pub fn as_range(&self) -> Range<usize> {
         self.0.clone()
     }
@@ -33,6 +34,8 @@ impl NsPayloadRange2 {
     /// - `num_txs`
     /// - The maximum number of tx table entries that could fit in the namespace
     ///   payload.
+    ///
+    /// TODO delete me
     pub fn num_txs(&self, num_txs: &NumTxs2) -> usize {
         std::cmp::min(
             // Number of txs declared in the tx table

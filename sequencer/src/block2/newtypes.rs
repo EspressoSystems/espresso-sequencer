@@ -79,9 +79,26 @@ pub struct NumTxs2(usize);
 as_payload_bytes_serde_impl!(NumTxs2);
 
 impl NumTxs2 {
-    // TODO can I get rid of this?
+    // TODO delete me
     pub fn as_usize(&self) -> usize {
         self.0
+    }
+
+    /// Number of txs in this namespace.
+    ///
+    /// Returns the minimum of:
+    /// - `num_txs`
+    /// - The maximum number of tx table entries that could fit in the namespace
+    ///   payload.
+    ///
+    /// TODO newtype for ns_payload_byte_len
+    pub fn num_txs(&self, ns_payload_byte_len: usize) -> usize {
+        std::cmp::min(
+            // Number of txs declared in the tx table
+            self.0,
+            // Max number of tx table entries that could fit in the namespace payload
+            ns_payload_byte_len.saturating_sub(NUM_TXS_BYTE_LEN) / TX_OFFSET_BYTE_LEN,
+        )
     }
 }
 
