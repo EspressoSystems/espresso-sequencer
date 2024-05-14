@@ -19,12 +19,12 @@ package "Espresso Sequencer" as Espresso {
         component "HotShot Query\nService" as QS {
         }
         component "APIs" {
-            portin "Hotshot\nEvents\nStream" as Events
             portin Catchup
             portin HTTP
             portin Status
             portin Submit
             portin Query
+            portin "Hotshot\nEvents\nStream" as Events
         }
         component "Networking"{
             component Libp2p
