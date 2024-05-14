@@ -72,11 +72,10 @@ impl<'a> Iterator for Iter<'a> {
                         .ns_table()
                         .ns_payload_range2(ns_index, self.block.as_byte_slice().len());
                     let ns_payload = self.block.read_ns_payload(&ns_payload_range);
-                    // TODO newtype for ns payload byte len
-                    let ns_payload_byte_len = ns_payload.as_byte_slice().len();
-                    let num_txs_range = NumTxsRange2::new(ns_payload_byte_len);
+                    let byte_len = ns_payload.byte_len();
+                    let num_txs_range = NumTxsRange2::new(&byte_len);
                     let num_txs = ns_payload.read(&num_txs_range);
-                    TxIter::new2(&num_txs, ns_payload_byte_len)
+                    TxIter::new2(&num_txs, &byte_len)
                 }) // ensure `tx_iter` is set
                 .next()
             {

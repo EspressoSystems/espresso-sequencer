@@ -179,10 +179,10 @@ impl Payload {
             .ns_table()
             .ns_payload_range2(index.ns(), self.payload.len());
         let ns_payload = self.read_ns_payload(&ns_payload_range);
-        let num_txs = ns_payload.read(&NumTxsRange2::new(ns_payload_range.byte_len()));
+        let num_txs = ns_payload.read(&NumTxsRange2::new(&ns_payload_range.byte_len()));
         let tx_table_entries = ns_payload.read(&TxTableEntriesRange2::new(index.tx()));
         let tx_payload_range =
-            TxPayloadRange::new(&num_txs, &tx_table_entries, ns_payload_range.byte_len());
+            TxPayloadRange::new(&num_txs, &tx_table_entries, &ns_payload_range.byte_len());
         let tx_payload = ns_payload
             .read(&tx_payload_range)
             .to_payload_bytes()

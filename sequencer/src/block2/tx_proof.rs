@@ -62,7 +62,7 @@ impl TxProof2 {
 
         // Read the tx table len from this namespace's tx table and compute a
         // proof of correctness.
-        let num_txs_range = NumTxsRange2::new(ns_payload_range.byte_len());
+        let num_txs_range = NumTxsRange2::new(&ns_payload_range.byte_len());
         let payload_num_txs = ns_payload.read(&num_txs_range);
         if !ns_payload_range.in_bounds(index.tx(), &payload_num_txs) {
             return None; // error: tx index out of bounds
@@ -90,7 +90,7 @@ impl TxProof2 {
         let tx_payload_range = TxPayloadRange::new(
             &payload_num_txs,
             &payload_tx_table_entries,
-            ns_payload_range.byte_len(),
+            &ns_payload_range.byte_len(),
         );
         let payload_proof_tx = {
             let range = tx_payload_range.block_payload_range(ns_payload_range.offset());
@@ -157,7 +157,7 @@ impl TxProof2 {
                 .payload_verify(
                     Statement {
                         payload_subslice: self.payload_num_txs.to_payload_bytes().as_ref(),
-                        range: NumTxsRange2::new(ns_payload_range.byte_len())
+                        range: NumTxsRange2::new(&ns_payload_range.byte_len())
                             .block_payload_range(ns_payload_range.offset()),
                         commit,
                         common,
@@ -196,7 +196,7 @@ impl TxProof2 {
             let range = TxPayloadRange::new(
                 &self.payload_num_txs,
                 &self.payload_tx_table_entries,
-                ns_payload_range.byte_len(),
+                &ns_payload_range.byte_len(),
             )
             .block_payload_range(ns_payload_range.offset());
 

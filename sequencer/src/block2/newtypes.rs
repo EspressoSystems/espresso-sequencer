@@ -72,13 +72,13 @@ impl NumTxs2 {
     /// - The maximum number of tx table entries that could fit in the namespace
     ///   payload.
     ///
-    /// TODO newtype for ns_payload_byte_len
-    pub fn num_txs(&self, ns_payload_byte_len: usize) -> usize {
+    /// TODO this method should be a constructor of NumTxsChecked
+    pub fn num_txs(&self, byte_len: &NsPayloadByteLen) -> usize {
         std::cmp::min(
             // Number of txs declared in the tx table
             self.0,
             // Max number of tx table entries that could fit in the namespace payload
-            ns_payload_byte_len.saturating_sub(NUM_TXS_BYTE_LEN) / TX_OFFSET_BYTE_LEN,
+            byte_len.0.saturating_sub(NUM_TXS_BYTE_LEN) / TX_OFFSET_BYTE_LEN,
         )
     }
 }
@@ -93,12 +93,20 @@ impl AsPayloadBytes<'_> for NumTxs2 {
     }
 }
 
+pub struct NsPayloadByteLen(usize);
+
+impl NsPayloadByteLen {
+    // TODO restrict visibility
+    pub fn from_usize(n: usize) -> Self {
+        Self(n)
+    }
+}
+
 pub struct NumTxsRange2(Range<usize>);
 
 impl NumTxsRange2 {
-    // TODO newtype for `ns_payload_byte_len`?
-    pub fn new(ns_payload_byte_len: usize) -> Self {
-        Self(0..NUM_TXS_BYTE_LEN.min(ns_payload_byte_len))
+    pub fn new(byte_len: &NsPayloadByteLen) -> Self {
+        Self(0..NUM_TXS_BYTE_LEN.min(byte_len.0))
     }
 }
 
@@ -201,7 +209,7 @@ impl TxPayloadRange {
     pub fn new(
         num_txs: &NumTxs2,
         tx_table_entries: &TxTableEntries2,
-        ns_payload_byte_len: usize,
+        byte_len: &NsPayloadByteLen,
     ) -> Self {
         let tx_table_byte_len = num_txs
             .0
@@ -210,7 +218,7 @@ impl TxPayloadRange {
         let end = tx_table_entries
             .cur
             .saturating_add(tx_table_byte_len)
-            .min(ns_payload_byte_len);
+            .min(byte_len.0);
         let start = tx_table_entries
             .prev
             .unwrap_or(0)

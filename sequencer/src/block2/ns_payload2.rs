@@ -6,7 +6,8 @@ use crate::{NamespaceId, Transaction};
 
 use super::{
     newtypes::{
-        AsPayloadBytes, NumTxsRange2, PayloadBytesRange, TxPayloadRange, TxTableEntriesRange2,
+        AsPayloadBytes, NsPayloadByteLen, NumTxsRange2, PayloadBytesRange, TxPayloadRange,
+        TxTableEntriesRange2,
     },
     tx_iter::TxIter,
 };
@@ -17,6 +18,10 @@ pub struct NsPayload2([u8]);
 impl NsPayload2 {
     pub fn new(bytes: &[u8]) -> &NsPayload2 {
         NsPayload2::new_private(bytes)
+    }
+
+    pub fn byte_len(&self) -> NsPayloadByteLen {
+        NsPayloadByteLen::from_usize(self.0.len())
     }
 
     /// Access the bytes of this [`NsPayload`].
@@ -32,16 +37,15 @@ impl NsPayload2 {
     }
 
     pub fn export_all_txs(&self, ns_id: &NamespaceId) -> Vec<Transaction> {
-        // TODO newtype for ns_payload_byte_len
         // TODO I guess I need helpers for all this...
-        let num_txs = self.read(&NumTxsRange2::new(self.0.len()));
-        TxIter::new2(&num_txs, self.0.len())
+        let num_txs = self.read(&NumTxsRange2::new(&self.byte_len()));
+        TxIter::new2(&num_txs, &self.byte_len())
             .map(|i| {
                 let payload = self
                     .read(&TxPayloadRange::new(
                         &num_txs,
                         &self.read(&TxTableEntriesRange2::new(&i)),
-                        self.0.len(),
+                        &self.byte_len(),
                     ))
                     .to_payload_bytes()
                     .as_ref()
