@@ -4,7 +4,7 @@
 //! - [`Counter`]: an ever-increasing value (example usage: total bytes send/received)
 //! - [`Gauge`]: a value that store the latest value, and can go up and down (example usage: amount of users logged in)
 //! - [`Histogram`]: stores multiple float values based for a graph (example usage: CPU %)
-//! - [`Label`]: Stores the last string (example usage: current version, network online/offline)
+//! - text: stores a constant string in the collected metrics
 
 use std::fmt::Debug;
 
@@ -15,21 +15,114 @@ pub trait Metrics: Send + Sync + DynClone + Debug {
     /// Create a [`Counter`] with an optional `unit_label`.
     ///
     /// The `unit_label` can be used to indicate what the unit of the value is, e.g. "kb" or "seconds"
-    fn create_counter(&self, label: String, unit_label: Option<String>) -> Box<dyn Counter>;
+    fn create_counter(&self, name: String, unit_label: Option<String>) -> Box<dyn Counter>;
     /// Create a [`Gauge`] with an optional `unit_label`.
     ///
     /// The `unit_label` can be used to indicate what the unit of the value is, e.g. "kb" or "seconds"
-    fn create_gauge(&self, label: String, unit_label: Option<String>) -> Box<dyn Gauge>;
+    fn create_gauge(&self, name: String, unit_label: Option<String>) -> Box<dyn Gauge>;
     /// Create a [`Histogram`] with an optional `unit_label`.
     ///
     /// The `unit_label` can be used to indicate what the unit of the value is, e.g. "kb" or "seconds"
-    fn create_histogram(&self, label: String, unit_label: Option<String>) -> Box<dyn Histogram>;
-    /// Create a [`Label`].
-    fn create_label(&self, label: String) -> Box<dyn Label>;
+    fn create_histogram(&self, name: String, unit_label: Option<String>) -> Box<dyn Histogram>;
+
+    /// Create a text metric.
+    ///
+    /// Unlike other metrics, a textmetric  does not have a value. It exists only to record a text
+    /// string in the collected metrics, and possibly to care other key-value pairs as part of a
+    /// [`TextFamily`]. Thus, the act of creating the text itself is sufficient to populate the text
+    /// in the collect metrics; no setter function needs to be called.
+    fn create_text(&self, name: String);
+
+    /// Create a family of related counters, partitioned by their label values.
+    fn counter_family(&self, name: String, labels: Vec<String>) -> Box<dyn CounterFamily>;
+
+    /// Create a family of related gauges, partitioned by their label values.
+    fn gauge_family(&self, name: String, labels: Vec<String>) -> Box<dyn GaugeFamily>;
+
+    /// Create a family of related histograms, partitioned by their label values.
+    fn histogram_family(&self, name: String, labels: Vec<String>) -> Box<dyn HistogramFamily>;
+
+    /// Create a family of related text metricx, partitioned by their label values.
+    fn text_family(&self, name: String, labels: Vec<String>) -> Box<dyn TextFamily>;
 
     /// Create a subgroup with a specified prefix.
     fn subgroup(&self, subgroup_name: String) -> Box<dyn Metrics>;
 }
+
+/// A family of related metrics, partitioned by their label values.
+///
+/// All metrics in a family have the same name. They are distinguished by a vector of strings
+/// called labels. Each label has a name and a value, and each distinct vector of lable values
+/// within a family acts like a distinct metric.
+///
+/// The family object is used to instantiate individual metrics within the family via the
+/// [`create`](Self::create) method.
+///
+/// # Examples
+///
+/// ## Counting HTTP requests, partitioned by method.
+///
+/// ```
+/// # use hotshot_types::traits::metrics::{Metrics, MetricsFamily, Counter};
+/// # fn doc(_metrics: Box<dyn Metrics>) {
+/// let metrics: Box<dyn Metrics>;
+/// # metrics = _metrics;
+/// let http_count = metrics.counter_family("http".into(), vec!["method".into()]);
+/// let get_count = http_count.create(vec!["GET".into()]);
+/// let post_count = http_count.create(vec!["POST".into()]);
+///
+/// get_count.add(1);
+/// post_count.add(2);
+/// # }
+/// ```
+///
+/// This creates Prometheus metrics like
+/// ```text
+/// http{method="GET"} 1
+/// http{method="POST"} 2
+/// ```
+///
+/// ## Using labels to store key-value text pairs.
+///
+/// ```
+/// # use hotshot_types::traits::metrics::{Metrics, MetricsFamily};
+/// # fn doc(_metrics: Box<dyn Metrics>) {
+/// let metrics: Box<dyn Metrics>;
+/// # metrics = _metrics;
+/// metrics
+///     .text_family("version".into(), vec!["semver".into(), "rev".into()])
+///     .create(vec!["0.1.0".into(), "891c5baa5".into()]);
+/// # }
+/// ```
+///
+/// This creates Prometheus metrics like
+/// ```text
+/// version{semver="0.1.0", rev="891c5baa5"} 1
+/// ```
+pub trait MetricsFamily<M>: Send + Sync + DynClone + Debug {
+    /// Instantiate a metric in this family with a specific label vector.
+    ///
+    /// The given values of `labels` are used to identify this metric within its family. It must
+    /// contain exactly one value for each label name defined when the family was created, in the
+    /// same order.
+    fn create(&self, labels: Vec<String>) -> M;
+}
+
+/// A family of related counters, partitioned by their label values.
+pub trait CounterFamily: MetricsFamily<Box<dyn Counter>> {}
+impl<T: MetricsFamily<Box<dyn Counter>>> CounterFamily for T {}
+
+/// A family of related gauges, partitioned by their label values.
+pub trait GaugeFamily: MetricsFamily<Box<dyn Gauge>> {}
+impl<T: MetricsFamily<Box<dyn Gauge>>> GaugeFamily for T {}
+
+/// A family of related histograms, partitioned by their label values.
+pub trait HistogramFamily: MetricsFamily<Box<dyn Histogram>> {}
+impl<T: MetricsFamily<Box<dyn Histogram>>> HistogramFamily for T {}
+
+/// A family of related text metrics, partitioned by their label values.
+pub trait TextFamily: MetricsFamily<()> {}
+impl<T: MetricsFamily<()>> TextFamily for T {}
 
 /// Use this if you're not planning to use any metrics. All methods are implemented as a no-op
 #[derive(Clone, Copy, Debug, Default)]
@@ -56,7 +149,21 @@ impl Metrics for NoMetrics {
         Box::new(NoMetrics)
     }
 
-    fn create_label(&self, _: String) -> Box<dyn Label> {
+    fn create_text(&self, _: String) {}
+
+    fn counter_family(&self, _: String, _: Vec<String>) -> Box<dyn CounterFamily> {
+        Box::new(NoMetrics)
+    }
+
+    fn gauge_family(&self, _: String, _: Vec<String>) -> Box<dyn GaugeFamily> {
+        Box::new(NoMetrics)
+    }
+
+    fn histogram_family(&self, _: String, _: Vec<String>) -> Box<dyn HistogramFamily> {
+        Box::new(NoMetrics)
+    }
+
+    fn text_family(&self, _: String, _: Vec<String>) -> Box<dyn TextFamily> {
         Box::new(NoMetrics)
     }
 
@@ -75,8 +182,23 @@ impl Gauge for NoMetrics {
 impl Histogram for NoMetrics {
     fn add_point(&self, _: f64) {}
 }
-impl Label for NoMetrics {
-    fn set(&self, _: String) {}
+impl MetricsFamily<Box<dyn Counter>> for NoMetrics {
+    fn create(&self, _: Vec<String>) -> Box<dyn Counter> {
+        Box::new(NoMetrics)
+    }
+}
+impl MetricsFamily<Box<dyn Gauge>> for NoMetrics {
+    fn create(&self, _: Vec<String>) -> Box<dyn Gauge> {
+        Box::new(NoMetrics)
+    }
+}
+impl MetricsFamily<Box<dyn Histogram>> for NoMetrics {
+    fn create(&self, _: Vec<String>) -> Box<dyn Histogram> {
+        Box::new(NoMetrics)
+    }
+}
+impl MetricsFamily<()> for NoMetrics {
+    fn create(&self, _: Vec<String>) {}
 }
 
 /// An ever-incrementing counter
@@ -99,16 +221,10 @@ pub trait Histogram: Send + Sync + Debug + DynClone {
     fn add_point(&self, point: f64);
 }
 
-/// A label that stores the last string value.
-pub trait Label: Send + Sync + DynClone {
-    /// Set the label value
-    fn set(&self, value: String);
-}
 dyn_clone::clone_trait_object!(Metrics);
 dyn_clone::clone_trait_object!(Gauge);
 dyn_clone::clone_trait_object!(Counter);
 dyn_clone::clone_trait_object!(Histogram);
-dyn_clone::clone_trait_object!(Label);
 
 #[cfg(test)]
 mod test {
@@ -137,35 +253,55 @@ mod test {
                 values: Arc::clone(&self.values),
             }
         }
+
+        fn family(&self, labels: Vec<String>) -> Self {
+            let mut curr = self.clone();
+            for label in labels {
+                curr = curr.sub(label);
+            }
+            curr
+        }
     }
 
     impl Metrics for TestMetrics {
         fn create_counter(
             &self,
-            label: String,
+            name: String,
             _unit_label: Option<String>,
         ) -> Box<dyn super::Counter> {
-            Box::new(self.sub(label))
+            Box::new(self.sub(name))
         }
 
-        fn create_gauge(
-            &self,
-            label: String,
-            _unit_label: Option<String>,
-        ) -> Box<dyn super::Gauge> {
-            Box::new(self.sub(label))
+        fn create_gauge(&self, name: String, _unit_label: Option<String>) -> Box<dyn super::Gauge> {
+            Box::new(self.sub(name))
         }
 
         fn create_histogram(
             &self,
-            label: String,
+            name: String,
             _unit_label: Option<String>,
         ) -> Box<dyn super::Histogram> {
-            Box::new(self.sub(label))
+            Box::new(self.sub(name))
         }
 
-        fn create_label(&self, label: String) -> Box<dyn super::Label> {
-            Box::new(self.sub(label))
+        fn create_text(&self, name: String) {
+            self.create_gauge(name, None).set(1);
+        }
+
+        fn counter_family(&self, name: String, _: Vec<String>) -> Box<dyn CounterFamily> {
+            Box::new(self.sub(name))
+        }
+
+        fn gauge_family(&self, name: String, _: Vec<String>) -> Box<dyn GaugeFamily> {
+            Box::new(self.sub(name))
+        }
+
+        fn histogram_family(&self, name: String, _: Vec<String>) -> Box<dyn HistogramFamily> {
+            Box::new(self.sub(name))
+        }
+
+        fn text_family(&self, name: String, _: Vec<String>) -> Box<dyn TextFamily> {
+            Box::new(self.sub(name))
         }
 
         fn subgroup(&self, subgroup_name: String) -> Box<dyn Metrics> {
@@ -215,15 +351,27 @@ mod test {
         }
     }
 
-    impl Label for TestMetrics {
-        fn set(&self, value: String) {
-            *self
-                .values
-                .lock()
-                .unwrap()
-                .labels
-                .entry(self.prefix.clone())
-                .or_default() = value;
+    impl MetricsFamily<Box<dyn Counter>> for TestMetrics {
+        fn create(&self, labels: Vec<String>) -> Box<dyn Counter> {
+            Box::new(self.family(labels))
+        }
+    }
+
+    impl MetricsFamily<Box<dyn Gauge>> for TestMetrics {
+        fn create(&self, labels: Vec<String>) -> Box<dyn Gauge> {
+            Box::new(self.family(labels))
+        }
+    }
+
+    impl MetricsFamily<Box<dyn Histogram>> for TestMetrics {
+        fn create(&self, labels: Vec<String>) -> Box<dyn Histogram> {
+            Box::new(self.family(labels))
+        }
+    }
+
+    impl MetricsFamily<()> for TestMetrics {
+        fn create(&self, labels: Vec<String>) {
+            self.family(labels).set(1);
         }
     }
 
@@ -232,7 +380,6 @@ mod test {
         counters: HashMap<String, usize>,
         gauges: HashMap<String, usize>,
         histograms: HashMap<String, Vec<f64>>,
-        labels: HashMap<String, String>,
     }
 
     #[test]

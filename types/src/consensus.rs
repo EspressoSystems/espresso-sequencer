@@ -2,12 +2,11 @@
 
 use std::{
     collections::{BTreeMap, HashMap},
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use anyhow::{ensure, Result};
 use committable::{Commitment, Committable};
-use displaydoc::Display;
 use tracing::{debug, error};
 
 pub use crate::utils::{View, ViewInner};
@@ -21,7 +20,7 @@ use crate::{
     },
     traits::{
         block_contents::BuilderFee,
-        metrics::{Counter, Gauge, Histogram, Label, Metrics, NoMetrics},
+        metrics::{Counter, Gauge, Histogram, Metrics, NoMetrics},
         node_implementation::NodeType,
         BlockPayload, ValidatedState,
     },
@@ -118,120 +117,6 @@ pub struct ConsensusMetricsValue {
     pub number_of_timeouts: Box<dyn Counter>,
     /// The number of empty blocks that have been proposed
     pub number_of_empty_blocks_proposed: Box<dyn Counter>,
-}
-
-/// The wrapper with a string name for the networking metrics
-#[derive(Clone, Debug)]
-pub struct ConsensusMetrics {
-    /// a prefix which tracks the name of the metric
-    prefix: String,
-    /// a map of values
-    values: Arc<Mutex<InnerConsensusMetrics>>,
-}
-
-/// the set of counters and gauges for the networking metrics
-#[derive(Clone, Debug, Default, Display)]
-pub struct InnerConsensusMetrics {
-    /// All the counters of the networking metrics
-    pub counters: HashMap<String, usize>,
-    /// All the gauges of the networking metrics
-    pub gauges: HashMap<String, usize>,
-    /// All the histograms of the networking metrics
-    pub histograms: HashMap<String, Vec<f64>>,
-    /// All the labels of the networking metrics
-    pub labels: HashMap<String, String>,
-}
-
-impl ConsensusMetrics {
-    #[must_use]
-    /// For the creation and naming of gauge, counter, histogram and label.
-    pub fn sub(&self, name: String) -> Self {
-        let prefix = if self.prefix.is_empty() {
-            name
-        } else {
-            format!("{}-{name}", self.prefix)
-        };
-        Self {
-            prefix,
-            values: Arc::clone(&self.values),
-        }
-    }
-}
-
-impl Metrics for ConsensusMetrics {
-    fn create_counter(&self, label: String, _unit_label: Option<String>) -> Box<dyn Counter> {
-        Box::new(self.sub(label))
-    }
-
-    fn create_gauge(&self, label: String, _unit_label: Option<String>) -> Box<dyn Gauge> {
-        Box::new(self.sub(label))
-    }
-
-    fn create_histogram(&self, label: String, _unit_label: Option<String>) -> Box<dyn Histogram> {
-        Box::new(self.sub(label))
-    }
-
-    fn create_label(&self, label: String) -> Box<dyn Label> {
-        Box::new(self.sub(label))
-    }
-
-    fn subgroup(&self, subgroup_name: String) -> Box<dyn Metrics> {
-        Box::new(self.sub(subgroup_name))
-    }
-}
-
-impl Counter for ConsensusMetrics {
-    fn add(&self, amount: usize) {
-        *self
-            .values
-            .lock()
-            .unwrap()
-            .counters
-            .entry(self.prefix.clone())
-            .or_default() += amount;
-    }
-}
-
-impl Gauge for ConsensusMetrics {
-    fn set(&self, amount: usize) {
-        *self
-            .values
-            .lock()
-            .unwrap()
-            .gauges
-            .entry(self.prefix.clone())
-            .or_default() = amount;
-    }
-    fn update(&self, delta: i64) {
-        let mut values = self.values.lock().unwrap();
-        let value = values.gauges.entry(self.prefix.clone()).or_default();
-        let signed_value = i64::try_from(*value).unwrap_or(i64::MAX);
-        *value = usize::try_from(signed_value + delta).unwrap_or(0);
-    }
-}
-
-impl Histogram for ConsensusMetrics {
-    fn add_point(&self, point: f64) {
-        self.values
-            .lock()
-            .unwrap()
-            .histograms
-            .entry(self.prefix.clone())
-            .or_default()
-            .push(point);
-    }
-}
-
-impl Label for ConsensusMetrics {
-    fn set(&self, value: String) {
-        *self
-            .values
-            .lock()
-            .unwrap()
-            .labels
-            .entry(self.prefix.clone())
-            .or_default() = value;
-    }
 }
 
 impl ConsensusMetricsValue {
