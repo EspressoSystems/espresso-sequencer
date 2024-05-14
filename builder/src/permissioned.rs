@@ -439,7 +439,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             maximize_txns_count_timeout_duration,
             instance_state
                 .chain_config
-                .base_fee()
+                .base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),

@@ -42,7 +42,9 @@ use jf_merkle_tree::{
 };
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
-use sequencer_utils::{deserialize_from_decimal, impl_to_fixed_bytes, serialize_as_decimal};
+use sequencer_utils::{
+    impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -226,7 +228,7 @@ pub fn validate_proposal(
     // validate block size and fee
     let block_size = VidSchemeType::get_payload_byte_len(vid_common) as u64;
     anyhow::ensure!(
-        block_size < expected_chain_config.max_block_size,
+        block_size < *expected_chain_config.max_block_size,
         anyhow::anyhow!(
             "Invalid Payload Size: local={:?}, proposal={:?}",
             expected_chain_config,
@@ -923,8 +925,6 @@ impl Committable for FeeInfo {
     Clone,
     Debug,
     Display,
-    Deserialize,
-    Serialize,
     PartialEq,
     Eq,
     PartialOrd,
@@ -936,14 +936,9 @@ impl Committable for FeeInfo {
     Into,
 )]
 #[display(fmt = "{_0}")]
-pub struct FeeAmount(
-    #[serde(
-        serialize_with = "serialize_as_decimal",
-        deserialize_with = "deserialize_from_decimal"
-    )]
-    U256,
-);
+pub struct FeeAmount(U256);
 
+impl_serde_from_string_or_integer!(FeeAmount);
 impl_to_fixed_bytes!(FeeAmount, U256);
 
 impl From<u64> for FeeAmount {
@@ -972,49 +967,62 @@ impl FromStr for FeeAmount {
     }
 }
 
+impl FromStringOrInteger for FeeAmount {
+    type Binary = U256;
+    type Integer = u64;
+
+    fn from_binary(b: Self::Binary) -> anyhow::Result<Self> {
+        Ok(Self(b))
+    }
+
+    fn from_integer(i: Self::Integer) -> anyhow::Result<Self> {
+        Ok(i.into())
+    }
+
+    fn from_string(s: String) -> anyhow::Result<Self> {
+        // Interpret the integer as hex if the string starts with 0x.
+        let (s, hex) = match s.strip_prefix("0x") {
+            Some(s) => (s, true),
+            None => (s.as_str(), false),
+        };
+        // Strip an optional non-numeric suffix, which will be interpreted as a unit.
+        let (s, multiplier) = match s.split_once(char::is_whitespace) {
+            Some((s, unit)) => {
+                let multiplier = match unit.to_lowercase().as_str() {
+                    "wei" => 1u64,
+                    "gwei" => 1_000_000_000,
+                    "eth" | "ether" => 1_000_000_000_000_000_000,
+                    unit => bail!("unrecognized unit {unit}"),
+                };
+                (s, multiplier)
+            }
+            None => (s, 1),
+        };
+        // Parse the base amount as an integer.
+        let base = if hex {
+            s.parse()?
+        } else {
+            U256::from_dec_str(s)?
+        };
+
+        Ok(Self(base * multiplier))
+    }
+
+    fn to_binary(&self) -> anyhow::Result<Self::Binary> {
+        Ok(self.0)
+    }
+
+    fn to_string(&self) -> anyhow::Result<String> {
+        Ok(format!("{self}"))
+    }
+}
+
 impl FeeAmount {
     pub fn as_u64(&self) -> Option<u64> {
         if self.0 <= u64::MAX.into() {
             Some(self.0.as_u64())
         } else {
             None
-        }
-    }
-
-    pub fn from_toml(toml: &toml::Value) -> anyhow::Result<Self> {
-        match toml {
-            toml::Value::String(s) => {
-                // Interpret the integer as hex if the string starts with 0x.
-                let (s, hex) = match s.strip_prefix("0x") {
-                    Some(s) => (s, true),
-                    None => (s.as_str(), false),
-                };
-                // Strip an optional non-numeric suffix, which will be interpreted as a unit.
-                let (s, multiplier) = match s.split_once(char::is_whitespace) {
-                    Some((s, unit)) => {
-                        let multiplier = match unit.to_lowercase().as_str() {
-                            "wei" => 1u64,
-                            "gwei" => 1_000_000_000,
-                            "eth" | "ether" => 1_000_000_000_000_000_000,
-                            unit => bail!("unrecognized unit {unit}"),
-                        };
-                        (s, multiplier)
-                    }
-                    None => (s, 1),
-                };
-                // Parse the base amount as an integer.
-                let base = if hex {
-                    s.parse()?
-                } else {
-                    U256::from_dec_str(s)?
-                };
-
-                Ok(Self(base * multiplier))
-            }
-            toml::Value::Integer(n) => Ok(u64::try_from(*n)
-                .context("must be an unsigned integer")?
-                .into()),
-            _ => bail!("must be an integer or an integral string"),
         }
     }
 }
@@ -1335,7 +1343,7 @@ mod test {
 
         let state = ValidatedState::default();
         let instance = NodeState::mock().with_chain_config(ChainConfig {
-            max_block_size: MAX_BLOCK_SIZE as u64,
+            max_block_size: (MAX_BLOCK_SIZE as u64).into(),
             base_fee: 0.into(),
             ..Default::default()
         });
@@ -1360,7 +1368,7 @@ mod test {
         let state = ValidatedState::default();
         let instance = NodeState::mock().with_chain_config(ChainConfig {
             base_fee: 1000.into(), // High base fee
-            max_block_size,
+            max_block_size: max_block_size.into(),
             ..Default::default()
         });
         let parent = Leaf::genesis(&instance);
@@ -1410,5 +1418,56 @@ mod test {
         state.prefund_account(dst, amt);
         state.fee_merkle_tree.forget(dst).expect_ok().unwrap();
         state.charge_fee(fee_info, dst).unwrap_err();
+    }
+
+    #[test]
+    fn test_fee_amount_serde_json_as_decimal() {
+        let amt = FeeAmount::from(123);
+        let serialized = serde_json::to_string(&amt).unwrap();
+
+        // The value is serialized as a decimal string.
+        assert_eq!(serialized, "\"123\"");
+
+        // Deserialization produces the original value
+        let deserialized: FeeAmount = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, amt);
+    }
+
+    #[test]
+    fn test_fee_amount_from_units() {
+        for (unit, multiplier) in [
+            ("wei", 1),
+            ("gwei", 1_000_000_000),
+            ("eth", 1_000_000_000_000_000_000),
+        ] {
+            let amt: FeeAmount = serde_json::from_str(&format!("\"1 {unit}\"")).unwrap();
+            assert_eq!(amt, multiplier.into());
+        }
+    }
+
+    #[test]
+    fn test_fee_amount_serde_json_from_hex() {
+        // For backwards compatibility, fee amounts can also be deserialized from a 0x-prefixed hex
+        // string.
+        let amt: FeeAmount = serde_json::from_str("\"0x123\"").unwrap();
+        assert_eq!(amt, FeeAmount::from(0x123));
+    }
+
+    #[test]
+    fn test_fee_amount_serde_json_from_number() {
+        // For convenience, fee amounts can also be deserialized from a JSON number.
+        let amt: FeeAmount = serde_json::from_str("123").unwrap();
+        assert_eq!(amt, FeeAmount::from(123));
+    }
+
+    #[test]
+    fn test_fee_amount_serde_bincode_unchanged() {
+        // For non-human-readable formats, FeeAmount just serializes as the underlying U256.
+        let n = U256::from(123);
+        let amt = FeeAmount(n);
+        assert_eq!(
+            bincode::serialize(&n).unwrap(),
+            bincode::serialize(&amt).unwrap(),
+        );
     }
 }

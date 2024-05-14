@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::Path, str::FromStr};
+use std::{collections::HashMap, path::Path};
 
 /// Initial configuration of an Espresso stake table.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -17,9 +17,10 @@ pub struct StakeTableConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Genesis {
     pub chain_config: ChainConfig,
+    pub stake_table: StakeTableConfig,
+    #[serde(default)]
     pub accounts: HashMap<FeeAccount, FeeAmount>,
     pub l1_finalized: Option<L1BlockInfo>,
-    pub stake_table: StakeTableConfig,
 }
 
 impl Genesis {
@@ -27,52 +28,7 @@ impl Genesis {
         let path = path.as_ref();
         let bytes = std::fs::read(path).context(format!("genesis file {}", path.display()))?;
         let text = std::str::from_utf8(&bytes).context("genesis file must be UTF-8")?;
-        let toml: toml::Value = toml::from_str(text).context("malformed genesis file")?;
-        Self::from_toml(&toml).context("malformed genesis file")
-    }
-
-    pub fn from_toml(toml: &toml::Value) -> anyhow::Result<Self> {
-        let genesis = toml.as_table().context("must be a TOML table")?;
-        let chain_config = ChainConfig::from_toml(
-            genesis
-                .get("chain_config")
-                .context("missing chain_config section")?,
-        )
-        .context("invalid chain config section")?;
-        let accounts = match toml.get("accounts") {
-            Some(accounts) => {
-                let accounts = accounts
-                    .as_table()
-                    .context("accounts section must be a table")?;
-                accounts
-                    .iter()
-                    .map(|(account, value)| {
-                        Ok((
-                            FeeAccount::from_str(account)
-                                .context(format!("invalid account {account}"))?,
-                            FeeAmount::from_toml(value)
-                                .context(format!("invalid value for account {account}"))?,
-                        ))
-                    })
-                    .collect::<anyhow::Result<_>>()?
-            }
-            None => Default::default(),
-        };
-        let l1_finalized = toml
-            .get("l1_finalized")
-            .map(|toml| L1BlockInfo::from_toml(toml).context("ivnalid L1 finalized block"))
-            .transpose()?;
-        let stake_table = toml::from_str(&toml::to_string(
-            toml.get("stake_table").context("missing stake_table")?,
-        )?)
-        .context("invalid stake table")?;
-
-        Ok(Self {
-            chain_config,
-            accounts,
-            l1_finalized,
-            stake_table,
-        })
+        toml::from_str(text).context("malformed genesis file")
     }
 }
 
@@ -104,15 +60,15 @@ mod test {
             timestamp = "0x123def"
             hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
         }
-        .into();
+        .to_string();
 
-        let genesis = Genesis::from_toml(&toml).unwrap();
+        let genesis: Genesis = toml::from_str(&toml).unwrap();
         assert_eq!(genesis.stake_table, StakeTableConfig { capacity: 10 });
         assert_eq!(
             genesis.chain_config,
             ChainConfig {
                 chain_id: 12345.into(),
-                max_block_size: 30000,
+                max_block_size: 30000.into(),
                 base_fee: 1.into(),
                 fee_recipient: FeeAccount::default(),
                 fee_contract: Some(Address::default())
@@ -159,15 +115,15 @@ mod test {
             base_fee = 1
             fee_recipient = "0x0000000000000000000000000000000000000000"
         }
-        .into();
+        .to_string();
 
-        let genesis = Genesis::from_toml(&toml).unwrap();
+        let genesis: Genesis = toml::from_str(&toml).unwrap();
         assert_eq!(genesis.stake_table, StakeTableConfig { capacity: 10 });
         assert_eq!(
             genesis.chain_config,
             ChainConfig {
                 chain_id: 12345.into(),
-                max_block_size: 30000,
+                max_block_size: 30000.into(),
                 base_fee: 1.into(),
                 fee_recipient: FeeAccount::default(),
                 fee_contract: None,
@@ -189,11 +145,11 @@ mod test {
             base_fee = "1 gwei"
             fee_recipient = "0x0000000000000000000000000000000000000000"
         }
-        .into();
+        .to_string();
 
-        let genesis = Genesis::from_toml(&toml).unwrap();
+        let genesis: Genesis = toml::from_str(&toml).unwrap();
         assert_eq!(genesis.stake_table, StakeTableConfig { capacity: 10 });
-        assert_eq!(genesis.chain_config.max_block_size, 30000000);
+        assert_eq!(*genesis.chain_config.max_block_size, 30000000);
         assert_eq!(genesis.chain_config.base_fee, 1_000_000_000.into());
     }
 }

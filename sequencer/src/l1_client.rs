@@ -40,12 +40,6 @@ pub struct L1BlockInfo {
     pub hash: H256,
 }
 
-impl L1BlockInfo {
-    pub fn from_toml(toml: &toml::Value) -> anyhow::Result<Self> {
-        Ok(toml::from_str(&toml::to_string(toml)?)?)
-    }
-}
-
 impl PartialOrd for L1BlockInfo {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
