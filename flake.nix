@@ -218,12 +218,14 @@
             nodePackages.prettier
             solhint
             (python3.withPackages (ps: with ps; [ black ]))
-
+            yarn
           ] ++ lib.optionals stdenv.isDarwin
             [ darwin.apple_sdk.frameworks.SystemConfiguration ]
           ++ lib.optionals (!stdenv.isDarwin) [ cargo-watch ] # broken on OSX
           ;
           shellHook = ''
+            # Add node binaries to PATH
+            export PATH="$PWD/node_modules/.bin:$PATH"
             # Prevent cargo aliases from using programs in `~/.cargo` to avoid conflicts
             # with rustup installations.
             export CARGO_HOME=$HOME/.cargo-nix
