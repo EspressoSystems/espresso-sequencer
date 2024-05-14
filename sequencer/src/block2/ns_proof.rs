@@ -102,7 +102,7 @@ impl NsProof {
                         Statement {
                             payload_subslice: pf.ns_payload.as_byte_slice(),
                             range: ns_table
-                                .ns_payload_range(
+                                .ns_payload_range2(
                                     &ns_index,
                                     VidSchemeType::get_payload_byte_len(common),
                                 )

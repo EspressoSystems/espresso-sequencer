@@ -1,9 +1,6 @@
 use crate::{
     block2::{
         iter::{Index, Iter},
-        ns_iter::NsIndex,
-        ns_payload::NsPayload,
-        ns_payload_range::NsPayloadRange,
         ns_table::NsTable,
         uint_bytes::{u64_to_bytes, usize_to_bytes},
         NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
@@ -17,7 +14,12 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::{collections::HashMap, fmt::Display};
 
-use super::{newtypes::NamespacePayloadBuilder, NsPayload2, NsPayloadRange2, TxProof2};
+use super::{
+    newtypes::{
+        AsPayloadBytes, NamespacePayloadBuilder, NumTxsRange2, TxPayloadRange, TxTableEntriesRange2,
+    },
+    NsPayload2, NsPayloadRange2, TxProof2,
+};
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {
@@ -171,13 +173,25 @@ pub struct A(());
 
 impl Payload {
     pub fn transaction(&self, index: &Index) -> Option<Transaction> {
-        // TODO check index.ns() in bounds
+        // TODO helper methods please!
+        // TODO check index.ns(), index.tx() in bounds
+        let ns_payload_range = self
+            .ns_table()
+            .ns_payload_range2(index.ns(), self.payload.len());
+        let ns_payload = self.read_ns_payload(&ns_payload_range);
+        let num_txs = ns_payload.read(&NumTxsRange2::new(ns_payload_range.byte_len()));
+        let tx_table_entries = ns_payload.read(&TxTableEntriesRange2::new(index.tx()));
+        let tx_payload_range =
+            TxPayloadRange::new(&num_txs, &tx_table_entries, ns_payload_range.byte_len());
+        let tx_payload = ns_payload
+            .read(&tx_payload_range)
+            .to_payload_bytes()
+            .as_ref()
+            .to_vec();
+        let ns_id = self.ns_table().read_ns_id(index.ns());
         // TODO don't copy the tx bytes into the return value
         // https://github.com/EspressoSystems/hotshot-query-service/issues/267
-        Some(
-            self.ns_payload(index.ns())
-                .export_tx(&self.ns_table.read_ns_id(index.ns()), index.tx()),
-        )
+        Some(Transaction::new(ns_id, tx_payload))
     }
 
     pub fn as_byte_slice(&self) -> &[u8] {
@@ -190,19 +204,18 @@ impl Payload {
     // lots of manual delegation boo!
 
     /// TODO panics if index out of bounds
-    pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
-        let range = self.ns_payload_range(index).as_range();
-        NsPayload::new(A(()), &self.payload[range])
-    }
+    // pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
+    //     let range = self.ns_payload_range(index).as_range();
+    //     NsPayload::new(A(()), &self.payload[range])
+    // }
 
     pub fn read_ns_payload(&self, range: &NsPayloadRange2) -> &NsPayload2 {
         NsPayload2::new(&self.payload[range.as_range()])
     }
 
-    /// TODO panics if index out of bounds
-    pub fn ns_payload_range(&self, index: &NsIndex) -> NsPayloadRange {
-        self.ns_table.ns_payload_range(index, self.payload.len())
-    }
+    // pub fn ns_payload_range(&self, index: &NsIndex) -> NsPayloadRange {
+    //     self.ns_table.ns_payload_range(index, self.payload.len())
+    // }
 
     // pub fn ns_payload_range2(&self, index: &NsIndex) -> NsPayloadRange2 {
     //     self.ns_table.ns_payload_range2(index, self.payload.len())

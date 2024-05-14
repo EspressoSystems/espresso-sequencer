@@ -1,6 +1,5 @@
 use crate::block2::{
     ns_iter::{NsIndex, NsIter},
-    ns_payload_range::NsPayloadRange,
     payload,
     uint_bytes::{u64_from_bytes, usize_from_bytes},
     NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
@@ -104,15 +103,15 @@ impl NsTable {
     /// TODO newtype for `payload_byte_len` arg?
     ///
     /// Panics if `index >= self.num_nss()`.
-    pub fn ns_payload_range(&self, index: &NsIndex, payload_byte_len: usize) -> NsPayloadRange {
-        let end = self.read_ns_offset(index).min(payload_byte_len);
-        let start = index
-            .prev(A(()))
-            .map(|prev| self.read_ns_offset(&prev))
-            .unwrap_or(0)
-            .min(end);
-        NsPayloadRange::new(A(()), start, end)
-    }
+    // pub fn ns_payload_range(&self, index: &NsIndex, payload_byte_len: usize) -> NsPayloadRange {
+    //     let end = self.read_ns_offset(index).min(payload_byte_len);
+    //     let start = index
+    //         .prev(A(()))
+    //         .map(|prev| self.read_ns_offset(&prev))
+    //         .unwrap_or(0)
+    //         .min(end);
+    //     NsPayloadRange::new(A(()), start, end)
+    // }
 
     pub fn ns_payload_range2(&self, index: &NsIndex, payload_byte_len: usize) -> NsPayloadRange2 {
         let end = self.read_ns_offset(index).min(payload_byte_len);

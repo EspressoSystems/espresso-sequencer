@@ -87,13 +87,13 @@ impl TxProof2 {
         };
 
         // Read the tx payload and compute a proof of correctness.
+        let tx_payload_range = TxPayloadRange::new(
+            &payload_num_txs,
+            &payload_tx_table_entries,
+            ns_payload_range.byte_len(),
+        );
         let payload_proof_tx = {
-            let range = TxPayloadRange::new(
-                &payload_num_txs,
-                &payload_tx_table_entries,
-                ns_payload_range.byte_len(),
-            )
-            .block_payload_range(ns_payload_range.offset());
+            let range = tx_payload_range.block_payload_range(ns_payload_range.offset());
 
             tracing::info!(
                 "prove: (ns,tx) ({:?},{:?}), tx_payload_range {:?}, content {:?}",
@@ -109,9 +109,19 @@ impl TxProof2 {
                 Some(vid.payload_proof(payload.as_byte_slice(), range).ok()?)
             }
         };
+        // TODO a helper would help here
+        let tx = {
+            let ns_id = payload.ns_table().read_ns_id(index.ns());
+            let tx_payload = ns_payload
+                .read(&tx_payload_range)
+                .to_payload_bytes()
+                .as_ref()
+                .to_vec();
+            Transaction::new(ns_id, tx_payload)
+        };
 
         Some((
-            payload.transaction(index)?,
+            tx,
             TxProof2 {
                 tx_index: index.tx().clone(),
                 payload_num_txs,
