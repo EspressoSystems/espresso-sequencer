@@ -1,5 +1,5 @@
 use crate::block2::{
-    ns_payload::{self, NsPayload},
+    ns_payload,
     uint_bytes::{usize_from_bytes, usize_to_bytes},
     NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
@@ -121,9 +121,6 @@ impl TxIndex {
 pub struct TxIter(Range<usize>);
 
 impl TxIter {
-    pub fn new(ns_payload: &NsPayload) -> Self {
-        Self(0..ns_payload.num_txs())
-    }
     // TODO args should be NumTxs, ns_payload_byte_len (newtype!)
     // TODO probably yet another newtype for NumTxsChecked(NumTxs, ns_payload_byte_len)
     pub fn new2(num_txs: &NumTxs2, ns_payload_byte_len: usize) -> Self {

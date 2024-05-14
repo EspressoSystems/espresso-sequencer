@@ -2,7 +2,7 @@ use crate::{
     block2::{
         num_txs::NumTxs,
         payload,
-        tx_iter::{TxIndex, TxIter},
+        tx_iter::TxIndex,
         tx_table_entries::TxTableEntries,
         uint_bytes::{usize_from_bytes, usize_to_bytes},
         NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
@@ -86,12 +86,6 @@ impl NsPayload {
         &self.0
     }
 
-    /// TODO store `ns_id` in `NsPayload` struct?
-    pub fn export_all_txs(&self, ns_id: &NamespaceId) -> Vec<Transaction> {
-        TxIter::new(self)
-            .map(|i| Transaction::new(*ns_id, self.0[self.tx_payload_range_relative(&i)].to_vec()))
-            .collect()
-    }
     pub fn export_tx(&self, ns_id: &NamespaceId, index: &TxIndex) -> Transaction {
         Transaction::new(
             *ns_id,

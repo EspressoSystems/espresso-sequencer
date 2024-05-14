@@ -6,6 +6,8 @@ use crate::block2::{
 use serde::{Deserialize, Serialize};
 use std::iter::Peekable;
 
+use super::newtypes::NumTxsRange2;
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Index {
     ns_index: NsIndex,
@@ -62,7 +64,20 @@ impl<'a> Iterator for Iter<'a> {
 
             if let Some(tx_index) = self
                 .tx_iter
-                .get_or_insert_with(|| TxIter::new(self.block.ns_payload(ns_index))) // ensure `tx_iter` is set
+                .get_or_insert_with(|| {
+                    // TODO newtype for full block payload byte len
+                    // TODO desperate need for helpers
+                    let ns_payload_range = self
+                        .block
+                        .ns_table()
+                        .ns_payload_range2(ns_index, self.block.as_byte_slice().len());
+                    let ns_payload = self.block.read_ns_payload(&ns_payload_range);
+                    // TODO newtype for ns payload byte len
+                    let ns_payload_byte_len = ns_payload.as_byte_slice().len();
+                    let num_txs_range = NumTxsRange2::new(ns_payload_byte_len);
+                    let num_txs = ns_payload.read(&num_txs_range);
+                    TxIter::new2(&num_txs, ns_payload_byte_len)
+                }) // ensure `tx_iter` is set
                 .next()
             {
                 return Some(Index {
