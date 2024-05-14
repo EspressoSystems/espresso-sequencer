@@ -288,6 +288,7 @@ async fn submit_transactions<Ver: StaticVersionType>(
             } {
                 tracing::error!("failed to submit batch of {txns_batch_count} transactions: {err}");
             } else {
+                tracing::info!("submitted batch of {txns_batch_count} transactions");
                 let submitted_at = Instant::now();
                 for hash in hashes.iter() {
                     sender
