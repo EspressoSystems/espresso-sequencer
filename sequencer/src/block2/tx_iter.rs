@@ -1,6 +1,6 @@
 use crate::block2::{
     uint_bytes::{usize_from_bytes, usize_to_bytes},
-    NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
+    NUM_TXS_BYTE_LEN,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
@@ -71,27 +71,27 @@ impl TxIndex {
     /// Special case: If `tx_index` is 0 then the start index is implicitly 0,
     /// so the returned range contains only one entry from the tx table: the
     /// first entry of the tx table.
-    pub fn tx_table_entries_range_relative(&self) -> Range<usize> {
-        let start = if self.0 == 0 {
-            // Special case: the desired range includes only one entry from
-            // the tx table: the first entry. This entry starts immediately
-            // following the bytes that encode the tx table length.
-            NUM_TXS_BYTE_LEN
-        } else {
-            // The desired range starts at the beginning of the previous tx
-            // table entry.
-            (self.0 - 1)
-                .saturating_mul(TX_OFFSET_BYTE_LEN)
-                .saturating_add(NUM_TXS_BYTE_LEN)
-        };
-        // The desired range ends at the end of this transaction's tx table entry
-        let end = self
-            .0
-            .saturating_add(1)
-            .saturating_mul(TX_OFFSET_BYTE_LEN)
-            .saturating_add(NUM_TXS_BYTE_LEN);
-        start..end
-    }
+    // pub fn tx_table_entries_range_relative(&self) -> Range<usize> {
+    //     let start = if self.0 == 0 {
+    //         // Special case: the desired range includes only one entry from
+    //         // the tx table: the first entry. This entry starts immediately
+    //         // following the bytes that encode the tx table length.
+    //         NUM_TXS_BYTE_LEN
+    //     } else {
+    //         // The desired range starts at the beginning of the previous tx
+    //         // table entry.
+    //         (self.0 - 1)
+    //             .saturating_mul(TX_OFFSET_BYTE_LEN)
+    //             .saturating_add(NUM_TXS_BYTE_LEN)
+    //     };
+    //     // The desired range ends at the end of this transaction's tx table entry
+    //     let end = self
+    //         .0
+    //         .saturating_add(1)
+    //         .saturating_mul(TX_OFFSET_BYTE_LEN)
+    //         .saturating_add(NUM_TXS_BYTE_LEN);
+    //     start..end
+    // }
 
     /// Infallible serialization.
     ///
