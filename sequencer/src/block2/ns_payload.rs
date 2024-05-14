@@ -1,11 +1,7 @@
 use crate::{
     block2::{
-        num_txs::NumTxs,
-        payload,
-        tx_iter::TxIndex,
-        tx_table_entries::TxTableEntries,
-        uint_bytes::{usize_from_bytes, usize_to_bytes},
-        NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
+        num_txs::NumTxs, payload, tx_iter::TxIndex, tx_table_entries::TxTableEntries,
+        uint_bytes::usize_from_bytes, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
     },
     NamespaceId, Transaction,
 };
@@ -15,35 +11,6 @@ use std::ops::Range;
 /// TODO explain: ZST to unlock visibility in other modules. can only be
 /// constructed in this module.
 pub struct A(());
-
-// TODO move all the modules from inside ns_table back up to block2?
-// TODO move this to ns_table.rs so we can construct a `Payload` there and keep `NsTable` fields private?
-#[derive(Default)]
-pub struct NamespacePayloadBuilder {
-    tx_table_entries: Vec<u8>,
-    tx_bodies: Vec<u8>,
-}
-
-impl NamespacePayloadBuilder {
-    /// Add a transaction's payload to this namespace
-    pub fn append_tx(&mut self, tx: Transaction) {
-        self.tx_bodies.extend(tx.into_payload());
-        self.tx_table_entries
-            .extend(usize_to_bytes::<TX_OFFSET_BYTE_LEN>(self.tx_bodies.len()));
-    }
-
-    /// Serialize to bytes and consume self.
-    pub fn into_bytes(self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(
-            NUM_TXS_BYTE_LEN + self.tx_table_entries.len() + self.tx_bodies.len(),
-        );
-        let num_txs = NumTxs::from_usize(A(()), self.tx_table_entries.len() / TX_OFFSET_BYTE_LEN);
-        result.extend(num_txs.as_bytes());
-        result.extend(self.tx_table_entries);
-        result.extend(self.tx_bodies);
-        result
-    }
-}
 
 /// TODO explain: [`NsPayloadOwned`] to [`NsPayload`] as [`Vec<T>`] is to `[T]`.
 /// TODO store `ns_id` in [`NsPayload`] and [`NsPayloadOwned`]? TODO we'd like

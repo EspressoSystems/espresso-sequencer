@@ -2,7 +2,7 @@ use crate::{
     block2::{
         iter::{Index, Iter},
         ns_iter::NsIndex,
-        ns_payload::{NamespacePayloadBuilder, NsPayload},
+        ns_payload::NsPayload,
         ns_payload_range::NsPayloadRange,
         ns_table::NsTable,
         uint_bytes::{u64_to_bytes, usize_to_bytes},
@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::{collections::HashMap, fmt::Display};
 
-use super::{NsPayload2, NsPayloadRange2, TxProof2};
+use super::{newtypes::NamespacePayloadBuilder, NsPayload2, NsPayloadRange2, TxProof2};
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {

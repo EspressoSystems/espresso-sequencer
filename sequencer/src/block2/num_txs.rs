@@ -68,7 +68,7 @@ impl NumTxs {
     pub fn from_bytes(_: ns_payload::A, bytes: &[u8]) -> Self {
         Self(usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes))
     }
-    pub fn from_usize(_: ns_payload::A, n: usize) -> Self {
+    pub fn from_usize(n: usize) -> Self {
         Self(n)
     }
     pub fn as_usize(&self, _: ns_payload::A) -> usize {
