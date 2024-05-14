@@ -132,6 +132,9 @@ impl Options {
             .clone()
             .unwrap_or_else(|| self.url.join("submit").unwrap())
     }
+    fn use_public_mempool(&self) -> bool {
+        self.submit_url.is_none()
+    }
 }
 
 #[async_std::main]
@@ -267,7 +270,11 @@ async fn submit_transactions<Ver: StaticVersionType>(
         txns.push(tx);
         hashes.push(hash);
 
-        let randomized_batch_size = rng.gen_range(opt.min_batch_size..=opt.max_batch_size);
+        let randomized_batch_size = if opt.use_public_mempool() {
+            1
+        } else {
+            rng.gen_range(opt.min_batch_size..=opt.max_batch_size)
+        };
         let txns_batch_count = txns.len() as u64;
         if randomized_batch_size <= txns_batch_count {
             if let Err(err) = if txns_batch_count == 1 {
