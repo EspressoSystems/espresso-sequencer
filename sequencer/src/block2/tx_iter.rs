@@ -5,7 +5,7 @@ use crate::block2::{
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
 
-use super::newtypes::{NsPayloadByteLen, NumTxs2};
+use super::newtypes::NumTxsChecked;
 
 /// Index for an entry in a tx table.
 ///
@@ -108,9 +108,8 @@ impl TxIndex {
 pub struct TxIter(Range<usize>);
 
 impl TxIter {
-    // TODO new arg should be of type NumTxsChecked(NumTxs, ns_payload_byte_len)
-    pub fn new2(num_txs: &NumTxs2, byte_len: &NsPayloadByteLen) -> Self {
-        Self(0..num_txs.num_txs(byte_len))
+    pub fn new2(num_txs: &NumTxsChecked) -> Self {
+        Self(0..num_txs.as_usize())
     }
 }
 

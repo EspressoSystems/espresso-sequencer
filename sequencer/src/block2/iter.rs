@@ -6,7 +6,7 @@ use crate::block2::{
 use serde::{Deserialize, Serialize};
 use std::iter::Peekable;
 
-use super::newtypes::NumTxsRange2;
+use super::newtypes::{NumTxsChecked, NumTxsRange2};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Index {
@@ -75,7 +75,8 @@ impl<'a> Iterator for Iter<'a> {
                     let byte_len = ns_payload.byte_len();
                     let num_txs_range = NumTxsRange2::new(&byte_len);
                     let num_txs = ns_payload.read(&num_txs_range);
-                    TxIter::new2(&num_txs, &byte_len)
+                    let num_txs_checked = NumTxsChecked::new(&num_txs, &byte_len);
+                    TxIter::new2(&num_txs_checked)
                 }) // ensure `tx_iter` is set
                 .next()
             {

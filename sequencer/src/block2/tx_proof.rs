@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     newtypes::{
-        AsPayloadBytes, NumTxs2, NumTxsRange2, PayloadBytesRange, TxTableEntries2,
+        AsPayloadBytes, NumTxs2, NumTxsChecked, NumTxsRange2, PayloadBytesRange, TxTableEntries2,
         TxTableEntriesRange2,
     },
     ns_table::NsTable,
@@ -64,7 +64,10 @@ impl TxProof2 {
         // proof of correctness.
         let num_txs_range = NumTxsRange2::new(&ns_payload_range.byte_len());
         let payload_num_txs = ns_payload.read(&num_txs_range);
-        if !ns_payload_range.in_bounds(index.tx(), &payload_num_txs) {
+
+        // TODO desperate need of helpers!
+        if !NumTxsChecked::new(&payload_num_txs, &ns_payload_range.byte_len()).in_bounds(index.tx())
+        {
             return None; // error: tx index out of bounds
         }
         let payload_proof_num_txs = vid
@@ -146,7 +149,11 @@ impl TxProof2 {
         };
         let ns_payload_range =
             ns_table.ns_payload_range2(&ns_index, VidSchemeType::get_payload_byte_len(common));
-        if !ns_payload_range.in_bounds(&self.tx_index, &self.payload_num_txs) {
+
+        // TODO desperate need of helpers!
+        if !NumTxsChecked::new(&self.payload_num_txs, &ns_payload_range.byte_len())
+            .in_bounds(&self.tx_index)
+        {
             return None; // error: tx index out of bounds
         }
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));

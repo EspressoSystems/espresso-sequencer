@@ -58,28 +58,8 @@ as_payload_bytes_serde_impl!(NumTxs2);
 
 impl NumTxs2 {
     // TODO delete me
-    pub fn as_usize(&self) -> usize {
-        self.0
-    }
     pub fn from_usize(n: usize) -> Self {
         Self(n)
-    }
-
-    /// Number of txs in this namespace.
-    ///
-    /// Returns the minimum of:
-    /// - `num_txs`
-    /// - The maximum number of tx table entries that could fit in the namespace
-    ///   payload.
-    ///
-    /// TODO this method should be a constructor of NumTxsChecked
-    pub fn num_txs(&self, byte_len: &NsPayloadByteLen) -> usize {
-        std::cmp::min(
-            // Number of txs declared in the tx table
-            self.0,
-            // Max number of tx table entries that could fit in the namespace payload
-            byte_len.0.saturating_sub(NUM_TXS_BYTE_LEN) / TX_OFFSET_BYTE_LEN,
-        )
     }
 }
 
@@ -90,6 +70,36 @@ impl AsPayloadBytes<'_> for NumTxs2 {
 
     fn from_payload_bytes(bytes: &[u8]) -> Self {
         Self(usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes))
+    }
+}
+
+/// Number of txs in a namespace.
+///
+/// TODO explain: `NumTxs` but checked against `NsPayloadByteLen`
+/// TODO rename NumTxs -> NumTxsUncheced, NumTxsChecked -> NumTxs?
+pub struct NumTxsChecked(usize);
+
+impl NumTxsChecked {
+    /// delete me
+    pub fn as_usize(&self) -> usize {
+        self.0
+    }
+
+    /// Returns the minimum of:
+    /// - `num_txs`
+    /// - The maximum number of tx table entries that could fit in the namespace
+    ///   payload.
+    pub fn new(num_txs: &NumTxs2, byte_len: &NsPayloadByteLen) -> Self {
+        Self(std::cmp::min(
+            // Number of txs declared in the tx table
+            num_txs.0,
+            // Max number of tx table entries that could fit in the namespace payload
+            byte_len.0.saturating_sub(NUM_TXS_BYTE_LEN) / TX_OFFSET_BYTE_LEN,
+        ))
+    }
+
+    pub fn in_bounds(&self, index: &TxIndex) -> bool {
+        index.as_usize2() < self.0
     }
 }
 

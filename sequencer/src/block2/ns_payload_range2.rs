@@ -4,10 +4,7 @@
 
 use std::ops::Range;
 
-use super::{
-    newtypes::{NsPayloadByteLen, NumTxs2},
-    tx_iter::TxIndex,
-};
+use super::newtypes::NsPayloadByteLen;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct NsPayloadRange2(Range<usize>);
@@ -29,13 +26,6 @@ impl NsPayloadRange2 {
     /// TODO newtype for return type?
     pub fn offset(&self) -> usize {
         self.0.start
-    }
-
-    /// Does the `index`th entry exist in the tx table?
-    ///
-    /// TODO this method should be a method of NumTxsChecked::in_bounds(TxIndex)
-    pub fn in_bounds(&self, index: &TxIndex, num_txs: &NumTxs2) -> bool {
-        index.as_usize2() < num_txs.num_txs(&self.byte_len())
     }
 
     // TODO is `tx_offset_range_relative` needed, or can we go straight to
