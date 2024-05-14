@@ -43,8 +43,8 @@ struct Deposit {
 
     /// Espresso query service provider.
     ///
-    /// This must point to an Espresso node running the node, availability, and Merklized state
-    /// APIs.
+    /// This must point to an Espresso node running the /availability, /node and Merklized state
+    /// (/fee-state and /block-state) APIs.
     #[clap(short, long, env = "ESPRESSO_PROVIDER")]
     espresso_provider: Url,
 

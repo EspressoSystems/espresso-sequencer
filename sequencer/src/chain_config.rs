@@ -50,6 +50,10 @@ pub struct ChainConfig {
     #[clap(long, env = "ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
     pub fee_contract: Option<Address>,
     /// Account that receives sequencing fees.
+    ///
+    /// This account in the Espresso fee ledger will always receive every fee paid in Espresso,
+    /// regardless of whether or not their is a `fee_contract` deployed. Once deployed, the fee
+    /// contract can decide what to do with tokens locked in this burner account in Espresso.
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_FEE_BURN_ACCOUNT",
