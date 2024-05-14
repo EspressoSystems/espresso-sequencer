@@ -1,18 +1,13 @@
 mod iter;
 mod newtypes;
 mod ns_iter;
-mod ns_payload;
-pub use ns_payload::*; // TODO temp
 mod ns_payload2;
-// mod ns_payload_range;
 mod ns_payload_range2;
 mod ns_proof;
 mod ns_table;
-mod num_txs;
 mod payload;
 mod tx_iter;
 mod tx_proof;
-mod tx_table_entries;
 mod uint_bytes;
 
 // TODO this eliminates dead code warnings

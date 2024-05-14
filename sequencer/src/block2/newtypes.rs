@@ -1,9 +1,7 @@
 use crate::Transaction;
 
 use super::{
-    num_txs::NumTxs,
     tx_iter::TxIndex,
-    tx_table_entries::TxTableEntries,
     uint_bytes::{usize_from_bytes, usize_to_bytes},
     NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
@@ -52,29 +50,6 @@ pub trait PayloadBytesRange {
     fn block_payload_range(&self, ns_payload_offset: usize) -> Range<usize>;
 }
 
-const TEMP: usize = 2 * TX_OFFSET_BYTE_LEN;
-impl AsPayloadBytes<'_> for TxTableEntries {
-    fn to_payload_bytes(&self) -> [u8; TEMP] {
-        todo!()
-    }
-
-    fn from_payload_bytes(bytes: &[u8]) -> Self {
-        match bytes.len() {
-            TX_OFFSET_BYTE_LEN => Self::new2(usize_from_bytes::<TX_OFFSET_BYTE_LEN>(bytes), None),
-            TEMP => Self::new2(
-                usize_from_bytes::<TX_OFFSET_BYTE_LEN>(&bytes[TX_OFFSET_BYTE_LEN..]),
-                Some(usize_from_bytes::<TX_OFFSET_BYTE_LEN>(
-                    &bytes[..TX_OFFSET_BYTE_LEN],
-                )),
-            ),
-            len => panic!(
-                "unexpected bytes len {} should be either {} or {}",
-                len, TX_OFFSET_BYTE_LEN, TEMP
-            ),
-        }
-    }
-}
-
 // WIP WIP
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -85,6 +60,9 @@ impl NumTxs2 {
     // TODO delete me
     pub fn as_usize(&self) -> usize {
         self.0
+    }
+    pub fn from_usize(n: usize) -> Self {
+        Self(n)
     }
 
     /// Number of txs in this namespace.
@@ -275,8 +253,8 @@ impl NamespacePayloadBuilder {
         let mut result = Vec::with_capacity(
             NUM_TXS_BYTE_LEN + self.tx_table_entries.len() + self.tx_bodies.len(),
         );
-        let num_txs = NumTxs::from_usize(self.tx_table_entries.len() / TX_OFFSET_BYTE_LEN);
-        result.extend(num_txs.as_bytes());
+        let num_txs = NumTxs2::from_usize(self.tx_table_entries.len() / TX_OFFSET_BYTE_LEN);
+        result.extend(num_txs.to_payload_bytes().as_ref());
         result.extend(self.tx_table_entries);
         result.extend(self.tx_bodies);
         result

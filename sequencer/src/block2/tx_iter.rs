@@ -1,5 +1,4 @@
 use crate::block2::{
-    ns_payload,
     uint_bytes::{usize_from_bytes, usize_to_bytes},
     NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
@@ -101,18 +100,6 @@ impl TxIndex {
         usize_to_bytes(self.0)
     }
 
-    /// Return a decremented [`TxIndex`].
-    pub fn prev(&self, _: ns_payload::A) -> Option<Self> {
-        if self.0 == 0 {
-            None
-        } else {
-            Some(Self(self.0 - 1))
-        }
-    }
-
-    pub fn as_usize(&self, _: ns_payload::A) -> usize {
-        self.0
-    }
     pub fn as_usize2(&self) -> usize {
         self.0
     }
