@@ -13,17 +13,16 @@ use serde::{Deserialize, Serialize};
 pub struct NsPayload([u8]);
 
 impl NsPayload {
-    pub fn new(bytes: &[u8]) -> &NsPayload {
+    pub fn from_bytes_slice(bytes: &[u8]) -> &NsPayload {
         NsPayload::new_private(bytes)
+    }
+
+    pub fn as_bytes_slice(&self) -> &[u8] {
+        &self.0
     }
 
     pub fn byte_len(&self) -> NsPayloadByteLen {
         NsPayloadByteLen::from_usize(self.0.len())
-    }
-
-    /// Access the bytes of this [`NsPayload`].
-    pub fn as_byte_slice(&self) -> &[u8] {
-        &self.0
     }
 
     pub fn read<'a, R>(&'a self, range: &R) -> R::Output
@@ -33,6 +32,7 @@ impl NsPayload {
         <R::Output as FromNsPayloadBytes<'a>>::from_payload_bytes(&self.0[range.ns_payload_range()])
     }
 
+    /// Return a `Vec` of all transactions in this namespace...
     pub fn export_all_txs(&self, ns_id: &NamespaceId) -> Vec<Transaction> {
         // TODO I guess I need helpers for all this...
         let num_txs = self.read(&NumTxsRange::new(&self.byte_len()));

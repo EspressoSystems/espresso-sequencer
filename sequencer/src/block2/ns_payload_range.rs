@@ -5,7 +5,7 @@ use std::ops::Range;
 pub struct NsPayloadRange(Range<usize>);
 
 impl NsPayloadRange {
-    /// TODO newtype for args?
+    /// TODO restrict visibility?
     pub fn new(start: usize, end: usize) -> Self {
         Self(start..end)
     }

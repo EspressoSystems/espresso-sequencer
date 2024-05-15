@@ -13,17 +13,32 @@ use super::{payload::PayloadByteLen, NsPayloadRange};
 /// constructed in this module.
 pub struct A(());
 
+/// TODO explain: similar API to `NsPayload`
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct NsTable(Vec<u8>);
 
 impl NsTable {
-    pub fn from_bytes(_: payload::A, bytes: Vec<u8>) -> Self {
+    pub fn from_bytes_vec(_: payload::A, bytes: Vec<u8>) -> Self {
         Self(bytes)
     }
-
-    /// Access the bytes of this [`NsTable`].
-    pub fn as_byte_slice(&self) -> &[u8] {
+    pub fn as_bytes_slice(&self) -> &[u8] {
         &self.0
+    }
+
+    /// Read the namespace id from the `index`th entry from the namespace table.
+    pub fn read_ns_id(&self, index: &NsIndex) -> NamespaceId {
+        let start =
+            index.as_usize(A(())) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
+
+        // TODO hack to deserialize `NamespaceId` from `NS_ID_BYTE_LEN` bytes
+        NamespaceId::from(u64_from_bytes::<NS_ID_BYTE_LEN>(
+            &self.0[start..start + NS_ID_BYTE_LEN],
+        ))
+    }
+
+    /// Search the namespace table for the ns_index belonging to `ns_id`.
+    pub fn find_ns_id(&self, ns_id: &NamespaceId) -> Option<NsIndex> {
+        self.iter().find(|index| self.read_ns_id(index) == *ns_id)
     }
 
     /// Does the `index`th entry exist in the namespace table?
@@ -41,55 +56,6 @@ impl NsTable {
         index.as_usize(A(())) < num_nss_with_duplicates
     }
 
-    /// Read the number of namespaces declared in the namespace table.
-    ///
-    /// TODO newtype for return type like [`NumTxs`]?
-    fn read_num_nss(&self) -> usize {
-        let num_nss_byte_len = NUM_NSS_BYTE_LEN.min(self.0.len());
-        usize_from_bytes::<NUM_NSS_BYTE_LEN>(&self.0[..num_nss_byte_len])
-    }
-
-    /// Search the namespace table for the ns_index belonging to `ns_id`.
-    pub fn find_ns_id(&self, ns_id: &NamespaceId) -> Option<NsIndex> {
-        self.iter().find(|index| self.read_ns_id(index) == *ns_id)
-    }
-
-    /// Iterator over all unique namespaces in the namespace table.
-    pub fn iter(&self) -> impl Iterator<Item = <NsIter as Iterator>::Item> + '_ {
-        NsIter::new(self)
-    }
-
-    /// The number of unique namespaces in the namespace table.
-    pub fn num_namespaces(&self) -> usize {
-        // Don't double count duplicate namespace IDs. The easiest solution is
-        // to consume an iterator. If performance is a concern then we could
-        // cache this count on construction of `Payload`.
-        self.iter().count()
-    }
-
-    /// Read the namespace id from the `index`th entry from the namespace table.
-    ///
-    /// Panics if `index >= self.num_nss()`.
-    pub fn read_ns_id(&self, index: &NsIndex) -> NamespaceId {
-        let start =
-            index.as_usize(A(())) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
-
-        // TODO hack to deserialize `NamespaceId` from `NS_ID_BYTE_LEN` bytes
-        NamespaceId::from(u64_from_bytes::<NS_ID_BYTE_LEN>(
-            &self.0[start..start + NS_ID_BYTE_LEN],
-        ))
-    }
-
-    /// Read the namespace offset from the `index`th entry from the namespace table.
-    ///
-    /// Panics if `index >= self.num_nss()`.
-    pub fn read_ns_offset(&self, index: &NsIndex) -> usize {
-        let start = index.as_usize(A(())) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN)
-            + NUM_NSS_BYTE_LEN
-            + NS_ID_BYTE_LEN;
-        usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.0[start..start + NS_OFFSET_BYTE_LEN])
-    }
-
     /// Read subslice range for the `index`th namespace from the namespace
     /// table.
     pub fn ns_payload_range(
@@ -104,5 +70,38 @@ impl NsTable {
             .unwrap_or(0)
             .min(end);
         NsPayloadRange::new(start, end)
+    }
+
+    // PRIVATE HELPERS START HERE
+
+    /// Read the number of namespaces declared in the namespace table. This
+    /// quantity might exceed the number of entries that could fit in the
+    /// namespace table.
+    ///
+    /// For a correct count of the number of namespaces in this namespace table
+    /// use [`self.iter().count()`].
+    fn read_num_nss(&self) -> usize {
+        let num_nss_byte_len = NUM_NSS_BYTE_LEN.min(self.0.len());
+        usize_from_bytes::<NUM_NSS_BYTE_LEN>(&self.0[..num_nss_byte_len])
+    }
+
+    /// Read the namespace offset from the `index`th entry from the namespace table.
+    fn read_ns_offset(&self, index: &NsIndex) -> usize {
+        let start = index.as_usize(A(())) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN)
+            + NUM_NSS_BYTE_LEN
+            + NS_ID_BYTE_LEN;
+        usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.0[start..start + NS_OFFSET_BYTE_LEN])
+    }
+
+    /// Iterator over all unique namespaces in the namespace table.
+    fn iter(&self) -> impl Iterator<Item = <NsIter as Iterator>::Item> + '_ {
+        NsIter::new(self)
+    }
+}
+
+#[cfg(test)]
+impl NsTable {
+    pub fn iter_test(&self) -> impl Iterator<Item = <NsIter as Iterator>::Item> + '_ {
+        self.iter()
     }
 }

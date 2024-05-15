@@ -71,7 +71,7 @@ impl BlockPayload for Payload {
         Ok((
             Self {
                 payload,
-                ns_table: NsTable::from_bytes(A(()), ns_table.clone()),
+                ns_table: NsTable::from_bytes_vec(A(()), ns_table.clone()),
             },
             ns_table,
         ))
@@ -83,7 +83,7 @@ impl BlockPayload for Payload {
     {
         Self {
             payload: encoded_transactions.into_iter().collect(),
-            ns_table: NsTable::from_bytes(A(()), ns_table.clone()), // TODO don't clone ns_table
+            ns_table: NsTable::from_bytes_vec(A(()), ns_table.clone()), // TODO don't clone ns_table
         }
     }
 
@@ -108,7 +108,7 @@ impl BlockPayload for Payload {
 
     // TODO change `BlockPayload` trait: remove arg `Self::Metadata`
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
-        let ns_table_bytes = self.ns_table.as_byte_slice();
+        let ns_table_bytes = self.ns_table.as_bytes_slice();
         let mut digest = sha2::Sha256::new();
         digest.update((self.payload.len() as u64).to_le_bytes());
         digest.update((ns_table_bytes.len() as u64).to_le_bytes());
@@ -170,6 +170,8 @@ impl Committable for Payload {
 pub struct A(());
 
 impl Payload {
+    /// Like [`QueryablePayload::transaction_with_proof`] except without the
+    /// proof.
     pub fn transaction(&self, index: &Index) -> Option<Transaction> {
         // TODO helper methods please!
         // TODO check index.ns(), index.tx() in bounds
@@ -210,7 +212,7 @@ impl Payload {
     // }
 
     pub fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
-        NsPayload::new(&self.payload[range.as_range()])
+        NsPayload::from_bytes_slice(&self.payload[range.as_range()])
     }
 
     // pub fn ns_payload_range(&self, index: &NsIndex) -> NsPayloadRange {

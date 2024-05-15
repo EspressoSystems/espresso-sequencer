@@ -97,7 +97,7 @@ impl NsProof {
                     .as_range();
                 vid.payload_verify(
                     Statement {
-                        payload_subslice: pf.ns_payload.as_byte_slice(),
+                        payload_subslice: pf.ns_payload.as_bytes_slice(),
                         range,
                         commit,
                         common,
