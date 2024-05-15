@@ -22,7 +22,6 @@ pub struct NsProof {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 struct NsProofExistence {
-    // TODO `#[serde(with = "base64_bytes")]` screws up serde for `NsPayloadOwned`.
     ns_payload: NsPayloadOwned,
     ns_proof: LargeRangeProofType,
 }
