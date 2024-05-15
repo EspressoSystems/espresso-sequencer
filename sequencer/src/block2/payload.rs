@@ -16,7 +16,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use super::{
     newtypes::{
-        AsPayloadBytes, NamespacePayloadBuilder, NumTxsRange2, TxPayloadRange, TxTableEntriesRange2,
+        AsPayloadBytes, NsPayloadBuilder, NumTxsRange, TxPayloadRange, TxTableEntriesRange,
     },
     NsPayload2, NsPayloadRange2, TxProof2,
 };
@@ -52,7 +52,7 @@ impl BlockPayload for Payload {
         transactions: impl IntoIterator<Item = Self::Transaction>,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
         // add each tx to its namespace
-        let mut namespaces = HashMap::<NamespaceId, NamespacePayloadBuilder>::new();
+        let mut namespaces = HashMap::<NamespaceId, NsPayloadBuilder>::new();
         for tx in transactions.into_iter() {
             let namespace = namespaces.entry(tx.namespace()).or_default();
             namespace.append_tx(tx);
@@ -179,8 +179,8 @@ impl Payload {
             .ns_table()
             .ns_payload_range2(index.ns(), self.payload.len());
         let ns_payload = self.read_ns_payload(&ns_payload_range);
-        let num_txs = ns_payload.read(&NumTxsRange2::new(&ns_payload_range.byte_len()));
-        let tx_table_entries = ns_payload.read(&TxTableEntriesRange2::new(index.tx()));
+        let num_txs = ns_payload.read(&NumTxsRange::new(&ns_payload_range.byte_len()));
+        let tx_table_entries = ns_payload.read(&TxTableEntriesRange::new(index.tx()));
         let tx_payload_range =
             TxPayloadRange::new(&num_txs, &tx_table_entries, &ns_payload_range.byte_len());
         let tx_payload = ns_payload

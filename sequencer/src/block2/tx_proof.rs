@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     newtypes::{
-        AsPayloadBytes, NumTxs2, NumTxsChecked, NumTxsRange2, PayloadBytesRange, TxIndex,
-        TxTableEntries2, TxTableEntriesRange2,
+        AsPayloadBytes, NumTxs, NumTxsRange, NumTxsUnchecked, PayloadBytesRange, TxIndex,
+        TxTableEntries, TxTableEntriesRange,
     },
     ns_table::NsTable,
 };
@@ -26,11 +26,11 @@ pub struct TxProof2 {
     tx_index: TxIndex,
 
     // Number of txs declared in the tx table
-    payload_num_txs: NumTxs2,
+    payload_num_txs: NumTxsUnchecked,
     payload_proof_num_txs: SmallRangeProofType,
 
     // Tx table entries for this tx
-    payload_tx_table_entries: TxTableEntries2,
+    payload_tx_table_entries: TxTableEntries,
     payload_proof_tx_table_entries: SmallRangeProofType,
 
     // This tx's payload bytes.
@@ -62,12 +62,11 @@ impl TxProof2 {
 
         // Read the tx table len from this namespace's tx table and compute a
         // proof of correctness.
-        let num_txs_range = NumTxsRange2::new(&ns_payload_range.byte_len());
+        let num_txs_range = NumTxsRange::new(&ns_payload_range.byte_len());
         let payload_num_txs = ns_payload.read(&num_txs_range);
 
         // TODO desperate need of helpers!
-        if !NumTxsChecked::new(&payload_num_txs, &ns_payload_range.byte_len()).in_bounds(index.tx())
-        {
+        if !NumTxs::new(&payload_num_txs, &ns_payload_range.byte_len()).in_bounds(index.tx()) {
             return None; // error: tx index out of bounds
         }
         let payload_proof_num_txs = vid
@@ -79,7 +78,7 @@ impl TxProof2 {
 
         // Read the tx table entries for this tx and compute a proof of
         // correctness.
-        let tx_table_entries_range = TxTableEntriesRange2::new(index.tx());
+        let tx_table_entries_range = TxTableEntriesRange::new(index.tx());
         let payload_tx_table_entries = ns_payload.read(&tx_table_entries_range);
         let payload_proof_tx_table_entries = {
             vid.payload_proof(
@@ -151,7 +150,7 @@ impl TxProof2 {
             ns_table.ns_payload_range2(&ns_index, VidSchemeType::get_payload_byte_len(common));
 
         // TODO desperate need of helpers!
-        if !NumTxsChecked::new(&self.payload_num_txs, &ns_payload_range.byte_len())
+        if !NumTxs::new(&self.payload_num_txs, &ns_payload_range.byte_len())
             .in_bounds(&self.tx_index)
         {
             tracing::info!("tx index {:?} out of bounds", self.tx_index);
@@ -166,7 +165,7 @@ impl TxProof2 {
                 .payload_verify(
                     Statement {
                         payload_subslice: &self.payload_num_txs.to_payload_bytes(),
-                        range: NumTxsRange2::new(&ns_payload_range.byte_len())
+                        range: NumTxsRange::new(&ns_payload_range.byte_len())
                             .block_payload_range(ns_payload_range.offset()),
                         commit,
                         common,
@@ -187,7 +186,7 @@ impl TxProof2 {
                 .payload_verify(
                     Statement {
                         payload_subslice: &self.payload_tx_table_entries.to_payload_bytes(),
-                        range: TxTableEntriesRange2::new(&self.tx_index)
+                        range: TxTableEntriesRange::new(&self.tx_index)
                             .block_payload_range(ns_payload_range.offset()),
                         commit,
                         common,

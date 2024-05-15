@@ -65,10 +65,10 @@ where
 // WIP WIP
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NumTxs2(usize);
-as_payload_bytes_serde_impl!(NumTxs2);
+pub struct NumTxsUnchecked(usize);
+as_payload_bytes_serde_impl!(NumTxsUnchecked);
 
-impl AsPayloadBytes<'_, [u8; NUM_TXS_BYTE_LEN]> for NumTxs2 {
+impl AsPayloadBytes<'_, [u8; NUM_TXS_BYTE_LEN]> for NumTxsUnchecked {
     fn to_serde_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
         usize_to_bytes::<NUM_TXS_BYTE_LEN>(self.0)
     }
@@ -82,14 +82,14 @@ impl AsPayloadBytes<'_, [u8; NUM_TXS_BYTE_LEN]> for NumTxs2 {
 ///
 /// TODO explain: `NumTxs` but checked against `NsPayloadByteLen`
 /// TODO rename NumTxs -> NumTxsUncheced, NumTxsChecked -> NumTxs?
-pub struct NumTxsChecked(usize);
+pub struct NumTxs(usize);
 
-impl NumTxsChecked {
+impl NumTxs {
     /// Returns the minimum of:
     /// - `num_txs`
     /// - The maximum number of tx table entries that could fit in the namespace
     ///   payload.
-    pub fn new(num_txs: &NumTxs2, byte_len: &NsPayloadByteLen) -> Self {
+    pub fn new(num_txs: &NumTxsUnchecked, byte_len: &NsPayloadByteLen) -> Self {
         Self(std::cmp::min(
             // Number of txs declared in the tx table
             num_txs.0,
@@ -112,16 +112,16 @@ impl NsPayloadByteLen {
     }
 }
 
-pub struct NumTxsRange2(Range<usize>);
+pub struct NumTxsRange(Range<usize>);
 
-impl NumTxsRange2 {
+impl NumTxsRange {
     pub fn new(byte_len: &NsPayloadByteLen) -> Self {
         Self(0..NUM_TXS_BYTE_LEN.min(byte_len.0))
     }
 }
 
-impl PayloadBytesRange<'_, [u8; NUM_TXS_BYTE_LEN]> for NumTxsRange2 {
-    type Output = NumTxs2;
+impl PayloadBytesRange<'_, [u8; NUM_TXS_BYTE_LEN]> for NumTxsRange {
+    type Output = NumTxsUnchecked;
 
     fn ns_payload_range(&self) -> Range<usize> {
         self.0.clone()
@@ -129,17 +129,17 @@ impl PayloadBytesRange<'_, [u8; NUM_TXS_BYTE_LEN]> for NumTxsRange2 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TxTableEntries2 {
+pub struct TxTableEntries {
     cur: usize,
     prev: Option<usize>, // TODO no Option, just usize
 }
-as_payload_bytes_serde_impl!(TxTableEntries2);
+as_payload_bytes_serde_impl!(TxTableEntries);
 
-impl TxTableEntries2 {
+impl TxTableEntries {
     const TWO_ENTRIES_BYTE_LEN: usize = 2 * TX_OFFSET_BYTE_LEN;
 }
 
-impl AsPayloadBytes<'_, Vec<u8>, [u8; Self::TWO_ENTRIES_BYTE_LEN]> for TxTableEntries2 {
+impl AsPayloadBytes<'_, Vec<u8>, [u8; Self::TWO_ENTRIES_BYTE_LEN]> for TxTableEntries {
     fn to_payload_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(Self::TWO_ENTRIES_BYTE_LEN);
         if let Some(prev) = self.prev {
@@ -223,9 +223,9 @@ impl AsPayloadBytes<'_, Vec<u8>, [u8; Self::TWO_ENTRIES_BYTE_LEN]> for TxTableEn
 /// Special case: If `tx_index` is 0 then the start index is implicitly 0,
 /// so the returned range contains only one entry from the tx table: the
 /// first entry of the tx table.
-pub struct TxTableEntriesRange2(Range<usize>);
+pub struct TxTableEntriesRange(Range<usize>);
 
-impl TxTableEntriesRange2 {
+impl TxTableEntriesRange {
     pub fn new(index: &TxIndex) -> Self {
         let start = if index.0 == 0 {
             // Special case: the desired range includes only one entry from
@@ -250,10 +250,10 @@ impl TxTableEntriesRange2 {
 }
 
 // TODO macro for impl `PayloadBytesRange`
-impl PayloadBytesRange<'_, Vec<u8>, [u8; TxTableEntries2::TWO_ENTRIES_BYTE_LEN]>
-    for TxTableEntriesRange2
+impl PayloadBytesRange<'_, Vec<u8>, [u8; TxTableEntries::TWO_ENTRIES_BYTE_LEN]>
+    for TxTableEntriesRange
 {
-    type Output = TxTableEntries2;
+    type Output = TxTableEntries;
 
     fn ns_payload_range(&self) -> Range<usize> {
         self.0.clone()
@@ -280,8 +280,8 @@ impl TxPayloadRange {
     // Why? Each of these `XRange` types requires the ns payload byte len
     // anyway.
     pub fn new(
-        num_txs: &NumTxs2,
-        tx_table_entries: &TxTableEntries2,
+        num_txs: &NumTxsUnchecked,
+        tx_table_entries: &TxTableEntries,
         byte_len: &NsPayloadByteLen,
     ) -> Self {
         let tx_table_byte_len = num_txs
@@ -312,12 +312,12 @@ impl<'a> PayloadBytesRange<'a, &'a [u8]> for TxPayloadRange {
 
 // TODO is this a good home for NamespacePayloadBuilder?
 #[derive(Default)]
-pub struct NamespacePayloadBuilder {
+pub struct NsPayloadBuilder {
     tx_table_entries: Vec<u8>,
     tx_bodies: Vec<u8>,
 }
 
-impl NamespacePayloadBuilder {
+impl NsPayloadBuilder {
     /// Add a transaction's payload to this namespace
     pub fn append_tx(&mut self, tx: Transaction) {
         self.tx_bodies.extend(tx.into_payload());
@@ -330,7 +330,7 @@ impl NamespacePayloadBuilder {
         let mut result = Vec::with_capacity(
             NUM_TXS_BYTE_LEN + self.tx_table_entries.len() + self.tx_bodies.len(),
         );
-        let num_txs = NumTxs2(self.tx_table_entries.len() / TX_OFFSET_BYTE_LEN);
+        let num_txs = NumTxsUnchecked(self.tx_table_entries.len() / TX_OFFSET_BYTE_LEN);
         result.extend(num_txs.to_payload_bytes().as_ref());
         result.extend(self.tx_table_entries);
         result.extend(self.tx_bodies);
@@ -360,7 +360,7 @@ impl AsPayloadBytes<'_, [u8; NUM_TXS_BYTE_LEN]> for TxIndex {
 pub struct TxIter(Range<usize>);
 
 impl TxIter {
-    pub fn new2(num_txs: &NumTxsChecked) -> Self {
+    pub fn new2(num_txs: &NumTxs) -> Self {
         Self(0..num_txs.0)
     }
 }

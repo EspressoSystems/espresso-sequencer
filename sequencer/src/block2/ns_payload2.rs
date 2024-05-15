@@ -5,8 +5,8 @@
 use crate::{NamespaceId, Transaction};
 
 use super::newtypes::{
-    AsPayloadBytes, NsPayloadByteLen, NumTxsChecked, NumTxsRange2, PayloadBytesRange, TxIter,
-    TxPayloadRange, TxTableEntriesRange2,
+    AsPayloadBytes, NsPayloadByteLen, NumTxs, NumTxsRange, PayloadBytesRange, TxIter,
+    TxPayloadRange, TxTableEntriesRange,
 };
 use serde::{Deserialize, Serialize};
 
@@ -38,14 +38,14 @@ impl NsPayload2 {
 
     pub fn export_all_txs(&self, ns_id: &NamespaceId) -> Vec<Transaction> {
         // TODO I guess I need helpers for all this...
-        let num_txs = self.read(&NumTxsRange2::new(&self.byte_len()));
-        let num_txs_checked = NumTxsChecked::new(&num_txs, &self.byte_len());
+        let num_txs = self.read(&NumTxsRange::new(&self.byte_len()));
+        let num_txs_checked = NumTxs::new(&num_txs, &self.byte_len());
         TxIter::new2(&num_txs_checked)
             .map(|i| {
                 let payload = self
                     .read(&TxPayloadRange::new(
                         &num_txs,
-                        &self.read(&TxTableEntriesRange2::new(&i)),
+                        &self.read(&TxTableEntriesRange::new(&i)),
                         &self.byte_len(),
                     ))
                     .to_payload_bytes()
