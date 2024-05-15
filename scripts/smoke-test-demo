@@ -11,30 +11,37 @@ SEQUENCER_BLOCKS_TIMEOUT=120
 
 # usage: wait_for timeout_in_secs name URL
 function wait_for() {
-	timeout=$1
-	what=$2
-	url=$3
-	start=$SECONDS
-	elapsed=0
-	echo "Checking if $what @ $url is available, timeout in $timeout seconds"
-	while ! curl -sL --fail "$url" > /dev/null; do
-		elapsed=$((SECONDS - start))
-		if [[ $elapsed -gt $timeout ]]; then
-			echo "Timeout waiting for $what @ $url"
-			exit 1
-		fi
-		echo "Waiting for $what @ $url, $elapsed of $timeout seconds elapsed"
-		sleep 1
-	done
-	echo "Endpoint $what @ $url is Ok, after $elapsed seconds"
+    timeout=$1
+    what=$2
+    url=$3
+    start=$SECONDS
+    elapsed=0
+    echo "Checking if $what @ $url is available, timeout in $timeout seconds"
+    while ! curl -sL --fail "$url" > /dev/null; do
+        elapsed=$((SECONDS - start))
+        if [[ $elapsed -gt $timeout ]]; then
+            echo "Timeout waiting for $what @ $url"
+            exit 1
+        fi
+        echo "Waiting for $what @ $url, $elapsed of $timeout seconds elapsed"
+        sleep 1
+    done
+    echo "Endpoint $what @ $url is Ok, after $elapsed seconds"
 }
 
 # usage: get_balance <address> <block>
 function get_balance() {
-	(
-		unset MNEMONIC
-		cargo run --release --all-features --bin bridge -- balance -e $SEQUENCER_API -a $1 -b $2
-	)
+    if which bridge > /dev/null ; then
+        # If the bridge program is built locally, use it.
+        (
+            unset MNEMONIC
+            RUST_LOG=off bridge balance -e $SEQUENCER_API -a $1 -b $2
+        )
+    else
+        # Otherwise, use Docker.
+        docker run -e RUST_LOG=off ghcr.io/espressosystems/espresso-sequencer/bridge:main \
+            bridge balance -e $SEQUENCER_API -a $1 -b $2
+    fi
 }
 
 # Wait for the load generator to start.
@@ -61,42 +68,42 @@ START=$SECONDS
 # Check blocks and transactions are increasing
 # Every second until timeout after $TIMEOUT seconds
 while true; do
-	new_block_height=`curl -sL $SEQUENCER_API/node/block-height`
-	new_num_tx=`curl -sL $SEQUENCER_API/node/transactions/count`
-	if [[ $new_block_height -gt $block_height && $new_num_tx -gt $num_tx ]]; then
-		new_builder_balance=`get_balance 0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f $new_block_height`
-		new_recipient_balance=`get_balance 0x0000000000000000000000000000000000000000 $new_block_height`
+    new_block_height=`curl -sL $SEQUENCER_API/node/block-height`
+    new_num_tx=`curl -sL $SEQUENCER_API/node/transactions/count`
+    if [[ $new_block_height -gt $block_height && $new_num_tx -gt $num_tx ]]; then
+        new_builder_balance=`get_balance 0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f $new_block_height`
+        new_recipient_balance=`get_balance 0x0000000000000000000000000000000000000000 $new_block_height`
 
-		echo "Final state:"
-		echo "  block_height: $new_block_height"
-		echo "  transactions: $new_num_tx"
-		echo "  builder_balance: $new_builder_balance"
-		echo "  recipient_balance: $new_recipient_balance"
-		echo "Block height and transaction count are increasing. Great!"
+        echo "Final state:"
+        echo "  block_height: $new_block_height"
+        echo "  transactions: $new_num_tx"
+        echo "  builder_balance: $new_builder_balance"
+        echo "  recipient_balance: $new_recipient_balance"
+        echo "Block height and transaction count are increasing. Great!"
 
-		if [[ $((builder_balance + recipient_balance)) != $((new_builder_balance + new_recipient_balance)) ]]; then
-			echo "Balance not conserved!"
-			exit 1
-		fi
+        if [[ $((builder_balance + recipient_balance)) != $((new_builder_balance + new_recipient_balance)) ]]; then
+            echo "Balance not conserved!"
+            exit 1
+        fi
 
-		break
-	fi
-	sleep 1
-	if [[ $((SECONDS - START)) -gt $SEQUENCER_BLOCKS_TIMEOUT ]]; then
-		echo "Timeout waiting for block height and transaction count to increase"
-		echo "Final state:"
-		echo "  block_height: $new_block_height"
-		echo "  transactions: $new_num_tx"
+        break
+    fi
+    sleep 1
+    if [[ $((SECONDS - START)) -gt $SEQUENCER_BLOCKS_TIMEOUT ]]; then
+        echo "Timeout waiting for block height and transaction count to increase"
+        echo "Final state:"
+        echo "  block_height: $new_block_height"
+        echo "  transactions: $new_num_tx"
 
-		if ! [[ $new_block_height -gt $block_height ]]; then
-			echo "Block height is not increasing!"
-		fi
-		if ! [[ $new_num_tx -gt $num_tx ]]; then
-			echo "Transaction count is not increasing!"
-		fi
+        if ! [[ $new_block_height -gt $block_height ]]; then
+            echo "Block height is not increasing!"
+        fi
+        if ! [[ $new_num_tx -gt $num_tx ]]; then
+            echo "Transaction count is not increasing!"
+        fi
 
-		exit 1
-	fi
+        exit 1
+    fi
 done
 
 
