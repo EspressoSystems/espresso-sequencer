@@ -14,16 +14,15 @@ struct Args {
     )]
     port: u16,
 
-    /// Threshold to form an available state signature package.
+    /// Total amount of stake.
     /// WARNING: this is a temporary flag, should remove after integrating with stake table.
     /// Related issue: [https://github.com/EspressoSystems/espresso-sequencer/issues/1022]
     #[clap(
-        short,
         long,
-        env = "ESPRESSO_STATE_SIGNATURE_WEIGHT_THRESHOLD",
-        default_value = "3"
+        env = "ESPRESSO_STATE_SIGNATURE_TOTAL_STAKE",
+        default_value = "5"
     )]
-    threshold: u64,
+    total_stake: u64,
 }
 
 #[async_std::main]
@@ -32,11 +31,12 @@ async fn main() {
     setup_backtrace();
 
     let args = Args::parse();
+    let threshold = ((2 * args.total_stake) / 3) + 1;
 
-    tracing::info!("starting state relay server on port {}", args.port);
+    tracing::info!(port = args.port, threshold, "starting state relay server");
     run_relay_server(
         None,
-        args.threshold,
+        threshold,
         format!("http://0.0.0.0:{}", args.port).parse().unwrap(),
         SEQUENCER_VERSION,
     )

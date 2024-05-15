@@ -29,6 +29,10 @@ struct Args {
     #[clap(short, long = "freq", value_parser = parse_duration, default_value = "10m", env = "ESPRESSO_STATE_PROVER_UPDATE_INTERVAL")]
     update_interval: Duration,
 
+    /// Interval between retries if a state update fails
+    #[clap(long = "retry-freq", value_parser = parse_duration, default_value = "2s", env = "ESPRESSO_STATE_PROVER_RETRY_INTERVAL")]
+    retry_interval: Duration,
+
     /// URL of layer 1 Ethereum JSON-RPC provider.
     #[clap(
         long,
@@ -99,6 +103,7 @@ async fn main() {
     let config = StateProverConfig {
         relay_server: args.relay_server.clone(),
         update_interval: args.update_interval,
+        retry_interval: args.retry_interval,
         l1_provider: args.l1_provider.clone(),
         light_client_address: args.light_client_address,
         eth_signing_key: MnemonicBuilder::<English>::default()
