@@ -4,12 +4,17 @@ use crate::{
         uint_bytes::{
             bytes_serde_impl, u64_from_bytes, u64_to_bytes, usize_from_bytes, usize_to_bytes,
         },
-        NsPayloadRange, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
+        NsPayloadRange,
     },
     NamespaceId,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashSet;
+
+// TODO explain: the constants that dictate ns table data sizes
+const NUM_NSS_BYTE_LEN: usize = 4;
+const NS_OFFSET_BYTE_LEN: usize = 4;
+const NS_ID_BYTE_LEN: usize = 4;
 
 /// TODO explain: similar API to `NsPayload`
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]

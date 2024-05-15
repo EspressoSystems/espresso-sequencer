@@ -14,11 +14,5 @@ pub use ns_payload_range::NsPayloadRange;
 pub use ns_proof::NsProof;
 pub use tx_proof::TxProof;
 
-const NUM_TXS_BYTE_LEN: usize = 4;
-const TX_OFFSET_BYTE_LEN: usize = 4;
-const NUM_NSS_BYTE_LEN: usize = NUM_TXS_BYTE_LEN;
-const NS_OFFSET_BYTE_LEN: usize = TX_OFFSET_BYTE_LEN;
-const NS_ID_BYTE_LEN: usize = 4;
-
 #[cfg(test)]
 mod test;

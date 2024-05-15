@@ -1,14 +1,15 @@
 use crate::Transaction;
 
-use super::{
-    uint_bytes::{bytes_serde_impl, usize_from_bytes, usize_to_bytes},
-    NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
-};
+use super::uint_bytes::{bytes_serde_impl, usize_from_bytes, usize_to_bytes};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
 
 mod ns_payload_traits;
 pub use ns_payload_traits::{FromNsPayloadBytes, NsPayloadBytesRange};
+
+// TODO explain: the constants that dictate tx table data sizes
+const NUM_TXS_BYTE_LEN: usize = 4;
+const TX_OFFSET_BYTE_LEN: usize = 4;
 
 /// Number of txs in a namespace.
 ///
