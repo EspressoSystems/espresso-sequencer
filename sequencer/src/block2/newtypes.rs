@@ -8,8 +8,14 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
 
 // TODO explain: T param allows for both array (fixed len) and vec/slice (var len).
-pub trait AsPayloadBytes<'a, T> {
-    fn to_payload_bytes(&self) -> T;
+pub trait AsPayloadBytes<'a, T, U = T>
+where
+    U: Into<T>,
+{
+    fn to_payload_bytes(&self) -> T {
+        self.to_serde_bytes().into()
+    }
+    fn to_serde_bytes(&self) -> U;
     fn from_payload_bytes(bytes: &'a [u8]) -> Self;
 }
 
@@ -20,7 +26,7 @@ macro_rules! as_payload_bytes_serde_impl {
             where
                 S: Serializer,
             {
-                self.to_payload_bytes().as_ref().serialize(serializer)
+                self.to_serde_bytes().serialize(serializer)
             }
         }
 
@@ -36,8 +42,11 @@ macro_rules! as_payload_bytes_serde_impl {
     };
 }
 
-pub trait PayloadBytesRange<'a, T> {
-    type Output: AsPayloadBytes<'a, T>;
+pub trait PayloadBytesRange<'a, T, U = T>
+where
+    U: Into<T>,
+{
+    type Output: AsPayloadBytes<'a, T, U>;
 
     /// Range relative to this ns payload
     ///
@@ -67,7 +76,7 @@ impl NumTxs2 {
 }
 
 impl AsPayloadBytes<'_, [u8; NUM_TXS_BYTE_LEN]> for NumTxs2 {
-    fn to_payload_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
+    fn to_serde_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
         usize_to_bytes::<NUM_TXS_BYTE_LEN>(self.0)
     }
 
@@ -142,8 +151,17 @@ impl TxTableEntries2 {
     const TWO_ENTRIES_BYTE_LEN: usize = 2 * TX_OFFSET_BYTE_LEN;
 }
 
-impl AsPayloadBytes<'_, [u8; Self::TWO_ENTRIES_BYTE_LEN]> for TxTableEntries2 {
-    fn to_payload_bytes(&self) -> [u8; Self::TWO_ENTRIES_BYTE_LEN] {
+impl AsPayloadBytes<'_, Vec<u8>, [u8; Self::TWO_ENTRIES_BYTE_LEN]> for TxTableEntries2 {
+    fn to_payload_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(Self::TWO_ENTRIES_BYTE_LEN);
+        if let Some(prev) = self.prev {
+            bytes.extend(usize_to_bytes::<TX_OFFSET_BYTE_LEN>(prev));
+        }
+        bytes.extend(usize_to_bytes::<TX_OFFSET_BYTE_LEN>(self.cur));
+        bytes
+    }
+
+    fn to_serde_bytes(&self) -> [u8; Self::TWO_ENTRIES_BYTE_LEN] {
         let mut bytes = [0; Self::TWO_ENTRIES_BYTE_LEN];
         bytes[..TX_OFFSET_BYTE_LEN].copy_from_slice(&usize_to_bytes::<TX_OFFSET_BYTE_LEN>(
             self.prev.unwrap_or(0),
@@ -237,7 +255,9 @@ impl TxTableEntriesRange2 {
 }
 
 // TODO macro for impl `PayloadBytesRange`
-impl PayloadBytesRange<'_, [u8; TxTableEntries2::TWO_ENTRIES_BYTE_LEN]> for TxTableEntriesRange2 {
+impl PayloadBytesRange<'_, Vec<u8>, [u8; TxTableEntries2::TWO_ENTRIES_BYTE_LEN]>
+    for TxTableEntriesRange2
+{
     type Output = TxTableEntries2;
 
     fn ns_payload_range(&self) -> Range<usize> {
@@ -248,7 +268,7 @@ impl PayloadBytesRange<'_, [u8; TxTableEntries2::TWO_ENTRIES_BYTE_LEN]> for TxTa
 pub struct TxPayload<'a>(&'a [u8]);
 
 impl<'a> AsPayloadBytes<'a, &'a [u8]> for TxPayload<'a> {
-    fn to_payload_bytes(&self) -> &'a [u8] {
+    fn to_serde_bytes(&self) -> &'a [u8] {
         self.0
     }
 
@@ -346,7 +366,7 @@ impl TxIndex {
 }
 
 impl AsPayloadBytes<'_, [u8; NUM_TXS_BYTE_LEN]> for TxIndex {
-    fn to_payload_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
+    fn to_serde_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
         usize_to_bytes::<NUM_TXS_BYTE_LEN>(self.0)
     }
 

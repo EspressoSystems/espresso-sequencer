@@ -26,11 +26,14 @@ impl NsPayload2 {
         &self.0
     }
 
-    pub fn read<'a, T, U>(&'a self, range: &T) -> T::Output
+    pub fn read<'a, R, T, U>(&'a self, range: &R) -> R::Output
     where
-        T: PayloadBytesRange<'a, U>,
+        R: PayloadBytesRange<'a, T, U>,
+        U: Into<T>,
     {
-        <T::Output as AsPayloadBytes<'a, U>>::from_payload_bytes(&self.0[range.ns_payload_range()])
+        <R::Output as AsPayloadBytes<'a, T, U>>::from_payload_bytes(
+            &self.0[range.ns_payload_range()],
+        )
     }
 
     pub fn export_all_txs(&self, ns_id: &NamespaceId) -> Vec<Transaction> {
