@@ -16,8 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     newtypes::{
-        NsPayloadBytesRange, NumTxs, NumTxsRange, NumTxsUnchecked, TxIndex, TxTableEntries,
-        TxTableEntriesRange,
+        NumTxs, NumTxsRange, NumTxsUnchecked, TxIndex, TxTableEntries, TxTableEntriesRange,
     },
     ns_table::NsTable,
 };
@@ -75,10 +74,11 @@ impl TxProof {
         if !NumTxs::new(&payload_num_txs, &ns_payload_range.byte_len()).in_bounds(index.tx()) {
             return None; // error: tx index out of bounds
         }
+
         let payload_proof_num_txs = vid
             .payload_proof(
                 payload.as_byte_slice(),
-                num_txs_range.block_payload_range(ns_payload_range.offset()),
+                ns_payload_range.block_payload_range(&num_txs_range),
             )
             .ok()?;
 
@@ -89,7 +89,7 @@ impl TxProof {
         let payload_proof_tx_table_entries = {
             vid.payload_proof(
                 payload.as_byte_slice(),
-                tx_table_entries_range.block_payload_range(ns_payload_range.offset()),
+                ns_payload_range.block_payload_range(&tx_table_entries_range),
             )
             .ok()?
         };
@@ -101,7 +101,7 @@ impl TxProof {
             &ns_payload_range.byte_len(),
         );
         let payload_proof_tx = {
-            let range = tx_payload_range.block_payload_range(ns_payload_range.offset());
+            let range = ns_payload_range.block_payload_range(&tx_payload_range);
 
             tracing::info!(
                 "prove: (ns,tx) ({:?},{:?}), tx_payload_range {:?}, content {:?}",
@@ -117,6 +117,7 @@ impl TxProof {
                 Some(vid.payload_proof(payload.as_byte_slice(), range).ok()?)
             }
         };
+
         // TODO a helper would help here
         let tx = {
             let ns_id = payload.ns_table().read_ns_id(index.ns());
@@ -169,12 +170,13 @@ impl TxProof {
 
         // Verify proof for tx table len
         {
+            let range = ns_payload_range
+                .block_payload_range(&NumTxsRange::new(&ns_payload_range.byte_len()));
             if vid
                 .payload_verify(
                     Statement {
                         payload_subslice: &self.payload_num_txs.to_payload_bytes(),
-                        range: NumTxsRange::new(&ns_payload_range.byte_len())
-                            .block_payload_range(ns_payload_range.offset()),
+                        range,
                         commit,
                         common,
                     },
@@ -189,12 +191,13 @@ impl TxProof {
 
         // Verify proof for tx table entries
         {
+            let range =
+                ns_payload_range.block_payload_range(&TxTableEntriesRange::new(&self.tx_index));
             if vid
                 .payload_verify(
                     Statement {
                         payload_subslice: &self.payload_tx_table_entries.to_payload_bytes(),
-                        range: TxTableEntriesRange::new(&self.tx_index)
-                            .block_payload_range(ns_payload_range.offset()),
+                        range,
                         commit,
                         common,
                     },
@@ -209,12 +212,11 @@ impl TxProof {
 
         // Verify proof for tx payload
         {
-            let range = TxPayloadRange::new(
+            let range = ns_payload_range.block_payload_range(&TxPayloadRange::new(
                 &self.payload_num_txs,
                 &self.payload_tx_table_entries,
                 &ns_payload_range.byte_len(),
-            )
-            .block_payload_range(ns_payload_range.offset());
+            ));
 
             match (&self.payload_proof_tx, range.is_empty()) {
                 (Some(proof), false) => {

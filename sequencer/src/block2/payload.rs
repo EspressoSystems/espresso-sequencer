@@ -39,7 +39,7 @@ impl Payload {
         PayloadByteLen(self.payload.len())
     }
     pub fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
-        NsPayload::from_bytes_slice(&self.payload[range.as_range()])
+        NsPayload::from_bytes_slice(&self.payload[range.as_block_payload_range()])
     }
 
     /// Like [`QueryablePayload::transaction_with_proof`] except without the

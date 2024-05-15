@@ -1,22 +1,19 @@
 use std::ops::Range;
 
-/// Any struct `X` whose data is read from a namespace payload impls
-/// [`FromNsPayloadBytes`]. There should be an accompanying struct `XRange` that
-/// impls [`NsPayloadBytesRange`]. These traits are used in [`NsPayload::read`].
+/// Data that can be deserialized from a subslice of namespace payload bytes.
+/// Companion trait for [`NsPayloadBytesRange`], which specifies the subslice of
+/// namespace payload bytes to read.
 pub trait FromNsPayloadBytes<'a> {
+    /// Deserialize `Self` from namespace payload bytes.
     fn from_payload_bytes(bytes: &'a [u8]) -> Self;
 }
 
-/// Companion trait for [`FromNsPayloadBytes`].
+/// Specifies a subslice of namespace payload bytes to read. Compantion trait
+/// for [`FromNsPayloadBytes`], which holds data that can be deserialized from
+/// that subslice of bytes.
 pub trait NsPayloadBytesRange<'a> {
     type Output: FromNsPayloadBytes<'a>;
 
     /// Range relative to this ns payload
     fn ns_payload_range(&self) -> Range<usize>;
-
-    /// Range relative to the entire block payload
-    fn block_payload_range(&self, ns_payload_offset: usize) -> Range<usize> {
-        let range = self.ns_payload_range();
-        range.start + ns_payload_offset..range.end + ns_payload_offset
-    }
 }

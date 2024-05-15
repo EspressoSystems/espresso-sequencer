@@ -1,6 +1,7 @@
-use super::newtypes::NsPayloadByteLen;
+use super::newtypes::{NsPayloadByteLen, NsPayloadBytesRange};
 use std::ops::Range;
 
+/// Index range for a namespace payload inside a block payload.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct NsPayloadRange(Range<usize>);
 
@@ -10,17 +11,24 @@ impl NsPayloadRange {
         Self(start..end)
     }
 
-    /// TODO replace with equivalent of `PayloadBytesRange::block_payload_range`
-    pub fn as_range(&self) -> Range<usize> {
+    /// Access the underlying index range for this namespace inside a block
+    /// payload.
+    pub fn as_block_payload_range(&self) -> Range<usize> {
         self.0.clone()
     }
 
+    /// Return the byte length of this namespace.
     pub fn byte_len(&self) -> NsPayloadByteLen {
         NsPayloadByteLen::from_usize(self.0.len())
     }
 
-    /// TODO newtype for return type?
-    pub fn offset(&self) -> usize {
-        self.0.start
+    /// Convert a [`NsPayloadBytesRange`] into a range that's relative to the
+    /// entire block payload.
+    pub fn block_payload_range<'a, R>(&self, range: &R) -> Range<usize>
+    where
+        R: NsPayloadBytesRange<'a>,
+    {
+        let range = range.ns_payload_range();
+        range.start + self.0.start..range.end + self.0.start
     }
 }
