@@ -148,7 +148,11 @@ pub struct Options {
     pub prefunded_builder_accounts: Vec<Address>,
 
     /// Url we will use for RPC communication with L1.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_L1_PROVIDER",
+        default_value = "http://localhost:8545"
+    )]
     #[derivative(Debug(format_with = "Display::fmt"))]
     pub l1_provider_url: Url,
 
