@@ -28,14 +28,6 @@ pub trait ExplorerAPIError: Display + Debug {
     fn code(&self) -> &str;
 }
 
-/// [ExplorerAPIErrorWithCause] is a trait that represents an extension to the
-/// normal [ExplorerAPIError] in that it also includes an underlying cause
-/// for the given error.
-pub trait ExplorerAPIErrorWithCause: ExplorerAPIError {
-    type Cause: ExplorerAPIError;
-    fn cause(&self) -> Self::Cause;
-}
-
 impl std::error::Error for dyn ExplorerAPIError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None

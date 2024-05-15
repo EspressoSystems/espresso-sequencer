@@ -46,11 +46,8 @@ jobs:
 
       # Run Clippy on all targets. The lint workflow doesn't run Clippy on tests, because the tests
       # don't compile with all combinations of features.
-      - uses: actions-rs/clippy-check@v1
-        name: Clippy
-        with:
-          token: ${{ github.token }}
-          args: --workspace --all-features --all-targets -- -D warnings
+      - name: Clippy
+        run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 
       - name: Generate Documentation
         run: |

@@ -70,11 +70,6 @@ impl Default for Options {
     }
 }
 
-#[derive(Clone, Debug, Snafu)]
-struct ParseDurationError {
-    reason: String,
-}
-
 #[derive(Clone, Debug, From, Snafu, Deserialize, Serialize)]
 #[snafu(visibility(pub))]
 pub enum Error {
