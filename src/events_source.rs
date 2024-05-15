@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::{self, BoxStream, Stream, StreamExt};
 use hotshot_types::{
-    data::{DAProposal, QuorumProposal},
+    data::{DaProposal, QuorumProposal},
     error::HotShotError,
     event::{error_adaptor, Event, EventType},
     message::Proposal,
@@ -47,8 +47,8 @@ impl<Types: NodeType> From<Event<Types>> for BuilderEvent<Types> {
                         block_size,
                     }
                 }
-                EventType::DAProposal { proposal, sender } => {
-                    BuilderEventType::HotshotDAProposal { proposal, sender }
+                EventType::DaProposal { proposal, sender } => {
+                    BuilderEventType::HotshotDaProposal { proposal, sender }
                 }
                 EventType::QuorumProposal { proposal, sender } => {
                     BuilderEventType::HotshotQuorumProposal { proposal, sender }
@@ -86,9 +86,9 @@ pub enum BuilderEventType<Types: NodeType> {
         block_size: Option<u64>,
     },
     /// DA proposal was received from the network
-    HotshotDAProposal {
+    HotshotDaProposal {
         /// Contents of the proposal
-        proposal: Proposal<Types, DAProposal<Types>>,
+        proposal: Proposal<Types, DaProposal<Types>>,
         /// Public key of the leader submitting the proposal
         sender: Types::SignatureKey,
     },
@@ -139,7 +139,7 @@ impl<Types: NodeType> EventConsumer<Types> for EventsStreamer<Types> {
     async fn handle_event(&mut self, event: Event<Types>) {
         let filter = match event {
             Event {
-                event: EventType::DAProposal { .. },
+                event: EventType::DaProposal { .. },
                 ..
             } => true,
             Event {
