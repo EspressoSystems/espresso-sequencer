@@ -11,20 +11,19 @@ package "Espresso Sequencer Network" as Network {
 'CDN Layout
 Broker -> KeyDB: state
 KeyDB -> Marshal: state
-Nodes <-up-> CDN: consensus\nmessages
+Nodes <--> CDN: consensus\nmessages
 
 package "Espresso Sequencer" as Espresso {
     database "Postgres" as DB
     package "Sequencer Node" as Seq {
-        component "HotShot\nQuery\nService" as QS {
-        }
         component "APIs" {
-            portin Catchup
-            portin HTTP
-            portin Status
-            portin Submit
-            portin Query
-            portin "Hotshot\nEvents\nStream" as Events
+            port Catchup
+            port HTTP
+            port Status
+            port Submit
+            port Query
+            port "Hotshot\nEvents\nStream" as Events
+            component "HotShot\nQuery\nService" as QS
         }
         component "Networking"{
             component Libp2p
@@ -39,12 +38,12 @@ package "Espresso Sequencer" as Espresso {
     component "HotShot state\nprover service" as HSProver
     component "HotShot state\nrelay service" as Relay
     component "Builder" as Builder
+    Query --> QS
 }
 
-Nodes -up-> Catchup
+Nodes -up-> Catchup: missing\nstate
 Nodes <-up-> Libp2p: consensus\nmessages
 "CDN Client" <--> CDN: consensus\nmessages
-'CND -up[hidden]-> Nodes
 
 QS --> DB
 'QS -[hidden]left-> Signer
@@ -65,7 +64,7 @@ package "Layer 2s" as L2 {
         component "API (e.g. JSON-RPC)" as L2_1_RPC
         component Executor as L2_1_Exec
         component Prover as L2_1_Prover
-        component "State DB" as L2_1_State
+        database "State DB" as L2_1_State
     }
     ' component "Rollup 2" as L2_2
     ' component "Rollup N" as L2_N
@@ -83,14 +82,14 @@ package "Ethereum Layer 1" as L1 {
 }
 
 entity User
-User -Up-> L2_1_RPC : Transactions\nState queries
+User -Up-> L2_1_RPC : "transactions,\nstate queries" " "
 ' note right of link
 ' 1. Many clients submit transactions
 '     to each L2 simultaneously (for
 '     clarity only one is shown)
 ' end note
 
-L2_1_RPC -down-> Submit : Transaction\nRollup 1 ID
+L2_1_RPC --> Submit : "transaction\nRollup 1 ID" " "
 ' note top of link
 ' 2. L2s forward transactions to sequencer.
 ' end note
@@ -105,7 +104,7 @@ Query -up-> L2_1_Exec : Block
 '     transactions for their rollup.
 ' end note
 
-HSProver -down-> LC_L1 : HotShot\nstate proof
+HSProver -down-> LC_L1 : HotShot\nstate\nproof
 ' note right of link
 ' 4. Sequencer posts succinct commitment
 '     to block to L1. Contract verifies proof
@@ -113,7 +112,7 @@ HSProver -down-> LC_L1 : HotShot\nstate proof
 '     then stores the block commitment.
 ' end note
 
-L2_1_Prover -> L2_1_L1 : Rollup\nstate proof
+L2_1_Prover -> L2_1_L1 : rollup\nstate\nproof
 ' L2_2 -> L2_2_L1 : State\nProof
 ' L2_N -> L2_N_L1 : State\nProof
 ' note right of link
@@ -145,7 +144,7 @@ L2_1_Prover <-up- L2_1_State : Read State
 ' Seq -[hidden]u-> L2
 ' Seq -[hidden]d-> L1
 
-Builder --> Fee_L1: Deposit\nfee
-Fee_L1 -up-> Validated: Fee\ndeposits
+Builder --> Fee_L1: deposit\nfee
+Fee_L1 -up-> Validated: fee\ndeposits
 
 @enduml
