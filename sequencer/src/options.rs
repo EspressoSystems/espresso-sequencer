@@ -1,4 +1,4 @@
-use crate::{api, persistence};
+use crate::{api, persistence, ChainConfig};
 use anyhow::{bail, Context};
 use bytesize::ByteSize;
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
@@ -6,7 +6,7 @@ use cld::ClDuration;
 use core::fmt::Display;
 use derivative::Derivative;
 use derive_more::From;
-use ethers::types::{Address, U256};
+use ethers::types::Address;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
@@ -43,10 +43,6 @@ use url::Url;
 #[derive(Parser, Clone, Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct Options {
-    /// Unique identifier for this instance of the sequencer network.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
-    pub chain_id: u16,
-
     /// URL of the HotShot orchestrator.
     #[clap(
         short,
@@ -181,13 +177,8 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
     pub stake_table_capacity: usize,
 
-    /// Maximum size in bytes of a block
-    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE", value_parser = parse_size)]
-    pub max_block_size: u64,
-
-    #[clap(long, env = "ESPRESSO_SEQUENCER_BASE_FEE")]
-    /// Minimum fee in WEI per byte of payload
-    pub base_fee: U256,
+    #[clap(flatten)]
+    pub chain_config: ChainConfig,
 }
 
 impl Options {

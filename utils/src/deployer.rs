@@ -35,6 +35,14 @@ pub struct DeployedContracts {
     /// Use an already-deployed LightClient.sol proxy instead of deploying a new one.
     #[clap(long, env = Contract::LightClientProxy)]
     light_client_proxy: Option<Address>,
+
+    /// Use an already-deployed FeeContract.sol instead of deploying a new one.
+    #[clap(long, env = Contract::FeeContract)]
+    fee_contract: Option<Address>,
+
+    /// Use an already-deployed FeeContract.sol proxy instead of deploying a new one.
+    #[clap(long, env = Contract::FeeContractProxy)]
+    fee_contract_proxy: Option<Address>,
 }
 
 /// An identifier for a particular contract.
@@ -50,6 +58,10 @@ pub enum Contract {
     LightClient,
     #[display(fmt = "ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS")]
     LightClientProxy,
+    #[display(fmt = "ESPRESSO_SEQUENCER_FEE_CONTRACT_ADDRESS")]
+    FeeContract,
+    #[display(fmt = "ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
+    FeeContractProxy,
 }
 
 impl From<Contract> for OsStr {
@@ -79,6 +91,12 @@ impl From<DeployedContracts> for Contracts {
         }
         if let Some(addr) = deployed.light_client_proxy {
             m.insert(Contract::LightClientProxy, addr);
+        }
+        if let Some(addr) = deployed.fee_contract {
+            m.insert(Contract::FeeContract, addr);
+        }
+        if let Some(addr) = deployed.fee_contract_proxy {
+            m.insert(Contract::FeeContractProxy, addr);
         }
         Self(m)
     }

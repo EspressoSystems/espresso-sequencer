@@ -73,6 +73,7 @@ jobs:
             target/release/permissionless-builder
             target/release/nasty-client
             target/release/pub-key
+            target/release/bridge
 
   build-arm:
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
@@ -117,6 +118,7 @@ jobs:
             target/release/permissionless-builder
             target/release/nasty-client
             target/release/pub-key
+            target/release/bridge
 
   build-dockers:
     runs-on: ubuntu-latest
@@ -134,6 +136,7 @@ jobs:
       deploy-tag: ${{ steps.deploy.outputs.tags }}
       builder-tag: ${{ steps.builder.outputs.tags }}
       nasty-client-tag: ${{ steps.nasty-client.outputs.tags }}
+      bridge-tag: ${{ steps.bridge.outputs.tags }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -234,6 +237,12 @@ jobs:
         id: nasty-client
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/nasty-client
+
+      - name: Generate bridge metadata
+        uses: docker/metadata-action@v5
+        id: bridge
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/bridge
 
       - name: Build and push sequencer docker
         uses: docker/build-push-action@v5
@@ -355,6 +364,16 @@ jobs:
           tags: ${{ steps.nasty-client.outputs.tags }}
           labels: ${{ steps.nasty-client.outputs.labels }}
 
+      - name: Build and push bridge docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/bridge.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.bridge.outputs.tags }}
+          labels: ${{ steps.bridge.outputs.labels }}
+
   test-demo:
     if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
@@ -382,6 +401,7 @@ jobs:
           docker pull ${{ needs.build-dockers.outputs.deploy-tag }}
           docker pull ${{ needs.build-dockers.outputs.builder-tag }}
           docker pull ${{ needs.build-dockers.outputs.nasty-client-tag }}
+          docker pull ${{ needs.build-dockers.outputs.bridge-tag }}
       - name: Tag new docker images
         run: |
           docker tag ${{ needs.build-dockers.outputs.sequencer-tag }} ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -396,6 +416,7 @@ jobs:
           docker tag ${{ needs.build-dockers.outputs.deploy-tag }} ghcr.io/espressosystems/espresso-sequencer/deploy:main
           docker tag ${{ needs.build-dockers.outputs.builder-tag }} ghcr.io/espressosystems/espresso-sequencer/builder:main
           docker tag ${{ needs.build-dockers.outputs.nasty-client-tag }} ghcr.io/espressosystems/espresso-sequencer/nasty-client:main
+          docker tag ${{ needs.build-dockers.outputs.bridge-tag }} ghcr.io/espressosystems/espresso-sequencer/bridge:main
 
       - name: Test docker demo
         run: |

@@ -1,57 +1,76 @@
-use crate::state::FeeAmount;
+use crate::{
+    options::parse_size,
+    state::{FeeAccount, FeeAmount},
+};
+use clap::Args;
 use committable::{Commitment, Committable};
 use derive_more::{From, Into};
-use ethers::types::U256;
+use ethers::types::{Address, U256};
 use itertools::Either;
 use sequencer_utils::impl_to_fixed_bytes;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 #[derive(Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, From, Into)]
 pub struct ChainId(U256);
 
 impl_to_fixed_bytes!(ChainId, U256);
 
-impl From<u16> for ChainId {
-    fn from(id: u16) -> Self {
+impl From<u64> for ChainId {
+    fn from(id: u64) -> Self {
         Self(id.into())
     }
 }
 
+impl FromStr for ChainId {
+    type Err = <u64 as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(u64::from_str(s)?.into())
+    }
+}
+
 /// Global variables for an Espresso blockchain.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Args, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ChainConfig {
     /// Espresso chain ID
-    chain_id: ChainId,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
+    pub chain_id: ChainId,
     /// Maximum size in bytes of a block
-    max_block_size: u64,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE", default_value = "30mb", value_parser = parse_size)]
+    pub max_block_size: u64,
     /// Minimum fee in WEI per byte of payload
-    base_fee: FeeAmount,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_BASE_FEE", default_value = "0")]
+    pub base_fee: FeeAmount,
+    /// Fee contract address on L1.
+    ///
+    /// This is optional so that fees can easily be toggled on/off, with no need to deploy a
+    /// contract when they are off. In a future release, after fees are switched on and thoroughly
+    /// tested, this may be made mandatory.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
+    pub fee_contract: Option<Address>,
+    /// Account that receives sequencing fees.
+    ///
+    /// This account in the Espresso fee ledger will always receive every fee paid in Espresso,
+    /// regardless of whether or not their is a `fee_contract` deployed. Once deployed, the fee
+    /// contract can decide what to do with tokens locked in this account in Espresso.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_FEE_RECIPIENT",
+        default_value = "0x0000000000000000000000000000000000000000"
+    )]
+    pub fee_recipient: FeeAccount,
 }
 
 impl Default for ChainConfig {
     fn default() -> Self {
-        Self::new(
-            U256::from(35353), // arbitrarily chosen chain ID
-            10240,             // 10 kB max_block_size
-            0,                 // no fees
-        )
-    }
-}
-
-impl ChainConfig {
-    pub fn new(
-        chain_id: impl Into<ChainId>,
-        max_block_size: u64,
-        base_fee: impl Into<FeeAmount>,
-    ) -> Self {
         Self {
-            chain_id: chain_id.into(),
-            max_block_size,
-            base_fee: base_fee.into(),
+            chain_id: U256::from(35353).into(), // arbitrarily chosen chain ID
+            max_block_size: 10240,
+            base_fee: 0.into(),
+            fee_contract: None,
+            fee_recipient: Default::default(),
         }
-    }
-    pub fn max_block_size(&self) -> u64 {
-        self.max_block_size
     }
 }
 
@@ -61,11 +80,17 @@ impl Committable for ChainConfig {
     }
 
     fn commit(&self) -> Commitment<Self> {
-        committable::RawCommitmentBuilder::new(&Self::tag())
+        let comm = committable::RawCommitmentBuilder::new(&Self::tag())
             .fixed_size_field("chain_id", &self.chain_id.to_fixed_bytes())
             .u64_field("max_block_size", self.max_block_size)
             .fixed_size_field("base_fee", &self.base_fee.to_fixed_bytes())
-            .finalize()
+            .fixed_size_field("fee_recipient", &self.fee_recipient.to_fixed_bytes());
+        let comm = if let Some(addr) = self.fee_contract {
+            comm.u64_field("fee_contract", 1).fixed_size_bytes(&addr.0)
+        } else {
+            comm.u64_field("fee_contract", 0)
+        };
+        comm.finalize()
     }
 }
 
@@ -118,7 +143,12 @@ mod tests {
             max_block_size,
             ..
         } = chain_config;
-        let other_config = ChainConfig::new(chain_id, max_block_size, 1);
+        let other_config = ChainConfig {
+            chain_id,
+            max_block_size,
+            base_fee: 1.into(),
+            ..Default::default()
+        };
         assert!(chain_config != other_config);
     }
 

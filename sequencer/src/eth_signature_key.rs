@@ -55,6 +55,10 @@ impl EthKeyPair {
     pub fn address(&self) -> Address {
         self.fee_account.address()
     }
+
+    pub fn signer(&self) -> LocalWallet {
+        LocalWallet::from_bytes(&self.signing_key.to_bytes()).unwrap()
+    }
 }
 
 impl Hash for EthKeyPair {
@@ -108,9 +112,11 @@ impl Ord for EthKeyPair {
 #[derive(Clone, Debug, Snafu)]
 pub struct SigningError;
 
+pub type BuilderSignature = Signature;
+
 impl BuilderSignatureKey for FeeAccount {
     type BuilderPrivateKey = EthKeyPair;
-    type BuilderSignature = Signature;
+    type BuilderSignature = BuilderSignature;
     type SignError = SigningError;
 
     fn validate_builder_signature(&self, signature: &Self::BuilderSignature, data: &[u8]) -> bool {
@@ -121,7 +127,7 @@ impl BuilderSignatureKey for FeeAccount {
         private_key: &Self::BuilderPrivateKey,
         data: &[u8],
     ) -> Result<Self::BuilderSignature, Self::SignError> {
-        let wallet = LocalWallet::from_bytes(&private_key.signing_key.to_bytes()).unwrap();
+        let wallet = private_key.signer();
         let message_hash = ethers::utils::hash_message(data);
         wallet.sign_hash(message_hash).map_err(|_| SigningError)
     }
@@ -190,12 +196,12 @@ mod tests {
         let sig = FeeAccount::sign_builder_message(&key, msg).unwrap();
         assert!(key.fee_account().validate_builder_signature(&sig, msg));
 
-        // Recovery fails if signed with other key
+        // Validation fails if signed with other key.
         let other_key = FeeAccount::generated_from_seed_indexed([0u8; 32], 1).1;
         let sig = FeeAccount::sign_builder_message(&other_key, msg).unwrap();
         assert!(!key.fee_account().validate_builder_signature(&sig, msg));
 
-        // Recovery fails if another message was signed
+        // Validation fails if another message was signed
         let sig = FeeAccount::sign_builder_message(&key, b"hello world XYZ").unwrap();
         assert!(!key.fee_account().validate_builder_signature(&sig, msg));
     }
