@@ -138,7 +138,7 @@ services:
       - "$ESPRESSO_STATE_RELAY_SERVER_PORT:$ESPRESSO_STATE_RELAY_SERVER_PORT"
     environment:
       - ESPRESSO_STATE_RELAY_SERVER_PORT
-      - ESPRESSO_STATE_SIGNATURE_WEIGHT_THRESHOLD
+      - ESPRESSO_STATE_SIGNATURE_TOTAL_STAKE
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
@@ -223,7 +223,7 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER1_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
-    command: sequencer -- storage-sql -- http -- query -- catchup -- state -- explorer
+    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- state -- explorer
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_CDN_ENDPOINT
@@ -462,7 +462,7 @@ services:
       - "$ESPRESSO_NASTY_CLIENT_PORT:$ESPRESSO_NASTY_CLIENT_PORT"
     environment:
       # Point the nasty client at sequencer1, the only one running the state API.
-      - ESPRESSO_SEQUENCER_URL=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
+      - ESPRESSO_SEQUENCER_URL=http://sequencer1:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_NASTY_CLIENT_PORT
       - RUST_LOG
       - RUST_LOG_FORMAT

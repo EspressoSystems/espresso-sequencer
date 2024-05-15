@@ -5,7 +5,7 @@ use anyhow::anyhow;
 use async_std::{
     io,
     sync::Arc,
-    task::{sleep, spawn},
+    task::{sleep, spawn, spawn_blocking},
 };
 use contract_bindings::light_client::{LightClient, LightClientErrors};
 use displaydoc::Display;
@@ -61,6 +61,8 @@ pub struct StateProverConfig {
     pub relay_server: Url,
     /// Interval between light client state update
     pub update_interval: Duration,
+    /// Interval between retries if a state update fails
+    pub retry_interval: Duration,
     /// URL of layer 1 Ethereum JSON-RPC provider.
     pub l1_provider: Url,
     /// Address of LightClient contract on layer 1.
@@ -274,13 +276,14 @@ pub async fn submit_state_and_proof(
 
 pub async fn sync_state<Ver: StaticVersionType>(
     st: &StakeTable<BLSPubKey, StateVerKey, CircuitField>,
-    proving_key: &ProvingKey,
+    proving_key: Arc<ProvingKey>,
     relay_server_client: &Client<ServerError, Ver>,
     config: &StateProverConfig,
 ) -> Result<(), ProverError> {
     tracing::info!("Start syncing light client state.");
 
     let bundle = fetch_latest_state(relay_server_client).await?;
+    tracing::info!("Bundle accumulated weight: {}", bundle.accumulated_weight);
     tracing::info!("Latest HotShot block height: {}", bundle.state.block_height);
     let old_state = read_contract_state(config).await?;
     tracing::info!(
@@ -322,24 +325,22 @@ pub async fn sync_state<Ver: StaticVersionType>(
         ));
     }
 
-    // TODO this assert fails. See https://github.com/EspressoSystems/espresso-sequencer/issues/1161
-    // assert_eq!(
-    //     bundle.state.stake_table_comm,
-    //     st.commitment(SnapshotVersion::LastEpochStart).unwrap()
-    // );
-
     tracing::info!("Collected latest state and signatures. Start generating SNARK proof.");
     let proof_gen_start = Instant::now();
-    let (proof, public_input) = generate_state_update_proof::<_, _, _, _>(
-        &mut ark_std::rand::thread_rng(),
-        proving_key,
-        &entries,
-        signer_bit_vec,
-        signatures,
-        &bundle.state,
-        &threshold,
-        config.stake_table_capacity,
-    )?;
+    let stake_table_capacity = config.stake_table_capacity;
+    let (proof, public_input) = spawn_blocking(move || {
+        generate_state_update_proof::<_, _, _, _>(
+            &mut ark_std::rand::thread_rng(),
+            &proving_key,
+            &entries,
+            signer_bit_vec,
+            signatures,
+            &bundle.state,
+            &threshold,
+            stake_table_capacity,
+        )
+    })
+    .await?;
     let proof_gen_elapsed = Instant::now().signed_duration_since(proof_gen_start);
     tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:.3}");
 
@@ -394,24 +395,21 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
         }
     }
 
-    let proving_key = async_std::task::block_on(async move {
-        Arc::new(load_proving_key(config.stake_table_capacity))
-    });
+    let stake_table_capacity = config.stake_table_capacity;
+    let proving_key =
+        spawn_blocking(move || Arc::new(load_proving_key(stake_table_capacity))).await;
 
     let update_interval = config.update_interval;
+    let retry_interval = config.retry_interval;
     loop {
-        let st = st.clone();
-        let proving_key = proving_key.clone();
-        let relay_server_client = relay_server_client.clone();
-        let config = config.clone();
-        // Use block_on to avoid blocking the async runtime with this computationally heavy task
-        async_std::task::block_on(async move {
-            if let Err(err) = sync_state(&st, &proving_key, &relay_server_client, &config).await {
-                tracing::error!("Cannot sync the light client state: {}", err);
-            }
-        });
-        tracing::info!("Sleeping for {:?}", update_interval);
-        sleep(update_interval).await;
+        if let Err(err) = sync_state(&st, proving_key.clone(), &relay_server_client, &config).await
+        {
+            tracing::error!("Cannot sync the light client state, will retry: {}", err);
+            sleep(retry_interval).await;
+        } else {
+            tracing::info!("Sleeping for {:?}", update_interval);
+            sleep(update_interval).await;
+        }
     }
 }
 
@@ -420,10 +418,12 @@ pub async fn run_prover_once<Ver: StaticVersionType>(config: StateProverConfig, 
     let st =
         init_stake_table_from_orchestrator(&config.orchestrator_url, config.stake_table_capacity)
             .await;
-    let proving_key = load_proving_key(config.stake_table_capacity);
+    let stake_table_capacity = config.stake_table_capacity;
+    let proving_key =
+        spawn_blocking(move || Arc::new(load_proving_key(stake_table_capacity))).await;
     let relay_server_client = Client::<ServerError, Ver>::new(config.relay_server.clone());
 
-    sync_state(&st, &proving_key, &relay_server_client, &config)
+    sync_state(&st, proving_key, &relay_server_client, &config)
         .await
         .expect("Error syncing the light client state.");
 }
@@ -624,6 +624,7 @@ mod test {
             Self {
                 relay_server: Url::parse("http://localhost").unwrap(),
                 update_interval: Duration::default(),
+                retry_interval: Duration::default(),
                 l1_provider: Url::parse("http://localhost").unwrap(),
                 light_client_address: Address::default(),
                 eth_signing_key: SigningKey::random(&mut test_rng()),
