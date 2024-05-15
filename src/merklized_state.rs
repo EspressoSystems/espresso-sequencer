@@ -81,7 +81,6 @@ where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State:
         Send + Sync + MerklizedStateDataSource<Types, M, ARITY> + MerklizedStateHeightPersistence,
-    Types: NodeType,
     for<'a> <M::Commit as TryFrom<&'a TaggedBase64>>::Error: Display,
 {
     let mut api = load_api::<State, Error, Ver>(
