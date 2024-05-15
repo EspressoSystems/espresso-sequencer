@@ -1,6 +1,5 @@
 mod iter;
 mod newtypes;
-mod ns_iter;
 mod ns_payload;
 mod ns_payload_range;
 mod ns_proof;

@@ -1,21 +1,15 @@
-use crate::block2::{
-    ns_iter::{NsIndex, NsIter},
-    payload,
-    uint_bytes::{u64_from_bytes, usize_from_bytes},
-    NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
+use crate::{
+    block2::{
+        payload::{self, PayloadByteLen},
+        uint_bytes::{
+            bytes_serde_impl, u64_from_bytes, u64_to_bytes, usize_from_bytes, usize_to_bytes,
+        },
+        NsPayloadRange, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
+    },
+    NamespaceId,
 };
-use crate::NamespaceId;
-use serde::{Deserialize, Serialize};
-
-use super::{
-    payload::PayloadByteLen,
-    uint_bytes::{u64_to_bytes, usize_to_bytes},
-    NsPayloadRange,
-};
-
-/// TODO explain: ZST to unlock visibility in other modules. can only be
-/// constructed in this module.
-pub struct A(());
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::collections::HashSet;
 
 /// TODO explain: similar API to `NsPayload`
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -34,10 +28,9 @@ impl NsTable {
 
     /// Read the namespace id from the `index`th entry from the namespace table.
     pub fn read_ns_id(&self, index: &NsIndex) -> NamespaceId {
-        let start =
-            index.as_usize(A(())) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
+        let start = index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
 
-        // TODO hack to deserialize `NamespaceId` from `NS_ID_BYTE_LEN` bytes
+        // hack to deserialize `NamespaceId` from `NS_ID_BYTE_LEN` bytes
         NamespaceId::from(u64_from_bytes::<NS_ID_BYTE_LEN>(
             &self.0[start..start + NS_ID_BYTE_LEN],
         ))
@@ -60,7 +53,7 @@ impl NsTable {
                 / NS_ID_BYTE_LEN.saturating_add(NS_OFFSET_BYTE_LEN),
         );
 
-        index.as_usize(A(())) < num_nss_with_duplicates
+        index.0 < num_nss_with_duplicates
     }
 
     /// Read subslice range for the `index`th namespace from the namespace
@@ -71,11 +64,12 @@ impl NsTable {
         payload_byte_len: &PayloadByteLen,
     ) -> NsPayloadRange {
         let end = self.read_ns_offset(index).min(payload_byte_len.as_usize());
-        let start = index
-            .prev(A(()))
-            .map(|prev| self.read_ns_offset(&prev))
-            .unwrap_or(0)
-            .min(end);
+        let start = if index.0 == 0 {
+            0
+        } else {
+            self.read_ns_offset(&NsIndex(index.0 - 1))
+        }
+        .min(end);
         NsPayloadRange::new(start, end)
     }
 
@@ -94,9 +88,8 @@ impl NsTable {
 
     /// Read the namespace offset from the `index`th entry from the namespace table.
     fn read_ns_offset(&self, index: &NsIndex) -> usize {
-        let start = index.as_usize(A(())) * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN)
-            + NUM_NSS_BYTE_LEN
-            + NS_ID_BYTE_LEN;
+        let start =
+            index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
         usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.0[start..start + NS_OFFSET_BYTE_LEN])
     }
 
@@ -144,5 +137,58 @@ impl NsTableBuilder {
         bytes[..NUM_NSS_BYTE_LEN]
             .copy_from_slice(&usize_to_bytes::<NUM_NSS_BYTE_LEN>(self.num_entries));
         NsTable(bytes)
+    }
+}
+
+/// Index for an entry in a ns table.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct NsIndex(usize);
+bytes_serde_impl!(NsIndex, to_bytes, [u8; NUM_NSS_BYTE_LEN], from_bytes);
+
+impl NsIndex {
+    pub fn to_bytes(&self) -> [u8; NUM_NSS_BYTE_LEN] {
+        usize_to_bytes::<NUM_NSS_BYTE_LEN>(self.0)
+    }
+    fn from_bytes(bytes: &[u8]) -> Self {
+        Self(usize_from_bytes::<NUM_NSS_BYTE_LEN>(bytes))
+    }
+}
+
+/// Return type for [`Payload::ns_iter`].
+pub struct NsIter<'a> {
+    cur_index: usize,
+    repeat_nss: HashSet<NamespaceId>,
+    ns_table: &'a NsTable,
+}
+
+impl<'a> NsIter<'a> {
+    pub fn new(ns_table: &'a NsTable) -> Self {
+        Self {
+            cur_index: 0,
+            repeat_nss: HashSet::new(),
+            ns_table,
+        }
+    }
+}
+
+impl<'a> Iterator for NsIter<'a> {
+    type Item = NsIndex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let candidate_result = NsIndex(self.cur_index);
+            if !self.ns_table.in_bounds(&candidate_result) {
+                break None;
+            }
+            let ns_id = self.ns_table.read_ns_id(&candidate_result);
+            self.cur_index += 1;
+
+            // skip duplicate namespace IDs
+            if !self.repeat_nss.insert(ns_id) {
+                continue;
+            }
+
+            break Some(candidate_result);
+        }
     }
 }

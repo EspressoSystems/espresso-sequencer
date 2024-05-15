@@ -1,10 +1,9 @@
 use crate::Transaction;
 
 use super::{
-    uint_bytes::{usize_from_bytes, usize_to_bytes},
+    uint_bytes::{bytes_serde_impl, usize_from_bytes, usize_to_bytes},
     NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
-use ns_payload_traits::bytes_serde_impl;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
 

@@ -20,28 +20,3 @@ pub trait NsPayloadBytesRange<'a> {
         range.start + ns_payload_offset..range.end + ns_payload_offset
     }
 }
-
-macro_rules! bytes_serde_impl {
-    ($T:ty, $to_bytes:ident, $B:ty, $from_bytes:ident) => {
-        impl Serialize for $T {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: Serializer,
-            {
-                self.$to_bytes().serialize(serializer)
-            }
-        }
-
-        impl<'de> Deserialize<'de> for $T {
-            fn deserialize<D>(deserializer: D) -> Result<$T, D::Error>
-            where
-                D: Deserializer<'de>,
-            {
-                <$B as Deserialize>::deserialize(deserializer)
-                    .map(|bytes| <$T>::$from_bytes(bytes.as_ref()))
-            }
-        }
-    };
-}
-
-pub(super) use bytes_serde_impl;
