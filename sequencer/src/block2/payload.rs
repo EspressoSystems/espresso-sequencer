@@ -186,7 +186,6 @@ impl Payload {
         let tx_payload = ns_payload
             .read(&tx_payload_range)
             .to_payload_bytes()
-            .as_ref()
             .to_vec();
         let ns_id = self.ns_table().read_ns_id(index.ns());
         // TODO don't copy the tx bytes into the return value
