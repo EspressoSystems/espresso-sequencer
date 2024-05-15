@@ -1,5 +1,9 @@
 use crate::{
-    block2::{iter::Index, newtypes::TxPayloadRange, payload::Payload},
+    block2::{
+        iter::Index,
+        newtypes::TxPayloadRange,
+        payload::{Payload, PayloadByteLen},
+    },
     Transaction,
 };
 use hotshot_query_service::{VidCommitment, VidCommon};
@@ -44,9 +48,8 @@ impl TxProof2 {
         payload: &Payload,
         common: &VidCommon,
     ) -> Option<(Transaction, Self)> {
-        let payload_byte_len = payload.as_byte_slice().len(); // TODO newtype?
-
-        if payload_byte_len != VidSchemeType::get_payload_byte_len(common) {
+        let payload_byte_len = payload.byte_len();
+        if !payload_byte_len.is_consistent(common) {
             return None; // error: common inconsistent with self
         }
         if !payload.ns_table().in_bounds(index.ns()) {
@@ -56,7 +59,7 @@ impl TxProof2 {
 
         let ns_payload_range = payload
             .ns_table()
-            .ns_payload_range2(index.ns(), payload_byte_len);
+            .ns_payload_range(index.ns(), &payload_byte_len);
         let ns_payload = payload.read_ns_payload(&ns_payload_range);
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
 
@@ -147,7 +150,7 @@ impl TxProof2 {
             return None; // error: ns id does not exist
         };
         let ns_payload_range =
-            ns_table.ns_payload_range2(&ns_index, VidSchemeType::get_payload_byte_len(common));
+            ns_table.ns_payload_range(&ns_index, &PayloadByteLen::from_vid_common(common));
 
         // TODO desperate need of helpers!
         if !NumTxs::new(&self.payload_num_txs, &ns_payload_range.byte_len())

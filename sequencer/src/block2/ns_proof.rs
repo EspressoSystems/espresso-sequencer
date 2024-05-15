@@ -11,7 +11,7 @@ use jf_primitives::vid::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::ns_payload::NsPayloadOwned;
+use super::{ns_payload::NsPayloadOwned, payload::PayloadByteLen};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct NsProof {
@@ -39,9 +39,8 @@ impl NsProof {
     /// Returns the payload bytes for namespace `ns_id`, along with a proof of
     /// correctness for those bytes.
     pub fn new(payload: &Payload, ns_id: NamespaceId, common: &VidCommon) -> Option<NsProof> {
-        let payload_byte_len = payload.as_byte_slice().len(); // TODO newtype?
-
-        if payload.as_byte_slice().len() != VidSchemeType::get_payload_byte_len(common) {
+        let payload_byte_len = payload.byte_len();
+        if !payload_byte_len.is_consistent(common) {
             return None; // error: vid_common inconsistent with self
         }
         let Some(ns_index) = payload.ns_table().find_ns_id(&ns_id) else {
@@ -54,7 +53,7 @@ impl NsProof {
 
         let ns_payload_range = payload
             .ns_table()
-            .ns_payload_range2(&ns_index, payload_byte_len);
+            .ns_payload_range(&ns_index, &payload_byte_len);
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
 
         Some(NsProof {
@@ -102,9 +101,9 @@ impl NsProof {
                         Statement {
                             payload_subslice: pf.ns_payload.as_byte_slice(),
                             range: ns_table
-                                .ns_payload_range2(
+                                .ns_payload_range(
                                     &ns_index,
-                                    VidSchemeType::get_payload_byte_len(common),
+                                    &PayloadByteLen::from_vid_common(common),
                                 )
                                 .as_range(),
                             commit,

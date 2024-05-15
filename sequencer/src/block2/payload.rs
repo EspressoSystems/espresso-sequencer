@@ -175,7 +175,7 @@ impl Payload {
         // TODO check index.ns(), index.tx() in bounds
         let ns_payload_range = self
             .ns_table()
-            .ns_payload_range2(index.ns(), self.payload.len());
+            .ns_payload_range(index.ns(), &self.byte_len());
         let ns_payload = self.read_ns_payload(&ns_payload_range);
         let num_txs = ns_payload.read(&NumTxsRange::new(&ns_payload_range.byte_len()));
         let tx_table_entries = ns_payload.read(&TxTableEntriesRange::new(index.tx()));
@@ -191,6 +191,9 @@ impl Payload {
         Some(Transaction::new(ns_id, tx_payload))
     }
 
+    pub fn byte_len(&self) -> PayloadByteLen {
+        PayloadByteLen(self.payload.len())
+    }
     pub fn as_byte_slice(&self) -> &[u8] {
         &self.payload
     }
@@ -217,4 +220,23 @@ impl Payload {
     // pub fn ns_payload_range2(&self, index: &NsIndex) -> NsPayloadRange2 {
     //     self.ns_table.ns_payload_range2(index, self.payload.len())
     // }
+}
+
+// TODO find me a home?
+use hotshot_types::vid::{VidCommon, VidSchemeType};
+use jf_primitives::vid::VidScheme;
+pub struct PayloadByteLen(usize);
+
+impl PayloadByteLen {
+    pub fn from_vid_common(common: &VidCommon) -> Self {
+        Self(VidSchemeType::get_payload_byte_len(common))
+    }
+    pub fn is_consistent(&self, common: &VidCommon) -> bool {
+        self.0 == VidSchemeType::get_payload_byte_len(common)
+    }
+
+    // TODO restrict visibility?
+    pub fn as_usize(&self) -> usize {
+        self.0
+    }
 }

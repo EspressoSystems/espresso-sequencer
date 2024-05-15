@@ -7,7 +7,7 @@ use crate::block2::{
 use crate::NamespaceId;
 use serde::{Deserialize, Serialize};
 
-use super::NsPayloadRange;
+use super::{payload::PayloadByteLen, NsPayloadRange};
 
 /// TODO explain: ZST to unlock visibility in other modules. can only be
 /// constructed in this module.
@@ -92,29 +92,12 @@ impl NsTable {
 
     /// Read subslice range for the `index`th namespace from the namespace
     /// table.
-    ///
-    /// It is the responsibility of the caller to ensure that the `index`th
-    /// entry is not a duplicate of a previous entry. Otherwise the returned
-    /// range will be invalid. (Can the caller even create his own `NsIndex`??)
-    ///
-    /// Returned range guaranteed to satisfy `start <= end <=
-    /// payload_byte_len`.
-    ///
-    /// TODO newtype for `payload_byte_len` arg?
-    ///
-    /// Panics if `index >= self.num_nss()`.
-    // pub fn ns_payload_range(&self, index: &NsIndex, payload_byte_len: usize) -> NsPayloadRange {
-    //     let end = self.read_ns_offset(index).min(payload_byte_len);
-    //     let start = index
-    //         .prev(A(()))
-    //         .map(|prev| self.read_ns_offset(&prev))
-    //         .unwrap_or(0)
-    //         .min(end);
-    //     NsPayloadRange::new(A(()), start, end)
-    // }
-
-    pub fn ns_payload_range2(&self, index: &NsIndex, payload_byte_len: usize) -> NsPayloadRange {
-        let end = self.read_ns_offset(index).min(payload_byte_len);
+    pub fn ns_payload_range(
+        &self,
+        index: &NsIndex,
+        payload_byte_len: &PayloadByteLen,
+    ) -> NsPayloadRange {
+        let end = self.read_ns_offset(index).min(payload_byte_len.as_usize());
         let start = index
             .prev(A(()))
             .map(|prev| self.read_ns_offset(&prev))
