@@ -12,7 +12,7 @@ async function main() {
         // Initialize web3 provider using the RPC URL from environment variables
         const web3Provider = new ethers.JsonRpcProvider(getEnvVar("SEPOLIA_RPC_URL"));
         // Create a signer using the orchestrator's private key and the web3 provider
-        const orchestratorSigner = new ethers.Wallet(getEnvVar("ORCHESTRATOR_SIGNER_KEY"), web3Provider);
+        const orchestratorSigner = new ethers.Wallet(getEnvVar("SAFE_ORCHESTRATOR_PRIVATE_KEY"), web3Provider);
 
         // Set up Eth Adapter with ethers and the signer
         const ethAdapter = new EthersAdapter({

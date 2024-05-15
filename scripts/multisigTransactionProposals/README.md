@@ -12,7 +12,7 @@ To enable the permissioned prover on the light client contract, ensure that the 
 in the `.env` file:
 
 - `SEPOLIA_RPC_URL`
-- `ORCHESTRATOR_SIGNER_KEY`
+- `SAFE_ORCHESTRATOR_PRIVATE_KEY`
 - `SAFE_MULTISIG_ADDRESS`
 - `APPROVED_PROVER_ADDRESS`
 - `LIGHT_CLIENT_CONTRACT_ADDRESS`
@@ -36,7 +36,7 @@ To disable the permissioned prover on the light client contract, ensure that the
 in the `.env` file:
 
 - `SEPOLIA_RPC_URL`
-- `ORCHESTRATOR_SIGNER_KEY`
+- `SAFE_ORCHESTRATOR_PRIVATE_KEY`
 - `SAFE_MULTISIG_ADDRESS`
 - `LIGHT_CLIENT_CONTRACT_ADDRESS`
 
