@@ -1,6 +1,6 @@
 @startuml
 package "Espresso Sequencer Network" as Network {
-    component "Sequencer Nodes" as Nodes
+    component "Sequencer\nNodes" as Nodes
     package CDN {
         component Broker
         component Marshal
@@ -16,7 +16,7 @@ Nodes <-up-> CDN: consensus\nmessages
 package "Espresso Sequencer" as Espresso {
     database "Postgres" as DB
     package "Sequencer Node" as Seq {
-        component "HotShot Query\nService" as QS {
+        component "HotShot\nQuery\nService" as QS {
         }
         component "APIs" {
             portin Catchup
@@ -31,7 +31,9 @@ package "Espresso Sequencer" as Espresso {
             component "CDN Client"
         }
 
-        component "State Signer" as Signer {
+        package State as State {
+            component "State Signer" as Signer
+            component "ValidatedState" as Validated
         }
     }
     component "HotShot state\nprover service" as HSProver
@@ -68,8 +70,11 @@ package "Layer 2s" as L2 {
     ' component "Rollup 2" as L2_2
     ' component "Rollup N" as L2_N
 }
-package "Layer 1" as L1 {
-    component "Light Client Contract" as LC_L1
+package "Ethereum Layer 1" as L1 {
+    package "Espresso Contracts" as Esp_L1 {
+        component "Light Client\nContract" as LC_L1
+        component "Fee\nContract" as Fee_L1
+    }
     package "Rollup Contracts" as L2_L1 {
         component "Rollup 1\nContract" as L2_1_L1
         ' component "Rollup 2\nContract" as L2_2_L1
@@ -100,7 +105,7 @@ Query -up-> L2_1_Exec : Block
 '     transactions for their rollup.
 ' end note
 
-HSProver -down-> LC_L1 : HotShot state proof
+HSProver -down-> LC_L1 : HotShot\nstate proof
 ' note right of link
 ' 4. Sequencer posts succinct commitment
 '     to block to L1. Contract verifies proof
@@ -108,7 +113,7 @@ HSProver -down-> LC_L1 : HotShot state proof
 '     then stores the block commitment.
 ' end note
 
-L2_1_Prover -> L2_1_L1 : Rollup state proof
+L2_1_Prover -> L2_1_L1 : Rollup\nstate proof
 ' L2_2 -> L2_2_L1 : State\nProof
 ' L2_N -> L2_N_L1 : State\nProof
 ' note right of link
@@ -116,7 +121,7 @@ L2_1_Prover -> L2_1_L1 : Rollup state proof
 '     ZK-rollups include a proof.
 ' end note
 
-LC_L1 -down-> L2_L1
+LC_L1 -> L2_L1
 ' note bottom of link
 ' 6. Rollup contracts read certified sequence
 '     of block commitments from sequencer
@@ -139,5 +144,7 @@ L2_1_Prover <-up- L2_1_State : Read State
 ' L2 -[hidden]d-> L1
 ' Seq -[hidden]u-> L2
 ' Seq -[hidden]d-> L1
+
+Builder --> Fee_L1: Deposit Fee
 
 @enduml
