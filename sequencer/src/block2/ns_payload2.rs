@@ -4,12 +4,9 @@
 
 use crate::{NamespaceId, Transaction};
 
-use super::{
-    newtypes::{
-        AsPayloadBytes, NsPayloadByteLen, NumTxsChecked, NumTxsRange2, PayloadBytesRange,
-        TxPayloadRange, TxTableEntriesRange2,
-    },
-    tx_iter::TxIter,
+use super::newtypes::{
+    AsPayloadBytes, NsPayloadByteLen, NumTxsChecked, NumTxsRange2, PayloadBytesRange, TxIter,
+    TxPayloadRange, TxTableEntriesRange2,
 };
 use serde::{Deserialize, Serialize};
 

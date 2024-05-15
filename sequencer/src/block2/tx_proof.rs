@@ -1,5 +1,5 @@
 use crate::{
-    block2::{iter::Index, newtypes::TxPayloadRange, payload::Payload, tx_iter::TxIndex},
+    block2::{iter::Index, newtypes::TxPayloadRange, payload::Payload},
     Transaction,
 };
 use hotshot_query_service::{VidCommitment, VidCommon};
@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     newtypes::{
-        AsPayloadBytes, NumTxs2, NumTxsChecked, NumTxsRange2, PayloadBytesRange, TxTableEntries2,
-        TxTableEntriesRange2,
+        AsPayloadBytes, NumTxs2, NumTxsChecked, NumTxsRange2, PayloadBytesRange, TxIndex,
+        TxTableEntries2, TxTableEntriesRange2,
     },
     ns_table::NsTable,
 };

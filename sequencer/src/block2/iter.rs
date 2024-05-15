@@ -1,12 +1,11 @@
 use crate::block2::{
     ns_iter::{NsIndex, NsIter},
     payload::Payload,
-    tx_iter::{TxIndex, TxIter},
 };
 use serde::{Deserialize, Serialize};
 use std::iter::Peekable;
 
-use super::newtypes::{NumTxsChecked, NumTxsRange2};
+use super::newtypes::{NumTxsChecked, NumTxsRange2, TxIndex, TxIter};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Index {

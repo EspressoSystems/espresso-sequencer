@@ -1,7 +1,6 @@
 use crate::Transaction;
 
 use super::{
-    tx_iter::TxIndex,
     uint_bytes::{usize_from_bytes, usize_to_bytes},
     NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
@@ -329,5 +328,63 @@ impl NamespacePayloadBuilder {
         result.extend(self.tx_table_entries);
         result.extend(self.tx_bodies);
         result
+    }
+}
+
+/// Index for an entry in a tx table.
+///
+/// Byte length same as [`NumTxs`].
+///
+/// Custom serialization and helper methods.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct TxIndex(usize);
+
+// TODO so much boilerplate for serde
+impl Serialize for TxIndex {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.as_bytes().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for TxIndex {
+    fn deserialize<D>(deserializer: D) -> Result<TxIndex, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        <[u8; NUM_TXS_BYTE_LEN] as Deserialize>::deserialize(deserializer)
+            .map(|bytes| TxIndex(usize_from_bytes::<NUM_TXS_BYTE_LEN>(&bytes)))
+    }
+}
+
+impl TxIndex {
+    /// Infallible serialization.
+    ///
+    /// TODO same question as [`NumTxs::as_bytes`]
+    pub fn as_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
+        usize_to_bytes(self.0)
+    }
+
+    pub fn as_usize2(&self) -> usize {
+        self.0
+    }
+}
+
+pub struct TxIter(Range<usize>);
+
+impl TxIter {
+    pub fn new2(num_txs: &NumTxsChecked) -> Self {
+        Self(0..num_txs.as_usize())
+    }
+}
+
+// TODO explain: boilerplate `impl Iterator` delegates to `Range`
+impl Iterator for TxIter {
+    type Item = TxIndex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(TxIndex)
     }
 }

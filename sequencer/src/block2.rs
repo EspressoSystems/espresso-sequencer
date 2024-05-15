@@ -6,7 +6,6 @@ mod ns_payload_range2;
 mod ns_proof;
 mod ns_table;
 mod payload;
-mod tx_iter;
 mod tx_proof;
 mod uint_bytes;
 
