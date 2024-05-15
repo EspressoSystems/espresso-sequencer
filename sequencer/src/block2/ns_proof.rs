@@ -11,7 +11,7 @@ use jf_primitives::vid::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::ns_payload2::NsPayloadOwned;
+use super::ns_payload::NsPayloadOwned;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct NsProof {
