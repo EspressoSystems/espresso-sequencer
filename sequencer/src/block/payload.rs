@@ -170,7 +170,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
                 block_size += size_of::<TxTableEntry>() as u64;
             }
 
-            if block_size > chain_config.max_block_size() {
+            if block_size > chain_config.max_block_size {
                 break;
             }
 
@@ -372,7 +372,10 @@ mod test {
         assert_eq!(tx_size, 10);
 
         let n_txs = target_payload_total as u64 / tx_size;
-        let chain_config = ChainConfig::new(1, max_block_size, 1);
+        let chain_config = ChainConfig {
+            max_block_size,
+            ..Default::default()
+        };
 
         let mut txs = (0..n_txs)
             .map(|_| Transaction::of_size(payload_size))

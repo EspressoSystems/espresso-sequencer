@@ -11,7 +11,7 @@ use async_std::sync::RwLock;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::DepositFilter;
 use core::fmt::Debug;
-use derive_more::{Add, Display, From, Into, Sub};
+use derive_more::{Add, Display, From, Into, Mul, Sub};
 use ethers::{abi::Address, types::U256};
 use futures::future::Future;
 use hotshot::traits::ValidatedState as HotShotState;
@@ -25,7 +25,10 @@ use hotshot_query_service::{
 use hotshot_types::{
     data::{BlockError, ViewNumber},
     traits::{
-        node_implementation::ConsensusTime, signature_key::BuilderSignatureKey, states::StateDelta,
+        block_contents::{BlockHeader, BuilderFee},
+        node_implementation::ConsensusTime,
+        signature_key::BuilderSignatureKey,
+        states::StateDelta,
     },
     vid::{VidCommon, VidSchemeType},
 };
@@ -34,7 +37,8 @@ use jf_merkle_tree::{
     prelude::{LightWeightSHA3MerkleTree, MerkleProof, Sha3Digest, Sha3Node},
     universal_merkle_tree::UniversalMerkleTree,
     AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
-    LookupResult, MerkleCommitment, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
+    LookupResult, MerkleCommitment, MerkleTreeScheme, PersistentUniversalMerkleTreeScheme,
+    ToTraversalPath, UniversalMerkleTreeScheme,
 };
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
@@ -91,6 +95,14 @@ impl ValidatedState {
         self.fee_merkle_tree.update(account, amount).unwrap();
     }
 
+    pub fn balance(&mut self, account: FeeAccount) -> Option<FeeAmount> {
+        match self.fee_merkle_tree.lookup(account) {
+            LookupResult::Ok(balance, _) => Some(*balance),
+            LookupResult::NotFound(_) => Some(0.into()),
+            LookupResult::NotInMemory => None,
+        }
+    }
+
     /// Find accounts that are not in memory.
     ///
     /// As an optimization we could try to apply updates and return the
@@ -136,11 +148,14 @@ impl ValidatedState {
             })?)
     }
 
-    /// Charge a fee to an account.
-    pub fn charge_fee(&mut self, fee_info: FeeInfo) -> anyhow::Result<()> {
+    /// Charge a fee to an account, transferring the funds to the fee recipient account.
+    pub fn charge_fee(&mut self, fee_info: FeeInfo, recipient: FeeAccount) -> anyhow::Result<()> {
+        let fee_state = self.fee_merkle_tree.clone();
+
+        // Deduct the fee from the paying account.
         let FeeInfo { account, amount } = fee_info;
         let mut err = None;
-        let res = self.fee_merkle_tree.update_with(account, |balance| {
+        let fee_state = fee_state.persistent_update_with(account, |balance| {
             let balance = balance.copied();
             let Some(updated) = balance.unwrap_or_default().checked_sub(&amount) else {
                 // Return an error without updating the account.
@@ -158,17 +173,21 @@ impl ValidatedState {
                 Some(updated)
             }
         })?;
-        // Check if we were unable to do the update because the required Merkle path is missing.
-        ensure!(
-            res.expect_not_in_memory().is_err(),
-            format!("missing account state for {account}")
-        );
-        // Fail if there was an error during `update_with`, otherwise succeed.
+
+        // Fail if there was an error during `persistent_update_with` (e.g. insufficient balance).
         if let Some(err) = err {
-            Err(err)
-        } else {
-            Ok(())
+            return Err(err);
         }
+
+        // If we successfully deducted the fee from the source account, increment the balance of the
+        // recipient account.
+        let fee_state = fee_state.persistent_update_with(recipient, |balance| {
+            Some(balance.copied().unwrap_or_default() + amount)
+        })?;
+
+        // If the whole update was successful, update the original state.
+        self.fee_merkle_tree = fee_state;
+        Ok(())
     }
 }
 
@@ -203,13 +222,22 @@ pub fn validate_proposal(
         )
     );
 
+    // validate block size and fee
+    let block_size = VidSchemeType::get_payload_byte_len(vid_common) as u64;
     anyhow::ensure!(
-        (VidSchemeType::get_payload_byte_len(vid_common) as u64)
-            < expected_chain_config.max_block_size(),
+        block_size < expected_chain_config.max_block_size,
         anyhow::anyhow!(
             "Invalid Payload Size: local={:?}, proposal={:?}",
             expected_chain_config,
             proposal.chain_config
+        )
+    );
+    anyhow::ensure!(
+        proposal.fee_info.amount() >= expected_chain_config.base_fee * block_size,
+        format!(
+            "insufficient fee: block_size={block_size}, base_fee={:?}, proposed_fee={:?}",
+            expected_chain_config.base_fee,
+            proposal.fee_info.amount()
         )
     );
 
@@ -254,9 +282,10 @@ fn charge_fee(
     state: &mut ValidatedState,
     delta: &mut Delta,
     fee_info: FeeInfo,
+    recipient: FeeAccount,
 ) -> anyhow::Result<()> {
-    state.charge_fee(fee_info)?;
-    delta.fees_delta.insert(fee_info.account);
+    state.charge_fee(fee_info, recipient)?;
+    delta.fees_delta.extend([fee_info.account, recipient]);
     Ok(())
 }
 
@@ -266,13 +295,18 @@ fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
     let signature = proposed_header
         .builder_signature
         .ok_or_else(|| anyhow::anyhow!("Builder signature not found"))?;
-    let msg = proposed_header.fee_message().context("invalid fee")?;
+    let fee_amount = proposed_header.fee_info.amount().as_u64().context(format!(
+        "fee amount out of range: {:?}",
+        proposed_header.fee_info.amount()
+    ))?;
     // verify signature
     anyhow::ensure!(
-        proposed_header
-            .fee_info
-            .account
-            .validate_builder_signature(&signature, msg.as_ref()),
+        proposed_header.fee_info.account.validate_fee_signature(
+            &signature,
+            fee_amount,
+            proposed_header.metadata(),
+            &proposed_header.payload_commitment()
+        ),
         "Invalid Builder Signature"
     );
 
@@ -515,7 +549,7 @@ impl<T> SequencerStateDataSource for T where
 }
 
 impl ValidatedState {
-    async fn apply_header(
+    pub(crate) async fn apply_header(
         &self,
         instance: &NodeState,
         parent_leaf: &Leaf,
@@ -528,11 +562,16 @@ impl ValidatedState {
 
         let mut validated_state = self.clone();
 
-        let accounts = std::iter::once(proposed_header.fee_info.account);
-
-        // Find missing state entries
+        // Find missing fee state entries. We will need to use the builder account which is paying a
+        // fee and the recipient account which is receiving it, plus any counts receiving deposits
+        // in this block.
         let missing_accounts = self.forgotten_accounts(
-            accounts.chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
+            [
+                proposed_header.fee_info.account,
+                instance.chain_config().fee_recipient,
+            ]
+            .into_iter()
+            .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
         );
 
         let parent_height = parent_leaf.get_height();
@@ -590,7 +629,12 @@ impl ValidatedState {
         let mut validated_state =
             apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
 
-        charge_fee(&mut validated_state, &mut delta, proposed_header.fee_info)?;
+        charge_fee(
+            &mut validated_state,
+            &mut delta,
+            proposed_header.fee_info,
+            instance.chain_config().fee_recipient,
+        )?;
 
         Ok((validated_state, delta))
     }
@@ -601,10 +645,13 @@ pub async fn get_l1_deposits(
     header: &Header,
     parent_leaf: &Leaf,
 ) -> Vec<FeeInfo> {
-    if let Some(block_info) = header.l1_finalized {
+    if let (Some(addr), Some(block_info)) =
+        (instance.chain_config.fee_contract, header.l1_finalized)
+    {
         instance
             .l1_client
             .get_finalized_deposits(
+                addr,
                 parent_leaf
                     .get_block_header()
                     .l1_finalized
@@ -618,7 +665,7 @@ pub async fn get_l1_deposits(
 }
 
 #[must_use]
-pub fn apply_proposal(
+fn apply_proposal(
     validated_state: &ValidatedState,
     delta: &mut Delta,
     parent_leaf: &Leaf,
@@ -835,6 +882,15 @@ impl FeeInfo {
     }
 }
 
+impl From<BuilderFee<SeqTypes>> for FeeInfo {
+    fn from(fee: BuilderFee<SeqTypes>) -> Self {
+        Self {
+            amount: fee.fee_amount.into(),
+            account: fee.fee_account,
+        }
+    }
+}
+
 impl From<DepositFilter> for FeeInfo {
     fn from(item: DepositFilter) -> Self {
         Self {
@@ -864,6 +920,7 @@ impl Committable for FeeInfo {
     Copy,
     Clone,
     Debug,
+    Display,
     Deserialize,
     Serialize,
     PartialEq,
@@ -872,9 +929,11 @@ impl Committable for FeeInfo {
     Ord,
     Add,
     Sub,
+    Mul,
     From,
     Into,
 )]
+#[display(fmt = "{_0}")]
 pub struct FeeAmount(U256);
 
 impl_to_fixed_bytes!(FeeAmount, U256);
@@ -897,8 +956,16 @@ impl CheckedSub for FeeAmount {
     }
 }
 
+impl FromStr for FeeAmount {
+    type Err = <U256 as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(s.parse()?))
+    }
+}
+
 impl FeeAmount {
-    pub(crate) fn as_u64(&self) -> Option<u64> {
+    pub fn as_u64(&self) -> Option<u64> {
         if self.0 <= u64::MAX.into() {
             Some(self.0.as_u64())
         } else {
@@ -1170,6 +1237,8 @@ impl FeeAccountProof {
 mod test {
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use hotshot_types::vid::vid_scheme;
+    use jf_vid::VidScheme;
 
     #[test]
     fn test_fee_proofs() {
@@ -1208,5 +1277,93 @@ mod test {
         proof2.remember(&mut tree).unwrap();
         FeeAccountProof::prove(&tree, account1).unwrap();
         FeeAccountProof::prove(&tree, account2).unwrap();
+    }
+
+    #[test]
+    fn test_validation_max_block_size() {
+        setup_logging();
+        setup_backtrace();
+
+        const MAX_BLOCK_SIZE: usize = 10;
+        let payload = [0; 2 * MAX_BLOCK_SIZE];
+        let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
+
+        let state = ValidatedState::default();
+        let instance = NodeState::mock().with_chain_config(ChainConfig {
+            max_block_size: MAX_BLOCK_SIZE as u64,
+            base_fee: 0.into(),
+            ..Default::default()
+        });
+        let parent = Leaf::genesis(&instance);
+        let header = parent.get_block_header();
+
+        // Validation fails because the proposed block exceeds the maximum block size.
+        let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
+            .unwrap_err();
+        tracing::info!(%err, "task failed successfully");
+    }
+
+    #[test]
+    fn test_validation_base_fee() {
+        setup_logging();
+        setup_backtrace();
+
+        let max_block_size = 10;
+        let payload = [0; 1];
+        let vid_common = vid_scheme(1).disperse(payload).unwrap().common;
+
+        let state = ValidatedState::default();
+        let instance = NodeState::mock().with_chain_config(ChainConfig {
+            base_fee: 1000.into(), // High base fee
+            max_block_size,
+            ..Default::default()
+        });
+        let parent = Leaf::genesis(&instance);
+        let header = parent.get_block_header();
+
+        // Validation fails because the genesis fee (0) is too low.
+        let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
+            .unwrap_err();
+        tracing::info!(%err, "task failed successfully");
+    }
+
+    #[test]
+    fn test_charge_fee() {
+        setup_logging();
+        setup_backtrace();
+
+        let src = FeeAccount::generated_from_seed_indexed([0; 32], 0).0;
+        let dst = FeeAccount::generated_from_seed_indexed([0; 32], 1).0;
+        let amt = FeeAmount::from(1);
+
+        let fee_info = FeeInfo::new(src, amt);
+
+        let new_state = || {
+            let mut state = ValidatedState::default();
+            state.prefund_account(src, amt);
+            state
+        };
+
+        tracing::info!("test successful fee");
+        let mut state = new_state();
+        state.charge_fee(fee_info, dst).unwrap();
+        assert_eq!(state.balance(src), Some(0.into()));
+        assert_eq!(state.balance(dst), Some(amt));
+
+        tracing::info!("test insufficient balance");
+        state.charge_fee(fee_info, dst).unwrap_err();
+        assert_eq!(state.balance(src), Some(0.into()));
+        assert_eq!(state.balance(dst), Some(amt));
+
+        tracing::info!("test src not in memory");
+        let mut state = new_state();
+        state.fee_merkle_tree.forget(src).expect_ok().unwrap();
+        state.charge_fee(fee_info, dst).unwrap_err();
+
+        tracing::info!("test dst not in memory");
+        let mut state = new_state();
+        state.prefund_account(dst, amt);
+        state.fee_merkle_tree.forget(dst).expect_ok().unwrap();
+        state.charge_fee(fee_info, dst).unwrap_err();
     }
 }
