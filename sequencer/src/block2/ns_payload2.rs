@@ -1,6 +1,6 @@
 //! The only thing [`NsPayload2`] does is naively read from its payload given a
 //! byte range. It doesn't know anything about the underlying binary format.
-//! That's all done in `NsPayloadRange2`.
+//! That's all done in `xxx`.
 
 use crate::{NamespaceId, Transaction};
 
@@ -10,11 +10,11 @@ use super::newtypes::{
 };
 use serde::{Deserialize, Serialize};
 
-pub struct NsPayload2([u8]);
+pub struct NsPayload([u8]);
 
-impl NsPayload2 {
-    pub fn new(bytes: &[u8]) -> &NsPayload2 {
-        NsPayload2::new_private(bytes)
+impl NsPayload {
+    pub fn new(bytes: &[u8]) -> &NsPayload {
+        NsPayload::new_private(bytes)
     }
 
     pub fn byte_len(&self) -> NsPayloadByteLen {
@@ -57,42 +57,42 @@ impl NsPayload2 {
 // #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(transparent)]
-pub struct NsPayloadOwned2(Vec<u8>);
+pub struct NsPayloadOwned(Vec<u8>);
 
 /// Crazy boilerplate code to make it so that [`NsPayloadOwned`] is to
 /// [`NsPayload`] as [`Vec<T>`] is to `[T]`. See [How can I create newtypes for
 /// an unsized type and its owned counterpart (like `str` and `String`) in safe
 /// Rust? - Stack Overflow](https://stackoverflow.com/q/64977525)
 mod ns_payload_owned {
-    use super::{NsPayload2, NsPayloadOwned2};
+    use super::{NsPayload, NsPayloadOwned};
     use std::borrow::Borrow;
     use std::ops::Deref;
 
-    impl NsPayload2 {
+    impl NsPayload {
         // pub(super) because I want it visible everywhere in this file but I
         // also want this boilerplate code quarrantined in `ns_payload_owned`.
-        pub(super) fn new_private(p: &[u8]) -> &NsPayload2 {
-            unsafe { &*(p as *const [u8] as *const NsPayload2) }
+        pub(super) fn new_private(p: &[u8]) -> &NsPayload {
+            unsafe { &*(p as *const [u8] as *const NsPayload) }
         }
     }
 
-    impl Deref for NsPayloadOwned2 {
-        type Target = NsPayload2;
-        fn deref(&self) -> &NsPayload2 {
-            NsPayload2::new_private(&self.0)
+    impl Deref for NsPayloadOwned {
+        type Target = NsPayload;
+        fn deref(&self) -> &NsPayload {
+            NsPayload::new_private(&self.0)
         }
     }
 
-    impl Borrow<NsPayload2> for NsPayloadOwned2 {
-        fn borrow(&self) -> &NsPayload2 {
+    impl Borrow<NsPayload> for NsPayloadOwned {
+        fn borrow(&self) -> &NsPayload {
             self.deref()
         }
     }
 
-    impl ToOwned for NsPayload2 {
-        type Owned = NsPayloadOwned2;
-        fn to_owned(&self) -> NsPayloadOwned2 {
-            NsPayloadOwned2(self.0.to_owned())
+    impl ToOwned for NsPayload {
+        type Owned = NsPayloadOwned;
+        fn to_owned(&self) -> NsPayloadOwned {
+            NsPayloadOwned(self.0.to_owned())
         }
     }
 }

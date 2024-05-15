@@ -16,7 +16,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use super::{
     newtypes::{NsPayloadBuilder, NumTxsRange, TxPayloadRange, TxTableEntriesRange},
-    NsPayload2, NsPayloadRange2, TxProof2,
+    NsPayload, NsPayloadRange, TxProof2,
 };
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -206,8 +206,8 @@ impl Payload {
     //     NsPayload::new(A(()), &self.payload[range])
     // }
 
-    pub fn read_ns_payload(&self, range: &NsPayloadRange2) -> &NsPayload2 {
-        NsPayload2::new(&self.payload[range.as_range()])
+    pub fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
+        NsPayload::new(&self.payload[range.as_range()])
     }
 
     // pub fn ns_payload_range(&self, index: &NsIndex) -> NsPayloadRange {

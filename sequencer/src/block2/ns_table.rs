@@ -7,7 +7,7 @@ use crate::block2::{
 use crate::NamespaceId;
 use serde::{Deserialize, Serialize};
 
-use super::NsPayloadRange2;
+use super::NsPayloadRange;
 
 /// TODO explain: ZST to unlock visibility in other modules. can only be
 /// constructed in this module.
@@ -113,13 +113,13 @@ impl NsTable {
     //     NsPayloadRange::new(A(()), start, end)
     // }
 
-    pub fn ns_payload_range2(&self, index: &NsIndex, payload_byte_len: usize) -> NsPayloadRange2 {
+    pub fn ns_payload_range2(&self, index: &NsIndex, payload_byte_len: usize) -> NsPayloadRange {
         let end = self.read_ns_offset(index).min(payload_byte_len);
         let start = index
             .prev(A(()))
             .map(|prev| self.read_ns_offset(&prev))
             .unwrap_or(0)
             .min(end);
-        NsPayloadRange2::new(start, end)
+        NsPayloadRange::new(start, end)
     }
 }

@@ -10,8 +10,8 @@ mod tx_proof;
 mod uint_bytes;
 
 // TODO this eliminates dead code warnings
-pub use ns_payload2::NsPayload2;
-pub use ns_payload_range2::NsPayloadRange2;
+pub use ns_payload2::NsPayload;
+pub use ns_payload_range2::NsPayloadRange;
 pub use ns_proof::NsProof;
 pub use tx_proof::TxProof2;
 

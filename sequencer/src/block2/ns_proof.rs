@@ -11,7 +11,7 @@ use jf_primitives::vid::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::ns_payload2::NsPayloadOwned2;
+use super::ns_payload2::NsPayloadOwned;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct NsProof {
@@ -31,7 +31,7 @@ impl NsProof {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 struct NsProofExistence {
     // TODO `#[serde(with = "base64_bytes")]` screws up serde for `NsPayloadOwned`.
-    ns_payload: NsPayloadOwned2,
+    ns_payload: NsPayloadOwned,
     ns_proof: LargeRangeProofType,
 }
 
