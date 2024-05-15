@@ -7,7 +7,11 @@ use crate::block2::{
 use crate::NamespaceId;
 use serde::{Deserialize, Serialize};
 
-use super::{payload::PayloadByteLen, NsPayloadRange};
+use super::{
+    payload::PayloadByteLen,
+    uint_bytes::{u64_to_bytes, usize_to_bytes},
+    NsPayloadRange,
+};
 
 /// TODO explain: ZST to unlock visibility in other modules. can only be
 /// constructed in this module.
@@ -18,9 +22,12 @@ pub struct A(());
 pub struct NsTable(Vec<u8>);
 
 impl NsTable {
+    /// TODO delete method [`NsTable::from_bytes_vec`] after `BlockPayload`
+    /// trait has been changed to remove `Self::Metadata` args.
     pub fn from_bytes_vec(_: payload::A, bytes: Vec<u8>) -> Self {
         Self(bytes)
     }
+
     pub fn as_bytes_slice(&self) -> &[u8] {
         &self.0
     }
@@ -103,5 +110,39 @@ impl NsTable {
 impl NsTable {
     pub fn iter_test(&self) -> impl Iterator<Item = <NsIter as Iterator>::Item> + '_ {
         self.iter()
+    }
+}
+
+pub struct NsTableBuilder {
+    bytes: Vec<u8>,
+    num_entries: usize,
+}
+
+impl NsTableBuilder {
+    pub fn new() -> Self {
+        // pre-allocate space for the ns table header
+        Self {
+            bytes: Vec::from([0; NUM_NSS_BYTE_LEN]),
+            num_entries: 0,
+        }
+    }
+
+    /// Add an entry to the namespace table.
+    pub fn append_entry(&mut self, ns_id: NamespaceId, offset: usize) {
+        // hack to serialize `NamespaceId` to `NS_ID_BYTE_LEN` bytes
+        self.bytes
+            .extend(u64_to_bytes::<NS_ID_BYTE_LEN>(u64::from(ns_id)));
+        self.bytes
+            .extend(usize_to_bytes::<NS_OFFSET_BYTE_LEN>(offset));
+        self.num_entries += 1;
+    }
+
+    /// Serialize to bytes and consume self.
+    pub fn into_ns_table(self) -> NsTable {
+        let mut bytes = self.bytes;
+        // write the number of entries to the ns table header
+        bytes[..NUM_NSS_BYTE_LEN]
+            .copy_from_slice(&usize_to_bytes::<NUM_NSS_BYTE_LEN>(self.num_entries));
+        NsTable(bytes)
     }
 }

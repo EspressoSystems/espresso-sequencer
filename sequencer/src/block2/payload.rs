@@ -1,23 +1,23 @@
 use crate::{
     block2::{
         iter::{Index, Iter},
-        ns_table::NsTable,
-        uint_bytes::{u64_to_bytes, usize_to_bytes},
-        NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
+        newtypes::{NsPayloadBuilder, NumTxsRange, TxPayloadRange, TxTableEntriesRange},
+        ns_table::{NsTable, NsTableBuilder},
+        NsPayload, NsPayloadRange, TxProof,
     },
     NamespaceId, Transaction,
 };
 use commit::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
-use hotshot_types::{traits::BlockPayload, utils::BuilderCommitment};
+use hotshot_types::{
+    traits::BlockPayload,
+    utils::BuilderCommitment,
+    vid::{VidCommon, VidSchemeType},
+};
+use jf_primitives::vid::VidScheme;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::{collections::HashMap, fmt::Display};
-
-use super::{
-    newtypes::{NsPayloadBuilder, NumTxsRange, TxPayloadRange, TxTableEntriesRange},
-    NsPayload, NsPayloadRange, TxProof,
-};
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {
@@ -26,20 +26,53 @@ pub struct Payload {
     payload: Vec<u8>,
 
     ns_table: NsTable,
-    // TODO Revisit caching of frequently used items
-    //
-    // TODO type should be `OnceLock<SmallRangeProofType>` instead of `OnceLock<Option<SmallRangeProofType>>`.
-    // We can correct this after `once_cell_try` is stabilized <https://github.com/rust-lang/rust/issues/109737>.
-    // #[derivative(Hash = "ignore")]
-    // #[derivative(PartialEq = "ignore")]
-    // #[serde(skip)]
-    // pub tx_table_len_proof: OnceLock<Option<SmallRangeProofType>>,
+}
+
+impl Payload {
+    pub fn as_byte_slice(&self) -> &[u8] {
+        &self.payload
+    }
+    pub fn ns_table(&self) -> &NsTable {
+        &self.ns_table
+    }
+    pub fn byte_len(&self) -> PayloadByteLen {
+        PayloadByteLen(self.payload.len())
+    }
+    pub fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
+        NsPayload::from_bytes_slice(&self.payload[range.as_range()])
+    }
+
+    /// Like [`QueryablePayload::transaction_with_proof`] except without the
+    /// proof.
+    pub fn transaction(&self, index: &Index) -> Option<Transaction> {
+        // TODO helper methods please!
+        // TODO check index.ns(), index.tx() in bounds
+        let ns_payload_range = self
+            .ns_table()
+            .ns_payload_range(index.ns(), &self.byte_len());
+        let ns_payload = self.read_ns_payload(&ns_payload_range);
+        let num_txs = ns_payload.read(&NumTxsRange::new(&ns_payload_range.byte_len()));
+        let tx_table_entries = ns_payload.read(&TxTableEntriesRange::new(index.tx()));
+        let tx_payload_range =
+            TxPayloadRange::new(&num_txs, &tx_table_entries, &ns_payload_range.byte_len());
+        let tx_payload = ns_payload
+            .read(&tx_payload_range)
+            .to_payload_bytes()
+            .to_vec();
+        let ns_id = self.ns_table().read_ns_id(index.ns());
+        // TODO don't copy the tx bytes into the return value
+        // https://github.com/EspressoSystems/hotshot-query-service/issues/267
+        Some(Transaction::new(ns_id, tx_payload))
+    }
 }
 
 impl BlockPayload for Payload {
     type Error = crate::Error;
     type Transaction = Transaction;
-    type Metadata = Vec<u8>; // namespace table bytes
+
+    // TODO change to `NsTable` after `BlockPayload` trait has been changed to
+    // remove `Self::Metadata` args.
+    type Metadata = Vec<u8>;
 
     // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
     // https://github.com/EspressoSystems/HotShot/issues/2115
@@ -50,40 +83,33 @@ impl BlockPayload for Payload {
         transactions: impl IntoIterator<Item = Self::Transaction>,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
         // add each tx to its namespace
-        let mut namespaces = HashMap::<NamespaceId, NsPayloadBuilder>::new();
+        let mut ns_builders = HashMap::<NamespaceId, NsPayloadBuilder>::new();
         for tx in transactions.into_iter() {
-            let namespace = namespaces.entry(tx.namespace()).or_default();
-            namespace.append_tx(tx);
+            let ns_builder = ns_builders.entry(tx.namespace()).or_default();
+            ns_builder.append_tx(tx);
         }
 
         // build block payload and namespace table
-        // TODO building the ns_table here breaks abstraction
         let mut payload = Vec::new();
-        let mut ns_table = Vec::from(usize_to_bytes::<NUM_NSS_BYTE_LEN>(namespaces.len()));
-        for (ns_id, namespace) in namespaces {
-            payload.extend(namespace.into_bytes());
-
-            // TODO hack to serialize `NamespaceId` to `NS_ID_BYTE_LEN` bytes
-            ns_table.extend(u64_to_bytes::<NS_ID_BYTE_LEN>(u64::from(ns_id)));
-
-            ns_table.extend(usize_to_bytes::<NS_OFFSET_BYTE_LEN>(payload.len()));
+        let mut ns_table_builder = NsTableBuilder::new();
+        for (ns_id, ns_builder) in ns_builders {
+            payload.extend(ns_builder.into_bytes());
+            ns_table_builder.append_entry(ns_id, payload.len());
         }
-        Ok((
-            Self {
-                payload,
-                ns_table: NsTable::from_bytes_vec(A(()), ns_table.clone()),
-            },
-            ns_table,
-        ))
+        let ns_table = ns_table_builder.into_ns_table();
+        let metadata = ns_table.as_bytes_slice().to_vec();
+        Ok((Self { payload, ns_table }, metadata))
     }
 
-    fn from_bytes<I>(encoded_transactions: I, ns_table: &Self::Metadata) -> Self
+    // TODO change `BlockPayload` trait: arg type `&Self::Metadata` should not
+    // be a reference.
+    fn from_bytes<I>(block_payload_bytes: I, ns_table: &Self::Metadata) -> Self
     where
         I: Iterator<Item = u8>,
     {
         Self {
-            payload: encoded_transactions.into_iter().collect(),
-            ns_table: NsTable::from_bytes_vec(A(()), ns_table.clone()), // TODO don't clone ns_table
+            payload: block_payload_bytes.into_iter().collect(),
+            ns_table: NsTable::from_bytes_vec(A(()), ns_table.clone()),
         }
     }
 
@@ -169,64 +195,6 @@ impl Committable for Payload {
 /// constructed in this module.
 pub struct A(());
 
-impl Payload {
-    /// Like [`QueryablePayload::transaction_with_proof`] except without the
-    /// proof.
-    pub fn transaction(&self, index: &Index) -> Option<Transaction> {
-        // TODO helper methods please!
-        // TODO check index.ns(), index.tx() in bounds
-        let ns_payload_range = self
-            .ns_table()
-            .ns_payload_range(index.ns(), &self.byte_len());
-        let ns_payload = self.read_ns_payload(&ns_payload_range);
-        let num_txs = ns_payload.read(&NumTxsRange::new(&ns_payload_range.byte_len()));
-        let tx_table_entries = ns_payload.read(&TxTableEntriesRange::new(index.tx()));
-        let tx_payload_range =
-            TxPayloadRange::new(&num_txs, &tx_table_entries, &ns_payload_range.byte_len());
-        let tx_payload = ns_payload
-            .read(&tx_payload_range)
-            .to_payload_bytes()
-            .to_vec();
-        let ns_id = self.ns_table().read_ns_id(index.ns());
-        // TODO don't copy the tx bytes into the return value
-        // https://github.com/EspressoSystems/hotshot-query-service/issues/267
-        Some(Transaction::new(ns_id, tx_payload))
-    }
-
-    pub fn byte_len(&self) -> PayloadByteLen {
-        PayloadByteLen(self.payload.len())
-    }
-    pub fn as_byte_slice(&self) -> &[u8] {
-        &self.payload
-    }
-    pub fn ns_table(&self) -> &NsTable {
-        &self.ns_table
-    }
-
-    // lots of manual delegation boo!
-
-    /// TODO panics if index out of bounds
-    // pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
-    //     let range = self.ns_payload_range(index).as_range();
-    //     NsPayload::new(A(()), &self.payload[range])
-    // }
-
-    pub fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
-        NsPayload::from_bytes_slice(&self.payload[range.as_range()])
-    }
-
-    // pub fn ns_payload_range(&self, index: &NsIndex) -> NsPayloadRange {
-    //     self.ns_table.ns_payload_range(index, self.payload.len())
-    // }
-
-    // pub fn ns_payload_range2(&self, index: &NsIndex) -> NsPayloadRange2 {
-    //     self.ns_table.ns_payload_range2(index, self.payload.len())
-    // }
-}
-
-// TODO find me a home?
-use hotshot_types::vid::{VidCommon, VidSchemeType};
-use jf_primitives::vid::VidScheme;
 pub struct PayloadByteLen(usize);
 
 impl PayloadByteLen {
