@@ -111,6 +111,9 @@ where
             if let Some(hotshot_events) = modules.hotshot_events {
                 http_opt = http_opt.hotshot_events(hotshot_events);
             }
+            if let Some(explorer) = modules.explorer {
+                http_opt = http_opt.explorer(explorer);
+            }
 
             http_opt
                 .serve(

@@ -282,6 +282,9 @@ impl ModuleArgs {
                 SequencerModule::HotshotEvents(m) => {
                     curr = m.add(&mut modules.hotshot_events, &mut provided)?
                 }
+                SequencerModule::Explorer(m) => {
+                    curr = m.add(&mut modules.explorer, &mut provided)?
+                }
             }
         }
 
@@ -315,6 +318,7 @@ module!("status", api::options::Status, requires: "http");
 module!("state", api::options::State, requires: "http", "storage-sql");
 module!("catchup", api::options::Catchup, requires: "http");
 module!("hotshot-events", api::options::HotshotEvents, requires: "http");
+module!("explorer", api::options::Explorer, requires: "http", "storage-sql");
 
 #[derive(Clone, Debug, Args)]
 struct Module<Options: ModuleInfo> {
@@ -392,6 +396,10 @@ enum SequencerModule {
     ///
     /// This module requires the http module to be started.
     HotshotEvents(Module<api::options::HotshotEvents>),
+    /// Run the explorer API module.
+    ///
+    /// This module requires the http and storage-sql modules to be started.
+    Explorer(Module<api::options::Explorer>),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -405,4 +413,5 @@ pub struct Modules {
     pub state: Option<api::options::State>,
     pub catchup: Option<api::options::Catchup>,
     pub hotshot_events: Option<api::options::HotshotEvents>,
+    pub explorer: Option<api::options::Explorer>,
 }

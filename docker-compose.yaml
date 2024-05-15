@@ -259,7 +259,7 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER1_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
-    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- state
+    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- state -- explorer
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_CDN_ENDPOINT
@@ -553,3 +553,13 @@ services:
       interval: 5s
       timeout: 4s
       retries: 20
+
+  block-explorer:
+    image: ghcr.io/espressosystems/espresso-block-explorer:main
+    ports:
+      - "$ESPRESSO_BLOCK_EXPLORER_PORT:3000"
+    environment:
+      - QUERY_SERVICE_URI:http://localhost:$ESPRESSO_SEQUENCER1_API_PORT/v0/
+    depends_on:
+      sequencer1:
+        condition: service_healthy
