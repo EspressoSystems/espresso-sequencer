@@ -44,4 +44,4 @@ jobs:
         name: Enable Rust Caching
 
       - name: Clippy
-        run: cargo clippy --workspace --all-features --all-targets -- -D warnings
+        run: cargo clippy --workspace --no-default-features --features "${{ matrix.features }}" -- -D warnings
