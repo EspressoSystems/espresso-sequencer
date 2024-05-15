@@ -179,9 +179,16 @@ impl AsPayloadBytes<'_, Vec<u8>, [u8; Self::TWO_ENTRIES_BYTE_LEN]> for TxTableEn
             },
             Self::TWO_ENTRIES_BYTE_LEN => Self {
                 cur: usize_from_bytes::<TX_OFFSET_BYTE_LEN>(&bytes[TX_OFFSET_BYTE_LEN..]),
-                prev: Some(usize_from_bytes::<TX_OFFSET_BYTE_LEN>(
-                    &bytes[..TX_OFFSET_BYTE_LEN],
-                )),
+                prev: {
+                    let p = usize_from_bytes::<TX_OFFSET_BYTE_LEN>(&bytes[..TX_OFFSET_BYTE_LEN]);
+                    // if bytes was produced by `to_serde_bytes` then zero value
+                    // must deserialize to `None`.
+                    if p == 0 {
+                        None
+                    } else {
+                        Some(p)
+                    }
+                },
             },
             len => panic!(
                 "unexpected bytes len {} should be either {} or {}",
