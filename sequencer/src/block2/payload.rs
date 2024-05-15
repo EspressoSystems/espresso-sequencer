@@ -15,9 +15,7 @@ use sha2::Digest;
 use std::{collections::HashMap, fmt::Display};
 
 use super::{
-    newtypes::{
-        AsPayloadBytes, NsPayloadBuilder, NumTxsRange, TxPayloadRange, TxTableEntriesRange,
-    },
+    newtypes::{NsPayloadBuilder, NumTxsRange, TxPayloadRange, TxTableEntriesRange},
     NsPayload2, NsPayloadRange2, TxProof2,
 };
 

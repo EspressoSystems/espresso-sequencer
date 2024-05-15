@@ -5,7 +5,7 @@
 use crate::{NamespaceId, Transaction};
 
 use super::newtypes::{
-    AsPayloadBytes, NsPayloadByteLen, NumTxs, NumTxsRange, PayloadBytesRange, TxIter,
+    FromPayloadBytes, NsPayloadByteLen, NumTxs, NumTxsRange, PayloadBytesRange, TxIter,
     TxPayloadRange, TxTableEntriesRange,
 };
 use serde::{Deserialize, Serialize};
@@ -26,14 +26,11 @@ impl NsPayload2 {
         &self.0
     }
 
-    pub fn read<'a, R, T, U>(&'a self, range: &R) -> R::Output
+    pub fn read<'a, R>(&'a self, range: &R) -> R::Output
     where
-        R: PayloadBytesRange<'a, T, U>,
-        U: Into<T>,
+        R: PayloadBytesRange<'a>,
     {
-        <R::Output as AsPayloadBytes<'a, T, U>>::from_payload_bytes(
-            &self.0[range.ns_payload_range()],
-        )
+        <R::Output as FromPayloadBytes<'a>>::from_payload_bytes(&self.0[range.ns_payload_range()])
     }
 
     pub fn export_all_txs(&self, ns_id: &NamespaceId) -> Vec<Transaction> {

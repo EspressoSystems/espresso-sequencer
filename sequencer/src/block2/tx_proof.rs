@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     newtypes::{
-        AsPayloadBytes, NumTxs, NumTxsRange, NumTxsUnchecked, PayloadBytesRange, TxIndex,
-        TxTableEntries, TxTableEntriesRange,
+        NumTxs, NumTxsRange, NumTxsUnchecked, PayloadBytesRange, TxIndex, TxTableEntries,
+        TxTableEntriesRange,
     },
     ns_table::NsTable,
 };

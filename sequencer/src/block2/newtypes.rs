@@ -7,46 +7,12 @@ use super::{
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
 
-// TODO explain: T param allows for both array (fixed len) and vec/slice (var len).
-pub trait AsPayloadBytes<'a, T, U = T>
-where
-    U: Into<T>,
-{
-    fn to_payload_bytes(&self) -> T {
-        self.to_serde_bytes().into()
-    }
-    fn to_serde_bytes(&self) -> U;
+pub trait FromPayloadBytes<'a> {
     fn from_payload_bytes(bytes: &'a [u8]) -> Self;
 }
 
-macro_rules! as_payload_bytes_serde_impl {
-    ($T:ty) => {
-        impl Serialize for $T {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: Serializer,
-            {
-                self.to_serde_bytes().serialize(serializer)
-            }
-        }
-
-        impl<'de> Deserialize<'de> for $T {
-            fn deserialize<D>(deserializer: D) -> Result<$T, D::Error>
-            where
-                D: Deserializer<'de>,
-            {
-                <&[u8] as Deserialize>::deserialize(deserializer)
-                    .map(|bytes| <$T>::from_payload_bytes(bytes))
-            }
-        }
-    };
-}
-
-pub trait PayloadBytesRange<'a, T, U = T>
-where
-    U: Into<T>,
-{
-    type Output: AsPayloadBytes<'a, T, U>;
+pub trait PayloadBytesRange<'a> {
+    type Output: FromPayloadBytes<'a>;
 
     /// Range relative to this ns payload
     ///
@@ -62,17 +28,42 @@ where
     }
 }
 
+macro_rules! bytes_serde_impl {
+    ($T:ty, $to_bytes:ident, $from_bytes:ident) => {
+        impl Serialize for $T {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                self.$to_bytes().serialize(serializer)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $T {
+            fn deserialize<D>(deserializer: D) -> Result<$T, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                <&[u8] as Deserialize>::deserialize(deserializer)
+                    .map(|bytes| <$T>::$from_bytes(bytes))
+            }
+        }
+    };
+}
+
 // WIP WIP
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NumTxsUnchecked(usize);
-as_payload_bytes_serde_impl!(NumTxsUnchecked);
+bytes_serde_impl!(NumTxsUnchecked, to_payload_bytes, from_payload_bytes);
 
-impl AsPayloadBytes<'_, [u8; NUM_TXS_BYTE_LEN]> for NumTxsUnchecked {
-    fn to_serde_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
+impl NumTxsUnchecked {
+    pub fn to_payload_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
         usize_to_bytes::<NUM_TXS_BYTE_LEN>(self.0)
     }
+}
 
+impl FromPayloadBytes<'_> for NumTxsUnchecked {
     fn from_payload_bytes(bytes: &[u8]) -> Self {
         Self(usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes))
     }
@@ -80,8 +71,7 @@ impl AsPayloadBytes<'_, [u8; NUM_TXS_BYTE_LEN]> for NumTxsUnchecked {
 
 /// Number of txs in a namespace.
 ///
-/// TODO explain: `NumTxs` but checked against `NsPayloadByteLen`
-/// TODO rename NumTxs -> NumTxsUncheced, NumTxsChecked -> NumTxs?
+/// TODO explain: like `NumTxsUnchecked` but checked against `NsPayloadByteLen`
 pub struct NumTxs(usize);
 
 impl NumTxs {
@@ -120,7 +110,7 @@ impl NumTxsRange {
     }
 }
 
-impl PayloadBytesRange<'_, [u8; NUM_TXS_BYTE_LEN]> for NumTxsRange {
+impl PayloadBytesRange<'_> for NumTxsRange {
     type Output = NumTxsUnchecked;
 
     fn ns_payload_range(&self) -> Range<usize> {
@@ -133,14 +123,16 @@ pub struct TxTableEntries {
     cur: usize,
     prev: Option<usize>, // TODO no Option, just usize
 }
-as_payload_bytes_serde_impl!(TxTableEntries);
+
+// TODO this serde impl uses Vec. We could save space by using an array of
+// length `TWO_ENTRIES_BYTE_LEN`, but then we need a way to distinguish
+// `prev=Some(0)` from `prev=None`.
+bytes_serde_impl!(TxTableEntries, to_payload_bytes, from_payload_bytes);
 
 impl TxTableEntries {
     const TWO_ENTRIES_BYTE_LEN: usize = 2 * TX_OFFSET_BYTE_LEN;
-}
 
-impl AsPayloadBytes<'_, Vec<u8>, [u8; Self::TWO_ENTRIES_BYTE_LEN]> for TxTableEntries {
-    fn to_payload_bytes(&self) -> Vec<u8> {
+    pub fn to_payload_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(Self::TWO_ENTRIES_BYTE_LEN);
         if let Some(prev) = self.prev {
             bytes.extend(usize_to_bytes::<TX_OFFSET_BYTE_LEN>(prev));
@@ -148,17 +140,9 @@ impl AsPayloadBytes<'_, Vec<u8>, [u8; Self::TWO_ENTRIES_BYTE_LEN]> for TxTableEn
         bytes.extend(usize_to_bytes::<TX_OFFSET_BYTE_LEN>(self.cur));
         bytes
     }
+}
 
-    fn to_serde_bytes(&self) -> [u8; Self::TWO_ENTRIES_BYTE_LEN] {
-        let mut bytes = [0; Self::TWO_ENTRIES_BYTE_LEN];
-        bytes[..TX_OFFSET_BYTE_LEN].copy_from_slice(&usize_to_bytes::<TX_OFFSET_BYTE_LEN>(
-            self.prev.unwrap_or(0),
-        ));
-        bytes[TX_OFFSET_BYTE_LEN..]
-            .copy_from_slice(&usize_to_bytes::<TX_OFFSET_BYTE_LEN>(self.cur));
-        bytes
-    }
-
+impl FromPayloadBytes<'_> for TxTableEntries {
     fn from_payload_bytes(bytes: &[u8]) -> Self {
         match bytes.len() {
             TX_OFFSET_BYTE_LEN => Self {
@@ -167,16 +151,9 @@ impl AsPayloadBytes<'_, Vec<u8>, [u8; Self::TWO_ENTRIES_BYTE_LEN]> for TxTableEn
             },
             Self::TWO_ENTRIES_BYTE_LEN => Self {
                 cur: usize_from_bytes::<TX_OFFSET_BYTE_LEN>(&bytes[TX_OFFSET_BYTE_LEN..]),
-                prev: {
-                    let p = usize_from_bytes::<TX_OFFSET_BYTE_LEN>(&bytes[..TX_OFFSET_BYTE_LEN]);
-                    // if bytes was produced by `to_serde_bytes` then zero value
-                    // must deserialize to `None`.
-                    if p == 0 {
-                        None
-                    } else {
-                        Some(p)
-                    }
-                },
+                prev: Some(usize_from_bytes::<TX_OFFSET_BYTE_LEN>(
+                    &bytes[..TX_OFFSET_BYTE_LEN],
+                )),
             },
             len => panic!(
                 "unexpected bytes len {} should be either {} or {}",
@@ -250,9 +227,7 @@ impl TxTableEntriesRange {
 }
 
 // TODO macro for impl `PayloadBytesRange`
-impl PayloadBytesRange<'_, Vec<u8>, [u8; TxTableEntries::TWO_ENTRIES_BYTE_LEN]>
-    for TxTableEntriesRange
-{
+impl PayloadBytesRange<'_> for TxTableEntriesRange {
     type Output = TxTableEntries;
 
     fn ns_payload_range(&self) -> Range<usize> {
@@ -262,11 +237,13 @@ impl PayloadBytesRange<'_, Vec<u8>, [u8; TxTableEntries::TWO_ENTRIES_BYTE_LEN]>
 
 pub struct TxPayload<'a>(&'a [u8]);
 
-impl<'a> AsPayloadBytes<'a, &'a [u8]> for TxPayload<'a> {
-    fn to_serde_bytes(&self) -> &'a [u8] {
+impl<'a> TxPayload<'a> {
+    pub fn to_payload_bytes(&self) -> &'a [u8] {
         self.0
     }
+}
 
+impl<'a> FromPayloadBytes<'a> for TxPayload<'a> {
     fn from_payload_bytes(bytes: &'a [u8]) -> Self {
         Self(bytes)
     }
@@ -302,7 +279,7 @@ impl TxPayloadRange {
 }
 
 // TODO macro for impl `PayloadBytesRange`
-impl<'a> PayloadBytesRange<'a, &'a [u8]> for TxPayloadRange {
+impl<'a> PayloadBytesRange<'a> for TxPayloadRange {
     type Output = TxPayload<'a>;
 
     fn ns_payload_range(&self) -> Range<usize> {
@@ -310,7 +287,6 @@ impl<'a> PayloadBytesRange<'a, &'a [u8]> for TxPayloadRange {
     }
 }
 
-// TODO is this a good home for NamespacePayloadBuilder?
 #[derive(Default)]
 pub struct NsPayloadBuilder {
     tx_table_entries: Vec<u8>,
@@ -331,7 +307,7 @@ impl NsPayloadBuilder {
             NUM_TXS_BYTE_LEN + self.tx_table_entries.len() + self.tx_bodies.len(),
         );
         let num_txs = NumTxsUnchecked(self.tx_table_entries.len() / TX_OFFSET_BYTE_LEN);
-        result.extend(num_txs.to_payload_bytes().as_ref());
+        result.extend(num_txs.to_payload_bytes());
         result.extend(self.tx_table_entries);
         result.extend(self.tx_bodies);
         result
@@ -345,14 +321,13 @@ impl NsPayloadBuilder {
 /// Custom serialization and helper methods.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct TxIndex(usize);
-as_payload_bytes_serde_impl!(TxIndex);
+bytes_serde_impl!(TxIndex, to_bytes, from_bytes);
 
-impl AsPayloadBytes<'_, [u8; NUM_TXS_BYTE_LEN]> for TxIndex {
-    fn to_serde_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
+impl TxIndex {
+    pub fn to_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
         usize_to_bytes::<NUM_TXS_BYTE_LEN>(self.0)
     }
-
-    fn from_payload_bytes(bytes: &[u8]) -> Self {
+    fn from_bytes(bytes: &[u8]) -> Self {
         Self(usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes))
     }
 }
