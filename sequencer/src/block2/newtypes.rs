@@ -4,74 +4,16 @@ use super::{
     uint_bytes::{usize_from_bytes, usize_to_bytes},
     NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
+use ns_payload_traits::bytes_serde_impl;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
 
-pub trait FromPayloadBytes<'a> {
-    fn from_payload_bytes(bytes: &'a [u8]) -> Self;
-}
-
-pub trait PayloadBytesRange<'a> {
-    type Output: FromPayloadBytes<'a>;
-
-    /// Range relative to this ns payload
-    ///
-    /// TODO newtype for return type?
-    fn ns_payload_range(&self) -> Range<usize>;
-
-    /// Range relative to the entire block payload
-    ///
-    /// TODO newtype for return type? ...for arg `ns_payload_offset`?
-    fn block_payload_range(&self, ns_payload_offset: usize) -> Range<usize> {
-        let range = self.ns_payload_range();
-        range.start + ns_payload_offset..range.end + ns_payload_offset
-    }
-}
-
-macro_rules! bytes_serde_impl {
-    ($T:ty, $to_bytes:ident, $from_bytes:ident) => {
-        impl Serialize for $T {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: Serializer,
-            {
-                self.$to_bytes().serialize(serializer)
-            }
-        }
-
-        impl<'de> Deserialize<'de> for $T {
-            fn deserialize<D>(deserializer: D) -> Result<$T, D::Error>
-            where
-                D: Deserializer<'de>,
-            {
-                <&[u8] as Deserialize>::deserialize(deserializer)
-                    .map(|bytes| <$T>::$from_bytes(bytes))
-            }
-        }
-    };
-}
-
-// WIP WIP
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NumTxsUnchecked(usize);
-bytes_serde_impl!(NumTxsUnchecked, to_payload_bytes, from_payload_bytes);
-
-impl NumTxsUnchecked {
-    pub fn to_payload_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
-        usize_to_bytes::<NUM_TXS_BYTE_LEN>(self.0)
-    }
-}
-
-impl FromPayloadBytes<'_> for NumTxsUnchecked {
-    fn from_payload_bytes(bytes: &[u8]) -> Self {
-        Self(usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes))
-    }
-}
+mod ns_payload_traits;
+pub use ns_payload_traits::{FromNsPayloadBytes, NsPayloadBytesRange};
 
 /// Number of txs in a namespace.
 ///
-/// TODO explain: like `NumTxsUnchecked` but checked against `NsPayloadByteLen`
+/// Like [`NumTxsUnchecked`] but checked against a [`NsPayloadByteLen`].
 pub struct NumTxs(usize);
 
 impl NumTxs {
@@ -93,6 +35,7 @@ impl NumTxs {
     }
 }
 
+/// Byte length of a namespace payload.
 pub struct NsPayloadByteLen(usize);
 
 impl NsPayloadByteLen {
@@ -102,6 +45,29 @@ impl NsPayloadByteLen {
     }
 }
 
+/// The part of a tx table that declares the number of txs in the payload.
+/// "Unchecked" because this quantity might be larger than the number of tx
+/// table entries that could fit into the namespace that contains it.
+///
+/// Use [`NumTxs`] for the actual number of txs in this namespace.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NumTxsUnchecked(usize);
+bytes_serde_impl!(NumTxsUnchecked, to_payload_bytes, from_payload_bytes);
+
+impl NumTxsUnchecked {
+    pub fn to_payload_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
+        usize_to_bytes::<NUM_TXS_BYTE_LEN>(self.0)
+    }
+}
+
+impl FromNsPayloadBytes<'_> for NumTxsUnchecked {
+    fn from_payload_bytes(bytes: &[u8]) -> Self {
+        Self(usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes))
+    }
+}
+
+/// Byte range for the part of a tx table that declares the number of txs in the
+/// payload.
 pub struct NumTxsRange(Range<usize>);
 
 impl NumTxsRange {
@@ -110,7 +76,7 @@ impl NumTxsRange {
     }
 }
 
-impl PayloadBytesRange<'_> for NumTxsRange {
+impl NsPayloadBytesRange<'_> for NumTxsRange {
     type Output = NumTxsUnchecked;
 
     fn ns_payload_range(&self) -> Range<usize> {
@@ -118,13 +84,17 @@ impl PayloadBytesRange<'_> for NumTxsRange {
     }
 }
 
+/// Entries from a tx table in a namespace for use in a transaction proof.
+///
+/// Contains either one or two entries according to whether it was derived from
+/// the first transaction in the namespace.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TxTableEntries {
     cur: usize,
     prev: Option<usize>, // TODO no Option, just usize
 }
 
-// TODO this serde impl uses Vec. We could save space by using an array of
+// This serde impl uses Vec. We could save space by using an array of
 // length `TWO_ENTRIES_BYTE_LEN`, but then we need a way to distinguish
 // `prev=Some(0)` from `prev=None`.
 bytes_serde_impl!(TxTableEntries, to_payload_bytes, from_payload_bytes);
@@ -142,7 +112,7 @@ impl TxTableEntries {
     }
 }
 
-impl FromPayloadBytes<'_> for TxTableEntries {
+impl FromNsPayloadBytes<'_> for TxTableEntries {
     fn from_payload_bytes(bytes: &[u8]) -> Self {
         match bytes.len() {
             TX_OFFSET_BYTE_LEN => Self {
@@ -165,41 +135,10 @@ impl FromPayloadBytes<'_> for TxTableEntries {
     }
 }
 
-/// TODO cleanup. Return a byte range into a tx table for use in a transaction proof.
+/// Byte range for entries from a tx table for use in a transaction proof.
 ///
-/// TODO move this method to NsPayloadRange, where it can be properly
-/// translated into the payload. Ugh I can't do that because some
-/// descendants depend on `NsPayload`! There's gotta be a better way to
-/// control visibility. TODO newtype for the returned range to ensure it's
-/// not accidentally miused?
-///
-/// The returned range `R` is relative to the beginning of a payload for a
-/// namespace `N`. If `R` is to be used to retrieve bytes in a
-/// multi-namespace payload then `R` must be translated to the beginning of
-/// `N`.
-///
-/// `R` covers one entry in the tx table if `self` is zero, otherwise it
-/// covers two entries.
-///
-/// It is the responsibility of the caller to ensure that `R` is used only
-/// when `self` is less than the number of entries in `N`'s tx table.
-///
-/// This method should be `const` but that's forbidden by Rust.
-///
-/// # Tx table format (MOVE THIS DOC ELSEWHERE)
-///
-/// The bytes in this range encode tx table entries that contain the
-/// (start,end) byte indices for the `tx_index`th transaction payload.
-///
-/// The `tx_index`th entry in the tx table encodes the byte index of the
-/// *end* of this transaction's payload range. By deinition, this byte index
-/// is also the *start* of the *previous* transaction's payload range. Thus,
-/// the returned range includes `(tx_index - 1)`th and `tx_index`th entries
-/// of the tx table.
-///
-/// Special case: If `tx_index` is 0 then the start index is implicitly 0,
-/// so the returned range contains only one entry from the tx table: the
-/// first entry of the tx table.
+/// This range covers either one or two entries from a tx table according to
+/// whether it was derived from the first transaction in the namespace.
 pub struct TxTableEntriesRange(Range<usize>);
 
 impl TxTableEntriesRange {
@@ -226,8 +165,7 @@ impl TxTableEntriesRange {
     }
 }
 
-// TODO macro for impl `PayloadBytesRange`
-impl PayloadBytesRange<'_> for TxTableEntriesRange {
+impl NsPayloadBytesRange<'_> for TxTableEntriesRange {
     type Output = TxTableEntries;
 
     fn ns_payload_range(&self) -> Range<usize> {
@@ -235,6 +173,7 @@ impl PayloadBytesRange<'_> for TxTableEntriesRange {
     }
 }
 
+/// A transaction's payload data.
 pub struct TxPayload<'a>(&'a [u8]);
 
 impl<'a> TxPayload<'a> {
@@ -243,19 +182,16 @@ impl<'a> TxPayload<'a> {
     }
 }
 
-impl<'a> FromPayloadBytes<'a> for TxPayload<'a> {
+impl<'a> FromNsPayloadBytes<'a> for TxPayload<'a> {
     fn from_payload_bytes(bytes: &'a [u8]) -> Self {
         Self(bytes)
     }
 }
 
+/// Byte range for a transaction's payload data.
 pub struct TxPayloadRange(Range<usize>);
 
 impl TxPayloadRange {
-    // TODO instead of `new` for each of these `XRange` types: have a
-    // NsPayloadByteLen newtype with a method to construct each `XRange` type.
-    // Why? Each of these `XRange` types requires the ns payload byte len
-    // anyway.
     pub fn new(
         num_txs: &NumTxsUnchecked,
         tx_table_entries: &TxTableEntries,
@@ -278,8 +214,7 @@ impl TxPayloadRange {
     }
 }
 
-// TODO macro for impl `PayloadBytesRange`
-impl<'a> PayloadBytesRange<'a> for TxPayloadRange {
+impl<'a> NsPayloadBytesRange<'a> for TxPayloadRange {
     type Output = TxPayload<'a>;
 
     fn ns_payload_range(&self) -> Range<usize> {
@@ -287,6 +222,42 @@ impl<'a> PayloadBytesRange<'a> for TxPayloadRange {
     }
 }
 
+/// Index for an entry in a tx table.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct TxIndex(usize);
+bytes_serde_impl!(TxIndex, to_bytes, from_bytes);
+
+impl TxIndex {
+    pub fn to_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
+        usize_to_bytes::<NUM_TXS_BYTE_LEN>(self.0)
+    }
+    fn from_bytes(bytes: &[u8]) -> Self {
+        Self(usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes))
+    }
+}
+
+pub struct TxIter(Range<usize>);
+
+impl TxIter {
+    pub fn new(num_txs: &NumTxs) -> Self {
+        Self(0..num_txs.0)
+    }
+}
+
+// Simple `impl Iterator` delegates to `Range`.
+impl Iterator for TxIter {
+    type Item = TxIndex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(TxIndex)
+    }
+}
+
+/// Build an individual namespace payload one transaction at a time.
+///
+/// Use [`Self::append_tx`] to add each transaction. Use [`Self::into_bytes`]
+/// when you're done. The returned bytes include a well-formed tx table and all
+/// tx payloads.
 #[derive(Default)]
 pub struct NsPayloadBuilder {
     tx_table_entries: Vec<u8>,
@@ -311,40 +282,5 @@ impl NsPayloadBuilder {
         result.extend(self.tx_table_entries);
         result.extend(self.tx_bodies);
         result
-    }
-}
-
-/// Index for an entry in a tx table.
-///
-/// Byte length same as [`NumTxs`].
-///
-/// Custom serialization and helper methods.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct TxIndex(usize);
-bytes_serde_impl!(TxIndex, to_bytes, from_bytes);
-
-impl TxIndex {
-    pub fn to_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
-        usize_to_bytes::<NUM_TXS_BYTE_LEN>(self.0)
-    }
-    fn from_bytes(bytes: &[u8]) -> Self {
-        Self(usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes))
-    }
-}
-
-pub struct TxIter(Range<usize>);
-
-impl TxIter {
-    pub fn new2(num_txs: &NumTxs) -> Self {
-        Self(0..num_txs.0)
-    }
-}
-
-// TODO explain: boilerplate `impl Iterator` delegates to `Range`
-impl Iterator for TxIter {
-    type Item = TxIndex;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next().map(TxIndex)
     }
 }

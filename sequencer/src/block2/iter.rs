@@ -75,7 +75,7 @@ impl<'a> Iterator for Iter<'a> {
                     let num_txs_range = NumTxsRange::new(&byte_len);
                     let num_txs = ns_payload.read(&num_txs_range);
                     let num_txs_checked = NumTxs::new(&num_txs, &byte_len);
-                    TxIter::new2(&num_txs_checked)
+                    TxIter::new(&num_txs_checked)
                 }) // ensure `tx_iter` is set
                 .next()
             {

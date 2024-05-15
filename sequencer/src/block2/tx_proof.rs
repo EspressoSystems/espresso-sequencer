@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     newtypes::{
-        NumTxs, NumTxsRange, NumTxsUnchecked, PayloadBytesRange, TxIndex, TxTableEntries,
+        NsPayloadBytesRange, NumTxs, NumTxsRange, NumTxsUnchecked, TxIndex, TxTableEntries,
         TxTableEntriesRange,
     },
     ns_table::NsTable,
