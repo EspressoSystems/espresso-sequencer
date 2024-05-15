@@ -145,6 +145,7 @@ L2_1_Prover <-up- L2_1_State : Read State
 ' Seq -[hidden]u-> L2
 ' Seq -[hidden]d-> L1
 
-Builder --> Fee_L1: Deposit Fee
+Builder --> Fee_L1: Deposit\nfee
+Fee_L1 -up-> Validated: Fee\ndeposits
 
 @enduml
