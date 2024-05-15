@@ -338,26 +338,7 @@ impl NamespacePayloadBuilder {
 /// Custom serialization and helper methods.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct TxIndex(usize);
-
-// TODO so much boilerplate for serde
-impl Serialize for TxIndex {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        self.as_bytes().serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for TxIndex {
-    fn deserialize<D>(deserializer: D) -> Result<TxIndex, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        <[u8; NUM_TXS_BYTE_LEN] as Deserialize>::deserialize(deserializer)
-            .map(|bytes| TxIndex(usize_from_bytes::<NUM_TXS_BYTE_LEN>(&bytes)))
-    }
-}
+as_payload_bytes_serde_impl!(TxIndex);
 
 impl TxIndex {
     /// Infallible serialization.
@@ -369,6 +350,16 @@ impl TxIndex {
 
     pub fn as_usize2(&self) -> usize {
         self.0
+    }
+}
+
+impl AsPayloadBytes<'_> for TxIndex {
+    fn to_payload_bytes(&self) -> impl AsRef<[u8]> {
+        usize_to_bytes::<NUM_TXS_BYTE_LEN>(self.0)
+    }
+
+    fn from_payload_bytes(bytes: &[u8]) -> Self {
+        Self(usize_from_bytes::<NUM_TXS_BYTE_LEN>(bytes))
     }
 }
 
