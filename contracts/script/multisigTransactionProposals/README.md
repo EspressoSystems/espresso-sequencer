@@ -20,7 +20,7 @@ in the `.env` file:
 Assuming you're in the root folder, run the following command:
 
 ```bash
-ts-node scripts/multisigTransactionProposals/safeSDK/setProverProposal.ts
+ts-node contracts/script/multisigTransactionProposals/safeSDK/setProverProposal.ts
 ```
 
 Once successful, all signers will see a transaction request on the SAFE UI e.g.
@@ -28,7 +28,7 @@ Once successful, all signers will see a transaction request on the SAFE UI e.g.
 
 Once the transaction has been signed by all signers and executed by one, you should be able to go to the light client
 proxy and read the permissioned prover address.
-`ts-node scripts/multisigTransactionProposals/setPermissionedProverProposal.ts <network_name> <lightClientContract> <proverAddress> <multisigWalletAddress>`
+`ts-node contracts/script/multisigTransactionProposals/setPermissionedProverProposal.ts <network_name> <lightClientContract> <proverAddress> <multisigWalletAddress>`
 
 ## Disable Permissioned Prover
 
@@ -43,7 +43,7 @@ in the `.env` file:
 Assuming you're in the root folder, run the following command:
 
 ```bash
-ts-node scripts/multisigTransactionProposals/safeSDK/disableProverProposal.ts
+ts-node contracts/script/multisigTransactionProposals/safeSDK/disableProverProposal.ts
 ```
 
 Once successful, all signers will see a transaction request on the SAFE UI
@@ -81,5 +81,11 @@ stage.
 Testing safeSDK/utils.ts
 
 ```bash
-yarn jest scripts/multisigTransactionProposals/tests/utils.test.ts
+yarn jest contracts/script/multisigTransactionProposals/tests/utils.test.ts
+```
+
+OR
+
+```bash
+yarn jest
 ```
