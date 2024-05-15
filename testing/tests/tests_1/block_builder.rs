@@ -87,7 +87,7 @@ async fn test_random_block_builder() {
 
     // Test claiming non-existent block
     let commitment_for_non_existent_block = TestBlockPayload {
-        transactions: vec![TestTransaction(vec![0; 1])],
+        transactions: vec![TestTransaction::new(vec![0; 1])],
     }
     .builder_commitment(&TestMetadata);
     let result = client

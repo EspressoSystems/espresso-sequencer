@@ -36,11 +36,11 @@ async fn test_vid_task() {
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
 
     let mut vid = vid_scheme_from_view_number::<TestTypes>(&quorum_membership, ViewNumber::new(0));
-    let transactions = vec![TestTransaction(vec![0])];
+    let transactions = vec![TestTransaction::new(vec![0])];
     let (payload, metadata) =
         TestBlockPayload::from_transactions(transactions.clone(), &TestInstanceState {}).unwrap();
     let builder_commitment = payload.builder_commitment(&metadata);
-    let encoded_transactions = Arc::from(TestTransaction::encode(&transactions).unwrap());
+    let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
     let vid_disperse = vid.disperse(&encoded_transactions).unwrap();
     let (_, vid_precompute) = vid.commit_only_precompute(&encoded_transactions).unwrap();
     let payload_commitment = vid_disperse.commit;

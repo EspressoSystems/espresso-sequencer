@@ -102,7 +102,7 @@ impl TestView {
             proposal_certificate: None,
         };
 
-        let encoded_transactions = Arc::from(TestTransaction::encode(&transactions).unwrap());
+        let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
         let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
         let block_payload_signature =
             <TestTypes as NodeType>::SignatureKey::sign(&private_key, &encoded_transactions_hash)
@@ -308,7 +308,7 @@ impl TestView {
             _pd: PhantomData,
         };
 
-        let encoded_transactions = Arc::from(TestTransaction::encode(transactions).unwrap());
+        let encoded_transactions = Arc::from(TestTransaction::encode(transactions));
         let encoded_transactions_hash = Sha256::digest(&encoded_transactions);
         let block_payload_signature =
             <TestTypes as NodeType>::SignatureKey::sign(&private_key, &encoded_transactions_hash)

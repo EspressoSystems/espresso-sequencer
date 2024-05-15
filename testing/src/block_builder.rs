@@ -25,7 +25,7 @@ use hotshot_orchestrator::config::RandomBuilderConfig;
 use hotshot_types::{
     constants::{Version01, STATIC_VER_0_1},
     traits::{
-        block_contents::{precompute_vid_commitment, BlockHeader},
+        block_contents::{precompute_vid_commitment, BlockHeader, EncodeBytes},
         node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
     },
@@ -167,7 +167,7 @@ where
                                 .expect("We are NOT running on a 16-bit platform")
                         ];
                         rng.fill_bytes(&mut bytes);
-                        TestTransaction(bytes)
+                        TestTransaction::new(bytes)
                     })
                     .collect();
 
@@ -568,13 +568,10 @@ where
     let commitment = block_payload.builder_commitment(&metadata);
 
     let (vid_commitment, precompute_data) =
-        precompute_vid_commitment(&block_payload.encode().unwrap(), num_storage_nodes);
+        precompute_vid_commitment(&block_payload.encode(), num_storage_nodes);
 
     // Get block size from the encoded payload
-    let block_size = block_payload
-        .encode()
-        .expect("failed to encode block")
-        .len() as u64;
+    let block_size = block_payload.encode().len() as u64;
 
     let signature_over_block_info =
         TYPES::BuilderSignatureKey::sign_block_info(&priv_key, block_size, 123, &commitment)

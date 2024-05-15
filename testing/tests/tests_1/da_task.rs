@@ -34,8 +34,8 @@ async fn test_da_task() {
 
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
-    let transactions = vec![TestTransaction(vec![0])];
-    let encoded_transactions = Arc::from(TestTransaction::encode(&transactions).unwrap());
+    let transactions = vec![TestTransaction::new(vec![0])];
+    let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
     let (payload_commit, precompute) = precompute_vid_commitment(
         &encoded_transactions,
         handle.hotshot.memberships.quorum_membership.total_nodes(),
@@ -57,7 +57,7 @@ async fn test_da_task() {
         vids.push(view.vid_proposal.clone());
     }
 
-    generator.add_transactions(vec![TestTransaction(vec![0])]);
+    generator.add_transactions(vec![TestTransaction::new(vec![0])]);
 
     for view in (&mut generator).take(1) {
         proposals.push(view.da_proposal.clone());
@@ -116,8 +116,8 @@ async fn test_da_task_storage_failure() {
 
     // Make some empty encoded transactions, we just care about having a commitment handy for the
     // later calls. We need the VID commitment to be able to propose later.
-    let transactions = vec![TestTransaction(vec![0])];
-    let encoded_transactions = Arc::from(TestTransaction::encode(&transactions).unwrap());
+    let transactions = vec![TestTransaction::new(vec![0])];
+    let encoded_transactions = Arc::from(TestTransaction::encode(&transactions));
     let (payload_commit, precompute) = precompute_vid_commitment(
         &encoded_transactions,
         handle.hotshot.memberships.quorum_membership.total_nodes(),

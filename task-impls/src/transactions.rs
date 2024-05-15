@@ -16,7 +16,7 @@ use hotshot_types::{
     data::{null_block, Leaf},
     event::{Event, EventType},
     traits::{
-        block_contents::{precompute_vid_commitment, BuilderFee},
+        block_contents::{precompute_vid_commitment, BuilderFee, EncodeBytes},
         consensus_api::ConsensusApi,
         election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
@@ -135,18 +135,9 @@ impl<
                     block_header,
                 }) = self.wait_for_block().await
                 {
-                    // send the sequenced transactions to VID and DA tasks
-                    let encoded_transactions = match block_data.block_payload.encode() {
-                        Ok(encoded) => encoded,
-                        Err(e) => {
-                            error!("Failed to encode the block payload: {:?}.", e);
-                            return None;
-                        }
-                    };
-
                     broadcast_event(
                         Arc::new(HotShotEvent::BlockRecv(
-                            encoded_transactions,
+                            block_data.block_payload.encode(),
                             block_data.metadata,
                             block_view,
                             BuilderFee {

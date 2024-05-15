@@ -472,7 +472,7 @@ pub trait RunDa<
                                         .get_transactions(leaf.get_block_header().metadata())
                                     {
                                         let restored_timestamp_vec =
-                                            tx.0[tx.0.len() - 8..].to_vec();
+                                            tx.bytes()[tx.bytes().len() - 8..].to_vec();
                                         let restored_timestamp = i64::from_be_bytes(
                                             restored_timestamp_vec.as_slice().try_into().unwrap(),
                                         );
@@ -495,12 +495,12 @@ pub trait RunDa<
                                 for _ in 0..transactions_to_send_per_round {
                                     // append current timestamp to the tx to calc latency
                                     let timestamp = Utc::now().timestamp();
-                                    let mut tx = transactions.remove(0).0;
+                                    let mut tx = transactions.remove(0).into_bytes();
                                     let mut timestamp_vec = timestamp.to_be_bytes().to_vec();
                                     tx.append(&mut timestamp_vec);
 
                                     () = context
-                                        .submit_transaction(TestTransaction(tx))
+                                        .submit_transaction(TestTransaction::new(tx))
                                         .await
                                         .unwrap();
                                     total_transactions_sent += 1;
@@ -980,7 +980,7 @@ pub async fn main_entry_point<
 
     for round in 0..rounds {
         for _ in 0..transactions_to_send_per_round {
-            let mut txn = <TYPES::ValidatedState>::create_random_transaction(
+            let txn = <TYPES::ValidatedState>::create_random_transaction(
                 None,
                 &mut txn_rng,
                 transaction_size as u64,
@@ -988,9 +988,10 @@ pub async fn main_entry_point<
 
             // prepend destined view number to transaction
             let view_execute_number: u64 = round as u64 + 4;
-            txn.0[0..8].copy_from_slice(&view_execute_number.to_be_bytes());
+            let mut bytes = txn.into_bytes();
+            bytes[0..8].copy_from_slice(&view_execute_number.to_be_bytes());
 
-            transactions.push(txn);
+            transactions.push(TestTransaction::new(bytes));
         }
     }
     if let NetworkConfigSource::Orchestrator = source {

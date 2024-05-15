@@ -30,7 +30,7 @@ use crate::{
     simple_vote::{QuorumData, UpgradeProposalData},
     traits::{
         block_contents::{
-            vid_commitment, BlockHeader, TestableBlock, GENESIS_VID_NUM_STORAGE_NODES,
+            vid_commitment, BlockHeader, EncodeBytes, TestableBlock, GENESIS_VID_NUM_STORAGE_NODES,
         },
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
@@ -460,7 +460,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         let (payload, metadata) =
             TYPES::BlockPayload::from_transactions([], instance_state).unwrap();
         let builder_commitment = payload.builder_commitment(&metadata);
-        let payload_bytes = payload.encode().expect("unable to encode genesis payload");
+        let payload_bytes = payload.encode();
 
         let payload_commitment = vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES);
 
@@ -535,9 +535,7 @@ impl<TYPES: NodeType> Leaf<TYPES> {
         block_payload: TYPES::BlockPayload,
         num_storage_nodes: usize,
     ) -> Result<(), BlockError> {
-        let Ok(encoded_txns) = block_payload.encode() else {
-            return Err(BlockError::InvalidTransactionLength);
-        };
+        let encoded_txns = block_payload.encode();
         let commitment = vid_commitment(&encoded_txns, num_storage_nodes);
         if commitment != self.block_header.payload_commitment() {
             return Err(BlockError::InconsistentPayloadCommitment);
