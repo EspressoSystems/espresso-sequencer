@@ -17,7 +17,6 @@
 //!   will still be able to propose on time.
 
 use crate::state::FeeInfo;
-use anyhow::Context;
 use async_std::task::sleep;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::FeeContract;
@@ -121,18 +120,52 @@ impl L1Client {
     }
 
     /// Get information about the given block.
-    pub async fn get_block(&self, number: u64) -> anyhow::Result<L1BlockInfo> {
-        let block = self
-            .provider
-            .get_block(number)
-            .await?
-            .context(format!("no block {number}"))?;
-        let hash = block.hash.context(format!("block {number} has no hash"))?;
-        Ok(L1BlockInfo {
-            number,
-            hash,
-            timestamp: block.timestamp,
-        })
+    ///
+    /// If the desired block number is not available yet, this function will block until it becomes
+    /// available.
+    pub async fn wait_for_block(&self, number: u64) -> L1BlockInfo {
+        let interval = self.provider.get_interval();
+
+        // Wait for the block to become available.
+        loop {
+            match self.provider.get_block_number().await {
+                Ok(height) if height > number.into() => break,
+                Ok(height) => {
+                    tracing::warn!(number, %height, "waiting for L1 block");
+                }
+                Err(err) => {
+                    tracing::error!(%err, "failed to get L1 block height");
+                }
+            }
+            sleep(interval).await;
+        }
+
+        // Get the block, retrying until we succeed.
+        loop {
+            let block = match self.provider.get_block(number).await {
+                Ok(Some(block)) => block,
+                Ok(None) => {
+                    tracing::error!(number, "no such block");
+                    sleep(interval).await;
+                    continue;
+                }
+                Err(err) => {
+                    tracing::error!(%err, number, "failed to get L1 block");
+                    sleep(interval).await;
+                    continue;
+                }
+            };
+            let Some(hash) = block.hash else {
+                tracing::error!(number, ?block, "L1 block has no hash");
+                sleep(interval).await;
+                continue;
+            };
+            break L1BlockInfo {
+                number,
+                hash,
+                timestamp: block.timestamp,
+            };
+        }
     }
 
     /// Proxy to `Provider.get_block_number`.
@@ -441,5 +474,29 @@ mod test {
         assert_eq!(0, pending.len());
 
         Ok(())
+    }
+
+    #[async_std::test]
+    async fn test_wait_for_block() {
+        setup_logging();
+        setup_backtrace();
+
+        let anvil = Anvil::new().block_time(1u32).spawn();
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), 1);
+        let provider = &l1_client.provider;
+
+        // Wait for a block 10 blocks in the future.
+        let block_height = provider.get_block_number().await.unwrap().as_u64();
+        let block = l1_client.wait_for_block(block_height + 10).await;
+        assert_eq!(block.number, block_height + 10);
+
+        // Compare against underlying provider.
+        let true_block = provider
+            .get_block(block_height + 10)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(block.timestamp, true_block.timestamp);
+        assert_eq!(block.hash, true_block.hash.unwrap());
     }
 }
