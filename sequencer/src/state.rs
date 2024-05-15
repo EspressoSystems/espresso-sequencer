@@ -147,8 +147,8 @@ impl ValidatedState {
             })?)
     }
 
-    /// Charge a fee to an account, transferring the funds to the burn account.
-    pub fn burn_fee(&mut self, fee_info: FeeInfo, burn: FeeAccount) -> anyhow::Result<()> {
+    /// Charge a fee to an account, transferring the funds to the fee recipient account.
+    pub fn charge_fee(&mut self, fee_info: FeeInfo, recipient: FeeAccount) -> anyhow::Result<()> {
         let fee_state = self.fee_merkle_tree.clone();
 
         // Deduct the fee from the paying account.
@@ -179,8 +179,8 @@ impl ValidatedState {
         }
 
         // If we successfully deducted the fee from the source account, increment the balance of the
-        // burn account.
-        let fee_state = fee_state.persistent_update_with(burn, |balance| {
+        // recipient account.
+        let fee_state = fee_state.persistent_update_with(recipient, |balance| {
             Some(balance.copied().unwrap_or_default() + amount)
         })?;
 
@@ -281,10 +281,10 @@ fn charge_fee(
     state: &mut ValidatedState,
     delta: &mut Delta,
     fee_info: FeeInfo,
-    burn: FeeAccount,
+    recipient: FeeAccount,
 ) -> anyhow::Result<()> {
-    state.burn_fee(fee_info, burn)?;
-    delta.fees_delta.extend([fee_info.account, burn]);
+    state.charge_fee(fee_info, recipient)?;
+    delta.fees_delta.extend([fee_info.account, recipient]);
     Ok(())
 }
 
@@ -562,12 +562,12 @@ impl ValidatedState {
         let mut validated_state = self.clone();
 
         // Find missing fee state entries. We will need to use the builder account which is paying a
-        // fee and the burn account which is receiving it, plus any counts receiving deposits in
-        // this block.
+        // fee and the recipient account which is receiving it, plus any counts receiving deposits
+        // in this block.
         let missing_accounts = self.forgotten_accounts(
             [
                 proposed_header.fee_info.account,
-                instance.chain_config().fee_burn_account,
+                instance.chain_config().fee_recipient,
             ]
             .into_iter()
             .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
@@ -632,7 +632,7 @@ impl ValidatedState {
             &mut validated_state,
             &mut delta,
             proposed_header.fee_info,
-            instance.chain_config().fee_burn_account,
+            instance.chain_config().fee_recipient,
         )?;
 
         Ok((validated_state, delta))
@@ -1321,7 +1321,7 @@ mod test {
     }
 
     #[test]
-    fn test_burn_fee() {
+    fn test_charge_fee() {
         setup_logging();
         setup_backtrace();
 
@@ -1337,26 +1337,26 @@ mod test {
             state
         };
 
-        tracing::info!("test successful burn");
+        tracing::info!("test successful fee");
         let mut state = new_state();
-        state.burn_fee(fee_info, dst).unwrap();
+        state.charge_fee(fee_info, dst).unwrap();
         assert_eq!(state.balance(src), Some(0.into()));
         assert_eq!(state.balance(dst), Some(amt));
 
         tracing::info!("test insufficient balance");
-        state.burn_fee(fee_info, dst).unwrap_err();
+        state.charge_fee(fee_info, dst).unwrap_err();
         assert_eq!(state.balance(src), Some(0.into()));
         assert_eq!(state.balance(dst), Some(amt));
 
         tracing::info!("test src not in memory");
         let mut state = new_state();
         state.fee_merkle_tree.forget(src).expect_ok().unwrap();
-        state.burn_fee(fee_info, dst).unwrap_err();
+        state.charge_fee(fee_info, dst).unwrap_err();
 
         tracing::info!("test dst not in memory");
         let mut state = new_state();
         state.prefund_account(dst, amt);
         state.fee_merkle_tree.forget(dst).expect_ok().unwrap();
-        state.burn_fee(fee_info, dst).unwrap_err();
+        state.charge_fee(fee_info, dst).unwrap_err();
     }
 }

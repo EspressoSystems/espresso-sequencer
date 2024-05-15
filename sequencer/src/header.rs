@@ -226,7 +226,7 @@ impl Header {
         let builder_signature = Some(builder_fee.fee_signature);
         let fee_info = builder_fee.into();
         state
-            .burn_fee(fee_info, chain_config.fee_burn_account)
+            .charge_fee(fee_info, chain_config.fee_recipient)
             .context(format!("invalid builder fee {fee_info:?}"))?;
 
         let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
@@ -313,10 +313,10 @@ impl BlockHeader<SeqTypes> for Header {
             vec![]
         };
         // Find missing fee state entries. We will need to use the builder account which is paying a
-        // fee and the burn account which is receiving it, plus any counts receiving deposits in
-        // this block.
+        // fee and the recipient account which is receiving it, plus any counts receiving deposits
+        // in this block.
         let missing_accounts = parent_state.forgotten_accounts(
-            [builder_fee.fee_account, chain_config.fee_burn_account]
+            [builder_fee.fee_account, chain_config.fee_recipient]
                 .into_iter()
                 .chain(l1_deposits.iter().map(|info| info.account())),
         );

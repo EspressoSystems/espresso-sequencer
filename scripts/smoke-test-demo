@@ -44,16 +44,16 @@ wait_for 300 "demo load generator" "$LOAD_GENERATOR/healthcheck"
 # both increased.
 block_height=`curl -sL $SEQUENCER_API/node/block-height`
 num_tx=`curl -sL $SEQUENCER_API/node/transactions/count`
-# Get the balance of the builder and burner accounts. The former should decrease over time while the
-# latter should increase.
+# Get the balance of the builder and fee recipient accounts. The former should decrease over time
+# while the latter should increase.
 builder_balance=`get_balance 0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f $block_height`
-burner_balance=`get_balance 0x0000000000000000000000000000000000000000 $block_height`
+recipient_balance=`get_balance 0x0000000000000000000000000000000000000000 $block_height`
 
 echo "Initial state:"
 echo "  block_height: $block_height"
 echo "  transactions: $num_tx"
 echo "  builder_balance: $builder_balance"
-echo "  burner_balance: $burner_balance"
+echo "  recipient_balance: $recipient_balance"
 
 # Bash magic to get the current time in seconds since start of this shell
 START=$SECONDS
@@ -65,16 +65,16 @@ while true; do
 	new_num_tx=`curl -sL $SEQUENCER_API/node/transactions/count`
 	if [[ $new_block_height -gt $block_height && $new_num_tx -gt $num_tx ]]; then
 		new_builder_balance=`get_balance 0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f $new_block_height`
-		new_burner_balance=`get_balance 0x0000000000000000000000000000000000000000 $new_block_height`
+		new_recipient_balance=`get_balance 0x0000000000000000000000000000000000000000 $new_block_height`
 
 		echo "Final state:"
 		echo "  block_height: $new_block_height"
 		echo "  transactions: $new_num_tx"
 		echo "  builder_balance: $new_builder_balance"
-		echo "  burner_balance: $new_burner_balance"
+		echo "  recipient_balance: $new_recipient_balance"
 		echo "Block height and transaction count are increasing. Great!"
 
-		if [[ $((builder_balance + burner_balance)) != $((new_builder_balance + new_burner_balance)) ]]; then
+		if [[ $((builder_balance + recipient_balance)) != $((new_builder_balance + new_recipient_balance)) ]]; then
 			echo "Balance not conserved!"
 			exit 1
 		fi

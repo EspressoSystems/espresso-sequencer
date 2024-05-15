@@ -187,7 +187,7 @@ mod reference {
     fn test_reference_header() {
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~5eR1V-KaEtGxKjC7adxnKnJ2hJQ3kqBqISWHLBhOYgrY",
+            "BLOCK~Wg0AQ-1-7OZ1MjxYnD_KYPj4LSP1BW1wAKMfemBDvQOi",
             |header| header.commit(),
         );
     }

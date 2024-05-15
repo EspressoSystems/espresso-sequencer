@@ -53,13 +53,13 @@ pub struct ChainConfig {
     ///
     /// This account in the Espresso fee ledger will always receive every fee paid in Espresso,
     /// regardless of whether or not their is a `fee_contract` deployed. Once deployed, the fee
-    /// contract can decide what to do with tokens locked in this burner account in Espresso.
+    /// contract can decide what to do with tokens locked in this account in Espresso.
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_FEE_BURN_ACCOUNT",
+        env = "ESPRESSO_SEQUENCER_FEE_RECIPIENT",
         default_value = "0x0000000000000000000000000000000000000000"
     )]
-    pub fee_burn_account: FeeAccount,
+    pub fee_recipient: FeeAccount,
 }
 
 impl Default for ChainConfig {
@@ -69,7 +69,7 @@ impl Default for ChainConfig {
             max_block_size: 10240,
             base_fee: 0.into(),
             fee_contract: None,
-            fee_burn_account: Default::default(),
+            fee_recipient: Default::default(),
         }
     }
 }
@@ -84,7 +84,7 @@ impl Committable for ChainConfig {
             .fixed_size_field("chain_id", &self.chain_id.to_fixed_bytes())
             .u64_field("max_block_size", self.max_block_size)
             .fixed_size_field("base_fee", &self.base_fee.to_fixed_bytes())
-            .fixed_size_field("fee_burn_account", &self.fee_burn_account.to_fixed_bytes());
+            .fixed_size_field("fee_recipient", &self.fee_recipient.to_fixed_bytes());
         let comm = if let Some(addr) = self.fee_contract {
             comm.u64_field("fee_contract", 1).fixed_size_bytes(&addr.0)
         } else {
