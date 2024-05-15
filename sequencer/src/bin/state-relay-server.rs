@@ -31,7 +31,7 @@ async fn main() {
     setup_backtrace();
 
     let args = Args::parse();
-    let threshold = ((2 * args.total_stake) / 3) + 1;
+    let threshold = (args.total_stake / 3) + 1;
 
     tracing::info!(port = args.port, threshold, "starting state relay server");
     run_relay_server(

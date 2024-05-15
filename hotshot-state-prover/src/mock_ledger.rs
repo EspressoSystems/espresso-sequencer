@@ -86,7 +86,7 @@ impl MockLedger {
             key_archive.insert(qc_keys[i], state_keys[i].0.clone());
         }
         let st = stake_table_for_testing(&qc_keys, &state_keys);
-        let threshold = st.total_stake(SnapshotVersion::LastEpochStart).unwrap() * 2 / 3;
+        let threshold = st.total_stake(SnapshotVersion::LastEpochStart).unwrap() / 3 + 1;
 
         // arbitrary commitment values as they don't affect logic being tested
         let block_comm_root = F::from(1234);
@@ -124,8 +124,8 @@ impl MockLedger {
                 .st
                 .total_stake(SnapshotVersion::LastEpochStart)
                 .unwrap()
-                * 2
-                / 3;
+                / 3
+                + 1;
         }
 
         let new_root = self.new_dummy_comm();

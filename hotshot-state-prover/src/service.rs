@@ -156,7 +156,7 @@ pub async fn light_client_genesis(
     let (bls_comm, schnorr_comm, stake_comm) = st
         .commitment(SnapshotVersion::LastEpochStart)
         .expect("Commitment computation shouldn't fail.");
-    let threshold = st.total_stake(SnapshotVersion::LastEpochStart)? * 2 / 3;
+    let threshold = st.total_stake(SnapshotVersion::LastEpochStart)? / 3 + 1;
 
     let pi = vec![
         u256_to_field(threshold),
@@ -297,7 +297,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
     tracing::debug!("Old state: {old_state:?}");
     tracing::debug!("New state: {:?}", bundle.state);
 
-    let threshold = st.total_stake(SnapshotVersion::LastEpochStart)? * 2 / 3;
+    let threshold = st.total_stake(SnapshotVersion::LastEpochStart)? / 3 + 1;
     tracing::info!("Threshold before syncing state: {}", threshold);
     let entries = st
         .try_iter(SnapshotVersion::LastEpochStart)
