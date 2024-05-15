@@ -16,7 +16,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use super::{
     newtypes::{NsPayloadBuilder, NumTxsRange, TxPayloadRange, TxTableEntriesRange},
-    NsPayload, NsPayloadRange, TxProof2,
+    NsPayload, NsPayloadRange, TxProof,
 };
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -128,7 +128,7 @@ impl QueryablePayload for Payload {
     // TODO change `QueryablePayload` trait: remove `Ord` bound from `TransactionIndex`
     type TransactionIndex = Index;
     type Iter<'a> = Iter<'a>;
-    type InclusionProof = TxProof2;
+    type InclusionProof = TxProof;
 
     // TODO change `QueryablePayload` trait: remove arg `Self::Metadata`
     fn len(&self, _meta: &Self::Metadata) -> usize {

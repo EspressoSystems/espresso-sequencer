@@ -22,8 +22,9 @@ use super::{
     ns_table::NsTable,
 };
 
+/// Proof of correctness for transaction bytes in a block.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct TxProof2 {
+pub struct TxProof {
     // Naming conventions for this struct's fields:
     // - `payload_x`: bytes from the payload
     // - `payload_proof_x`: a proof of those bytes from the payload
@@ -42,8 +43,10 @@ pub struct TxProof2 {
     payload_proof_tx: Option<SmallRangeProofType>,
 }
 
-impl TxProof2 {
-    pub fn new2(
+impl TxProof {
+    /// Returns the [`Transaction`] indicated by `index`, along with a proof of
+    /// correctness for that transaction. Returns `None` on error.
+    pub fn new(
         index: &Index,
         payload: &Payload,
         common: &VidCommon,
@@ -126,7 +129,7 @@ impl TxProof2 {
 
         Some((
             tx,
-            TxProof2 {
+            TxProof {
                 tx_index: index.tx().clone(),
                 payload_num_txs,
                 payload_proof_num_txs,
@@ -137,6 +140,8 @@ impl TxProof2 {
         ))
     }
 
+    /// Verify a [`TxProof`] for `tx` against a payload commitment. Returns
+    /// `None` on error.
     pub fn verify(
         &self,
         ns_table: &NsTable,
@@ -159,10 +164,10 @@ impl TxProof2 {
             tracing::info!("tx index {:?} out of bounds", self.tx_index);
             return None; // error: tx index out of bounds
         }
+
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
 
         // Verify proof for tx table len
-        tracing::info!("tx table len");
         {
             if vid
                 .payload_verify(
@@ -183,7 +188,6 @@ impl TxProof2 {
         }
 
         // Verify proof for tx table entries
-        tracing::info!("tx table entries");
         {
             if vid
                 .payload_verify(
@@ -204,7 +208,6 @@ impl TxProof2 {
         }
 
         // Verify proof for tx payload
-        tracing::info!("tx payload");
         {
             let range = TxPayloadRange::new(
                 &self.payload_num_txs,
@@ -212,13 +215,6 @@ impl TxProof2 {
                 &ns_payload_range.byte_len(),
             )
             .block_payload_range(ns_payload_range.offset());
-
-            tracing::info!(
-                "verify: tx_index {:?}, tx_payload_range {:?}, content {:?}",
-                self.tx_index,
-                range,
-                tx.payload()
-            );
 
             match (&self.payload_proof_tx, range.is_empty()) {
                 (Some(proof), false) => {

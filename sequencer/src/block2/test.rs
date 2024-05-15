@@ -1,5 +1,5 @@
 use crate::{
-    block2::{ns_proof::NsProof, payload::Payload, tx_proof::TxProof2},
+    block2::{ns_proof::NsProof, payload::Payload, tx_proof::TxProof},
     NamespaceId, Transaction,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -61,7 +61,7 @@ fn basic_correctness() {
             assert_eq!(tx, test_tx);
 
             let tx_proof2 = {
-                let (tx2, tx_proof) = TxProof2::new2(&tx_index, &block, &vid_common).unwrap();
+                let (tx2, tx_proof) = TxProof::new(&tx_index, &block, &vid_common).unwrap();
                 assert_eq!(tx, tx2);
                 tx_proof
             };
@@ -94,7 +94,7 @@ fn basic_correctness() {
             assert!(ns_proof.is_existence());
 
             let (ns_proof_txs, ns_proof_ns_id) = ns_proof
-                .verify_namespace_proof(block.ns_table(), &vid_commit, &vid_common)
+                .verify(block.ns_table(), &vid_commit, &vid_common)
                 .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id));
 
             assert_eq!(ns_proof_ns_id, ns_id);
