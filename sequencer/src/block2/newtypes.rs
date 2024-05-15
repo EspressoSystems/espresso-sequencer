@@ -52,7 +52,12 @@ impl NsPayloadByteLen {
 /// Use [`NumTxs`] for the actual number of txs in this namespace.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NumTxsUnchecked(usize);
-bytes_serde_impl!(NumTxsUnchecked, to_payload_bytes, from_payload_bytes);
+bytes_serde_impl!(
+    NumTxsUnchecked,
+    to_payload_bytes,
+    [u8; NUM_TXS_BYTE_LEN],
+    from_payload_bytes
+);
 
 impl NumTxsUnchecked {
     pub fn to_payload_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
@@ -97,7 +102,12 @@ pub struct TxTableEntries {
 // This serde impl uses Vec. We could save space by using an array of
 // length `TWO_ENTRIES_BYTE_LEN`, but then we need a way to distinguish
 // `prev=Some(0)` from `prev=None`.
-bytes_serde_impl!(TxTableEntries, to_payload_bytes, from_payload_bytes);
+bytes_serde_impl!(
+    TxTableEntries,
+    to_payload_bytes,
+    Vec<u8>,
+    from_payload_bytes
+);
 
 impl TxTableEntries {
     const TWO_ENTRIES_BYTE_LEN: usize = 2 * TX_OFFSET_BYTE_LEN;
@@ -225,7 +235,7 @@ impl<'a> NsPayloadBytesRange<'a> for TxPayloadRange {
 /// Index for an entry in a tx table.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct TxIndex(usize);
-bytes_serde_impl!(TxIndex, to_bytes, from_bytes);
+bytes_serde_impl!(TxIndex, to_bytes, [u8; NUM_TXS_BYTE_LEN], from_bytes);
 
 impl TxIndex {
     pub fn to_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {

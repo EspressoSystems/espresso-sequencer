@@ -22,7 +22,7 @@ pub trait NsPayloadBytesRange<'a> {
 }
 
 macro_rules! bytes_serde_impl {
-    ($T:ty, $to_bytes:ident, $from_bytes:ident) => {
+    ($T:ty, $to_bytes:ident, $B:ty, $from_bytes:ident) => {
         impl Serialize for $T {
             fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where
@@ -37,8 +37,8 @@ macro_rules! bytes_serde_impl {
             where
                 D: Deserializer<'de>,
             {
-                <&[u8] as Deserialize>::deserialize(deserializer)
-                    .map(|bytes| <$T>::$from_bytes(bytes))
+                <$B as Deserialize>::deserialize(deserializer)
+                    .map(|bytes| <$T>::$from_bytes(bytes.as_ref()))
             }
         }
     };
