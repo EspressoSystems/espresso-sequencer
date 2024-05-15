@@ -43,8 +43,5 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         name: Enable Rust Caching
 
-      - uses: actions-rs/clippy-check@v1
-        name: Clippy
-        with:
-          token: ${{ github.token }}
-          args: --workspace --no-default-features --features "${{ matrix.features }}" -- -D warnings
+      - name: Clippy
+        run: cargo clippy --workspace --all-features --all-targets -- -D warnings
