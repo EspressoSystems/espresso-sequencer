@@ -68,13 +68,6 @@ where
 pub struct NumTxs2(usize);
 as_payload_bytes_serde_impl!(NumTxs2);
 
-impl NumTxs2 {
-    // TODO delete me
-    pub fn from_usize(n: usize) -> Self {
-        Self(n)
-    }
-}
-
 impl AsPayloadBytes<'_, [u8; NUM_TXS_BYTE_LEN]> for NumTxs2 {
     fn to_serde_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
         usize_to_bytes::<NUM_TXS_BYTE_LEN>(self.0)
@@ -92,11 +85,6 @@ impl AsPayloadBytes<'_, [u8; NUM_TXS_BYTE_LEN]> for NumTxs2 {
 pub struct NumTxsChecked(usize);
 
 impl NumTxsChecked {
-    /// delete me
-    pub fn as_usize(&self) -> usize {
-        self.0
-    }
-
     /// Returns the minimum of:
     /// - `num_txs`
     /// - The maximum number of tx table entries that could fit in the namespace
@@ -111,7 +99,7 @@ impl NumTxsChecked {
     }
 
     pub fn in_bounds(&self, index: &TxIndex) -> bool {
-        index.as_usize2() < self.0
+        index.0 < self.0
     }
 }
 
@@ -239,7 +227,7 @@ pub struct TxTableEntriesRange2(Range<usize>);
 
 impl TxTableEntriesRange2 {
     pub fn new(index: &TxIndex) -> Self {
-        let start = if index.as_usize2() == 0 {
+        let start = if index.0 == 0 {
             // Special case: the desired range includes only one entry from
             // the tx table: the first entry. This entry starts immediately
             // following the bytes that encode the tx table length.
@@ -247,13 +235,13 @@ impl TxTableEntriesRange2 {
         } else {
             // The desired range starts at the beginning of the previous tx
             // table entry.
-            (index.as_usize2() - 1)
+            (index.0 - 1)
                 .saturating_mul(TX_OFFSET_BYTE_LEN)
                 .saturating_add(NUM_TXS_BYTE_LEN)
         };
         // The desired range ends at the end of this transaction's tx table entry
         let end = index
-            .as_usize2()
+            .0
             .saturating_add(1)
             .saturating_mul(TX_OFFSET_BYTE_LEN)
             .saturating_add(NUM_TXS_BYTE_LEN);
@@ -342,7 +330,7 @@ impl NamespacePayloadBuilder {
         let mut result = Vec::with_capacity(
             NUM_TXS_BYTE_LEN + self.tx_table_entries.len() + self.tx_bodies.len(),
         );
-        let num_txs = NumTxs2::from_usize(self.tx_table_entries.len() / TX_OFFSET_BYTE_LEN);
+        let num_txs = NumTxs2(self.tx_table_entries.len() / TX_OFFSET_BYTE_LEN);
         result.extend(num_txs.to_payload_bytes().as_ref());
         result.extend(self.tx_table_entries);
         result.extend(self.tx_bodies);
@@ -359,19 +347,6 @@ impl NamespacePayloadBuilder {
 pub struct TxIndex(usize);
 as_payload_bytes_serde_impl!(TxIndex);
 
-impl TxIndex {
-    /// Infallible serialization.
-    ///
-    /// TODO same question as [`NumTxs::as_bytes`]
-    pub fn as_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
-        usize_to_bytes(self.0)
-    }
-
-    pub fn as_usize2(&self) -> usize {
-        self.0
-    }
-}
-
 impl AsPayloadBytes<'_, [u8; NUM_TXS_BYTE_LEN]> for TxIndex {
     fn to_serde_bytes(&self) -> [u8; NUM_TXS_BYTE_LEN] {
         usize_to_bytes::<NUM_TXS_BYTE_LEN>(self.0)
@@ -386,7 +361,7 @@ pub struct TxIter(Range<usize>);
 
 impl TxIter {
     pub fn new2(num_txs: &NumTxsChecked) -> Self {
-        Self(0..num_txs.as_usize())
+        Self(0..num_txs.0)
     }
 }
 
