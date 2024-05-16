@@ -1,10 +1,10 @@
 use crate::{
     block2::{
+        ns_payload_range::NsPayloadRange,
         payload::{self, PayloadByteLen},
         uint_bytes::{
             bytes_serde_impl, u64_from_bytes, u64_to_bytes, usize_from_bytes, usize_to_bytes,
         },
-        NsPayloadRange,
     },
     NamespaceId,
 };

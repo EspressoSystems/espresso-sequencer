@@ -2,10 +2,10 @@ use crate::{
     block2::{
         iter::{Index, Iter},
         newtypes::NsPayloadBuilder, // TODO hide newtypes, pub use NsPayloadBuilder
+        ns_payload::NsPayload,
+        ns_payload_range::NsPayloadRange,
         ns_table::{NsTable, NsTableBuilder},
-        NsPayload,
-        NsPayloadRange,
-        TxProof,
+        tx_proof::TxProof,
     },
     NamespaceId, Transaction,
 };
