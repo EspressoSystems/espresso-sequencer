@@ -343,6 +343,8 @@ impl Options {
             .init_app_modules(ds, state.clone(), tasks, bind_version)
             .await?;
 
+        app.register_module("config", endpoints::config(bind_version)?)?;
+
         if self.explorer.is_some() {
             app.register_module("explorer", endpoints::explorer(bind_version)?)?;
         }

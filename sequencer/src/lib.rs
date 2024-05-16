@@ -9,6 +9,7 @@ pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 
+use crate::persistence::ConfigPersistence;
 use anyhow::Context;
 use async_std::sync::RwLock;
 use async_trait::async_trait;

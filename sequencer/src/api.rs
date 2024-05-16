@@ -1,10 +1,10 @@
-use self::data_source::StateSignatureDataSource;
+use self::data_source::{HotShotConfigDataSource, StateSignatureDataSource};
 use crate::{
     network,
     persistence::SequencerPersistence,
     state::{BlockMerkleTree, FeeAccountProof},
     state_signature::StateSigner,
-    Node, NodeState, SeqTypes, SequencerContext, Transaction,
+    Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
 };
 use anyhow::Context;
 use async_once_cell::Lazy;
@@ -20,7 +20,7 @@ use futures::{
 use hotshot::types::{Event, SystemContextHandle};
 use hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
 use hotshot_query_service::data_source::ExtensibleDataSource;
-use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
+use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody, HotShotConfig};
 use jf_merkle_tree::MerkleTreeScheme;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
@@ -236,6 +236,18 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
         let tree = &state.block_merkle_tree;
         let frontier = tree.lookup(tree.num_leaves() - 1).expect_ok()?.1;
         Ok(frontier)
+    }
+}
+
+impl<
+        N: network::Type,
+        D: HotShotConfigDataSource + Sync,
+        Ver: StaticVersionType + 'static,
+        P: SequencerPersistence,
+    > HotShotConfigDataSource for StorageState<N, P, D, Ver>
+{
+    async fn get_config(&self) -> anyhow::Result<Option<HotShotConfig<PubKey>>> {
+        self.inner().get_config().await
     }
 }
 

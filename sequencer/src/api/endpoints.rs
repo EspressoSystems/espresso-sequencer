@@ -2,7 +2,8 @@
 
 use super::{
     data_source::{
-        CatchupDataSource, SequencerDataSource, StateSignatureDataSource, SubmitDataSource,
+        CatchupDataSource, HotShotConfigDataSource, SequencerDataSource, StateSignatureDataSource,
+        SubmitDataSource,
     },
     StorageState,
 };
@@ -284,5 +285,26 @@ where
     let api = merklized_state::define_api::<AvailState<N, P, D, Ver>, SeqTypes, S, Ver, ARITY>(
         &Default::default(),
     )?;
+    Ok(api)
+}
+
+pub(super) fn config<S, Ver: StaticVersionType + 'static>(_: Ver) -> Result<Api<S, Error, Ver>>
+where
+    S: 'static + Send + Sync + ReadState,
+    S::State: Send + Sync + HotShotConfigDataSource,
+{
+    let toml = toml::from_str::<toml::Value>(include_str!("../../api/config.toml"))?;
+    let mut api = Api::<S, Error, Ver>::new(toml)?;
+
+    api.get("config", |_, state| {
+        async move {
+            state
+                .get_config()
+                .await
+                .map_err(|err| Error::catch_all(StatusCode::NotFound, format!("{err:#}")))
+        }
+        .boxed()
+    })?;
+
     Ok(api)
 }

@@ -1,0 +1,4 @@
+[route.config]
+PATH = ["/config"]
+METHOD = "Get"
+DOC = "Get HotShot config"

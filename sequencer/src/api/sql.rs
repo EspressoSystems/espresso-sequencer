@@ -1,11 +1,11 @@
 use super::{
-    data_source::{CatchupDataSource, Provider, SequencerDataSource},
+    data_source::{CatchupDataSource, HotShotConfigDataSource, Provider, SequencerDataSource},
     AccountQueryData, BlocksFrontier,
 };
 use crate::{
-    persistence::sql::Options,
+    persistence::{sql::Options, ConfigPersistence},
     state::{BlockMerkleTree, FeeAccountProof, FeeMerkleTree},
-    SeqTypes,
+    PubKey, SeqTypes,
 };
 use anyhow::{bail, Context};
 use async_trait::async_trait;
@@ -17,7 +17,7 @@ use hotshot_query_service::{
     },
     merklized_state::{MerklizedStateDataSource, Snapshot},
 };
-use hotshot_types::data::ViewNumber;
+use hotshot_types::{data::ViewNumber, HotShotConfig};
 use jf_merkle_tree::{prelude::MerkleNode, MerkleTreeScheme};
 
 pub type DataSource = SqlDataSource<SeqTypes, Provider>;
@@ -93,6 +93,15 @@ impl CatchupDataSource for DataSource {
 
     async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
         self.storage().await.get_frontier(height, view).await
+    }
+}
+
+impl HotShotConfigDataSource for DataSource {
+    async fn get_config(&self) -> anyhow::Result<Option<HotShotConfig<PubKey>>> {
+        (*self.storage().await)
+            .load_config()
+            .await
+            .map(|res| res.map(|network_config| network_config.config))
     }
 }
 

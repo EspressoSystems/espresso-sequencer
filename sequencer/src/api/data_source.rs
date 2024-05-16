@@ -6,7 +6,7 @@ use super::{
 use crate::{
     network,
     persistence::{self, SequencerPersistence},
-    SeqTypes, Transaction,
+    PubKey, SeqTypes, Transaction,
 };
 use anyhow::bail;
 use async_trait::async_trait;
@@ -19,7 +19,7 @@ use hotshot_query_service::{
     node::NodeDataSource,
     status::StatusDataSource,
 };
-use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
+use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody, HotShotConfig};
 use tide_disco::Url;
 use vbs::version::StaticVersionType;
 
@@ -82,6 +82,12 @@ pub fn provider<Ver: StaticVersionType + 'static>(
 
 pub(crate) trait SubmitDataSource<N: network::Type, P: SequencerPersistence> {
     fn submit(&self, tx: Transaction) -> impl Send + Future<Output = anyhow::Result<()>>;
+}
+
+pub(crate) trait HotShotConfigDataSource {
+    fn get_config(
+        &self,
+    ) -> impl Send + Future<Output = anyhow::Result<Option<HotShotConfig<PubKey>>>>;
 }
 
 #[async_trait]
