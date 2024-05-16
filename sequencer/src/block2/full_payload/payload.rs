@@ -1,6 +1,6 @@
 use crate::{
     block2::{
-        full_payload::ns_table::{NsTable, NsTableBuilder},
+        full_payload::ns_table::{NsIndex, NsTable, NsTableBuilder},
         namespace_payload::{Index, Iter, NsPayload, NsPayloadBuilder, NsPayloadRange, TxProof},
     },
     NamespaceId, Transaction,
@@ -30,7 +30,6 @@ impl Payload {
     pub fn as_byte_slice(&self) -> &[u8] {
         &self.payload
     }
-    /// TODO delete me?
     pub fn ns_table(&self) -> &NsTable {
         &self.ns_table
     }
@@ -41,6 +40,12 @@ impl Payload {
         NsPayload::from_bytes_slice(&self.payload[range.as_block_range()])
     }
 
+    /// Convenience wrapper for [`Self::read_ns_payload`].
+    pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
+        let ns_payload_range = self.ns_table().ns_range(index, &self.byte_len());
+        self.read_ns_payload(&ns_payload_range)
+    }
+
     /// Like [`QueryablePayload::transaction_with_proof`] except without the
     /// proof.
     pub fn transaction(&self, index: &Index) -> Option<Transaction> {
@@ -48,8 +53,7 @@ impl Payload {
             return None; // error: ns index out of bounds
         }
         let ns_id = self.ns_table.read_ns_id(index.ns());
-        let ns_range = self.ns_table().ns_range(index.ns(), &self.byte_len());
-        let ns_payload = self.read_ns_payload(&ns_range);
+        let ns_payload = self.ns_payload(index.ns());
         ns_payload.export_tx(&ns_id, index.tx())
     }
 }

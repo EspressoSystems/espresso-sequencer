@@ -61,17 +61,7 @@ impl<'a> Iterator for Iter<'a> {
 
             if let Some(tx_index) = self
                 .tx_iter
-                .get_or_insert_with(|| {
-                    // Initialize a new TxIter for this namespace.
-                    //
-                    // TODO helpers
-                    let ns_payload_range = self
-                        .block
-                        .ns_table()
-                        .ns_range(ns_index, &self.block.byte_len());
-                    let ns_payload = self.block.read_ns_payload(&ns_payload_range);
-                    ns_payload.iter()
-                })
+                .get_or_insert_with(|| self.block.ns_payload(ns_index).iter())
                 .next()
             {
                 return Some(Index {
