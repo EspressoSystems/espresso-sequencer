@@ -1,7 +1,9 @@
 use crate::block2::{
+    full_payload::{
+        ns_table::{NsIndex, NsIter},
+        payload::Payload,
+    },
     newtypes::{NumTxs, NumTxsRange, TxIndex, TxIter},
-    ns_table::{NsIndex, NsIter},
-    payload::Payload,
 };
 use serde::{Deserialize, Serialize};
 use std::iter::Peekable;

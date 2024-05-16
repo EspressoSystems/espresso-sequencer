@@ -1,11 +1,13 @@
 use crate::{
     block2::{
-        iter::{Index, Iter},
+        full_payload::{
+            iter::{Index, Iter},
+            ns_table::{NsTable, NsTableBuilder},
+            tx_proof::TxProof,
+        },
         newtypes::NsPayloadBuilder, // TODO hide newtypes, pub use NsPayloadBuilder
         ns_payload::NsPayload,
         ns_payload_range::NsPayloadRange,
-        ns_table::{NsTable, NsTableBuilder},
-        tx_proof::TxProof,
     },
     NamespaceId, Transaction,
 };

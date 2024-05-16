@@ -1,8 +1,14 @@
 use crate::{
     block2::{
-        iter::Index,
-        newtypes::TxPayloadRange,
-        payload::{Payload, PayloadByteLen},
+        full_payload::{
+            iter::Index,
+            ns_table::NsTable,
+            payload::{Payload, PayloadByteLen},
+        },
+        newtypes::{
+            NumTxs, NumTxsRange, NumTxsUnchecked, TxIndex, TxPayloadRange, TxTableEntries,
+            TxTableEntriesRange,
+        },
     },
     Transaction,
 };
@@ -13,13 +19,6 @@ use jf_primitives::vid::{
     VidScheme,
 };
 use serde::{Deserialize, Serialize};
-
-use super::{
-    newtypes::{
-        NumTxs, NumTxsRange, NumTxsUnchecked, TxIndex, TxTableEntries, TxTableEntriesRange,
-    },
-    ns_table::NsTable,
-};
 
 /// Proof of correctness for transaction bytes in a block.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

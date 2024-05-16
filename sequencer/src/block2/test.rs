@@ -1,5 +1,5 @@
 use crate::{
-    block2::{ns_proof::NsProof, payload::Payload, tx_proof::TxProof},
+    block2::full_payload::{NsProof, Payload, TxProof},
     NamespaceId, Transaction,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
