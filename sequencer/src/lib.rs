@@ -47,7 +47,7 @@ use hotshot_orchestrator::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DAProposal, VidDisperseShare, ViewNumber},
+    data::{DaProposal, VidDisperseShare, ViewNumber},
     event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
     message::Proposal,
@@ -117,7 +117,7 @@ pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 impl<N: network::Type, P: SequencerPersistence> NodeImplementation<SeqTypes> for Node<N, P> {
     type QuorumNetwork = N::QuorumChannel;
-    type CommitteeNetwork = N::DAChannel;
+    type DaNetwork = N::DAChannel;
     type Storage = Arc<RwLock<P>>;
 }
 
@@ -132,7 +132,7 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
 
     async fn append_da(
         &self,
-        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         self.write().await.append_da(proposal).await
     }
@@ -309,14 +309,21 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 ) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
     // Expose git information via status API.
     metrics
-        .create_label("git_rev".into())
-        .set(env!("VERGEN_GIT_SHA").into());
+        .text_family(
+            "version".into(),
+            vec!["rev".into(), "desc".into(), "timestamp".into()],
+        )
+        .create(vec![
+            env!("VERGEN_GIT_SHA").into(),
+            env!("VERGEN_GIT_DESCRIBE").into(),
+            env!("VERGEN_GIT_COMMIT_TIMESTAMP").into(),
+        ]);
+
+    // Stick our public key in `metrics` so it is easily accessible via the status API.
+    let pub_key = BLSPubKey::from_private(&network_params.private_staking_key);
     metrics
-        .create_label("git_desc".into())
-        .set(env!("VERGEN_GIT_DESCRIBE").into());
-    metrics
-        .create_label("git_timestamp".into())
-        .set(env!("VERGEN_GIT_COMMIT_TIMESTAMP").into());
+        .text_family("node".into(), vec!["key".into()])
+        .create(vec![pub_key.to_string()]);
 
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -327,7 +334,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     let orchestrator_client = OrchestratorClient::new(validator_args);
     let state_key_pair = StateKeyPair::from_sign_key(network_params.private_state_key);
     let my_config = ValidatorConfig {
-        public_key: BLSPubKey::from_private(&network_params.private_staking_key),
+        public_key: pub_key,
         private_key: network_params.private_staking_key,
         stake_value: 1,
         state_key_pair,
@@ -453,7 +460,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
     let l1_genesis = match l1_params.finalized_block {
-        Some(block) => Some(l1_client.get_block(block).await?),
+        Some(block) => Some(l1_client.wait_for_block(block).await),
         None => None,
     };
 

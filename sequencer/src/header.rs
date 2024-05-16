@@ -3,13 +3,13 @@ use crate::{
     chain_config::ResolvableChainConfig,
     eth_signature_key::BuilderSignature,
     l1_client::L1Snapshot,
-    state::{BlockMerkleCommitment, FeeInfo, FeeMerkleCommitment},
-    ChainConfig, L1BlockInfo, Leaf, NodeState, SeqTypes, ValidatedState,
+    state::{BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment},
+    ChainConfig, L1BlockInfo, Leaf, NamespaceId, NodeState, SeqTypes, ValidatedState,
 };
 use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
-use hotshot_query_service::availability::QueryableHeader;
+use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BlockPayload, BuilderFee},
@@ -426,6 +426,45 @@ impl BlockHeader<SeqTypes> for Header {
 impl QueryableHeader<SeqTypes> for Header {
     fn timestamp(&self) -> u64 {
         self.timestamp
+    }
+}
+
+impl ExplorerHeader<SeqTypes> for Header {
+    type BalanceAmount = FeeAmount;
+    type WalletAddress = FeeAccount;
+    type ProposerId = FeeAccount;
+    type NamespaceId = NamespaceId;
+
+    fn proposer_id(&self) -> Self::ProposerId {
+        self.fee_info.account()
+    }
+
+    fn fee_info_account(&self) -> Self::WalletAddress {
+        self.fee_info.account()
+    }
+
+    fn fee_info_balance(&self) -> Self::BalanceAmount {
+        self.fee_info.amount()
+    }
+
+    /// reward_balance at the moment is only implemented as a stub, as block
+    /// rewards have not yet been implemented.
+    ///
+    /// TODO: update implementation when rewards have been created / supported.
+    ///       Issue: https://github.com/EspressoSystems/espresso-sequencer/issues/1453
+    fn reward_balance(&self) -> Self::BalanceAmount {
+        FeeAmount::from(0)
+    }
+
+    fn namespace_ids(&self) -> Vec<Self::NamespaceId> {
+        let l = self.ns_table.len();
+        let mut result: Vec<Self::NamespaceId> = Vec::with_capacity(l);
+        for i in 0..l {
+            let (ns_id, _) = self.ns_table.get_table_entry(i);
+            result.push(ns_id);
+        }
+
+        result
     }
 }
 

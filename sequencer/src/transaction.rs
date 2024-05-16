@@ -1,6 +1,7 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use committable::{Commitment, Committable};
 use derive_more::{Display, From, Into};
+use hotshot_query_service::explorer::ExplorerTransaction;
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
 use jf_merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
 use serde::{Deserialize, Serialize};
@@ -104,5 +105,12 @@ impl Committable for Transaction {
 
     fn tag() -> String {
         "TX".into()
+    }
+}
+
+impl ExplorerTransaction for Transaction {
+    type NamespaceId = NamespaceId;
+    fn namespace_id(&self) -> Self::NamespaceId {
+        self.namespace
     }
 }

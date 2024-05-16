@@ -6,7 +6,7 @@ use clap::Parser;
 
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DAProposal, VidDisperseShare},
+    data::{DaProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -255,7 +255,7 @@ impl SequencerPersistence for Persistence {
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
         let dir_path = self.da_dir_path();
 
         let file_path = dir_path
@@ -268,7 +268,7 @@ impl SequencerPersistence for Persistence {
 
         let da_bytes = fs::read(file_path)?;
 
-        let da_proposal: Proposal<SeqTypes, DAProposal<SeqTypes>> =
+        let da_proposal: Proposal<SeqTypes, DaProposal<SeqTypes>> =
             bincode::deserialize(&da_bytes)?;
         Ok(Some(da_proposal))
     }
@@ -320,7 +320,7 @@ impl SequencerPersistence for Persistence {
     }
     async fn append_da(
         &mut self,
-        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let view_number = proposal.data.get_view_number().get_u64();
         let dir_path = self.da_dir_path();

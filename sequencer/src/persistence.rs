@@ -20,7 +20,7 @@ use hotshot::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DAProposal, VidDisperseShare},
+    data::{DaProposal, VidDisperseShare},
     event::{HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -94,7 +94,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>>;
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>>;
 
     /// Load the latest known consensus state.
     ///
@@ -209,7 +209,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     ) -> anyhow::Result<()>;
     async fn append_da(
         &mut self,
-        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()>;
     async fn record_action(
         &mut self,
@@ -401,7 +401,7 @@ mod persistence_tests {
         let block_payload_signature =
             BLSPubKey::sign(&privkey, &tx_hash).expect("Failed to sign tx hash");
 
-        let da_proposal_inner = DAProposal::<SeqTypes> {
+        let da_proposal_inner = DaProposal::<SeqTypes> {
             encoded_transactions: Arc::from(tx_hash),
             metadata: Default::default(),
             view_number: ViewNumber::new(1),
