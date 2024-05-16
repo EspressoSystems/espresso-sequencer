@@ -8,7 +8,7 @@ struct Auction {
     /// current phase.
     phase: AuctionPhase,
     /// A structure to find which Phase should be the current one.
-    // This could probably be an enum if we we structure.
+    // This could probably be an enum with some restructuring.
     possible_phases: [AuctionPhase; 3],
 }
 
