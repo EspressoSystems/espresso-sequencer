@@ -1,5 +1,7 @@
 //! Sequencer-specific API endpoint handlers.
 
+use std::env;
+
 use super::{
     data_source::{
         CatchupDataSource, HotShotConfigDataSource, SequencerDataSource, StateSignatureDataSource,
@@ -296,12 +298,23 @@ where
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/config.toml"))?;
     let mut api = Api::<S, Error, Ver>::new(toml)?;
 
-    api.get("config", |_, state| {
+    let env_vars: Vec<(String, String)> = env::vars()
+        .filter(|(key, _)| key.starts_with("ESPRESSO_"))
+        .collect();
+
+    api.get("hotshot", |_, state| {
         async move {
             state
                 .get_config()
                 .await
                 .map_err(|err| Error::catch_all(StatusCode::NotFound, format!("{err:#}")))
+        }
+        .boxed()
+    })?
+    .get("env", move |_, _| {
+        {
+            let env_vars = env_vars.clone();
+            async move { Ok(env_vars) }
         }
         .boxed()
     })?;

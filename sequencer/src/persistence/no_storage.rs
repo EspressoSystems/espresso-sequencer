@@ -1,7 +1,7 @@
 //! Mock implementation of persistence, for testing.
 #![cfg(any(test, feature = "testing"))]
 
-use super::{ConfigPersistence, NetworkConfig, PersistenceOptions, SequencerPersistence};
+use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
 use crate::{Leaf, SeqTypes, ViewNumber};
 use async_trait::async_trait;
 use hotshot_types::{
@@ -30,7 +30,11 @@ impl PersistenceOptions for Options {
     }
 }
 
-impl ConfigPersistence for NoStorage {
+#[derive(Clone, Copy, Debug)]
+pub struct NoStorage;
+
+#[async_trait]
+impl SequencerPersistence for NoStorage {
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
         Ok(None)
     }
@@ -38,13 +42,7 @@ impl ConfigPersistence for NoStorage {
     async fn save_config(&mut self, _: &NetworkConfig) -> anyhow::Result<()> {
         Ok(())
     }
-}
 
-#[derive(Clone, Copy, Debug)]
-pub struct NoStorage;
-
-#[async_trait]
-impl SequencerPersistence for NoStorage {
     async fn collect_garbage(&mut self, _view: ViewNumber) -> anyhow::Result<()> {
         Ok(())
     }

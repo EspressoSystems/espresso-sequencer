@@ -43,6 +43,7 @@ pub struct Options {
     pub submit: Option<Submit>,
     pub status: Option<Status>,
     pub catchup: Option<Catchup>,
+    pub config: Option<Config>,
     pub state: Option<State>,
     pub hotshot_events: Option<HotshotEvents>,
     pub explorer: Option<Explorer>,
@@ -58,6 +59,7 @@ impl From<Http> for Options {
             submit: None,
             status: None,
             catchup: None,
+            config: None,
             state: None,
             hotshot_events: None,
             explorer: None,
@@ -97,6 +99,12 @@ impl Options {
     /// Add a catchup API module.
     pub fn catchup(mut self, opt: Catchup) -> Self {
         self.catchup = Some(opt);
+        self
+    }
+
+    /// Add a config API module.
+    pub fn config(mut self, opt: Config) -> Self {
+        self.config = Some(opt);
         self
     }
 
@@ -343,8 +351,6 @@ impl Options {
             .init_app_modules(ds, state.clone(), tasks, bind_version)
             .await?;
 
-        app.register_module("config", endpoints::config(bind_version)?)?;
-
         if self.explorer.is_some() {
             app.register_module("explorer", endpoints::explorer(bind_version)?)?;
         }
@@ -371,6 +377,10 @@ impl Options {
 
         if self.hotshot_events.is_some() {
             self.init_and_spawn_hotshot_event_streaming_module(state, tasks, bind_version)?;
+        }
+
+        if self.config.is_some() {
+            app.register_module("config", endpoints::config(bind_version)?)?;
         }
 
         tasks.spawn(
@@ -481,6 +491,10 @@ pub struct Status;
 /// Options for the catchup API module.
 #[derive(Parser, Clone, Copy, Debug, Default)]
 pub struct Catchup;
+
+/// Options for the config API module.
+#[derive(Parser, Clone, Copy, Debug, Default)]
+pub struct Config;
 
 /// Options for the query API module.
 #[derive(Parser, Clone, Debug, Default)]

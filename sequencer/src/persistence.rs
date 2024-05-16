@@ -13,7 +13,6 @@ use anyhow::{bail, ensure, Context};
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use committable::Committable;
-use futures::Future;
 use hotshot::{
     traits::ValidatedState as _,
     types::{Event, EventType},
@@ -48,26 +47,21 @@ pub trait PersistenceOptions: Clone + Send + Sync + 'static {
     }
 }
 
-pub trait ConfigPersistence {
-    /// Load the orchestrator config from storage.
-    ///
-    /// Returns `None` if no config exists (we are joining a network for the first time). Fails with
-    /// `Err` if it could not be determined whether a config exists or not.
-    fn load_config(&self) -> impl Send + Future<Output = anyhow::Result<Option<NetworkConfig>>>;
-
-    /// Save the orchestrator config to storage.
-    fn save_config(
-        &mut self,
-        cfg: &NetworkConfig,
-    ) -> impl Send + Future<Output = anyhow::Result<()>>;
-}
-
 #[async_trait]
-pub trait SequencerPersistence: ConfigPersistence + Sized + Send + Sync + 'static {
+pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     /// Use this storage as a state catchup backend, if supported.
     fn into_catchup_provider(self) -> anyhow::Result<Arc<dyn StateCatchup>> {
         bail!("state catchup is not implemented for this persistence type");
     }
+
+    /// Load the orchestrator config from storage.
+    ///
+    /// Returns `None` if no config exists (we are joining a network for the first time). Fails with
+    /// `Err` if it could not be determined whether a config exists or not.
+    async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>>;
+
+    /// Save the orchestrator config to storage.
+    async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()>;
 
     async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()>;
 

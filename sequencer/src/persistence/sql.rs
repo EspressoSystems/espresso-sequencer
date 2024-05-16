@@ -1,4 +1,4 @@
-use super::{ConfigPersistence, NetworkConfig, PersistenceOptions, SequencerPersistence};
+use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
 use crate::{
     catchup::{SqlStateCatchup, StateCatchup},
     options::parse_duration,
@@ -235,7 +235,12 @@ async fn transaction(
     }
 }
 
-impl ConfigPersistence for Persistence {
+#[async_trait]
+impl SequencerPersistence for Persistence {
+    fn into_catchup_provider(self) -> anyhow::Result<Arc<dyn StateCatchup>> {
+        Ok(Arc::new(SqlStateCatchup::from(Arc::new(RwLock::new(self)))))
+    }
+
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
         tracing::info!("loading config from Postgres");
 
@@ -267,13 +272,6 @@ impl ConfigPersistence for Persistence {
             .boxed()
         })
         .await
-    }
-}
-
-#[async_trait]
-impl SequencerPersistence for Persistence {
-    fn into_catchup_provider(self) -> anyhow::Result<Arc<dyn StateCatchup>> {
-        Ok(Arc::new(SqlStateCatchup::from(Arc::new(RwLock::new(self)))))
     }
 
     async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {

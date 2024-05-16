@@ -321,6 +321,7 @@ module!("submit", api::options::Submit, requires: "http");
 module!("status", api::options::Status, requires: "http");
 module!("state", api::options::State, requires: "http", "storage-sql");
 module!("catchup", api::options::Catchup, requires: "http");
+module!("config", api::options::Config, requires: "http", "storage-sql");
 module!("hotshot-events", api::options::HotshotEvents, requires: "http");
 module!("explorer", api::options::Explorer, requires: "http", "storage-sql");
 

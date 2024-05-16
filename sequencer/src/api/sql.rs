@@ -3,7 +3,7 @@ use super::{
     AccountQueryData, BlocksFrontier,
 };
 use crate::{
-    persistence::{sql::Options, ConfigPersistence},
+    persistence::{sql::Options, SequencerPersistence},
     state::{BlockMerkleTree, FeeAccountProof, FeeMerkleTree},
     PubKey, SeqTypes,
 };

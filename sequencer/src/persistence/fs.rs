@@ -1,4 +1,4 @@
-use super::{ConfigPersistence, NetworkConfig, PersistenceOptions, SequencerPersistence};
+use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
 use crate::{Leaf, SeqTypes, ViewNumber};
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
@@ -122,7 +122,8 @@ impl Persistence {
     }
 }
 
-impl ConfigPersistence for Persistence {
+#[async_trait]
+impl SequencerPersistence for Persistence {
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
         let path = self.config_path();
         if !path.is_file() {
@@ -138,10 +139,7 @@ impl ConfigPersistence for Persistence {
         tracing::info!("saving config to {}", path.display());
         Ok(cfg.to_file(path.display().to_string())?)
     }
-}
 
-#[async_trait]
-impl SequencerPersistence for Persistence {
     async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
         let view_number = view.get_u64();
 
