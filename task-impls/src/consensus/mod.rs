@@ -226,6 +226,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
             self.payload_commitment_and_metadata.clone(),
             self.proposal_cert.clone(),
             Arc::clone(&self.instance_state),
+            *self.version.read().await,
         )
         .await?;
 
@@ -240,7 +241,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
     /// Spawn a vote task for the given view.  Will try to vote
     /// and emit a `QuorumVoteSend` event we should vote on the current proposal
     #[cfg(not(feature = "dependency-tasks"))]
-    fn spawn_vote_task(
+    async fn spawn_vote_task(
         &mut self,
         view: TYPES::Time,
         event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
@@ -259,6 +260,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
         let quorum_mem = Arc::clone(&self.quorum_membership);
         let da_mem = Arc::clone(&self.da_membership);
         let instance_state = Arc::clone(&self.instance_state);
+        let version = *self.version.read().await;
         let handle = async_spawn(async move {
             update_state_and_vote_if_able::<TYPES, I>(
                 view,
@@ -269,6 +271,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                 quorum_mem,
                 instance_state,
                 (priv_key, upgrade, da_mem, event_stream),
+                version,
             )
             .await;
         });
@@ -282,17 +285,24 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
         event: Arc<HotShotEvent<TYPES>>,
         event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) {
+        let version = *self.version.read().await;
         match event.as_ref() {
             #[cfg(not(feature = "dependency-tasks"))]
             HotShotEvent::QuorumProposalRecv(proposal, sender) => {
                 debug!("proposal recv view: {:?}", proposal.data.view_number());
-                match handle_quorum_proposal_recv(proposal, sender, event_stream.clone(), self)
-                    .await
+                match handle_quorum_proposal_recv(
+                    proposal,
+                    sender,
+                    event_stream.clone(),
+                    self,
+                    version,
+                )
+                .await
                 {
                     Ok(Some(current_proposal)) => {
                         let view = current_proposal.view_number();
                         self.current_proposal = Some(current_proposal);
-                        self.spawn_vote_task(view, event_stream);
+                        self.spawn_vote_task(view, event_stream).await;
                     }
                     Ok(None) => {}
                     Err(e) => debug!("Failed to propose {e:#}"),
@@ -452,7 +462,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                 if proposal.view_number() != view {
                     return;
                 }
-                self.spawn_vote_task(view, event_stream);
+                self.spawn_vote_task(view, event_stream).await;
             }
             #[cfg(not(feature = "dependency-tasks"))]
             HotShotEvent::VIDShareRecv(disperse) => {
@@ -492,7 +502,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                 if proposal.view_number() != view {
                     return;
                 }
-                self.spawn_vote_task(view, event_stream.clone());
+                self.spawn_vote_task(view, event_stream.clone()).await;
             }
             HotShotEvent::ViewChange(new_view) => {
                 let new_view = *new_view;

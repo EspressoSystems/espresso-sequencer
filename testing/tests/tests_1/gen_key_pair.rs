@@ -3,12 +3,11 @@
 #[cfg(test)]
 mod tests {
     use core::panic;
+    use std::{env, fs::File, io::prelude::*};
+
     use hotshot::types::{BLSPubKey, SignatureKey};
     use hotshot_orchestrator::config::ValidatorConfigFile;
     use hotshot_types::ValidatorConfig;
-    use std::env;
-    use std::fs::File;
-    use std::io::prelude::*;
     #[test]
     fn gen_key_pair_gen_from_config_file() {
         let config_file = ValidatorConfigFile::from_file("config/ValidatorConfigFile.toml");

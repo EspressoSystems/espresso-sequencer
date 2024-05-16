@@ -6,7 +6,7 @@
 async fn test_timeout() {
     use std::time::Duration;
 
-    use hotshot_example_types::node_types::{TestTypes, MemoryImpl};
+    use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
     use hotshot_testing::{
         block_builder::SimpleBuilderImplementation,
         completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},

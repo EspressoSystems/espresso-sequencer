@@ -10,18 +10,15 @@ use hotshot_task_impls::{events::HotShotEvent::*, quorum_proposal::QuorumProposa
 use hotshot_testing::{
     predicates::event::quorum_proposal_send,
     script::{run_test_script, TestScriptStage},
-    task_helpers::{build_cert, key_pair_for_id},
-    task_helpers::{build_system_handle, vid_scheme_from_view_number},
+    task_helpers::{build_cert, build_system_handle, key_pair_for_id, vid_scheme_from_view_number},
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, ProposalDependencyData},
-    data::null_block,
-    data::{VidDisperseShare, ViewChangeEvidence, ViewNumber},
+    data::{null_block, VidDisperseShare, ViewChangeEvidence, ViewNumber},
     message::Proposal,
     simple_certificate::{TimeoutCertificate, ViewSyncFinalizeCertificate2},
-    simple_vote::ViewSyncFinalizeData,
-    simple_vote::{TimeoutData, TimeoutVote, ViewSyncFinalizeVote},
+    simple_vote::{TimeoutData, TimeoutVote, ViewSyncFinalizeData, ViewSyncFinalizeVote},
     traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},

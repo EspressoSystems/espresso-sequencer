@@ -1,5 +1,5 @@
 use hotshot_example_types::{
-    node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl },
+    node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl},
     state_types::TestTypes,
 };
 use hotshot_macros::cross_tests;

@@ -1,16 +1,15 @@
-use hotshot::tasks::task_state::CreateTaskState;
-use hotshot::types::SystemContextHandle;
+use std::collections::HashMap;
+
+use hotshot::{tasks::task_state::CreateTaskState, types::SystemContextHandle};
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
-use std::collections::HashMap;
 
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_view_sync_task() {
-    use hotshot_task_impls::harness::run_harness;
-    use hotshot_task_impls::view_sync::ViewSyncTaskState;
+    use hotshot_task_impls::{harness::run_harness, view_sync::ViewSyncTaskState};
     use hotshot_testing::task_helpers::build_system_handle;
     use hotshot_types::simple_vote::ViewSyncPreCommitData;
 

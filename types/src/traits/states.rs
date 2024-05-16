@@ -7,6 +7,7 @@
 use std::{error::Error, fmt::Debug, future::Future, hash::Hash};
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use vbs::version::Version;
 
 use super::block_contents::TestableBlock;
 use crate::{
@@ -61,6 +62,7 @@ pub trait ValidatedState<TYPES: NodeType>:
         parent_leaf: &Leaf<TYPES>,
         proposed_header: &TYPES::BlockHeader,
         vid_common: VidCommon,
+        version: Version,
     ) -> impl Future<Output = Result<(Self, Self::Delta), Self::Error>> + Send;
 
     /// Construct the state with the given block header.

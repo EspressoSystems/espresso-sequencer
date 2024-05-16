@@ -265,6 +265,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             timeout_task: None,
             round_start_delay: handle.hotshot.config.round_start_delay,
             id: handle.hotshot.id,
+            version: *handle.hotshot.version.read().await,
         }
     }
 }

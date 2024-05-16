@@ -14,6 +14,7 @@ use std::{
 use committable::{Commitment, Committable};
 use jf_vid::{precomputable::Precomputable, VidScheme};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use vbs::version::Version;
 
 use super::signature_key::BuilderSignatureKey;
 use crate::{
@@ -188,6 +189,7 @@ pub trait BlockHeader<TYPES: NodeType>:
         metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
         builder_fee: BuilderFee<TYPES>,
         vid_common: VidCommon,
+        version: Version,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send;
 
     /// Build the genesis header, payload, and metadata.

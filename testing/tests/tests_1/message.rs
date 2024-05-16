@@ -2,9 +2,7 @@
 use std::marker::PhantomData;
 
 use committable::Committable;
-
 use hotshot_example_types::node_types::TestTypes;
-
 use hotshot_types::{
     message::{GeneralConsensusMessage, Message, MessageKind, SequencingMessage},
     signature_key::BLSPubKey,
