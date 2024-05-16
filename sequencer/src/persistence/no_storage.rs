@@ -6,7 +6,7 @@ use crate::{Leaf, SeqTypes, ViewNumber};
 use async_trait::async_trait;
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DAProposal, VidDisperseShare},
+    data::{DaProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -74,7 +74,7 @@ impl SequencerPersistence for NoStorage {
     async fn load_da_proposal(
         &self,
         _view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
         Ok(None)
     }
 
@@ -93,7 +93,7 @@ impl SequencerPersistence for NoStorage {
     }
     async fn append_da(
         &mut self,
-        _proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }

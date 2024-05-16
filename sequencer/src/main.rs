@@ -9,7 +9,7 @@ use sequencer::{
     api::{self, data_source::DataSourceOptions},
     init_node,
     options::{Modules, Options},
-    persistence, BuilderParams, ChainConfig, L1Params, NetworkParams,
+    persistence, BuilderParams, L1Params, NetworkParams,
 };
 use vbs::version::StaticVersionType;
 
@@ -50,7 +50,6 @@ where
 {
     let (private_staking_key, private_state_key) = opt.private_keys()?;
     let stake_table_capacity = opt.stake_table_capacity;
-    let chain_config = ChainConfig::new(opt.chain_id, opt.max_block_size, opt.base_fee);
     let l1_params = L1Params {
         url: opt.l1_provider_url,
         finalized_block: opt.l1_genesis,
@@ -112,6 +111,9 @@ where
             if let Some(hotshot_events) = modules.hotshot_events {
                 http_opt = http_opt.hotshot_events(hotshot_events);
             }
+            if let Some(explorer) = modules.explorer {
+                http_opt = http_opt.explorer(explorer);
+            }
 
             http_opt
                 .serve(
@@ -125,7 +127,7 @@ where
                                 l1_params,
                                 stake_table_capacity,
                                 bind_version,
-                                chain_config,
+                                opt.chain_config,
                                 opt.is_da,
                             )
                             .await
@@ -146,7 +148,7 @@ where
                 l1_params,
                 stake_table_capacity,
                 bind_version,
-                chain_config,
+                opt.chain_config,
                 opt.is_da,
             )
             .await?
@@ -158,4 +160,99 @@ where
     ctx.join().await;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use async_std::task::spawn;
+    use es_version::SequencerVersion;
+    use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey};
+    use portpicker::pick_unused_port;
+    use sequencer::{
+        api::options::{Http, Status},
+        persistence::fs,
+        PubKey,
+    };
+    use std::time::Duration;
+    use surf_disco::{error::ClientError, Client, Url};
+    use tempfile::TempDir;
+
+    #[async_std::test]
+    async fn test_startup_before_orchestrator() {
+        setup_logging();
+        setup_backtrace();
+
+        let (pub_key, priv_key) = PubKey::generated_from_seed_indexed([0; 32], 0);
+        let state_key = StateKeyPair::generate_from_seed_indexed([0; 32], 0);
+
+        let port = pick_unused_port().unwrap();
+        let tmp = TempDir::new().unwrap();
+        let modules = Modules {
+            http: Some(Http { port }),
+            status: Some(Status),
+            ..Default::default()
+        };
+        let opt = Options::parse_from([
+            "sequencer",
+            "--private-staking-key",
+            &priv_key.to_string(),
+            "--private-state-key",
+            &state_key.sign_key_ref().to_string(),
+        ]);
+
+        // Start the sequencer in a background task. This process will not complete, because it will
+        // be waiting for the orchestrator, but it should at least start up the API server and
+        // populate some metrics.
+        tracing::info!(port, "starting sequencer");
+        let task = spawn(async move {
+            if let Err(err) = init_with_storage(
+                modules,
+                opt,
+                fs::Options {
+                    path: tmp.path().into(),
+                },
+                SEQUENCER_VERSION,
+            )
+            .await
+            {
+                tracing::error!("failed to start sequencer: {err:#}");
+            }
+        });
+
+        // The healthcheck should eventually come up even though the node is waiting for the
+        // orchestrator.
+        tracing::info!("waiting for API to start");
+        let url: Url = format!("http://localhost:{port}").parse().unwrap();
+        let client = Client::<ClientError, SequencerVersion>::new(url.clone());
+        assert!(client.connect(Some(Duration::from_secs(60))).await);
+        client.get::<()>("healthcheck").send().await.unwrap();
+
+        // The metrics should include information about the node and software version. surf-disco
+        // doesn't currently support fetching a plaintext file, so we use a raw reqwest client.
+        let res = reqwest::get(url.join("/status/metrics").unwrap())
+            .await
+            .unwrap();
+        assert!(res.status().is_success(), "{}", res.status());
+        let metrics = res.text().await.unwrap();
+        let lines = metrics.lines().collect::<Vec<_>>();
+        assert!(
+            lines.contains(&format!("consensus_node{{key=\"{pub_key}\"}} 1").as_str()),
+            "{lines:#?}"
+        );
+        assert!(
+            lines.contains(
+                &format!(
+                    "consensus_version{{desc=\"{}\",rev=\"{}\",timestamp=\"{}\"}} 1",
+                    env!("VERGEN_GIT_DESCRIBE"),
+                    env!("VERGEN_GIT_SHA"),
+                    env!("VERGEN_GIT_COMMIT_TIMESTAMP"),
+                )
+                .as_str()
+            ),
+            "{lines:#?}"
+        );
+
+        task.cancel().await;
+    }
 }

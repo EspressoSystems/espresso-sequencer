@@ -18,6 +18,8 @@ use committable::Committable;
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
+    data_source::storage::ExplorerStorage,
+    explorer::{self},
     merklized_state::{
         self, MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence,
     },
@@ -120,6 +122,20 @@ where
         .boxed()
     })?;
 
+    Ok(api)
+}
+
+type ExplorerApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, explorer::Error, Ver>;
+
+pub(super) fn explorer<N, P, D, Ver: StaticVersionType + 'static>(
+    bind_version: Ver,
+) -> Result<ExplorerApi<N, P, D, Ver>>
+where
+    N: network::Type,
+    D: ExplorerStorage<SeqTypes> + Send + Sync + 'static,
+    P: SequencerPersistence,
+{
+    let api = explorer::define_api::<AvailState<N, P, D, Ver>, SeqTypes, Ver>(bind_version)?;
     Ok(api)
 }
 

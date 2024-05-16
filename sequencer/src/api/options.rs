@@ -45,6 +45,7 @@ pub struct Options {
     pub catchup: Option<Catchup>,
     pub state: Option<State>,
     pub hotshot_events: Option<HotshotEvents>,
+    pub explorer: Option<Explorer>,
     pub storage_fs: Option<persistence::fs::Options>,
     pub storage_sql: Option<persistence::sql::Options>,
 }
@@ -59,6 +60,7 @@ impl From<Http> for Options {
             catchup: None,
             state: None,
             hotshot_events: None,
+            explorer: None,
             storage_fs: None,
             storage_sql: None,
         }
@@ -107,6 +109,12 @@ impl Options {
     /// Add a Hotshot events streaming API module.
     pub fn hotshot_events(mut self, opt: HotshotEvents) -> Self {
         self.hotshot_events = Some(opt);
+        self
+    }
+
+    /// Add an explorer API module.
+    pub fn explorer(mut self, opt: Explorer) -> Self {
+        self.explorer = Some(opt);
         self
     }
 
@@ -335,6 +343,10 @@ impl Options {
             .init_app_modules(ds, state.clone(), tasks, bind_version)
             .await?;
 
+        if self.explorer.is_some() {
+            app.register_module("explorer", endpoints::explorer(bind_version)?)?;
+        }
+
         if self.state.is_some() {
             // Initialize merklized state module for block merkle tree
             app.register_module(
@@ -487,3 +499,7 @@ pub struct HotshotEvents {
     #[clap(long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT")]
     pub events_service_port: u16,
 }
+
+/// Options for the explorer API module.
+#[derive(Parser, Clone, Copy, Debug, Default)]
+pub struct Explorer;

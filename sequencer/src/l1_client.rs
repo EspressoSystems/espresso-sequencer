@@ -17,9 +17,9 @@
 //!   will still be able to propose on time.
 
 use crate::state::FeeInfo;
-use anyhow::Context;
 use async_std::task::sleep;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
+use contract_bindings::fee_contract::FeeContract;
 use ethers::prelude::*;
 use futures::{
     join,
@@ -98,20 +98,18 @@ impl Committable for L1BlockInfo {
 pub struct L1Client {
     retry_delay: Duration,
     /// `Provider` from `ethers-provider`.
-    provider: Provider<Http>,
-    /// `Address` of fee contract.
-    _address: Address,
+    provider: Arc<Provider<Http>>,
     /// Maximum number of L1 blocks that can be scanned for events in a single query.
     events_max_block_range: u64,
 }
 
 impl L1Client {
     /// Instantiate an `L1Client` for a given `Url`.
-    pub fn new(url: Url, contract_address: Address, events_max_block_range: u64) -> Self {
+    pub fn new(url: Url, events_max_block_range: u64) -> Self {
+        let provider = Arc::new(Provider::new(Http::new(url)));
         Self {
             retry_delay: Duration::from_secs(1),
-            provider: Provider::new(Http::new(url)),
-            _address: contract_address,
+            provider,
             events_max_block_range,
         }
     }
@@ -122,18 +120,52 @@ impl L1Client {
     }
 
     /// Get information about the given block.
-    pub async fn get_block(&self, number: u64) -> anyhow::Result<L1BlockInfo> {
-        let block = self
-            .provider
-            .get_block(number)
-            .await?
-            .context(format!("no block {number}"))?;
-        let hash = block.hash.context(format!("block {number} has no hash"))?;
-        Ok(L1BlockInfo {
-            number,
-            hash,
-            timestamp: block.timestamp,
-        })
+    ///
+    /// If the desired block number is not available yet, this function will block until it becomes
+    /// available.
+    pub async fn wait_for_block(&self, number: u64) -> L1BlockInfo {
+        let interval = self.provider.get_interval();
+
+        // Wait for the block to become available.
+        loop {
+            match self.provider.get_block_number().await {
+                Ok(height) if height > number.into() => break,
+                Ok(height) => {
+                    tracing::warn!(number, %height, "waiting for L1 block");
+                }
+                Err(err) => {
+                    tracing::error!(%err, "failed to get L1 block height");
+                }
+            }
+            sleep(interval).await;
+        }
+
+        // Get the block, retrying until we succeed.
+        loop {
+            let block = match self.provider.get_block(number).await {
+                Ok(Some(block)) => block,
+                Ok(None) => {
+                    tracing::error!(number, "no such block");
+                    sleep(interval).await;
+                    continue;
+                }
+                Err(err) => {
+                    tracing::error!(%err, number, "failed to get L1 block");
+                    sleep(interval).await;
+                    continue;
+                }
+            };
+            let Some(hash) = block.hash else {
+                tracing::error!(number, ?block, "L1 block has no hash");
+                sleep(interval).await;
+                continue;
+            };
+            break L1BlockInfo {
+                number,
+                hash,
+                timestamp: block.timestamp,
+            };
+        }
     }
 
     /// Proxy to `Provider.get_block_number`.
@@ -164,6 +196,7 @@ impl L1Client {
     /// and `new`. Returns `Vec<FeeInfo>`
     pub async fn get_finalized_deposits(
         &self,
+        fee_contract_address: Address,
         prev_finalized: Option<u64>,
         new_finalized: u64,
     ) -> Vec<FeeInfo> {
@@ -195,24 +228,20 @@ impl L1Client {
 
         // Fetch events for each chunk.
         let events = stream::iter(chunks).then(|(from, to)| {
-            let address = self._address;
-            let provider = self.provider.clone();
             let retry_delay = self.retry_delay;
+            let fee_contract = FeeContract::new(fee_contract_address, self.provider.clone());
             async move {
                 tracing::debug!(from, to, "fetch events in range");
 
                 // query for deposit events, loop until successful.
                 loop {
-                    match contract_bindings::fee_contract::FeeContract::new(
-                        address,
-                        Arc::new(&provider),
-                    )
-                    .deposit_filter()
-                    .address(address.into())
-                    .from_block(from)
-                    .to_block(to)
-                    .query()
-                    .await
+                    match fee_contract
+                        .deposit_filter()
+                        .address(fee_contract.address().into())
+                        .from_block(from)
+                        .to_block(to)
+                        .query()
+                        .await
                     {
                         Ok(events) => break stream::iter(events),
                         Err(err) => {
@@ -274,7 +303,7 @@ mod test {
         // Test l1_client methods against `ethers::Provider`. There is
         // also some sanity testing demonstrating `Anvil` availability.
         let anvil = Anvil::new().block_time(1u32).spawn();
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), Address::default(), 1);
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), 1);
         let provider = &l1_client.provider;
 
         let version = provider.client_version().await.unwrap();
@@ -282,11 +311,7 @@ mod test {
 
         // Test that nothing funky is happening to the provider when
         // passed along in state.
-        let state = NodeState::mock().with_l1(L1Client::new(
-            anvil.endpoint().parse().unwrap(),
-            Address::default(),
-            1,
-        ));
+        let state = NodeState::mock().with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1));
         let version = state.l1_client().provider.client_version().await.unwrap();
         assert_eq!("anvil/v0.2.0", version);
 
@@ -319,7 +344,7 @@ mod test {
 
         let anvil = Anvil::new().spawn();
         let wallet_address = anvil.addresses().first().cloned().unwrap();
-        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), Address::default(), 1);
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), 1);
         let wallet: LocalWallet = anvil.keys()[0].clone().into();
 
         // In order to deposit we need a provider that can sign.
@@ -384,16 +409,16 @@ mod test {
         assert_eq!(deposits + deploy_txn_count, head);
 
         // Use non-signing `L1Client` to retrieve data.
-        let l1_client = L1Client::new(
-            anvil.endpoint().parse().unwrap(),
-            fee_contract_proxy.address(),
-            1,
-        );
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), 1);
         // Set prev deposits to `None` so `Filter` will start at block
         // 0. The test would also succeed if we pass `0` (b/c first
         // block did not deposit).
         let pending = l1_client
-            .get_finalized_deposits(None, deposits + deploy_txn_count)
+            .get_finalized_deposits(
+                fee_contract_proxy.address(),
+                None,
+                deposits + deploy_txn_count,
+            )
             .await;
 
         assert_eq!(deposits as usize, pending.len(), "{pending:?}");
@@ -406,32 +431,72 @@ mod test {
 
         // check a few more cases
         let pending = l1_client
-            .get_finalized_deposits(Some(0), deposits + deploy_txn_count)
+            .get_finalized_deposits(
+                fee_contract_proxy.address(),
+                Some(0),
+                deposits + deploy_txn_count,
+            )
             .await;
         assert_eq!(deposits as usize, pending.len());
 
-        let pending = l1_client.get_finalized_deposits(Some(0), 0).await;
-        assert_eq!(0, pending.len());
-
-        let pending = l1_client.get_finalized_deposits(Some(0), 1).await;
-        assert_eq!(0, pending.len());
-
         let pending = l1_client
-            .get_finalized_deposits(Some(deploy_txn_count), deploy_txn_count)
+            .get_finalized_deposits(fee_contract_proxy.address(), Some(0), 0)
             .await;
         assert_eq!(0, pending.len());
 
         let pending = l1_client
-            .get_finalized_deposits(Some(deploy_txn_count), deploy_txn_count + 1)
+            .get_finalized_deposits(fee_contract_proxy.address(), Some(0), 1)
+            .await;
+        assert_eq!(0, pending.len());
+
+        let pending = l1_client
+            .get_finalized_deposits(
+                fee_contract_proxy.address(),
+                Some(deploy_txn_count),
+                deploy_txn_count,
+            )
+            .await;
+        assert_eq!(0, pending.len());
+
+        let pending = l1_client
+            .get_finalized_deposits(
+                fee_contract_proxy.address(),
+                Some(deploy_txn_count),
+                deploy_txn_count + 1,
+            )
             .await;
         assert_eq!(1, pending.len());
 
         // what happens if `new_finalized` is `0`?
         let pending = l1_client
-            .get_finalized_deposits(Some(deploy_txn_count), 0)
+            .get_finalized_deposits(fee_contract_proxy.address(), Some(deploy_txn_count), 0)
             .await;
         assert_eq!(0, pending.len());
 
         Ok(())
+    }
+
+    #[async_std::test]
+    async fn test_wait_for_block() {
+        setup_logging();
+        setup_backtrace();
+
+        let anvil = Anvil::new().block_time(1u32).spawn();
+        let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), 1);
+        let provider = &l1_client.provider;
+
+        // Wait for a block 10 blocks in the future.
+        let block_height = provider.get_block_number().await.unwrap().as_u64();
+        let block = l1_client.wait_for_block(block_height + 10).await;
+        assert_eq!(block.number, block_height + 10);
+
+        // Compare against underlying provider.
+        let true_block = provider
+            .get_block(block_height + 10)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(block.timestamp, true_block.timestamp);
+        assert_eq!(block.hash, true_block.hash.unwrap());
     }
 }

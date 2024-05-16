@@ -19,7 +19,7 @@ use hotshot_query_service::data_source::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DAProposal, VidDisperseShare},
+    data::{DaProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -388,7 +388,7 @@ impl SequencerPersistence for Persistence {
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
         let result = self
             .query_opt(
                 "SELECT data FROM da_proposal where view = $1",
@@ -448,7 +448,7 @@ impl SequencerPersistence for Persistence {
     }
     async fn append_da(
         &mut self,
-        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
         let view = data.get_view_number().get_u64();

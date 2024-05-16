@@ -47,7 +47,7 @@ use hotshot_orchestrator::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DAProposal, VidDisperseShare, ViewNumber},
+    data::{DaProposal, VidDisperseShare, ViewNumber},
     event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
     message::Proposal,
@@ -117,7 +117,7 @@ pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 impl<N: network::Type, P: SequencerPersistence> NodeImplementation<SeqTypes> for Node<N, P> {
     type QuorumNetwork = N::QuorumChannel;
-    type CommitteeNetwork = N::DAChannel;
+    type DaNetwork = N::DAChannel;
     type Storage = Arc<RwLock<P>>;
 }
 
@@ -132,7 +132,7 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
 
     async fn append_da(
         &self,
-        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         self.write().await.append_da(proposal).await
     }
@@ -187,13 +187,13 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::new(
-                "http://localhost:3331".parse().unwrap(),
-                Address::default(),
-                10000,
-            ),
+            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
             catchup::mock::MockStateCatchup::default(),
         )
+    }
+
+    pub fn chain_config(&self) -> &ChainConfig {
+        &self.chain_config
     }
 
     pub fn with_l1(mut self, l1_client: L1Client) -> Self {
@@ -203,6 +203,11 @@ impl NodeState {
 
     pub fn with_genesis(mut self, state: ValidatedState) -> Self {
         self.genesis_state = state;
+        self
+    }
+
+    pub fn with_chain_config(mut self, cfg: ChainConfig) -> Self {
+        self.chain_config = cfg;
         self
     }
 
@@ -219,11 +224,7 @@ impl Default for NodeState {
         Self::new(
             1u64,
             ChainConfig::default(),
-            L1Client::new(
-                "http://localhost:3331".parse().unwrap(),
-                Address::default(),
-                10000,
-            ),
+            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
             catchup::mock::MockStateCatchup::default(),
         )
     }
@@ -308,14 +309,21 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 ) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
     // Expose git information via status API.
     metrics
-        .create_label("git_rev".into())
-        .set(env!("VERGEN_GIT_SHA").into());
+        .text_family(
+            "version".into(),
+            vec!["rev".into(), "desc".into(), "timestamp".into()],
+        )
+        .create(vec![
+            env!("VERGEN_GIT_SHA").into(),
+            env!("VERGEN_GIT_DESCRIBE").into(),
+            env!("VERGEN_GIT_COMMIT_TIMESTAMP").into(),
+        ]);
+
+    // Stick our public key in `metrics` so it is easily accessible via the status API.
+    let pub_key = BLSPubKey::from_private(&network_params.private_staking_key);
     metrics
-        .create_label("git_desc".into())
-        .set(env!("VERGEN_GIT_DESCRIBE").into());
-    metrics
-        .create_label("git_timestamp".into())
-        .set(env!("VERGEN_GIT_COMMIT_TIMESTAMP").into());
+        .text_family("node".into(), vec!["key".into()])
+        .create(vec![pub_key.to_string()]);
 
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -326,7 +334,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     let orchestrator_client = OrchestratorClient::new(validator_args);
     let state_key_pair = StateKeyPair::from_sign_key(network_params.private_state_key);
     let my_config = ValidatorConfig {
-        public_key: BLSPubKey::from_private(&network_params.private_staking_key),
+        public_key: pub_key,
         private_key: network_params.private_staking_key,
         stake_value: 1,
         state_key_pair,
@@ -450,13 +458,9 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
-    let l1_client = L1Client::new(
-        l1_params.url,
-        Address::default(),
-        l1_params.events_max_block_range,
-    );
+    let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
     let l1_genesis = match l1_params.finalized_block {
-        Some(block) => Some(l1_client.get_block(block).await?),
+        Some(block) => Some(l1_client.wait_for_block(block).await),
         None => None,
     };
 
@@ -587,7 +591,6 @@ pub mod testing {
                 my_own_validator_config: Default::default(),
                 view_sync_timeout: Duration::from_secs(1),
                 data_request_delay: Duration::from_secs(1),
-                //??
                 builder_url: Url::parse(&format!(
                     "http://127.0.0.1:{}",
                     pick_unused_port().unwrap()
@@ -638,7 +641,6 @@ pub mod testing {
                     &NoMetrics,
                     STAKE_TABLE_CAPACITY_FOR_TEST,
                     bind_version,
-                    true,
                 )
                 .await
             }))
@@ -655,18 +657,15 @@ pub mod testing {
             metrics: &dyn Metrics,
             stake_table_capacity: usize,
             bind_version: Ver,
-            is_da: bool,
         ) -> SequencerContext<network::Memory, P::Persistence, Ver> {
             let mut config = self.config.clone();
+            let my_peer_config = &config.known_nodes_with_stake[i];
             config.my_own_validator_config = ValidatorConfig {
-                public_key: config.known_nodes_with_stake[i].stake_table_entry.stake_key,
+                public_key: my_peer_config.stake_table_entry.stake_key,
                 private_key: self.priv_keys[i].clone(),
-                stake_value: config.known_nodes_with_stake[i]
-                    .stake_table_entry
-                    .stake_amount
-                    .as_u64(),
+                stake_value: my_peer_config.stake_table_entry.stake_amount.as_u64(),
                 state_key_pair: self.state_key_pairs[i].clone(),
-                is_da,
+                is_da: config.known_da_nodes.contains(my_peer_config),
             };
 
             let network = Arc::new(MemoryNetwork::new(
@@ -688,11 +687,7 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 ChainConfig::default(),
-                L1Client::new(
-                    self.anvil.endpoint().parse().unwrap(),
-                    Address::default(),
-                    10000,
-                ),
+                L1Client::new(self.anvil.endpoint().parse().unwrap(), 10000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
             )
             .with_genesis(state);
