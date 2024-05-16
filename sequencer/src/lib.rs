@@ -460,7 +460,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
     let l1_genesis = match l1_params.finalized_block {
-        Some(block) => Some(l1_client.wait_for_block(block).await),
+        Some(block) => Some(l1_client.wait_for_finalized_block(block).await),
         None => None,
     };
 
