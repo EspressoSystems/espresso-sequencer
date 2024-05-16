@@ -4,7 +4,7 @@ pub mod catchup;
 mod chain_config;
 pub mod context;
 pub mod eth_signature_key;
-mod genesis;
+pub mod genesis;
 mod header;
 pub mod hotshot_commitment;
 pub mod options;
@@ -20,6 +20,7 @@ use block::entry::TxTableEntryWord;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
 use ethers::types::U256;
+use genesis::L1Finalized;
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
@@ -447,11 +448,18 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     }
 
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
+    let l1_genesis = match genesis.l1_finalized {
+        Some(L1Finalized::Block(b)) => Some(b),
+        Some(L1Finalized::Number { number }) => {
+            Some(l1_client.wait_for_finalized_block(number).await)
+        }
+        None => None,
+    };
     let instance_state = NodeState {
         chain_config: genesis.chain_config,
         l1_client,
         genesis_state,
-        l1_genesis: genesis.l1_finalized,
+        l1_genesis,
         peers: catchup::local_and_remote(
             persistence_opt,
             StatePeers::<Ver>::from_urls(network_params.state_peers),

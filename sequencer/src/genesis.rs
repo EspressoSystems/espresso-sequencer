@@ -13,6 +13,25 @@ pub struct StakeTableConfig {
     pub capacity: u64,
 }
 
+/// An L1 block from which an Espresso chain should start syncing.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum L1Finalized {
+    /// Complete block info.
+    ///
+    /// This allows a validator to specify the exact, existing L1 block to start syncing from. A
+    /// validator that specifies a specific L1 block will not be able to reach consensus with a
+    /// malicious validator that starts from a different L1 block.
+    Block(L1BlockInfo),
+
+    /// An L1 block number to sync from.
+    ///
+    /// This allows a validator to specify a future L1 block whose hash is not yet known, and start
+    /// syncing only when a finalized block with the given number becomes available. The configured
+    /// L1 client will be used to fetch the rest of the block info once available.
+    Number { number: u64 },
+}
+
 /// Genesis of an Espresso chain.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Genesis {
@@ -20,7 +39,7 @@ pub struct Genesis {
     pub stake_table: StakeTableConfig,
     #[serde(default)]
     pub accounts: HashMap<FeeAccount, FeeAmount>,
-    pub l1_finalized: Option<L1BlockInfo>,
+    pub l1_finalized: Option<L1Finalized>,
 }
 
 impl Genesis {
@@ -91,7 +110,7 @@ mod test {
         );
         assert_eq!(
             genesis.l1_finalized,
-            Some(L1BlockInfo {
+            Some(L1Finalized::Block(L1BlockInfo {
                 number: 64,
                 timestamp: 0x123def.into(),
                 hash: H256([
@@ -99,7 +118,7 @@ mod test {
                     0xf3, 0x0a, 0x47, 0xde, 0x02, 0xcf, 0x28, 0xad, 0x68, 0xc8, 0x9e, 0x10, 0x4c,
                     0x00, 0xc4, 0xe5, 0x1b, 0xb7, 0xa5
                 ])
-            })
+            }))
         );
     }
 
@@ -131,6 +150,30 @@ mod test {
         );
         assert_eq!(genesis.accounts, HashMap::default());
         assert_eq!(genesis.l1_finalized, None);
+    }
+
+    #[test]
+    fn test_genesis_l1_finalized_number_only() {
+        let toml = toml! {
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+
+            [l1_finalized]
+            number = 42
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap();
+        assert_eq!(
+            genesis.l1_finalized,
+            Some(L1Finalized::Number { number: 42 })
+        );
     }
 
     #[test]

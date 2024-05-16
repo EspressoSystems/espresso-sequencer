@@ -70,6 +70,7 @@ use sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, 
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
+    genesis::L1Finalized,
     l1_client::L1Client,
     network,
     persistence::SequencerPersistence,
@@ -246,12 +247,19 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     }
 
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
+    let l1_genesis = match genesis.l1_finalized {
+        Some(L1Finalized::Block(b)) => Some(b),
+        Some(L1Finalized::Number { number }) => {
+            Some(l1_client.wait_for_finalized_block(number).await)
+        }
+        None => None,
+    };
 
     let instance_state = NodeState {
         chain_config: genesis.chain_config,
         l1_client,
         genesis_state,
-        l1_genesis: genesis.l1_finalized,
+        l1_genesis,
         peers: Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
         node_id: node_index,
     };
