@@ -4,8 +4,11 @@ use crate::{
     ChainConfig,
 };
 use anyhow::Context;
+use derive_more::{Display, From, Into};
+use sequencer_utils::{impl_serde_from_string_or_integer, serde::FromStringOrInteger};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::Path};
+use time::{format_description::well_known::Rfc3339 as TimestampFormat, OffsetDateTime};
 
 /// Initial configuration of an Espresso stake table.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -32,6 +35,60 @@ pub enum L1Finalized {
     Number { number: u64 },
 }
 
+#[derive(Hash, Copy, Clone, Debug, Display, PartialEq, Eq, From, Into)]
+#[display(fmt = "{}", _0.format(&TimestampFormat))]
+pub struct Timestamp(OffsetDateTime);
+
+impl_serde_from_string_or_integer!(Timestamp);
+
+impl Default for Timestamp {
+    fn default() -> Self {
+        Self::from_integer(0).unwrap()
+    }
+}
+
+impl Timestamp {
+    pub fn unix_timestamp(&self) -> u64 {
+        self.0.unix_timestamp() as u64
+    }
+}
+
+impl FromStringOrInteger for Timestamp {
+    type Binary = u64;
+    type Integer = u64;
+
+    fn from_binary(b: Self::Binary) -> anyhow::Result<Self> {
+        Self::from_integer(b)
+    }
+
+    fn from_integer(i: Self::Integer) -> anyhow::Result<Self> {
+        let unix = i.try_into().context("timestamp out of range")?;
+        Ok(Self(
+            OffsetDateTime::from_unix_timestamp(unix).context("invalid timestamp")?,
+        ))
+    }
+
+    fn from_string(s: String) -> anyhow::Result<Self> {
+        Ok(Self(
+            OffsetDateTime::parse(&s, &TimestampFormat).context("invalid timestamp")?,
+        ))
+    }
+
+    fn to_binary(&self) -> anyhow::Result<Self::Binary> {
+        Ok(self.unix_timestamp())
+    }
+
+    fn to_string(&self) -> anyhow::Result<String> {
+        Ok(format!("{self}"))
+    }
+}
+
+/// Information about the genesis state which feeds into the genesis block header.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct GenesisHeader {
+    pub timestamp: Timestamp,
+}
+
 /// Genesis of an Espresso chain.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Genesis {
@@ -40,6 +97,7 @@ pub struct Genesis {
     #[serde(default)]
     pub accounts: HashMap<FeeAccount, FeeAmount>,
     pub l1_finalized: Option<L1Finalized>,
+    pub header: GenesisHeader,
 }
 
 impl Genesis {
@@ -70,6 +128,9 @@ mod test {
             fee_recipient = "0x0000000000000000000000000000000000000000"
             fee_contract = "0x0000000000000000000000000000000000000000"
 
+            [header]
+            timestamp = 123456
+
             [accounts]
             "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f" = 100000
             "0x0000000000000000000000000000000000000000" = 42
@@ -81,7 +142,7 @@ mod test {
         }
         .to_string();
 
-        let genesis: Genesis = toml::from_str(&toml).unwrap();
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
         assert_eq!(genesis.stake_table, StakeTableConfig { capacity: 10 });
         assert_eq!(
             genesis.chain_config,
@@ -91,6 +152,12 @@ mod test {
                 base_fee: 1.into(),
                 fee_recipient: FeeAccount::default(),
                 fee_contract: Some(Address::default())
+            }
+        );
+        assert_eq!(
+            genesis.header,
+            GenesisHeader {
+                timestamp: Timestamp::from_integer(123456).unwrap(),
             }
         );
         assert_eq!(
@@ -133,10 +200,13 @@ mod test {
             max_block_size = 30000
             base_fee = 1
             fee_recipient = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
         }
         .to_string();
 
-        let genesis: Genesis = toml::from_str(&toml).unwrap();
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
         assert_eq!(genesis.stake_table, StakeTableConfig { capacity: 10 });
         assert_eq!(
             genesis.chain_config,
@@ -146,6 +216,12 @@ mod test {
                 base_fee: 1.into(),
                 fee_recipient: FeeAccount::default(),
                 fee_contract: None,
+            }
+        );
+        assert_eq!(
+            genesis.header,
+            GenesisHeader {
+                timestamp: Timestamp::from_integer(123456).unwrap(),
             }
         );
         assert_eq!(genesis.accounts, HashMap::default());
@@ -164,12 +240,15 @@ mod test {
             base_fee = 1
             fee_recipient = "0x0000000000000000000000000000000000000000"
 
+            [header]
+            timestamp = 123456
+
             [l1_finalized]
             number = 42
         }
         .to_string();
 
-        let genesis: Genesis = toml::from_str(&toml).unwrap();
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
         assert_eq!(
             genesis.l1_finalized,
             Some(L1Finalized::Number { number: 42 })
@@ -187,12 +266,21 @@ mod test {
             max_block_size = "30mb"
             base_fee = "1 gwei"
             fee_recipient = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = "2024-05-16T11:20:28-04:00"
         }
         .to_string();
 
-        let genesis: Genesis = toml::from_str(&toml).unwrap();
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
         assert_eq!(genesis.stake_table, StakeTableConfig { capacity: 10 });
         assert_eq!(*genesis.chain_config.max_block_size, 30000000);
         assert_eq!(genesis.chain_config.base_fee, 1_000_000_000.into());
+        assert_eq!(
+            genesis.header,
+            GenesisHeader {
+                timestamp: Timestamp::from_integer(1715872828).unwrap(),
+            }
+        )
     }
 }

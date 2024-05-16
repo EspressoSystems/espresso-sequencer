@@ -20,7 +20,7 @@ use block::entry::TxTableEntryWord;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
 use ethers::types::U256;
-use genesis::L1Finalized;
+use genesis::{GenesisHeader, L1Finalized};
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
@@ -167,6 +167,7 @@ pub struct NodeState {
     pub chain_config: ChainConfig,
     pub l1_client: L1Client,
     pub peers: Arc<dyn StateCatchup>,
+    pub genesis_header: GenesisHeader,
     pub genesis_state: ValidatedState,
     pub l1_genesis: Option<L1BlockInfo>,
 }
@@ -183,6 +184,7 @@ impl NodeState {
             chain_config,
             l1_client,
             peers: Arc::new(catchup),
+            genesis_header: Default::default(),
             genesis_state: Default::default(),
             l1_genesis: None,
         }
@@ -458,6 +460,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     let instance_state = NodeState {
         chain_config: genesis.chain_config,
         l1_client,
+        genesis_header: genesis.header,
         genesis_state,
         l1_genesis,
         peers: catchup::local_and_remote(

@@ -258,6 +258,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let instance_state = NodeState {
         chain_config: genesis.chain_config,
         l1_client,
+        genesis_header: genesis.header,
         genesis_state,
         l1_genesis,
         peers: Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
