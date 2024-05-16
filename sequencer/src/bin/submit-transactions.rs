@@ -309,11 +309,11 @@ async fn submit_transactions<Ver: StaticVersionType>(
             }
             txns.clear();
             hashes.clear();
-        }
 
-        let delay = Duration::from_millis(delay_distr.sample(&mut rng) as u64);
-        tracing::info!("sleeping for {delay:?}");
-        sleep(delay).await;
+            let delay = Duration::from_millis(delay_distr.sample(&mut rng) as u64);
+            tracing::info!("sleeping for {delay:?}");
+            sleep(delay).await;
+        }
     }
 }
 
