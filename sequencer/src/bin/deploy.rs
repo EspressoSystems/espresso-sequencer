@@ -95,7 +95,7 @@ struct Options {
     #[clap(flatten)]
     contracts: DeployedContracts,
 
-    /// If toggled, launch a mock prover contract that does not do any proof verification.
+    /// If toggled, launch a mock prover contract with a smaller verification key.
     #[clap(short, long)]
     pub use_mock_contract: bool,
 
