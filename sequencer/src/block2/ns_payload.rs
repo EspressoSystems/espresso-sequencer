@@ -39,7 +39,7 @@ impl NsPayload {
     /// Return all transactions in this namespace. The namespace ID for each
     /// returned [`Transaction`] is set to `ns_id`.
     pub fn export_all_txs(&self, ns_id: &NamespaceId) -> Vec<Transaction> {
-        // TODO desperate need of helpers
+        // TODO helpers
         let num_txs = self.read(&NumTxsRange::new(&self.byte_len()));
         let num_txs_checked = NumTxs::new(&num_txs, &self.byte_len());
         TxIter::new(&num_txs_checked)

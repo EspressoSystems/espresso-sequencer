@@ -63,8 +63,9 @@ impl<'a> Iterator for Iter<'a> {
             if let Some(tx_index) = self
                 .tx_iter
                 .get_or_insert_with(|| {
-                    // TODO newtype for full block payload byte len
-                    // TODO desperate need for helpers
+                    // Initialize a new TxIter for this namespace.
+                    //
+                    // TODO helpers
                     let ns_payload_range = self
                         .block
                         .ns_table()
@@ -72,10 +73,10 @@ impl<'a> Iterator for Iter<'a> {
                     let ns_payload = self.block.read_ns_payload(&ns_payload_range);
                     let byte_len = ns_payload.byte_len();
                     let num_txs_range = NumTxsRange::new(&byte_len);
-                    let num_txs = ns_payload.read(&num_txs_range);
-                    let num_txs_checked = NumTxs::new(&num_txs, &byte_len);
-                    TxIter::new(&num_txs_checked)
-                }) // ensure `tx_iter` is set
+                    let num_txs_unchecked = ns_payload.read(&num_txs_range);
+                    let num_txs = NumTxs::new(&num_txs_unchecked, &byte_len);
+                    TxIter::new(&num_txs)
+                })
                 .next()
             {
                 return Some(Index {

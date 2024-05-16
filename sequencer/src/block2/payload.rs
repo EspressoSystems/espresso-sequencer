@@ -1,7 +1,7 @@
 use crate::{
     block2::{
         iter::{Index, Iter},
-        newtypes::{NsPayloadBuilder, NumTxsRange, TxPayloadRange, TxTableEntriesRange},
+        newtypes::{NsPayloadBuilder, NumTxs, NumTxsRange, TxPayloadRange, TxTableEntriesRange},
         ns_table::{NsTable, NsTableBuilder},
         NsPayload, NsPayloadRange, TxProof,
     },
@@ -45,19 +45,33 @@ impl Payload {
     /// Like [`QueryablePayload::transaction_with_proof`] except without the
     /// proof.
     pub fn transaction(&self, index: &Index) -> Option<Transaction> {
-        // TODO helper methods please!
-        // TODO check index.ns(), index.tx() in bounds
-        let ns_payload_range = self.ns_table().ns_range(index.ns(), &self.byte_len());
-        let ns_payload = self.read_ns_payload(&ns_payload_range);
-        let num_txs = ns_payload.read(&NumTxsRange::new(&ns_payload_range.byte_len()));
+        // TODO helpers
+
+        // check ns index
+        if !self.ns_table().in_bounds(index.ns()) {
+            tracing::info!("ns_index {:?} out of bounds", index.ns());
+            return None; // error: ns index out of bounds
+        }
+
+        let ns_range = self.ns_table().ns_range(index.ns(), &self.byte_len());
+        let ns_byte_len = ns_range.byte_len();
+        let ns_payload = self.read_ns_payload(&ns_range);
+        let num_txs = ns_payload.read(&NumTxsRange::new(&ns_byte_len));
+
+        // check tx index
+        if !NumTxs::new(&num_txs, &ns_byte_len).in_bounds(index.tx()) {
+            tracing::info!("tx_index {:?} out of bounds", index.tx());
+            return None; // error: tx index out of bounds
+        }
+
         let tx_table_entries = ns_payload.read(&TxTableEntriesRange::new(index.tx()));
-        let tx_payload_range =
-            TxPayloadRange::new(&num_txs, &tx_table_entries, &ns_payload_range.byte_len());
+        let tx_payload_range = TxPayloadRange::new(&num_txs, &tx_table_entries, &ns_byte_len);
         let tx_payload = ns_payload
             .read(&tx_payload_range)
             .to_payload_bytes()
             .to_vec();
         let ns_id = self.ns_table().read_ns_id(index.ns());
+
         // TODO don't copy the tx bytes into the return value
         // https://github.com/EspressoSystems/hotshot-query-service/issues/267
         Some(Transaction::new(ns_id, tx_payload))
