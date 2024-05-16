@@ -224,7 +224,7 @@ where
 
 pub async fn run_relay_server<Ver: StaticVersionType + 'static>(
     shutdown_listener: Option<OneShotReceiver<()>>,
-    threshold: u64,
+    threshold: U256,
     url: Url,
     bind_version: Ver,
 ) -> std::io::Result<()> {
@@ -234,7 +234,6 @@ pub async fn run_relay_server<Ver: StaticVersionType + 'static>(
 
     // We don't have a stake table yet, putting some temporary value here.
     // Related issue: [https://github.com/EspressoSystems/espresso-sequencer/issues/1022]
-    let threshold = U256::from(threshold);
     let state =
         State::new(StateRelayServerState::new(threshold).with_shutdown_signal(shutdown_listener));
     let mut app = App::<State, Error>::with_state(state);

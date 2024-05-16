@@ -1,6 +1,8 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use es_version::SEQUENCER_VERSION;
+use ethers::types::U256;
+use hotshot_state_prover::service::compute_quorum_threshold;
 use sequencer::state_signature::relay_server::run_relay_server;
 
 #[derive(Parser)]
@@ -31,9 +33,12 @@ async fn main() {
     setup_backtrace();
 
     let args = Args::parse();
-    let threshold = (args.total_stake / 3) + 1;
+    let threshold = compute_quorum_threshold(U256::from(args.total_stake));
 
-    tracing::info!(port = args.port, threshold, "starting state relay server");
+    tracing::info!(
+        port = args.port,
+        "starting state relay server, quorum threshold: {threshold}"
+    );
     run_relay_server(
         None,
         threshold,
