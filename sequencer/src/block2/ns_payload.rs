@@ -4,8 +4,8 @@
 
 use crate::{
     block2::newtypes::{
-        FromNsPayloadBytes, NsPayloadByteLen, NsPayloadBytesRange, NumTxs, NumTxsRange, TxIter,
-        TxPayloadRange, TxTableEntriesRange,
+        FromNsPayloadBytes, NsPayloadByteLen, NsPayloadBytesRange, NumTxs, NumTxsRange,
+        NumTxsUnchecked, TxIndex, TxIter, TxPayloadRange, TxTableEntriesRange,
     },
     NamespaceId, Transaction,
 };
@@ -40,21 +40,37 @@ impl NsPayload {
     /// returned [`Transaction`] is set to `ns_id`.
     pub fn export_all_txs(&self, ns_id: &NamespaceId) -> Vec<Transaction> {
         // TODO helpers
-        let num_txs = self.read(&NumTxsRange::new(&self.byte_len()));
-        let num_txs_checked = NumTxs::new(&num_txs, &self.byte_len());
-        TxIter::new(&num_txs_checked)
-            .map(|i| {
-                let payload = self
-                    .read(&TxPayloadRange::new(
-                        &num_txs,
-                        &self.read(&TxTableEntriesRange::new(&i)),
-                        &self.byte_len(),
-                    ))
-                    .to_payload_bytes()
-                    .to_vec();
-                Transaction::new(*ns_id, payload)
-            })
+        let num_txs_unchecked = self.read(&NumTxsRange::new(&self.byte_len()));
+        let num_txs = NumTxs::new(&num_txs_unchecked, &self.byte_len());
+        TxIter::new(&num_txs)
+            .map(|i| self.tx_from_num_txs(ns_id, &i, &num_txs_unchecked))
             .collect()
+    }
+
+    /// Return a transaction from this namespace. Set its namespace ID to
+    /// `ns_id`.
+    pub fn export_tx(&self, ns_id: &NamespaceId, index: &TxIndex) -> Option<Transaction> {
+        let num_txs_unchecked = self.read(&NumTxsRange::new(&self.byte_len()));
+        if !NumTxs::new(&num_txs_unchecked, &self.byte_len()).in_bounds(index) {
+            return None; // error: tx index out of bounds
+        }
+        Some(self.tx_from_num_txs(ns_id, index, &num_txs_unchecked))
+    }
+
+    /// Private helper for [`NsPayload::export_all_txs`], [`NsPayload::export_tx`].
+    fn tx_from_num_txs(
+        &self,
+        ns_id: &NamespaceId,
+        index: &TxIndex,
+        num_txs_unchecked: &NumTxsUnchecked,
+    ) -> Transaction {
+        let tx_table_entries = self.read(&TxTableEntriesRange::new(index));
+        let tx_range = TxPayloadRange::new(num_txs_unchecked, &tx_table_entries, &self.byte_len());
+
+        // TODO don't copy the tx bytes into the return value
+        // https://github.com/EspressoSystems/hotshot-query-service/issues/267
+        let tx_payload = self.read(&tx_range).to_payload_bytes().to_vec();
+        Transaction::new(*ns_id, tx_payload)
     }
 }
 
