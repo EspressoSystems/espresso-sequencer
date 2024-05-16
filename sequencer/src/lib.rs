@@ -1,4 +1,5 @@
 pub mod api;
+pub mod auction;
 pub mod block;
 pub mod catchup;
 mod chain_config;
