@@ -5,9 +5,7 @@ use crate::{
             ns_table::{NsTable, NsTableBuilder},
             tx_proof::TxProof,
         },
-        newtypes::NsPayloadBuilder, // TODO hide newtypes, pub use NsPayloadBuilder
-        ns_payload::NsPayload,
-        ns_payload_range::NsPayloadRange,
+        namespace_payload::{NsPayload, NsPayloadBuilder, NsPayloadRange},
     },
     NamespaceId, Transaction,
 };

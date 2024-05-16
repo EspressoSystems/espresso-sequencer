@@ -1,6 +1,5 @@
+use crate::block2::uint_bytes::{bytes_serde_impl, usize_from_bytes, usize_to_bytes};
 use crate::Transaction;
-
-use super::uint_bytes::{bytes_serde_impl, usize_from_bytes, usize_to_bytes};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
 

@@ -3,7 +3,7 @@ use crate::block2::{
         ns_table::{NsIndex, NsIter},
         payload::Payload,
     },
-    newtypes::{NumTxs, NumTxsRange, TxIndex, TxIter},
+    namespace_payload::newtypes::{NumTxs, NumTxsRange, TxIndex, TxIter},
 };
 use serde::{Deserialize, Serialize};
 use std::iter::Peekable;

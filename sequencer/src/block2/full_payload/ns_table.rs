@@ -1,7 +1,7 @@
 use crate::{
     block2::{
         full_payload::payload::{self, PayloadByteLen},
-        ns_payload_range::NsPayloadRange,
+        namespace_payload::NsPayloadRange,
         uint_bytes::{
             bytes_serde_impl, u64_from_bytes, u64_to_bytes, usize_from_bytes, usize_to_bytes,
         },

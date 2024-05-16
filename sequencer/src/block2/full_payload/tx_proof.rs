@@ -5,7 +5,7 @@ use crate::{
             ns_table::NsTable,
             payload::{Payload, PayloadByteLen},
         },
-        newtypes::{
+        namespace_payload::newtypes::{
             NumTxs, NumTxsRange, NumTxsUnchecked, TxIndex, TxPayloadRange, TxTableEntries,
             TxTableEntriesRange,
         },

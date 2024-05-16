@@ -1,7 +1,7 @@
 use crate::{
     block2::{
         full_payload::{ns_table::NsTable, payload::Payload, payload::PayloadByteLen},
-        ns_payload::NsPayloadOwned,
+        namespace_payload::NsPayloadOwned,
     },
     NamespaceId, Transaction,
 };

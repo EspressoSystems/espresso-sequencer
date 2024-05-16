@@ -1,7 +1,5 @@
 mod full_payload;
-mod newtypes;
-mod ns_payload;
-mod ns_payload_range;
+mod namespace_payload;
 mod uint_bytes;
 
 // TODO this eliminates dead code warnings
