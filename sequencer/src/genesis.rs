@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::Context;
 use derive_more::{Display, From, Into};
-use sequencer_utils::{impl_serde_from_string_or_integer, serde::FromStringOrInteger};
+use sequencer_utils::{impl_serde_from_string_or_integer, ser::FromStringOrInteger};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::Path};
 use time::{format_description::well_known::Rfc3339 as TimestampFormat, OffsetDateTime};

@@ -984,6 +984,12 @@ impl FromStringOrInteger for FeeAmount {
     }
 
     fn from_string(s: String) -> anyhow::Result<Self> {
+        // For backwards compatibility, we have an ad hoc parser for WEI amounts represented as hex
+        // strings.
+        if let Some(s) = s.strip_prefix("0x") {
+            return Ok(Self(s.parse()?));
+        }
+
         // Strip an optional non-numeric suffix, which will be interpreted as a unit.
         let (base, unit) = s
             .split_once(char::is_whitespace)
