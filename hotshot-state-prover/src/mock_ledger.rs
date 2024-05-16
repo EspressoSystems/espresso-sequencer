@@ -17,7 +17,7 @@ use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_stake_table::vec_based::StakeTable;
 
 use crate::{
-    generate_state_update_proof, preprocess, service::compute_quorum_threshold, Proof, VerifyingKey,
+    generate_state_update_proof, preprocess, service::one_honest_threshold, Proof, VerifyingKey,
 };
 use hotshot_types::traits::stake_table::StakeTableScheme;
 use hotshot_types::{
@@ -89,7 +89,7 @@ impl MockLedger {
         }
         let st = stake_table_for_testing(&qc_keys, &state_keys);
         let threshold =
-            compute_quorum_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap());
+            one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap());
 
         // arbitrary commitment values as they don't affect logic being tested
         let block_comm_root = F::from(1234);
@@ -123,7 +123,7 @@ impl MockLedger {
         {
             self.epoch += 1;
             self.st.advance();
-            self.threshold = compute_quorum_threshold(
+            self.threshold = one_honest_threshold(
                 self.st
                     .total_stake(SnapshotVersion::LastEpochStart)
                     .unwrap(),

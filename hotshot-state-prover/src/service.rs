@@ -81,7 +81,7 @@ pub struct StateProverConfig {
 
 #[inline]
 /// A helper function to compute the quorum threshold given a total amount of stake.
-pub fn compute_quorum_threshold(total_stake: U256) -> U256 {
+pub fn one_honest_threshold(total_stake: U256) -> U256 {
     total_stake / 3 + 1
 }
 
@@ -162,7 +162,7 @@ pub async fn light_client_genesis(
     let (bls_comm, schnorr_comm, stake_comm) = st
         .commitment(SnapshotVersion::LastEpochStart)
         .expect("Commitment computation shouldn't fail.");
-    let threshold = compute_quorum_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
+    let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
 
     let pi = vec![
         u256_to_field(threshold),
@@ -303,7 +303,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
     tracing::debug!("Old state: {old_state:?}");
     tracing::debug!("New state: {:?}", bundle.state);
 
-    let threshold = compute_quorum_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
+    let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
     tracing::info!("Threshold before syncing state: {}", threshold);
     let entries = st
         .try_iter(SnapshotVersion::LastEpochStart)
