@@ -1,9 +1,6 @@
 use crate::block2::{
-    full_payload::{
-        ns_table::{NsIndex, NsIter},
-        payload::Payload,
-    },
-    namespace_payload::newtypes::{NumTxs, NumTxsRange, TxIndex, TxIter},
+    full_payload::{NsIndex, NsIter, Payload},
+    namespace_payload::newtypes::{TxIndex, TxIter},
 };
 use serde::{Deserialize, Serialize};
 use std::iter::Peekable;
@@ -73,11 +70,7 @@ impl<'a> Iterator for Iter<'a> {
                         .ns_table()
                         .ns_range(ns_index, &self.block.byte_len());
                     let ns_payload = self.block.read_ns_payload(&ns_payload_range);
-                    let byte_len = ns_payload.byte_len();
-                    let num_txs_range = NumTxsRange::new(&byte_len);
-                    let num_txs_unchecked = ns_payload.read(&num_txs_range);
-                    let num_txs = NumTxs::new(&num_txs_unchecked, &byte_len);
-                    TxIter::new(&num_txs)
+                    ns_payload.iter()
                 })
                 .next()
             {

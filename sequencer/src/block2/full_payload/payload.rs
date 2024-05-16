@@ -1,11 +1,7 @@
 use crate::{
     block2::{
-        full_payload::{
-            iter::{Index, Iter},
-            ns_table::{NsTable, NsTableBuilder},
-            tx_proof::TxProof,
-        },
-        namespace_payload::{NsPayload, NsPayloadBuilder, NsPayloadRange},
+        full_payload::ns_table::{NsTable, NsTableBuilder},
+        namespace_payload::{Index, Iter, NsPayload, NsPayloadBuilder, NsPayloadRange, TxProof},
     },
     NamespaceId, Transaction,
 };
@@ -34,6 +30,7 @@ impl Payload {
     pub fn as_byte_slice(&self) -> &[u8] {
         &self.payload
     }
+    /// TODO delete me?
     pub fn ns_table(&self) -> &NsTable {
         &self.ns_table
     }

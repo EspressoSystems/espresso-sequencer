@@ -3,7 +3,7 @@ mod namespace_payload;
 mod uint_bytes;
 
 // TODO this eliminates dead code warnings
-pub use full_payload::{NsProof, Payload, TxProof};
+pub use full_payload::{NsProof, Payload};
 
 #[cfg(test)]
 mod test;

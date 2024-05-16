@@ -36,28 +36,43 @@ impl NsPayload {
         <R::Output as FromNsPayloadBytes<'a>>::from_payload_bytes(&self.0[range.ns_payload_range()])
     }
 
+    /// Iterator over all transactions in this namespace.
+    pub fn iter(&self) -> TxIter {
+        self.iter_from_num_txs(&self.read_num_txs())
+    }
+
     /// Return all transactions in this namespace. The namespace ID for each
     /// returned [`Transaction`] is set to `ns_id`.
     pub fn export_all_txs(&self, ns_id: &NamespaceId) -> Vec<Transaction> {
-        // TODO helpers
-        let num_txs_unchecked = self.read(&NumTxsRange::new(&self.byte_len()));
-        let num_txs = NumTxs::new(&num_txs_unchecked, &self.byte_len());
-        TxIter::new(&num_txs)
-            .map(|i| self.tx_from_num_txs(ns_id, &i, &num_txs_unchecked))
+        let num_txs = self.read_num_txs();
+        self.iter_from_num_txs(&num_txs)
+            .map(|i| self.tx_from_num_txs(ns_id, &i, &num_txs))
             .collect()
     }
 
     /// Return a transaction from this namespace. Set its namespace ID to
     /// `ns_id`.
     pub fn export_tx(&self, ns_id: &NamespaceId, index: &TxIndex) -> Option<Transaction> {
-        let num_txs_unchecked = self.read(&NumTxsRange::new(&self.byte_len()));
-        if !NumTxs::new(&num_txs_unchecked, &self.byte_len()).in_bounds(index) {
+        let num_txs_unchecked = self.read_num_txs();
+        let num_txs = NumTxs::new(&num_txs_unchecked, &self.byte_len());
+        if !num_txs.in_bounds(index) {
             return None; // error: tx index out of bounds
         }
         Some(self.tx_from_num_txs(ns_id, index, &num_txs_unchecked))
     }
 
-    /// Private helper for [`NsPayload::export_all_txs`], [`NsPayload::export_tx`].
+    /// Private helper. (Could be pub if desired.)
+    fn read_num_txs(&self) -> NumTxsUnchecked {
+        self.read(&NumTxsRange::new(&self.byte_len()))
+    }
+
+    /// Private helper
+    fn iter_from_num_txs(&self, num_txs: &NumTxsUnchecked) -> TxIter {
+        let num_txs = NumTxs::new(num_txs, &self.byte_len());
+        TxIter::new(&num_txs)
+    }
+
+    /// Private helper
     fn tx_from_num_txs(
         &self,
         ns_id: &NamespaceId,

@@ -1,13 +1,14 @@
 use crate::{
     block2::{
         full_payload::{
-            iter::Index,
-            ns_table::NsTable,
-            payload::{Payload, PayloadByteLen},
+            NsTable, {Payload, PayloadByteLen},
         },
-        namespace_payload::newtypes::{
-            NumTxs, NumTxsRange, NumTxsUnchecked, TxIndex, TxPayloadRange, TxTableEntries,
-            TxTableEntriesRange,
+        namespace_payload::{
+            iter::Index,
+            newtypes::{
+                NumTxs, NumTxsRange, NumTxsUnchecked, TxIndex, TxPayloadRange, TxTableEntries,
+                TxTableEntriesRange,
+            },
         },
     },
     Transaction,
