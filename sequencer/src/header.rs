@@ -1,4 +1,7 @@
+use std::collections::HashSet;
+
 use crate::{
+    auction::{mock_full_network_txs, FullNetworkTx, Slot},
     block::NsTable,
     chain_config::ResolvableChainConfig,
     eth_signature_key::BuilderSignature,
@@ -95,6 +98,11 @@ pub struct Header {
     /// that `fee_info` is correct without relying on the signature. Thus, this signature is not
     /// included in the header commitment.
     pub builder_signature: Option<BuilderSignature>,
+    // pub full_network_txs: Vec<FullNetworkTx>,
+    // /// refund flag set at the beginning of new slots
+    // /// In extreme cases, more than one slot may need to be refunded,
+    // /// hence this data structure
+    // pub refund_bids: HashSet<Slot>,
 }
 
 impl Committable for Header {
@@ -133,6 +141,14 @@ impl Committable for Header {
 }
 
 impl Header {
+    // TODO move to BlockHeader
+    pub fn get_full_network_txs(&self) -> Vec<FullNetworkTx> {
+        // TODO unmock
+        mock_full_network_txs()
+    }
+    pub fn get_refund_bids(&self) -> HashSet<Slot> {
+        unimplemented!();
+    }
     #[allow(clippy::too_many_arguments)]
     fn from_info(
         payload_commitment: VidCommitment,

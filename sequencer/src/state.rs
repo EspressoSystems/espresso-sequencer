@@ -1,6 +1,7 @@
 use crate::{
     api::data_source::CatchupDataSource,
     block::{NsTableValidationError, PayloadByteLen},
+    auction::{ExecutionError, FullNetworkTx, MarketplaceResults, Slot},
     catchup::SqlStateCatchup,
     chain_config::BlockSize,
     chain_config::ResolvableChainConfig,
@@ -57,8 +58,8 @@ use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::time::Duration;
+use std::{collections::HashMap, sync::Arc};
 use std::{collections::HashSet, ops::Add, str::FromStr};
 use thiserror::Error;
 use vbs::version::Version;
@@ -82,6 +83,9 @@ pub struct ValidatedState {
     /// Fee Merkle Tree
     pub fee_merkle_tree: FeeMerkleTree,
     pub chain_config: ResolvableChainConfig,
+    // TODO
+    // /// Map of Marketplace Results.
+    // slot_map: HashMap<Slot, MarketplaceResults>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -774,6 +778,25 @@ impl ValidatedState {
         let mut validated_state =
             apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
 
+        // TODO we will need something similar to `charge_fee` but
+        // that charges `BidTx` to the account. We will also validate
+        // against bid phase time constraints.
+        //
+        // According to discussion we may receive multiple bids per
+        // header (up to configurable maximum), so this will likely be
+        // represented as `Vec<BidTx>` where `BidTx` holds account and
+        // amount.
+        //
+        // Note that different from `charge_fee` fee for the bid (sent
+        // to fee_recipient) which the bid itself will be held in an
+        // escrow account.
+        // charge_bids(&mut validated_state, bids_vec, fee_recipient, escrow_account);
+
+        // or possibly we will call `charge_fee` twice, once as here
+        // and the 2nd will have escrow_account in recipient place
+
+        // but where does the escrow account information come from?
+        // headers? state?
         charge_fee(
             &mut validated_state,
             &mut delta,
@@ -947,6 +970,17 @@ impl HotShotState<SeqTypes> for ValidatedState {
         if parent_leaf.view_number().u64() % 10 == 0 {
             tracing::info!("validated and applied new header");
         }
+
+        if let Err((err, kind)) = apply_full_transactions(
+            &validated_state,
+            instance.chain_config,
+            proposed_header.get_full_network_txs(),
+        ) {
+            tracing::error!("Invalid Tx Error: {err:?}, kind: {kind:?}");
+            // TODO review spec for conditions of BlockError
+            return Err(BlockError::InvalidBlockHeader);
+        }
+
         Ok((validated_state, delta))
     }
     /// Construct the state with the given block header.
@@ -978,6 +1012,19 @@ impl HotShotState<SeqTypes> for ValidatedState {
     fn genesis(instance: &Self::Instance) -> (Self, Self::Delta) {
         (instance.genesis_state.clone(), Delta::default())
     }
+}
+
+fn apply_full_transactions(
+    validated_state: &ValidatedState,
+    chain_config: ChainConfig,
+    full_network_txs: Vec<FullNetworkTx>,
+) -> Result<(), (ExecutionError, FullNetworkTx)> {
+    dbg!(&full_network_txs);
+    // proposed_header
+    //     .get_full_network_txs()
+    full_network_txs
+        .iter()
+        .try_for_each(|tx| tx.execute(validated_state))
 }
 
 // Required for TestableState
@@ -1474,6 +1521,8 @@ impl FeeAccountProof {
 
 #[cfg(test)]
 mod test {
+    use crate::auction::mock_full_network_txs;
+
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use hotshot_types::vid::vid_scheme;
@@ -1637,6 +1686,14 @@ mod test {
             FeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
             state.charge_fee(fee_info, dst).unwrap_err()
         );
+    }
+
+    #[test]
+    fn test_apply_full_tx() {
+        let state = ValidatedState::default();
+        let txs = mock_full_network_txs();
+        let (err, bid) = apply_full_transactions(&state, ChainConfig::default(), txs).unwrap_err();
+        assert_eq!(ExecutionError::InvalidSignature, err);
     }
 
     #[test]
