@@ -39,7 +39,7 @@ impl Payload {
         PayloadByteLen(self.payload.len())
     }
     pub fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
-        NsPayload::from_bytes_slice(&self.payload[range.as_block_payload_range()])
+        NsPayload::from_bytes_slice(&self.payload[range.as_block_range()])
     }
 
     /// Like [`QueryablePayload::transaction_with_proof`] except without the
@@ -47,9 +47,7 @@ impl Payload {
     pub fn transaction(&self, index: &Index) -> Option<Transaction> {
         // TODO helper methods please!
         // TODO check index.ns(), index.tx() in bounds
-        let ns_payload_range = self
-            .ns_table()
-            .ns_payload_range(index.ns(), &self.byte_len());
+        let ns_payload_range = self.ns_table().ns_range(index.ns(), &self.byte_len());
         let ns_payload = self.read_ns_payload(&ns_payload_range);
         let num_txs = ns_payload.read(&NumTxsRange::new(&ns_payload_range.byte_len()));
         let tx_table_entries = ns_payload.read(&TxTableEntriesRange::new(index.tx()));

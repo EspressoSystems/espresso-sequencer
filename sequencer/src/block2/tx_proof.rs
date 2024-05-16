@@ -52,33 +52,37 @@ impl TxProof {
     ) -> Option<(Transaction, Self)> {
         let payload_byte_len = payload.byte_len();
         if !payload_byte_len.is_consistent(common) {
+            tracing::info!("payload byte len inconsistent with vid_common");
             return None; // error: common inconsistent with self
         }
         if !payload.ns_table().in_bounds(index.ns()) {
+            tracing::info!("ns_index {:?} out of bounds", index.ns());
             return None; // error: ns index out of bounds
         }
         // check tx index below
 
-        let ns_payload_range = payload
-            .ns_table()
-            .ns_payload_range(index.ns(), &payload_byte_len);
-        let ns_payload = payload.read_ns_payload(&ns_payload_range);
+        let ns_range = payload.ns_table().ns_range(index.ns(), &payload_byte_len);
+        let ns_byte_len = ns_range.byte_len();
+        let ns_payload = payload.read_ns_payload(&ns_range);
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
 
         // Read the tx table len from this namespace's tx table and compute a
         // proof of correctness.
-        let num_txs_range = NumTxsRange::new(&ns_payload_range.byte_len());
+        let num_txs_range = NumTxsRange::new(&ns_byte_len);
         let payload_num_txs = ns_payload.read(&num_txs_range);
 
-        // TODO desperate need of helpers!
-        if !NumTxs::new(&payload_num_txs, &ns_payload_range.byte_len()).in_bounds(index.tx()) {
+        // Check tx index.
+        //
+        // TODO the next line of code (and other code) could be easier to read
+        // if we make a helpers that repeat computation we've already done.
+        if !NumTxs::new(&payload_num_txs, &ns_byte_len).in_bounds(index.tx()) {
             return None; // error: tx index out of bounds
         }
 
         let payload_proof_num_txs = vid
             .payload_proof(
                 payload.as_byte_slice(),
-                ns_payload_range.block_payload_range(&num_txs_range),
+                ns_range.block_range(&num_txs_range),
             )
             .ok()?;
 
@@ -89,19 +93,16 @@ impl TxProof {
         let payload_proof_tx_table_entries = {
             vid.payload_proof(
                 payload.as_byte_slice(),
-                ns_payload_range.block_payload_range(&tx_table_entries_range),
+                ns_range.block_range(&tx_table_entries_range),
             )
             .ok()?
         };
 
         // Read the tx payload and compute a proof of correctness.
-        let tx_payload_range = TxPayloadRange::new(
-            &payload_num_txs,
-            &payload_tx_table_entries,
-            &ns_payload_range.byte_len(),
-        );
+        let tx_payload_range =
+            TxPayloadRange::new(&payload_num_txs, &payload_tx_table_entries, &ns_byte_len);
         let payload_proof_tx = {
-            let range = ns_payload_range.block_payload_range(&tx_payload_range);
+            let range = ns_range.block_range(&tx_payload_range);
 
             tracing::info!(
                 "prove: (ns,tx) ({:?},{:?}), tx_payload_range {:?}, content {:?}",
@@ -118,7 +119,6 @@ impl TxProof {
             }
         };
 
-        // TODO a helper would help here
         let tx = {
             let ns_id = payload.ns_table().read_ns_id(index.ns());
             let tx_payload = ns_payload
@@ -155,13 +155,10 @@ impl TxProof {
             tracing::info!("ns id {} does not exist", tx.namespace());
             return None; // error: ns id does not exist
         };
-        let ns_payload_range =
-            ns_table.ns_payload_range(&ns_index, &PayloadByteLen::from_vid_common(common));
+        let ns_range = ns_table.ns_range(&ns_index, &PayloadByteLen::from_vid_common(common));
+        let ns_byte_len = ns_range.byte_len();
 
-        // TODO desperate need of helpers!
-        if !NumTxs::new(&self.payload_num_txs, &ns_payload_range.byte_len())
-            .in_bounds(&self.tx_index)
-        {
+        if !NumTxs::new(&self.payload_num_txs, &ns_byte_len).in_bounds(&self.tx_index) {
             tracing::info!("tx index {:?} out of bounds", self.tx_index);
             return None; // error: tx index out of bounds
         }
@@ -170,8 +167,7 @@ impl TxProof {
 
         // Verify proof for tx table len
         {
-            let range = ns_payload_range
-                .block_payload_range(&NumTxsRange::new(&ns_payload_range.byte_len()));
+            let range = ns_range.block_range(&NumTxsRange::new(&ns_byte_len));
             if vid
                 .payload_verify(
                     Statement {
@@ -191,8 +187,7 @@ impl TxProof {
 
         // Verify proof for tx table entries
         {
-            let range =
-                ns_payload_range.block_payload_range(&TxTableEntriesRange::new(&self.tx_index));
+            let range = ns_range.block_range(&TxTableEntriesRange::new(&self.tx_index));
             if vid
                 .payload_verify(
                     Statement {
@@ -212,10 +207,10 @@ impl TxProof {
 
         // Verify proof for tx payload
         {
-            let range = ns_payload_range.block_payload_range(&TxPayloadRange::new(
+            let range = ns_range.block_range(&TxPayloadRange::new(
                 &self.payload_num_txs,
                 &self.payload_tx_table_entries,
-                &ns_payload_range.byte_len(),
+                &ns_byte_len,
             ));
 
             match (&self.payload_proof_tx, range.is_empty()) {

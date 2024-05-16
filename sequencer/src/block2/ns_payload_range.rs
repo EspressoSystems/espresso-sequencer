@@ -13,7 +13,7 @@ impl NsPayloadRange {
 
     /// Access the underlying index range for this namespace inside a block
     /// payload.
-    pub fn as_block_payload_range(&self) -> Range<usize> {
+    pub fn as_block_range(&self) -> Range<usize> {
         self.0.clone()
     }
 
@@ -24,7 +24,7 @@ impl NsPayloadRange {
 
     /// Convert a [`NsPayloadBytesRange`] into a range that's relative to the
     /// entire block payload.
-    pub fn block_payload_range<'a, R>(&self, range: &R) -> Range<usize>
+    pub fn block_range<'a, R>(&self, range: &R) -> Range<usize>
     where
         R: NsPayloadBytesRange<'a>,
     {

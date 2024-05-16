@@ -68,7 +68,7 @@ impl<'a> Iterator for Iter<'a> {
                     let ns_payload_range = self
                         .block
                         .ns_table()
-                        .ns_payload_range(ns_index, &self.block.byte_len());
+                        .ns_range(ns_index, &self.block.byte_len());
                     let ns_payload = self.block.read_ns_payload(&ns_payload_range);
                     let byte_len = ns_payload.byte_len();
                     let num_txs_range = NumTxsRange::new(&byte_len);

@@ -50,9 +50,7 @@ impl NsProof {
             });
         };
 
-        let ns_payload_range = payload
-            .ns_table()
-            .ns_payload_range(&ns_index, &payload_byte_len);
+        let ns_payload_range = payload.ns_table().ns_range(&ns_index, &payload_byte_len);
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
 
         Some(NsProof {
@@ -60,10 +58,7 @@ impl NsProof {
             existence: Some(NsProofExistence {
                 ns_payload: payload.read_ns_payload(&ns_payload_range).to_owned(),
                 ns_proof: vid
-                    .payload_proof(
-                        payload.as_byte_slice(),
-                        ns_payload_range.as_block_payload_range(),
-                    )
+                    .payload_proof(payload.as_byte_slice(), ns_payload_range.as_block_range())
                     .ok()?,
             }),
         })
@@ -95,8 +90,8 @@ impl NsProof {
             (Some(ns_index), Some(pf)) => {
                 let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
                 let range = ns_table
-                    .ns_payload_range(&ns_index, &PayloadByteLen::from_vid_common(common))
-                    .as_block_payload_range();
+                    .ns_range(&ns_index, &PayloadByteLen::from_vid_common(common))
+                    .as_block_range();
                 vid.payload_verify(
                     Statement {
                         payload_subslice: pf.ns_payload.as_bytes_slice(),
