@@ -12,7 +12,11 @@ use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::DepositFilter;
 use core::fmt::Debug;
 use derive_more::{Add, Display, From, Into, Mul, Sub};
-use ethers::{abi::Address, types::U256};
+use ethers::{
+    abi::Address,
+    types::U256,
+    utils::{parse_units, ParseUnits},
+};
 use futures::future::Future;
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
@@ -980,32 +984,14 @@ impl FromStringOrInteger for FeeAmount {
     }
 
     fn from_string(s: String) -> anyhow::Result<Self> {
-        // Interpret the integer as hex if the string starts with 0x.
-        let (s, hex) = match s.strip_prefix("0x") {
-            Some(s) => (s, true),
-            None => (s.as_str(), false),
-        };
         // Strip an optional non-numeric suffix, which will be interpreted as a unit.
-        let (s, multiplier) = match s.split_once(char::is_whitespace) {
-            Some((s, unit)) => {
-                let multiplier = match unit.to_lowercase().as_str() {
-                    "wei" => 1u64,
-                    "gwei" => 1_000_000_000,
-                    "eth" | "ether" => 1_000_000_000_000_000_000,
-                    unit => bail!("unrecognized unit {unit}"),
-                };
-                (s, multiplier)
-            }
-            None => (s, 1),
-        };
-        // Parse the base amount as an integer.
-        let base = if hex {
-            s.parse()?
-        } else {
-            U256::from_dec_str(s)?
-        };
-
-        Ok(Self(base * multiplier))
+        let (base, unit) = s
+            .split_once(char::is_whitespace)
+            .unwrap_or((s.as_str(), "wei"));
+        match parse_units(base, unit)? {
+            ParseUnits::U256(n) => Ok(Self(n)),
+            ParseUnits::I256(_) => bail!("amount cannot be negative"),
+        }
     }
 
     fn to_binary(&self) -> anyhow::Result<Self::Binary> {
