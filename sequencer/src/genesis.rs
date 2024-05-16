@@ -36,7 +36,7 @@ pub enum L1Finalized {
 }
 
 #[derive(Hash, Copy, Clone, Debug, Display, PartialEq, Eq, From, Into)]
-#[display(fmt = "{}", _0.format(&TimestampFormat))]
+#[display(fmt = "{}", "_0.format(&TimestampFormat).unwrap()")]
 pub struct Timestamp(OffsetDateTime);
 
 impl_serde_from_string_or_integer!(Timestamp);
@@ -101,6 +101,12 @@ pub struct Genesis {
 }
 
 impl Genesis {
+    pub fn to_file(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
+        let toml = toml::to_string_pretty(self)?;
+        std::fs::write(path, toml.as_bytes())?;
+        Ok(())
+    }
+
     pub fn from_file(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let path = path.as_ref();
         let bytes = std::fs::read(path).context(format!("genesis file {}", path.display()))?;

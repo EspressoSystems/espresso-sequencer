@@ -168,6 +168,7 @@ mod test {
     use portpicker::pick_unused_port;
     use sequencer::{
         api::options::{Http, Status},
+        genesis::StakeTableConfig,
         persistence::fs,
         PubKey,
     };
@@ -185,6 +186,17 @@ mod test {
 
         let port = pick_unused_port().unwrap();
         let tmp = TempDir::new().unwrap();
+
+        let genesis_file = tmp.path().join("genesis.toml");
+        let genesis = Genesis {
+            chain_config: Default::default(),
+            stake_table: StakeTableConfig { capacity: 10 },
+            accounts: Default::default(),
+            l1_finalized: Default::default(),
+            header: Default::default(),
+        };
+        genesis.to_file(&genesis_file).unwrap();
+
         let modules = Modules {
             http: Some(Http { port }),
             status: Some(Status),
@@ -196,6 +208,8 @@ mod test {
             &priv_key.to_string(),
             "--private-state-key",
             &state_key.sign_key_ref().to_string(),
+            "--genesis-file",
+            &genesis_file.display().to_string(),
         ]);
 
         // Start the sequencer in a background task. This process will not complete, because it will

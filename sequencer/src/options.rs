@@ -88,7 +88,12 @@ pub struct Options {
     pub state_relay_server_url: Url,
 
     /// Path to TOML file containing genesis state.
-    #[clap(long, name = "GENESIS_FILE", env = "ESPRESSO_SEQUENCER_GENESIS_FILE")]
+    #[clap(
+        long,
+        name = "GENESIS_FILE",
+        env = "ESPRESSO_SEQUENCER_GENESIS_FILE",
+        default_value = "genesis.toml"
+    )]
     pub genesis_file: PathBuf,
 
     /// Path to file containing private keys.
