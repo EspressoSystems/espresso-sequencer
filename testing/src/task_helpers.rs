@@ -126,15 +126,15 @@ pub fn build_cert<
         SimpleVote::<TYPES, DATAType>::create_signed_vote(data, view, public_key, private_key)
             .expect("Failed to sign data!");
     let cert = CERT::create_signed_certificate(
-        vote.get_data_commitment(),
-        vote.get_data().clone(),
+        vote.date_commitment(),
+        vote.date().clone(),
         real_qc_sig,
-        vote.get_view_number(),
+        vote.view_number(),
     );
     cert
 }
 
-pub fn get_vid_share<TYPES: NodeType>(
+pub fn vid_share<TYPES: NodeType>(
     shares: &[Proposal<TYPES, VidDisperseShare<TYPES>>],
     pub_key: TYPES::SignatureKey,
 ) -> Proposal<TYPES, VidDisperseShare<TYPES>> {
@@ -161,9 +161,9 @@ pub fn build_assembled_sig<
     membership: &TYPES::Membership,
     view: TYPES::Time,
 ) -> <TYPES::SignatureKey as SignatureKey>::QCType {
-    let stake_table = membership.get_committee_qc_stake_table();
+    let stake_table = membership.committee_qc_stake_table();
     let real_qc_pp: <TYPES::SignatureKey as SignatureKey>::QCParams =
-        <TYPES::SignatureKey as SignatureKey>::get_public_parameter(
+        <TYPES::SignatureKey as SignatureKey>::public_parameter(
             stake_table.clone(),
             U256::from(CERT::threshold(membership)),
         );
@@ -182,7 +182,7 @@ pub fn build_assembled_sig<
         )
         .expect("Failed to sign data!");
         let original_signature: <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType =
-            vote.get_signature();
+            vote.signature();
         sig_lists.push(original_signature);
     }
 
@@ -212,7 +212,7 @@ pub fn vid_scheme_from_view_number<TYPES: NodeType>(
     membership: &TYPES::Membership,
     view_number: TYPES::Time,
 ) -> VidSchemeType {
-    let num_storage_nodes = membership.get_staked_committee(view_number).len();
+    let num_storage_nodes = membership.staked_committee(view_number).len();
     vid_scheme(num_storage_nodes)
 }
 
@@ -301,7 +301,7 @@ pub async fn build_vote(
             leaf_commit: leaf.commit(),
         },
         view,
-        handle.public_key(),
+        &handle.public_key(),
         handle.private_key(),
     )
     .expect("Failed to create quorum vote");

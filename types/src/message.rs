@@ -54,8 +54,8 @@ impl<TYPES: NodeType> NetworkMsg for Message<TYPES> {}
 
 impl<TYPES: NodeType> ViewMessage<TYPES> for Message<TYPES> {
     /// get the view number out of a message
-    fn get_view_number(&self) -> TYPES::Time {
-        self.kind.get_view_number()
+    fn view_number(&self) -> TYPES::Time {
+        self.kind.view_number()
     }
     fn purpose(&self) -> MessagePurpose {
         self.kind.purpose()
@@ -123,7 +123,7 @@ impl<TYPES: NodeType> From<DataMessage<TYPES>> for MessageKind<TYPES> {
 }
 
 impl<TYPES: NodeType> ViewMessage<TYPES> for MessageKind<TYPES> {
-    fn get_view_number(&self) -> TYPES::Time {
+    fn view_number(&self) -> TYPES::Time {
         match &self {
             MessageKind::Consensus(message) => message.view_number(),
             MessageKind::Data(DataMessage::SubmitTransaction(_, v)) => *v,
@@ -221,32 +221,26 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                     GeneralConsensusMessage::Proposal(p) => {
                         // view of leader in the leaf when proposal
                         // this should match replica upon receipt
-                        p.data.get_view_number()
+                        p.data.view_number()
                     }
-                    GeneralConsensusMessage::Vote(vote_message) => vote_message.get_view_number(),
-                    GeneralConsensusMessage::TimeoutVote(message) => message.get_view_number(),
+                    GeneralConsensusMessage::Vote(vote_message) => vote_message.view_number(),
+                    GeneralConsensusMessage::TimeoutVote(message) => message.view_number(),
                     GeneralConsensusMessage::ViewSyncPreCommitVote(message) => {
-                        message.get_view_number()
+                        message.view_number()
                     }
-                    GeneralConsensusMessage::ViewSyncCommitVote(message) => {
-                        message.get_view_number()
-                    }
-                    GeneralConsensusMessage::ViewSyncFinalizeVote(message) => {
-                        message.get_view_number()
-                    }
+                    GeneralConsensusMessage::ViewSyncCommitVote(message) => message.view_number(),
+                    GeneralConsensusMessage::ViewSyncFinalizeVote(message) => message.view_number(),
                     GeneralConsensusMessage::ViewSyncPreCommitCertificate(message) => {
-                        message.get_view_number()
+                        message.view_number()
                     }
                     GeneralConsensusMessage::ViewSyncCommitCertificate(message) => {
-                        message.get_view_number()
+                        message.view_number()
                     }
                     GeneralConsensusMessage::ViewSyncFinalizeCertificate(message) => {
-                        message.get_view_number()
+                        message.view_number()
                     }
-                    GeneralConsensusMessage::UpgradeProposal(message) => {
-                        message.data.get_view_number()
-                    }
-                    GeneralConsensusMessage::UpgradeVote(message) => message.get_view_number(),
+                    GeneralConsensusMessage::UpgradeProposal(message) => message.data.view_number(),
+                    GeneralConsensusMessage::UpgradeVote(message) => message.view_number(),
                 }
             }
             SequencingMessage::Da(da_message) => {
@@ -254,11 +248,11 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
                     DaConsensusMessage::DaProposal(p) => {
                         // view of leader in the leaf when proposal
                         // this should match replica upon receipt
-                        p.data.get_view_number()
+                        p.data.view_number()
                     }
-                    DaConsensusMessage::DaVote(vote_message) => vote_message.get_view_number(),
+                    DaConsensusMessage::DaVote(vote_message) => vote_message.view_number(),
                     DaConsensusMessage::DaCertificate(cert) => cert.view_number,
-                    DaConsensusMessage::VidDisperseMsg(disperse) => disperse.data.get_view_number(),
+                    DaConsensusMessage::VidDisperseMsg(disperse) => disperse.data.view_number(),
                 }
             }
         }
@@ -335,8 +329,8 @@ where
     /// # Errors
     /// Returns an error when the proposal signature is invalid.
     pub fn validate_signature(&self, quorum_membership: &TYPES::Membership) -> Result<()> {
-        let view_number = self.data.get_view_number();
-        let view_leader_key = quorum_membership.get_leader(view_number);
+        let view_number = self.data.view_number();
+        let view_leader_key = quorum_membership.leader(view_number);
         let proposed_leaf = Leaf::from_quorum_proposal(&self.data);
 
         ensure!(

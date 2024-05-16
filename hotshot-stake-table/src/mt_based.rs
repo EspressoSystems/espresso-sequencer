@@ -66,7 +66,7 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
     }
 
     fn commitment(&self, version: SnapshotVersion) -> Result<Self::Commitment, StakeTableError> {
-        let root = Self::get_root(self, &version)?;
+        let root = Self::root(self, &version)?;
         Ok(MerkleCommitment::new(
             root.commitment(),
             self.height,
@@ -75,12 +75,12 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
     }
 
     fn total_stake(&self, version: SnapshotVersion) -> Result<Self::Amount, StakeTableError> {
-        let root = Self::get_root(self, &version)?;
+        let root = Self::root(self, &version)?;
         Ok(root.total_stakes())
     }
 
     fn len(&self, version: SnapshotVersion) -> Result<usize, StakeTableError> {
-        let root = Self::get_root(self, &version)?;
+        let root = Self::root(self, &version)?;
         Ok(root.num_keys())
     }
 
@@ -89,7 +89,7 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
     }
 
     fn lookup(&self, version: SnapshotVersion, key: &K) -> Result<Self::Amount, StakeTableError> {
-        let root = Self::get_root(self, &version)?;
+        let root = Self::root(self, &version)?;
         match self.mapping.get(key) {
             Some(index) => {
                 let branches = to_merkle_path(*index, self.height);
@@ -104,7 +104,7 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
         version: SnapshotVersion,
         key: &Self::Key,
     ) -> Result<(Self::Amount, Self::LookupProof), StakeTableError> {
-        let root = Self::get_root(self, &version)?;
+        let root = Self::root(self, &version)?;
 
         let proof = match self.mapping.get(key) {
             Some(index) => {
@@ -113,7 +113,7 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
             }
             None => Err(StakeTableError::KeyNotFound),
         }?;
-        let amount = *proof.get_value().ok_or(StakeTableError::KeyNotFound)?;
+        let amount = *proof.value().ok_or(StakeTableError::KeyNotFound)?;
         Ok((amount, proof))
     }
 
@@ -159,11 +159,11 @@ impl<K: Key> StakeTableScheme for StakeTable<K> {
         let r = U512::from_big_endian(&bytes);
         let m = U512::from(self.last_epoch_start.total_stakes());
         let pos: U256 = (r % m).try_into().unwrap(); // won't fail
-        self.last_epoch_start.get_key_by_stake(pos)
+        self.last_epoch_start.key_by_stake(pos)
     }
 
     fn try_iter(&self, version: SnapshotVersion) -> Result<Self::IntoIter, StakeTableError> {
-        let root = Self::get_root(self, &version)?;
+        let root = Self::root(self, &version)?;
         Ok(internal::IntoIter::new(root))
     }
 }
@@ -182,7 +182,7 @@ impl<K: Key> StakeTable<K> {
     }
 
     /// returns the root of stake table at `version`
-    fn get_root(
+    fn root(
         &self,
         version: &SnapshotVersion,
     ) -> Result<Arc<PersistentMerkleNode<K>>, StakeTableError> {

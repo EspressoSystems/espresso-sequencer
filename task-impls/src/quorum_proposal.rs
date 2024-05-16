@@ -435,7 +435,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
         event: Arc<HotShotEvent<TYPES>>,
     ) {
         // Don't even bother making the task if we are not entitled to propose anyay.
-        if self.quorum_membership.get_leader(view_number) != self.public_key {
+        if self.quorum_membership.leader(view_number) != self.public_key {
             return;
         }
 
@@ -573,7 +573,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                 if !certificate.is_valid_cert(self.quorum_membership.as_ref()) {
                     warn!(
                         "View Sync Finalize certificate {:?} was invalid",
-                        certificate.get_data()
+                        certificate.date()
                     );
                     return;
                 }

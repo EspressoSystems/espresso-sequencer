@@ -30,7 +30,7 @@ async fn test_vid_task() {
 
     // Build the API for node 2.
     let handle = build_system_handle(2).await.0;
-    let pub_key = *handle.public_key();
+    let pub_key = handle.public_key();
 
     // quorum membership for VID share distribution
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
@@ -124,12 +124,12 @@ async fn test_vid_task() {
 
     let vid_state = VIDTaskState {
         api: handle.clone(),
-        consensus: handle.hotshot.get_consensus(),
+        consensus: handle.hotshot.consensus(),
         cur_view: ViewNumber::new(0),
         vote_collector: None,
         network: handle.hotshot.networks.quorum_network.clone(),
         membership: handle.hotshot.memberships.vid_membership.clone().into(),
-        public_key: *handle.public_key(),
+        public_key: handle.public_key(),
         private_key: handle.private_key().clone(),
         id: handle.hotshot.id,
     };

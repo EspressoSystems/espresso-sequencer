@@ -84,10 +84,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 // If we have an upgrade target, we validate that the proposal is relevant for the current view.
                 info!(
                     "Upgrade proposal received for view: {:?}",
-                    proposal.data.get_view_number()
+                    proposal.data.view_number()
                 );
 
-                let view = proposal.data.get_view_number();
+                let view = proposal.data.view_number();
 
                 // At this point, we could choose to validate
                 // that the proposal was issued by the correct leader
@@ -113,7 +113,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 }
 
                 // We then validate that the proposal was issued by the leader for the view.
-                let view_leader_key = self.quorum_membership.get_leader(view);
+                let view_leader_key = self.quorum_membership.leader(view);
                 if &view_leader_key != sender {
                     error!("Upgrade proposal doesn't have expected leader key for view {} \n Upgrade proposal is: {:?}", *view, proposal.data.clone());
                     return None;
@@ -143,20 +143,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     error!("Failed to sign UpgradeVote!");
                     return None;
                 };
-                debug!("Sending upgrade vote {:?}", vote.get_view_number());
+                debug!("Sending upgrade vote {:?}", vote.view_number());
                 broadcast_event(Arc::new(HotShotEvent::UpgradeVoteSend(vote)), &tx).await;
             }
             HotShotEvent::UpgradeVoteRecv(ref vote) => {
-                debug!("Upgrade vote recv, Main Task {:?}", vote.get_view_number());
+                debug!("Upgrade vote recv, Main Task {:?}", vote.view_number());
 
                 // Check if we are the leader.
                 {
-                    let view = vote.get_view_number();
-                    if self.quorum_membership.get_leader(view) != self.public_key {
+                    let view = vote.view_number();
+                    if self.quorum_membership.leader(view) != self.public_key {
                         error!(
                             "We are not the leader for view {} are we leader for next view? {}",
                             *view,
-                            self.quorum_membership.get_leader(view + 1) == self.public_key
+                            self.quorum_membership.leader(view + 1) == self.public_key
                         );
                         return None;
                     }
@@ -164,13 +164,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
                 let mut collector = self.vote_collector.write().await;
 
-                if collector.is_none() || vote.get_view_number() > collector.as_ref().unwrap().view
-                {
-                    debug!("Starting vote handle for view {:?}", vote.get_view_number());
+                if collector.is_none() || vote.view_number() > collector.as_ref().unwrap().view {
+                    debug!("Starting vote handle for view {:?}", vote.view_number());
                     let info = AccumulatorInfo {
                         public_key: self.public_key.clone(),
                         membership: Arc::clone(&self.quorum_membership),
-                        view: vote.get_view_number(),
+                        view: vote.view_number(),
                         id: self.id,
                     };
                     *collector = create_vote_accumulator::<
@@ -218,8 +217,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     };
                     use vbs::version::Version;
 
-                    if *view == 5 && self.quorum_membership.get_leader(view + 5) == self.public_key
-                    {
+                    if *view == 5 && self.quorum_membership.leader(view + 5) == self.public_key {
                         let upgrade_proposal_data = UpgradeProposalData {
                             old_version: Version { major: 0, minor: 1 },
                             new_version: Version { major: 1, minor: 0 },

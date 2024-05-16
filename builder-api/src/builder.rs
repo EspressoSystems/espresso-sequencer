@@ -143,7 +143,7 @@ where
                 let signature = try_extract_param(&req, "signature")?;
                 let sender = try_extract_param(&req, "sender")?;
                 state
-                    .get_available_blocks(&hash, view_number, sender, &signature)
+                    .available_blocks(&hash, view_number, sender, &signature)
                     .await
                     .context(BlockAvailableSnafu {
                         resource: hash.to_string(),
@@ -182,13 +182,7 @@ where
             .boxed()
         })?
         .get("builder_address", |_req, state| {
-            async move {
-                state
-                    .get_builder_address()
-                    .await
-                    .context(BuilderAddressSnafu)
-            }
-            .boxed()
+            async move { state.builder_address().await.context(BuilderAddressSnafu) }.boxed()
         })?;
     Ok(api)
 }

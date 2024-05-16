@@ -85,7 +85,7 @@ fn fake_message_eq(message_1: Message<Test>, message_2: Message<Test>) {
 }
 
 #[instrument]
-fn get_pubkey() -> BLSPubKey {
+fn pubkey() -> BLSPubKey {
     // random 32 bytes
     let mut bytes = [0; 32];
     rand::thread_rng().fill_bytes(&mut bytes);
@@ -121,7 +121,7 @@ async fn memory_network_spawn_single() {
     setup_logging();
     let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
-    let _pub_key = get_pubkey();
+    let _pub_key = pubkey();
 }
 
 // // Spawning a two MemoryNetworks and connecting them should produce no errors
@@ -132,8 +132,8 @@ async fn memory_network_spawn_double() {
     setup_logging();
     let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
-    let _pub_key_1 = get_pubkey();
-    let _pub_key_2 = get_pubkey();
+    let _pub_key_1 = pubkey();
+    let _pub_key_2 = pubkey();
 }
 
 // Check to make sure direct queue works
@@ -148,7 +148,7 @@ async fn memory_network_direct_queue() {
     let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
 
-    let pub_key_1 = get_pubkey();
+    let pub_key_1 = pubkey();
     let network1 = MemoryNetwork::new(
         pub_key_1,
         NetworkingMetricsValue::default(),
@@ -156,7 +156,7 @@ async fn memory_network_direct_queue() {
         Option::None,
     );
 
-    let pub_key_2 = get_pubkey();
+    let pub_key_2 = pubkey();
     let network2 = MemoryNetwork::new(
         pub_key_2,
         NetworkingMetricsValue::default(),
@@ -210,14 +210,14 @@ async fn memory_network_broadcast_queue() {
     // Make and connect the networking instances
     let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
-    let pub_key_1 = get_pubkey();
+    let pub_key_1 = pubkey();
     let network1 = MemoryNetwork::new(
         pub_key_1,
         NetworkingMetricsValue::default(),
         group.clone(),
         Option::None,
     );
-    let pub_key_2 = get_pubkey();
+    let pub_key_2 = pubkey();
     let network2 = MemoryNetwork::new(
         pub_key_2,
         NetworkingMetricsValue::default(),
@@ -279,14 +279,14 @@ async fn memory_network_test_in_flight_message_count() {
 
     let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
-    let pub_key_1 = get_pubkey();
+    let pub_key_1 = pubkey();
     let network1 = MemoryNetwork::new(
         pub_key_1,
         NetworkingMetricsValue::default(),
         group.clone(),
         Option::None,
     );
-    let pub_key_2 = get_pubkey();
+    let pub_key_2 = pubkey();
     let network2 = MemoryNetwork::new(
         pub_key_2,
         NetworkingMetricsValue::default(),

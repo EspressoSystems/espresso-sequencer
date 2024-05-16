@@ -14,7 +14,7 @@ use crate::{
 #[async_trait]
 pub trait BuilderDataSource<TYPES: NodeType> {
     /// To get the list of available blocks
-    async fn get_available_blocks(
+    async fn available_blocks(
         &self,
         for_parent: &VidCommitment,
         view_number: u64,
@@ -41,7 +41,7 @@ pub trait BuilderDataSource<TYPES: NodeType> {
     ) -> Result<AvailableBlockHeaderInput<TYPES>, BuildError>;
 
     /// To get the builder address
-    async fn get_builder_address(&self) -> Result<TYPES::BuilderSignatureKey, BuildError>;
+    async fn builder_address(&self) -> Result<TYPES::BuilderSignatureKey, BuildError>;
 }
 
 #[async_trait]

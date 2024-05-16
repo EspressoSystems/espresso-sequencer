@@ -67,7 +67,7 @@ pub async fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     handle: &SystemContextHandle<TYPES, I>,
 ) {
     let state = NetworkResponseState::<TYPES>::new(
-        handle.hotshot.get_consensus(),
+        handle.hotshot.consensus(),
         rx,
         handle.hotshot.memberships.quorum_membership.clone().into(),
         handle.public_key().clone(),

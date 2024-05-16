@@ -320,8 +320,7 @@ impl OrchestratorClient {
             .expect("failed to create multiaddress")
         });
 
-        let pubkey: Vec<u8> =
-            PeerConfig::<K>::to_bytes(&validator_config.get_public_config()).clone();
+        let pubkey: Vec<u8> = PeerConfig::<K>::to_bytes(&validator_config.public_config()).clone();
         let da_requested: bool = validator_config.is_da;
 
         // Serialize our (possible) libp2p-specific data

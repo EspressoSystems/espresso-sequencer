@@ -355,7 +355,7 @@ impl NetworkNode {
         let record = Record::new(query.key.clone(), query.value.clone());
         match self.swarm.behaviour_mut().dht.put_record(
             record,
-            libp2p::kad::Quorum::N(self.dht_handler.get_replication_factor()),
+            libp2p::kad::Quorum::N(self.dht_handler.replication_factor()),
         ) {
             Err(e) => {
                 // failed try again later
@@ -433,7 +433,7 @@ impl NetworkNode {
                         notify,
                         retry_count,
                     } => {
-                        self.dht_handler.get_record(
+                        self.dht_handler.record(
                             key,
                             notify,
                             NonZeroUsize::new(NUM_REPLICATED_TO_TRUST).unwrap(),

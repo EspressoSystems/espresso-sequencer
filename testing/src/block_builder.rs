@@ -209,7 +209,7 @@ impl<TYPES: NodeType> ReadState for RandomBuilderSource<TYPES> {
 
 #[async_trait]
 impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
-    async fn get_available_blocks(
+    async fn available_blocks(
         &self,
         _for_parent: &VidCommitment,
         _view_number: u64,
@@ -260,7 +260,7 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for RandomBuilderSource<TYPES> {
         Ok(header_input)
     }
 
-    async fn get_builder_address(&self) -> Result<TYPES::BuilderSignatureKey, BuildError> {
+    async fn builder_address(&self) -> Result<TYPES::BuilderSignatureKey, BuildError> {
         Ok(self.pub_key.clone())
     }
 }
@@ -322,7 +322,7 @@ impl<TYPES: NodeType> BuilderDataSource<TYPES> for SimpleBuilderSource<TYPES>
 where
     <TYPES as NodeType>::InstanceState: Default,
 {
-    async fn get_available_blocks(
+    async fn available_blocks(
         &self,
         _for_parent: &VidCommitment,
         _view_number: u64,
@@ -419,7 +419,7 @@ where
         entry.header_input.take().ok_or(BuildError::Missing)
     }
 
-    async fn get_builder_address(&self) -> Result<TYPES::BuilderSignatureKey, BuildError> {
+    async fn builder_address(&self) -> Result<TYPES::BuilderSignatureKey, BuildError> {
         Ok(self.pub_key.clone())
     }
 }
@@ -473,9 +473,9 @@ impl<TYPES: NodeType> BuilderTask<TYPES> for SimpleBuilderTask<TYPES> {
                         EventType::Decide { leaf_chain, .. } => {
                             let mut queue = self.transactions.write().await;
                             for leaf_info in leaf_chain.iter() {
-                                if let Some(ref payload) = leaf_info.leaf.get_block_payload() {
+                                if let Some(ref payload) = leaf_info.leaf.block_payload() {
                                     for txn in payload.transaction_commitments(
-                                        leaf_info.leaf.get_block_header().metadata(),
+                                        leaf_info.leaf.block_header().metadata(),
                                     ) {
                                         self.decided_transactions.put(txn, ());
                                         queue.remove(&txn);

@@ -110,7 +110,7 @@ async fn test_da_task_storage_failure() {
     let handle = build_system_handle(2).await.0;
 
     // Set the error flag here for the system handle. This causes it to emit an error on append.
-    handle.get_storage().write().await.should_return_err = true;
+    handle.storage().write().await.should_return_err = true;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 

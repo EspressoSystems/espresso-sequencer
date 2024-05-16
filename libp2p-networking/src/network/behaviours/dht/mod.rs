@@ -42,7 +42,7 @@ pub struct DHTBehaviour {
     /// in progress queries for nearby peers
     pub in_progress_get_closest_peers: HashMap<QueryId, Sender<()>>,
     /// List of in-progress get requests
-    in_progress_get_record_queries: HashMap<QueryId, KadGetQuery>,
+    in_progress_record_queries: HashMap<QueryId, KadGetQuery>,
     /// List of in-progress put requests
     in_progress_put_record_queries: HashMap<QueryId, KadPutQuery>,
     /// State of bootstrapping
@@ -101,7 +101,7 @@ impl DHTBehaviour {
         // <https://github.com/libp2p/rust-libp2p/issues/4194>
         Self {
             peer_id: pid,
-            in_progress_get_record_queries: HashMap::default(),
+            in_progress_record_queries: HashMap::default(),
             in_progress_put_record_queries: HashMap::default(),
             bootstrap_state: Bootstrap {
                 state: State::NotStarted,
@@ -132,7 +132,7 @@ impl DHTBehaviour {
 
     /// Get the replication factor for queries
     #[must_use]
-    pub fn get_replication_factor(&self) -> NonZeroUsize {
+    pub fn replication_factor(&self) -> NonZeroUsize {
         self.replication_factor
     }
     /// Publish a key/value to the kv store.
@@ -147,7 +147,7 @@ impl DHTBehaviour {
     /// Value (serialized) is sent over `chan`, and if a value is not found,
     /// a [`crate::network::error::DHTError`] is sent instead.
     /// NOTE: noop if `retry_count` is 0
-    pub fn get_record(
+    pub fn record(
         &mut self,
         key: Vec<u8>,
         chan: Sender<Vec<u8>>,
@@ -180,7 +180,7 @@ impl DHTBehaviour {
                 retry_count: retry_count - 1,
                 records: HashMap::default(),
             };
-            self.in_progress_get_record_queries.insert(qid, query);
+            self.in_progress_record_queries.insert(qid, query);
         }
     }
 
@@ -225,7 +225,7 @@ impl DHTBehaviour {
         id: QueryId,
         mut last: bool,
     ) {
-        let num = match self.in_progress_get_record_queries.get_mut(&id) {
+        let num = match self.in_progress_record_queries.get_mut(&id) {
             Some(query) => match record_results {
                 Ok(results) => match results {
                     GetRecordOk::FoundRecord(record) => {
@@ -273,7 +273,7 @@ impl DHTBehaviour {
                 key,
                 retry_count,
                 records,
-            }) = self.in_progress_get_record_queries.remove(&id)
+            }) = self.in_progress_record_queries.remove(&id)
             {
                 // if channel has been dropped, cancel request
                 if notify.is_canceled() {

@@ -361,7 +361,7 @@ impl TestView {
                 leaf_commit: self.leaf.commit(),
             },
             self.view_number,
-            handle.public_key(),
+            &handle.public_key(),
             handle.private_key(),
         )
         .expect("Failed to generate a signature on QuorumVote")
@@ -375,7 +375,7 @@ impl TestView {
         UpgradeVote::<TestTypes>::create_signed_vote(
             data,
             self.view_number,
-            handle.public_key(),
+            &handle.public_key(),
             handle.private_key(),
         )
         .expect("Failed to generate a signature on UpgradVote")
@@ -389,7 +389,7 @@ impl TestView {
         DaVote::create_signed_vote(
             data,
             self.view_number,
-            handle.public_key(),
+            &handle.public_key(),
             handle.private_key(),
         )
         .expect("Failed to sign DaData")

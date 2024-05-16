@@ -355,15 +355,15 @@ pub trait RunDa<
         let initializer = hotshot::HotShotInitializer::<TYPES>::from_genesis(TestInstanceState {})
             .expect("Couldn't generate genesis block");
 
-        let config = self.get_config();
+        let config = self.config();
 
         // Get KeyPair for certificate Aggregation
         let pk = config.config.my_own_validator_config.public_key.clone();
         let sk = config.config.my_own_validator_config.private_key.clone();
         let known_nodes_with_stake = config.config.known_nodes_with_stake.clone();
 
-        let da_network = self.get_da_channel();
-        let quorum_network = self.get_quorum_channel();
+        let da_network = self.da_channel();
+        let quorum_network = self.quorum_channel();
 
         let networks_bundle = Networks {
             quorum_network: quorum_network.clone().into(),
@@ -423,7 +423,7 @@ pub trait RunDa<
             node_index,
             start_delay_seconds,
             ..
-        } = self.get_config();
+        } = self.config();
 
         let mut total_transactions_committed = 0;
         let mut total_transactions_sent = 0;
@@ -438,7 +438,7 @@ pub trait RunDa<
         info!("Starting HotShot example!");
         let start = Instant::now();
 
-        let mut event_stream = context.get_event_stream();
+        let mut event_stream = context.event_stream();
         let mut anchor_view: TYPES::Time = <TYPES::Time as ConsensusTime>::genesis();
         let mut num_successful_commits = 0;
 
@@ -464,12 +464,12 @@ pub trait RunDa<
                             // this might be a obob
                             if let Some(leaf_info) = leaf_chain.first() {
                                 let leaf = &leaf_info.leaf;
-                                info!("Decide event for leaf: {}", *leaf.get_view_number());
+                                info!("Decide event for leaf: {}", *leaf.view_number());
 
                                 // iterate all the decided transactions to calculate latency
-                                if let Some(block_payload) = &leaf.get_block_payload() {
-                                    for tx in block_payload
-                                        .get_transactions(leaf.get_block_header().metadata())
+                                if let Some(block_payload) = &leaf.block_payload() {
+                                    for tx in
+                                        block_payload.transactions(leaf.block_header().metadata())
                                     {
                                         let restored_timestamp_vec =
                                             tx.bytes()[tx.bytes().len() - 8..].to_vec();
@@ -486,9 +486,9 @@ pub trait RunDa<
                                     }
                                 }
 
-                                let new_anchor = leaf.get_view_number();
+                                let new_anchor = leaf.view_number();
                                 if new_anchor >= anchor_view {
-                                    anchor_view = leaf.get_view_number();
+                                    anchor_view = leaf.view_number();
                                 }
 
                                 // send transactions
@@ -532,9 +532,9 @@ pub trait RunDa<
                 }
             }
         }
-        let consensus_lock = context.hotshot.get_consensus();
+        let consensus_lock = context.hotshot.consensus();
         let consensus = consensus_lock.read().await;
-        let total_num_views = usize::try_from(consensus.locked_view().get_u64()).unwrap();
+        let total_num_views = usize::try_from(consensus.locked_view().u64()).unwrap();
         // `failed_num_views` could include uncommitted views
         let failed_num_views = total_num_views - num_successful_commits;
         // When posting to the orchestrator, note that the total number of views also include un-finalized views.
@@ -570,13 +570,13 @@ pub trait RunDa<
     }
 
     /// Returns the da network for this run
-    fn get_da_channel(&self) -> DANET;
+    fn da_channel(&self) -> DANET;
 
     /// Returns the quorum network for this run
-    fn get_quorum_channel(&self) -> QUORUMNET;
+    fn quorum_channel(&self) -> QUORUMNET;
 
     /// Returns the config for this run
-    fn get_config(&self) -> NetworkConfig<TYPES::SignatureKey>;
+    fn config(&self) -> NetworkConfig<TYPES::SignatureKey>;
 }
 
 // Push CDN
@@ -652,15 +652,15 @@ where
         }
     }
 
-    fn get_da_channel(&self) -> PushCdnNetwork<TYPES> {
+    fn da_channel(&self) -> PushCdnNetwork<TYPES> {
         self.da_channel.clone()
     }
 
-    fn get_quorum_channel(&self) -> PushCdnNetwork<TYPES> {
+    fn quorum_channel(&self) -> PushCdnNetwork<TYPES> {
         self.quorum_channel.clone()
     }
 
-    fn get_config(&self) -> NetworkConfig<TYPES::SignatureKey> {
+    fn config(&self) -> NetworkConfig<TYPES::SignatureKey> {
         self.config.clone()
     }
 }
@@ -750,15 +750,15 @@ where
         }
     }
 
-    fn get_da_channel(&self) -> Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> {
+    fn da_channel(&self) -> Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> {
         self.da_channel.clone()
     }
 
-    fn get_quorum_channel(&self) -> Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> {
+    fn quorum_channel(&self) -> Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> {
         self.quorum_channel.clone()
     }
 
-    fn get_config(&self) -> NetworkConfig<TYPES::SignatureKey> {
+    fn config(&self) -> NetworkConfig<TYPES::SignatureKey> {
         self.config.clone()
     }
 }
@@ -846,15 +846,15 @@ where
         }
     }
 
-    fn get_da_channel(&self) -> CombinedNetworks<TYPES> {
+    fn da_channel(&self) -> CombinedNetworks<TYPES> {
         self.da_channel.clone()
     }
 
-    fn get_quorum_channel(&self) -> CombinedNetworks<TYPES> {
+    fn quorum_channel(&self) -> CombinedNetworks<TYPES> {
         self.quorum_channel.clone()
     }
 
-    fn get_config(&self) -> NetworkConfig<TYPES::SignatureKey> {
+    fn config(&self) -> NetworkConfig<TYPES::SignatureKey> {
         self.config.clone()
     }
 }
@@ -954,7 +954,7 @@ pub async fn main_entry_point<
     let hotshot = run.initialize_state_and_hotshot().await;
 
     if let Some(task) = builder_task {
-        task.start(Box::new(hotshot.get_event_stream()));
+        task.start(Box::new(hotshot.event_stream()));
     }
 
     // pre-generate transactions

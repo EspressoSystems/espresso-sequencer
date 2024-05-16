@@ -169,7 +169,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
             self.delayed_tasks
                 .write()
                 .await
-                .entry(message.kind.get_view_number().get_u64())
+                .entry(message.kind.view_number().u64())
                 .or_default()
                 .push(async_spawn(async move {
                     async_sleep(duration).await;

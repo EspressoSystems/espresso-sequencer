@@ -160,7 +160,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
                 block_size: maybe_block_size,
             } => {
                 // Skip the genesis leaf.
-                if leaf_chain.last().unwrap().leaf.get_view_number() == TYPES::Time::genesis() {
+                if leaf_chain.last().unwrap().leaf.view_number() == TYPES::Time::genesis() {
                     return None;
                 }
                 let paired_up = (leaf_chain.to_vec(), (*qc).clone());
@@ -373,7 +373,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
                 }
             }
 
-            let payload_commitment = leaf.get_payload_commitment();
+            let payload_commitment = leaf.payload_commitment();
 
             match self.block_map.entry(payload_commitment) {
                 std::collections::hash_map::Entry::Occupied(mut o) => {
@@ -430,7 +430,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
                 .unwrap();
             if *count >= threshold {
                 for leaf in self.leaf_map.keys() {
-                    if leaf.get_view_number() > quorum_leaf.get_view_number() {
+                    if leaf.view_number() > quorum_leaf.view_number() {
                         error!("LEAF MAP (that is mismatched) IS: {:?}", self.leaf_map);
                         self.status = ViewStatus::Err(OverallSafetyTaskErr::MismatchedLeaf);
                         return;
@@ -465,7 +465,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
             // if not, return error
             // if neither, continue through
 
-            let block_key = key.get_payload_commitment();
+            let block_key = key.payload_commitment();
 
             if *self.block_map.get(&block_key).unwrap() == threshold
                 && *self.leaf_map.get(key).unwrap() == threshold

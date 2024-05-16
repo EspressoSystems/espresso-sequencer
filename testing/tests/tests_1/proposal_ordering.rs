@@ -11,7 +11,7 @@ use hotshot_example_types::{
 use hotshot_task_impls::{consensus::ConsensusTaskState, events::HotShotEvent::*};
 use hotshot_testing::{
     predicates::event::{all_predicates, exact, quorum_proposal_send, quorum_proposal_validated},
-    task_helpers::{get_vid_share, vid_scheme_from_view_number},
+    task_helpers::{vid_share, vid_scheme_from_view_number},
     test_helpers::permute_input_with_index_order,
     view_generator::TestViewGenerator,
 };
@@ -69,7 +69,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
         inputs: vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
-            VIDShareRecv(get_vid_share(&vids[0].0, handle.get_public_key())),
+            VIDShareRecv(vid_share(&vids[0].0, handle.public_key())),
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(1))),
@@ -101,11 +101,11 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     view_2_inputs.insert(0, DaCertificateRecv(dacs[1].clone()));
     view_2_inputs.insert(
         0,
-        VIDShareRecv(get_vid_share(&vids[2].0, handle.get_public_key())),
+        VIDShareRecv(vid_share(&vids[2].0, handle.public_key())),
     );
     view_2_inputs.insert(
         0,
-        VIDShareRecv(get_vid_share(&vids[1].0, handle.get_public_key())),
+        VIDShareRecv(vid_share(&vids[1].0, handle.public_key())),
     );
 
     // This stage transitions from view 1 to view 2.

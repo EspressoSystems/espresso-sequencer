@@ -358,7 +358,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         ) -> bool,
     {
         let mut next_leaf = if let Some(view) = self.validated_state_map.get(&start_from) {
-            view.get_leaf_commitment()
+            view.leaf_commitment()
                 .ok_or_else(|| HotShotError::InvalidState {
                     context: format!(
                         "Visited failed view {start_from:?} leaf. Expected successfuil leaf"
@@ -371,8 +371,8 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         };
 
         while let Some(leaf) = self.saved_leaves.get(&next_leaf) {
-            let view = leaf.get_view_number();
-            if let (Some(state), delta) = self.get_state_and_delta(view) {
+            let view = leaf.view_number();
+            if let (Some(state), delta) = self.state_and_delta(view) {
                 if let Terminator::Exclusive(stop_before) = terminator {
                     if stop_before == view {
                         if ok_when_finished {
@@ -381,7 +381,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
                         break;
                     }
                 }
-                next_leaf = leaf.get_parent_commitment();
+                next_leaf = leaf.parent_commitment();
                 if !f(leaf, state, delta) {
                     return Ok(());
                 }
@@ -423,7 +423,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .retain(|view_number, _| *view_number >= old_anchor_view);
         self.validated_state_map
             .range(old_anchor_view..new_anchor_view)
-            .filter_map(|(_view_number, view)| view.get_leaf_commitment())
+            .filter_map(|(_view_number, view)| view.leaf_commitment())
             .for_each(|leaf| {
                 self.saved_leaves.remove(&leaf);
             });
@@ -438,29 +438,29 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// if the last decided view's leaf does not exist in the state map or saved leaves, which
     /// should never happen.
     #[must_use]
-    pub fn get_decided_leaf(&self) -> Leaf<TYPES> {
+    pub fn decided_leaf(&self) -> Leaf<TYPES> {
         let decided_view_num = self.last_decided_view;
         let view = self.validated_state_map.get(&decided_view_num).unwrap();
         let leaf = view
-            .get_leaf_commitment()
+            .leaf_commitment()
             .expect("Decided leaf not found! Consensus internally inconsistent");
         self.saved_leaves.get(&leaf).unwrap().clone()
     }
 
     /// Gets the validated state with the given view number, if in the state map.
     #[must_use]
-    pub fn get_state(&self, view_number: TYPES::Time) -> Option<&Arc<TYPES::ValidatedState>> {
+    pub fn state(&self, view_number: TYPES::Time) -> Option<&Arc<TYPES::ValidatedState>> {
         match self.validated_state_map.get(&view_number) {
-            Some(view) => view.get_state(),
+            Some(view) => view.state(),
             None => None,
         }
     }
 
     /// Gets the validated state and state delta with the given view number, if in the state map.
     #[must_use]
-    pub fn get_state_and_delta(&self, view_number: TYPES::Time) -> StateAndDelta<TYPES> {
+    pub fn state_and_delta(&self, view_number: TYPES::Time) -> StateAndDelta<TYPES> {
         match self.validated_state_map.get(&view_number) {
-            Some(view) => view.get_state_and_delta(),
+            Some(view) => view.state_and_delta(),
             None => (None, None),
         }
     }
@@ -471,9 +471,9 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// If the last decided view's state does not exist in the state map, which should never
     /// happen.
     #[must_use]
-    pub fn get_decided_state(&self) -> Arc<TYPES::ValidatedState> {
+    pub fn decided_state(&self) -> Arc<TYPES::ValidatedState> {
         let decided_view_num = self.last_decided_view;
-        self.get_state_and_delta(decided_view_num)
+        self.state_and_delta(decided_view_num)
             .0
             .expect("Decided state not found! Consensus internally inconsistent")
     }

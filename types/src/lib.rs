@@ -93,9 +93,9 @@ impl<KEY: SignatureKey> ValidatorConfig<KEY> {
     }
 
     /// get the public config of the validator
-    pub fn get_public_config(&self) -> PeerConfig<KEY> {
+    pub fn public_config(&self) -> PeerConfig<KEY> {
         PeerConfig {
-            stake_table_entry: self.public_key.get_stake_table_entry(self.stake_value),
+            stake_table_entry: self.public_key.stake_table_entry(self.stake_value),
             state_ver_key: self.state_key_pair.0.ver_key(),
         }
     }
@@ -148,7 +148,7 @@ impl<KEY: SignatureKey> PeerConfig<KEY> {
 impl<KEY: SignatureKey> Default for PeerConfig<KEY> {
     fn default() -> Self {
         let default_validator_config = ValidatorConfig::<KEY>::default();
-        default_validator_config.get_public_config()
+        default_validator_config.public_config()
     }
 }
 

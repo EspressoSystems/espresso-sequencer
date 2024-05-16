@@ -403,12 +403,12 @@ impl<M: NetworkMsg, K: SignatureKey> Libp2pNetwork<M, K> {
 
         // Make a node DA if it is under the staked committee size
         for node in config.config.known_da_nodes {
-            da_keys.insert(K::get_public_key(&node.stake_table_entry));
+            da_keys.insert(K::public_key(&node.stake_table_entry));
         }
 
         // Insert all known nodes into the set of all keys
         for node in config.config.known_nodes_with_stake {
-            all_keys.insert(K::get_public_key(&node.stake_table_entry));
+            all_keys.insert(K::public_key(&node.stake_table_entry));
         }
 
         Ok(Libp2pNetwork::new(
@@ -1119,7 +1119,7 @@ impl<M: NetworkMsg, K: SignatureKey + 'static> ConnectedNetwork<M, K> for Libp2p
         TYPES: NodeType<SignatureKey = K> + 'a,
     {
         let future_view = <TYPES as NodeType>::Time::new(view) + LOOK_AHEAD;
-        let future_leader = membership.get_leader(future_view);
+        let future_leader = membership.leader(future_view);
 
         let _ = self
             .queue_node_lookup(ViewNumber::new(*future_view), future_leader)

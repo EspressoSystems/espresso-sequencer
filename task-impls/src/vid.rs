@@ -145,7 +145,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 self.cur_view = view;
 
                 // If we are not the next leader, we should exit
-                if self.membership.get_leader(self.cur_view + 1) != self.public_key {
+                if self.membership.leader(self.cur_view + 1) != self.public_key {
                     // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
                     return None;
                 }

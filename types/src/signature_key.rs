@@ -80,18 +80,18 @@ impl SignatureKey for BLSPubKey {
         (kp.ver_key(), kp.sign_key_ref().clone())
     }
 
-    fn get_stake_table_entry(&self, stake: u64) -> Self::StakeTableEntry {
+    fn stake_table_entry(&self, stake: u64) -> Self::StakeTableEntry {
         StakeTableEntry {
             stake_key: *self,
             stake_amount: U256::from(stake),
         }
     }
 
-    fn get_public_key(entry: &Self::StakeTableEntry) -> Self {
+    fn public_key(entry: &Self::StakeTableEntry) -> Self {
         entry.stake_key
     }
 
-    fn get_public_parameter(
+    fn public_parameter(
         stake_entries: Vec<Self::StakeTableEntry>,
         threshold: U256,
     ) -> Self::QCParams {
@@ -107,7 +107,7 @@ impl SignatureKey for BLSPubKey {
         BitVectorQC::<BLSOverBN254CurveSignatureScheme>::check(real_qc_pp, msg, qc).is_ok()
     }
 
-    fn get_sig_proof(signature: &Self::QCType) -> (Self::PureAssembledSignatureType, BitVec) {
+    fn sig_proof(signature: &Self::QCType) -> (Self::PureAssembledSignatureType, BitVec) {
         signature.clone()
     }
 

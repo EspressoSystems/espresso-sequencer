@@ -47,7 +47,7 @@ pub struct SystemContextHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandle<TYPES, I> {
     /// obtains a stream to expose to the user
-    pub fn get_event_stream(&self) -> impl Stream<Item = Event<TYPES>> {
+    pub fn event_stream(&self) -> impl Stream<Item = Event<TYPES>> {
         self.output_event_stream.1.activate_cloned()
     }
 
@@ -56,7 +56,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// - make the stream generic and in nodetypes or nodeimpelmentation
     /// - type wrapper
     #[must_use]
-    pub fn get_event_stream_known_impl(&self) -> Receiver<Event<TYPES>> {
+    pub fn event_stream_known_impl(&self) -> Receiver<Event<TYPES>> {
         self.output_event_stream.1.activate_cloned()
     }
 
@@ -66,7 +66,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// - type wrapper
     /// NOTE: this is only used for sanity checks in our tests
     #[must_use]
-    pub fn get_internal_event_stream_known_impl(&self) -> Receiver<Arc<HotShotEvent<TYPES>>> {
+    pub fn internal_event_stream_known_impl(&self) -> Receiver<Arc<HotShotEvent<TYPES>>> {
         self.internal_event_stream.1.activate_cloned()
     }
 
@@ -74,8 +74,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     ///
     /// # Panics
     /// If the internal consensus is in an inconsistent state.
-    pub async fn get_decided_state(&self) -> Arc<TYPES::ValidatedState> {
-        self.hotshot.get_decided_state().await
+    pub async fn decided_state(&self) -> Arc<TYPES::ValidatedState> {
+        self.hotshot.decided_state().await
     }
 
     /// Get the validated state from a given `view`.
@@ -83,18 +83,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// Returns the requested state, if the [`SystemContext`] is tracking this view. Consensus
     /// tracks views that have not yet been decided but could be in the future. This function may
     /// return [`None`] if the requested view has already been decided (but see
-    /// [`get_decided_state`](Self::get_decided_state)) or if there is no path for the requested
+    /// [`decided_state`](Self::decided_state)) or if there is no path for the requested
     /// view to ever be decided.
-    pub async fn get_state(&self, view: TYPES::Time) -> Option<Arc<TYPES::ValidatedState>> {
-        self.hotshot.get_state(view).await
+    pub async fn state(&self, view: TYPES::Time) -> Option<Arc<TYPES::ValidatedState>> {
+        self.hotshot.state(view).await
     }
 
     /// Get the last decided leaf of the [`SystemContext`] instance.
     ///
     /// # Panics
     /// If the internal consensus is in an inconsistent state.
-    pub async fn get_decided_leaf(&self) -> Leaf<TYPES> {
-        self.hotshot.get_decided_leaf().await
+    pub async fn decided_leaf(&self) -> Leaf<TYPES> {
+        self.hotshot.decided_leaf().await
     }
 
     /// Tries to get the most recent decided leaf, returning instantly
@@ -103,8 +103,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     /// # Panics
     /// Panics if internal consensus is in an inconsistent state.
     #[must_use]
-    pub fn try_get_decided_leaf(&self) -> Option<Leaf<TYPES>> {
-        self.hotshot.try_get_decided_leaf()
+    pub fn try_decided_leaf(&self) -> Option<Leaf<TYPES>> {
+        self.hotshot.try_decided_leaf()
     }
 
     /// Submits a transaction to the backing [`SystemContext`] instance.
@@ -124,8 +124,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
 
     /// Get the underlying consensus state for this [`SystemContext`]
     #[must_use]
-    pub fn get_consensus(&self) -> Arc<RwLock<Consensus<TYPES>>> {
-        self.hotshot.get_consensus()
+    pub fn consensus(&self) -> Arc<RwLock<Consensus<TYPES>>> {
+        self.hotshot.consensus()
     }
 
     /// Block the underlying quorum (and DA) networking interfaces until node is
@@ -158,36 +158,36 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
 
     /// return the timeout for a view of the underlying `SystemContext`
     #[must_use]
-    pub fn get_next_view_timeout(&self) -> u64 {
-        self.hotshot.get_next_view_timeout()
+    pub fn next_view_timeout(&self) -> u64 {
+        self.hotshot.next_view_timeout()
     }
 
-    /// Wrapper for `HotShotConsensusApi`'s `get_leader` function
+    /// Wrapper for `HotShotConsensusApi`'s `leader` function
     #[allow(clippy::unused_async)] // async for API compatibility reasons
-    pub async fn get_leader(&self, view_number: TYPES::Time) -> TYPES::SignatureKey {
+    pub async fn leader(&self, view_number: TYPES::Time) -> TYPES::SignatureKey {
         self.hotshot
             .memberships
             .quorum_membership
-            .get_leader(view_number)
+            .leader(view_number)
     }
 
     // Below is for testing only:
     /// Wrapper to get this node's public key
     #[cfg(feature = "hotshot-testing")]
     #[must_use]
-    pub fn get_public_key(&self) -> TYPES::SignatureKey {
+    pub fn public_key(&self) -> TYPES::SignatureKey {
         self.hotshot.public_key.clone()
     }
 
     /// Wrapper to get the view number this node is on.
-    pub async fn get_cur_view(&self) -> TYPES::Time {
+    pub async fn cur_view(&self) -> TYPES::Time {
         self.hotshot.consensus.read().await.cur_view()
     }
 
     /// Provides a reference to the underlying storage for this [`SystemContext`], allowing access to
     /// historical data
     #[must_use]
-    pub fn get_storage(&self) -> Arc<RwLock<I::Storage>> {
+    pub fn storage(&self) -> Arc<RwLock<I::Storage>> {
         Arc::clone(&self.storage)
     }
 }

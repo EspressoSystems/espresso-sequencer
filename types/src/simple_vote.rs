@@ -116,7 +116,7 @@ pub struct SimpleVote<TYPES: NodeType, DATA: Voteable> {
 }
 
 impl<TYPES: NodeType, DATA: Voteable + 'static> HasViewNumber<TYPES> for SimpleVote<TYPES, DATA> {
-    fn get_view_number(&self) -> <TYPES as NodeType>::Time {
+    fn view_number(&self) -> <TYPES as NodeType>::Time {
         self.view_number
     }
 }
@@ -124,19 +124,19 @@ impl<TYPES: NodeType, DATA: Voteable + 'static> HasViewNumber<TYPES> for SimpleV
 impl<TYPES: NodeType, DATA: Voteable + 'static> Vote<TYPES> for SimpleVote<TYPES, DATA> {
     type Commitment = DATA;
 
-    fn get_signing_key(&self) -> <TYPES as NodeType>::SignatureKey {
+    fn signing_key(&self) -> <TYPES as NodeType>::SignatureKey {
         self.signature.0.clone()
     }
 
-    fn get_signature(&self) -> <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType {
+    fn signature(&self) -> <TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType {
         self.signature.1.clone()
     }
 
-    fn get_data(&self) -> &DATA {
+    fn date(&self) -> &DATA {
         &self.data
     }
 
-    fn get_data_commitment(&self) -> Commitment<DATA> {
+    fn date_commitment(&self) -> Commitment<DATA> {
         self.data.commit()
     }
 }

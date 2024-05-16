@@ -55,7 +55,7 @@ pub enum CounterMessage {
 /// chooses one
 /// # Panics
 /// panics if handles is of length 0
-fn get_random_handle<S: Debug + Default + Send + Clone>(
+fn random_handle<S: Debug + Default + Send + Clone>(
     handles: &[HandleWithState<S>],
     rng: &mut dyn rand::RngCore,
 ) -> HandleWithState<S> {
@@ -208,7 +208,7 @@ async fn run_gossip_round(
     timeout_duration: Duration,
 ) -> Result<(), TestError<CounterState>> {
     let mut rng = rand::thread_rng();
-    let msg_handle = get_random_handle(handles, &mut rng);
+    let msg_handle = random_handle(handles, &mut rng);
     msg_handle.state.modify(|s| *s = new_state).await;
 
     let mut futs = Vec::new();
@@ -351,7 +351,7 @@ async fn run_dht_rounds(
     let mut rng = rand::thread_rng();
     for i in 0..num_rounds {
         debug!("begin round {}", i);
-        let msg_handle = get_random_handle(handles, &mut rng);
+        let msg_handle = random_handle(handles, &mut rng);
         let mut key = vec![0; DHT_KV_PADDING];
         let inc_val = u8::try_from(starting_val + i).unwrap();
         key.push(inc_val);
@@ -369,7 +369,7 @@ async fn run_dht_rounds(
         for handle in handles {
             let result: Result<Vec<u8>, NetworkNodeHandleError> = handle
                 .handle
-                .get_record_timeout(&key, timeout, STATIC_VER_0_1)
+                .record_timeout(&key, timeout, STATIC_VER_0_1)
                 .await;
             match result {
                 Err(e) => {
@@ -416,7 +416,7 @@ async fn run_request_response_increment_all(
     timeout: Duration,
 ) {
     let mut rng = rand::thread_rng();
-    let requestee_handle = get_random_handle(handles, &mut rng);
+    let requestee_handle = random_handle(handles, &mut rng);
     requestee_handle.state.modify(|s| *s += 1).await;
     info!("RR REQUESTEE IS {:?}", requestee_handle.handle.peer_id());
     let mut futs = Vec::new();

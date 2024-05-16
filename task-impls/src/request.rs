@@ -87,7 +87,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
         match event.as_ref() {
             HotShotEvent::QuorumProposalValidated(proposal, _) => {
                 let state = task.state();
-                let prop_view = proposal.get_view_number();
+                let prop_view = proposal.view_number();
                 if prop_view >= state.view {
                     state
                         .spawn_requests(prop_view, task.clone_sender(), Ver::instance())
@@ -169,7 +169,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
     ) {
         let mut recipients: Vec<_> = self
             .da_membership
-            .get_whole_committee(view)
+            .whole_committee(view)
             .into_iter()
             .collect();
         // Randomize the recipients so all replicas don't overload the same 1 recipients

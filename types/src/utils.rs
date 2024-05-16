@@ -75,9 +75,7 @@ pub type StateAndDelta<TYPES> = (
 impl<TYPES: NodeType> ViewInner<TYPES> {
     /// Return the underlying undecide leaf commitment and validated state if they exist.
     #[must_use]
-    pub fn get_leaf_and_state(
-        &self,
-    ) -> Option<(LeafCommitment<TYPES>, &Arc<TYPES::ValidatedState>)> {
+    pub fn leaf_and_state(&self) -> Option<(LeafCommitment<TYPES>, &Arc<TYPES::ValidatedState>)> {
         if let Self::Leaf { leaf, state, .. } = self {
             Some((*leaf, state))
         } else {
@@ -87,7 +85,7 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
 
     /// return the underlying leaf hash if it exists
     #[must_use]
-    pub fn get_leaf_commitment(&self) -> Option<LeafCommitment<TYPES>> {
+    pub fn leaf_commitment(&self) -> Option<LeafCommitment<TYPES>> {
         if let Self::Leaf { leaf, .. } = self {
             Some(*leaf)
         } else {
@@ -97,7 +95,7 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
 
     /// return the underlying validated state if it exists
     #[must_use]
-    pub fn get_state(&self) -> Option<&Arc<TYPES::ValidatedState>> {
+    pub fn state(&self) -> Option<&Arc<TYPES::ValidatedState>> {
         if let Self::Leaf { state, .. } = self {
             Some(state)
         } else {
@@ -107,7 +105,7 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
 
     /// Return the underlying validated state and state delta if they exist.
     #[must_use]
-    pub fn get_state_and_delta(&self) -> StateAndDelta<TYPES> {
+    pub fn state_and_delta(&self) -> StateAndDelta<TYPES> {
         if let Self::Leaf { state, delta, .. } = self {
             (Some(Arc::clone(state)), delta.clone())
         } else {
@@ -117,7 +115,7 @@ impl<TYPES: NodeType> ViewInner<TYPES> {
 
     /// return the underlying block paylod commitment if it exists
     #[must_use]
-    pub fn get_payload_commitment(&self) -> Option<VidCommitment> {
+    pub fn payload_commitment(&self) -> Option<VidCommitment> {
         if let Self::Da { payload_commitment } = self {
             Some(*payload_commitment)
         } else {

@@ -92,7 +92,7 @@ where
         } = event
         {
             let leaf = leaf_chain.first().unwrap().leaf.clone();
-            if leaf.get_view_number() > state.last_decided_leaf.get_view_number() {
+            if leaf.view_number() > state.last_decided_leaf.view_number() {
                 state.last_decided_leaf = leaf;
             }
         } else if let EventType::QuorumProposal {
@@ -100,7 +100,7 @@ where
             sender: _,
         } = event
         {
-            if proposal.data.justify_qc.get_view_number() > state.high_qc.get_view_number() {
+            if proposal.data.justify_qc.view_number() > state.high_qc.view_number() {
                 state.high_qc = proposal.data.justify_qc;
             }
         }

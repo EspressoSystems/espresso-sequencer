@@ -258,10 +258,10 @@ impl TestDescription {
 
                 // Add the node to the known DA nodes based on the index (for tests)
                 if node_id_ < da_staked_committee_size {
-                    known_da_nodes.push(cur_validator_config.get_public_config());
+                    known_da_nodes.push(cur_validator_config.public_config());
                 }
 
-                cur_validator_config.get_public_config()
+                cur_validator_config.public_config()
             })
             .collect();
         // But now to test validator's config, we input the info of my_own_validator from config file when node_id == 0.

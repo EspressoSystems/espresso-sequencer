@@ -210,7 +210,7 @@ impl BlockPayload for TestBlockPayload {
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
 
-    fn get_transactions<'a>(
+    fn transactions<'a>(
         &'a self,
         _metadata: &'a Self::Metadata,
     ) -> impl 'a + Iterator<Item = Self::Transaction> {
@@ -246,7 +246,7 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
         _builder_fee: BuilderFee<TYPES>,
         _vid_common: VidCommon,
     ) -> Result<Self, Self::Error> {
-        let parent = parent_leaf.get_block_header();
+        let parent = parent_leaf.block_header();
 
         let mut timestamp = OffsetDateTime::now_utc().unix_timestamp() as u64;
         if timestamp < parent.timestamp {

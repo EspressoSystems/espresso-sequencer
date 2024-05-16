@@ -101,14 +101,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> HandleDepOutput
                     }
                     let parent_commitment = parent_leaf.commit();
                     let proposed_leaf = Leaf::from_quorum_proposal(proposal);
-                    if proposed_leaf.get_parent_commitment() != parent_commitment {
+                    if proposed_leaf.parent_commitment() != parent_commitment {
                         warn!("Proposed leaf parent commitment does not match parent leaf payload commitment. Aborting vote.");
                         return;
                     }
                     leaf = Some(proposed_leaf);
                 }
                 HotShotEvent::DaCertificateValidated(cert) => {
-                    let cert_payload_comm = cert.get_data().payload_commit;
+                    let cert_payload_comm = cert.date().payload_commit;
                     if let Some(comm) = payload_commitment {
                         if cert_payload_comm != comm {
                             error!("DAC has inconsistent payload commitment with quorum proposal or VID.");
@@ -187,7 +187,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> HandleDepOutput
         if let GeneralConsensusMessage::Vote(vote) = message {
             debug!(
                 "Sending vote to next quorum leader {:?}",
-                vote.get_view_number() + 1
+                vote.view_number() + 1
             );
             // Add to the storage.
             let Some(disperse) = disperse_share else {
@@ -444,7 +444,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                 self.create_dependency_task_if_new(view, event_receiver, &event_sender, None);
             }
             HotShotEvent::VIDShareRecv(disperse) => {
-                let view = disperse.data.get_view_number();
+                let view = disperse.data.view_number();
                 trace!("Received VID share for view {}", *view);
                 if view <= self.latest_voted_view {
                     return;
@@ -458,14 +458,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                 // * Signed by one of the staked DA committee members.
                 if !self
                     .quorum_membership
-                    .get_leader(view)
+                    .leader(view)
                     .validate(&disperse.signature, payload_commitment.as_ref())
                     && !self
                         .public_key
                         .validate(&disperse.signature, payload_commitment.as_ref())
                 {
                     let mut validated = false;
-                    for da_member in self.da_membership.get_staked_committee(view) {
+                    for da_member in self.da_membership.staked_committee(view) {
                         if da_member.validate(&disperse.signature, payload_commitment.as_ref()) {
                             validated = true;
                             break;

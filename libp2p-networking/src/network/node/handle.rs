@@ -242,7 +242,7 @@ impl NetworkNodeHandle {
     ) -> Result<PeerId, NetworkNodeHandleError> {
         // get record (from DHT)
         let pid = self
-            .get_record_timeout::<PeerId, VER>(&key, dht_timeout, bind_version)
+            .record_timeout::<PeerId, VER>(&key, dht_timeout, bind_version)
             .await?;
 
         // pid lookup for routing
@@ -279,7 +279,7 @@ impl NetworkNodeHandle {
     /// - Will return [`NetworkNodeHandleError::DHTError`] when encountering an error putting to DHT
     /// - Will return [`NetworkNodeHandleError::SerializationError`] when unable to serialize the key
     /// - Will return [`NetworkNodeHandleError::DeserializationError`] when unable to deserialize the returned value
-    pub async fn get_record<V: for<'a> Deserialize<'a>, VER: StaticVersionType>(
+    pub async fn record<V: for<'a> Deserialize<'a>, VER: StaticVersionType>(
         &self,
         key: &impl Serialize,
         retry_count: u8,
@@ -305,13 +305,13 @@ impl NetworkNodeHandle {
     /// - Will return [`NetworkNodeHandleError::TimeoutError`] when times out
     /// - Will return [`NetworkNodeHandleError::SerializationError`] when unable to serialize the key
     /// - Will return [`NetworkNodeHandleError::DeserializationError`] when unable to deserialize the returned value
-    pub async fn get_record_timeout<V: for<'a> Deserialize<'a>, VER: StaticVersionType>(
+    pub async fn record_timeout<V: for<'a> Deserialize<'a>, VER: StaticVersionType>(
         &self,
         key: &impl Serialize,
         timeout: Duration,
         bind_version: VER,
     ) -> Result<V, NetworkNodeHandleError> {
-        let result = async_timeout(timeout, self.get_record(key, 3, bind_version)).await;
+        let result = async_timeout(timeout, self.record(key, 3, bind_version)).await;
         match result {
             Err(e) => Err(e).context(TimeoutSnafu),
             Ok(r) => r,

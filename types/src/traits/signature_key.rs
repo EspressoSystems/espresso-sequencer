@@ -17,7 +17,7 @@ use crate::{utils::BuilderCommitment, vid::VidSchemeType};
 /// Type representing stake table entries in a `StakeTable`
 pub trait StakeTableEntryType {
     /// Get the stake value
-    fn get_stake(&self) -> U256;
+    fn stake(&self) -> U256;
 }
 
 /// Trait for abstracting public key signatures
@@ -117,13 +117,13 @@ pub trait SignatureKey:
     fn generated_from_seed_indexed(seed: [u8; 32], index: u64) -> (Self, Self::PrivateKey);
 
     /// get the stake table entry from the public key and stake value
-    fn get_stake_table_entry(&self, stake: u64) -> Self::StakeTableEntry;
+    fn stake_table_entry(&self, stake: u64) -> Self::StakeTableEntry;
 
     /// only get the public key from the stake table entry
-    fn get_public_key(entry: &Self::StakeTableEntry) -> Self;
+    fn public_key(entry: &Self::StakeTableEntry) -> Self;
 
     /// get the public parameter for the assembled signature checking
-    fn get_public_parameter(
+    fn public_parameter(
         stake_entries: Vec<Self::StakeTableEntry>,
         threshold: U256,
     ) -> Self::QCParams;
@@ -132,7 +132,7 @@ pub trait SignatureKey:
     fn check(real_qc_pp: &Self::QCParams, data: &[u8], qc: &Self::QCType) -> bool;
 
     /// get the assembled signature and the `BitVec` separately from the assembled signature
-    fn get_sig_proof(signature: &Self::QCType) -> (Self::PureAssembledSignatureType, BitVec);
+    fn sig_proof(signature: &Self::QCType) -> (Self::PureAssembledSignatureType, BitVec);
 
     /// assemble the signature from the partial signature and the indication of signers in `BitVec`
     fn assemble(

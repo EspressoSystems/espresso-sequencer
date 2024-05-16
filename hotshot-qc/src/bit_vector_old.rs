@@ -33,7 +33,7 @@ pub struct StakeTableEntry<V> {
 }
 
 impl<V> StakeTableEntryType for StakeTableEntry<V> {
-    fn get_stake(&self) -> U256 {
+    fn stake(&self) -> U256 {
         self.stake_amount
     }
 }

@@ -34,28 +34,28 @@ pub trait Membership<TYPES: NodeType>:
     ) -> Self;
 
     /// Clone the public key and corresponding stake table for current elected committee
-    fn get_committee_qc_stake_table(
+    fn committee_qc_stake_table(
         &self,
     ) -> Vec<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;
 
     /// The leader of the committee for view `view_number`.
-    fn get_leader(&self, view_number: TYPES::Time) -> TYPES::SignatureKey;
+    fn leader(&self, view_number: TYPES::Time) -> TYPES::SignatureKey;
 
     /// The staked members of the committee for view `view_number`.
-    fn get_staked_committee(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
+    fn staked_committee(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
 
     /// The non-staked members of the committee for view `view_number`.
-    fn get_non_staked_committee(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
+    fn non_staked_committee(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
 
     /// Get whole (staked + non-staked) committee for view `view_number`.
-    fn get_whole_committee(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
+    fn whole_committee(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
 
     /// Check if a key has stake
     fn has_stake(&self, pub_key: &TYPES::SignatureKey) -> bool;
 
     /// Get the stake table entry for a public key, returns `None` if the
     /// key is not in the table
-    fn get_stake(
+    fn stake(
         &self,
         pub_key: &TYPES::SignatureKey,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry>;

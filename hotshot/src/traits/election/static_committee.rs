@@ -56,7 +56,7 @@ where
     TYPES: NodeType<SignatureKey = PUBKEY>,
 {
     /// Clone the public key and corresponding stake table for current elected committee
-    fn get_committee_qc_stake_table(&self) -> Vec<PUBKEY::StakeTableEntry> {
+    fn committee_qc_stake_table(&self) -> Vec<PUBKEY::StakeTableEntry> {
         self.committee_nodes_with_stake.clone()
     }
 
@@ -65,16 +65,16 @@ where
         feature = "fixed-leader-election"
     )))]
     /// Index the vector of public keys with the current view number
-    fn get_leader(&self, view_number: TYPES::Time) -> PUBKEY {
+    fn leader(&self, view_number: TYPES::Time) -> PUBKEY {
         let index = usize::try_from(*view_number % self.all_nodes_with_stake.len() as u64).unwrap();
         let res = self.all_nodes_with_stake[index].clone();
-        TYPES::SignatureKey::get_public_key(&res)
+        TYPES::SignatureKey::public_key(&res)
     }
 
     #[cfg(feature = "fixed-leader-election")]
     /// Only get leader in fixed set
     /// Index the fixed vector (first fixed_leader_for_gpuvid element) of public keys with the current view number
-    fn get_leader(&self, view_number: TYPES::Time) -> PUBKEY {
+    fn leader(&self, view_number: TYPES::Time) -> PUBKEY {
         if self.fixed_leader_for_gpuvid <= 0
             || self.fixed_leader_for_gpuvid > self.all_nodes_with_stake.len()
         {
@@ -82,29 +82,29 @@ where
         }
         let index = usize::try_from(*view_number % self.fixed_leader_for_gpuvid as u64).unwrap();
         let res = self.all_nodes_with_stake[index].clone();
-        TYPES::SignatureKey::get_public_key(&res)
+        TYPES::SignatureKey::public_key(&res)
     }
 
     #[cfg(feature = "randomized-leader-election")]
     /// Index the vector of public keys with a random number generated using the current view number as a seed
-    fn get_leader(&self, view_number: TYPES::Time) -> PUBKEY {
+    fn leader(&self, view_number: TYPES::Time) -> PUBKEY {
         let mut rng: StdRng = rand::SeedableRng::seed_from_u64(*view_number);
         let randomized_view_number: usize = rng.gen();
         let index = randomized_view_number % self.nodes_with_stake.len();
         let res = self.all_nodes_with_stake[index].clone();
-        TYPES::SignatureKey::get_public_key(&res)
+        TYPES::SignatureKey::public_key(&res)
     }
 
     fn has_stake(&self, pub_key: &PUBKEY) -> bool {
-        let entry = pub_key.get_stake_table_entry(1u64);
+        let entry = pub_key.stake_table_entry(1u64);
         self.committee_nodes_with_stake.contains(&entry)
     }
 
-    fn get_stake(
+    fn stake(
         &self,
         pub_key: &<TYPES as NodeType>::SignatureKey,
     ) -> Option<<TYPES::SignatureKey as SignatureKey>::StakeTableEntry> {
-        let entry = pub_key.get_stake_table_entry(1u64);
+        let entry = pub_key.stake_table_entry(1u64);
         if self.committee_nodes_with_stake.contains(&entry) {
             Some(entry)
         } else {
@@ -125,17 +125,17 @@ where
             .iter()
             .map(|entry| entry.stake_table_entry.clone())
         {
-            if entry.get_stake() > U256::from(0) {
+            if entry.stake() > U256::from(0) {
                 // Positive stake
                 committee_nodes_with_stake.push(entry);
             } else {
                 // Zero stake
-                committee_nodes_without_stake.push(PUBKEY::get_public_key(&entry));
+                committee_nodes_without_stake.push(PUBKEY::public_key(&entry));
             }
         }
 
         // Retain all nodes with stake
-        all_nodes.retain(|entry| entry.stake_table_entry.get_stake() > U256::from(0));
+        all_nodes.retain(|entry| entry.stake_table_entry.stake() > U256::from(0));
 
         debug!(
             "Election Membership Size: {}",
@@ -170,29 +170,29 @@ where
         NonZeroU64::new(((self.committee_nodes_with_stake.len() as u64 * 9) / 10) + 1).unwrap()
     }
 
-    fn get_staked_committee(
+    fn staked_committee(
         &self,
         _view_number: <TYPES as NodeType>::Time,
     ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
         self.committee_nodes_with_stake
             .iter()
-            .map(|node| <TYPES as NodeType>::SignatureKey::get_public_key(node))
+            .map(|node| <TYPES as NodeType>::SignatureKey::public_key(node))
             .collect()
     }
 
-    fn get_non_staked_committee(
+    fn non_staked_committee(
         &self,
         _view_number: <TYPES as NodeType>::Time,
     ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
         self.committee_nodes_without_stake.iter().cloned().collect()
     }
 
-    fn get_whole_committee(
+    fn whole_committee(
         &self,
         view_number: <TYPES as NodeType>::Time,
     ) -> std::collections::BTreeSet<<TYPES as NodeType>::SignatureKey> {
-        let mut committee = self.get_staked_committee(view_number);
-        committee.extend(self.get_non_staked_committee(view_number));
+        let mut committee = self.staked_committee(view_number);
+        committee.extend(self.non_staked_committee(view_number));
         committee
     }
 }
@@ -208,7 +208,7 @@ where
     }
     #[allow(clippy::must_use_candidate)]
     /// get all the non-staked nodes
-    pub fn get_non_staked_nodes(&self) -> Vec<PUBKEY> {
+    pub fn non_staked_nodes(&self) -> Vec<PUBKEY> {
         self.committee_nodes_without_stake.clone()
     }
 }

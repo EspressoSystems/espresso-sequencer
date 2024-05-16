@@ -181,7 +181,7 @@ impl NetworkMsg for Vec<u8> {}
 /// a message
 pub trait ViewMessage<TYPES: NodeType> {
     /// get the view out of the message
-    fn get_view_number(&self) -> TYPES::Time;
+    fn view_number(&self) -> TYPES::Time;
     // TODO move out of this trait.
     /// get the purpose of the message
     fn purpose(&self) -> MessagePurpose;

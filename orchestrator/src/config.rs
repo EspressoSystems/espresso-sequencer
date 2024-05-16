@@ -716,11 +716,11 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
 
                 // Add to DA nodes based on index
                 if node_id < staked_da_nodes as u64 {
-                    known_da_nodes.push(cur_validator_config.get_public_config());
+                    known_da_nodes.push(cur_validator_config.public_config());
                     cur_validator_config.is_da = true;
                 }
 
-                cur_validator_config.get_public_config()
+                cur_validator_config.public_config()
             })
             .collect();
 

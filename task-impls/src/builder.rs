@@ -104,7 +104,7 @@ impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver> {
     /// # Errors
     /// - [`BuilderClientError::NotFound`] if blocks aren't available for this parent
     /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
-    pub async fn get_available_blocks(
+    pub async fn available_blocks(
         &self,
         parent: VidCommitment,
         view_number: u64,

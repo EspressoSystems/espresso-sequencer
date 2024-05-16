@@ -17,14 +17,14 @@ pub struct StakeTableEntry<K: SignatureKey> {
 
 impl<K: SignatureKey> StakeTableEntryType for StakeTableEntry<K> {
     /// Get the stake amount
-    fn get_stake(&self) -> U256 {
+    fn stake(&self) -> U256 {
         self.stake_amount
     }
 }
 
 impl<K: SignatureKey> StakeTableEntry<K> {
     /// Get the public key
-    pub fn get_key(&self) -> &K {
+    pub fn key(&self) -> &K {
         &self.stake_key
     }
 }

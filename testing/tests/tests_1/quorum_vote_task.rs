@@ -1,7 +1,7 @@
 #![allow(clippy::panic)]
 use hotshot::tasks::task_state::CreateTaskState;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
-use hotshot_testing::task_helpers::get_vid_share;
+use hotshot_testing::task_helpers::vid_share;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 
 #[cfg(test)]
@@ -147,7 +147,7 @@ async fn test_quorum_vote_task_miss_dependency() {
     let view_no_dac = TestScriptStage {
         inputs: vec![
             QuorumProposalValidated(proposals[0].data.clone(), leaves[0].clone()),
-            VIDShareRecv(get_vid_share(&vids[0].0, handle.get_public_key())),
+            VIDShareRecv(vid_share(&vids[0].0, handle.public_key())),
         ],
         outputs: vec![exact(VIDShareValidated(vids[0].0[0].clone()))],
         asserts: vec![],
@@ -163,7 +163,7 @@ async fn test_quorum_vote_task_miss_dependency() {
     let view_no_quorum_proposal = TestScriptStage {
         inputs: vec![
             DaCertificateRecv(dacs[2].clone()),
-            VIDShareRecv(get_vid_share(&vids[2].0, handle.get_public_key())),
+            VIDShareRecv(vid_share(&vids[2].0, handle.public_key())),
         ],
         outputs: vec![
             exact(DaCertificateValidated(dacs[2].clone())),

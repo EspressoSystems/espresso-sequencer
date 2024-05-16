@@ -103,7 +103,7 @@ impl<K: Key> MerkleProof<K> {
     }
 
     /// Returns the public key of the associated stake table entry, if there's any.
-    pub fn get_key(&self) -> Option<&K> {
+    pub fn key(&self) -> Option<&K> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key, value: _ }) => Some(key),
             _ => None,
@@ -111,7 +111,7 @@ impl<K: Key> MerkleProof<K> {
     }
 
     /// Returns the stake amount of the associated stake table entry, if there's any.
-    pub fn get_value(&self) -> Option<&U256> {
+    pub fn value(&self) -> Option<&U256> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key: _, value }) => Some(value),
             _ => None,
@@ -119,7 +119,7 @@ impl<K: Key> MerkleProof<K> {
     }
 
     /// Returns the associated stake table entry, if there's any.
-    pub fn get_key_value(&self) -> Option<(&K, &U256)> {
+    pub fn key_value(&self) -> Option<(&K, &U256)> {
         match self.path.first() {
             Some(MerklePathEntry::Leaf { key, value }) => Some((key, value)),
             _ => None,
@@ -317,7 +317,7 @@ impl<K: Key> PersistentMerkleNode<K> {
     /// Imagine that the keys in this subtree is sorted, returns the first key such that
     /// the prefix sum of withholding stakes is greater or equal the given `stake_number`.
     /// Useful for key sampling weighted by withholding stakes
-    pub fn get_key_by_stake(&self, mut stake_number: U256) -> Option<(&K, &U256)> {
+    pub fn key_by_stake(&self, mut stake_number: U256) -> Option<(&K, &U256)> {
         if stake_number >= self.total_stakes() {
             None
         } else {
@@ -334,7 +334,7 @@ impl<K: Key> PersistentMerkleNode<K> {
                         stake_number -= children[ptr].total_stakes();
                         ptr += 1;
                     }
-                    children[ptr].get_key_by_stake(stake_number)
+                    children[ptr].key_by_stake(stake_number)
                 }
                 PersistentMerkleNode::Leaf {
                     comm: _,
@@ -663,14 +663,14 @@ mod tests {
                 roots[i + 1].simple_lookup(height, &path[i]).unwrap()
             );
         }
-        // test get_key_by_stake
+        // test key_by_stake
         keys.iter().enumerate().for_each(|(i, key)| {
             assert_eq!(
                 key,
                 roots
                     .last()
                     .unwrap()
-                    .get_key_by_stake(U256::from(i as u64 * 100 + i as u64 + 1))
+                    .key_by_stake(U256::from(i as u64 * 100 + i as u64 + 1))
                     .unwrap()
                     .0
             );
@@ -680,8 +680,8 @@ mod tests {
         for i in 0..10 {
             let proof = roots.last().unwrap().lookup(height, &path[i]).unwrap();
             assert_eq!(height, proof.tree_height());
-            assert_eq!(&keys[i], proof.get_key().unwrap());
-            assert_eq!(&U256::from(100), proof.get_value().unwrap());
+            assert_eq!(&keys[i], proof.key().unwrap());
+            assert_eq!(&U256::from(100), proof.value().unwrap());
             assert_eq!(
                 roots.last().unwrap().commitment(),
                 proof.compute_root().unwrap()

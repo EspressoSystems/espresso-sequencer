@@ -172,7 +172,7 @@ pub trait ConsensusTime:
     /// Create a new instance of this time unit
     fn new(val: u64) -> Self;
     /// Get the u64 format of time
-    fn get_u64(&self) -> u64;
+    fn u64(&self) -> u64;
 }
 
 /// Trait with all the type definitions that are used in the current hotshot setup.

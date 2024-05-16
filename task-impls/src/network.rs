@@ -283,11 +283,11 @@ impl<
                 HotShotEvent::QuorumVoteSend(vote) => {
                     maybe_action = Some(HotShotAction::Vote);
                     (
-                        vote.get_signing_key(),
+                        vote.signing_key(),
                         MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                             GeneralConsensusMessage::Vote(vote.clone()),
                         )),
-                        TransmitType::Direct(membership.get_leader(vote.get_view_number() + 1)),
+                        TransmitType::Direct(membership.leader(vote.view_number() + 1)),
                     )
                 }
                 HotShotEvent::VidDisperseSend(proposal, sender) => {
@@ -306,11 +306,11 @@ impl<
                 HotShotEvent::DaVoteSend(vote) => {
                     maybe_action = Some(HotShotAction::DaVote);
                     (
-                        vote.get_signing_key(),
+                        vote.signing_key(),
                         MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
                             DaConsensusMessage::DaVote(vote.clone()),
                         )),
-                        TransmitType::Direct(membership.get_leader(vote.get_view_number())),
+                        TransmitType::Direct(membership.leader(vote.view_number())),
                     )
                 }
                 // ED NOTE: This needs to be broadcasted to all nodes, not just ones on the DA committee
@@ -325,31 +325,25 @@ impl<
                     )
                 }
                 HotShotEvent::ViewSyncPreCommitVoteSend(vote) => (
-                    vote.get_signing_key(),
+                    vote.signing_key(),
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::ViewSyncPreCommitVote(vote.clone()),
                     )),
-                    TransmitType::Direct(
-                        membership.get_leader(vote.get_view_number() + vote.get_data().relay),
-                    ),
+                    TransmitType::Direct(membership.leader(vote.view_number() + vote.date().relay)),
                 ),
                 HotShotEvent::ViewSyncCommitVoteSend(vote) => (
-                    vote.get_signing_key(),
+                    vote.signing_key(),
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::ViewSyncCommitVote(vote.clone()),
                     )),
-                    TransmitType::Direct(
-                        membership.get_leader(vote.get_view_number() + vote.get_data().relay),
-                    ),
+                    TransmitType::Direct(membership.leader(vote.view_number() + vote.date().relay)),
                 ),
                 HotShotEvent::ViewSyncFinalizeVoteSend(vote) => (
-                    vote.get_signing_key(),
+                    vote.signing_key(),
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::ViewSyncFinalizeVote(vote.clone()),
                     )),
-                    TransmitType::Direct(
-                        membership.get_leader(vote.get_view_number() + vote.get_data().relay),
-                    ),
+                    TransmitType::Direct(membership.leader(vote.view_number() + vote.date().relay)),
                 ),
                 HotShotEvent::ViewSyncPreCommitCertificate2Send(certificate, sender) => (
                     sender,
@@ -373,11 +367,11 @@ impl<
                     TransmitType::Broadcast,
                 ),
                 HotShotEvent::TimeoutVoteSend(vote) => (
-                    vote.get_signing_key(),
+                    vote.signing_key(),
                     MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                         GeneralConsensusMessage::TimeoutVote(vote.clone()),
                     )),
-                    TransmitType::Direct(membership.get_leader(vote.get_view_number() + 1)),
+                    TransmitType::Direct(membership.leader(vote.view_number() + 1)),
                 ),
                 HotShotEvent::UpgradeProposalSend(proposal, sender) => (
                     sender,
@@ -389,17 +383,17 @@ impl<
                 HotShotEvent::UpgradeVoteSend(vote) => {
                     error!("Sending upgrade vote!");
                     (
-                        vote.get_signing_key(),
+                        vote.signing_key(),
                         MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
                             GeneralConsensusMessage::UpgradeVote(vote.clone()),
                         )),
-                        TransmitType::Direct(membership.get_leader(vote.get_view_number())),
+                        TransmitType::Direct(membership.leader(vote.view_number())),
                     )
                 }
                 HotShotEvent::ViewChange(view) => {
                     self.view = view;
                     self.channel
-                        .update_view::<TYPES>(self.view.get_u64(), membership)
+                        .update_view::<TYPES>(self.view.u64(), membership)
                         .await;
                     return None;
                 }
@@ -421,8 +415,8 @@ impl<
             sender,
             kind: message_kind,
         };
-        let view = message.kind.get_view_number();
-        let committee = membership.get_whole_committee(view);
+        let view = message.kind.view_number();
+        let committee = membership.whole_committee(view);
         let net = Arc::clone(&self.channel);
         let storage = Arc::clone(&self.storage);
         let version = self.version;

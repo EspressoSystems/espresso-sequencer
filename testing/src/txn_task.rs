@@ -69,7 +69,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TxnTask<TYPES, I> {
                     // we're assuming all nodes have the same leaf.
                     // If they don't match, this is probably fine since
                     // it should be caught by an assertion (and the txn will be rejected anyway)
-                    let leaf = node.handle.get_decided_leaf().await;
+                    let leaf = node.handle.decided_leaf().await;
                     let txn = I::leaf_create_random_transaction(&leaf, &mut thread_rng(), 0);
                     node.handle
                         .submit_transaction(txn.clone())
