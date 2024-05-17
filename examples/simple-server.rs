@@ -148,7 +148,7 @@ async fn init_consensus(
         .iter()
         .zip(&state_key_pairs)
         .map(|(pub_key, state_key_pair)| PeerConfig::<BLSPubKey> {
-            stake_table_entry: pub_key.get_stake_table_entry(1u64),
+            stake_table_entry: pub_key.stake_table_entry(1u64),
             state_ver_key: state_key_pair.ver_key(),
         })
         .collect::<Vec<_>>();
@@ -255,7 +255,7 @@ async fn init_consensus(
 
     // Hook the builder up to the event stream from the first node
     if let Some(builder_task) = builder_task {
-        let event_stream = nodes[0].get_event_stream();
+        let event_stream = nodes[0].event_stream();
         builder_task.start(Box::new(event_stream));
     }
 

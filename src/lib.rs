@@ -77,7 +77,7 @@
 //! spawn(app.serve("0.0.0.0:8080", STATIC_VER_0_1));
 //!
 //! // Update query data using HotShot events.
-//! let mut events = hotshot.get_event_stream();
+//! let mut events = hotshot.event_stream();
 //! while let Some(event) = events.next().await {
 //!     // Re-lock the mutex each time we get a new event.
 //!     let mut data_source = data_source.write().await;
@@ -525,7 +525,7 @@ where
         BackgroundTask::spawn("server", async move { app.serve(&url, bind_version).await });
 
     // Subscribe to events before starting consensus, so we don't miss any events.
-    let mut events = hotshot.get_event_stream();
+    let mut events = hotshot.event_stream();
     hotshot.hotshot.start_consensus().await;
 
     // Update query data using HotShot events.
@@ -712,7 +712,7 @@ mod test {
 
         // Mock up some data and add a block to the store.
         let leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
-        let block = BlockQueryData::new(leaf.get_block_header().clone(), MockPayload::genesis());
+        let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
         hotshot_qs.insert_block(block.clone()).await.unwrap();
 
         let module_state =

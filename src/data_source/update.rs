@@ -23,7 +23,7 @@ use hotshot::types::{Event, EventType};
 use hotshot_types::event::LeafInfo;
 use hotshot_types::{
     traits::{
-        block_contents::{BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+        block_contents::{BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::{ConsensusTime, NodeType},
     },
     vid::vid_scheme,
@@ -75,7 +75,7 @@ where
             let qcs = once((**qc).clone())
                 // ...and each leaf in the chain justifies the subsequent leaf (its parent) through
                 // `leaf.justify_qc`.
-                .chain(leaf_chain.iter().map(|leaf| leaf.leaf.get_justify_qc()))
+                .chain(leaf_chain.iter().map(|leaf| leaf.leaf.justify_qc()))
                 // Put the QCs in chronological order.
                 .rev()
                 // The oldest QC is the `justify_qc` of the oldest leaf, which does not justify any
@@ -98,13 +98,13 @@ where
                 if let Some(vid_share) = vid_share {
                     self.insert_vid(
                         VidCommonQueryData::new(
-                            leaf.get_block_header().clone(),
+                            leaf.block_header().clone(),
                             vid_share.common.clone(),
                         ),
                         Some(vid_share.share.clone()),
                     )
                     .await?;
-                } else if leaf.get_view_number().get_u64() == 0 {
+                } else if leaf.view_number().u64() == 0 {
                     // HotShot does not run VID in consensus for the genesis block. In this case,
                     // the block payload is guaranteed to always be empty, so VID isn't really
                     // necessary. But for consistency, we will still store the VID dispersal data,
@@ -113,17 +113,17 @@ where
                 } else {
                     tracing::error!(
                         "VID info for block {} not available at decide",
-                        leaf.get_block_header().block_number()
+                        leaf.block_header().block_number()
                     );
                 }
 
-                if let Some(block) = leaf.get_block_payload() {
-                    self.insert_block(BlockQueryData::new(leaf.get_block_header().clone(), block))
+                if let Some(block) = leaf.block_payload() {
+                    self.insert_block(BlockQueryData::new(leaf.block_header().clone(), block))
                         .await?;
                 } else {
                     tracing::error!(
                         "block {} not available at decide",
-                        leaf.get_block_header().block_number()
+                        leaf.block_header().block_number()
                     );
                 }
             }
@@ -137,25 +137,19 @@ async fn store_genesis_vid<Types: NodeType>(
     leaf: &Leaf<Types>,
 ) {
     let payload = Payload::<Types>::genesis().0;
-    let bytes = match payload.encode() {
-        Ok(bytes) => bytes,
-        Err(err) => {
-            tracing::error!(%err, "unable to encode genesis payload");
-            return;
-        }
-    };
+    let bytes = payload.encode();
     match vid_scheme(GENESIS_VID_NUM_STORAGE_NODES).disperse(bytes) {
-        Ok(disperse) if disperse.commit != leaf.get_block_header().payload_commitment() => {
+        Ok(disperse) if disperse.commit != leaf.block_header().payload_commitment() => {
             tracing::error!(
                 computed = %disperse.commit,
-                header = %leaf.get_block_header().payload_commitment(),
+                header = %leaf.block_header().payload_commitment(),
                 "computed VID commit for genesis block does not match header",
             );
         }
         Ok(mut disperse) => {
             if let Err(err) = storage
                 .insert_vid(
-                    VidCommonQueryData::new(leaf.get_block_header().clone(), disperse.common),
+                    VidCommonQueryData::new(leaf.block_header().clone(), disperse.common),
                     Some(disperse.shares.remove(0)),
                 )
                 .await

@@ -61,6 +61,7 @@ use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BlockPayload},
         node_implementation::NodeType,
+        EncodeBytes,
     },
 };
 use itertools::{izip, Itertools};
@@ -849,11 +850,10 @@ where
 
         // While we don't necessarily have the full block for this leaf yet, we can initialize the
         // header table with block metadata taken from the leaf.
-        let header_json = serde_json::to_value(leaf.leaf().get_block_header()).map_err(|err| {
-            QueryError::Error {
+        let header_json =
+            serde_json::to_value(leaf.leaf().block_header()).map_err(|err| QueryError::Error {
                 message: format!("failed to serialize header: {err}"),
-            }
-        })?;
+            })?;
         tx.upsert(
             "header",
             ["height", "hash", "payload_hash", "data", "timestamp"],
@@ -861,15 +861,9 @@ where
             [[
                 sql_param(&(leaf.height() as i64)),
                 sql_param(&leaf.block_hash().to_string()),
-                sql_param(
-                    &leaf
-                        .leaf()
-                        .get_block_header()
-                        .payload_commitment()
-                        .to_string(),
-                ),
+                sql_param(&leaf.leaf().block_header().payload_commitment().to_string()),
                 sql_param(&header_json),
-                sql_param(&(leaf.leaf().get_block_header().timestamp() as i64)),
+                sql_param(&(leaf.leaf().block_header().timestamp() as i64)),
             ]],
         )
         .await?;
@@ -910,9 +904,7 @@ where
 
         // The header and payload tables should already have been initialized when we inserted the
         // corresponding leaf. All we have to do is add the payload itself and its size.
-        let payload = block.payload.encode().map_err(|err| QueryError::Error {
-            message: format!("failed to serialize block: {err}"),
-        })?;
+        let payload = block.payload.encode();
         tx.upsert(
             "payload",
             ["height", "data", "size"],
@@ -3312,8 +3304,8 @@ mod test {
         let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
         // insert some mock data
         for i in 0..20 {
-            leaf.leaf.get_block_header_mut().block_number = i;
-            leaf.leaf.get_block_header_mut().timestamp = Utc::now().timestamp() as u64;
+            leaf.leaf.block_header_mut().block_number = i;
+            leaf.leaf.block_header_mut().timestamp = Utc::now().timestamp() as u64;
             storage.insert_leaf(leaf.clone()).await.unwrap();
             storage.commit().await.unwrap();
         }
@@ -3382,8 +3374,8 @@ mod test {
         let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
         // insert some mock data
         for i in 0..20 {
-            leaf.leaf.get_block_header_mut().block_number = i;
-            leaf.leaf.get_block_header_mut().timestamp = Utc::now().timestamp() as u64;
+            leaf.leaf.block_header_mut().block_number = i;
+            leaf.leaf.block_header_mut().timestamp = Utc::now().timestamp() as u64;
             storage.insert_leaf(leaf.clone()).await.unwrap();
             storage.commit().await.unwrap();
         }

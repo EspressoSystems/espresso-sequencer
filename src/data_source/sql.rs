@@ -288,7 +288,7 @@ impl Config {
 ///     // Register API modules.
 ///
 ///     spawn(async move {
-///         let mut events = hotshot.get_event_stream();
+///         let mut events = hotshot.event_stream();
 ///         while let Some(event) = events.next().await {
 ///             let mut state = state.write().await;
 ///             UpdateDataSource::<AppTypes>::update(&mut state.hotshot_qs, &event)
