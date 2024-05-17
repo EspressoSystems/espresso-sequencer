@@ -199,10 +199,6 @@ impl BlockPayload for TestBlockPayload {
         Self { transactions }
     }
 
-    fn genesis() -> (Self, Self::Metadata) {
-        (Self::genesis(), TestMetadata)
-    }
-
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
         let mut digest = sha2::Sha256::new();
         for txn in &self.transactions {

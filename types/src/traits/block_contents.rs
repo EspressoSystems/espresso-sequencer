@@ -89,7 +89,13 @@ pub trait BlockPayload:
     fn from_bytes(encoded_transactions: &[u8], metadata: &Self::Metadata) -> Self;
 
     /// Build the genesis payload and metadata.
-    fn genesis() -> (Self, Self::Metadata);
+    #[must_use]
+    fn genesis() -> (Self, Self::Metadata)
+    where
+        <Self as BlockPayload>::Instance: Default,
+    {
+        Self::from_transactions([], &Default::default()).unwrap()
+    }
 
     /// List of transaction commitments.
     fn transaction_commitments(
