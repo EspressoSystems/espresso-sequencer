@@ -121,26 +121,32 @@ impl L1Client {
 
     /// Get information about the given block.
     ///
-    /// If the desired block number is not available yet, this function will block until it becomes
-    /// available.
-    pub async fn wait_for_block(&self, number: u64) -> L1BlockInfo {
+    /// If the desired block number is not finalized yet, this function will block until it becomes
+    /// finalized.
+    pub async fn wait_for_finalized_block(&self, number: u64) -> L1BlockInfo {
         let interval = self.provider.get_interval();
 
-        // Wait for the block to become available.
-        loop {
-            match self.provider.get_block_number().await {
-                Ok(height) if height > number.into() => break,
-                Ok(height) => {
-                    tracing::warn!(number, %height, "waiting for L1 block");
-                }
-                Err(err) => {
-                    tracing::error!(%err, "failed to get L1 block height");
-                }
+        // Wait for the block to finalize.
+        let finalized = loop {
+            let Some(block) = self.get_finalized_block().await else {
+                tracing::info!("waiting for finalized block");
+                sleep(interval).await;
+                continue;
+            };
+            if block.number >= number {
+                break block;
             }
+            tracing::info!(current_finalized = %block.number, "waiting for finalized block");
             sleep(interval).await;
+            continue;
+        };
+
+        if finalized.number == number {
+            return finalized;
         }
 
-        // Get the block, retrying until we succeed.
+        // The finalized block may have skipped over the block of interest. In this case, our block
+        // is still finalized, since it is before the finalized block. We just need to fetch it.
         loop {
             let block = match self.provider.get_block(number).await {
                 Ok(Some(block)) => block,
@@ -477,7 +483,7 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_wait_for_block() {
+    async fn test_wait_for_finalized_block() {
         setup_logging();
         setup_backtrace();
 
@@ -487,7 +493,7 @@ mod test {
 
         // Wait for a block 10 blocks in the future.
         let block_height = provider.get_block_number().await.unwrap().as_u64();
-        let block = l1_client.wait_for_block(block_height + 10).await;
+        let block = l1_client.wait_for_finalized_block(block_height + 10).await;
         assert_eq!(block.number, block_height + 10);
 
         // Compare against underlying provider.
