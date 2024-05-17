@@ -126,10 +126,10 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             Some((leaf, high_qc)) => {
                 tracing::info!(?leaf, ?high_qc, "starting from saved leaf");
                 ensure!(
-                    leaf.get_view_number() == high_qc.view_number,
+                    leaf.view_number() == high_qc.view_number,
                     format!(
                         "loaded anchor leaf from view {:?}, but high QC is from view {:?}",
-                        leaf.get_view_number(),
+                        leaf.view_number(),
                         high_qc.view_number
                     )
                 );
@@ -140,7 +140,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                 (Leaf::genesis(&state), QuorumCertificate::genesis(&state))
             }
         };
-        let validated_state = if leaf.get_block_header().height == 0 {
+        let validated_state = if leaf.block_header().height == 0 {
             // If we are starting from genesis, we can provide the full state.
             Some(Arc::new(ValidatedState::genesis(&state).0))
         } else {
@@ -153,7 +153,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         // between `highest_voted_view` and `leaf.view_number`. This prevents double votes from
         // starting in a view in which we had already voted before the restart, and prevents
         // unnecessary catchup from starting in a view earlier than the anchor leaf.
-        let mut view = max(highest_voted_view, leaf.get_view_number());
+        let mut view = max(highest_voted_view, leaf.view_number());
         if view != ViewNumber::genesis() {
             view += 1;
         }
@@ -188,9 +188,9 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     async fn handle_event(&mut self, event: &Event<SeqTypes>) {
         if let EventType::Decide { leaf_chain, qc, .. } = &event.event {
             if let Some(LeafInfo { leaf, .. }) = leaf_chain.first() {
-                if qc.view_number != leaf.get_view_number() {
+                if qc.view_number != leaf.view_number() {
                     tracing::error!(
-                        leaf_view = ?leaf.get_view_number(),
+                        leaf_view = ?leaf.view_number(),
                         qc_view = ?qc.view_number,
                         "latest leaf and QC are from different views!",
                     );
@@ -204,7 +204,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                     );
                 }
 
-                if let Err(err) = self.collect_garbage(leaf.get_view_number()).await {
+                if let Err(err) = self.collect_garbage(leaf.view_number()).await {
                     tracing::error!("Failed to garbage collect. {err:#}",);
                 }
             }
@@ -252,8 +252,9 @@ mod persistence_tests {
     use crate::{NodeState, Transaction};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
+    use hotshot::types::BLSPubKey;
     use hotshot::types::SignatureKey;
-    use hotshot::{traits::BlockPayload, types::BLSPubKey};
+    use hotshot_types::traits::EncodeBytes;
     use hotshot_types::{event::HotShotAction, vid::vid_scheme};
     use jf_vid::VidScheme;
     use rand::{RngCore, SeedableRng};
@@ -282,7 +283,7 @@ mod persistence_tests {
 
         // Store a newer leaf, make sure storage gets updated.
         let mut leaf2 = leaf1.clone();
-        leaf2.get_block_header_mut().height += 1;
+        leaf2.block_header_mut().height += 1;
         let mut qc2 = qc1.clone();
         qc2.data.leaf_commit = leaf2.commit();
         qc2.vote_commitment = qc2.data.commit();
@@ -359,8 +360,8 @@ mod persistence_tests {
         );
 
         let leaf = Leaf::genesis(&NodeState::mock());
-        let payload = leaf.get_block_payload().unwrap();
-        let bytes = payload.encode().unwrap().to_vec();
+        let payload = leaf.block_payload().unwrap();
+        let bytes = payload.encode().to_vec();
         let disperse = vid_scheme(2).disperse(bytes).unwrap();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let mut vid = VidDisperseShare::<SeqTypes> {

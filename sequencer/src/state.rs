@@ -47,6 +47,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashSet, ops::Add, str::FromStr};
+use vbs::version::Version;
 
 const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
 const FEE_MERKLE_TREE_HEIGHT: usize = 20;
@@ -210,7 +211,7 @@ pub fn validate_proposal(
     proposal: &Header,
     vid_common: &VidCommon,
 ) -> anyhow::Result<()> {
-    let parent_header = parent_leaf.get_block_header();
+    let parent_header = parent_leaf.block_header();
 
     // validate `ChainConfig`
     anyhow::ensure!(
@@ -321,10 +322,10 @@ async fn compute_state_update(
 ) -> anyhow::Result<(ValidatedState, Delta)> {
     let proposed_leaf = proposed_leaf.leaf();
     let parent_leaf = parent_leaf.leaf();
-    let header = proposed_leaf.get_block_header();
+    let header = proposed_leaf.block_header();
 
     // Check internal consistency.
-    let parent_header = parent_leaf.get_block_header();
+    let parent_header = parent_leaf.block_header();
     ensure!(
         state.block_merkle_tree.commitment() == parent_header.block_merkle_tree_root,
         "internal error! in-memory block tree {:?} does not match parent header {:?}",
@@ -409,7 +410,7 @@ async fn store_state_update(
     skip_all,
     fields(
         node_id = instance.node_id,
-        view = ?parent_leaf.leaf().get_view_number(),
+        view = ?parent_leaf.leaf().view_number(),
         height = parent_leaf.height(),
     ),
 )]
@@ -574,8 +575,8 @@ impl ValidatedState {
             .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
         );
 
-        let parent_height = parent_leaf.get_height();
-        let parent_view = parent_leaf.get_view_number();
+        let parent_height = parent_leaf.height();
+        let parent_view = parent_leaf.view_number();
 
         // Ensure merkle tree has frontier
         if self.need_to_fetch_blocks_mt_frontier() {
@@ -653,7 +654,7 @@ pub async fn get_l1_deposits(
             .get_finalized_deposits(
                 addr,
                 parent_leaf
-                    .get_block_header()
+                    .block_header()
                     .l1_finalized
                     .map(|block_info| block_info.number),
                 block_info.number,
@@ -675,7 +676,7 @@ fn apply_proposal(
     // pushing a block into merkle tree shouldn't fail
     validated_state
         .block_merkle_tree
-        .push(parent_leaf.get_block_header().commit())
+        .push(parent_leaf.block_header().commit())
         .unwrap();
 
     for FeeInfo { account, amount } in l1_deposits.iter() {
@@ -705,8 +706,8 @@ impl HotShotState<SeqTypes> for ValidatedState {
         skip_all,
         fields(
             node_id = instance.node_id,
-            view = ?parent_leaf.get_view_number(),
-            height = parent_leaf.get_height(),
+            view = ?parent_leaf.view_number(),
+            height = parent_leaf.height(),
         ),
     )]
     async fn validate_and_apply_header(
@@ -715,6 +716,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         parent_leaf: &Leaf,
         proposed_header: &Header,
         vid_common: VidCommon,
+        _version: Version,
     ) -> Result<(Self, Self::Delta), Self::Error> {
         //validate builder fee
         if let Err(err) = validate_builder_fee(proposed_header) {
@@ -743,7 +745,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
 
         // log successful progress about once in 10 - 20 seconds,
         // TODO: we may want to make this configurable
-        if parent_leaf.get_view_number().get_u64() % 10 == 0 {
+        if parent_leaf.view_number().u64() % 10 == 0 {
             tracing::info!("validated and applied new header");
         }
         Ok((validated_state, delta))
@@ -1295,7 +1297,7 @@ mod test {
             ..Default::default()
         });
         let parent = Leaf::genesis(&instance);
-        let header = parent.get_block_header();
+        let header = parent.block_header();
 
         // Validation fails because the proposed block exceeds the maximum block size.
         let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
@@ -1319,7 +1321,7 @@ mod test {
             ..Default::default()
         });
         let parent = Leaf::genesis(&instance);
-        let header = parent.get_block_header();
+        let header = parent.block_header();
 
         // Validation fails because the genesis fee (0) is too low.
         let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)

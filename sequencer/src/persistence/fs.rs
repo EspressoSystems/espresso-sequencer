@@ -163,7 +163,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
-        let view_number = view.get_u64();
+        let view_number = view.u64();
 
         let delete_files = |dir_path: PathBuf| -> anyhow::Result<()> {
             if !dir_path.is_dir() {
@@ -220,10 +220,10 @@ impl SequencerPersistence for Persistence {
                 let mut height_bytes = [0; 8];
                 file.read_exact(&mut height_bytes).context("read height")?;
                 let height = u64::from_le_bytes(height_bytes);
-                if height >= leaf.get_height() {
+                if height >= leaf.height() {
                     tracing::warn!(
                         saved_height = height,
-                        new_height = leaf.get_height(),
+                        new_height = leaf.height(),
                         "not writing anchor leaf because saved leaf has newer height",
                     );
                     return Ok(false);
@@ -235,7 +235,7 @@ impl SequencerPersistence for Persistence {
             },
             |mut file| {
                 // Save the new leaf. First we write the height.
-                file.write_all(&leaf.get_height().to_le_bytes())
+                file.write_all(&leaf.height().to_le_bytes())
                     .context("write height")?;
                 // Now serialize and write out the actual leaf and its corresponding QC.
                 let bytes = bincode::serialize(&(leaf, qc)).context("serialize leaf")?;
@@ -280,9 +280,7 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
         let dir_path = self.da_dir_path();
 
-        let file_path = dir_path
-            .join(view.get_u64().to_string())
-            .with_extension("txt");
+        let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
 
         if !file_path.exists() {
             return Ok(None);
@@ -301,9 +299,7 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
         let dir_path = self.vid_dir_path();
 
-        let file_path = dir_path
-            .join(view.get_u64().to_string())
-            .with_extension("txt");
+        let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
 
         if !file_path.exists() {
             return Ok(None);
@@ -319,7 +315,7 @@ impl SequencerPersistence for Persistence {
         &mut self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        let view_number = proposal.data.get_view_number().get_u64();
+        let view_number = proposal.data.view_number().u64();
         let dir_path = self.vid_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
@@ -344,7 +340,7 @@ impl SequencerPersistence for Persistence {
         &mut self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        let view_number = proposal.data.get_view_number().get_u64();
+        let view_number = proposal.data.view_number().u64();
         let dir_path = self.da_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create da dir")?;
@@ -384,7 +380,7 @@ impl SequencerPersistence for Persistence {
                 Ok(saved_view < view)
             },
             |mut file| {
-                file.write_all(&view.get_u64().to_le_bytes())?;
+                file.write_all(&view.u64().to_le_bytes())?;
                 Ok(())
             },
         )

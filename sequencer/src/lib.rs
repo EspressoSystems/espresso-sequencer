@@ -566,7 +566,7 @@ pub mod testing {
                 .iter()
                 .zip(&state_key_pairs)
                 .map(|(pub_key, state_key_pair)| PeerConfig::<PubKey> {
-                    stake_table_entry: pub_key.get_stake_table_entry(1),
+                    stake_table_entry: pub_key.stake_table_entry(1),
                     state_ver_key: state_key_pair.ver_key(),
                 })
                 .collect::<Vec<_>>();
@@ -733,12 +733,12 @@ pub mod testing {
             if let Decide { leaf_chain, .. } = event.event {
                 if let Some(height) = leaf_chain.iter().find_map(|LeafInfo { leaf, .. }| {
                     if leaf
-                        .get_block_payload()
+                        .block_payload()
                         .as_ref()?
-                        .transaction_commitments(leaf.get_block_header().metadata())
+                        .transaction_commitments(leaf.block_header().metadata())
                         .contains(&commitment)
                     {
-                        Some(leaf.get_block_header().block_number())
+                        Some(leaf.block_header().block_number())
                     } else {
                         None
                     }
@@ -766,7 +766,7 @@ mod test {
     use hotshot_types::{
         event::LeafInfo,
         traits::block_contents::{
-            vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
+            vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
         },
     };
     use testing::{wait_for_decide_on_handle, TestConfig};
@@ -789,10 +789,10 @@ mod test {
 
         // Hook the builder up to the event stream from the first node
         if let Some(builder_task) = builder_task {
-            builder_task.start(Box::new(handle_0.get_event_stream()));
+            builder_task.start(Box::new(handle_0.event_stream()));
         }
 
-        let mut events = handle_0.get_event_stream();
+        let mut events = handle_0.event_stream();
 
         for handle in handles.iter() {
             handle.start_consensus().await;
@@ -826,11 +826,11 @@ mod test {
 
         let handle_0 = &handles[0];
 
-        let mut events = handle_0.get_event_stream();
+        let mut events = handle_0.event_stream();
 
         // Hook the builder up to the event stream from the first node
         if let Some(builder_task) = builder_task {
-            builder_task.start(Box::new(handle_0.get_event_stream()));
+            builder_task.start(Box::new(handle_0.event_stream()));
         }
 
         for handle in handles.iter() {
@@ -843,9 +843,7 @@ mod test {
                 Payload::from_transactions([], &NodeState::mock()).unwrap();
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
-                let payload_bytes = genesis_payload
-                    .encode()
-                    .expect("unable to encode genesis payload");
+                let payload_bytes = genesis_payload.encode();
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
             let genesis_state = NodeState::mock();
@@ -868,7 +866,7 @@ mod test {
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-                let header = leaf.get_block_header().clone();
+                let header = leaf.block_header().clone();
                 if header.height == 0 {
                     parent = header;
                     continue;

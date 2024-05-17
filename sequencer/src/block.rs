@@ -1,7 +1,7 @@
 use crate::{BlockBuildingSnafu, NodeState, Transaction};
 use committable::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
-use hotshot_types::traits::BlockPayload;
+use hotshot_types::traits::{BlockPayload, EncodeBytes};
 use hotshot_types::utils::BuilderCommitment;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -19,7 +19,11 @@ use payload::Payload;
 use tables::NameSpaceTable;
 
 pub type NsTable = NameSpaceTable<TxTableEntryWord>;
-
+impl EncodeBytes for Payload<TxTableEntryWord> {
+    fn encode(&self) -> Arc<[u8]> {
+        Arc::from(self.raw_payload.clone())
+    }
+}
 impl BlockPayload for Payload<TxTableEntryWord> {
     type Error = crate::Error;
     type Transaction = Transaction;
@@ -72,10 +76,6 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         Self::from_transactions([], &NodeState::mock()).unwrap()
     }
 
-    fn encode(&self) -> Result<Arc<[u8]>, Self::Error> {
-        Ok(Arc::from(self.raw_payload.clone()))
-    }
-
     fn transaction_commitments(&self, meta: &Self::Metadata) -> Vec<Commitment<Self::Transaction>> {
         self.enumerate(meta).map(|(_, tx)| tx.commit()).collect()
     }
@@ -92,7 +92,7 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
 
-    fn get_transactions<'a>(
+    fn transactions<'a>(
         &'a self,
         metadata: &'a Self::Metadata,
     ) -> impl 'a + Iterator<Item = Self::Transaction> {
