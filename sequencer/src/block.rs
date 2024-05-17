@@ -62,16 +62,6 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         }
     }
 
-    // TODO remove
-    fn genesis() -> (Self, Self::Metadata) {
-        // this is only called from `Leaf::genesis`. Since we are
-        // passing empty list, max_block_size is irrelevant so we can
-        // use the mock NodeState. A future update to HotShot should
-        // make a change there to remove the need for this workaround.
-
-        Self::from_transactions([], &NodeState::mock()).unwrap()
-    }
-
     fn encode(&self) -> Result<Arc<[u8]>, Self::Error> {
         Ok(Arc::from(self.raw_payload.clone()))
     }
