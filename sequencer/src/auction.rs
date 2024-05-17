@@ -1,4 +1,7 @@
-use crate::{state::FeeAmount, NamespaceId, Transaction};
+use crate::{
+    state::{FeeAccount, FeeAmount},
+    NamespaceId, Transaction,
+};
 use hotshot_types::data::ViewNumber;
 use std::num::NonZeroU64;
 
@@ -72,6 +75,7 @@ struct Signature;
 struct BidTx {
     auction: AuctionId,
     amount: FeeAmount,
+    account: FeeAccount,
     namespace: NamespaceId,
     nonce: Nonce,
     signature: Signature,
