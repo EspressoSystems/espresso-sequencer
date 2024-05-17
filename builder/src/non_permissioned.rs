@@ -30,6 +30,7 @@ use hotshot_types::{
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::{ConsensusTime, NodeType},
+        EncodeBytes,
     },
     utils::BuilderCommitment,
 };
@@ -119,9 +120,7 @@ impl BuilderConfig {
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
 
         let vid_commitment = {
-            let payload_bytes = genesis_payload
-                .encode()
-                .expect("unable to encode genesis payload");
+            let payload_bytes = genesis_payload.encode();
             vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
         };
 

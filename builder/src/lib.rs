@@ -195,7 +195,7 @@ pub mod testing {
             // Only pass the pub keys to the hotshot config
             let known_nodes_without_stake_pub_keys = known_nodes_without_stake
                 .iter()
-                .map(|x| <BLSPubKey as SignatureKey>::get_public_key(&x.stake_table_entry))
+                .map(|x| <BLSPubKey as SignatureKey>::public_key(&x.stake_table_entry))
                 .collect::<Vec<_>>();
 
             let master_map = MasterMap::new();
@@ -261,7 +261,7 @@ pub mod testing {
             .iter()
             .zip(&state_key_pairs)
             .map(|(pub_key, state_key_pair)| PeerConfig::<PubKey> {
-                stake_table_entry: pub_key.get_stake_table_entry(stake_value),
+                stake_table_entry: pub_key.stake_table_entry(stake_value),
                 state_ver_key: state_key_pair.ver_key(),
             })
             .collect::<Vec<_>>();
@@ -466,7 +466,7 @@ pub mod testing {
             // send the events to the event streaming state
             async_spawn({
                 async move {
-                    let mut hotshot_event_stream = hotshot_context_handle.get_event_stream();
+                    let mut hotshot_event_stream = hotshot_context_handle.event_stream();
                     loop {
                         let event = hotshot_event_stream.next().await.unwrap();
                         tracing::debug!("Before writing in event streamer: {event:?}");
@@ -494,12 +494,12 @@ pub mod testing {
             if let Decide { leaf_chain, .. } = event.event {
                 if let Some(height) = leaf_chain.iter().find_map(|LeafInfo { leaf, .. }| {
                     if leaf
-                        .get_block_payload()
+                        .block_payload()
                         .as_ref()?
-                        .transaction_commitments(leaf.get_block_header().metadata())
+                        .transaction_commitments(leaf.block_header().metadata())
                         .contains(&commitment)
                     {
-                        Some(leaf.get_block_header().block_number())
+                        Some(leaf.block_header().block_number())
                     } else {
                         None
                     }
@@ -664,7 +664,7 @@ mod test {
     use hotshot_builder_core::service::GlobalState;
     use hotshot_types::event::LeafInfo;
     use hotshot_types::traits::block_contents::{
-        vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
+        vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
     };
     use hotshot_types::utils::BuilderCommitment;
     use sequencer::block::payload::Payload;
@@ -695,7 +695,7 @@ mod test {
         let total_nodes = HotShotTestConfig::total_nodes();
 
         // try to listen on non-voting node handle as it is the last handle
-        let mut events = handles[total_nodes - 1].0.get_event_stream();
+        let mut events = handles[total_nodes - 1].0.event_stream();
         for (handle, ..) in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
@@ -709,9 +709,7 @@ mod test {
             let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
-                let payload_bytes = genesis_payload
-                    .encode()
-                    .expect("unable to encode genesis payload");
+                let payload_bytes = genesis_payload.encode();
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
             Header::genesis(
@@ -733,7 +731,7 @@ mod test {
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-                let header = leaf.get_block_header().clone();
+                let header = leaf.block_header().clone();
                 if header.height == 0 {
                     parent = header;
                     continue;

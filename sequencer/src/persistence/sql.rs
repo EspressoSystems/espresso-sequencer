@@ -290,10 +290,10 @@ impl SequencerPersistence for Persistence {
         transaction(self, |mut tx| {
             async move {
                 let stmt1 = "DELETE FROM vid_share where view <= $1";
-                tx.execute(stmt1, [&(view.get_u64() as i64)]).await?;
+                tx.execute(stmt1, [&(view.u64() as i64)]).await?;
 
                 let stmt2 = "DELETE FROM da_proposal where view <= $1";
-                tx.execute(stmt2, [&(view.get_u64() as i64)]).await?;
+                tx.execute(stmt2, [&(view.u64() as i64)]).await?;
                 Ok(())
             }
             .boxed()
@@ -325,8 +325,8 @@ impl SequencerPersistence for Persistence {
             )
         ";
 
-        let height = leaf.get_height() as i64;
-        let view = qc.view_number.get_u64() as i64;
+        let height = leaf.height() as i64;
+        let view = qc.view_number.u64() as i64;
         let leaf_bytes = bincode::serialize(leaf)?;
         let qc_bytes = bincode::serialize(qc)?;
 
@@ -408,7 +408,7 @@ impl SequencerPersistence for Persistence {
             .db
             .query_opt(
                 "SELECT data FROM da_proposal where view = $1",
-                [&(view.get_u64() as i64)],
+                [&(view.u64() as i64)],
             )
             .await?;
 
@@ -428,7 +428,7 @@ impl SequencerPersistence for Persistence {
             .db
             .query_opt(
                 "SELECT data FROM vid_share where view = $1",
-                [&(view.get_u64() as i64)],
+                [&(view.u64() as i64)],
             )
             .await?;
 
@@ -445,7 +445,7 @@ impl SequencerPersistence for Persistence {
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
-        let view = data.get_view_number().get_u64();
+        let view = data.view_number().u64();
         let data_bytes = bincode::serialize(proposal).unwrap();
 
         transaction(self, |mut tx| {
@@ -468,7 +468,7 @@ impl SequencerPersistence for Persistence {
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
-        let view = data.get_view_number().get_u64();
+        let view = data.view_number().u64();
         let data_bytes = bincode::serialize(proposal).unwrap();
 
         transaction(self, |mut tx| {
@@ -497,7 +497,7 @@ impl SequencerPersistence for Persistence {
 
         transaction(self, |mut tx| {
             async move {
-                tx.execute_one_with_retries(stmt, [view.get_u64() as i64])
+                tx.execute_one_with_retries(stmt, [view.u64() as i64])
                     .await?;
                 Ok(())
             }
