@@ -140,7 +140,14 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                 (Leaf::genesis(&state), QuorumCertificate::genesis(&state))
             }
         };
-        let validated_state = Some(Arc::new(ValidatedState::genesis(&state).0));
+        let validated_state = if leaf.get_block_header().height == 0 {
+            // If we are starting from genesis, we can provide the full state.
+            Some(Arc::new(ValidatedState::genesis(&state).0))
+        } else {
+            // Otherwise, we will have to construct a sparse state and fetch missing data during
+            // catchup.
+            None
+        };
 
         // If we are not starting from genesis, we start from the view following the maximum view
         // between `highest_voted_view` and `leaf.view_number`. This prevents double votes from
@@ -161,6 +168,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             ?leaf,
             ?view,
             ?high_qc,
+            ?validated_state,
             ?undecided_leaves,
             ?undecided_state,
             "loaded consensus state"
