@@ -26,7 +26,10 @@ use std::{
 pub struct Options {
     /// Storage path for persistent data.
     #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
-    pub path: PathBuf,
+    path: PathBuf,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_STORE_UNDECIDED_STATE", hide = true)]
+    store_undecided_state: bool,
 }
 
 impl Default for Options {
@@ -35,12 +38,28 @@ impl Default for Options {
     }
 }
 
+impl Options {
+    pub fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            store_undecided_state: false,
+        }
+    }
+
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
 #[async_trait]
 impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
     async fn create(self) -> anyhow::Result<Persistence> {
-        Ok(Persistence(self.path))
+        Ok(Persistence {
+            path: self.path,
+            store_undecided_state: self.store_undecided_state,
+        })
     }
 
     async fn reset(self) -> anyhow::Result<()> {
@@ -50,31 +69,34 @@ impl PersistenceOptions for Options {
 
 /// File system backed persistence.
 #[derive(Clone, Debug)]
-pub struct Persistence(PathBuf);
+pub struct Persistence {
+    path: PathBuf,
+    store_undecided_state: bool,
+}
 
 impl Persistence {
     fn config_path(&self) -> PathBuf {
-        self.0.join("hotshot.cfg")
+        self.path.join("hotshot.cfg")
     }
 
     fn voted_view_path(&self) -> PathBuf {
-        self.0.join("highest_voted_view")
+        self.path.join("highest_voted_view")
     }
 
     fn anchor_leaf_path(&self) -> PathBuf {
-        self.0.join("anchor_leaf")
+        self.path.join("anchor_leaf")
     }
 
     fn vid_dir_path(&self) -> PathBuf {
-        self.0.join("vid")
+        self.path.join("vid")
     }
 
     fn da_dir_path(&self) -> PathBuf {
-        self.0.join("da")
+        self.path.join("da")
     }
 
     fn undecided_state_path(&self) -> PathBuf {
-        self.0.join("undecided_state")
+        self.path.join("undecided_state")
     }
 
     /// Overwrite a file if a condition is met.
@@ -372,6 +394,10 @@ impl SequencerPersistence for Persistence {
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        if !self.store_undecided_state {
+            return Ok(());
+        }
+
         self.replace(
             &self.undecided_state_path(),
             |_| {
@@ -403,7 +429,7 @@ mod testing {
         }
 
         async fn connect(storage: &Self::Storage) -> Self {
-            Persistence(storage.path().into())
+            Options::new(storage.path().into()).create().await.unwrap()
         }
     }
 }

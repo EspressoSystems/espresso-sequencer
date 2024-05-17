@@ -212,9 +212,7 @@ mod test {
             if let Err(err) = init_with_storage(
                 modules,
                 opt,
-                fs::Options {
-                    path: tmp.path().into(),
-                },
+                fs::Options::new(tmp.path().into()),
                 SEQUENCER_VERSION,
             )
             .await
