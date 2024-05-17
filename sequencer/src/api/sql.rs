@@ -100,10 +100,14 @@ impl CatchupDataSource for DataSource {
 
 impl HotShotConfigDataSource for DataSource {
     async fn get_config(&self) -> anyhow::Result<Option<MyHotShotConfig>> {
-        (*self.storage().await)
-            .load_config()
+        let hotshot_config = self
+            .storage()
             .await
-            .map(|res| res.map(|network_config| MyHotShotConfig::new(network_config.config)))
+            .load_config()
+            .await?
+            .map(|res| res.config);
+
+        hotshot_config.map(|c| MyHotShotConfig::new(c)).transpose()
     }
 }
 
