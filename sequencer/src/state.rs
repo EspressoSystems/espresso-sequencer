@@ -629,6 +629,15 @@ impl ValidatedState {
         let mut validated_state =
             apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
 
+        // TODO we will need something similar to `charge_fee` but
+        // that charges `BidTx` to the account. We will also validate
+        // we are within bid phase time constraints. Questions: * Is
+        // there a single bid per block or multiple?  * What
+        // account(s) are we charging?
+        //
+        // Assuming multiple bids we might have a `bids_map` might be
+        // a hashmap of accounts => `BidTx`
+        // charge_bids(&mut validated_state, bids_map);
         charge_fee(
             &mut validated_state,
             &mut delta,
