@@ -41,7 +41,7 @@ impl<Types: NodeType> From<Event<Types>> for BuilderEvent<Types> {
                     block_size,
                     ..
                 } => {
-                    let latest_decide_view_num = leaf_chain[0].leaf.get_view_number();
+                    let latest_decide_view_num = leaf_chain[0].leaf.view_number();
                     BuilderEventType::HotshotDecide {
                         latest_decide_view_num,
                         block_size,
