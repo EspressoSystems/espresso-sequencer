@@ -283,6 +283,7 @@ impl ModuleArgs {
                 SequencerModule::Status(m) => curr = m.add(&mut modules.status, &mut provided)?,
                 SequencerModule::State(m) => curr = m.add(&mut modules.state, &mut provided)?,
                 SequencerModule::Catchup(m) => curr = m.add(&mut modules.catchup, &mut provided)?,
+                SequencerModule::Config(m) => curr = m.add(&mut modules.config, &mut provided)?,
                 SequencerModule::HotshotEvents(m) => {
                     curr = m.add(&mut modules.hotshot_events, &mut provided)?
                 }
@@ -393,6 +394,7 @@ enum SequencerModule {
     ///
     /// This module requires the http module to be started.
     Catchup(Module<api::options::Catchup>),
+    Config(Module<api::options::Config>),
     /// Run the merklized state  API module.
     ///
     /// This module requires the http and storage-sql modules to be started.
@@ -417,6 +419,7 @@ pub struct Modules {
     pub status: Option<api::options::Status>,
     pub state: Option<api::options::State>,
     pub catchup: Option<api::options::Catchup>,
+    pub config: Option<api::options::Config>,
     pub hotshot_events: Option<api::options::HotshotEvents>,
     pub explorer: Option<api::options::Explorer>,
 }

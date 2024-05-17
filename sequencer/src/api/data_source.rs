@@ -19,7 +19,11 @@ use hotshot_query_service::{
     node::NodeDataSource,
     status::StatusDataSource,
 };
-use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody, HotShotConfig};
+use hotshot_types::{
+    data::ViewNumber, light_client::StateSignatureRequestBody, HotShotConfig, ValidatorConfig,
+};
+use serde::ser::SerializeStruct;
+use serde::Serialize;
 use tide_disco::Url;
 use vbs::version::StaticVersionType;
 
@@ -85,9 +89,7 @@ pub(crate) trait SubmitDataSource<N: network::Type, P: SequencerPersistence> {
 }
 
 pub(crate) trait HotShotConfigDataSource {
-    fn get_config(
-        &self,
-    ) -> impl Send + Future<Output = anyhow::Result<Option<HotShotConfig<PubKey>>>>;
+    fn get_config(&self) -> impl Send + Future<Output = anyhow::Result<Option<MyHotShotConfig>>>;
 }
 
 #[async_trait]
@@ -139,6 +141,71 @@ pub(crate) trait CatchupDataSource {
 }
 
 impl CatchupDataSource for MetricsDataSource {}
+
+pub struct MyHotShotConfig(HotShotConfig<PubKey>);
+
+impl MyHotShotConfig {
+    pub fn new(c: HotShotConfig<PubKey>) -> Self {
+        Self(c)
+    }
+}
+pub struct MyValidatorConfig<'a>(&'a ValidatorConfig<PubKey>);
+
+impl<'a> Serialize for MyValidatorConfig<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("MyValidatorConfig", 3)?;
+
+        state.serialize_field("public_key", &self.0.public_key)?;
+        state.serialize_field("stake_value", &self.0.stake_value)?;
+        state.serialize_field("is_da", &self.0.is_da)?;
+
+        state.end()
+    }
+}
+
+impl Serialize for MyHotShotConfig {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("HotShotConfig", 20)?;
+        let config = &self.0;
+        state.serialize_field("execution_type", &config.execution_type)?;
+        state.serialize_field("start_threshold", &config.start_threshold)?;
+        state.serialize_field("num_nodes_with_stake", &config.num_nodes_with_stake)?;
+        state.serialize_field("num_nodes_without_stake", &config.num_nodes_without_stake)?;
+        state.serialize_field("known_nodes_with_stake", &config.known_nodes_with_stake)?;
+        state.serialize_field("known_da_nodes", &config.known_da_nodes)?;
+        state.serialize_field(
+            "known_nodes_without_stake",
+            &config.known_nodes_without_stake,
+        )?;
+
+        let validator_confg = MyValidatorConfig(&config.my_own_validator_config);
+
+        state.serialize_field("my_own_validator_config", &validator_confg)?;
+        state.serialize_field("da_staked_committee_size", &config.da_staked_committee_size)?;
+        state.serialize_field(
+            "da_non_staked_committee_size",
+            &config.da_non_staked_committee_size,
+        )?;
+        state.serialize_field("fixed_leader_for_gpuvid", &config.fixed_leader_for_gpuvid)?;
+        state.serialize_field("next_view_timeout", &config.next_view_timeout)?;
+        state.serialize_field("view_sync_timeout", &config.view_sync_timeout)?;
+        state.serialize_field("timeout_ratio", &config.timeout_ratio)?;
+        state.serialize_field("round_start_delay", &config.round_start_delay)?;
+        state.serialize_field("start_delay", &config.start_delay)?;
+        state.serialize_field("num_bootstrap", &config.num_bootstrap)?;
+        state.serialize_field("builder_timeout", &config.builder_timeout)?;
+        state.serialize_field("data_request_delay", &config.data_request_delay)?;
+        state.serialize_field("builder_url", &config.builder_url)?;
+
+        state.end()
+    }
+}
 
 #[cfg(test)]
 pub(crate) mod testing {
