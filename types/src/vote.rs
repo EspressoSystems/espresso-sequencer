@@ -61,7 +61,7 @@ pub trait Certificate<TYPES: NodeType>: HasViewNumber<TYPES> {
     fn create_signed_certificate(
         vote_commitment: Commitment<Self::Voteable>,
         data: Self::Voteable,
-        sig: <TYPES::SignatureKey as SignatureKey>::QCType,
+        sig: <TYPES::SignatureKey as SignatureKey>::QcType,
         view: TYPES::Time,
     ) -> Self;
 
@@ -156,7 +156,7 @@ impl<TYPES: NodeType, VOTE: Vote<TYPES>, CERT: Certificate<TYPES, Voteable = VOT
 
         if *total_stake_casted >= CERT::threshold(membership).into() {
             // Assemble QC
-            let real_qc_pp: <<TYPES as NodeType>::SignatureKey as SignatureKey>::QCParams =
+            let real_qc_pp: <<TYPES as NodeType>::SignatureKey as SignatureKey>::QcParams =
                 <TYPES::SignatureKey as SignatureKey>::public_parameter(
                     stake_table,
                     U256::from(CERT::threshold(membership)),

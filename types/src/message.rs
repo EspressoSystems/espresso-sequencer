@@ -82,7 +82,7 @@ pub enum MessagePurpose {
     /// Message with a view sync certificate.
     ViewSyncCertificate,
     /// Message with a DAC.
-    DAC,
+    DaCertificate,
     /// Message for internal use
     Internal,
     /// Data message
@@ -284,7 +284,7 @@ impl<TYPES: NodeType> SequencingMessage<TYPES> {
             SequencingMessage::Da(da_message) => match da_message {
                 DaConsensusMessage::DaProposal(_) => MessagePurpose::Proposal,
                 DaConsensusMessage::DaVote(_) => MessagePurpose::Vote,
-                DaConsensusMessage::DaCertificate(_) => MessagePurpose::DAC,
+                DaConsensusMessage::DaCertificate(_) => MessagePurpose::DaCertificate,
                 DaConsensusMessage::VidDisperseMsg(_) => MessagePurpose::VidDisperse,
             },
         }

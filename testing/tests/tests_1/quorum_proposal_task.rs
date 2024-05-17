@@ -93,7 +93,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
 
     let view = TestScriptStage {
         inputs: vec![
-            QCFormed(either::Left(cert.clone())),
+            QcFormed(either::Left(cert.clone())),
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
@@ -181,7 +181,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
     let view = TestScriptStage {
         inputs: vec![
             QuorumProposalValidated(proposals[1].data.clone(), leaves[1].clone()),
-            QCFormed(either::Left(cert.clone())),
+            QcFormed(either::Left(cert.clone())),
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
@@ -249,7 +249,7 @@ async fn test_quorum_proposal_task_qc_timeout() {
     // Run at view 2, the quorum vote task shouldn't care as long as the bookkeeping is correct
     let view_2 = TestScriptStage {
         inputs: vec![
-            QCFormed(either::Right(cert.clone())),
+            QcFormed(either::Right(cert.clone())),
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,

@@ -177,11 +177,11 @@ pub enum HotShotAction {
     /// A quorum proposal was sent
     Propose,
     /// DA proposal was sent
-    DAPropose,
+    DaPropose,
     /// DA vote was sent
     DaVote,
     /// DA certificate was sent
-    DACert,
+    DaCert,
     /// VID shares were sent
     VidDisperse,
     /// An upgrade vote was sent

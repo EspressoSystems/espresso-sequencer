@@ -162,7 +162,7 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                                 HotShotEvent::DaCertificateRecv(cert)
                             }
                             DaConsensusMessage::VidDisperseMsg(proposal) => {
-                                HotShotEvent::VIDShareRecv(proposal)
+                                HotShotEvent::VidShareRecv(proposal)
                             }
                         },
                     };
@@ -294,7 +294,7 @@ impl<
                     return self.handle_vid_disperse_proposal(proposal, &sender);
                 }
                 HotShotEvent::DaProposalSend(proposal, sender) => {
-                    maybe_action = Some(HotShotAction::DAPropose);
+                    maybe_action = Some(HotShotAction::DaPropose);
                     (
                         sender,
                         MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
@@ -315,7 +315,7 @@ impl<
                 }
                 // ED NOTE: This needs to be broadcasted to all nodes, not just ones on the DA committee
                 HotShotEvent::DacSend(certificate, sender) => {
-                    maybe_action = Some(HotShotAction::DACert);
+                    maybe_action = Some(HotShotAction::DaCert);
                     (
                         sender,
                         MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(

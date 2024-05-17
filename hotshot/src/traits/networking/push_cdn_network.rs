@@ -163,7 +163,7 @@ pub enum Topic {
     /// The global topic
     Global = 0,
     /// The DA topic
-    DA = 1,
+    Da = 1,
 }
 
 /// Implement the `TopicTrait` for our `Topic` enum. We need this to filter
@@ -373,7 +373,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
 
                     // Calculate if we're DA or not
                     let topics = if node_id < da_committee_size as u64 {
-                        vec![Topic::DA as u8, Topic::Global as u8]
+                        vec![Topic::Da as u8, Topic::Global as u8]
                     } else {
                         vec![Topic::Global as u8]
                     };
@@ -464,7 +464,7 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
         _recipients: BTreeSet<TYPES::SignatureKey>,
         bind_version: Ver,
     ) -> Result<(), NetworkError> {
-        self.broadcast_message(message, Topic::DA, bind_version)
+        self.broadcast_message(message, Topic::Da, bind_version)
             .await
     }
 

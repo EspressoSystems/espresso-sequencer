@@ -6,7 +6,7 @@ use hotshot_example_types::{
     node_types::TestTypes,
     state_types::TestInstanceState,
 };
-use hotshot_task_impls::{events::HotShotEvent, vid::VIDTaskState};
+use hotshot_task_impls::{events::HotShotEvent, vid::VidTaskState};
 use hotshot_testing::task_helpers::{build_system_handle, vid_scheme_from_view_number};
 use hotshot_types::{
     data::{null_block, DaProposal, VidDisperse, VidDisperseShare, ViewNumber},
@@ -98,7 +98,7 @@ async fn test_vid_task() {
     ));
 
     input.push(HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key));
-    input.push(HotShotEvent::VIDShareRecv(vid_share_proposal.clone()));
+    input.push(HotShotEvent::VidShareRecv(vid_share_proposal.clone()));
     input.push(HotShotEvent::Shutdown);
 
     output.insert(
@@ -122,7 +122,7 @@ async fn test_vid_task() {
         1,
     );
 
-    let vid_state = VIDTaskState {
+    let vid_state = VidTaskState {
         api: handle.clone(),
         consensus: handle.hotshot.consensus(),
         cur_view: ViewNumber::new(0),

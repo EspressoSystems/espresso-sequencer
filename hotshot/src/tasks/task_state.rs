@@ -9,7 +9,7 @@ use hotshot_task_impls::{
     builder::BuilderClient, consensus::ConsensusTaskState, da::DaTaskState,
     quorum_proposal::QuorumProposalTaskState, quorum_proposal_recv::QuorumProposalRecvTaskState,
     quorum_vote::QuorumVoteTaskState, request::NetworkRequestState,
-    transactions::TransactionTaskState, upgrade::UpgradeTaskState, vid::VIDTaskState,
+    transactions::TransactionTaskState, upgrade::UpgradeTaskState, vid::VidTaskState,
     view_sync::ViewSyncTaskState,
 };
 use hotshot_types::traits::{
@@ -80,12 +80,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
-    for VIDTaskState<TYPES, I, SystemContextHandle<TYPES, I>>
+    for VidTaskState<TYPES, I, SystemContextHandle<TYPES, I>>
 {
     async fn create_from(
         handle: &SystemContextHandle<TYPES, I>,
-    ) -> VIDTaskState<TYPES, I, SystemContextHandle<TYPES, I>> {
-        VIDTaskState {
+    ) -> VidTaskState<TYPES, I, SystemContextHandle<TYPES, I>> {
+        VidTaskState {
             api: handle.clone(),
             consensus: handle.hotshot.consensus(),
             cur_view: handle.cur_view().await,

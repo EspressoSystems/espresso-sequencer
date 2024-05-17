@@ -151,7 +151,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
     /// of the request.
     async fn handle_request(&self, req: DataRequest<TYPES>) -> Message<TYPES> {
         match req.request {
-            RequestKind::VID(view, pub_key) => {
+            RequestKind::Vid(view, pub_key) => {
                 let Some(share) = self.get_or_calc_vid_share(view, &pub_key).await else {
                     return self.make_msg(ResponseMessage::NotFound);
                 };

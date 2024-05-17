@@ -21,7 +21,7 @@ use hotshot_task_impls::{
     response::{run_response_task, NetworkResponseState, RequestReceiver},
     transactions::TransactionTaskState,
     upgrade::UpgradeTaskState,
-    vid::VIDTaskState,
+    vid::VidTaskState,
     view_sync::ViewSyncTaskState,
 };
 use hotshot_types::{
@@ -160,7 +160,7 @@ pub async fn add_vid_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     rx: Receiver<Arc<HotShotEvent<TYPES>>>,
     handle: &SystemContextHandle<TYPES, I>,
 ) {
-    let vid_state = VIDTaskState::create_from(handle).await;
+    let vid_state = VidTaskState::create_from(handle).await;
     let task = Task::new(tx, rx, Arc::clone(&task_reg), vid_state);
     task_reg.run_task(task).await;
 }

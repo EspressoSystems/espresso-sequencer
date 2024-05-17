@@ -14,7 +14,7 @@ pub struct NodeImpl {}
 /// convenience type alias
 pub type DaNetwork = CombinedNetworks<TestTypes>;
 /// convenience type alias
-pub type VIDNetwork = CombinedNetworks<TestTypes>;
+pub type VidNetwork = CombinedNetworks<TestTypes>;
 /// convenience type alias
 pub type QuorumNetwork = CombinedNetworks<TestTypes>;
 /// convenience type alias

@@ -207,7 +207,7 @@ pub struct DataRequest<TYPES: NodeType> {
 #[derive(Serialize, Deserialize, Derivative, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RequestKind<TYPES: NodeType> {
     /// Request VID data by our key and the VID commitment
-    VID(TYPES::Time, TYPES::SignatureKey),
+    Vid(TYPES::Time, TYPES::SignatureKey),
     /// Request a DA proposal for a certain view
     DaProposal(TYPES::Time),
 }

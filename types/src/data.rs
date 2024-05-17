@@ -636,7 +636,7 @@ pub fn random_commitment<S: Committable>(rng: &mut dyn rand::RngCore) -> Commitm
 /// # Panics
 /// if serialization fails
 pub fn serialize_signature2<TYPES: NodeType>(
-    signatures: &<TYPES::SignatureKey as SignatureKey>::QCType,
+    signatures: &<TYPES::SignatureKey as SignatureKey>::QcType,
 ) -> Vec<u8> {
     let mut signatures_bytes = vec![];
     signatures_bytes.extend("Yes".as_bytes());

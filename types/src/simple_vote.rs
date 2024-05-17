@@ -34,7 +34,7 @@ pub struct TimeoutData<TYPES: NodeType> {
 }
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Hash, Eq)]
 /// Data used for a VID vote.
-pub struct VIDData {
+pub struct VidData {
     /// Commitment to the block payload the VID vote is on.
     pub payload_commit: VidCommitment,
 }
@@ -186,7 +186,7 @@ impl Committable for DaData {
     }
 }
 
-impl Committable for VIDData {
+impl Committable for VidData {
     fn commit(&self) -> Commitment<Self> {
         committable::RawCommitmentBuilder::new("VID data")
             .var_size_bytes(self.payload_commit.as_ref())

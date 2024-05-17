@@ -1,4 +1,4 @@
-//! Implementation for `BitVectorQC` that uses BLS signature + Bit vector.
+//! Implementation for `BitVectorQc` that uses BLS signature + Bit vector.
 //! See more details in `HotShot` paper.
 
 use ark_std::{
@@ -21,14 +21,14 @@ use serde::{Deserialize, Serialize};
 use typenum::U32;
 
 /// An implementation of QC using BLS signature and a bit-vector.
-pub struct BitVectorQC<A: AggregateableSignatureSchemes, ST: StakeTableScheme>(
+pub struct BitVectorQc<A: AggregateableSignatureSchemes, ST: StakeTableScheme>(
     PhantomData<A>,
     PhantomData<ST>,
 );
 
-/// Public parameters of [`BitVectorQC`]
+/// Public parameters of [`BitVectorQc`]
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
-pub struct QCParams<A: AggregateableSignatureSchemes, ST: StakeTableScheme> {
+pub struct QcParams<A: AggregateableSignatureSchemes, ST: StakeTableScheme> {
     /// the stake table (snapshot) this QC is verified against
     pub stake_table: ST,
     /// threshold for the accumulated "weight" of votes to form a QC
@@ -37,7 +37,7 @@ pub struct QCParams<A: AggregateableSignatureSchemes, ST: StakeTableScheme> {
     pub agg_sig_pp: A::PublicParameter,
 }
 
-impl<A, ST> QuorumCertificate<A> for BitVectorQC<A, ST>
+impl<A, ST> QuorumCertificate<A> for BitVectorQc<A, ST>
 where
     A: AggregateableSignatureSchemes + Serialize + for<'a> Deserialize<'a> + PartialEq,
     ST: StakeTableScheme<Key = A::VerificationKey, Amount = U256>
@@ -45,12 +45,12 @@ where
         + for<'a> Deserialize<'a>
         + PartialEq,
 {
-    type QCProverParams = QCParams<A, ST>;
+    type QcProverParams = QcParams<A, ST>;
 
     // TODO: later with SNARKs we'll use a smaller verifier parameter
-    type QCVerifierParams = QCParams<A, ST>;
+    type QcVerifierParams = QcParams<A, ST>;
 
-    type QC = (A::Signature, BitVec);
+    type Qc = (A::Signature, BitVec);
     type MessageLength = U32;
     type QuorumSize = U256;
 
@@ -65,10 +65,10 @@ where
     }
 
     fn assemble(
-        qc_pp: &Self::QCProverParams,
+        qc_pp: &Self::QcProverParams,
         signers: &BitSlice,
         sigs: &[A::Signature],
-    ) -> Result<Self::QC, PrimitivesError> {
+    ) -> Result<Self::Qc, PrimitivesError> {
         let st_len = qc_pp.stake_table.len(SnapshotVersion::LastEpochStart)?;
         if signers.len() != st_len {
             return Err(ParameterError(format!(
@@ -120,9 +120,9 @@ where
     }
 
     fn check(
-        qc_vp: &Self::QCVerifierParams,
+        qc_vp: &Self::QcVerifierParams,
         message: &GenericArray<A::MessageUnit, Self::MessageLength>,
-        qc: &Self::QC,
+        qc: &Self::Qc,
     ) -> Result<Self::QuorumSize, PrimitivesError> {
         let (sig, signers) = qc;
         let st_len = qc_vp.stake_table.len(SnapshotVersion::LastEpochStart)?;
@@ -169,9 +169,9 @@ where
     }
 
     fn trace(
-        qc_vp: &Self::QCVerifierParams,
+        qc_vp: &Self::QcVerifierParams,
         message: &GenericArray<<A>::MessageUnit, Self::MessageLength>,
-        qc: &Self::QC,
+        qc: &Self::Qc,
     ) -> Result<Vec<<A>::VerificationKey>, PrimitivesError> {
         let (_sig, signers) = qc;
         let st_len = qc_vp.stake_table.len(SnapshotVersion::LastEpochStart)?;
@@ -227,28 +227,28 @@ mod tests {
             st.advance();
             st.advance();
 
-            let qc_pp = QCParams {
+            let qc_pp = QcParams {
                 stake_table: st,
                 threshold: U256::from(10u8),
                 agg_sig_pp,
             };
 
             let msg = [72u8; 32];
-            let sig1 = BitVectorQC::<$aggsig, ST>::sign(
+            let sig1 = BitVectorQc::<$aggsig, ST>::sign(
                 &agg_sig_pp,
                 &msg.into(),
                 key_pair1.sign_key_ref(),
                 &mut rng,
             )
             .unwrap();
-            let sig2 = BitVectorQC::<$aggsig, ST>::sign(
+            let sig2 = BitVectorQc::<$aggsig, ST>::sign(
                 &agg_sig_pp,
                 &msg.into(),
                 key_pair2.sign_key_ref(),
                 &mut rng,
             )
             .unwrap();
-            let sig3 = BitVectorQC::<$aggsig, ST>::sign(
+            let sig3 = BitVectorQc::<$aggsig, ST>::sign(
                 &agg_sig_pp,
                 &msg.into(),
                 key_pair3.sign_key_ref(),
@@ -258,19 +258,19 @@ mod tests {
 
             // happy path
             let signers = bitvec![0, 1, 1];
-            let qc = BitVectorQC::<$aggsig, ST>::assemble(
+            let qc = BitVectorQc::<$aggsig, ST>::assemble(
                 &qc_pp,
                 signers.as_bitslice(),
                 &[sig2.clone(), sig3.clone()],
             )
             .unwrap();
-            assert!(BitVectorQC::<$aggsig, ST>::check(&qc_pp, &msg.into(), &qc).is_ok());
+            assert!(BitVectorQc::<$aggsig, ST>::check(&qc_pp, &msg.into(), &qc).is_ok());
             assert_eq!(
-                BitVectorQC::<$aggsig, ST>::trace(&qc_pp, &msg.into(), &qc).unwrap(),
+                BitVectorQc::<$aggsig, ST>::trace(&qc_pp, &msg.into(), &qc).unwrap(),
                 vec![key_pair2.ver_key(), key_pair3.ver_key()],
             );
 
-            // Check the QC and the QCParams can be serialized / deserialized
+            // Check the QC and the QcParams can be serialized / deserialized
             assert_eq!(
                 qc,
                 Serializer::<STATIC_VER_0_1>::deserialize(
@@ -282,7 +282,7 @@ mod tests {
             // (alex) since deserialized stake table's leaf would contain normalized projective
             // points with Z=1, which differs from the original projective representation.
             // We compare individual fields for equivalence instead.
-            let de_qc_pp: QCParams<$aggsig, ST> = Serializer::<STATIC_VER_0_1>::deserialize(
+            let de_qc_pp: QcParams<$aggsig, ST> = Serializer::<STATIC_VER_0_1>::deserialize(
                 &Serializer::<STATIC_VER_0_1>::serialize(&qc_pp).unwrap(),
             )
             .unwrap();
@@ -308,7 +308,7 @@ mod tests {
 
             // bad paths
             // number of signatures unmatch
-            assert!(BitVectorQC::<$aggsig, ST>::assemble(
+            assert!(BitVectorQc::<$aggsig, ST>::assemble(
                 &qc_pp,
                 signers.as_bitslice(),
                 &[sig2.clone()]
@@ -316,7 +316,7 @@ mod tests {
             .is_err());
             // total weight under threshold
             let active_bad = bitvec![1, 1, 0];
-            assert!(BitVectorQC::<$aggsig, ST>::assemble(
+            assert!(BitVectorQc::<$aggsig, ST>::assemble(
                 &qc_pp,
                 active_bad.as_bitslice(),
                 &[sig1.clone(), sig2.clone()]
@@ -324,30 +324,30 @@ mod tests {
             .is_err());
             // wrong bool vector length
             let active_bad_2 = bitvec![0, 1, 1, 0];
-            assert!(BitVectorQC::<$aggsig, ST>::assemble(
+            assert!(BitVectorQc::<$aggsig, ST>::assemble(
                 &qc_pp,
                 active_bad_2.as_bitslice(),
                 &[sig2, sig3],
             )
             .is_err());
 
-            assert!(BitVectorQC::<$aggsig, ST>::check(
+            assert!(BitVectorQc::<$aggsig, ST>::check(
                 &qc_pp,
                 &msg.into(),
                 &(qc.0.clone(), active_bad)
             )
             .is_err());
-            assert!(BitVectorQC::<$aggsig, ST>::check(
+            assert!(BitVectorQc::<$aggsig, ST>::check(
                 &qc_pp,
                 &msg.into(),
                 &(qc.0.clone(), active_bad_2)
             )
             .is_err());
             let bad_msg = [70u8; 32];
-            assert!(BitVectorQC::<$aggsig, ST>::check(&qc_pp, &bad_msg.into(), &qc).is_err());
+            assert!(BitVectorQc::<$aggsig, ST>::check(&qc_pp, &bad_msg.into(), &qc).is_err());
 
             let bad_sig = &sig1;
-            assert!(BitVectorQC::<$aggsig, ST>::check(
+            assert!(BitVectorQc::<$aggsig, ST>::check(
                 &qc_pp,
                 &msg.into(),
                 &(bad_sig.clone(), qc.1)

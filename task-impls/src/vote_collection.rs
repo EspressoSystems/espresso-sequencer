@@ -258,7 +258,7 @@ impl<TYPES: NodeType> AggregatableVote<TYPES, QuorumVote<TYPES>, QuorumCertifica
         certificate: QuorumCertificate<TYPES>,
         _key: &TYPES::SignatureKey,
     ) -> HotShotEvent<TYPES> {
-        HotShotEvent::QCFormed(Left(certificate))
+        HotShotEvent::QcFormed(Left(certificate))
     }
 }
 
@@ -300,7 +300,7 @@ impl<TYPES: NodeType> AggregatableVote<TYPES, TimeoutVote<TYPES>, TimeoutCertifi
         certificate: TimeoutCertificate<TYPES>,
         _key: &TYPES::SignatureKey,
     ) -> HotShotEvent<TYPES> {
-        HotShotEvent::QCFormed(Right(certificate))
+        HotShotEvent::QcFormed(Right(certificate))
     }
 }
 

@@ -72,7 +72,7 @@ async fn test_consensus_task() {
         inputs: vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
-            VIDShareRecv(vid_share(&vids[0].0, handle.public_key())),
+            VidShareRecv(vid_share(&vids[0].0, handle.public_key())),
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(1))),
@@ -88,9 +88,9 @@ async fn test_consensus_task() {
     // Run view 2 and propose.
     let view_2 = TestScriptStage {
         inputs: vec![
-            VIDShareRecv(vid_share(&vids[1].0, handle.public_key())),
+            VidShareRecv(vid_share(&vids[1].0, handle.public_key())),
             QuorumProposalRecv(proposals[1].clone(), leaders[1]),
-            QCFormed(either::Left(cert)),
+            QcFormed(either::Left(cert)),
             // We must have a payload commitment and metadata to propose.
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
@@ -155,7 +155,7 @@ async fn test_consensus_vote() {
         inputs: vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
-            VIDShareRecv(vid_share(&vids[0].0, handle.public_key())),
+            VidShareRecv(vid_share(&vids[0].0, handle.public_key())),
             QuorumVoteRecv(votes[0].clone()),
         ],
         outputs: vec![
@@ -204,7 +204,7 @@ async fn test_vote_with_specific_order(input_permutation: Vec<usize>) {
         inputs: vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
-            VIDShareRecv(vid_share(&vids[0].0, handle.public_key())),
+            VidShareRecv(vid_share(&vids[0].0, handle.public_key())),
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(1))),
@@ -216,7 +216,7 @@ async fn test_vote_with_specific_order(input_permutation: Vec<usize>) {
 
     let inputs = vec![
         // We need a VID share for view 2 otherwise we cannot vote at view 2 (as node 2).
-        VIDShareRecv(vid_share(&vids[1].0, handle.public_key())),
+        VidShareRecv(vid_share(&vids[1].0, handle.public_key())),
         DaCertificateRecv(dacs[1].clone()),
         QuorumProposalRecv(proposals[1].clone(), leaders[1]),
     ];
@@ -317,7 +317,7 @@ async fn test_view_sync_finalize_propose() {
         inputs: vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
-            VIDShareRecv(vid_share(&vids[0].0, handle.public_key())),
+            VidShareRecv(vid_share(&vids[0].0, handle.public_key())),
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(1))),
@@ -366,7 +366,7 @@ async fn test_view_sync_finalize_propose() {
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
     let view_4 = TestScriptStage {
         inputs: vec![
-            VIDShareRecv(vid_share(&vids[1].0, handle.public_key())),
+            VidShareRecv(vid_share(&vids[1].0, handle.public_key())),
             QuorumProposalRecv(proposals[1].clone(), leaders[1]),
             TimeoutVoteRecv(timeout_vote_view_2),
             TimeoutVoteRecv(timeout_vote_view_3),
@@ -443,7 +443,7 @@ async fn test_view_sync_finalize_vote() {
         inputs: vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
-            VIDShareRecv(vid_share(&vids[0].0, handle.public_key())),
+            VidShareRecv(vid_share(&vids[0].0, handle.public_key())),
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(1))),
@@ -540,7 +540,7 @@ async fn test_view_sync_finalize_vote_fail_view_number() {
         inputs: vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
-            VIDShareRecv(vid_share(&vids[0].0, handle.public_key())),
+            VidShareRecv(vid_share(&vids[0].0, handle.public_key())),
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(1))),
@@ -634,7 +634,7 @@ async fn test_vid_disperse_storage_failure() {
         inputs: vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
-            VIDShareRecv(vid_share(&vids[0].0, handle.public_key())),
+            VidShareRecv(vid_share(&vids[0].0, handle.public_key())),
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(1))),

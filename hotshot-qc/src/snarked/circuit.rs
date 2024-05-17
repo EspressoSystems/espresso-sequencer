@@ -84,7 +84,7 @@ pub trait VerKeyVar<E>: Sized + Clone {
 }
 
 /// Plonk circuit gadget for stake key aggregation for quorum certificates.
-pub trait QCKeyAggregateGadget<F>
+pub trait QcKeyAggregateGadget<F>
 where
     F: RescueParameter,
 {
@@ -124,7 +124,7 @@ where
     ) -> Result<(), CircuitError>;
 }
 
-impl<F> QCKeyAggregateGadget<F> for PlonkCircuit<F>
+impl<F> QcKeyAggregateGadget<F> for PlonkCircuit<F>
 where
     F: RescueParameter,
 {

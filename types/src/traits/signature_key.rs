@@ -61,7 +61,7 @@ pub trait SignatureKey:
         + Serialize
         + for<'a> Deserialize<'a>;
     /// The type of the quorum certificate parameters used for assembled signature
-    type QCParams: Send + Sync + Sized + Clone + Debug + Hash;
+    type QcParams: Send + Sync + Sized + Clone + Debug + Hash;
     /// The type of the assembled signature, without `BitVec`
     type PureAssembledSignatureType: Send
         + Sync
@@ -76,7 +76,7 @@ pub trait SignatureKey:
         + Into<TaggedBase64>
         + for<'a> TryFrom<&'a TaggedBase64>;
     /// The type of the assembled qc: assembled signature + `BitVec`
-    type QCType: Send
+    type QcType: Send
         + Sync
         + Sized
         + Clone
@@ -126,20 +126,20 @@ pub trait SignatureKey:
     fn public_parameter(
         stake_entries: Vec<Self::StakeTableEntry>,
         threshold: U256,
-    ) -> Self::QCParams;
+    ) -> Self::QcParams;
 
     /// check the quorum certificate for the assembled signature
-    fn check(real_qc_pp: &Self::QCParams, data: &[u8], qc: &Self::QCType) -> bool;
+    fn check(real_qc_pp: &Self::QcParams, data: &[u8], qc: &Self::QcType) -> bool;
 
     /// get the assembled signature and the `BitVec` separately from the assembled signature
-    fn sig_proof(signature: &Self::QCType) -> (Self::PureAssembledSignatureType, BitVec);
+    fn sig_proof(signature: &Self::QcType) -> (Self::PureAssembledSignatureType, BitVec);
 
     /// assemble the signature from the partial signature and the indication of signers in `BitVec`
     fn assemble(
-        real_qc_pp: &Self::QCParams,
+        real_qc_pp: &Self::QcParams,
         signers: &BitSlice,
         sigs: &[Self::PureAssembledSignatureType],
-    ) -> Self::QCType;
+    ) -> Self::QcType;
 
     /// generates the genesis public key. Meant to be dummy/filler
     #[must_use]

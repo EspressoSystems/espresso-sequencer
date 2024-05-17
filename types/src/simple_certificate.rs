@@ -71,7 +71,7 @@ pub struct SimpleCertificate<TYPES: NodeType, VOTEABLE: Voteable, THRESHOLD: Thr
     /// Which view this QC relates to
     pub view_number: TYPES::Time,
     /// assembled signature for certificate aggregation
-    pub signatures: Option<<TYPES::SignatureKey as SignatureKey>::QCType>,
+    pub signatures: Option<<TYPES::SignatureKey as SignatureKey>::QcType>,
     /// phantom data for `THRESHOLD` and `TYPES`
     pub _pd: PhantomData<(TYPES, THRESHOLD)>,
 }
@@ -102,7 +102,7 @@ impl<TYPES: NodeType, VOTEABLE: Voteable + 'static, THRESHOLD: Threshold<TYPES>>
     fn create_signed_certificate(
         vote_commitment: Commitment<VOTEABLE>,
         data: Self::Voteable,
-        sig: <TYPES::SignatureKey as SignatureKey>::QCType,
+        sig: <TYPES::SignatureKey as SignatureKey>::QcType,
         view: TYPES::Time,
     ) -> Self {
         SimpleCertificate {

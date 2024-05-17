@@ -63,7 +63,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// Send a DA vote to the DA leader; emitted by DA committee members in the DA task after seeing a valid DA proposal
     DaVoteSend(DaVote<TYPES>),
     /// The next leader has collected enough votes to form a QC; emitted by the next leader in the consensus task; an internal event only
-    QCFormed(Either<QuorumCertificate<TYPES>, TimeoutCertificate<TYPES>>),
+    QcFormed(Either<QuorumCertificate<TYPES>, TimeoutCertificate<TYPES>>),
     /// The DA leader has collected enough votes to form a DAC; emitted by the DA leader in the DA task; sent to the entire network via the networking task
     DacSend(DaCertificate<TYPES>, TYPES::SignatureKey),
     /// The current view has changed; emitted by the replica in the consensus task or replica in the view sync task; received by almost all other tasks
@@ -134,9 +134,9 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// Vid disperse share has been received from the network; handled by the consensus task
     ///
     /// Like [`HotShotEvent::DaProposalRecv`].
-    VIDShareRecv(Proposal<TYPES, VidDisperseShare<TYPES>>),
+    VidShareRecv(Proposal<TYPES, VidDisperseShare<TYPES>>),
     /// VID share data is validated.
-    VIDShareValidated(Proposal<TYPES, VidDisperseShare<TYPES>>),
+    VidShareValidated(Proposal<TYPES, VidDisperseShare<TYPES>>),
     /// Upgrade proposal has been received from the network
     UpgradeProposalRecv(Proposal<TYPES, UpgradeProposal<TYPES>>, TYPES::SignatureKey),
     /// Upgrade proposal has been sent to the network

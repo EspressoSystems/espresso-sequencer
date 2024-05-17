@@ -23,7 +23,7 @@ use crate::{
 };
 
 /// Tracks state of a VID task
-pub struct VIDTaskState<
+pub struct VidTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
     A: ConsensusApi<TYPES, I> + 'static,
@@ -51,7 +51,7 @@ pub struct VIDTaskState<
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
-    VIDTaskState<TYPES, I, A>
+    VidTaskState<TYPES, I, A>
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "VID Main Task", level = "error")]
@@ -166,7 +166,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
 
 /// task state implementation for VID Task
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TaskState
-    for VIDTaskState<TYPES, I, A>
+    for VidTaskState<TYPES, I, A>
 {
     type Event = Arc<HotShotEvent<TYPES>>;
 

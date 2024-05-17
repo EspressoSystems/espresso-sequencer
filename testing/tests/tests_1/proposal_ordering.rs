@@ -69,7 +69,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
         inputs: vec![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
-            VIDShareRecv(vid_share(&vids[0].0, handle.public_key())),
+            VidShareRecv(vid_share(&vids[0].0, handle.public_key())),
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(1))),
@@ -86,7 +86,7 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
     let inputs = vec![
         QuorumProposalRecv(proposals[1].clone(), leaders[1]),
-        QCFormed(either::Left(cert)),
+        QcFormed(either::Left(cert)),
         SendPayloadCommitmentAndMetadata(
             payload_commitment,
             builder_commitment,
@@ -101,11 +101,11 @@ async fn test_ordering_with_specific_order(input_permutation: Vec<usize>) {
     view_2_inputs.insert(0, DaCertificateRecv(dacs[1].clone()));
     view_2_inputs.insert(
         0,
-        VIDShareRecv(vid_share(&vids[2].0, handle.public_key())),
+        VidShareRecv(vid_share(&vids[2].0, handle.public_key())),
     );
     view_2_inputs.insert(
         0,
-        VIDShareRecv(vid_share(&vids[1].0, handle.public_key())),
+        VidShareRecv(vid_share(&vids[1].0, handle.public_key())),
     );
 
     // This stage transitions from view 1 to view 2.

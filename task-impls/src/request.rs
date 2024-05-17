@@ -151,7 +151,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
     async fn build_requests(&self, view: TYPES::Time, _: Ver) -> Vec<RequestKind<TYPES>> {
         let mut reqs = Vec::new();
         if !self.state.read().await.vid_shares().contains_key(&view) {
-            reqs.push(RequestKind::VID(view, self.public_key.clone()));
+            reqs.push(RequestKind::Vid(view, self.public_key.clone()));
         }
         // TODO request other things
         reqs
@@ -236,7 +236,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DelayedRequester<TYPES, I> {
             async_sleep(self.delay).await;
         }
         match request {
-            RequestKind::VID(view, key) => {
+            RequestKind::Vid(view, key) => {
                 self.do_vid::<Ver>(VidRequest(view, key), signature).await;
             }
             RequestKind::DaProposal(..) => {}
@@ -300,7 +300,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DelayedRequester<TYPES, I> {
     async fn handle_response_message(&self, message: SequencingMessage<TYPES>) {
         let event = match message {
             SequencingMessage::Da(DaConsensusMessage::VidDisperseMsg(prop)) => {
-                HotShotEvent::VIDShareRecv(prop)
+                HotShotEvent::VidShareRecv(prop)
             }
             _ => return,
         };
@@ -313,7 +313,7 @@ fn make_vid<TYPES: NodeType>(
     req: &VidRequest<TYPES>,
     signature: Signature<TYPES>,
 ) -> Message<TYPES> {
-    let kind = RequestKind::VID(req.0, req.1.clone());
+    let kind = RequestKind::Vid(req.0, req.1.clone());
     let data_request = DataRequest {
         view: req.0,
         request: kind,

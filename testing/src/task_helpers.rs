@@ -160,9 +160,9 @@ pub fn build_assembled_sig<
     data: &DATAType,
     membership: &TYPES::Membership,
     view: TYPES::Time,
-) -> <TYPES::SignatureKey as SignatureKey>::QCType {
+) -> <TYPES::SignatureKey as SignatureKey>::QcType {
     let stake_table = membership.committee_qc_stake_table();
-    let real_qc_pp: <TYPES::SignatureKey as SignatureKey>::QCParams =
+    let real_qc_pp: <TYPES::SignatureKey as SignatureKey>::QcParams =
         <TYPES::SignatureKey as SignatureKey>::public_parameter(
             stake_table.clone(),
             U256::from(CERT::threshold(membership)),

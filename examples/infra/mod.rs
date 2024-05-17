@@ -628,7 +628,7 @@ where
         // See if we should be DA, subscribe to the DA topic if so
         let mut topics = vec![Topic::Global];
         if config.config.my_own_validator_config.is_da {
-            topics.push(Topic::DA);
+            topics.push(Topic::Da);
         }
 
         // Create the network and await the initial connection

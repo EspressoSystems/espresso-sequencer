@@ -11,7 +11,7 @@ pub struct NodeImpl {}
 /// Convenience type alias
 pub type DaNetwork = PushCdnNetwork<TestTypes>;
 /// Convenience type alias
-pub type VIDNetwork = PushCdnNetwork<TestTypes>;
+pub type VidNetwork = PushCdnNetwork<TestTypes>;
 /// Convenience type alias
 pub type QuorumNetwork = PushCdnNetwork<TestTypes>;
 /// Convenience type alias

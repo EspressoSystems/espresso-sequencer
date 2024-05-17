@@ -39,13 +39,13 @@ enum ProposalDependency {
     /// For the `SendPayloadCommitmentAndMetadata` event.
     PayloadAndMetadata,
 
-    /// For the `QCFormed` event.
+    /// For the `QcFormed` event.
     QC,
 
     /// For the `ViewSyncFinalizeCertificate2Recv` event.
     ViewSyncCert,
 
-    /// For the `QCFormed` event timeout branch.
+    /// For the `QcFormed` event timeout branch.
     TimeoutCert,
 
     /// For the `QuroumProposalValidated` event after validating `QuorumProposalRecv`.
@@ -141,7 +141,7 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
                         block_view: *view,
                     });
                 }
-                HotShotEvent::QCFormed(cert) => match cert {
+                HotShotEvent::QcFormed(cert) => match cert {
                     either::Right(timeout) => {
                         _timeout_certificate = Some(timeout.clone());
                     }
@@ -272,14 +272,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                 let event = event.as_ref();
                 let event_view = match dependency_type {
                     ProposalDependency::QC => {
-                        if let HotShotEvent::QCFormed(either::Left(qc)) = event {
+                        if let HotShotEvent::QcFormed(either::Left(qc)) = event {
                             qc.view_number + 1
                         } else {
                             return false;
                         }
                     }
                     ProposalDependency::TimeoutCert => {
-                        if let HotShotEvent::QCFormed(either::Right(timeout)) = event {
+                        if let HotShotEvent::QcFormed(either::Right(timeout)) = event {
                             timeout.view_number
                         } else {
                             return false;
@@ -386,7 +386,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             HotShotEvent::QuorumProposalValidated(..) => {
                 proposal_dependency.mark_as_completed(event);
             }
-            HotShotEvent::QCFormed(quorum_certificate) => match quorum_certificate {
+            HotShotEvent::QcFormed(quorum_certificate) => match quorum_certificate {
                 Either::Right(_) => {
                     timeout_dependency.mark_as_completed(event);
                 }
@@ -408,7 +408,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             AndDependency::from_deps(vec![view_sync_dependency]),
         ];
 
-        // 1. A QCFormed event and QuorumProposalValidated event
+        // 1. A QcFormed event and QuorumProposalValidated event
         if *view_number > 1 {
             secondary_deps.push(AndDependency::from_deps(vec![
                 qc_dependency,
@@ -528,7 +528,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                     Arc::clone(&event),
                 );
             }
-            HotShotEvent::QCFormed(cert) => {
+            HotShotEvent::QcFormed(cert) => {
                 match cert.clone() {
                     either::Right(timeout_cert) => {
                         let view = timeout_cert.view_number + 1;
@@ -637,7 +637,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState
         !matches!(
             event.as_ref(),
             HotShotEvent::QuorumProposalValidated(..)
-                | HotShotEvent::QCFormed(_)
+                | HotShotEvent::QcFormed(_)
                 | HotShotEvent::SendPayloadCommitmentAndMetadata(..)
                 | HotShotEvent::ViewSyncFinalizeCertificate2Recv(_)
                 | HotShotEvent::ProposeNow(..)

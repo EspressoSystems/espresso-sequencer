@@ -301,7 +301,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         Ok(inner)
     }
 
-    /// "Starts" consensus by sending a `QCFormed` event
+    /// "Starts" consensus by sending a `QcFormed` event
     ///
     /// # Panics
     /// Panics if sending genesis fails
@@ -315,7 +315,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             .expect("Genesis Broadcast failed");
         self.internal_event_stream
             .0
-            .broadcast_direct(Arc::new(HotShotEvent::QCFormed(either::Left(
+            .broadcast_direct(Arc::new(HotShotEvent::QcFormed(either::Left(
                 consensus.high_qc().clone(),
             ))))
             .await

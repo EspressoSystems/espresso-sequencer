@@ -47,7 +47,7 @@ enum VoteDependency {
     QuorumProposal,
     /// For the `DaCertificateRecv` event.
     Dac,
-    /// For the `VIDShareRecv` event.
+    /// For the `VidShareRecv` event.
     Vid,
     /// For the `VoteNow` event.
     VoteNow,
@@ -118,7 +118,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> HandleDepOutput
                         payload_commitment = Some(cert_payload_comm);
                     }
                 }
-                HotShotEvent::VIDShareValidated(share) => {
+                HotShotEvent::VidShareValidated(share) => {
                     let vid_payload_commitment = share.data.payload_commitment;
                     disperse_share = Some(share.clone());
                     if let Some(comm) = payload_commitment {
@@ -275,7 +275,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                         }
                     }
                     VoteDependency::Vid => {
-                        if let HotShotEvent::VIDShareValidated(disperse) = event {
+                        if let HotShotEvent::VidShareValidated(disperse) = event {
                             disperse.data.view_number
                         } else {
                             return false;
@@ -443,7 +443,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                 .await;
                 self.create_dependency_task_if_new(view, event_receiver, &event_sender, None);
             }
-            HotShotEvent::VIDShareRecv(disperse) => {
+            HotShotEvent::VidShareRecv(disperse) => {
                 let view = disperse.data.view_number();
                 trace!("Received VID share for view {}", *view);
                 if view <= self.latest_voted_view {
@@ -498,7 +498,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                 }
 
                 broadcast_event(
-                    Arc::new(HotShotEvent::VIDShareValidated(disperse.clone())),
+                    Arc::new(HotShotEvent::VidShareValidated(disperse.clone())),
                     &event_sender.clone(),
                 )
                 .await;
@@ -523,7 +523,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for QuorumVoteTask
         !matches!(
             event.as_ref(),
             HotShotEvent::DaCertificateRecv(_)
-                | HotShotEvent::VIDShareRecv(..)
+                | HotShotEvent::VidShareRecv(..)
                 | HotShotEvent::QuorumVoteDependenciesValidated(_)
                 | HotShotEvent::VoteNow(..)
                 | HotShotEvent::QuorumProposalValidated(..)
