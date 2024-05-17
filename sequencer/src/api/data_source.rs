@@ -1,3 +1,5 @@
+use std::{num::NonZeroUsize, time::Duration};
+
 use super::{
     fs,
     options::{Options, Query},
@@ -8,7 +10,7 @@ use crate::{
     persistence::{self, SequencerPersistence},
     PubKey, SeqTypes, Transaction,
 };
-use anyhow::{bail, Context};
+use anyhow::bail;
 use async_trait::async_trait;
 use ethers::prelude::Address;
 use futures::future::Future;
@@ -19,10 +21,12 @@ use hotshot_query_service::{
     node::NodeDataSource,
     status::StatusDataSource,
 };
-use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody, HotShotConfig};
+use hotshot_types::{
+    data::ViewNumber, light_client::StateSignatureRequestBody, ExecutionType, HotShotConfig,
+    PeerConfig, ValidatorConfig,
+};
 
 use serde::Serialize;
-use serde_json::Value;
 use tide_disco::Url;
 use vbs::version::StaticVersionType;
 
@@ -88,7 +92,7 @@ pub(crate) trait SubmitDataSource<N: network::Type, P: SequencerPersistence> {
 }
 
 pub(crate) trait HotShotConfigDataSource {
-    fn get_config(&self) -> impl Send + Future<Output = anyhow::Result<Option<MyHotShotConfig>>>;
+    fn get_config(&self) -> impl Send + Future<Output = PublicHotShotConfig>;
 }
 
 #[async_trait]
@@ -141,36 +145,109 @@ pub(crate) trait CatchupDataSource {
 
 impl CatchupDataSource for MetricsDataSource {}
 
-pub struct MyHotShotConfig(Value);
+#[derive(Debug, Serialize)]
+pub struct PublicValidatorConfig {
+    pub public_key: PubKey,
+    pub stake_value: u64,
+    pub is_da: bool,
+    pub private_key: &'static str,
+    pub state_key_pair: &'static str,
+}
 
-impl MyHotShotConfig {
-    pub fn new(c: HotShotConfig<PubKey>) -> anyhow::Result<Self> {
-        let mut value = serde_json::to_value(c)?;
+impl From<ValidatorConfig<PubKey>> for PublicValidatorConfig {
+    fn from(v: ValidatorConfig<PubKey>) -> Self {
+        let ValidatorConfig::<PubKey> {
+            public_key,
+            private_key: _,
+            stake_value,
+            state_key_pair: _,
+            is_da,
+        } = v;
 
-        let validator_config = value
-            .get_mut("my_own_validator_config")
-            .context("my_own_validator_config not found")?;
-
-        let private_key = validator_config
-            .get_mut("private_key")
-            .context("private_key not found")?;
-        *private_key = "******".into();
-
-        let state_key_pair = validator_config
-            .get_mut("state_key_pair")
-            .context("state_key_pair not found")?;
-        *state_key_pair = "******".into();
-
-        Ok(Self(value))
+        Self {
+            public_key,
+            stake_value,
+            is_da,
+            private_key: "*****",
+            state_key_pair: "*****",
+        }
     }
 }
 
-impl Serialize for MyHotShotConfig {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.0.serialize(serializer)
+#[derive(Debug, Serialize)]
+pub struct PublicHotShotConfig {
+    pub execution_type: ExecutionType,
+    pub start_threshold: (u64, u64),
+    pub num_nodes_with_stake: NonZeroUsize,
+    pub num_nodes_without_stake: usize,
+    pub known_nodes_with_stake: Vec<PeerConfig<PubKey>>,
+    pub known_da_nodes: Vec<PeerConfig<PubKey>>,
+    pub known_nodes_without_stake: Vec<PubKey>,
+    pub my_own_validator_config: PublicValidatorConfig,
+    pub da_staked_committee_size: usize,
+    pub da_non_staked_committee_size: usize,
+    pub fixed_leader_for_gpuvid: usize,
+    pub next_view_timeout: u64,
+    pub view_sync_timeout: Duration,
+    pub timeout_ratio: (u64, u64),
+    pub round_start_delay: u64,
+    pub start_delay: u64,
+    pub num_bootstrap: usize,
+    pub builder_timeout: Duration,
+    pub data_request_delay: Duration,
+    pub builder_url: Url,
+}
+
+impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
+    fn from(v: HotShotConfig<PubKey>) -> Self {
+        // Destructure all fields from HotShotConfig to return an error
+        // if new fields are added to HotShotConfig. This makes sure that we handle
+        // all fields appropriately and do not miss any updates.
+        let HotShotConfig::<PubKey> {
+            execution_type,
+            start_threshold,
+            num_nodes_with_stake,
+            num_nodes_without_stake,
+            known_nodes_with_stake,
+            known_da_nodes,
+            known_nodes_without_stake,
+            my_own_validator_config,
+            da_staked_committee_size,
+            da_non_staked_committee_size,
+            fixed_leader_for_gpuvid,
+            next_view_timeout,
+            view_sync_timeout,
+            timeout_ratio,
+            round_start_delay,
+            start_delay,
+            num_bootstrap,
+            builder_timeout,
+            data_request_delay,
+            builder_url,
+        } = v;
+
+        Self {
+            execution_type,
+            start_threshold,
+            num_nodes_with_stake,
+            num_nodes_without_stake,
+            known_nodes_with_stake,
+            known_da_nodes,
+            known_nodes_without_stake,
+            my_own_validator_config: my_own_validator_config.into(),
+            da_staked_committee_size,
+            da_non_staked_committee_size,
+            fixed_leader_for_gpuvid,
+            next_view_timeout,
+            view_sync_timeout,
+            timeout_ratio,
+            round_start_delay,
+            start_delay,
+            num_bootstrap,
+            builder_timeout,
+            data_request_delay,
+            builder_url,
+        }
     }
 }
 

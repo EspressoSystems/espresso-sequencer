@@ -215,6 +215,10 @@ impl Options {
                 )?;
             }
 
+            if self.config.is_some() {
+                app.register_module("config", endpoints::config(bind_version)?)?;
+            }
+
             tasks.spawn(
                 "API server",
                 app.serve(format!("0.0.0.0:{}", self.http.port), bind_version),
@@ -238,6 +242,10 @@ impl Options {
                     &mut tasks,
                     bind_version,
                 )?;
+            }
+
+            if self.config.is_some() {
+                app.register_module("config", endpoints::config(bind_version)?)?;
             }
 
             tasks.spawn(
@@ -286,6 +294,10 @@ impl Options {
         app.register_module("node", endpoints::node(bind_version)?)?;
 
         self.init_hotshot_modules::<_, _, _, Ver>(&mut app)?;
+
+        if self.config.is_some() {
+            app.register_module("config", endpoints::config(bind_version)?)?;
+        }
 
         tasks.spawn(
             "query storage updater",
@@ -377,10 +389,6 @@ impl Options {
 
         if self.hotshot_events.is_some() {
             self.init_and_spawn_hotshot_event_streaming_module(state, tasks, bind_version)?;
-        }
-
-        if self.config.is_some() {
-            app.register_module("config", endpoints::config(bind_version)?)?;
         }
 
         tasks.spawn(

@@ -303,13 +303,7 @@ where
         .collect();
 
     api.get("hotshot", |_, state| {
-        async move {
-            state
-                .get_config()
-                .await
-                .map_err(|err| Error::catch_all(StatusCode::NotFound, format!("{err:#}")))
-        }
-        .boxed()
+        async move { Ok(state.get_config().await) }.boxed()
     })?
     .get("env", move |_, _| {
         {

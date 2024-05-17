@@ -1,11 +1,9 @@
 use super::{
-    data_source::{
-        CatchupDataSource, HotShotConfigDataSource, MyHotShotConfig, Provider, SequencerDataSource,
-    },
+    data_source::{CatchupDataSource, Provider, SequencerDataSource},
     AccountQueryData, BlocksFrontier,
 };
 use crate::{
-    persistence::{sql::Options, SequencerPersistence},
+    persistence::sql::Options,
     state::{BlockMerkleTree, FeeAccountProof, FeeMerkleTree},
     SeqTypes,
 };
@@ -95,19 +93,6 @@ impl CatchupDataSource for DataSource {
 
     async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
         self.storage().await.get_frontier(height, view).await
-    }
-}
-
-impl HotShotConfigDataSource for DataSource {
-    async fn get_config(&self) -> anyhow::Result<Option<MyHotShotConfig>> {
-        let hotshot_config = self
-            .storage()
-            .await
-            .load_config()
-            .await?
-            .map(|res| res.config);
-
-        hotshot_config.map(|c| MyHotShotConfig::new(c)).transpose()
     }
 }
 
