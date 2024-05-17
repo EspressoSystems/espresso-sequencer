@@ -872,7 +872,7 @@ mod test {
         // mock up some consensus data.
         let leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
 
-        let block = BlockQueryData::new(leaf.get_block_header().clone(), MockPayload::genesis());
+        let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
 
         data_source.insert_block(block.clone()).await.unwrap();
 

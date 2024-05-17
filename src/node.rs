@@ -193,7 +193,7 @@ mod test {
 
         // Create the consensus network.
         let mut network = MockNetwork::<MockDataSource>::init().await;
-        let mut events = network.handle().get_event_stream();
+        let mut events = network.handle().event_stream();
         network.start().await;
 
         // Start the web server.
@@ -255,20 +255,14 @@ mod test {
                 leaf, vid_share, ..
             } in leaf_chain.iter().rev()
             {
-                headers.push(leaf.get_block_header().clone());
-                if leaf.get_block_header().block_number >= block_height as u64 {
+                headers.push(leaf.block_header().clone());
+                if leaf.block_header().block_number >= block_height as u64 {
                     break 'outer;
                 }
-                tracing::info!(
-                    height = leaf.get_block_header().block_number,
-                    "checking share"
-                );
+                tracing::info!(height = leaf.block_header().block_number, "checking share");
 
                 let share = client
-                    .get::<VidShare>(&format!(
-                        "vid/share/{}",
-                        leaf.get_block_header().block_number
-                    ))
+                    .get::<VidShare>(&format!("vid/share/{}", leaf.block_header().block_number))
                     .send()
                     .await
                     .unwrap();
@@ -280,10 +274,7 @@ mod test {
                 assert_eq!(
                     share,
                     client
-                        .get(&format!(
-                            "vid/share/hash/{}",
-                            leaf.get_block_header().commit()
-                        ))
+                        .get(&format!("vid/share/hash/{}", leaf.block_header().commit()))
                         .send()
                         .await
                         .unwrap()
@@ -293,7 +284,7 @@ mod test {
                     client
                         .get(&format!(
                             "vid/share/payload-hash/{}",
-                            leaf.get_block_header().payload_commitment
+                            leaf.block_header().payload_commitment
                         ))
                         .send()
                         .await

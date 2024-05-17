@@ -467,10 +467,10 @@ pub mod persistence_tests {
         let mut leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
-        leaf.get_block_header_mut().block_number += 1;
+        leaf.block_header_mut().block_number += 1;
         qc.data.leaf_commit = leaf.commit();
 
-        let block = BlockQueryData::new(leaf.get_block_header().clone(), MockPayload::genesis());
+        let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert, but do not commit, some data and check that we can read it back.
@@ -510,10 +510,10 @@ pub mod persistence_tests {
         let mut leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
-        leaf.get_block_header_mut().block_number += 1;
+        leaf.block_header_mut().block_number += 1;
         qc.data.leaf_commit = leaf.commit();
 
-        let block = BlockQueryData::new(leaf.get_block_header().clone(), MockPayload::genesis());
+        let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert some data and check that we can read it back.
@@ -587,7 +587,7 @@ pub mod node_tests {
         let mut blocks = vec![BlockQueryData::<MockTypes>::genesis(&TestInstanceState {})];
         for i in 0..2 {
             let mut leaf = leaves[i].clone();
-            leaf.leaf.get_block_header_mut().block_number += 1;
+            leaf.leaf.block_header_mut().block_number += 1;
             leaves.push(leaf);
 
             let mut block = blocks[i].clone();
@@ -731,7 +731,7 @@ pub mod node_tests {
             };
 
             let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
-            *leaf.leaf.get_block_header_mut() = header.clone();
+            *leaf.leaf.block_header_mut() = header.clone();
             let block = BlockQueryData::new(header, payload);
             ds.insert_leaf(leaf).await.unwrap();
             ds.insert_block(block).await.unwrap();

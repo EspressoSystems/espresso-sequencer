@@ -255,7 +255,7 @@ async fn init_consensus(
 
     // Hook the builder up to the event stream from the first node
     if let Some(builder_task) = builder_task {
-        let event_stream = nodes[0].get_event_stream();
+        let event_stream = nodes[0].event_stream();
         builder_task.start(Box::new(event_stream));
     }
 

@@ -20,7 +20,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::try_join;
 use hotshot_types::{
-    traits::{node_implementation::NodeType, BlockPayload},
+    traits::{node_implementation::NodeType, EncodeBytes},
     vid::{vid_scheme, VidSchemeType},
 };
 use jf_vid::VidScheme;
@@ -69,17 +69,7 @@ where
                 // Verify that the data we retrieved is consistent with the request we made.
                 let num_storage_nodes =
                     VidSchemeType::get_num_storage_nodes(common.common()) as usize;
-                let bytes = match payload.data().encode() {
-                    Ok(bytes) => bytes,
-                    Err(err) => {
-                        tracing::error!(
-                            %err,
-                            ?payload,
-                            "received malformed payload (unable to encode to bytes)",
-                        );
-                        return None;
-                    }
-                };
+                let bytes = payload.data().encode();
                 let commit = match vid_scheme(num_storage_nodes).commit_only(bytes) {
                     Ok(commit) => commit,
                     Err(err) => {

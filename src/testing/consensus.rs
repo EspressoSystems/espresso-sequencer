@@ -194,7 +194,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
 
         // Hook the builder up to the event stream from the first node
         if let Some(builder_task) = builder_task {
-            builder_task.start(Box::new(nodes[0].hotshot.get_event_stream()));
+            builder_task.start(Box::new(nodes[0].hotshot.event_stream()));
         }
 
         let mut network = Self {
@@ -256,7 +256,7 @@ impl<D: DataSourceLifeCycle> MockNetwork<D> {
         // Spawn the update tasks.
         for (i, node) in self.nodes.iter_mut().enumerate() {
             let ds = node.data_source.clone();
-            let mut events = node.hotshot.get_event_stream();
+            let mut events = node.hotshot.event_stream();
             self.tasks.push(BackgroundTask::spawn(
                 format!("update node {i}"),
                 async move {
