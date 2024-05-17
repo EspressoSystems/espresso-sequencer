@@ -77,7 +77,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
         let stake = 1u64;
         let known_nodes_with_stake = (0..num_staked_nodes.into())
             .map(|id| PeerConfig {
-                stake_table_entry: pub_keys[id].get_stake_table_entry(stake),
+                stake_table_entry: pub_keys[id].stake_table_entry(stake),
                 state_ver_key: state_key_pairs[id].ver_key(),
             })
             .collect::<Vec<_>>();

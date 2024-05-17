@@ -45,7 +45,7 @@ pub type MockPayload = TestBlockPayload;
 pub type MockTransaction = TestTransaction;
 
 pub fn mock_transaction(payload: Vec<u8>) -> MockTransaction {
-    TestTransaction(payload)
+    TestTransaction::new(payload)
 }
 
 impl QueryableHeader<MockTypes> for MockHeader {

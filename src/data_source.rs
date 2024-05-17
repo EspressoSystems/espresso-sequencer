@@ -567,7 +567,7 @@ pub mod node_tests {
         state_types::TestInstanceState,
     };
     use hotshot_types::{
-        traits::block_contents::{vid_commitment, BlockPayload},
+        traits::block_contents::{vid_commitment, BlockPayload, EncodeBytes},
         vid::{vid_scheme, VidSchemeType},
     };
     use jf_vid::VidScheme;
@@ -721,7 +721,7 @@ pub mod node_tests {
                 &TestInstanceState {},
             )
             .unwrap();
-            let encoded = payload.encode().unwrap();
+            let encoded = payload.encode();
             let payload_commitment = vid_commitment(&encoded, 1);
             let header = TestBlockHeader {
                 block_number: i,
