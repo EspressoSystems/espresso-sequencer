@@ -35,7 +35,7 @@ use hotshot::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
             derive_libp2p_peer_id, KeyPair, MemoryNetwork, NetworkingMetricsValue, PushCdnNetwork,
-            WrappedSignatureKey,
+            Topic, WrappedSignatureKey,
         },
     },
     types::SignatureKey,
@@ -47,7 +47,7 @@ use hotshot_orchestrator::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DAProposal, VidDisperseShare, ViewNumber},
+    data::{DaProposal, VidDisperseShare, ViewNumber},
     event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
     message::Proposal,
@@ -118,7 +118,7 @@ pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 impl<N: network::Type, P: SequencerPersistence> NodeImplementation<SeqTypes> for Node<N, P> {
     type QuorumNetwork = N::QuorumChannel;
-    type CommitteeNetwork = N::DAChannel;
+    type DaNetwork = N::DAChannel;
     type Storage = Arc<RwLock<P>>;
 }
 
@@ -133,7 +133,7 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
 
     async fn append_da(
         &self,
-        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         self.write().await.append_da(proposal).await
     }
@@ -146,10 +146,13 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
 
     async fn update_undecided_state(
         &self,
-        _leaves: CommitmentMap<Leaf>,
-        _state: BTreeMap<ViewNumber, View<SeqTypes>>,
+        leaves: CommitmentMap<Leaf>,
+        state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        Ok(())
+        self.write()
+            .await
+            .update_undecided_state(leaves, state)
+            .await
     }
 }
 
@@ -160,6 +163,7 @@ pub struct NodeState {
     l1_client: L1Client,
     peers: Arc<dyn StateCatchup>,
     genesis_state: ValidatedState,
+    l1_genesis: Option<L1BlockInfo>,
 }
 
 impl NodeState {
@@ -175,6 +179,7 @@ impl NodeState {
             l1_client,
             peers: Arc::new(catchup),
             genesis_state: Default::default(),
+            l1_genesis: None,
         }
     }
 
@@ -183,9 +188,13 @@ impl NodeState {
         Self::new(
             0,
             ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), Address::default()),
+            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
             catchup::mock::MockStateCatchup::default(),
         )
+    }
+
+    pub fn chain_config(&self) -> &ChainConfig {
+        &self.chain_config
     }
 
     pub fn with_l1(mut self, l1_client: L1Client) -> Self {
@@ -198,8 +207,27 @@ impl NodeState {
         self
     }
 
+    pub fn with_chain_config(mut self, cfg: ChainConfig) -> Self {
+        self.chain_config = cfg;
+        self
+    }
+
     fn l1_client(&self) -> &L1Client {
         &self.l1_client
+    }
+}
+
+// This allows us to turn on `Default` on InstanceState trait
+// which is used in `HotShot` by `TestBuilderImplementation`.
+#[cfg(any(test, feature = "testing"))]
+impl Default for NodeState {
+    fn default() -> Self {
+        Self::new(
+            1u64,
+            ChainConfig::default(),
+            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
+            catchup::mock::MockStateCatchup::default(),
+        )
     }
 }
 
@@ -264,6 +292,8 @@ pub struct BuilderParams {
 
 pub struct L1Params {
     pub url: Url,
+    pub finalized_block: Option<u64>,
+    pub events_max_block_range: u64,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -278,6 +308,24 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     chain_config: ChainConfig,
     is_da: bool,
 ) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
+    // Expose git information via status API.
+    metrics
+        .text_family(
+            "version".into(),
+            vec!["rev".into(), "desc".into(), "timestamp".into()],
+        )
+        .create(vec![
+            env!("VERGEN_GIT_SHA").into(),
+            env!("VERGEN_GIT_DESCRIBE").into(),
+            env!("VERGEN_GIT_COMMIT_TIMESTAMP").into(),
+        ]);
+
+    // Stick our public key in `metrics` so it is easily accessible via the status API.
+    let pub_key = BLSPubKey::from_private(&network_params.private_staking_key);
+    metrics
+        .text_family("node".into(), vec!["key".into()])
+        .create(vec![pub_key.to_string()]);
+
     // Orchestrator client
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
@@ -287,7 +335,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     let orchestrator_client = OrchestratorClient::new(validator_args);
     let state_key_pair = StateKeyPair::from_sign_key(network_params.private_state_key);
     let my_config = ValidatorConfig {
-        public_key: BLSPubKey::from_private(&network_params.private_staking_key),
+        public_key: pub_key,
         private_key: network_params.private_staking_key,
         stake_value: 1,
         state_key_pair,
@@ -335,9 +383,9 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     // If we are a DA node, we need to subscribe to the DA topic
     let topics = {
-        let mut topics = vec!["Global".into()];
+        let mut topics = vec![Topic::Global];
         if is_da {
-            topics.push("DA".into());
+            topics.push(Topic::DA);
         }
         topics
     };
@@ -411,12 +459,17 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
-    let l1_client = L1Client::new(l1_params.url, Address::default());
+    let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
+    let l1_genesis = match l1_params.finalized_block {
+        Some(block) => Some(l1_client.wait_for_finalized_block(block).await),
+        None => None,
+    };
 
     let instance_state = NodeState {
         chain_config,
         l1_client,
         genesis_state,
+        l1_genesis,
         peers: catchup::local_and_remote(
             persistence_opt,
             StatePeers::<Ver>::from_urls(network_params.state_peers),
@@ -512,7 +565,7 @@ pub mod testing {
                 .iter()
                 .zip(&state_key_pairs)
                 .map(|(pub_key, state_key_pair)| PeerConfig::<PubKey> {
-                    stake_table_entry: pub_key.get_stake_table_entry(1),
+                    stake_table_entry: pub_key.stake_table_entry(1),
                     state_ver_key: state_key_pair.ver_key(),
                 })
                 .collect::<Vec<_>>();
@@ -537,7 +590,6 @@ pub mod testing {
                 my_own_validator_config: Default::default(),
                 view_sync_timeout: Duration::from_secs(1),
                 data_request_delay: Duration::from_secs(1),
-                //??
                 builder_url: Url::parse(&format!(
                     "http://127.0.0.1:{}",
                     pick_unused_port().unwrap()
@@ -595,7 +647,6 @@ pub mod testing {
                     &NoMetrics,
                     STAKE_TABLE_CAPACITY_FOR_TEST,
                     bind_version,
-                    true,
                 )
                 .await
             }))
@@ -613,8 +664,8 @@ pub mod testing {
                 .iter()
                 .for_each(|config| {
                     st.register(
-                        *config.stake_table_entry.get_key(),
-                        config.stake_table_entry.get_stake(),
+                        *config.stake_table_entry.key(),
+                        config.stake_table_entry.stake(),
                         config.state_ver_key.clone(),
                     )
                     .unwrap()
@@ -634,18 +685,15 @@ pub mod testing {
             metrics: &dyn Metrics,
             stake_table_capacity: usize,
             bind_version: Ver,
-            is_da: bool,
         ) -> SequencerContext<network::Memory, P::Persistence, Ver> {
             let mut config = self.config.clone();
+            let my_peer_config = &config.known_nodes_with_stake[i];
             config.my_own_validator_config = ValidatorConfig {
-                public_key: config.known_nodes_with_stake[i].stake_table_entry.stake_key,
+                public_key: my_peer_config.stake_table_entry.stake_key,
                 private_key: self.priv_keys[i].clone(),
-                stake_value: config.known_nodes_with_stake[i]
-                    .stake_table_entry
-                    .stake_amount
-                    .as_u64(),
+                stake_value: my_peer_config.stake_table_entry.stake_amount.as_u64(),
                 state_key_pair: self.state_key_pairs[i].clone(),
-                is_da,
+                is_da: config.known_da_nodes.contains(my_peer_config),
             };
 
             let network = Arc::new(MemoryNetwork::new(
@@ -667,7 +715,7 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 ChainConfig::default(),
-                L1Client::new(self.url.clone(), Address::default()),
+                L1Client::new(self.url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
             )
             .with_genesis(state);
@@ -713,12 +761,12 @@ pub mod testing {
             if let Decide { leaf_chain, .. } = event.event {
                 if let Some(height) = leaf_chain.iter().find_map(|LeafInfo { leaf, .. }| {
                     if leaf
-                        .get_block_payload()
+                        .block_payload()
                         .as_ref()?
-                        .transaction_commitments(leaf.get_block_header().metadata())
+                        .transaction_commitments(leaf.block_header().metadata())
                         .contains(&commitment)
                     {
-                        Some(leaf.get_block_header().block_number())
+                        Some(leaf.block_header().block_number())
                     } else {
                         None
                     }
@@ -746,7 +794,7 @@ mod test {
     use hotshot_types::{
         event::LeafInfo,
         traits::block_contents::{
-            vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
+            vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
         },
     };
     use sequencer_utils::AnvilOptions;
@@ -772,10 +820,10 @@ mod test {
 
         // Hook the builder up to the event stream from the first node
         if let Some(builder_task) = builder_task {
-            builder_task.start(Box::new(handle_0.get_event_stream()));
+            builder_task.start(Box::new(handle_0.event_stream()));
         }
 
-        let mut events = handle_0.get_event_stream();
+        let mut events = handle_0.event_stream();
 
         for handle in handles.iter() {
             handle.start_consensus().await;
@@ -811,11 +859,11 @@ mod test {
 
         let handle_0 = &handles[0];
 
-        let mut events = handle_0.get_event_stream();
+        let mut events = handle_0.event_stream();
 
         // Hook the builder up to the event stream from the first node
         if let Some(builder_task) = builder_task {
-            builder_task.start(Box::new(handle_0.get_event_stream()));
+            builder_task.start(Box::new(handle_0.event_stream()));
         }
 
         for handle in handles.iter() {
@@ -825,12 +873,10 @@ mod test {
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], Arc::new(NodeState::mock())).unwrap();
+                Payload::from_transactions([], &NodeState::mock()).unwrap();
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
-                let payload_bytes = genesis_payload
-                    .encode()
-                    .expect("unable to encode genesis payload");
+                let payload_bytes = genesis_payload.encode();
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
             let genesis_state = NodeState::mock();
@@ -853,7 +899,7 @@ mod test {
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-                let header = leaf.get_block_header().clone();
+                let header = leaf.block_header().clone();
                 if header.height == 0 {
                     parent = header;
                     continue;

@@ -21,7 +21,7 @@ use hotshot::types::{Event, SystemContextHandle};
 use hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
-use jf_primitives::merkle_tree::MerkleTreeScheme;
+use jf_merkle_tree::MerkleTreeScheme;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use vbs::version::StaticVersionType;
@@ -70,7 +70,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     fn from(ctx: &SequencerContext<N, P, Ver>) -> Self {
         Self {
             state_signer: ctx.state_signer(),
-            event_streamer: ctx.get_event_streamer(),
+            event_streamer: ctx.event_streamer(),
             node_state: ctx.node_state(),
             handle: ctx.consensus().clone(),
         }
@@ -99,7 +99,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     fn event_stream(&self) -> impl Stream<Item = Event<SeqTypes>> + Unpin {
         let state = self.clone();
-        async move { state.consensus().await.get_event_stream() }
+        async move { state.consensus().await.event_stream() }
             .boxed()
             .flatten_stream()
     }
@@ -211,14 +211,9 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
         view: ViewNumber,
         account: Address,
     ) -> anyhow::Result<AccountQueryData> {
-        let state = self
-            .consensus()
-            .await
-            .get_state(view)
-            .await
-            .context(format!(
-                "state not available for height {height}, view {view:?}"
-            ))?;
+        let state = self.consensus().await.state(view).await.context(format!(
+            "state not available for height {height}, view {view:?}"
+        ))?;
         let (proof, balance) = FeeAccountProof::prove(&state.fee_merkle_tree, account).context(
             format!("account {account} not available for height {height}, view {view:?}"),
         )?;
@@ -227,14 +222,9 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
 
     #[tracing::instrument(skip(self))]
     async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
-        let state = self
-            .consensus()
-            .await
-            .get_state(view)
-            .await
-            .context(format!(
-                "state not available for height {height}, view {view:?}"
-            ))?;
+        let state = self.consensus().await.state(view).await.context(format!(
+            "state not available for height {height}, view {view:?}"
+        ))?;
         let tree = &state.block_merkle_tree;
         let frontier = tree.lookup(tree.num_leaves() - 1).expect_ok()?.1;
         Ok(frontier)
@@ -292,7 +282,7 @@ pub mod test_helpers {
         },
     };
     use itertools::izip;
-    use jf_primitives::merkle_tree::{MerkleCommitment, MerkleTreeScheme};
+    use jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -339,7 +329,6 @@ pub mod test_helpers {
                                             &*metrics,
                                             STAKE_TABLE_CAPACITY_FOR_TEST,
                                             SEQUENCER_VERSION,
-                                            true,
                                         )
                                         .await
                                     }
@@ -358,7 +347,6 @@ pub mod test_helpers {
                                 &NoMetrics,
                                 STAKE_TABLE_CAPACITY_FOR_TEST,
                                 SEQUENCER_VERSION,
-                                true,
                             )
                             .await
                         }
@@ -371,7 +359,7 @@ pub mod test_helpers {
 
             // Hook the builder up to the event stream from the first node
             if let Some(builder_task) = builder_task {
-                builder_task.start(Box::new(handle_0.get_event_stream()));
+                builder_task.start(Box::new(handle_0.event_stream()));
             }
 
             for ctx in &nodes {
@@ -497,7 +485,7 @@ pub mod test_helpers {
         let l1 = anvil.endpoint().parse().unwrap();
         let network =
             TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
-        let mut events = network.server.get_event_stream();
+        let mut events = network.server.event_stream();
 
         client.connect(None).await;
 
@@ -534,12 +522,7 @@ pub mod test_helpers {
         // Wait for block >=2 appears
         // It's waiting for an extra second to make sure that the signature is generated
         loop {
-            height = network
-                .server
-                .consensus()
-                .get_decided_leaf()
-                .await
-                .get_height();
+            height = network.server.consensus().decided_leaf().await.height();
             sleep(std::time::Duration::from_secs(1)).await;
             if height >= 2 {
                 break;
@@ -576,7 +559,7 @@ pub mod test_helpers {
         client.connect(None).await;
 
         // Wait for a few blocks to be decided.
-        let mut events = network.server.get_event_stream();
+        let mut events = network.server.event_stream();
         loop {
             if let Event {
                 event: EventType::Decide { leaf_chain, .. },
@@ -585,7 +568,7 @@ pub mod test_helpers {
             {
                 if leaf_chain
                     .iter()
-                    .any(|LeafInfo { leaf, .. }| leaf.get_block_header().height > 2)
+                    .any(|LeafInfo { leaf, .. }| leaf.block_header().height > 2)
                 {
                     break;
                 }
@@ -596,13 +579,13 @@ pub mod test_helpers {
         network.server.consensus_mut().shut_down().await;
 
         // Undecided fee state: absent account.
-        let leaf = network.server.consensus().get_decided_leaf().await;
-        let height = leaf.get_height() + 1;
-        let view = leaf.get_view_number() + 1;
+        let leaf = network.server.consensus().decided_leaf().await;
+        let height = leaf.height() + 1;
+        let view = leaf.view_number() + 1;
         let res = client
             .get::<AccountQueryData>(&format!(
                 "catchup/{height}/{}/account/{:x}",
-                view.get_u64(),
+                view.u64(),
                 Address::default()
             ))
             .send()
@@ -615,7 +598,7 @@ pub mod test_helpers {
                     &network
                         .server
                         .consensus()
-                        .get_state(view)
+                        .state(view)
                         .await
                         .unwrap()
                         .fee_merkle_tree
@@ -627,14 +610,14 @@ pub mod test_helpers {
 
         // Undecided block state.
         let res = client
-            .get::<BlocksFrontier>(&format!("catchup/{height}/{}/blocks", view.get_u64()))
+            .get::<BlocksFrontier>(&format!("catchup/{height}/{}/blocks", view.u64()))
             .send()
             .await
             .unwrap();
         let root = &network
             .server
             .consensus()
-            .get_state(view)
+            .state(view)
             .await
             .unwrap()
             .block_merkle_tree
@@ -710,7 +693,7 @@ mod api_tests {
             l1,
         )
         .await;
-        let mut events = network.server.get_event_stream();
+        let mut events = network.server.event_stream();
 
         // Connect client.
         let client: Client<ServerError, SequencerVersion> =
@@ -865,7 +848,7 @@ mod test {
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
     };
-    use jf_primitives::merkle_tree::prelude::{MerkleProof, Sha3Node};
+    use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use surf_disco::Client;
@@ -1007,13 +990,13 @@ mod test {
         .await;
 
         // Wait for replica 0 to reach a (non-genesis) decide, before disconnecting it.
-        let mut events = network.peers[0].get_event_stream();
+        let mut events = network.peers[0].event_stream();
         loop {
             let event = events.next().await.unwrap();
             let EventType::Decide { leaf_chain, .. } = event.event else {
                 continue;
             };
-            if leaf_chain[0].leaf.get_height() > 0 {
+            if leaf_chain[0].leaf.height() > 0 {
                 break;
             }
         }
@@ -1028,7 +1011,7 @@ mod test {
         // Wait for a few blocks to pass while the node is down, so it falls behind.
         network
             .server
-            .get_event_stream()
+            .event_stream()
             .filter(|event| future::ready(matches!(event.event, EventType::Decide { .. })))
             .take(3)
             .collect::<Vec<_>>()
@@ -1047,10 +1030,9 @@ mod test {
                 &NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
                 SEQUENCER_VERSION,
-                true,
             )
             .await;
-        let mut events = node.get_event_stream();
+        let mut events = node.event_stream();
 
         // Wait for a (non-genesis) block proposed by each node, to prove that the lagging node has
         // caught up and all nodes are in sync.
@@ -1061,9 +1043,8 @@ mod test {
                 continue;
             };
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-                let height = leaf.get_height();
-                let leaf_builder =
-                    (leaf.get_view_number().get_u64() as usize) % TestConfig::NUM_NODES;
+                let height = leaf.height();
+                let leaf_builder = (leaf.view_number().u64() as usize) % TestConfig::NUM_NODES;
                 if height == 0 {
                     continue;
                 }
@@ -1146,10 +1127,10 @@ mod test {
             .try_collect()
             .await
             .unwrap();
-        let decided_view = chain.last().unwrap().leaf().get_view_number();
+        let decided_view = chain.last().unwrap().leaf().view_number();
 
         // Get the most recent state, for catchup.
-        let state = network.server.consensus().get_decided_state().await;
+        let state = network.server.consensus().decided_state().await;
         tracing::info!(?decided_view, ?state, "consensus state");
 
         // Fully shut down the API servers.
@@ -1199,7 +1180,7 @@ mod test {
             .unwrap();
         assert_eq!(new_leaf.height(), height as u64);
         assert_eq!(
-            new_leaf.leaf().get_parent_commitment(),
+            new_leaf.leaf().parent_commitment(),
             chain[height - 1].hash()
         );
 

@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v26
+        uses: cachix/install-nix-action@V27
 
       - name: Enable Cachix
         uses: cachix/cachix-action@v14
@@ -89,6 +89,7 @@ jobs:
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/deploy
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/keygen
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/pub-key
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/bridge
 
   static-dockers:
     runs-on: ubuntu-latest
@@ -192,6 +193,13 @@ jobs:
           images: ghcr.io/espressosystems/espresso-sequencer/deploy
           flavor: suffix=musl
 
+      - name: Generate bridge metadata
+        uses: docker/metadata-action@v5
+        id: bridge
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/bridge
+          flavor: suffix=musl
+
       - name: Build and push sequencer docker
         uses: docker/build-push-action@v5
         with:
@@ -291,3 +299,13 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.deploy.outputs.tags }}
           labels: ${{ steps.deploy.outputs.labels }}
+
+      - name: Build and push bridge docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/bridge.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.bridge.outputs.tags }}
+          labels: ${{ steps.bridge.outputs.labels }}

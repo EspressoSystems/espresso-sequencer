@@ -35,12 +35,10 @@ use hotshot_types::{
     traits::metrics::{Counter, Gauge, Metrics as _},
     vid::{vid_scheme, VidSchemeType},
 };
-use jf_primitives::{
-    merkle_tree::{
-        ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
-    },
-    vid::VidScheme,
+use jf_merkle_tree::{
+    ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
+use jf_vid::VidScheme;
 use rand::{seq::SliceRandom, RngCore};
 use sequencer::{
     api::endpoints::NamespaceProofQueryData,
@@ -151,7 +149,7 @@ struct ClientConfig {
 #[derive(Clone, Debug, Parser)]
 struct ActionDistribution {
     /// The weight of query actions in the random distribution.
-    #[clap(long, env = "ESPRESSO_NASTY_CLIENT_WEIGHT_QUERY", default_value = "5")]
+    #[clap(long, env = "ESPRESSO_NASTY_CLIENT_WEIGHT_QUERY", default_value = "20")]
     weight_query: u8,
 
     /// The weight of "open stream" actions in the random distribution.
@@ -174,7 +172,7 @@ struct ActionDistribution {
     #[clap(
         long,
         env = "ESPRESSO_NASTY_CLIENT_WEIGHT_POLL_STREAM",
-        default_value = "5"
+        default_value = "10"
     )]
     weight_poll_stream: u8,
 
@@ -182,7 +180,7 @@ struct ActionDistribution {
     #[clap(
         long,
         env = "ESPRESSO_NASTY_CLIENT_WEIGHT_QUERY_WINDOW",
-        default_value = "3"
+        default_value = "15"
     )]
     weight_query_window: u8,
 
@@ -190,7 +188,7 @@ struct ActionDistribution {
     #[clap(
         long,
         env = "ESPRESSO_NASTY_CLIENT_WEIGHT_QUERY_NAMESPACE",
-        default_value = "3"
+        default_value = "15"
     )]
     weight_query_namespace: u8,
 
@@ -198,7 +196,7 @@ struct ActionDistribution {
     #[clap(
         long,
         env = "ESPRESSO_NASTY_CLIENT_WEIGHT_QUERY_BLOCK_STATE",
-        default_value = "3"
+        default_value = "15"
     )]
     weight_query_block_state: u8,
 
@@ -206,7 +204,7 @@ struct ActionDistribution {
     #[clap(
         long,
         env = "ESPRESSO_NASTY_CLIENT_WEIGHT_QUERY_FEE_STATE",
-        default_value = "3"
+        default_value = "15"
     )]
     weight_query_fee_state: u8,
 }

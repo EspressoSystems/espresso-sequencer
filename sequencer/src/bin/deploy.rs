@@ -2,7 +2,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::light_client_genesis;
-use sequencer_utils::deployer::{deploy, Contracts, DeployedContracts};
+use sequencer_utils::deployer::{deploy, ContractGroup, Contracts, DeployedContracts};
 use std::{fs::File, io::stdout, path::PathBuf};
 use url::Url;
 
@@ -63,6 +63,10 @@ struct Options {
     )]
     account_index: u32,
 
+    /// Only deploy the given groups of related contracts.
+    #[clap(long, value_delimiter = ',')]
+    only: Option<Vec<ContractGroup>>,
+
     /// Write deployment results to OUT as a .env file.
     ///
     /// If not provided, the results will be written to stdout.
@@ -72,7 +76,7 @@ struct Options {
     #[clap(flatten)]
     contracts: DeployedContracts,
 
-    /// If toggled, launch a mock prover contract that does not do any proof verification.
+    /// If toggled, launch a mock prover contract with a smaller verification key.
     #[clap(short, long)]
     pub use_mock_contract: bool,
 
@@ -96,6 +100,7 @@ async fn main() -> anyhow::Result<()> {
         opt.mnemonic,
         opt.account_index,
         opt.use_mock_contract,
+        opt.only,
         genesis,
         contracts,
     )

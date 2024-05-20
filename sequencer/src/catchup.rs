@@ -8,9 +8,7 @@ use async_std::sync::RwLock;
 use async_trait::async_trait;
 use derive_more::From;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
-use jf_primitives::merkle_tree::{
-    prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme,
-};
+use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
 use serde::de::DeserializeOwned;
 use std::{fmt::Debug, sync::Arc, time::Duration};
 use surf_disco::Request;
@@ -160,7 +158,7 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
             match client
                 .get::<AccountQueryData>(&format!(
                     "catchup/{height}/{}/account/{account}",
-                    view.get_u64(),
+                    view.u64(),
                 ))
                 .send()
                 .await
@@ -187,7 +185,7 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
         for client in self.clients.iter() {
             tracing::info!("Fetching frontier from {}", client.url);
             match client
-                .get::<BlocksFrontier>(&format!("catchup/{height}/{}/blocks", view.get_u64()))
+                .get::<BlocksFrontier>(&format!("catchup/{height}/{}/blocks", view.u64()))
                 .send()
                 .await
             {
@@ -414,7 +412,7 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
 pub mod mock {
     use super::*;
     use crate::state::{FeeAccountProof, ValidatedState};
-    use jf_primitives::merkle_tree::MerkleTreeScheme;
+    use jf_merkle_tree::MerkleTreeScheme;
     use std::collections::HashMap;
 
     #[derive(Debug, Clone, Default)]

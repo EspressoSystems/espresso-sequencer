@@ -330,7 +330,7 @@ mod test {
     fn mock_leaf(height: u64, node_state: &NodeState) -> LeafQueryData<SeqTypes> {
         let mut leaf = Leaf::genesis(node_state);
         let mut qc = QuorumCertificate::genesis(node_state);
-        leaf.get_block_header_mut().height = height;
+        leaf.block_header_mut().height = height;
         qc.data.leaf_commit = leaf.commit();
         LeafQueryData::new(leaf, qc).unwrap()
     }
@@ -375,10 +375,8 @@ mod test {
         let num_batches = l1.hotshot.max_blocks().call().await.unwrap().as_usize();
         let mut data = MockDataSource::default();
 
-        let node_state = NodeState::mock().with_l1(L1Client::new(
-            anvil.provider().url().clone(),
-            Address::default(),
-        ));
+        let node_state =
+            NodeState::mock().with_l1(L1Client::new(anvil.provider().url().clone(), 1));
 
         for i in 0..num_batches {
             data.leaves.push(Some(mock_leaf(i as u64, &node_state)));
@@ -447,10 +445,8 @@ mod test {
         // Create a test batch.
         let mut data = MockDataSource::default();
 
-        let node_state = NodeState::mock().with_l1(L1Client::new(
-            anvil.provider().url().clone(),
-            Address::default(),
-        ));
+        let node_state =
+            NodeState::mock().with_l1(L1Client::new(anvil.provider().url().clone(), 1));
         data.leaves.push(Some(mock_leaf(0, &node_state)));
 
         // Connect to the HotShot contract with the expected L1 client.
@@ -511,10 +507,8 @@ mod test {
                 .unwrap(),
         );
 
-        let node_state = NodeState::mock().with_l1(L1Client::new(
-            anvil.provider().url().clone(),
-            Address::default(),
-        ));
+        let node_state =
+            NodeState::mock().with_l1(L1Client::new(anvil.provider().url().clone(), 1));
 
         // Create a sequence of leaves, some of which are missing.
         let mut data = MockDataSource::default();

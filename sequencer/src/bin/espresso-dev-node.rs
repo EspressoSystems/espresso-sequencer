@@ -111,6 +111,7 @@ async fn main() -> anyhow::Result<()> {
         opt.mnemonic.clone(),
         opt.account_index,
         true,
+        None,
         network.light_client_genesis(),
         contracts,
     )

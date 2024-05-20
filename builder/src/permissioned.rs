@@ -13,7 +13,7 @@ use hotshot::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
             derive_libp2p_peer_id, CombinedNetworks, KeyPair, Libp2pNetwork,
-            NetworkingMetricsValue, PushCdnNetwork, WebServerNetwork, WrappedSignatureKey,
+            NetworkingMetricsValue, PushCdnNetwork, Topic, WrappedSignatureKey,
         },
     },
     types::{SignatureKey, SystemContextHandle},
@@ -28,7 +28,7 @@ use hotshot_types::{
     event::Event,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
-    traits::{election::Membership, metrics::Metrics},
+    traits::{election::Membership, metrics::Metrics, EncodeBytes},
     utils::BuilderCommitment,
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
@@ -63,10 +63,8 @@ use hotshot_builder_core::{
     },
 };
 use hotshot_state_prover;
-use jf_primitives::{
-    merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
-    signatures::bls_over_bn254::VerKey,
-};
+use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
+use jf_signature::bls_over_bn254::VerKey;
 use sequencer::state_signature::StakeTableCommitmentType;
 use sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, ChainConfig};
 use sequencer::{
@@ -144,6 +142,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     is_da: bool,
     maximize_txns_count_timeout_duration: Duration,
     base_fee: u64,
+    max_block_size: u64,
 ) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -188,7 +187,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Initialize the push CDN network (and perform the initial connection)
     let cdn_network = PushCdnNetwork::new(
         network_params.cdn_endpoint,
-        vec!["Global".into(), "DA".into()],
+        vec![Topic::Global, Topic::DA],
         KeyPair {
             public_key: WrappedSignatureKey(my_config.public_key),
             private_key: my_config.private_key.clone(),
@@ -248,11 +247,14 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         genesis_state.prefund_account(address.into(), U256::max_value().into());
     }
 
-    let l1_client = L1Client::new(l1_params.url, Address::default());
-
+    let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
     let instance_state = NodeState::new(
         node_index,
-        ChainConfig::default(),
+        ChainConfig {
+            max_block_size,
+            base_fee: base_fee.into(),
+            ..Default::default()
+        },
         l1_client,
         Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
     );
@@ -286,7 +288,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         max_api_timeout_duration,
         buffered_view_num_count,
         maximize_txns_count_timeout_duration,
-        base_fee,
     )
     .await?;
 
@@ -382,7 +383,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
-        base_fee: u64,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
@@ -400,17 +400,14 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         // builder api request channel
         let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
 
-        let (genesis_payload, genesis_ns_table) =
-            Payload::from_transactions([], Arc::new(instance_state.clone()))
-                .expect("genesis payload construction failed");
+        let (genesis_payload, genesis_ns_table) = Payload::from_transactions([], &instance_state)
+            .expect("genesis payload construction failed");
 
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
 
         let vid_commitment = {
             // TODO we should not need to collect payload bytes just to compute vid_commitment
-            let payload_bytes = genesis_payload
-                .encode()
-                .expect("unable to encode genesis payload");
+            let payload_bytes = genesis_payload.encode();
             vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
         };
 
@@ -445,7 +442,11 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             bootstrapped_view,
             buffered_view_num_count as u64,
             maximize_txns_count_timeout_duration,
-            base_fee,
+            instance_state
+                .chain_config()
+                .base_fee
+                .as_u64()
+                .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
         );
 

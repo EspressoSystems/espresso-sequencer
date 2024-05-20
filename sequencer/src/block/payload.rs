@@ -1,13 +1,15 @@
 use crate::block::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block::payload;
-use crate::{BlockBuildingSnafu, Error, NamespaceId, NodeState, Transaction};
+use crate::block::tables::NameSpaceTable;
+use crate::block::tables::TxTable;
+use crate::{BlockBuildingSnafu, ChainConfig, Error, NamespaceId, Transaction};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use derivative::Derivative;
 use hotshot::traits::BlockPayload;
 use hotshot_types::vid::{
     vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType,
 };
-use jf_primitives::vid::{
+use jf_vid::{
     payload_prover::{PayloadProver, Statement},
     VidScheme,
 };
@@ -15,13 +17,9 @@ use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::default::Default;
-use std::sync::Arc;
+use std::mem::size_of;
 use std::{collections::HashMap, fmt::Display};
-
-use crate::block::tables::NameSpaceTable;
 use trait_set::trait_set;
-
-use crate::block::tables::TxTable;
 
 trait_set! {
 
@@ -155,13 +153,27 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
 
     pub fn from_txs(
         txs: impl IntoIterator<Item = <payload::Payload<TxTableEntryWord> as BlockPayload>::Transaction>,
+        chain_config: &ChainConfig,
     ) -> Result<Self, Error> {
         let mut namespaces: HashMap<NamespaceId, NamespaceInfo> = Default::default();
         let mut structured_payload = Self {
             raw_payload: vec![],
             ns_table: NameSpaceTable::default(),
         };
+
+        let mut block_size = 0u64;
         for tx in txs.into_iter() {
+            block_size += (tx.payload().len() + size_of::<TxTableEntry>()) as u64;
+
+            // block_size is updated when we encounter a new namespace
+            if !namespaces.contains_key(&tx.namespace()) {
+                block_size += size_of::<TxTableEntry>() as u64;
+            }
+
+            if block_size > chain_config.max_block_size {
+                break;
+            }
+
             Payload::<TableWord>::update_namespace_with_tx(&mut namespaces, tx);
         }
 
@@ -309,7 +321,7 @@ impl hotshot_types::traits::block_contents::TestableBlock
     for Payload<crate::block::entry::TxTableEntryWord>
 {
     fn genesis() -> Self {
-        BlockPayload::from_transactions([], Arc::new(NodeState::mock()))
+        BlockPayload::from_transactions([], &Default::default())
             .unwrap()
             .0
     }
@@ -332,17 +344,57 @@ mod test {
             tx_iterator::TxIndex,
         },
         transaction::NamespaceId,
-        Transaction,
+        ChainConfig, NodeState, Transaction,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
-    use hotshot_types::{traits::BlockPayload, vid::vid_scheme};
-    use jf_primitives::vid::{payload_prover::PayloadProver, VidScheme};
+    use hotshot_types::{
+        traits::{block_contents::TestableBlock, BlockPayload},
+        vid::vid_scheme,
+    };
+    use jf_vid::{payload_prover::PayloadProver, VidScheme};
     use rand::RngCore;
-    use std::{collections::HashMap, marker::PhantomData, ops::Range, sync::Arc};
+    use std::{collections::HashMap, marker::PhantomData, mem::size_of, ops::Range};
 
     const NUM_STORAGE_NODES: usize = 10;
+
+    #[test]
+    fn enforce_max_block_size() {
+        // sum of all payloads + table entry of each
+        let target_payload_total = 1000usize;
+        // include name space entry in max_block_size
+        let max_block_size = (target_payload_total + size_of::<TxTableEntry>()) as u64;
+        let payload_size = 6;
+        // `tx_size` is payload + table entry size
+        let tx_size = (payload_size + size_of::<TxTableEntry>()) as u64;
+        // check our sanity
+        assert_eq!(tx_size, 10);
+
+        let n_txs = target_payload_total as u64 / tx_size;
+        let chain_config = ChainConfig {
+            max_block_size,
+            ..Default::default()
+        };
+
+        let mut txs = (0..n_txs)
+            .map(|_| Transaction::of_size(payload_size))
+            .collect::<Vec<Transaction>>();
+
+        assert_eq!(txs.len(), 100);
+
+        txs.push(Transaction::of_size(payload_size));
+
+        // The final txn will be omitted
+        let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
+        assert_eq!(payload.txn_count(), txs.len() as u64 - 1u64);
+
+        txs.pop();
+        // All txns will be included.
+        let payload = Payload::<TxTableEntryWord>::from_txs(txs.clone(), &chain_config).unwrap();
+
+        assert_eq!(payload.txn_count(), txs.len() as u64);
+    }
 
     #[test]
     fn basic_correctness() {
@@ -464,8 +516,7 @@ mod test {
                 .iter()
                 .flat_map(|(_ns_id, ns)| ns.txs.iter().cloned());
             let (block, actual_ns_table) =
-                Payload::from_transactions(all_txs_iter, Arc::new(crate::NodeState::mock()))
-                    .unwrap();
+                Payload::from_transactions(all_txs_iter, &NodeState::mock()).unwrap();
             let disperse_data = vid.disperse(&block.raw_payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF

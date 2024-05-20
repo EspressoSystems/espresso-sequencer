@@ -31,16 +31,19 @@ hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-types = { workspace = true }
 itertools = { workspace = true }
+jf-crhf = { workspace = true }
+jf-pcs = { workspace = true }
 jf-plonk = { workspace = true }
-jf-primitives = { workspace = true }
 jf-relation = { workspace = true }
+jf-rescue = { workspace = true, features = ["gadgets"] }
+jf-signature = { workspace = true, features = ["schnorr", "bls", "gadgets"] }
 jf-utils = { workspace = true }
 rand_chacha = { workspace = true }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 snafu = { workspace = true }
 surf-disco = { workspace = true }
-tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
+tagged-base64 = { workspace = true }
 tide-disco = { workspace = true }
 time = { workspace = true }
 toml = "0.8"
@@ -51,4 +54,4 @@ vbs = { workspace = true }
 [features]
 default = ["parallel"]
 std = ["ark-std/std", "ark-ff/std"]
-parallel = ["jf-primitives/parallel", "jf-utils/parallel", "ark-ff/parallel"]
+parallel = ["jf-signature/parallel", "jf-utils/parallel", "ark-ff/parallel"]

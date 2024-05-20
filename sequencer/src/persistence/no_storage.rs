@@ -5,11 +5,14 @@ use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
 use crate::{Leaf, SeqTypes, ViewNumber};
 use async_trait::async_trait;
 use hotshot_types::{
-    data::{DAProposal, VidDisperseShare},
+    consensus::CommitmentMap,
+    data::{DaProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
+    utils::View,
 };
+use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Options;
@@ -62,10 +65,16 @@ impl SequencerPersistence for NoStorage {
         Ok(None)
     }
 
+    async fn load_undecided_state(
+        &self,
+    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
+        Ok(None)
+    }
+
     async fn load_da_proposal(
         &self,
         _view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
         Ok(None)
     }
 
@@ -84,7 +93,7 @@ impl SequencerPersistence for NoStorage {
     }
     async fn append_da(
         &mut self,
-        _proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -92,6 +101,13 @@ impl SequencerPersistence for NoStorage {
         &mut self,
         _view: ViewNumber,
         _action: HotShotAction,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn update_undecided_state(
+        &mut self,
+        _leaves: CommitmentMap<Leaf>,
+        _state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }

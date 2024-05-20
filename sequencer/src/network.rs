@@ -44,7 +44,7 @@ pub mod cdn {
         def::{ConnectionDef, RunDef},
         discovery::{Embedded, Redis},
     };
-    use hotshot::types::SignatureKey;
+    use hotshot::{traits::implementations::Topic, types::SignatureKey};
     use hotshot_types::{traits::node_implementation::NodeType, utils::bincode_opts};
 
     /// A wrapped `SignatureKey`. We need to implement the Push CDN's `SignatureScheme`
@@ -95,6 +95,7 @@ pub mod cdn {
         type User = UserDef<TYPES>;
         type Broker = BrokerDef<TYPES>;
         type DiscoveryClientType = Redis;
+        type Topic = Topic;
     }
 
     /// The user definition for the Push CDN.
@@ -133,5 +134,6 @@ pub mod cdn {
         type User = UserDef<TYPES>;
         type Broker = BrokerDef<TYPES>;
         type DiscoveryClientType = Embedded;
+        type Topic = Topic;
     }
 }

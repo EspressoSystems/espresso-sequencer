@@ -1,8 +1,9 @@
 use anyhow::{ensure, Context};
 use async_std::sync::Arc;
-use clap::{builder::OsStr, Parser};
+use clap::{builder::OsStr, Parser, ValueEnum};
 use contract_bindings::{
     erc1967_proxy::ERC1967Proxy,
+    fee_contract::FeeContract,
     hot_shot::HotShot,
     light_client::{LightClient, LIGHTCLIENT_ABI},
     light_client_mock::LIGHTCLIENTMOCK_ABI,
@@ -40,6 +41,14 @@ pub struct DeployedContracts {
     /// Use an already-deployed LightClient.sol proxy instead of deploying a new one.
     #[clap(long, env = Contract::LightClientProxy)]
     light_client_proxy: Option<Address>,
+
+    /// Use an already-deployed FeeContract.sol instead of deploying a new one.
+    #[clap(long, env = Contract::FeeContract)]
+    fee_contract: Option<Address>,
+
+    /// Use an already-deployed FeeContract.sol proxy instead of deploying a new one.
+    #[clap(long, env = Contract::FeeContractProxy)]
+    fee_contract_proxy: Option<Address>,
 }
 
 /// An identifier for a particular contract.
@@ -55,6 +64,10 @@ pub enum Contract {
     LightClient,
     #[display(fmt = "ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS")]
     LightClientProxy,
+    #[display(fmt = "ESPRESSO_SEQUENCER_FEE_CONTRACT_ADDRESS")]
+    FeeContract,
+    #[display(fmt = "ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS")]
+    FeeContractProxy,
 }
 
 impl From<Contract> for OsStr {
@@ -84,6 +97,12 @@ impl From<DeployedContracts> for Contracts {
         }
         if let Some(addr) = deployed.light_client_proxy {
             m.insert(Contract::LightClientProxy, addr);
+        }
+        if let Some(addr) = deployed.fee_contract {
+            m.insert(Contract::FeeContract, addr);
+        }
+        if let Some(addr) = deployed.fee_contract_proxy {
+            m.insert(Contract::FeeContractProxy, addr);
         }
         Self(m)
     }
@@ -288,6 +307,7 @@ pub async fn deploy(
     mnemonic: String,
     account_index: u32,
     use_mock_contract: bool,
+    only: Option<Vec<ContractGroup>>,
     genesis: ParsedLightClientState,
     mut contracts: Contracts,
 ) -> anyhow::Result<Contracts> {
@@ -309,36 +329,75 @@ pub async fn deploy(
     );
     tracing::info!(%balance, "deploying from address {owner:#x}");
 
-    contracts
-        .deploy_tx(Contract::HotShot, HotShot::deploy(l1.clone(), ())?)
-        .await?;
-
-    // Deploy the upgradable light client contract first, then initialize it through a proxy contract
-    let lc_address = if use_mock_contract {
+    // `HotShot.sol`
+    if should_deploy(ContractGroup::HotShot, &only) {
         contracts
-            .deploy_fn(Contract::LightClient, |contracts| {
-                deploy_mock_light_client_contract(l1.clone(), contracts, None).boxed()
-            })
-            .await?
-    } else {
-        contracts
-            .deploy_fn(Contract::LightClient, |contracts| {
-                deploy_light_client_contract(l1.clone(), contracts).boxed()
-            })
-            .await?
-    };
-    let light_client = LightClient::new(lc_address, l1.clone());
+            .deploy_tx(Contract::HotShot, HotShot::deploy(l1.clone(), ())?)
+            .await?;
+    }
 
-    let data = light_client
-        .initialize(genesis.into(), u32::MAX, owner)
-        .calldata()
-        .context("calldata for initialize transaction not available")?;
-    contracts
-        .deploy_tx(
-            Contract::LightClientProxy,
-            ERC1967Proxy::deploy(l1.clone(), (lc_address, data))?,
-        )
-        .await?;
+    // `LightClient.sol`
+    if should_deploy(ContractGroup::LightClient, &only) {
+        // Deploy the upgradable light client contract first, then initialize it through a proxy contract
+        let lc_address = if use_mock_contract {
+            contracts
+                .deploy_fn(Contract::LightClient, |contracts| {
+                    deploy_mock_light_client_contract(l1.clone(), contracts, None).boxed()
+                })
+                .await?
+        } else {
+            contracts
+                .deploy_fn(Contract::LightClient, |contracts| {
+                    deploy_light_client_contract(l1.clone(), contracts).boxed()
+                })
+                .await?
+        };
+        let light_client = LightClient::new(lc_address, l1.clone());
+
+        let data = light_client
+            .initialize(genesis.into(), u32::MAX, owner)
+            .calldata()
+            .context("calldata for initialize transaction not available")?;
+        contracts
+            .deploy_tx(
+                Contract::LightClientProxy,
+                ERC1967Proxy::deploy(l1.clone(), (lc_address, data))?,
+            )
+            .await?;
+    }
+
+    // `FeeContract.sol`
+    if should_deploy(ContractGroup::FeeContract, &only) {
+        let fee_contract_address = contracts
+            .deploy_tx(Contract::FeeContract, FeeContract::deploy(l1.clone(), ())?)
+            .await?;
+        let fee_contract = FeeContract::new(fee_contract_address, l1.clone());
+        let data = fee_contract
+            .initialize(owner)
+            .calldata()
+            .context("calldata for initialize transaction not available")?;
+        contracts
+            .deploy_tx(
+                Contract::FeeContractProxy,
+                ERC1967Proxy::deploy(l1.clone(), (fee_contract_address, data))?,
+            )
+            .await?;
+    }
 
     Ok(contracts)
+}
+
+fn should_deploy(group: ContractGroup, only: &Option<Vec<ContractGroup>>) -> bool {
+    match only {
+        Some(groups) => groups.contains(&group),
+        None => true,
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ContractGroup {
+    #[clap(name = "hotshot")]
+    HotShot,
+    FeeContract,
+    LightClient,
 }

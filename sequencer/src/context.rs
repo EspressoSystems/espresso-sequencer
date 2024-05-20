@@ -78,11 +78,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         let pub_key = config.my_own_validator_config.public_key;
         tracing::info!(%pub_key, "initializing consensus");
 
-        // Stick our public key and node ID in `metrics` so it is easily accessible via the status
-        // API.
-        metrics
-            .create_label("pub_key".into())
-            .set(pub_key.to_string());
+        // Stick our node ID in `metrics` so it is easily accessible via the status API.
         metrics
             .create_gauge("node_index".into(), None)
             .set(instance_state.node_id as usize);
@@ -158,7 +154,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
         node_state: NodeState,
     ) -> Self {
-        let events = handle.get_event_stream();
+        let events = handle.event_stream();
 
         let mut ctx = Self {
             handle,
@@ -200,8 +196,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     }
 
     /// Stream consensus events.
-    pub fn get_event_stream(&self) -> impl Stream<Item = Event<SeqTypes>> {
-        self.handle.get_event_stream()
+    pub fn event_stream(&self) -> impl Stream<Item = Event<SeqTypes>> {
+        self.handle.event_stream()
     }
 
     pub async fn submit_transaction(&self, tx: Transaction) -> anyhow::Result<()> {
@@ -210,7 +206,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     }
 
     /// get event streamer
-    pub fn get_event_streamer(&self) -> Arc<RwLock<EventsStreamer<SeqTypes>>> {
+    pub fn event_streamer(&self) -> Arc<RwLock<EventsStreamer<SeqTypes>>> {
         self.events_streamer.clone()
     }
 
