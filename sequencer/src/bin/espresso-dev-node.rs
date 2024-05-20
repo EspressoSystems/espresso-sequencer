@@ -49,14 +49,6 @@ struct Args {
     /// Port that the HTTP API will use.
     #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT", default_value = "8770")]
     sequencer_api_port: u16,
-    /// Port to run the builder server on.
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_BUILDER_SERVER_PORT",
-        default_value = "8771"
-    )]
-    builder_port: u16,
     /// If provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
@@ -103,6 +95,9 @@ async fn main() -> anyhow::Result<()> {
     )
     .await;
 
+    let config = network.cfg.hotshot_config();
+    tracing::info!("Hotshot config {config:?}");
+
     let contracts = Contracts::new();
 
     tracing::info!("deploying the contracts");
@@ -125,12 +120,6 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("starting the commitment server");
     start_commitment_server(opt.commitment_task_port, hotshot_address, SEQUENCER_VERSION).unwrap();
 
-    tracing::info!("starting the builder server");
-    let builder_address = "0xb0cfa4e5893107e2995974ef032957752bb526e9"
-        .parse()
-        .unwrap();
-    start_builder_server(opt.builder_port, builder_address, SEQUENCER_VERSION).unwrap();
-
     let sequencer_url =
         Url::parse(format!("http://localhost:{}", opt.sequencer_api_port).as_str()).unwrap();
     let commitment_task_options = CommitmentTaskOptions {
@@ -147,38 +136,6 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("starting hotshot commitment task");
     run_hotshot_commitment_task::<es_version::SequencerVersion>(&commitment_task_options).await;
 
-    Ok(())
-}
-
-// In the test node binary, for now we don't need to run the builder. We just hardcode the builder address
-// and expose the needed endpoint.
-fn start_builder_server<Ver: StaticVersionType + 'static>(
-    port: u16,
-    builder_address: Address,
-    bind_version: Ver,
-) -> io::Result<()> {
-    let mut app = tide_disco::App::<(), ServerError>::with_state(());
-    let toml_str = r#"
-[route.builder_address]
-PATH = ["builderaddress"]
-DOC = """
-Get the builder address.
-"""
-    "#;
-    let toml = toml::from_str::<toml::value::Value>(toml_str)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    let mut api = Api::<(), ServerError, Ver>::new(toml)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-    api.get("builder_address", move |_, _| {
-        async move { Ok(builder_address) }.boxed()
-    })
-    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    app.register_module("block_info", api)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    spawn(app.serve(format!("0.0.0.0:{port}"), bind_version));
     Ok(())
 }
 
@@ -222,7 +179,7 @@ mod tests {
     use escargot::CargoBuild;
     use portpicker::pick_unused_port;
     use reqwest::StatusCode;
-    use sequencer::{Header, Transaction};
+    use sequencer::Transaction;
     use sequencer_utils::AnvilOptions;
 
     // If this test failed and you are doing changes on the following stuff, please
@@ -235,7 +192,6 @@ mod tests {
         setup_logging();
         setup_backtrace();
         let anvil = AnvilOptions::default().spawn().await;
-        let builder_port = pick_unused_port().unwrap();
         let commitment_task_port = pick_unused_port().unwrap();
         let api_port = pick_unused_port().unwrap();
         let postgres_port = pick_unused_port().unwrap();
@@ -247,7 +203,7 @@ mod tests {
             .arg("sequencer-db-0")
             .arg("--force-recreate")
             .arg("--renew-anon-volumes")
-            .env("ESPRESSO_SEQUENCER_DB_PORT", postgres_port.to_string())
+            .env("ESPRESSO_SEQUENCER0_DB_PORT", postgres_port.to_string())
             .stdout(Stdio::null())
             .spawn()
             .unwrap();
@@ -260,7 +216,6 @@ mod tests {
             .unwrap()
             .command()
             .env("ESPRESSO_SEQUENCER_L1_PROVIDER", anvil.url().to_string())
-            .env("ESPRESSO_BUILDER_SERVER_PORT", builder_port.to_string())
             .env(
                 "ESPRESSO_COMMITMENT_TASK_PORT",
                 commitment_task_port.to_string(),
@@ -273,14 +228,9 @@ mod tests {
             )
             .env("ESPRESSO_SEQUENCER_POSTGRES_USER", "root")
             .env("ESPRESSO_SEQUENCER_POSTGRES_PASSWORD", "password")
+            .env("ESPRESSO_SEQUENCER_POSTGRES_DATABASE", "sequencer")
             .spawn()
             .unwrap();
-
-        let builder_url = format!(
-            "http://localhost:{}/block_info/builderaddress",
-            builder_port
-        );
-        println!("builder url: {}", builder_url);
 
         let commitment_task_url = format!(
             "http://localhost:{}/api/hotshot_contract",
@@ -298,29 +248,6 @@ mod tests {
         let client = reqwest::Client::new();
         let api_client = surf_disco::Client::<hotshot_query_service::Error, SequencerVersion>::new(
             format!("http://localhost:{}", api_port).parse().unwrap(),
-        );
-
-        let builder_address = client
-            .get(builder_url)
-            .send()
-            .await
-            .unwrap()
-            .json::<String>()
-            .await
-            .unwrap();
-
-        let header = client
-            .get(sequencer_get_header_url)
-            .send()
-            .await
-            .unwrap()
-            .json::<Header>()
-            .await
-            .unwrap();
-
-        assert_eq!(
-            format!("0x{:x}", header.fee_info.account().address()),
-            builder_address
         );
 
         let hotshot_contract = client
