@@ -145,12 +145,16 @@ pub(crate) trait CatchupDataSource {
 
 impl CatchupDataSource for MetricsDataSource {}
 
+/// This struct defines the public Hotshot validator configuration.
+/// Private key and state key pairs are excluded for security reasons.
+
 #[derive(Debug, Serialize)]
 pub struct PublicValidatorConfig {
     pub public_key: PubKey,
     pub stake_value: u64,
     pub is_da: bool,
     pub private_key: &'static str,
+    pub state_public_key: String,
     pub state_key_pair: &'static str,
 }
 
@@ -160,20 +164,26 @@ impl From<ValidatorConfig<PubKey>> for PublicValidatorConfig {
             public_key,
             private_key: _,
             stake_value,
-            state_key_pair: _,
+            state_key_pair,
             is_da,
         } = v;
+
+        let state_public_key = state_key_pair.ver_key();
 
         Self {
             public_key,
             stake_value,
             is_da,
+            state_public_key: state_public_key.to_string(),
             private_key: "*****",
             state_key_pair: "*****",
         }
     }
 }
 
+/// This struct defines the public Hotshot configuration parameters.
+/// Our config module features a GET endpoint accessible via the route `/hotshot` to display the hotshot config parameters.
+/// Hotshot config has sensitive information like private keys and such fields are excluded from this struct.
 #[derive(Debug, Serialize)]
 pub struct PublicHotShotConfig {
     pub execution_type: ExecutionType,
