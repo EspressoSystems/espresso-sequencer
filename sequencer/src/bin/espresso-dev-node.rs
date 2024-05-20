@@ -244,7 +244,7 @@ mod tests {
             .arg("compose")
             .arg("up")
             .arg("-d")
-            .arg("sequencer-db")
+            .arg("sequencer-db-0")
             .arg("--force-recreate")
             .arg("--renew-anon-volumes")
             .env("ESPRESSO_SEQUENCER_DB_PORT", postgres_port.to_string())
