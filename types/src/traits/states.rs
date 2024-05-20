@@ -23,7 +23,10 @@ use crate::{
 pub trait InstanceState: Debug + Send + Sync {}
 
 /// Application-specific state delta, which will be used to store a list of merkle tree entries.
-pub trait StateDelta: Debug + Send + Sync + Serialize + for<'a> Deserialize<'a> {}
+pub trait StateDelta:
+    Debug + PartialEq + Eq + Hash + Send + Sync + Serialize + for<'a> Deserialize<'a>
+{
+}
 
 /// Abstraction over the state that blocks modify
 ///

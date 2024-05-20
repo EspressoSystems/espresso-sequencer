@@ -1,0 +1,174 @@
+use async_broadcast::Sender;
+use hotshot_task::task::Task;
+use std::sync::Arc;
+use tracing::instrument;
+
+use async_lock::RwLock;
+use hotshot_task::task::TaskState;
+use hotshot_types::{
+    consensus::Consensus,
+    event::Event,
+    simple_certificate::{QuorumCertificate, TimeoutCertificate},
+    simple_vote::{QuorumVote, TimeoutVote},
+    traits::{
+        node_implementation::{NodeImplementation, NodeType},
+        signature_key::SignatureKey,
+    },
+};
+
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::JoinHandle;
+#[cfg(async_executor_impl = "tokio")]
+use tokio::task::JoinHandle;
+
+use crate::{events::HotShotEvent, vote_collection::VoteCollectionTaskState};
+
+use self::handlers::{
+    handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
+};
+
+/// Alias for Optional type for Vote Collectors
+type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>;
+
+/// Event handlers for use in the `handle` method.
+mod handlers;
+
+/// Task state for the Consensus task.
+pub struct Consensus2TaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+    /// Our public key
+    pub public_key: TYPES::SignatureKey,
+
+    /// Our Private Key
+    pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+
+    /// Immutable instance state
+    pub instance_state: Arc<TYPES::InstanceState>,
+
+    /// Network for all nodes
+    pub quorum_network: Arc<I::QuorumNetwork>,
+
+    /// Network for DA committee
+    pub da_network: Arc<I::DaNetwork>,
+
+    /// Membership for Timeout votes/certs
+    pub timeout_membership: Arc<TYPES::Membership>,
+
+    /// Membership for Quorum Certs/votes
+    pub quorum_membership: Arc<TYPES::Membership>,
+
+    /// Membership for DA committee Votes/certs
+    pub committee_membership: Arc<TYPES::Membership>,
+
+    /// Current Vote collection task, with it's view.
+    pub vote_collector:
+        RwLock<VoteCollectorOption<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>>,
+
+    /// Current timeout vote collection task with its view
+    pub timeout_vote_collector:
+        RwLock<VoteCollectorOption<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>>,
+
+    /// This node's storage ref
+    pub storage: Arc<RwLock<I::Storage>>,
+
+    /// The view number that this node is currently executing in.
+    pub cur_view: TYPES::Time,
+
+    /// Output events to application
+    pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
+
+    /// Timeout task handle
+    pub timeout_task: Option<JoinHandle<()>>,
+
+    /// View timeout from config.
+    pub timeout: u64,
+
+    /// A reference to the metrics trait.
+    pub consensus: Arc<RwLock<Consensus<TYPES>>>,
+
+    /// The last decided view
+    pub last_decided_view: TYPES::Time,
+
+    /// The node's id
+    pub id: u64,
+}
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Consensus2TaskState<TYPES, I> {
+    /// Handles a consensus event received on the event stream
+    #[instrument(skip_all, fields(id = self.id, cur_view = *self.cur_view, last_decided_view = *self.last_decided_view), name = "Consensus replica task", level = "error")]
+    pub async fn handle(
+        &mut self,
+        event: Arc<HotShotEvent<TYPES>>,
+        sender: Sender<Arc<HotShotEvent<TYPES>>>,
+    ) {
+        match event.as_ref() {
+            HotShotEvent::QuorumVoteRecv(ref vote) => {
+                if let Err(e) =
+                    handle_quorum_vote_recv(vote, Arc::clone(&event), &sender, self).await
+                {
+                    tracing::debug!("Failed to handle QuorumVoteRecv event; error = {e}");
+                }
+            }
+            HotShotEvent::TimeoutVoteRecv(ref vote) => {
+                if let Err(e) =
+                    handle_timeout_vote_recv(vote, Arc::clone(&event), &sender, self).await
+                {
+                    tracing::debug!("Failed to handle TimeoutVoteRecv event; error = {e}");
+                }
+            }
+            HotShotEvent::ViewChange(new_view_number) => {
+                if let Err(e) = handle_view_change(*new_view_number, &sender, self).await {
+                    tracing::trace!("Failed to handle ViewChange event; error = {e}");
+                }
+            }
+            HotShotEvent::Timeout(view_number) => {
+                if let Err(e) = handle_timeout(*view_number, &sender, self).await {
+                    tracing::debug!("Failed to handle Timeout event; error = {e}");
+                }
+            }
+            HotShotEvent::LastDecidedViewUpdated(view_number) => {
+                if *view_number < self.last_decided_view {
+                    tracing::debug!("New decided view is not newer than ours");
+                } else {
+                    self.last_decided_view = *view_number;
+                    if let Err(e) = self
+                        .consensus
+                        .write()
+                        .await
+                        .update_last_decided_view(*view_number)
+                    {
+                        tracing::trace!("{e:?}");
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for Consensus2TaskState<TYPES, I> {
+    type Event = Arc<HotShotEvent<TYPES>>;
+    type Output = ();
+
+    fn filter(&self, event: &Arc<HotShotEvent<TYPES>>) -> bool {
+        !matches!(
+            event.as_ref(),
+            HotShotEvent::QuorumVoteRecv(_)
+                | HotShotEvent::TimeoutVoteRecv(_)
+                | HotShotEvent::ViewChange(_)
+                | HotShotEvent::Timeout(_)
+                | HotShotEvent::LastDecidedViewUpdated(_)
+                | HotShotEvent::Shutdown
+        )
+    }
+    async fn handle_event(event: Self::Event, task: &mut Task<Self>) -> Option<()>
+    where
+        Self: Sized,
+    {
+        let sender = task.clone_sender();
+        task.state_mut().handle(event, sender).await;
+        None
+    }
+
+    fn should_shutdown(event: &Self::Event) -> bool {
+        matches!(event.as_ref(), HotShotEvent::Shutdown)
+    }
+}

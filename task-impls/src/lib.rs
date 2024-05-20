@@ -4,6 +4,9 @@
 /// the task which implements the main parts of consensus
 pub mod consensus;
 
+/// The task which implements the core state logic of consensus.
+pub mod consensus2;
+
 /// The task which handles the logic for the quorum vote.
 pub mod quorum_vote;
 

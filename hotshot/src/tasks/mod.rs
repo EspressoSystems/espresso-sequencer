@@ -11,6 +11,7 @@ use async_lock::RwLock;
 use hotshot_task::task::{Task, TaskRegistry};
 use hotshot_task_impls::{
     consensus::ConsensusTaskState,
+    consensus2::Consensus2TaskState,
     da::DaTaskState,
     events::HotShotEvent,
     network::{NetworkEventTaskState, NetworkMessageTaskState},
@@ -255,5 +256,17 @@ pub async fn add_quorum_proposal_recv_task<TYPES: NodeType, I: NodeImplementatio
         Arc::clone(&task_reg),
         quorum_proposal_recv_task_state,
     );
+    task_reg.run_task(task).await;
+}
+
+/// Add the Consensus2 task.
+pub async fn add_consensus2_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
+    task_reg: Arc<TaskRegistry>,
+    tx: Sender<Arc<HotShotEvent<TYPES>>>,
+    rx: Receiver<Arc<HotShotEvent<TYPES>>>,
+    handle: &SystemContextHandle<TYPES, I>,
+) {
+    let consensus2_task_state = Consensus2TaskState::create_from(handle).await;
+    let task = Task::new(tx, rx, Arc::clone(&task_reg), consensus2_task_state);
     task_reg.run_task(task).await;
 }

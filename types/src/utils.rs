@@ -24,7 +24,7 @@ use crate::{
 };
 
 /// A view's state
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(bound = "")]
 pub enum ViewInner<TYPES: NodeType> {
     /// A pending view with an available block but not leaf proposal yet.
@@ -133,7 +133,7 @@ impl<TYPES: NodeType> Deref for View<TYPES> {
 }
 
 /// This exists so we can perform state transitions mutably
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(bound = "")]
 pub struct View<TYPES: NodeType> {
     /// The view data. Wrapped in a struct so we can mutate
