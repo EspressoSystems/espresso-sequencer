@@ -323,10 +323,10 @@ fn get_public_env_vars() -> Result<Vec<String>> {
     let toml: toml::Value = toml::from_str(include_str!("../../../public-env-vars.toml"))?;
 
     let keys = toml
-        .get("vars")
-        .ok_or_else(|| toml::de::Error::custom("vars not found"))?
+        .get("variables")
+        .ok_or_else(|| toml::de::Error::custom("variables not found"))?
         .as_array()
-        .ok_or_else(|| toml::de::Error::custom("vars is not an array"))?
+        .ok_or_else(|| toml::de::Error::custom("variables is not an array"))?
         .clone()
         .into_iter()
         .map(|v| v.try_into())
