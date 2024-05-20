@@ -104,7 +104,7 @@ processes:
         condition: process_completed
 
   sequencer0:
-    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- submit -- hotshot-events
+    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- submit -- hotshot-events -- config
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_0

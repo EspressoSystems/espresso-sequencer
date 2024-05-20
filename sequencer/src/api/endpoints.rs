@@ -320,7 +320,7 @@ where
 }
 
 fn get_public_env_vars() -> Result<Vec<String>> {
-    let toml: toml::Value = toml::from_str(include_str!("../../../public-env-vars.toml"))?;
+    let toml: toml::Value = toml::from_str(include_str!("../../api/public-env-vars.toml"))?;
 
     let keys = toml
         .get("variables")
