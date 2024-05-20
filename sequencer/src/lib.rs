@@ -7,8 +7,10 @@ pub mod eth_signature_key;
 mod header;
 pub mod hotshot_commitment;
 pub mod options;
-mod reference_tests;
 pub mod state_signature;
+
+mod message_compat_tests;
+mod reference_tests;
 
 use anyhow::Context;
 use async_std::sync::RwLock;
