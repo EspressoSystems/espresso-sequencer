@@ -192,7 +192,8 @@ mod tests {
         setup_logging();
         setup_backtrace();
         let anvil = AnvilOptions::default().spawn().await;
-        let commitment_task_port = pick_unused_port().unwrap();
+        // let commitment_task_port = pick_unused_port().unwrap();
+        let commitment_task_port = 10002;
         let api_port = pick_unused_port().unwrap();
         let postgres_port = pick_unused_port().unwrap();
 
@@ -243,7 +244,7 @@ mod tests {
         println!("sequencer url: {}", sequencer_get_header_url);
 
         // Waiting for the test node running completely
-        async_sleep(Duration::from_secs(50)).await;
+        async_sleep(Duration::from_secs(100)).await;
 
         let client = reqwest::Client::new();
         let api_client = surf_disco::Client::<hotshot_query_service::Error, SequencerVersion>::new(
