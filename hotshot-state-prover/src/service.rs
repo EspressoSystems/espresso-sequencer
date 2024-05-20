@@ -159,11 +159,17 @@ pub async fn light_client_genesis(
     stake_table_capacity: usize,
 ) -> anyhow::Result<ParsedLightClientState> {
     let st = init_stake_table_from_orchestrator(orchestrator_url, stake_table_capacity).await;
+    light_client_genesis_from_stake_table(st)
+}
+
+#[inline]
+pub fn light_client_genesis_from_stake_table(
+    st: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
+) -> anyhow::Result<ParsedLightClientState> {
     let (bls_comm, schnorr_comm, stake_comm) = st
         .commitment(SnapshotVersion::LastEpochStart)
         .expect("Commitment computation shouldn't fail.");
     let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
-
     let pi = vec![
         u256_to_field(threshold),
         F::from(0_u64), // Arbitrary value for view number

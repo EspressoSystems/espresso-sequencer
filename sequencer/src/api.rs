@@ -20,6 +20,7 @@ use futures::{
 use hotshot::types::{Event, SystemContextHandle};
 use hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
 use hotshot_query_service::data_source::ExtensibleDataSource;
+use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
 use jf_merkle_tree::MerkleTreeScheme;
 use serde::{Deserialize, Serialize};
@@ -34,8 +35,6 @@ pub mod sql;
 mod update;
 
 pub use options::Options;
-
-type F = ark_ed_on_bn254::Fq;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AccountQueryData {
@@ -269,17 +268,10 @@ pub mod test_helpers {
     };
     use hotshot::types::{Event, EventType};
 
-    use hotshot_contract_adapter::{
-        jellyfish::u256_to_field, light_client::ParsedLightClientState,
-    };
+    use hotshot_contract_adapter::light_client::ParsedLightClientState;
     use hotshot_types::{
         event::LeafInfo,
-        light_client::GenericPublicInput,
-        traits::{
-            metrics::NoMetrics,
-            node_implementation::ConsensusTime,
-            stake_table::{SnapshotVersion, StakeTableScheme},
-        },
+        traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
     };
     use itertools::izip;
     use jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
@@ -389,23 +381,7 @@ pub mod test_helpers {
 
         pub fn light_client_genesis(&self) -> ParsedLightClientState {
             let st = self.cfg.stake_table(STAKE_TABLE_CAPACITY_FOR_TEST);
-            let (bls_comm, schnorr_comm, stake_comm) = st
-                .commitment(SnapshotVersion::LastEpochStart)
-                .expect("Commitment computation shouldn't fail.");
-            let threshold = st.total_stake(SnapshotVersion::LastEpochStart).unwrap() * 2 / 3;
-
-            let pi = vec![
-                u256_to_field(threshold),
-                F::from(0_u64), // Arbitrary value for view number
-                F::from(0_u64), // Arbitrary value for block height
-                F::from(0_u64), // Arbitrary value for state commitment
-                F::from(0_u64), // Arbitrary value for fee ledger commitment
-                bls_comm,
-                schnorr_comm,
-                stake_comm,
-            ];
-            let pi: GenericPublicInput<F> = pi.into();
-            pi.into()
+            light_client_genesis_from_stake_table(st).unwrap()
         }
 
         pub async fn stop_consensus(&mut self) {

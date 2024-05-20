@@ -320,6 +320,7 @@ pub async fn deploy(
         .with_chain_id(chain_id);
     let owner = wallet.address();
     let l1 = Arc::new(SignerMiddleware::new(provider, wallet));
+
     // As a sanity check, check that the deployer address has some balance of ETH it can use to pay
     // gas.
     let balance = l1.get_balance(owner, None).await?;
