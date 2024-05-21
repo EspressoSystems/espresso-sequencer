@@ -2474,6 +2474,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "diff"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
+
+[[package]]
 name = "diff-test-bn254"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/solidity-bn254.git#050a98a3b389862c50d0bbbea620d8dc278c275a"
@@ -7227,6 +7233,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "925383efa346730478fb4838dbe9137d2a47675ad789c546d150a6e1dd4ab31c"
 
 [[package]]
+name = "pretty_assertions"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af7cee1a6c8a5b9208b3cb1061f10c0cb689087b3d8ce85fb9d2dd7a29b6ba66"
+dependencies = [
+ "diff",
+ "yansi",
+]
+
+[[package]]
 name = "prettyplease"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8490,9 +8506,9 @@ dependencies = [
  "jf-signature",
  "jf-utils",
  "jf-vid",
- "lazy_static",
  "num-traits",
  "portpicker",
+ "pretty_assertions",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rand_distr",
