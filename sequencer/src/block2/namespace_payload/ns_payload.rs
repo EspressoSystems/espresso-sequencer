@@ -3,7 +3,7 @@
 //! That's all done in `xxx`.
 
 use crate::{
-    block2::namespace_payload::newtypes::{
+    block2::namespace_payload::types::{
         FromNsPayloadBytes, NsPayloadByteLen, NsPayloadBytesRange, NumTxs, NumTxsRange,
         NumTxsUnchecked, TxIndex, TxIter, TxPayloadRange, TxTableEntriesRange,
     },

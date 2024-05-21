@@ -5,7 +5,7 @@ use crate::{
         },
         namespace_payload::{
             iter::Index,
-            newtypes::{
+            types::{
                 NumTxs, NumTxsRange, NumTxsUnchecked, TxIndex, TxPayloadRange, TxTableEntries,
                 TxTableEntriesRange,
             },

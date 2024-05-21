@@ -1,4 +1,4 @@
-use super::newtypes::{NsPayloadByteLen, NsPayloadBytesRange};
+use super::types::{NsPayloadByteLen, NsPayloadBytesRange};
 use std::ops::Range;
 
 /// Index range for a namespace payload inside a block payload.

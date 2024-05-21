@@ -1,6 +1,6 @@
 use crate::block2::{
     full_payload::{NsIndex, NsIter, Payload},
-    namespace_payload::newtypes::{TxIndex, TxIter},
+    namespace_payload::types::{TxIndex, TxIter},
 };
 use serde::{Deserialize, Serialize};
 use std::iter::Peekable;
