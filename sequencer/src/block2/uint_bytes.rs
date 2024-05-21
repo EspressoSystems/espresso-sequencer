@@ -67,7 +67,19 @@ macro_rules! uint_bytes_impl {
 uint_bytes_impl!(usize);
 uint_bytes_impl!(u64);
 
-/// TODO explain this macro
+/// Impl [`serde`] for type `$T` with methods named `$to_bytes`, `$from_bytes`
+/// of the form
+/// ```
+/// $T::$to_bytes(&self) -> $B
+/// $T::$from_bytes(bytes: &[u8]) -> Self
+/// ```
+/// where `$B` is any type that impls [`serde::Deserialize`] and has a method
+/// `as_ref` of the form
+/// ```
+/// $B::as_ref(&self) -> &[u8]
+/// ```
+/// Typical examples of `$B` include array `[u8; N]`, slice `&[u8]`, or
+/// `Vec<u8>`.
 macro_rules! bytes_serde_impl {
     ($T:ty, $to_bytes:ident, $B:ty, $from_bytes:ident) => {
         impl Serialize for $T {
