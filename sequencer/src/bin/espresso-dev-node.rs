@@ -101,13 +101,16 @@ async fn main() -> anyhow::Result<()> {
     let contracts = Contracts::new();
 
     tracing::info!("deploying the contracts");
+
+    let light_client_genesis = network.light_client_genesis();
+
     let contracts = deploy(
         url.clone(),
         opt.mnemonic.clone(),
         opt.account_index,
         true,
         None,
-        network.light_client_genesis(),
+        async { Ok(light_client_genesis) }.boxed(),
         contracts,
     )
     .await?;
@@ -167,16 +170,16 @@ fn start_commitment_server<Ver: StaticVersionType + 'static>(
 
 #[cfg(test)]
 mod tests {
-    use std::{process::Stdio, time::Duration};
+    use std::time::Duration;
 
     use async_compatibility_layer::{
         art::async_sleep,
         logging::{setup_backtrace, setup_logging},
     };
-    use async_std::process::Command;
     use committable::{Commitment, Committable};
     use es_version::SequencerVersion;
     use escargot::CargoBuild;
+    use hotshot_query_service::data_source::sql::testing::TmpDb;
     use portpicker::pick_unused_port;
     use reqwest::StatusCode;
     use sequencer::Transaction;
@@ -195,19 +198,9 @@ mod tests {
         // let commitment_task_port = pick_unused_port().unwrap();
         let commitment_task_port = 10002;
         let api_port = pick_unused_port().unwrap();
-        let postgres_port = pick_unused_port().unwrap();
 
-        let mut db = Command::new("docker")
-            .arg("compose")
-            .arg("up")
-            .arg("-d")
-            .arg("sequencer-db-0")
-            .arg("--force-recreate")
-            .arg("--renew-anon-volumes")
-            .env("ESPRESSO_SEQUENCER0_DB_PORT", postgres_port.to_string())
-            .stdout(Stdio::null())
-            .spawn()
-            .unwrap();
+        let db = TmpDb::init().await;
+        let postgres_port = db.port();
 
         let mut child_process = CargoBuild::new()
             .bin("espresso-dev-node")
@@ -315,14 +308,7 @@ mod tests {
         }
 
         child_process.kill().unwrap();
-        db.kill().unwrap();
-
-        let _ = Command::new("docker")
-            .arg("compose")
-            .arg("down")
-            .stdout(Stdio::null())
-            .spawn()
-            .unwrap();
+        drop(db);
     }
 
     async fn api_get_test(client: &reqwest::Client, url: String) {

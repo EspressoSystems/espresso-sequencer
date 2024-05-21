@@ -1,5 +1,6 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
+use futures::FutureExt;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::light_client_genesis;
 use sequencer_utils::deployer::{deploy, ContractGroup, Contracts, DeployedContracts};
@@ -93,7 +94,9 @@ async fn main() -> anyhow::Result<()> {
     let opt = Options::parse();
     let contracts = Contracts::from(opt.contracts);
 
-    let genesis = light_client_genesis(&opt.orchestrator_url, opt.stake_table_capacity).await?;
+    let orchestrator_url = opt.orchestrator_url.clone();
+
+    let genesis = light_client_genesis(&orchestrator_url, opt.stake_table_capacity).boxed();
 
     let contracts = deploy(
         opt.rpc_url,
