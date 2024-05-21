@@ -274,7 +274,7 @@ impl<
 
                 // We failed to get a block
                 Ok(Err(err)) => {
-                    tracing::warn!(%err, "Couldn't get a block");
+                    tracing::warn!("Couldn't get a block: {err:#}");
                     // pause a bit
                     async_sleep(Duration::from_millis(100)).await;
                     continue;
