@@ -23,9 +23,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       
-      - name: Install capnproto
-        uses: ./.github/actions/install-capnp
-
       - name: Run cargo-udeps
         uses: aig787/cargo-udeps-action@v1
         with:

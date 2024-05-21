@@ -36,6 +36,7 @@ impl Scheme {
             }
             Self::Bls => {
                 let (pub_key, priv_key) = BLSPubKey::generated_from_seed_indexed(seed, index);
+                writeln!(env_file, "ESPRESSO_SEQUENCER_PUBLIC_STAKING_KEY={pub_key}")?;
                 writeln!(
                     env_file,
                     "ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY={priv_key}"
@@ -44,6 +45,11 @@ impl Scheme {
             }
             Self::Schnorr => {
                 let key_pair = StateKeyPair::generate_from_seed_indexed(seed, index);
+                writeln!(
+                    env_file,
+                    "ESPRESSO_SEQUENCER_PUBLIC_STATE_KEY={}",
+                    key_pair.ver_key()
+                )?;
                 writeln!(
                     env_file,
                     "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY={}",
@@ -138,7 +144,11 @@ fn main() -> anyhow::Result<()> {
         tracing::info!("generating new key set");
 
         let path = opts.out.join(format!("{index}.env"));
-        let mut file = File::options().write(true).create(true).open(&path)?;
+        let mut file = File::options()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&path)?;
         opts.scheme.gen(seed, index as u64, &mut file)?;
 
         tracing::info!("private keys written to {}", path.display());

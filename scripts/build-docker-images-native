@@ -51,11 +51,23 @@ case $KERNEL in
     cargo build --release
     ;;
   darwin)
-  # Build in docker container
+  # Use a different target directory for docker builds to avoid conflicts with
+  # native builds.
+  CARGO_TARGET_DIR=target/docker
+
+  # Build in docker container:
+  #   - RUSTFLAGS is needed for compilation.
+  #   - CARGO_TARGET_DIR is set to point to the location where the hosts
+  #     CARGO_TARGET_DIR is mounted.
+  #   - PWD is mounted to /work.
+  #   - Cargo registry and git directory are mounted to avoid re-downloading
+  #     dependencies.
   docker run \
-    -e RUST_LOG -e RUST_BACKTRACE -e RUSTFLAGS -e CARGO_TARGET_DIR \
-    -v $(pwd):/work \
-    -v $HOME/.cargo/registry:/root/.cargo/registry \
+    -e RUSTFLAGS \
+    -e CARGO_TARGET_DIR=/work/target/docker \
+    -v "$(pwd):/work" \
+    -v "$CARGO_HOME/registry:/usr/local/cargo/registry" \
+    -v "$CARGO_HOME/git:/usr/local/cargo/git" \
     -it ghcr.io/espressosystems/devops-rust:stable \
     bash -c "cd /work && cargo build --release"
     ;;
@@ -63,30 +75,33 @@ esac
 
 # Copy binaries to a temporary directory.
 WORKDIR=$(mktemp -d -t espresso-docker-build-XXXXXXXX)
-CONTRACTS_DIR="./contracts"
 
 trap "exit" INT TERM
 trap cleanup EXIT
 cleanup(){
-    rm -rfv ${WORKDIR}
+    rm -rfv "${WORKDIR}"
 }
 
-mkdir -p ${WORKDIR}/target/$ARCH/release
-for binary in "orchestrator" "web-server" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "nasty-client"; do
-  cp -v "${CARGO_TARGET_DIR}/release/$binary" ${WORKDIR}/target/$ARCH/release
+mkdir -p "${WORKDIR}/target/$ARCH/release"
+for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "permissionless-builder" "nasty-client" "pub-key" "bridge"; do
+  cp -v "${CARGO_TARGET_DIR}/release/$binary" "${WORKDIR}/target/$ARCH/release"
   # Patch the interpreter for running without nix inside the ubuntu based docker image.
   if [ $KERNEL == "linux" ]; then
-    patchelf --set-interpreter $INTERPRETER ${WORKDIR}/target/$ARCH/release/$binary
+    patchelf --set-interpreter "$INTERPRETER" "${WORKDIR}/target/$ARCH/release/$binary"
   fi
 done
 
 export DOCKER_BUILDKIT=1
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}
-docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/web-server:main -f docker/web-server.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/cdn-broker:main -f docker/cdn-broker.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/cdn-marshal:main -f docker/cdn-marshal.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/cdn-whitelist:main -f docker/cdn-whitelist.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/state-relay-server:main -f docker/state-relay-server.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/prover-service:main -f docker/prover-service.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/sequencer:main -f docker/sequencer.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/commitment-task:main -f docker/commitment-task.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/submit-transactions:main -f docker/submit-transactions.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/deploy:main -f docker/deploy.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/builder:main -f docker/permissionless-builder.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/nasty-client:main -f docker/nasty-client.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/bridge:main -f docker/bridge.Dockerfile ${WORKDIR}

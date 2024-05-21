@@ -11,7 +11,7 @@ import { BN254 } from "bn254/BN254.sol";
 import { EdOnBN254 } from "../src/libraries/EdOnBn254.sol";
 import { AbstractStakeTable } from "../src/interfaces/AbstractStakeTable.sol";
 import { LightClient } from "../src/LightClient.sol";
-import { LightClientTest } from "../test/mocks/LightClientTest.sol";
+import { LightClientMock } from "../test/mocks/LightClientMock.sol";
 import { StakeTableCommonTest } from "../test/StakeTable.t.sol";
 
 // Token contract
@@ -26,7 +26,7 @@ contract StakeTableHandlerTest is StakeTableCommonTest {
     ExampleToken public token;
     mapping(uint256 index => BN254.G2Point vk) public vks;
     BN254.G2Point[] public vksWithdraw;
-    LightClientTest public lightClient;
+    LightClientMock public lightClient;
     address[] public users;
 
     // Variables for testing invariant relative to Register
@@ -51,7 +51,7 @@ contract StakeTableHandlerTest is StakeTableCommonTest {
         S _stakeTable,
         address _tokenCreator,
         ExampleToken _token,
-        LightClientTest _lightClient
+        LightClientMock _lightClient
     ) {
         stakeTable = _stakeTable;
         token = _token;
@@ -254,7 +254,7 @@ contract StakeTableHandlerTest is StakeTableCommonTest {
 contract StakeTableInvariant_Tests is Test {
     S public stakeTable;
     ExampleToken public token;
-    LightClientTest public lightClientContract;
+    LightClientMock public lightClientContract;
     uint256 public constant INITIAL_BALANCE = 1_000_000_000_000;
     address public exampleTokenCreator;
     address[] public users;
@@ -278,7 +278,7 @@ contract StakeTableInvariant_Tests is Test {
         });
         uint32 numBlocksPerEpoch = 4;
         uint64 churnRate = 10;
-        lightClientContract = new LightClientTest(genesis, numBlocksPerEpoch);
+        lightClientContract = new LightClientMock(genesis, numBlocksPerEpoch);
         stakeTable = new S(address(token), address(lightClientContract), churnRate);
         handler =
             new StakeTableHandlerTest(stakeTable, exampleTokenCreator, token, lightClientContract);
@@ -287,7 +287,7 @@ contract StakeTableInvariant_Tests is Test {
         targetContract(address(handler));
     }
 
-    function invariant_BalancesAreConsistent() external {
+    function invariant_BalancesAreConsistent() external view {
         uint256 totalBalanceUsers = 0;
         for (uint256 i = 0; i < users.length; i++) {
             totalBalanceUsers += token.balanceOf(users[i]);
@@ -297,7 +297,7 @@ contract StakeTableInvariant_Tests is Test {
         assertEq(totalBalanceUsers + balanceStakeTable + tokenCreatorBalance, INITIAL_BALANCE);
     }
 
-    function invariant_Register() external {
+    function invariant_Register() external view {
         // Here we check that the queue state is updated in a consistent manner with the output
         // of nextExitEpoch.
         if (handler.registrationCalledAtLeastOnce()) {
@@ -315,7 +315,7 @@ contract StakeTableInvariant_Tests is Test {
         }
     }
 
-    function invariant_RequestExit() external {
+    function invariant_RequestExit() external view {
         // Here we check that the queue state is updated in a consistent manner with the output
         // of nextExitEpoch.
         if (handler.requestExitCalledAtLeastOnce()) {
@@ -327,7 +327,7 @@ contract StakeTableInvariant_Tests is Test {
         }
     }
 
-    function invariant_Queue() external {
+    function invariant_Queue() external view {
         // Global invariants
         assertLe(stakeTable.numPendingRegistrations(), stakeTable.maxChurnRate());
         assertLe(stakeTable.numPendingExits(), stakeTable.maxChurnRate());

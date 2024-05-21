@@ -1,3 +1,5 @@
+use std::net::ToSocketAddrs;
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use es_version::SEQUENCER_VERSION;
@@ -5,27 +7,26 @@ use futures::future::FutureExt;
 use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
-    context::SequencerContext,
-    init_node, network,
+    init_node,
     options::{Modules, Options},
     persistence, BuilderParams, L1Params, NetworkParams,
 };
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
     setup_logging();
     setup_backtrace();
 
-    tracing::info!("sequencer starting up");
+    tracing::warn!("sequencer starting up");
     let opt = Options::parse();
     let mut modules = opt.modules();
-    tracing::info!("modules: {:?}", modules);
+    tracing::warn!("modules: {:?}", modules);
 
-    let ctx = if let Some(storage) = modules.storage_fs.take() {
-        init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await?
+    if let Some(storage) = modules.storage_fs.take() {
+        init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await
     } else if let Some(storage) = modules.storage_sql.take() {
-        init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await?
+        init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await
     } else {
         // Persistence is required. If none is provided, just use the local file system.
         init_with_storage(
@@ -34,13 +35,8 @@ async fn main() -> anyhow::Result<()> {
             persistence::fs::Options::default(),
             SEQUENCER_VERSION,
         )
-        .await?
-    };
-
-    // Start doing consensus.
-    ctx.start_consensus().await;
-    ctx.join().await;
-    Ok(())
+        .await
+    }
 }
 
 async fn init_with_storage<S, Ver: StaticVersionType + 'static>(
@@ -48,84 +44,216 @@ async fn init_with_storage<S, Ver: StaticVersionType + 'static>(
     opt: Options,
     storage_opt: S,
     bind_version: Ver,
-) -> anyhow::Result<SequencerContext<network::Web, Ver>>
+) -> anyhow::Result<()>
 where
     S: DataSourceOptions,
 {
     let (private_staking_key, private_state_key) = opt.private_keys()?;
+    let stake_table_capacity = opt.stake_table_capacity;
     let l1_params = L1Params {
         url: opt.l1_provider_url,
+        finalized_block: opt.l1_genesis,
+        events_max_block_range: opt.l1_events_max_block_range,
     };
     let builder_params = BuilderParams {
-        mnemonic: opt.eth_mnemonic,
         prefunded_accounts: opt.prefunded_builder_accounts,
-        eth_account_index: opt.eth_account_index,
     };
+
+    // Parse supplied Libp2p addresses to their socket form
+    // We expect all nodes to be reachable via IPv4, so we filter out any IPv6 addresses.
+    // Downstream in HotShot we pin the IP address to v4, but this can be fixed in the future.
+    let libp2p_advertise_address = opt
+        .libp2p_advertise_address
+        .to_socket_addrs()?
+        .find(|x| x.is_ipv4())
+        .ok_or(anyhow::anyhow!(
+            "Failed to resolve Libp2p advertise address"
+        ))?;
+    let libp2p_bind_address = opt
+        .libp2p_bind_address
+        .to_socket_addrs()?
+        .find(|x| x.is_ipv4())
+        .ok_or(anyhow::anyhow!("Failed to resolve Libp2p bind address"))?;
+
     let network_params = NetworkParams {
-        da_server_url: opt.da_server_url,
-        consensus_server_url: opt.consensus_server_url,
+        cdn_endpoint: opt.cdn_endpoint,
+        libp2p_advertise_address,
+        libp2p_bind_address,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
-        webserver_poll_interval: opt.webserver_poll_interval,
         private_staking_key,
         private_state_key,
         state_peers: opt.state_peers,
     };
 
-    // Inititialize HotShot. If the user requested the HTTP module, we must initialize the handle in
+    // Initialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
-    match modules.http {
-        Some(opt) => {
+    let ctx = match modules.http {
+        Some(http_opt) => {
             // Add optional API modules as requested.
-            let mut opt = api::Options::from(opt);
+            let mut http_opt = api::Options::from(http_opt);
             if let Some(query) = modules.query {
-                opt = storage_opt.enable_query_module(opt, query);
+                http_opt = storage_opt.enable_query_module(http_opt, query);
             }
             if let Some(submit) = modules.submit {
-                opt = opt.submit(submit);
+                http_opt = http_opt.submit(submit);
             }
             if let Some(status) = modules.status {
-                opt = opt.status(status);
+                http_opt = http_opt.status(status);
             }
             if let Some(state) = modules.state {
-                opt = opt.state(state);
+                http_opt = http_opt.state(state);
             }
             if let Some(catchup) = modules.catchup {
-                opt = opt.catchup(catchup);
+                http_opt = http_opt.catchup(catchup);
             }
 
-            let storage = storage_opt.create().await?;
-            opt.serve(
-                move |metrics| {
-                    async move {
-                        init_node(
-                            network_params,
-                            &*metrics,
-                            storage,
-                            builder_params,
-                            l1_params,
-                            bind_version,
-                        )
-                        .await
-                        .unwrap()
-                    }
-                    .boxed()
-                },
-                bind_version,
-            )
-            .await
+            if let Some(hotshot_events) = modules.hotshot_events {
+                http_opt = http_opt.hotshot_events(hotshot_events);
+            }
+            if let Some(explorer) = modules.explorer {
+                http_opt = http_opt.explorer(explorer);
+            }
+            if let Some(config) = modules.config {
+                http_opt = http_opt.config(config);
+            }
+            http_opt
+                .serve(
+                    move |metrics| {
+                        async move {
+                            init_node(
+                                network_params,
+                                &*metrics,
+                                storage_opt,
+                                builder_params,
+                                l1_params,
+                                stake_table_capacity,
+                                bind_version,
+                                opt.chain_config,
+                                opt.is_da,
+                            )
+                            .await
+                            .unwrap()
+                        }
+                        .boxed()
+                    },
+                    bind_version,
+                )
+                .await?
         }
         None => {
             init_node(
                 network_params,
                 &NoMetrics,
-                storage_opt.create().await?,
+                storage_opt,
                 builder_params,
                 l1_params,
+                stake_table_capacity,
                 bind_version,
+                opt.chain_config,
+                opt.is_da,
+            )
+            .await?
+        }
+    };
+
+    // Start doing consensus.
+    ctx.start_consensus().await;
+    ctx.join().await;
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use async_std::task::spawn;
+    use es_version::SequencerVersion;
+    use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey};
+    use portpicker::pick_unused_port;
+    use sequencer::{
+        api::options::{Http, Status},
+        persistence::fs,
+        PubKey,
+    };
+    use std::time::Duration;
+    use surf_disco::{error::ClientError, Client, Url};
+    use tempfile::TempDir;
+
+    #[async_std::test]
+    async fn test_startup_before_orchestrator() {
+        setup_logging();
+        setup_backtrace();
+
+        let (pub_key, priv_key) = PubKey::generated_from_seed_indexed([0; 32], 0);
+        let state_key = StateKeyPair::generate_from_seed_indexed([0; 32], 0);
+
+        let port = pick_unused_port().unwrap();
+        let tmp = TempDir::new().unwrap();
+        let modules = Modules {
+            http: Some(Http { port }),
+            status: Some(Status),
+            ..Default::default()
+        };
+        let opt = Options::parse_from([
+            "sequencer",
+            "--private-staking-key",
+            &priv_key.to_string(),
+            "--private-state-key",
+            &state_key.sign_key_ref().to_string(),
+        ]);
+
+        // Start the sequencer in a background task. This process will not complete, because it will
+        // be waiting for the orchestrator, but it should at least start up the API server and
+        // populate some metrics.
+        tracing::info!(port, "starting sequencer");
+        let task = spawn(async move {
+            if let Err(err) = init_with_storage(
+                modules,
+                opt,
+                fs::Options::new(tmp.path().into()),
+                SEQUENCER_VERSION,
             )
             .await
-        }
+            {
+                tracing::error!("failed to start sequencer: {err:#}");
+            }
+        });
+
+        // The healthcheck should eventually come up even though the node is waiting for the
+        // orchestrator.
+        tracing::info!("waiting for API to start");
+        let url: Url = format!("http://localhost:{port}").parse().unwrap();
+        let client = Client::<ClientError, SequencerVersion>::new(url.clone());
+        assert!(client.connect(Some(Duration::from_secs(60))).await);
+        client.get::<()>("healthcheck").send().await.unwrap();
+
+        // The metrics should include information about the node and software version. surf-disco
+        // doesn't currently support fetching a plaintext file, so we use a raw reqwest client.
+        let res = reqwest::get(url.join("/status/metrics").unwrap())
+            .await
+            .unwrap();
+        assert!(res.status().is_success(), "{}", res.status());
+        let metrics = res.text().await.unwrap();
+        let lines = metrics.lines().collect::<Vec<_>>();
+        assert!(
+            lines.contains(&format!("consensus_node{{key=\"{pub_key}\"}} 1").as_str()),
+            "{lines:#?}"
+        );
+        assert!(
+            lines.contains(
+                &format!(
+                    "consensus_version{{desc=\"{}\",rev=\"{}\",timestamp=\"{}\"}} 1",
+                    env!("VERGEN_GIT_DESCRIBE"),
+                    env!("VERGEN_GIT_SHA"),
+                    env!("VERGEN_GIT_COMMIT_TIMESTAMP"),
+                )
+                .as_str()
+            ),
+            "{lines:#?}"
+        );
+
+        task.cancel().await;
     }
 }

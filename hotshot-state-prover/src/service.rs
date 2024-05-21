@@ -5,9 +5,9 @@ use anyhow::anyhow;
 use async_std::{
     io,
     sync::Arc,
-    task::{sleep, spawn},
+    task::{sleep, spawn, spawn_blocking},
 };
-use contract_bindings::light_client::LightClient;
+use contract_bindings::light_client::{LightClient, LightClientErrors};
 use displaydoc::Display;
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -21,7 +21,6 @@ use futures::FutureExt;
 use hotshot_contract_adapter::jellyfish::{u256_to_field, ParsedPlonkProof};
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_orchestrator::OrchestratorVersion;
-use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_stake_table::vec_based::config::FieldType;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::signature_key::BLSPubKey;
@@ -34,26 +33,26 @@ use hotshot_types::{
     traits::signature_key::StakeTableEntryType,
 };
 
+use jf_pcs::prelude::UnivariateUniversalParams;
 use jf_plonk::errors::PlonkError;
-use jf_primitives::constants::CS_ID_SCHNORR;
-use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_relation::Circuit as _;
-use std::{iter, time::Duration};
+use jf_signature::constants::CS_ID_SCHNORR;
+use std::{
+    iter,
+    time::{Duration, Instant},
+};
 use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
-use time::Instant;
+use time::ext::InstantExt;
 use url::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 type F = ark_ed_on_bn254::Fq;
 
 /// A wallet with local signer and connected to network via http
 pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
 
-type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<
-    BLSPubKey,
-    hotshot::traits::election::static_committee::StaticElectionConfig,
->;
+type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<BLSPubKey>;
 
 /// Configuration/Parameters used for hotshot state prover
 #[derive(Debug, Clone)]
@@ -62,27 +61,38 @@ pub struct StateProverConfig {
     pub relay_server: Url,
     /// Interval between light client state update
     pub update_interval: Duration,
+    /// Interval between retries if a state update fails
+    pub retry_interval: Duration,
     /// URL of layer 1 Ethereum JSON-RPC provider.
     pub l1_provider: Url,
     /// Address of LightClient contract on layer 1.
     pub light_client_address: Address,
     /// Transaction signing key for Ethereum
     pub eth_signing_key: SigningKey,
-    /// Address of the hotshot orchestrator, used for stake table initialization.
+    /// Address off the hotshot orchestrator, used for stake table initialization.
     pub orchestrator_url: Url,
     /// If daemon and provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
     pub port: Option<u16>,
+    /// Stake table capacity for the prover circuit.
+    pub stake_table_capacity: usize,
+}
+
+#[inline]
+/// A helper function to compute the quorum threshold given a total amount of stake.
+pub fn one_honest_threshold(total_stake: U256) -> U256 {
+    total_stake / 3 + 1
 }
 
 pub fn init_stake_table(
     bls_keys: &[BLSPubKey],
     state_keys: &[StateVerKey],
+    stake_table_capacity: usize,
 ) -> Result<StakeTable<BLSPubKey, StateVerKey, CircuitField>, StakeTableError> {
     // We now initialize a static stake table as what hotshot orchestrator does.
     // In the future we should get the stake table from the contract.
-    let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(STAKE_TABLE_CAPACITY);
+    let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(stake_table_capacity);
     st.batch_register(
         bls_keys.iter().cloned(),
         iter::repeat(U256::one()).take(bls_keys.len()),
@@ -95,6 +105,7 @@ pub fn init_stake_table(
 
 async fn init_stake_table_from_orchestrator(
     orchestrator_url: &Url,
+    stake_table_capacity: usize,
 ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
     tracing::info!("Initializing stake table from HotShot orchestrator.");
     let client = Client::<ServerError, OrchestratorVersion>::new(orchestrator_url.clone());
@@ -102,22 +113,23 @@ async fn init_stake_table_from_orchestrator(
         match client.get::<bool>("api/peer_pub_ready").send().await {
             Ok(true) => {
                 match client
-                    .get::<NetworkConfig>("api/get_config_after_peer_collected")
+                    .post::<NetworkConfig>("api/post_config_after_peer_collected")
                     .send()
                     .await
                 {
                     Ok(config) => {
                         let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(
-                            STAKE_TABLE_CAPACITY,
+                            stake_table_capacity,
                         );
+                        tracing::debug!("{}", config.config.known_nodes_with_stake.len());
                         config
                             .config
                             .known_nodes_with_stake
                             .into_iter()
                             .for_each(|config| {
                                 st.register(
-                                    *config.stake_table_entry.get_key(),
-                                    config.stake_table_entry.get_stake(),
+                                    *config.stake_table_entry.key(),
+                                    config.stake_table_entry.stake(),
                                     config.state_ver_key,
                                 )
                                 .expect("Key registration shouldn't fail.");
@@ -144,12 +156,13 @@ async fn init_stake_table_from_orchestrator(
 
 pub async fn light_client_genesis(
     orchestrator_url: &Url,
+    stake_table_capacity: usize,
 ) -> anyhow::Result<ParsedLightClientState> {
-    let st = init_stake_table_from_orchestrator(orchestrator_url).await;
+    let st = init_stake_table_from_orchestrator(orchestrator_url, stake_table_capacity).await;
     let (bls_comm, schnorr_comm, stake_comm) = st
         .commitment(SnapshotVersion::LastEpochStart)
         .expect("Commitment computation shouldn't fail.");
-    let threshold = st.total_stake(SnapshotVersion::LastEpochStart)? * 2 / 3;
+    let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
 
     let pi = vec![
         u256_to_field(threshold),
@@ -165,21 +178,20 @@ pub async fn light_client_genesis(
     Ok(pi.into())
 }
 
-pub fn load_proving_key() -> ProvingKey {
+pub fn load_proving_key(stake_table_capacity: usize) -> ProvingKey {
     let srs = {
         let num_gates = crate::circuit::build_for_preprocessing::<
             CircuitField,
             ark_ed_on_bn254::EdwardsConfig,
-            STAKE_TABLE_CAPACITY,
-        >()
+        >(stake_table_capacity)
         .unwrap()
         .0
         .num_gates();
 
         std::println!("Loading SRS from Aztec's ceremony...");
         let srs_timer = Instant::now();
-        let srs = ark_srs::aztec20::kzg10_setup(num_gates + 2).expect("Aztec SRS fail to load");
-        let srs_elapsed = srs_timer.elapsed();
+        let srs = ark_srs::kzg10::aztec20::setup(num_gates + 2).expect("Aztec SRS fail to load");
+        let srs_elapsed = Instant::now().signed_duration_since(srs_timer);
         std::println!("Done in {srs_elapsed:.3}");
 
         // convert to Jellyfish type
@@ -194,9 +206,9 @@ pub fn load_proving_key() -> ProvingKey {
 
     std::println!("Generating proving key and verification key.");
     let key_gen_timer = Instant::now();
-    let (pk, _) = crate::snark::preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+    let (pk, _) = crate::snark::preprocess(&srs, stake_table_capacity)
         .expect("Fail to preprocess state prover circuit");
-    let key_gen_elapsed = key_gen_timer.elapsed();
+    let key_gen_elapsed = Instant::now().signed_duration_since(key_gen_timer);
     std::println!("Done in {key_gen_elapsed:.3}");
     pk
 }
@@ -256,7 +268,7 @@ pub async fn submit_state_and_proof(
     let tx = contract.new_finalized_state(new_state.into(), proof.into());
 
     // send the tx
-    let (receipt, included_block) = sequencer_utils::contract_send(&tx)
+    let (receipt, included_block) = sequencer_utils::contract_send::<_, _, LightClientErrors>(&tx)
         .await
         .map_err(ProverError::ContractError)?;
 
@@ -270,13 +282,14 @@ pub async fn submit_state_and_proof(
 
 pub async fn sync_state<Ver: StaticVersionType>(
     st: &StakeTable<BLSPubKey, StateVerKey, CircuitField>,
-    proving_key: &ProvingKey,
+    proving_key: Arc<ProvingKey>,
     relay_server_client: &Client<ServerError, Ver>,
     config: &StateProverConfig,
 ) -> Result<(), ProverError> {
     tracing::info!("Start syncing light client state.");
 
     let bundle = fetch_latest_state(relay_server_client).await?;
+    tracing::info!("Bundle accumulated weight: {}", bundle.accumulated_weight);
     tracing::info!("Latest HotShot block height: {}", bundle.state.block_height);
     let old_state = read_contract_state(config).await?;
     tracing::info!(
@@ -290,7 +303,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
     tracing::debug!("Old state: {old_state:?}");
     tracing::debug!("New state: {:?}", bundle.state);
 
-    let threshold = st.total_stake(SnapshotVersion::LastEpochStart)? * 2 / 3;
+    let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
     tracing::info!("Threshold before syncing state: {}", threshold);
     let entries = st
         .try_iter(SnapshotVersion::LastEpochStart)
@@ -318,24 +331,23 @@ pub async fn sync_state<Ver: StaticVersionType>(
         ));
     }
 
-    // TODO this assert fails. See https://github.com/EspressoSystems/espresso-sequencer/issues/1161
-    // assert_eq!(
-    //     bundle.state.stake_table_comm,
-    //     st.commitment(SnapshotVersion::LastEpochStart).unwrap()
-    // );
-
     tracing::info!("Collected latest state and signatures. Start generating SNARK proof.");
-    let proof_gen_start = time::Instant::now();
-    let (proof, public_input) = generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
-        &mut ark_std::rand::thread_rng(),
-        proving_key,
-        &entries,
-        signer_bit_vec,
-        signatures,
-        &bundle.state,
-        &threshold,
-    )?;
-    let proof_gen_elapsed = proof_gen_start.elapsed();
+    let proof_gen_start = Instant::now();
+    let stake_table_capacity = config.stake_table_capacity;
+    let (proof, public_input) = spawn_blocking(move || {
+        generate_state_update_proof::<_, _, _, _>(
+            &mut ark_std::rand::thread_rng(),
+            &proving_key,
+            &entries,
+            signer_bit_vec,
+            signatures,
+            &bundle.state,
+            &threshold,
+            stake_table_capacity,
+        )
+    })
+    .await?;
+    let proof_gen_elapsed = Instant::now().signed_duration_since(proof_gen_start);
     tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:.3}");
 
     submit_state_and_proof(proof, public_input, config).await?;
@@ -349,7 +361,7 @@ fn start_http_server<Ver: StaticVersionType + 'static>(
     lightclient_address: Address,
     bind_version: Ver,
 ) -> io::Result<()> {
-    let mut app = tide_disco::App::<(), ServerError, Ver>::with_state(());
+    let mut app = tide_disco::App::<(), ServerError>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../api/prover-service.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
@@ -373,42 +385,51 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
     bind_version: Ver,
 ) {
     // TODO(#1022): maintain the following stake table
-    let st = Arc::new(init_stake_table_from_orchestrator(&config.orchestrator_url).await);
-    let proving_key = Arc::new(load_proving_key());
-    let relay_server_client =
-        Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
-    let config = Arc::new(config);
-    let update_interval = config.update_interval;
+    let st = Arc::new(
+        init_stake_table_from_orchestrator(&config.orchestrator_url, config.stake_table_capacity)
+            .await,
+    );
 
     tracing::info!("Light client address: {:?}", config.light_client_address);
+    let relay_server_client =
+        Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
 
+    // Start the HTTP server to get a functioning healthcheck before any heavy computations.
     if let Some(port) = config.port {
         if let Err(err) = start_http_server(port, config.light_client_address, bind_version) {
             tracing::error!("Error starting http server: {}", err);
         }
     }
 
+    let stake_table_capacity = config.stake_table_capacity;
+    let proving_key =
+        spawn_blocking(move || Arc::new(load_proving_key(stake_table_capacity))).await;
+
+    let update_interval = config.update_interval;
+    let retry_interval = config.retry_interval;
     loop {
-        let st = st.clone();
-        let proving_key = proving_key.clone();
-        let relay_server_client = relay_server_client.clone();
-        let config = config.clone();
-        spawn(async move {
-            if let Err(err) = sync_state(&st, &proving_key, &relay_server_client, &config).await {
-                tracing::error!("Cannot sync the light client state: {}", err);
-            }
-        });
-        sleep(update_interval).await;
+        if let Err(err) = sync_state(&st, proving_key.clone(), &relay_server_client, &config).await
+        {
+            tracing::error!("Cannot sync the light client state, will retry: {}", err);
+            sleep(retry_interval).await;
+        } else {
+            tracing::info!("Sleeping for {:?}", update_interval);
+            sleep(update_interval).await;
+        }
     }
 }
 
 /// Run light client state prover once
 pub async fn run_prover_once<Ver: StaticVersionType>(config: StateProverConfig, _: Ver) {
-    let st = init_stake_table_from_orchestrator(&config.orchestrator_url).await;
-    let proving_key = load_proving_key();
+    let st =
+        init_stake_table_from_orchestrator(&config.orchestrator_url, config.stake_table_capacity)
+            .await;
+    let stake_table_capacity = config.stake_table_capacity;
+    let proving_key =
+        spawn_blocking(move || Arc::new(load_proving_key(stake_table_capacity))).await;
     let relay_server_client = Client::<ServerError, Ver>::new(config.relay_server.clone());
 
-    sync_state(&st, &proving_key, &relay_server_client, &config)
+    sync_state(&st, proving_key, &relay_server_client, &config)
         .await
         .expect("Error syncing the light client state.");
 }
@@ -465,19 +486,17 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::{
         abi::AbiEncode,
-        providers::Middleware,
         utils::{Anvil, AnvilInstance},
     };
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
-    use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
+    use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
-    use std::process::Command;
+    use sequencer_utils::deployer;
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
     const BLOCKS_PER_EPOCH: u32 = 10;
     const NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / 2) as u32;
-    const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
     /// Init a meaningful ledger state that prover can generate future valid proof.
     /// this is used for testing purposes, contract deployed to test proof verification should also be initialized with this genesis
@@ -540,7 +559,7 @@ mod test {
 
         let srs = {
             // load SRS from Aztec's ceremony
-            let srs = ark_srs::aztec20::kzg10_setup(2u64.pow(16) as usize + 2)
+            let srs = ark_srs::kzg10::aztec20::setup(2u64.pow(16) as usize + 2)
                 .expect("Aztec SRS fail to load");
             // convert to Jellyfish type
             // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
@@ -551,63 +570,50 @@ mod test {
                 powers_of_h: vec![srs.h, srs.beta_h],
             }
         };
-        let (pk, _) = crate::preprocess::<STAKE_TABLE_CAPACITY_FOR_TEST>(&srs)
+        let (pk, _) = crate::preprocess(&srs, STAKE_TABLE_CAPACITY_FOR_TEST)
             .expect("Fail to preprocess state prover circuit");
         let stake_table_entries = st
             .try_iter(SnapshotVersion::LastEpochStart)
             .unwrap()
             .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
             .collect::<Vec<_>>();
-        let (proof, pi) =
-            crate::generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY_FOR_TEST>(
-                &mut rng,
-                &pk,
-                &stake_table_entries,
-                &bit_vec,
-                &sigs,
-                &new_state.into(),
-                &old_state.threshold,
-            )
-            .expect("Fail to generate state proof");
+        let (proof, pi) = crate::generate_state_update_proof::<_, _, _, _>(
+            &mut rng,
+            &pk,
+            &stake_table_entries,
+            &bit_vec,
+            &sigs,
+            &new_state.into(),
+            &old_state.threshold,
+            STAKE_TABLE_CAPACITY_FOR_TEST,
+        )
+        .expect("Fail to generate state proof");
 
         (pi, proof)
     }
 
-    /// deploy LightClient.sol on local blockchain (via `anvil`) for testing
+    /// deploy LightClientMock.sol on local blockchain (via `anvil`) for testing
     /// return (signer-loaded wallet, contract instance)
     async fn deploy_contract_for_test(
         anvil: &AnvilInstance,
+        genesis: ParsedLightClientState,
     ) -> Result<(Arc<L1Wallet>, LightClient<L1Wallet>)> {
         let provider = Provider::<Http>::try_from(anvil.endpoint())?;
-        let signer = Wallet::from(anvil.keys()[0].clone());
+        let signer = Wallet::from(anvil.keys()[0].clone())
+            .with_chain_id(provider.get_chainid().await?.as_u64());
         let l1_wallet = Arc::new(L1Wallet::new(provider.clone(), signer));
 
-        let output = Command::new("just")
-            .arg("dev-deploy")
-            .arg(anvil.endpoint())
-            .arg(TEST_MNEMONIC)
-            .arg(BLOCKS_PER_EPOCH.to_string())
-            .arg(NUM_INIT_VALIDATORS.to_string())
-            .output()
-            .expect("fail to deploy");
+        let mut contracts = deployer::Contracts::default();
+        let address = deployer::deploy_mock_light_client_contract(
+            l1_wallet.clone(),
+            &mut contracts,
+            Some((genesis.into(), BLOCKS_PER_EPOCH)),
+        )
+        .await?;
 
-        if !output.status.success() {
-            tracing::error!("{}", String::from_utf8(output.stderr).unwrap());
-            return Err(anyhow!("failed to deploy contract"));
-        }
+        let proxy = LightClient::new(address, l1_wallet.clone());
 
-        let last_blk_num = provider.get_block_number().await?;
-        // the first tx deploys PlonkVerifier.sol library, the second deploys LightClient.sol
-        let address = provider
-            .get_block_receipts(last_blk_num)
-            .await?
-            .last()
-            .unwrap()
-            .contract_address
-            .expect("fail to get LightClient address from receipt");
-
-        let contract = LightClient::new(address, l1_wallet.clone());
-        Ok((l1_wallet, contract))
+        Ok((l1_wallet, proxy))
     }
 
     impl StateProverConfig {
@@ -624,11 +630,13 @@ mod test {
             Self {
                 relay_server: Url::parse("http://localhost").unwrap(),
                 update_interval: Duration::default(),
+                retry_interval: Duration::default(),
                 l1_provider: Url::parse("http://localhost").unwrap(),
                 light_client_address: Address::default(),
                 eth_signing_key: SigningKey::random(&mut test_rng()),
                 orchestrator_url: Url::parse("http://localhost").unwrap(),
                 port: None,
+                stake_table_capacity: 10,
             }
         }
     }
@@ -639,15 +647,13 @@ mod test {
         setup_backtrace();
 
         let anvil = Anvil::new().spawn();
-        let (_wallet, contract) = deploy_contract_for_test(&anvil).await?;
+        let dummy_genesis = ParsedLightClientState::dummy_genesis();
+        let (_wallet, contract) = deploy_contract_for_test(&anvil, dummy_genesis.clone()).await?;
 
         // now test if we can read from the contract
         assert_eq!(contract.blocks_per_epoch().call().await?, BLOCKS_PER_EPOCH);
         let genesis: ParsedLightClientState = contract.get_genesis_state().await?.into();
-        // NOTE: these values changes with `contracts/scripts/LightClient.s.sol`
-        assert_eq!(genesis.view_num, 0);
-        assert_eq!(genesis.block_height, 0);
-        assert_eq!(genesis.threshold, U256::from(40));
+        assert_eq!(genesis, dummy_genesis);
 
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
@@ -665,12 +671,10 @@ mod test {
         let (genesis, _qc_keys, state_keys, st) = init_ledger_for_test();
 
         let anvil = Anvil::new().spawn();
-        let (_wallet, contract) = deploy_contract_for_test(&anvil).await?;
+        let (_wallet, contract) = deploy_contract_for_test(&anvil, genesis.clone()).await?;
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
-        // sanity check on `config`
 
-        // sanity check to ensure the same genesis state for LightClientTest and for our tests
         let genesis_l1: ParsedLightClientState = contract.get_genesis_state().await?.into();
         assert_eq!(genesis_l1, genesis, "mismatched genesis, aborting tests");
 

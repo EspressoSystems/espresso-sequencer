@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Nix
-        uses: cachix/install-nix-action@v26
+        uses: cachix/install-nix-action@V27
 
       - name: Enable Cachix
         uses: cachix/cachix-action@v14
@@ -73,16 +73,19 @@ jobs:
 
       - name: Build diff-test
         run: |
-          nix develop --accept-flake-config -c cargo build --bin diff-test --release
+          nix develop --accept-flake-config -c cargo build --locked --bin diff-test --release
 
       - name: Run tests (quick version for PR)
         if: ${{ github.event_name == 'pull_request' }}
         run: |
           export FOUNDRY_PROFILE=quick
-          nix develop --accept-flake-config -c  forge test -vvv
+          nix develop --accept-flake-config -c forge test -vvv
 
       - name: Run tests (full version for main)
         if: ${{ github.event_name != 'pull_request' }}
         run: |
           nix develop --accept-flake-config -c forge test -vvv
-          
+
+      - name: Print light contract gas benchmark
+        run: |
+          nix develop --accept-flake-config -c forge test --mt testCorrectUpdateBench

@@ -1,23 +1,19 @@
 //! Update loop for query API state.
 
 use super::{data_source::SequencerDataSource, StorageState};
-use crate::{network, state::Delta, SeqTypes, ValidatedState};
+use crate::{network, persistence::SequencerPersistence, SeqTypes};
 use async_std::sync::{Arc, RwLock};
-use async_trait::async_trait;
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;
-use hotshot_query_service::{
-    data_source::{UpdateDataSource, VersionedDataSource},
-    merklized_state::UpdateStateStorage,
-    Leaf,
-};
-use versioned_binary_serialization::version::StaticVersionType;
+use hotshot_query_service::data_source::{UpdateDataSource, VersionedDataSource};
+use vbs::version::StaticVersionType;
 
-pub(super) async fn update_loop<N, D, Ver: StaticVersionType>(
-    state: Arc<RwLock<StorageState<N, D, Ver>>>,
+pub(super) async fn update_loop<N, P, D, Ver: StaticVersionType>(
+    state: Arc<RwLock<StorageState<N, P, D, Ver>>>,
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
 ) where
     N: network::Type,
+    P: SequencerPersistence,
     D: SequencerDataSource + Send + Sync,
 {
     tracing::debug!("waiting for event");
@@ -39,33 +35,17 @@ pub(super) async fn update_loop<N, D, Ver: StaticVersionType>(
     tracing::warn!("end of HotShot event stream, updater task will exit");
 }
 
-async fn update_state<N, D, Ver: StaticVersionType>(
-    state: &mut StorageState<N, D, Ver>,
+async fn update_state<N, P, D, Ver: StaticVersionType>(
+    state: &mut StorageState<N, P, D, Ver>,
     event: &Event<SeqTypes>,
 ) -> anyhow::Result<()>
 where
     N: network::Type,
+    P: SequencerPersistence,
     D: SequencerDataSource + Send + Sync,
 {
     state.update(event).await?;
     state.commit().await?;
 
     Ok(())
-}
-
-#[async_trait]
-impl<N, D, Ver: StaticVersionType> UpdateStateStorage<SeqTypes, StorageState<N, D, Ver>>
-    for ValidatedState
-where
-    N: network::Type,
-    D: SequencerDataSource + Send + Sync,
-{
-    async fn update_storage(
-        &self,
-        storage: &mut StorageState<N, D, Ver>,
-        leaf: &Leaf<SeqTypes>,
-        delta: Arc<Delta>,
-    ) -> anyhow::Result<()> {
-        self.update_storage(storage.inner_mut(), leaf, delta).await
-    }
 }

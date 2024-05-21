@@ -6,9 +6,9 @@ pragma solidity ^0.8.0;
 
 // Libraries
 import "forge-std/Test.sol";
-import { BN254 } from "bn254/BN254.sol";
+import { BN254, Utils } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
-import { LightClientStateUpdateVKTest as VkTest } from "./mocks/LightClientStateUpdateVKTest.sol";
+import { LightClientStateUpdateVKMock as VkTest } from "./mocks/LightClientStateUpdateVKMock.sol";
 
 // Target contract
 import { Transcript as T } from "../src/libraries/Transcript.sol";
@@ -57,7 +57,9 @@ contract Transcript_appendFieldElement_Test is Test {
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
 
-        transcript.appendFieldElement(BN254.ScalarField.wrap(fieldElement));
+        transcript.transcript =
+            abi.encodePacked(transcript.transcript, Utils.reverseEndianness(fieldElement));
+
         assertEq(updated.transcript, transcript.transcript);
         assertEq(updated.state[0], transcript.state[0]);
         assertEq(updated.state[1], transcript.state[1]);
@@ -86,7 +88,9 @@ contract Transcript_appendGroupElement_Test is Test {
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
 
-        transcript.appendGroupElement(randPoint);
+        transcript.transcript =
+            abi.encodePacked(transcript.transcript, BN254.g1Serialize(randPoint));
+
         assertEq(updated.transcript, transcript.transcript);
         assertEq(updated.state[0], transcript.state[0]);
         assertEq(updated.state[1], transcript.state[1]);
@@ -106,7 +110,7 @@ contract Transcript_appendGroupElement_Test is Test {
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
 
-        transcript.appendGroupElement(infinity);
+        transcript.transcript = abi.encodePacked(transcript.transcript, BN254.g1Serialize(infinity));
         assertEq(updated.transcript, transcript.transcript);
         assertEq(updated.state[0], transcript.state[0]);
         assertEq(updated.state[1], transcript.state[1]);
@@ -142,8 +146,13 @@ contract Transcript_appendVkAndPubInput_Test is Test {
     /// @dev Test if `appendVkAndPubInput` matches that of Jellyfish
     function testFuzz_appendVkAndPubInput_matches(
         T.TranscriptData memory transcript,
-        uint256[] memory publicInput
+        uint256[8] memory _publicInput
     ) external {
+        uint256[] memory publicInput = new uint256[](8);
+        for (uint256 i = 0; i < 8; i++) {
+            publicInput[i] = _publicInput[i];
+        }
+
         for (uint256 i = 0; i < publicInput.length; i++) {
             publicInput[i] = bound(publicInput[i], 0, BN254.R_MOD - 1);
             BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));

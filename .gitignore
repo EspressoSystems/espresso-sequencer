@@ -24,3 +24,5 @@ node_modules/
 
 # solidity files cache
 cache
+
+**/*.bin

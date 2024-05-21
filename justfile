@@ -34,11 +34,8 @@ test:
 dev-orchestrator:
     target/release/orchestrator -p 8080 -n 1
 
-dev-da-server:
-    target/release/web-server -p 8081
-
-dev-consensus-server:
-    target/release/web-server -p 8082
+dev-cdn *args:
+    RUST_LOG=info cargo run --release --bin dev-cdn -- {{args}}
 
 dev-state-relay-server:
     target/release/state-relay-server -p 8083
@@ -46,8 +43,7 @@ dev-state-relay-server:
 dev-sequencer:
     target/release/sequencer \
     --orchestrator-url http://localhost:8080 \
-    --da-server-url http://localhost:8081 \
-    --consensus-server-url http://localhost:8082 \
+    --cdn-endpoint "127.0.0.1:1738" \
     --state-relay-server-url http://localhost:8083 \
     -- http --port 8083  -- query --storage-path storage
 
@@ -61,8 +57,9 @@ build-docker-images:
     scripts/build-docker-images
 
 # generate rust bindings for contracts
+REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$"
 gen-bindings:
-    forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --overwrite --force
+    forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --select "{{REGEXP}}" --overwrite --force
 
     # Foundry doesn't include bytecode in the bindings for LightClient.sol, since it links with
     # libraries. However, this bytecode is still needed to link and deploy the contract. Copy it to
@@ -70,6 +67,7 @@ gen-bindings:
     # date, without needed to recompile the contracts.
     mkdir -p contract-bindings/artifacts
     jq '.bytecode.object' < contracts/out/LightClient.sol/LightClient.json > contract-bindings/artifacts/LightClient_bytecode.json
+    jq '.bytecode.object' < contracts/out/LightClientMock.sol/LightClientMock.json > contract-bindings/artifacts/LightClientMock_bytecode.json
 
     cargo fmt --all
     cargo sort -g -w
@@ -85,11 +83,20 @@ sol-test:
     cargo build --bin diff-test --release
     forge test
 
-# Deploy contracts to local blockchain for development and testing
-dev-deploy url="http://localhost:8545" mnemonics="test test test test test test test test test test test junk" num_blocks_per_epoch="10" num_init_validators="5":
-    MNEMONICS="{{mnemonics}}" forge script contracts/test/LightClientTest.s.sol:DeployLightClientTestScript \
-    --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators)" {{num_blocks_per_epoch}} {{num_init_validators}} \
-    --fork-url {{url}} --broadcast
+# Deploys the light client contract on Sepolia and call it for profiling purposes.
+NUM_BLOCKS_PER_EPOCH := "3"
+NUM_INIT_VALIDATORS := "5"
+lc-contract-profiling-sepolia:
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    forge script contracts/test/DeployLightClientTestScript.s.sol --sig "runBench(uint32 numBlocksPerEpoch, uint64 numInitValidators)" {{NUM_BLOCKS_PER_EPOCH}} {{NUM_INIT_VALIDATORS}} --fork-url ${SEPOLIA_RPC_URL} --broadcast --verify --etherscan-api-key ${ETHERSCAN_API_KEY} --chain-id sepolia
+    LC_CONTRACT_ADDRESS=`cat contracts/broadcast/DeployLightClientTestScript.s.sol/11155111/runBench-latest.json | jq -r .receipts[-1].contractAddress`
+    echo $LC_CONTRACT_ADDRESS
+    forge script contracts/script/LightClientCallNewFinalizedState.s.sol --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators, address lcContractAddress)" {{NUM_BLOCKS_PER_EPOCH}} {{NUM_INIT_VALIDATORS}} $LC_CONTRACT_ADDRESS --fork-url ${SEPOLIA_RPC_URL}  --broadcast  --chain-id sepolia
+
+lc-contract-benchmark:
+    cargo build --bin diff-test --release
+    forge test --mt testCorrectUpdateBench | grep testCorrectUpdateBench
 
 # This is meant for local development and produces HTML output. In CI
 # the lcov output is pushed to coveralls.
@@ -99,3 +106,13 @@ code-coverage:
   grcov . -s . --binary-path $CARGO_TARGET_DIR/debug/ -t html --branch --ignore-not-existing -o $CARGO_TARGET_DIR/coverage/ \
       --ignore 'contract-bindings/*' --ignore 'contracts/*'
   @echo "HTML report available at: $CARGO_TARGET_DIR/coverage/index.html"
+
+# Download Aztec's SRS for production
+download-srs:
+    @echo "Check existence or download SRS for production"
+    @./scripts/download_srs_aztec.sh
+
+# Download Aztec's SRS for test (smaller degree usually)
+dev-download-srs:
+    @echo "Check existence or download SRS for dev/test"
+    @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin" ./scripts/download_srs_aztec.sh

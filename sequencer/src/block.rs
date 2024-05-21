@@ -1,11 +1,12 @@
-use crate::{BlockBuildingSnafu, Transaction};
-use commit::{Commitment, Committable};
+use crate::{BlockBuildingSnafu, NodeState, Transaction};
+use committable::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
-use hotshot_types::traits::BlockPayload;
+use hotshot_types::traits::{BlockPayload, EncodeBytes};
 use hotshot_types::utils::BuilderCommitment;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use snafu::OptionExt;
+use std::sync::Arc;
 
 pub mod entry;
 pub mod payload;
@@ -18,15 +19,16 @@ use payload::Payload;
 use tables::NameSpaceTable;
 
 pub type NsTable = NameSpaceTable<TxTableEntryWord>;
-
+impl EncodeBytes for Payload<TxTableEntryWord> {
+    fn encode(&self) -> Arc<[u8]> {
+        Arc::from(self.raw_payload.clone())
+    }
+}
 impl BlockPayload for Payload<TxTableEntryWord> {
     type Error = crate::Error;
     type Transaction = Transaction;
+    type Instance = NodeState;
     type Metadata = NsTable;
-
-    // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
-    // https://github.com/EspressoSystems/HotShot/issues/2115
-    type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
 
     /// Returns (Self, metadata).
     ///
@@ -50,28 +52,28 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     /// TODO(746) refactor and make pretty "table" code for tx, namespace tables?
     fn from_transactions(
         txs: impl IntoIterator<Item = Self::Transaction>,
+        instance_state: &Self::Instance,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
-        let payload = Payload::from_txs(txs)?;
+        let payload = Payload::from_txs(txs, &instance_state.chain_config)?;
         let ns_table = payload.get_ns_table().clone(); // TODO don't clone ns_table
         Some((payload, ns_table)).context(BlockBuildingSnafu)
     }
 
-    fn from_bytes<I>(encoded_transactions: I, metadata: &Self::Metadata) -> Self
-    where
-        I: Iterator<Item = u8>,
-    {
+    fn from_bytes(encoded_transactions: &[u8], metadata: &Self::Metadata) -> Self {
         Self {
-            raw_payload: encoded_transactions.into_iter().collect(),
+            raw_payload: encoded_transactions.to_vec(),
             ns_table: metadata.clone(), // TODO don't clone ns_table
         }
     }
 
+    // TODO remove
     fn genesis() -> (Self, Self::Metadata) {
-        Self::from_transactions([]).unwrap()
-    }
+        // this is only called from `Leaf::genesis`. Since we are
+        // passing empty list, max_block_size is irrelevant so we can
+        // use the mock NodeState. A future update to HotShot should
+        // make a change there to remove the need for this workaround.
 
-    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
-        Ok(self.raw_payload.iter().cloned())
+        Self::from_transactions([], &NodeState::mock()).unwrap()
     }
 
     fn transaction_commitments(&self, meta: &Self::Metadata) -> Vec<Commitment<Self::Transaction>> {
@@ -90,8 +92,11 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
 
-    fn get_transactions(&self, _: &Self::Metadata) -> &Vec<Self::Transaction> {
-        unimplemented!()
+    fn transactions<'a>(
+        &'a self,
+        metadata: &'a Self::Metadata,
+    ) -> impl 'a + Iterator<Item = Self::Transaction> {
+        self.enumerate(metadata).map(|(_, t)| t)
     }
 }
 
@@ -182,7 +187,7 @@ mod reference {
     fn test_reference_header() {
         reference_test::<Header, _>(
             HEADER.clone(),
-            "BLOCK~CltsD5AWVMRYoPCVoir_T8qU3qJTIxi5qBjyWu9vr-gC",
+            "BLOCK~Wg0AQ-1-7OZ1MjxYnD_KYPj4LSP1BW1wAKMfemBDvQOi",
             |header| header.commit(),
         );
     }
@@ -191,7 +196,7 @@ mod reference {
     fn test_reference_transaction() {
         reference_test::<Transaction, _>(
             TRANSACTION.clone(),
-            "COMMIT~77xOf9b3_RtGwqQ7_zOPeuJRS0iZwF7EJiV_NzOv4uID",
+            "TX~77xOf9b3_RtGwqQ7_zOPeuJRS0iZwF7EJiV_NzOv4uJ3",
             |tx| tx.commit(),
         );
     }

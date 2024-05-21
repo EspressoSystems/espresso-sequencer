@@ -1,32 +1,34 @@
+use std::{num::NonZeroUsize, time::Duration};
+
 use super::{
     fs,
     options::{Options, Query},
-    sql,
+    sql, AccountQueryData, BlocksFrontier,
 };
 use crate::{
-    network, persistence,
-    state::{BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree, ValidatedState},
-    Node, SeqTypes,
+    network,
+    persistence::{self, SequencerPersistence},
+    PubKey, SeqTypes, Transaction,
 };
-use anyhow::Context;
-use async_std::sync::Arc;
+use anyhow::bail;
 use async_trait::async_trait;
-use hotshot::types::SystemContextHandle;
+use ethers::prelude::Address;
+use futures::future::Future;
 use hotshot_query_service::{
     availability::AvailabilityDataSource,
-    data_source::{UpdateDataSource, VersionedDataSource},
+    data_source::{MetricsDataSource, UpdateDataSource, VersionedDataSource},
     fetching::provider::{AnyProvider, QueryServiceProvider},
-    merklized_state::{MerklizedState, UpdateStateStorage},
     node::NodeDataSource,
     status::StatusDataSource,
-    Leaf,
 };
-use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
-use jf_primitives::merkle_tree::{
-    prelude::MerklePath, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
+use hotshot_types::{
+    data::ViewNumber, light_client::StateSignatureRequestBody, ExecutionType, HotShotConfig,
+    PeerConfig, ValidatorConfig,
 };
+
+use serde::Serialize;
 use tide_disco::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 pub trait DataSourceOptions: persistence::PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
@@ -67,13 +69,6 @@ pub trait SequencerDataSource:
 
     /// Instantiate a data source from command line options.
     async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self>;
-    /// Wrapper function to store merkle nodes
-    async fn store_state<S: MerklizedState<SeqTypes>>(
-        &mut self,
-        path: MerklePath<S::Entry, S::Key, S::T>,
-        traversal_path: Vec<usize>,
-        block_number: u64,
-    ) -> anyhow::Result<()>;
 }
 
 /// Provider for fetching missing data for the query service.
@@ -92,8 +87,12 @@ pub fn provider<Ver: StaticVersionType + 'static>(
     provider
 }
 
-pub(crate) trait SubmitDataSource<N: network::Type> {
-    fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N>>;
+pub(crate) trait SubmitDataSource<N: network::Type, P: SequencerPersistence> {
+    fn submit(&self, tx: Transaction) -> impl Send + Future<Output = anyhow::Result<()>>;
+}
+
+pub(crate) trait HotShotConfigDataSource {
+    fn get_config(&self) -> impl Send + Future<Output = PublicHotShotConfig>;
 }
 
 #[async_trait]
@@ -101,62 +100,164 @@ pub(crate) trait StateSignatureDataSource<N: network::Type> {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody>;
 }
 
-#[trait_variant::make(StateDataSource: Send)]
-pub(crate) trait LocalStateDataSource {
-    async fn get_decided_state(&self) -> Arc<ValidatedState>;
-    async fn get_undecided_state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>>;
+pub(crate) trait CatchupDataSource {
+    /// Get the state of the requested `account`.
+    ///
+    /// The state is fetched from a snapshot at the given height and view, which _must_ correspond!
+    /// `height` is provided to simplify lookups for backends where data is not indexed by view.
+    /// This function is intended to be used for catchup, so `view` should be no older than the last
+    /// decided view.
+    fn get_account(
+        &self,
+        _height: u64,
+        _view: ViewNumber,
+        _account: Address,
+    ) -> impl Send + Future<Output = anyhow::Result<AccountQueryData>> {
+        // Merklized state catchup is only supported by persistence backends that provide merklized
+        // state storage. This default implementation is overridden for those that do. Otherwise,
+        // catchup can still be provided by fetching undecided merklized state from consensus
+        // memory.
+        async {
+            bail!("merklized state catchup is not supported for this data source");
+        }
+    }
+
+    /// Get the blocks Merkle tree frontier.
+    ///
+    /// The state is fetched from a snapshot at the given height and view, which _must_ correspond!
+    /// `height` is provided to simplify lookups for backends where data is not indexed by view.
+    /// This function is intended to be used for catchup, so `view` should be no older than the last
+    /// decided view.
+    fn get_frontier(
+        &self,
+        _height: u64,
+        _view: ViewNumber,
+    ) -> impl Send + Future<Output = anyhow::Result<BlocksFrontier>> {
+        // Merklized state catchup is only supported by persistence backends that provide merklized
+        // state storage. This default implementation is overridden for those that do. Otherwise,
+        // catchup can still be provided by fetching undecided merklized state from consensus
+        // memory.
+        async {
+            bail!("merklized state catchup is not supported for this data source");
+        }
+    }
 }
 
-#[async_trait]
-impl<D: SequencerDataSource + Send + Sync> UpdateStateStorage<SeqTypes, D> for ValidatedState {
-    async fn update_storage(
-        &self,
-        storage: &mut D,
-        leaf: &Leaf<SeqTypes>,
-        delta: Arc<Delta>,
-    ) -> anyhow::Result<()> {
-        let block_number = leaf.get_height();
-        let ValidatedState {
-            fee_merkle_tree,
-            block_merkle_tree,
-        } = self;
+impl CatchupDataSource for MetricsDataSource {}
 
-        let Delta { fees_delta } = delta.as_ref();
+/// This struct defines the public Hotshot validator configuration.
+/// Private key and state key pairs are excluded for security reasons.
 
-        // Insert block merkle tree nodes
-        let (_, proof) = block_merkle_tree
-            .lookup(block_number - 1)
-            .expect_ok()
-            .context("Index not found in block merkle tree")?;
-        let path = <u64 as ToTraversalPath<typenum::U3>>::to_traversal_path(
-            &(block_number - 1),
-            block_merkle_tree.height(),
-        );
+#[derive(Debug, Serialize)]
+pub struct PublicValidatorConfig {
+    pub public_key: PubKey,
+    pub stake_value: u64,
+    pub is_da: bool,
+    pub private_key: &'static str,
+    pub state_public_key: String,
+    pub state_key_pair: &'static str,
+}
 
-        storage
-            .store_state::<BlockMerkleTree>(proof.proof, path, block_number)
-            .await
-            .context("failed to insert merkle nodes for block merkle tree")?;
+impl From<ValidatorConfig<PubKey>> for PublicValidatorConfig {
+    fn from(v: ValidatorConfig<PubKey>) -> Self {
+        let ValidatorConfig::<PubKey> {
+            public_key,
+            private_key: _,
+            stake_value,
+            state_key_pair,
+            is_da,
+        } = v;
 
-        // Insert fee merkle tree nodes
-        for delta in fees_delta {
-            let (_, proof) = fee_merkle_tree
-                .universal_lookup(delta)
-                .expect_ok()
-                .context("Index not found in fee merkle tree")?;
-            let path: Vec<usize> =
-                <FeeAccount as ToTraversalPath<typenum::U256>>::to_traversal_path(
-                    delta,
-                    fee_merkle_tree.height(),
-                );
+        let state_public_key = state_key_pair.ver_key();
 
-            storage
-                .store_state::<FeeMerkleTree>(proof.proof, path, block_number)
-                .await
-                .context("failed to insert merkle nodes for block merkle tree")?;
+        Self {
+            public_key,
+            stake_value,
+            is_da,
+            state_public_key: state_public_key.to_string(),
+            private_key: "*****",
+            state_key_pair: "*****",
         }
+    }
+}
 
-        Ok(())
+/// This struct defines the public Hotshot configuration parameters.
+/// Our config module features a GET endpoint accessible via the route `/hotshot` to display the hotshot config parameters.
+/// Hotshot config has sensitive information like private keys and such fields are excluded from this struct.
+#[derive(Debug, Serialize)]
+pub struct PublicHotShotConfig {
+    pub execution_type: ExecutionType,
+    pub start_threshold: (u64, u64),
+    pub num_nodes_with_stake: NonZeroUsize,
+    pub num_nodes_without_stake: usize,
+    pub known_nodes_with_stake: Vec<PeerConfig<PubKey>>,
+    pub known_da_nodes: Vec<PeerConfig<PubKey>>,
+    pub known_nodes_without_stake: Vec<PubKey>,
+    pub my_own_validator_config: PublicValidatorConfig,
+    pub da_staked_committee_size: usize,
+    pub da_non_staked_committee_size: usize,
+    pub fixed_leader_for_gpuvid: usize,
+    pub next_view_timeout: u64,
+    pub view_sync_timeout: Duration,
+    pub timeout_ratio: (u64, u64),
+    pub round_start_delay: u64,
+    pub start_delay: u64,
+    pub num_bootstrap: usize,
+    pub builder_timeout: Duration,
+    pub data_request_delay: Duration,
+    pub builder_url: Url,
+}
+
+impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
+    fn from(v: HotShotConfig<PubKey>) -> Self {
+        // Destructure all fields from HotShotConfig to return an error
+        // if new fields are added to HotShotConfig. This makes sure that we handle
+        // all fields appropriately and do not miss any updates.
+        let HotShotConfig::<PubKey> {
+            execution_type,
+            start_threshold,
+            num_nodes_with_stake,
+            num_nodes_without_stake,
+            known_nodes_with_stake,
+            known_da_nodes,
+            known_nodes_without_stake,
+            my_own_validator_config,
+            da_staked_committee_size,
+            da_non_staked_committee_size,
+            fixed_leader_for_gpuvid,
+            next_view_timeout,
+            view_sync_timeout,
+            timeout_ratio,
+            round_start_delay,
+            start_delay,
+            num_bootstrap,
+            builder_timeout,
+            data_request_delay,
+            builder_url,
+        } = v;
+
+        Self {
+            execution_type,
+            start_threshold,
+            num_nodes_with_stake,
+            num_nodes_without_stake,
+            known_nodes_with_stake,
+            known_da_nodes,
+            known_nodes_without_stake,
+            my_own_validator_config: my_own_validator_config.into(),
+            da_staked_committee_size,
+            da_non_staked_committee_size,
+            fixed_leader_for_gpuvid,
+            next_view_timeout,
+            view_sync_timeout,
+            timeout_ratio,
+            round_start_delay,
+            start_delay,
+            num_bootstrap,
+            builder_timeout,
+            data_request_delay,
+            builder_url,
+        }
     }
 }
 
@@ -164,16 +265,13 @@ impl<D: SequencerDataSource + Send + Sync> UpdateStateStorage<SeqTypes, D> for V
 pub(crate) mod testing {
     use super::super::Options;
     use super::*;
-    use crate::persistence::SequencerPersistence;
-    use std::fmt::Debug;
 
     #[async_trait]
     pub(crate) trait TestableSequencerDataSource: SequencerDataSource {
-        type Storage;
-        type Persistence: Debug + SequencerPersistence;
+        type Storage: Sync;
 
         async fn create_storage() -> Self::Storage;
-        async fn connect(storage: &Self::Storage) -> Self::Persistence;
+        fn persistence_options(storage: &Self::Storage) -> Self::Options;
         fn options(storage: &Self::Storage, opt: Options) -> Options;
     }
 }

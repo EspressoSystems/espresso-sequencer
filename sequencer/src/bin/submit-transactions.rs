@@ -2,10 +2,8 @@
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::{sleep, spawn};
-use bytesize::ByteSize;
 use clap::Parser;
-use commit::{Commitment, Committable};
-use derive_more::From;
+use committable::{Commitment, Committable};
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
 use futures::{
     channel::mpsc::{self, Sender},
@@ -16,15 +14,17 @@ use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, 
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
-use sequencer::{options::parse_duration, SeqTypes, Transaction};
-use snafu::Snafu;
+use sequencer::{
+    options::{parse_duration, parse_size},
+    SeqTypes, Transaction,
+};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
 };
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// Submit random transactions to an Espresso Sequencer.
 #[derive(Clone, Debug, Parser)]
@@ -33,13 +33,26 @@ struct Options {
     ///
     /// The size of each transaction will be chosen uniformly between MIN_SIZE and MAX_SIZE.
     #[clap(long, name = "MIN_SIZE", default_value = "1", value_parser = parse_size, env = "ESPRESSO_SUBMIT_TRANSACTIONS_MIN_SIZE")]
-    min_size: usize,
+    min_size: u64,
 
     /// Maximum size of transaction to submit.
     ///
     /// The size of each transaction will be chosen uniformly between MIN_SIZE and MAX_SIZE.
     #[clap(long, name = "MAX_SIZE", default_value = "1kb", value_parser = parse_size, env = "ESPRESSO_SUBMIT_TRANSACTIONS_MAX_SIZE")]
-    max_size: usize,
+    max_size: u64,
+
+    /// Minimum size of batch of transactions to submit.
+    ///
+    /// Batches will be a random count between MIN_BATCH_SIZE and MAX_BATCH_SIZE, with a falling distribution favoring smaller batches.
+    /// This is by selecting a random size S on each iteration I since last batch, and collecting a batch whenever that S <= I.
+    #[clap(long, name = "MIN_BATCH_SIZE", default_value = "1", value_parser = parse_size, env = "ESPRESSO_SUBMIT_TRANSACTIONS_MIN_BATCH_SIZE")]
+    min_batch_size: u64,
+
+    /// Maximum size of batch of transactions to submit.
+    ///
+    /// Batches will be a random count between MIN_BATCH_SIZE and MAX_BATCH_SIZE, with a falling distribution favoring smaller batches.
+    #[clap(long, name = "MAX_BATCH_SIZE", default_value = "20", value_parser = parse_size, env = "ESPRESSO_SUBMIT_TRANSACTIONS_MAX_BATCH_SIZE")]
+    max_batch_size: u64,
 
     /// Minimum namespace ID to submit to.
     #[clap(
@@ -104,18 +117,24 @@ struct Options {
     #[clap(short, long, env = "ESPRESSO_SUBMIT_TRANSACTIONS_PORT")]
     port: Option<u16>,
 
+    /// Alternative URL to submit transactions to, if not the query service URL.
+    #[clap(long, env = "ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL")]
+    submit_url: Option<Url>,
+
     /// URL of the query service.
-    #[clap(env = "ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL")]
+    #[clap(env = "ESPRESSO_SEQUENCER_URL")]
     url: Url,
 }
 
-#[derive(Clone, Debug, From, Snafu)]
-struct ParseSizeError {
-    msg: String,
-}
-
-fn parse_size(s: &str) -> Result<usize, ParseSizeError> {
-    Ok(s.parse::<ByteSize>()?.0 as usize)
+impl Options {
+    fn submit_url(&self) -> Url {
+        self.submit_url
+            .clone()
+            .unwrap_or_else(|| self.url.join("submit").unwrap())
+    }
+    fn use_public_mempool(&self) -> bool {
+        self.submit_url.is_none()
+    }
 }
 
 #[async_std::main]
@@ -230,43 +249,76 @@ async fn submit_transactions<Ver: StaticVersionType>(
     mut rng: ChaChaRng,
     _: Ver,
 ) {
-    let client = Client::<Error, Ver>::new(opt.url.clone());
+    let url = opt.submit_url();
+    tracing::info!(%url, "starting load generator task");
+    let client = Client::<Error, Ver>::new(url);
 
     // Create an exponential distribution for sampling delay times. The distribution should have
     // mean `opt.delay`, or parameter `\lambda = 1 / opt.delay`.
     let delay_distr = rand_distr::Exp::<f64>::new(1f64 / opt.delay.as_millis() as f64).unwrap();
 
+    let mut txns = Vec::new();
+    let mut hashes = Vec::new();
     loop {
         let tx = random_transaction(&opt, &mut rng);
         let hash = tx.commit();
         tracing::info!(
-            "submitting transaction {hash} for namespace {} of size {}",
+            "Adding transaction {hash} for namespace {} of size {}",
             tx.namespace(),
             tx.payload().len()
         );
-        if let Err(err) = client
-            .post::<()>("submit/submit")
-            .body_binary(&tx)
-            .unwrap()
-            .send()
-            .await
-        {
-            tracing::error!("failed to submit transaction: {err}");
-        }
-        let submitted_at = Instant::now();
-        sender
-            .send(SubmittedTransaction { hash, submitted_at })
-            .await
-            .ok();
+        txns.push(tx);
+        hashes.push(hash);
 
-        let delay = Duration::from_millis(delay_distr.sample(&mut rng) as u64);
-        tracing::info!("sleeping for {delay:?}");
-        sleep(delay).await;
+        let randomized_batch_size = if opt.use_public_mempool() {
+            1
+        } else {
+            rng.gen_range(opt.min_batch_size..=opt.max_batch_size)
+        };
+        let txns_batch_count = txns.len() as u64;
+        if randomized_batch_size <= txns_batch_count {
+            if let Err(err) = if txns_batch_count == 1 {
+                // occasionally test the 'submit' endpoint, just for coverage
+                client
+                    .post::<()>("submit")
+                    .body_binary(&txns[0])
+                    .unwrap()
+                    .send()
+                    .await
+            } else {
+                client
+                    .post::<()>("batch")
+                    .body_binary(&txns)
+                    .unwrap()
+                    .send()
+                    .await
+            } {
+                tracing::error!("failed to submit batch of {txns_batch_count} transactions: {err}");
+            } else {
+                tracing::info!("submitted batch of {txns_batch_count} transactions");
+                let submitted_at = Instant::now();
+                for hash in hashes.iter() {
+                    sender
+                        .send(SubmittedTransaction {
+                            hash: *hash,
+                            submitted_at,
+                        })
+                        .await
+                        .ok();
+                }
+            }
+            txns.clear();
+            hashes.clear();
+
+            let delay = Duration::from_millis(delay_distr.sample(&mut rng) as u64);
+            tracing::info!("sleeping for {delay:?}");
+            sleep(delay).await;
+        }
     }
 }
 
 async fn server<Ver: StaticVersionType + 'static>(port: u16, bind_version: Ver) {
-    if let Err(err) = App::<(), ServerError, Ver>::with_state(())
+    if let Err(err) = App::<(), ServerError>::with_state(())
         .serve(format!("0.0.0.0:{port}"), bind_version)
         .await
     {
@@ -278,7 +330,7 @@ fn random_transaction(opt: &Options, rng: &mut ChaChaRng) -> Transaction {
     let namespace = rng.gen_range(opt.min_namespace..=opt.max_namespace);
 
     let len = rng.gen_range(opt.min_size..=opt.max_size);
-    let mut payload = vec![0; len];
+    let mut payload = vec![0; len as usize];
     rng.fill_bytes(&mut payload);
 
     Transaction::new(namespace.into(), payload)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export PATH=$PATH:./target/release
+export PATH=./target/release:$PATH
 
 ESPRESSO_BASE_STORAGE_PATH=$(mktemp -d -t espresso-XXXXXXXX)
 export ESPRESSO_BASE_STORAGE_PATH

@@ -8,7 +8,7 @@ use hotshot_stake_table::vec_based::config::FieldType;
 use hotshot_types::light_client::{
     StateSignature, StateSignatureScheme, StateSignaturesBundle, StateVerKey,
 };
-use jf_primitives::signatures::SignatureScheme;
+use jf_signature::SignatureScheme;
 use std::{
     collections::{BTreeSet, HashMap},
     path::PathBuf,
@@ -20,7 +20,7 @@ use tide_disco::{
     Api, App, Error as _, StatusCode,
 };
 use url::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 /// State that checks the light client state update and the signature collection
 #[derive(Default)]
@@ -224,7 +224,7 @@ where
 
 pub async fn run_relay_server<Ver: StaticVersionType + 'static>(
     shutdown_listener: Option<OneShotReceiver<()>>,
-    threshold: u64,
+    threshold: U256,
     url: Url,
     bind_version: Ver,
 ) -> std::io::Result<()> {
@@ -234,10 +234,9 @@ pub async fn run_relay_server<Ver: StaticVersionType + 'static>(
 
     // We don't have a stake table yet, putting some temporary value here.
     // Related issue: [https://github.com/EspressoSystems/espresso-sequencer/issues/1022]
-    let threshold = U256::from(threshold);
     let state =
         State::new(StateRelayServerState::new(threshold).with_shutdown_signal(shutdown_listener));
-    let mut app = App::<State, Error, Ver>::with_state(state);
+    let mut app = App::<State, Error>::with_state(state);
 
     app.register_module("api", api).unwrap();
 

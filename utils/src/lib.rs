@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use async_std::task::sleep;
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use ethers::{
     abi::Detokenize,
     contract::builders::ContractCall,
@@ -12,11 +12,15 @@ use ethers::{
     types::U256,
 };
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
 use std::time::Duration;
+use std::{
+    fmt::Debug,
+    process::{Child, Command},
+};
 use tempfile::TempDir;
 use url::Url;
 
+pub mod deployer;
 pub mod test_utils;
 
 pub type Signer = SignerMiddleware<Provider<Http>, LocalWallet>;
@@ -68,22 +72,7 @@ impl AnvilOptions {
         };
 
         // When we are running a local Anvil node, as in tests, some endpoints (e.g. eth_feeHistory)
-        // do not work until at least one block has been mined. Send a transaction to force the
-        // mining of a block.
-        anvil
-            .provider()
-            .send_transaction(
-                TransactionRequest {
-                    to: Some(Address::zero().into()),
-                    ..Default::default()
-                },
-                None,
-            )
-            .await
-            .unwrap()
-            .await
-            .unwrap();
-
+        // do not work until at least one block has been mined.
         while let Err(err) = anvil
             .provider()
             .fee_history(1, BlockNumber::Latest, &[])
@@ -345,17 +334,34 @@ pub fn u256_to_commitment<T: Committable>(comm: U256) -> Result<Commitment<T>, S
     Commitment::deserialize_uncompressed_unchecked(&*commit_bytes.to_vec())
 }
 
+/// Implement `to_fixed_bytes` for wrapped types
+#[macro_export]
+macro_rules! impl_to_fixed_bytes {
+    ($struct_name:ident, $type:ty) => {
+        impl $struct_name {
+            pub(crate) fn to_fixed_bytes(self) -> [u8; core::mem::size_of::<$type>()] {
+                let mut bytes = [0u8; core::mem::size_of::<$type>()];
+                self.0.to_little_endian(&mut bytes);
+                bytes
+            }
+        }
+    };
+}
+
 /// send a transaction and wait for confirmation before returning the tx receipt and block included.
-pub async fn contract_send<M: Middleware, T: Detokenize>(
+pub async fn contract_send<M: Middleware, T: Detokenize, E>(
     call: &ContractCall<M, T>,
 ) -> Result<(TransactionReceipt, u64), anyhow::Error>
 where
     M::Provider: Clone,
+    E: ContractRevert + Debug,
 {
     let pending = match call.send().await {
         Ok(pending) => pending,
         Err(err) => {
-            return Err(anyhow!("error sending transaction: {}", err));
+            let e = err.decode_contract_revert::<E>().unwrap();
+            tracing::error!("contract revert: {:?}", e);
+            return Err(anyhow!("error sending transaction: {:?}", e));
         }
     };
 
@@ -433,7 +439,7 @@ async fn wait_for_transaction_to_be_mined<P: JsonRpcClient>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use commit::RawCommitmentBuilder;
+    use committable::RawCommitmentBuilder;
 
     struct TestCommittable;
 

@@ -5,6 +5,7 @@ use es_version::SEQUENCER_VERSION;
 use ethers::providers::{Http, Middleware, Provider};
 use ethers::signers::{coins_bip39::English, MnemonicBuilder, Signer};
 use ethers::types::Address;
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
 use snafu::Snafu;
 use std::{str::FromStr as _, time::Duration};
@@ -27,6 +28,10 @@ struct Args {
     /// The frequency of updating the light client state, expressed in update interval
     #[clap(short, long = "freq", value_parser = parse_duration, default_value = "10m", env = "ESPRESSO_STATE_PROVER_UPDATE_INTERVAL")]
     update_interval: Duration,
+
+    /// Interval between retries if a state update fails
+    #[clap(long = "retry-freq", value_parser = parse_duration, default_value = "2s", env = "ESPRESSO_STATE_PROVER_RETRY_INTERVAL")]
+    retry_interval: Duration,
 
     /// URL of layer 1 Ethereum JSON-RPC provider.
     #[clap(
@@ -66,6 +71,10 @@ struct Args {
     /// The server provides healthcheck and version endpoints.
     #[clap(short, long, env = "ESPRESSO_PROVER_SERVICE_PORT")]
     pub port: Option<u16>,
+
+    /// Stake table capacity for the prover circuit
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
+    pub stake_table_capacity: usize,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -94,6 +103,7 @@ async fn main() {
     let config = StateProverConfig {
         relay_server: args.relay_server.clone(),
         update_interval: args.update_interval,
+        retry_interval: args.retry_interval,
         l1_provider: args.l1_provider.clone(),
         light_client_address: args.light_client_address,
         eth_signing_key: MnemonicBuilder::<English>::default()
@@ -107,6 +117,7 @@ async fn main() {
             .clone(),
         orchestrator_url: args.orchestrator_url,
         port: args.port,
+        stake_table_capacity: args.stake_table_capacity,
     };
 
     if args.daemon {

@@ -21,11 +21,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install capnproto
-        uses: ./.github/actions/install-capnp
         
       # See https://github.com/rustsec/audit-check for docs
-      - uses: rustsec/audit-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      # TODO: re-enable if https://github.com/rustsec/audit-check/pull/20 is merged
+      # - uses: rustsec/audit-check@v1
+      #   with:
+      #     token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Currently the rustsec/audit-check action regenerates the Cargo.lock
+      # file. Our binaries are built using the committed lock file.
+      # Re-generating the lock file can hide vulnerabilities. We therefore run
+      # cargo audit directly which respects our lock file.
+      - run: cargo audit

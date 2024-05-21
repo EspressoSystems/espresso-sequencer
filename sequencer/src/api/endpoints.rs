@@ -1,28 +1,38 @@
 //! Sequencer-specific API endpoint handlers.
 
+use serde::de::Error as _;
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+};
+
 use super::{
     data_source::{
-        SequencerDataSource, StateDataSource, StateSignatureDataSource, SubmitDataSource,
+        CatchupDataSource, HotShotConfigDataSource, SequencerDataSource, StateSignatureDataSource,
+        SubmitDataSource,
     },
     StorageState,
 };
 use crate::{
     block::payload::{parse_ns_payload, NamespaceProof},
     network,
-    state::{BlockMerkleTree, FeeAccountProof, ValidatedState},
+    persistence::SequencerPersistence,
     NamespaceId, SeqTypes, Transaction,
 };
+use anyhow::Result;
 use async_std::sync::{Arc, RwLock};
-use commit::Committable;
-use ethers::prelude::U256;
+use committable::Committable;
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
-    merklized_state::{self, MerklizedState, MerklizedStateDataSource},
+    data_source::storage::ExplorerStorage,
+    explorer::{self},
+    merklized_state::{
+        self, MerklizedState, MerklizedStateDataSource, MerklizedStateHeightPersistence,
+    },
     node, Error,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
-use jf_primitives::merkle_tree::MerkleTreeScheme;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use tagged_base64::TaggedBase64;
@@ -31,7 +41,7 @@ use tide_disco::{
     Api, Error as _, StatusCode,
 };
 
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
@@ -39,36 +49,27 @@ pub struct NamespaceProofQueryData {
     pub transactions: Vec<Transaction>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AccountQueryData {
-    pub balance: U256,
-    pub proof: FeeAccountProof,
-}
+pub(super) type AvailState<N, P, D, Ver> = Arc<RwLock<StorageState<N, P, D, Ver>>>;
 
-impl From<(FeeAccountProof, U256)> for AccountQueryData {
-    fn from((proof, balance): (FeeAccountProof, U256)) -> Self {
-        Self { balance, proof }
-    }
-}
+type AvailabilityApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, availability::Error, Ver>;
 
-pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
-
-pub(super) type AvailState<N, D, Ver> = Arc<RwLock<StorageState<N, D, Ver>>>;
-
-pub(super) fn availability<N, D, Ver: StaticVersionType + 'static>(
+pub(super) fn availability<N, P, D, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
-) -> anyhow::Result<Api<AvailState<N, D, Ver>, availability::Error, Ver>>
+) -> Result<AvailabilityApi<N, P, D, Ver>>
 where
     N: network::Type,
     D: SequencerDataSource + Send + Sync + 'static,
+    P: SequencerPersistence,
 {
     let mut options = availability::Options::default();
     let extension = toml::from_str(include_str!("../../api/availability.toml"))?;
     options.extensions.push(extension);
     let timeout = options.fetch_timeout;
 
-    let mut api =
-        availability::define_api::<AvailState<N, D, Ver>, SeqTypes, Ver>(&options, bind_version)?;
+    let mut api = availability::define_api::<AvailState<N, P, D, Ver>, SeqTypes, Ver>(
+        &options,
+        bind_version,
+    )?;
 
     api.get("getnamespaceproof", move |req, state| {
         async move {
@@ -131,24 +132,42 @@ where
     Ok(api)
 }
 
-pub(super) fn node<N, D, Ver: StaticVersionType + 'static>(
+type ExplorerApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, explorer::Error, Ver>;
+
+pub(super) fn explorer<N, P, D, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
-) -> anyhow::Result<Api<AvailState<N, D, Ver>, node::Error, Ver>>
+) -> Result<ExplorerApi<N, P, D, Ver>>
+where
+    N: network::Type,
+    D: ExplorerStorage<SeqTypes> + Send + Sync + 'static,
+    P: SequencerPersistence,
+{
+    let api = explorer::define_api::<AvailState<N, P, D, Ver>, SeqTypes, Ver>(bind_version)?;
+    Ok(api)
+}
+
+type NodeApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, node::Error, Ver>;
+
+pub(super) fn node<N, P, D, Ver: StaticVersionType + 'static>(
+    bind_version: Ver,
+) -> Result<NodeApi<N, P, D, Ver>>
 where
     N: network::Type,
     D: SequencerDataSource + Send + Sync + 'static,
+    P: SequencerPersistence,
 {
-    let api = node::define_api::<AvailState<N, D, Ver>, SeqTypes, Ver>(
+    let api = node::define_api::<AvailState<N, P, D, Ver>, SeqTypes, Ver>(
         &Default::default(),
         bind_version,
     )?;
     Ok(api)
 }
-pub(super) fn submit<N, S, Ver: StaticVersionType + 'static>() -> anyhow::Result<Api<S, Error, Ver>>
+pub(super) fn submit<N, P, S, Ver: StaticVersionType + 'static>() -> Result<Api<S, Error, Ver>>
 where
     N: network::Type,
     S: 'static + Send + Sync + WriteState,
-    S::State: Send + Sync + SubmitDataSource<N>,
+    P: SequencerPersistence,
+    S::State: Send + Sync + SubmitDataSource<N, P>,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/submit.toml"))?;
     let mut api = Api::<S, Error, Ver>::new(toml)?;
@@ -160,8 +179,7 @@ where
                 .map_err(Error::from_request_error)?;
             let hash = tx.commit();
             state
-                .consensus()
-                .submit_transaction(tx)
+                .submit(tx)
                 .await
                 .map_err(|err| Error::internal(err.to_string()))?;
             Ok(hash)
@@ -174,7 +192,7 @@ where
 
 pub(super) fn state_signature<N, S, Ver: StaticVersionType + 'static>(
     _: Ver,
-) -> anyhow::Result<Api<S, Error, Ver>>
+) -> Result<Api<S, Error, Ver>>
 where
     N: network::Type,
     S: 'static + Send + Sync + ReadState,
@@ -202,38 +220,22 @@ where
     Ok(api)
 }
 
-pub(super) fn catchup<S, Ver: StaticVersionType + 'static>(
-    _: Ver,
-) -> anyhow::Result<Api<S, Error, Ver>>
+pub(super) fn catchup<S, Ver: StaticVersionType + 'static>(_: Ver) -> Result<Api<S, Error, Ver>>
 where
     S: 'static + Send + Sync + ReadState,
-    S::State: Send + Sync + StateDataSource,
+    S::State: Send + Sync + CatchupDataSource,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/catchup.toml"))?;
     let mut api = Api::<S, Error, Ver>::new(toml)?;
 
-    async fn get_state<S: StateDataSource>(
-        req: &tide_disco::RequestParams,
-        state: &S,
-    ) -> Result<Arc<ValidatedState>, Error> {
-        match req
-            .opt_integer_param("view")
-            .map_err(Error::from_request_error)?
-        {
-            Some(view) => state
-                .get_undecided_state(ViewNumber::new(view))
-                .await
-                .ok_or(Error::catch_all(
-                    StatusCode::NotFound,
-                    format!("state not available for view {view}"),
-                )),
-            None => Ok(state.get_decided_state().await),
-        }
-    }
-
     api.get("account", |req, state| {
         async move {
-            let state = get_state(&req, state).await?;
+            let height = req
+                .integer_param("height")
+                .map_err(Error::from_request_error)?;
+            let view = req
+                .integer_param("view")
+                .map_err(Error::from_request_error)?;
             let account = req
                 .string_param("address")
                 .map_err(Error::from_request_error)?;
@@ -244,32 +246,26 @@ where
                 )
             })?;
 
-            let (proof, balance) =
-                FeeAccountProof::prove(&state.fee_merkle_tree, account).ok_or(Error::catch_all(
-                    StatusCode::NotFound,
-                    format!("account {account} is not in memory"),
-                ))?;
-            Ok(AccountQueryData { balance, proof })
+            state
+                .get_account(height, ViewNumber::new(view), account)
+                .await
+                .map_err(|err| Error::catch_all(StatusCode::NotFound, format!("{err:#}")))
         }
         .boxed()
     })?
     .get("blocks", |req, state| {
         async move {
-            let state = get_state(&req, state).await?;
+            let height = req
+                .integer_param("height")
+                .map_err(Error::from_request_error)?;
+            let view = req
+                .integer_param("view")
+                .map_err(Error::from_request_error)?;
 
-            // Get the frontier of the blocks Merkle tree, if we have it.
-            let tree = &state.block_merkle_tree;
-            let frontier: BlocksFrontier = tree
-                .lookup(tree.num_leaves() - 1)
-                .expect_ok()
-                .map_err(|err| {
-                    Error::catch_all(
-                        StatusCode::NotFound,
-                        format!("blocks frontier is not in memory: {err}"),
-                    )
-                })?
-                .1;
-            Ok(frontier)
+            state
+                .get_frontier(height, ViewNumber::new(view))
+                .await
+                .map_err(|err| Error::catch_all(StatusCode::NotFound, format!("{err:#}")))
         }
         .boxed()
     })?;
@@ -277,17 +273,71 @@ where
     Ok(api)
 }
 
-pub(super) fn merklized_state<N, D, S, Ver: StaticVersionType + 'static>(
+type MerklizedStateApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, merklized_state::Error, Ver>;
+pub(super) fn merklized_state<N, P, D, S, Ver: StaticVersionType + 'static, const ARITY: usize>(
     _: Ver,
-) -> anyhow::Result<Api<AvailState<N, D, Ver>, merklized_state::Error, Ver>>
+) -> Result<MerklizedStateApi<N, P, D, Ver>>
 where
     N: network::Type,
-    D: MerklizedStateDataSource<SeqTypes, S> + Send + Sync + 'static,
-    S: MerklizedState<SeqTypes>,
+    D: MerklizedStateDataSource<SeqTypes, S, ARITY>
+        + Send
+        + Sync
+        + MerklizedStateHeightPersistence
+        + 'static,
+    S: MerklizedState<SeqTypes, ARITY>,
+    P: SequencerPersistence,
     for<'a> <S::Commit as TryFrom<&'a TaggedBase64>>::Error: std::fmt::Display,
 {
-    let api = merklized_state::define_api::<AvailState<N, D, Ver>, SeqTypes, S, Ver>(
+    let api = merklized_state::define_api::<AvailState<N, P, D, Ver>, SeqTypes, S, Ver, ARITY>(
         &Default::default(),
     )?;
     Ok(api)
+}
+
+pub(super) fn config<S, Ver: StaticVersionType + 'static>(_: Ver) -> Result<Api<S, Error, Ver>>
+where
+    S: 'static + Send + Sync + ReadState,
+    S::State: Send + Sync + HotShotConfigDataSource,
+{
+    let toml = toml::from_str::<toml::Value>(include_str!("../../api/config.toml"))?;
+    let mut api = Api::<S, Error, Ver>::new(toml)?;
+
+    let env_variables = get_public_env_vars()
+        .map_err(|err| Error::catch_all(StatusCode::InternalServerError, format!("{err:#}")))?;
+
+    api.get("hotshot", |_, state| {
+        async move { Ok(state.get_config().await) }.boxed()
+    })?
+    .get("env", move |_, _| {
+        {
+            let env_variables = env_variables.clone();
+            async move { Ok(env_variables) }
+        }
+        .boxed()
+    })?;
+
+    Ok(api)
+}
+
+fn get_public_env_vars() -> Result<Vec<String>> {
+    let toml: toml::Value = toml::from_str(include_str!("../../api/public-env-vars.toml"))?;
+
+    let keys = toml
+        .get("variables")
+        .ok_or_else(|| toml::de::Error::custom("variables not found"))?
+        .as_array()
+        .ok_or_else(|| toml::de::Error::custom("variables is not an array"))?
+        .clone()
+        .into_iter()
+        .map(|v| v.try_into())
+        .collect::<Result<HashSet<String>, toml::de::Error>>()?;
+
+    let hashmap: HashMap<String, String> = env::vars().collect();
+    let mut public_env_vars: Vec<String> = Vec::new();
+    for key in keys {
+        let value = hashmap.get(&key).cloned().unwrap_or_default();
+        public_env_vars.push(format!("{key}={value}"));
+    }
+
+    Ok(public_env_vars)
 }

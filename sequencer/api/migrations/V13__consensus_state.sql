@@ -4,7 +4,9 @@ CREATE TABLE anchor_leaf (
     id INT PRIMARY KEY,
 
     height BIGINT,
-    leaf   BYTEA
+    view   BIGINT,
+    leaf   BYTEA,
+    qc     BYTEA
 );
 
 CREATE TABLE highest_voted_view (
@@ -13,4 +15,14 @@ CREATE TABLE highest_voted_view (
     id INT PRIMARY KEY,
 
     view BIGINT
+);
+
+CREATE TABLE da_proposal (
+    view BIGINT PRIMARY KEY,
+    data BYTEA
+);
+
+CREATE TABLE vid_share (
+    view BIGINT PRIMARY KEY,
+    data BYTEA
 );

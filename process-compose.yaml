@@ -1,15 +1,13 @@
 version: "3"
 
 environment:
-  - ESPRESSO_SEQUENCER_DA_SERVER_URL=http://localhost:$ESPRESSO_DA_SERVER_PORT
-  - ESPRESSO_SEQUENCER_CONSENSUS_SERVER_URL=http://localhost:$ESPRESSO_CONSENSUS_SERVER_PORT
+  - ESPRESSO_SEQUENCER_CDN_ENDPOINT=127.0.0.1:$ESPRESSO_CDN_SERVER_PORT
   - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL=http://localhost:$ESPRESSO_ORCHESTRATOR_PORT
   - ESPRESSO_SEQUENCER_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
-  - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
   - ESPRESSO_SEQUENCER_L1_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER_L1_PORT
   - ESPRESSO_DEMO_L1_HTTP_PROVIDER=$ESPRESSO_SEQUENCER_L1_PROVIDER
   - ESPRESSO_STATE_RELAY_SERVER_URL=http://localhost:$ESPRESSO_STATE_RELAY_SERVER_PORT
-
+  - QUERY_SERVICE_URI=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT/v0/
 processes:
   # Cheating a bit here but since we don't usually have to debug go-ethereum
   # it's using the docker compose service which is a bit easier.
@@ -24,18 +22,49 @@ processes:
       success_threshold: 1
       failure_threshold: 20
 
-  deploy-contracts:
+  deploy-sequencer-contracts:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
     # script will think they're already deployed.
-    command: unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy
+    command: unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --only fee-contract
+    depends_on:
+      demo-l1-network:
+        condition: process_healthy
+
+  deploy-prover-contracts:
+    # The contract addresses are implicitly inherited from .env. We need to unset these or else the
+    # script will think they're already deployed.
+    command: unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --use-mock-contract --only hotshot,light-client
+    environment:
+      - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
     depends_on:
       demo-l1-network:
         condition: process_healthy
       orchestrator:
         condition: process_healthy
+      # Make sure this doesn't start until the other contracts have been deployed, since we use the same mnemonic.
+      deploy-sequencer-contracts:
+        condition: process_completed
+
+  fund-builder:
+    command: bridge deposit
+    environment:
+      - L1_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER_L1_PORT
+      - ESPRESSO_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
+      - CONTRACT_ADDRESS=$ESPRESSO_SEQUENCER_FEE_CONTRACT_PROXY_ADDRESS
+      - MNEMONIC=$ESPRESSO_BUILDER_ETH_MNEMONIC
+      - ACCOUNT_INDEX=$ESPRESSO_BUILDER_ETH_ACCOUNT_INDEX
+      - AMOUNT=1000000000000000000
+      - CONFIRMATIONS=1
+    depends_on:
+      deploy-sequencer-contracts:
+        condition: process_completed
+      sequencer1:
+        condition: process_healthy
 
   orchestrator:
     command: orchestrator
+    environment: 
+      - ESPRESSO_ORCHESTRATOR_BUILDER_URL=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT
     readiness_probe:
       http_get:
         scheme: http
@@ -47,34 +76,6 @@ processes:
       timeout_seconds: 1
       success_threshold: 1
       failure_threshold: 100
-
-  da-server:
-    command: web-server
-    environment:
-      - ESPRESSO_WEB_SERVER_PORT=$ESPRESSO_DA_SERVER_PORT
-    depends_on:
-      orchestrator:
-        condition: process_healthy
-    readiness_probe:
-      http_get:
-        scheme: http
-        host: localhost
-        port: $ESPRESSO_DA_SERVER_PORT
-        path: /healthcheck
-
-  consensus-server:
-    command: web-server
-    environment:
-      - ESPRESSO_WEB_SERVER_PORT=$ESPRESSO_CONSENSUS_SERVER_PORT
-    depends_on:
-      orchestrator:
-        condition: process_healthy
-    readiness_probe:
-      http_get:
-        scheme: http
-        host: localhost
-        port: $ESPRESSO_CONSENSUS_SERVER_PORT
-        path: /healthcheck
 
   state-relay-server:
     command: state-relay-server
@@ -89,6 +90,9 @@ processes:
     command: state-prover -d
     environment:
       - MNEMONIC=$ESPRESSO_SEQUENCER_ETH_MNEMONIC
+      - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
+      - ESPRESSO_STATE_PROVER_UPDATE_INTERVAL=30s
+      - RAYON_NUM_THREADS=$PROVER_RAYON_NUM_THREADS
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -96,19 +100,26 @@ processes:
         condition: process_healthy
       demo-l1-network:
         condition: process_healthy
-      deploy-contracts:
+      deploy-prover-contracts:
         condition: process_completed
 
   sequencer0:
-    command: sequencer -- http -- query -- catchup -- status -- submit
+    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- submit -- hotshot-events -- config
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_0
+      - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=localhost:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_0
       - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
-      - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq0
+      - ESPRESSO_SEQUENCER_POSTGRES_HOST=localhost
+      - ESPRESSO_SEQUENCER_POSTGRES_PORT=$ESPRESSO_SEQUENCER0_DB_PORT
+      - ESPRESSO_SEQUENCER_POSTGRES_USER=root
+      - ESPRESSO_SEQUENCER_POSTGRES_PASSWORD=password
+      - ESPRESSO_SEQUENCER_POSTGRES_DATABASE=sequencer
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_0
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_0
-      - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=10
+      - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
+      - ESPRESSO_SEQUENCER_IS_DA=true
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -116,6 +127,17 @@ processes:
         condition: process_healthy
       state-relay-server:
         condition: process_healthy
+      sequencer-db-0:
+        condition: process_healthy
+      broker_0:
+        condition: process_healthy
+      broker_1:
+        condition: process_healthy
+      marshal_0:
+        condition: process_healthy
+      deploy-sequencer-contracts:
+        condition: process_completed
+
     readiness_probe:
       http_get:
         scheme: http
@@ -125,15 +147,22 @@ processes:
       failure_threshold: 100
 
   sequencer1:
-    command: sequencer -- http -- query -- catchup -- status
+    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- state -- explorer
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER1_API_PORT
+      - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
+      - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=localhost:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
       - ESPRESSO_SEQUENCER_API_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER2_API_PORT
-      - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq1
+      - ESPRESSO_SEQUENCER_POSTGRES_HOST=localhost
+      - ESPRESSO_SEQUENCER_POSTGRES_PORT=$ESPRESSO_SEQUENCER1_DB_PORT
+      - ESPRESSO_SEQUENCER_POSTGRES_USER=root
+      - ESPRESSO_SEQUENCER_POSTGRES_PASSWORD=password
+      - ESPRESSO_SEQUENCER_POSTGRES_DATABASE=sequencer
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_1
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_1
-      - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=11
+      - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
+      - ESPRESSO_SEQUENCER_IS_DA=true
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -141,6 +170,16 @@ processes:
         condition: process_healthy
       state-relay-server:
         condition: process_healthy
+      sequencer-db-1:
+        condition: process_healthy
+      broker_0:
+        condition: process_healthy
+      broker_1:
+        condition: process_healthy
+      marshal_0:
+        condition: process_healthy
+      deploy-sequencer-contracts:
+        condition: process_completed
     readiness_probe:
       http_get:
         scheme: http
@@ -153,11 +192,14 @@ processes:
     command: sequencer -- http -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER2_API_PORT
+      - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_2
+      - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=localhost:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_2
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER3_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq2
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_2
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_2
-      - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=12
+      - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
+      - ESPRESSO_SEQUENCER_IS_DA=true
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -165,6 +207,14 @@ processes:
         condition: process_healthy
       state-relay-server:
         condition: process_healthy
+      broker_0:
+        condition: process_healthy
+      broker_1:
+        condition: process_healthy
+      marshal_0:
+        condition: process_healthy
+      deploy-sequencer-contracts:
+        condition: process_completed
     readiness_probe:
       http_get:
         scheme: http
@@ -177,11 +227,13 @@ processes:
     command: sequencer -- http -- catchup -- status
     environment:
       - ESPRESSO_SEQUENCER_API_PORT=$ESPRESSO_SEQUENCER3_API_PORT
+      - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_3
+      - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=localhost:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_3
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER4_API_PORT
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq3
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_3
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_3
-      - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=13
+      - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -189,6 +241,14 @@ processes:
         condition: process_healthy
       state-relay-server:
         condition: process_healthy
+      broker_0:
+        condition: process_healthy
+      broker_1:
+        condition: process_healthy
+      marshal_0:
+        condition: process_healthy
+      deploy-sequencer-contracts:
+        condition: process_completed
     readiness_probe:
       http_get:
         scheme: http
@@ -205,7 +265,7 @@ processes:
       - ESPRESSO_SEQUENCER_STORAGE_PATH=$ESPRESSO_BASE_STORAGE_PATH/seq4
       - ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY=$ESPRESSO_DEMO_SEQUENCER_STAKING_PRIVATE_KEY_4
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_4
-      - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX=14
+      - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -213,6 +273,14 @@ processes:
         condition: process_healthy
       state-relay-server:
         condition: process_healthy
+      broker_0:
+        condition: process_healthy
+      broker_1:
+        condition: process_healthy
+      marshal_0:
+        condition: process_healthy
+      deploy-sequencer-contracts:
+        condition: process_completed
     readiness_probe:
       http_get:
         scheme: http
@@ -221,6 +289,83 @@ processes:
         path: /healthcheck
       failure_threshold: 100
 
+  # We use KeyDB (a Redis variant) to maintain consistency between 
+  # different parts of the CDN
+  # Cheating a bit here too, but KeyDB is not available as a Nix package.
+  # Could do local (SQLite) discovery, but removes some of the spirit
+  # from the local demo.
+  keydb:
+    command: docker run --rm -p 0.0.0.0:6379:6379 eqalpha/keydb --requirepass changeme!
+    readiness_probe:
+      exec:
+        command: nc -zv localhost 6379
+      period_seconds: 5
+      timeout_seconds: 4
+      failure_threshold: 20
+
+  # The CDN system's main entry point; where users contact first.
+  marshal_0:
+    command: cdn-marshal 
+      -d "redis://:changeme!@localhost:6379"
+      -b $ESPRESSO_CDN_SERVER_PORT
+      -m 127.0.0.1:9093
+    depends_on:
+      keydb:
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: 127.0.0.1
+        port: 9093
+        path: /metrics
+      failure_threshold: 100
+
+
+  # A broker is the main message-routing unit of the CDN
+  broker_0:
+    command: RUST_LOG=debug cdn-broker -d "redis://:changeme!@localhost:6379" -m 127.0.0.1:9091
+    depends_on:
+      keydb:
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: 127.0.0.1
+        port: 9091
+        path: /metrics
+      failure_threshold: 100
+
+  # A broker is the main message-routing unit of the CDN
+  # as we're running a local demo, we need to operate on different ports
+  broker_1:
+    command: RUST_LOG=debug cdn-broker 
+      --public-bind-endpoint 0.0.0.0:1740
+      --public-advertise-endpoint local_ip:1740
+      --private-bind-endpoint 0.0.0.0:1741
+      --private-advertise-endpoint local_ip:1741
+      -d "redis://:changeme!@localhost:6379"
+      -m 127.0.0.1:9092
+    depends_on:
+      keydb:
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: 127.0.0.1
+        port: 9092
+        path: /metrics
+      failure_threshold: 100
+
+  cdn-whitelist:
+    command: cdn-whitelist 
+      -d redis://:changeme!@localhost:6379 
+      -o http://localhost:$ESPRESSO_ORCHESTRATOR_PORT
+    depends_on:
+      orchestrator:
+        condition: process_healthy
+      keydb:
+        condition: process_healthy
+
   commitment-task:
     command: commitment-task
     depends_on:
@@ -228,7 +373,7 @@ processes:
         condition: process_healthy
       demo-l1-network:
         condition: process_healthy
-      deploy-contracts:
+      deploy-prover-contracts:
         condition: process_completed
     readiness_probe:
       http_get:
@@ -238,21 +383,66 @@ processes:
         path: /healthcheck
       failure_threshold: 100
 
-  submit-transactions:
+  submit-transactions-public:
     command: submit-transactions
+    environment:
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PUBLIC_PORT
     depends_on:
       sequencer0:
+        condition: process_healthy
+      # We don't directly depend on the builder, but transactions will not be finalized until it has
+      # started, so there is no point in starting before then.
+      permissionless-builder:
         condition: process_healthy
     readiness_probe:
       http_get:
         scheme: http
         host: localhost
-        port: $ESPRESSO_SUBMIT_TRANSACTIONS_PORT
+        port: $ESPRESSO_SUBMIT_TRANSACTIONS_PUBLIC_PORT
+        path: /healthcheck
+      failure_threshold: 100
+
+  submit-transactions-private:
+    command: submit-transactions
+    environment:
+      - ESPRESSO_SUBMIT_TRANSACTIONS_PORT=$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
+      - ESPRESSO_SUBMIT_TRANSACTIONS_SUBMIT_URL=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT/txn_submit
+    depends_on:
+      sequencer0:
+        condition: process_healthy
+      permissionless-builder:
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
+        path: /healthcheck
+      failure_threshold: 100
+
+  permissionless-builder:
+    command: permissionless-builder
+    ports:
+      - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
+    environment:
+      - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
+    depends_on:
+      fund-builder:
+        condition: process_completed
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_BUILDER_SERVER_PORT
         path: /healthcheck
       failure_threshold: 100
 
   nasty-client:
     command: nasty-client
+    environment:
+      # Point the nasty client at sequencer1, the only one running the state API.
+      - ESPRESSO_SEQUENCER_URL=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
     depends_on:
       sequencer0:
         condition: process_healthy
@@ -263,3 +453,43 @@ processes:
         port: $ESPRESSO_NASTY_CLIENT_PORT
         path: /healthcheck
       failure_threshold: 100
+
+  sequencer-db-0:
+    command: docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $ESPRESSO_SEQUENCER0_DB_PORT:5432 postgres
+    environment:
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_USER=root
+      - POSTGRES_DB=sequencer
+    readiness_probe:
+      exec:
+        command: pg_isready -h localhost -p $ESPRESSO_SEQUENCER0_DB_PORT
+      initial_delay_seconds: 5
+      period_seconds: 5
+      timeout_seconds: 4
+      # Postgres can be falsely "ready" once before running init scripts.
+      # See https://github.com/docker-library/postgres/issues/146 for discussion.
+      success_threshold: 2
+      failure_threshold: 20
+
+  sequencer-db-1:
+    command: docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $ESPRESSO_SEQUENCER1_DB_PORT:5432 postgres
+    environment:
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_USER=root
+      - POSTGRES_DB=sequencer
+    readiness_probe:
+      exec:
+        command: pg_isready -h localhost -p $ESPRESSO_SEQUENCER1_DB_PORT
+      initial_delay_seconds: 5
+      period_seconds: 5
+      timeout_seconds: 4
+      # Postgres can be falsely "ready" once before running init scripts.
+      # See https://github.com/docker-library/postgres/issues/146 for discussion.
+      success_threshold: 2
+      failure_threshold: 20
+
+  block-explorer:
+    command: docker run --rm -p $ESPRESSO_BLOCK_EXPLORER_PORT:3000 -e QUERY_SERVICE_URI ghcr.io/espressosystems/espresso-block-explorer:main
+    depends_on:
+      sequencer1:
+        condition: process_healthy

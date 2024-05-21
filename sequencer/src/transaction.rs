@@ -1,8 +1,9 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use derive_more::{Display, From, Into};
+use hotshot_query_service::explorer::ExplorerTransaction;
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
-use jf_primitives::merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
+use jf_merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
 use serde::{Deserialize, Serialize};
 
 #[derive(
@@ -79,6 +80,14 @@ impl Transaction {
             (0..len).map(|_| rand::random::<u8>()).collect::<Vec<_>>(),
         )
     }
+    #[cfg(any(test, feature = "testing"))]
+    /// Useful for when we want to test size of transaction(s)
+    pub fn of_size(len: usize) -> Self {
+        Self::new(
+            NamespaceId(0),
+            (0..len).map(|_| rand::random::<u8>()).collect::<Vec<_>>(),
+        )
+    }
 }
 
 impl HotShotTransaction for Transaction {}
@@ -92,9 +101,20 @@ impl Namespaced for Transaction {
 
 impl Committable for Transaction {
     fn commit(&self) -> Commitment<Self> {
-        commit::RawCommitmentBuilder::new("Transaction")
+        committable::RawCommitmentBuilder::new("Transaction")
             .u64_field("namespace", self.namespace.into())
             .var_size_bytes(&self.payload)
             .finalize()
+    }
+
+    fn tag() -> String {
+        "TX".into()
+    }
+}
+
+impl ExplorerTransaction for Transaction {
+    type NamespaceId = NamespaceId;
+    fn namespace_id(&self) -> Self::NamespaceId {
+        self.namespace
     }
 }

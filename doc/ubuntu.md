@@ -5,7 +5,7 @@
 ## Install system dependencies
 
     sudo apt-get update
-    sudo apt-get install -y curl cmake pkg-config libssl-dev protobuf-compiler git postgresql-client lsb-release gpg capnproto
+    sudo apt-get install -y curl cmake pkg-config libssl-dev protobuf-compiler git postgresql-client lsb-release gpg
 
 ## Install just
 
@@ -37,6 +37,7 @@ Just is not available in the official ubuntu repos.
     forge build
 
 ## Run the rust tests
+
 To run the SQL tests docker needs to be installed and running.
 
     export RUSTFLAGS='--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'

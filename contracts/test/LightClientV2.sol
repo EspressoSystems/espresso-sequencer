@@ -32,17 +32,11 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// https://forum.openzeppelin.com/t/upgradable-contracts-instantiating-an-immutable-value/28763/2#why-cant-i-use-immutable-variables-1
     uint32 public blocksPerEpoch;
 
-    /// @notice This number represent the semantic version (semver) of the contract.
-    /// @dev They must be constants and cannot be set using a constructor.
-    uint256 public immutable MAJOR = 2;
-    uint256 public immutable MINOR = 0;
-    uint256 public immutable PATCH = 0;
-
     /// @notice genesis block commitment index
-    uint32 internal immutable GENESIS_STATE = 0;
+    uint32 internal genesisState;
 
     /// @notice Finalized HotShot's light client state index
-    uint32 internal immutable FINALIZED_STATE = 1;
+    uint32 internal finalizedState;
 
     // === Storage ===
     //
@@ -107,18 +101,18 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
-    /// @notice This contract is called by the proxy when you deploy this contract
-    function initialize(LightClientState memory genesis, uint32 numBlocksPerEpoch)
+    /// @notice Use this to get the implementation contract version
+    function getVersion()
         public
-        initializer
+        pure
+        returns (uint8 majorVersion, uint8 minorVersion, uint8 patchVersion)
     {
-        __Ownable_init(msg.sender); //sets owner to msg.sender
-        __UUPSUpgradeable_init();
-        _initializeState(genesis, numBlocksPerEpoch);
+        return (2, 0, 0);
     }
 
     /// @notice only the owner can authorize an upgrade
@@ -144,8 +138,8 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert InvalidArgs();
         }
 
-        states[GENESIS_STATE] = genesis;
-        states[FINALIZED_STATE] = genesis;
+        states[genesisState] = genesis;
+        states[finalizedState] = genesis;
         currentEpoch = 0;
 
         blocksPerEpoch = numBlockPerEpoch;
@@ -199,18 +193,18 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(newField == 0, "newField can only be set to 0");
 
         // upon successful verification, update the latest finalized state
-        states[FINALIZED_STATE] = newState;
+        states[finalizedState] = newState;
         emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
     }
 
     /// @dev Simple getter function for the genesis state
     function getGenesisState() public view returns (LightClientState memory) {
-        return states[GENESIS_STATE];
+        return states[genesisState];
     }
 
     /// @dev Simple getter function for the finalized state
     function getFinalizedState() public view returns (LightClientState memory) {
-        return states[FINALIZED_STATE];
+        return states[finalizedState];
     }
 
     // === Pure or View-only APIs ===
@@ -242,7 +236,7 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
         uint256[] memory publicInput = preparePublicInput(state);
 
-        if (!PlonkVerifier.verify(vk, publicInput, proof, bytes(""))) {
+        if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
     }

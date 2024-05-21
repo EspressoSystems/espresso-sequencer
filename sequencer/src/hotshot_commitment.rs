@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use async_std::{sync::Arc, task::sleep};
 use async_trait::async_trait;
-use contract_bindings::hot_shot::{HotShot, Qc};
+use contract_bindings::hot_shot::{HotShot, HotShotErrors, Qc};
 use ethers::prelude::*;
 use futures::{
     future,
@@ -15,7 +15,7 @@ use sequencer_utils::{commitment_to_u256, contract_send, init_signer, Signer};
 use std::error::Error;
 use std::time::Duration;
 use surf_disco::Url;
-use versioned_binary_serialization::version::StaticVersionType;
+use vbs::version::StaticVersionType;
 
 use crate::{Header, SeqTypes};
 
@@ -249,7 +249,7 @@ async fn sync_with_l1(
     // error. We will retry, and may end up changing the transaction we send if the contract state
     // has changed, which is one possible cause of the transaction failure. This can happen, for
     // example, if there are multiple commitment tasks racing.
-    contract_send(&txn)
+    contract_send::<_, _, HotShotErrors>(&txn)
         .await
         .map_err(|e| SyncError::TransactionFailed { err: e, num_leaves })?;
 
@@ -278,7 +278,7 @@ mod test {
     use crate::{l1_client::L1Client, Leaf, NodeState};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
-    use commit::Committable;
+    use committable::Committable;
     use contract_bindings::hot_shot::{NewBlocksCall, NewBlocksFilter};
     use ethers::{abi::AbiDecode, providers::Middleware};
     use futures::FutureExt;
@@ -329,8 +329,8 @@ mod test {
 
     fn mock_leaf(height: u64, node_state: &NodeState) -> LeafQueryData<SeqTypes> {
         let mut leaf = Leaf::genesis(node_state);
-        let mut qc = QuorumCertificate::genesis();
-        leaf.block_header.height = height;
+        let mut qc = QuorumCertificate::genesis(node_state);
+        leaf.block_header_mut().height = height;
         qc.data.leaf_commit = leaf.commit();
         LeafQueryData::new(leaf, qc).unwrap()
     }
@@ -375,10 +375,8 @@ mod test {
         let num_batches = l1.hotshot.max_blocks().call().await.unwrap().as_usize();
         let mut data = MockDataSource::default();
 
-        let node_state = NodeState::mock().with_l1(L1Client::new(
-            anvil.provider().url().clone(),
-            Address::default(),
-        ));
+        let node_state =
+            NodeState::mock().with_l1(L1Client::new(anvil.provider().url().clone(), 1));
 
         for i in 0..num_batches {
             data.leaves.push(Some(mock_leaf(i as u64, &node_state)));
@@ -447,10 +445,8 @@ mod test {
         // Create a test batch.
         let mut data = MockDataSource::default();
 
-        let node_state = NodeState::mock().with_l1(L1Client::new(
-            anvil.provider().url().clone(),
-            Address::default(),
-        ));
+        let node_state =
+            NodeState::mock().with_l1(L1Client::new(anvil.provider().url().clone(), 1));
         data.leaves.push(Some(mock_leaf(0, &node_state)));
 
         // Connect to the HotShot contract with the expected L1 client.
@@ -511,10 +507,8 @@ mod test {
                 .unwrap(),
         );
 
-        let node_state = NodeState::mock().with_l1(L1Client::new(
-            anvil.provider().url().clone(),
-            Address::default(),
-        ));
+        let node_state =
+            NodeState::mock().with_l1(L1Client::new(anvil.provider().url().clone(), 1));
 
         // Create a sequence of leaves, some of which are missing.
         let mut data = MockDataSource::default();

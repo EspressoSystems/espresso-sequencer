@@ -11,7 +11,7 @@ use jf_plonk::{
     proof_system::{PlonkKzgSnark, UniversalSNARK},
     transcript::SolidityTranscript,
 };
-use jf_primitives::signatures::schnorr::Signature;
+use jf_signature::schnorr::Signature;
 
 /// BLS verification key, base field and Schnorr verification key
 pub use hotshot_stake_table::vec_based::config::QCVerKey;
@@ -28,14 +28,13 @@ pub type UniversalSrs = jf_plonk::proof_system::structs::UniversalSrs<Bn254>;
 /// # Errors
 /// Errors if unable to preprocess
 #[allow(clippy::cast_possible_truncation)]
-pub fn preprocess<const STAKE_TABLE_CAPACITY: usize>(
+pub fn preprocess(
     srs: &UniversalSrs,
+    stake_table_capacity: usize,
 ) -> Result<(ProvingKey, VerifyingKey), PlonkError> {
-    let (circuit, _) = crate::circuit::build_for_preprocessing::<
-        CircuitField,
-        EdwardsConfig,
-        STAKE_TABLE_CAPACITY,
-    >()?;
+    let (circuit, _) = crate::circuit::build_for_preprocessing::<CircuitField, EdwardsConfig>(
+        stake_table_capacity,
+    )?;
     PlonkKzgSnark::preprocess(srs, &circuit)
 }
 
@@ -53,7 +52,8 @@ pub fn preprocess<const STAKE_TABLE_CAPACITY: usize>(
 /// Errors if unable to generate proof
 /// # Panics
 /// if the stake table is not up to date
-pub fn generate_state_update_proof<STIter, R, BitIter, SigIter, const STAKE_TABLE_CAPACITY: usize>(
+#[allow(clippy::too_many_arguments)]
+pub fn generate_state_update_proof<STIter, R, BitIter, SigIter>(
     rng: &mut R,
     pk: &ProvingKey,
     stake_table_entries: STIter,
@@ -61,6 +61,7 @@ pub fn generate_state_update_proof<STIter, R, BitIter, SigIter, const STAKE_TABL
     signatures: SigIter,
     lightclient_state: &LightClientState,
     threshold: &U256,
+    stake_table_capacity: usize,
 ) -> Result<(Proof, PublicInput), PlonkError>
 where
     STIter: IntoIterator,
@@ -81,12 +82,13 @@ where
             CircuitField::from(0u64)
         }
     });
-    let (circuit, public_inputs) = crate::circuit::build::<_, _, _, _, _, STAKE_TABLE_CAPACITY>(
+    let (circuit, public_inputs) = crate::circuit::build(
         stake_table_entries,
         signer_bit_vec,
         signatures,
         lightclient_state,
         threshold,
+        stake_table_capacity,
     )?;
     let proof = PlonkKzgSnark::<Bn254>::prove::<_, _, SolidityTranscript>(rng, &circuit, pk, None)?;
     Ok((proof, public_inputs))
@@ -111,16 +113,17 @@ mod tests {
         light_client::GenericLightClientState,
         traits::stake_table::{SnapshotVersion, StakeTableScheme},
     };
+    use jf_crhf::CRHF;
     use jf_plonk::{
         proof_system::{PlonkKzgSnark, UniversalSNARK},
         transcript::SolidityTranscript,
     };
-    use jf_primitives::{
-        crhf::{VariableLengthRescueCRHF, CRHF},
-        errors::PrimitivesError,
-        signatures::{schnorr::Signature, SchnorrSignatureScheme, SignatureScheme},
-    };
     use jf_relation::Circuit;
+    use jf_rescue::crhf::VariableLengthRescueCRHF;
+    use jf_signature::{
+        schnorr::{SchnorrSignatureScheme, Signature},
+        SignatureScheme,
+    };
     use jf_utils::test_rng;
 
     const ST_CAPACITY: usize = 20;
@@ -130,7 +133,7 @@ mod tests {
     fn universal_setup_for_testing<R>(
         max_degree: usize,
         rng: &mut R,
-    ) -> Result<UniversalSrs, PrimitivesError>
+    ) -> anyhow::Result<UniversalSrs>
     where
         R: RngCore + CryptoRng,
     {
@@ -217,7 +220,7 @@ mod tests {
         let sigs = schnorr_keys
             .iter()
             .map(|(key, _)| SchnorrSignatureScheme::<Config>::sign(&(), key, state_msg, &mut prng))
-            .collect::<Result<Vec<_>, PrimitivesError>>()
+            .collect::<Result<Vec<_>, _>>()
             .unwrap();
 
         // bit vector with total weight 26
@@ -238,18 +241,18 @@ mod tests {
 
         // good path
         let num_gates =
-            build_for_preprocessing::<CircuitField, ark_ed_on_bn254::EdwardsConfig, ST_CAPACITY>()
+            build_for_preprocessing::<CircuitField, ark_ed_on_bn254::EdwardsConfig>(ST_CAPACITY)
                 .unwrap()
                 .0
                 .num_gates();
         let test_srs = universal_setup_for_testing(num_gates + 2, &mut prng).unwrap();
         ark_std::println!("Number of constraint in the circuit: {num_gates}");
 
-        let result = preprocess::<ST_CAPACITY>(&test_srs);
+        let result = preprocess(&test_srs, ST_CAPACITY);
         assert!(result.is_ok());
         let (pk, vk) = result.unwrap();
 
-        let result = generate_state_update_proof::<_, _, _, _, ST_CAPACITY>(
+        let result = generate_state_update_proof::<_, _, _, _>(
             &mut prng,
             &pk,
             &stake_table_entries,
@@ -257,6 +260,7 @@ mod tests {
             &bit_masked_sigs,
             &lightclient_state,
             &U256::from(26u32),
+            ST_CAPACITY,
         );
         assert!(result.is_ok());
 
@@ -270,7 +274,7 @@ mod tests {
         .is_ok());
 
         // minimum bad path, other bad cases are checked inside `circuit.rs`
-        let result = generate_state_update_proof::<_, _, _, _, ST_CAPACITY>(
+        let result = generate_state_update_proof::<_, _, _, _>(
             &mut prng,
             &pk,
             &stake_table_entries,
@@ -278,6 +282,7 @@ mod tests {
             &bit_masked_sigs,
             &lightclient_state,
             &U256::from(100u32),
+            ST_CAPACITY,
         );
         assert!(result.is_err());
     }

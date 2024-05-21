@@ -17,17 +17,16 @@ use hotshot_state_prover::mock_ledger::{
     gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY,
 };
 use itertools::multiunzip;
+use jf_pcs::prelude::Commitment;
 use jf_plonk::proof_system::structs::{Proof, VerifyingKey};
 use jf_plonk::proof_system::PlonkKzgSnark;
 use jf_plonk::{
     testing_apis::Verifier,
     transcript::{PlonkTranscript, SolidityTranscript},
 };
-use jf_primitives::constants::CS_ID_BLS_BN254;
-use jf_primitives::pcs::prelude::Commitment;
-use jf_primitives::signatures::bls_over_bn254::Signature;
-use jf_primitives::signatures::bls_over_bn254::{hash_to_curve, KeyPair as BLSKeyPair};
-use jf_primitives::signatures::schnorr::KeyPair as SchnorrKeyPair;
+use jf_signature::bls_over_bn254::{hash_to_curve, KeyPair as BLSKeyPair, Signature};
+use jf_signature::constants::CS_ID_BLS_BN254;
+use jf_signature::schnorr::KeyPair as SchnorrKeyPair;
 use sha3::Keccak256;
 
 #[derive(Parser)]
@@ -313,22 +312,23 @@ fn main() {
             println!("{}", (res,).encode_hex());
         }
         Action::PlonkPreparePcsInfo => {
-            if cli.args.len() != 4 {
-                panic!("Should provide arg1=verifyingKey, arg2=publicInput, arg3=proof, arg4=extraTranscriptInitMsg");
+            if cli.args.len() != 3 {
+                panic!("Should provide arg1=verifyingKey, arg2=publicInput, arg3=proof");
             }
 
             let vk: VerifyingKey<Bn254> = cli.args[0].parse::<ParsedVerifyingKey>().unwrap().into();
             let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[1]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
             let proof: Proof<Bn254> = cli.args[2].parse::<ParsedPlonkProof>().unwrap().into();
-            let msg = {
-                let parsed: Bytes = AbiDecode::decode_hex(&cli.args[3]).unwrap();
-                parsed.0.to_vec()
-            };
 
             let verifier = Verifier::<Bn254>::new(vk.domain_size).unwrap();
             let pcs_info = verifier
-                .prepare_pcs_info::<SolidityTranscript>(&[&vk], &[&pi], &proof.into(), &Some(msg))
+                .prepare_pcs_info::<SolidityTranscript>(
+                    &[&vk],
+                    &[&pi],
+                    &proof.into(),
+                    &Some(vec![]),
+                )
                 .unwrap();
 
             let scalars_and_bases_prod: ParsedG1Point = pcs_info

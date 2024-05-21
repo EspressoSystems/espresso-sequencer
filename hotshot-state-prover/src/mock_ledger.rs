@@ -16,28 +16,31 @@ use hotshot_contract_adapter::jellyfish::{field_to_u256, open_key, u256_to_field
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_stake_table::vec_based::StakeTable;
 
-use crate::{generate_state_update_proof, preprocess, Proof, VerifyingKey};
+use crate::{
+    generate_state_update_proof, preprocess, service::one_honest_threshold, Proof, VerifyingKey,
+};
 use hotshot_types::traits::stake_table::StakeTableScheme;
 use hotshot_types::{
     light_client::{GenericLightClientState, GenericPublicInput, LightClientState},
     traits::stake_table::SnapshotVersion,
 };
 use itertools::izip;
+use jf_pcs::prelude::UnivariateUniversalParams;
 use jf_plonk::proof_system::{PlonkKzgSnark, UniversalSNARK};
 use jf_plonk::transcript::SolidityTranscript;
-use jf_primitives::pcs::prelude::UnivariateUniversalParams;
-use jf_primitives::signatures::schnorr::Signature;
-use jf_primitives::signatures::{
-    bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey as BLSVerKey},
-    SchnorrSignatureScheme, SignatureScheme,
-};
 use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
+use jf_signature::schnorr::Signature;
+use jf_signature::{
+    bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey as BLSVerKey},
+    schnorr::SchnorrSignatureScheme,
+    SignatureScheme,
+};
 use jf_utils::test_rng;
 use std::collections::HashMap;
 
 type F = ark_ed_on_bn254::Fq;
-type SchnorrVerKey = jf_primitives::signatures::schnorr::VerKey<EdwardsConfig>;
-type SchnorrSignKey = jf_primitives::signatures::schnorr::SignKey<ark_ed_on_bn254::Fr>;
+type SchnorrVerKey = jf_signature::schnorr::VerKey<EdwardsConfig>;
+type SchnorrSignKey = jf_signature::schnorr::SignKey<ark_ed_on_bn254::Fr>;
 
 /// Stake table capacity used for testing
 pub const STAKE_TABLE_CAPACITY: usize = 10;
@@ -85,7 +88,8 @@ impl MockLedger {
             key_archive.insert(qc_keys[i], state_keys[i].0.clone());
         }
         let st = stake_table_for_testing(&qc_keys, &state_keys);
-        let threshold = st.total_stake(SnapshotVersion::LastEpochStart).unwrap() * 2 / 3;
+        let threshold =
+            one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap());
 
         // arbitrary commitment values as they don't affect logic being tested
         let block_comm_root = F::from(1234);
@@ -119,12 +123,11 @@ impl MockLedger {
         {
             self.epoch += 1;
             self.st.advance();
-            self.threshold = self
-                .st
-                .total_stake(SnapshotVersion::LastEpochStart)
-                .unwrap()
-                * 2
-                / 3;
+            self.threshold = one_honest_threshold(
+                self.st
+                    .total_stake(SnapshotVersion::LastEpochStart)
+                    .unwrap(),
+            );
         }
 
         let new_root = self.new_dummy_comm();
@@ -243,7 +246,7 @@ impl MockLedger {
 
         let srs = {
             // load SRS from Aztec's ceremony
-            let srs = ark_srs::aztec20::kzg10_setup(2u64.pow(16) as usize + 2)
+            let srs = ark_srs::kzg10::aztec20::setup(2u64.pow(16) as usize + 2)
                 .expect("Aztec SRS fail to load");
             // convert to Jellyfish type
             // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
@@ -254,7 +257,7 @@ impl MockLedger {
                 powers_of_h: vec![srs.h, srs.beta_h],
             }
         };
-        let (pk, _) = preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+        let (pk, _) = preprocess(&srs, STAKE_TABLE_CAPACITY)
             .expect("Fail to preprocess state prover circuit");
         let stake_table_entries = self
             .st
@@ -262,7 +265,7 @@ impl MockLedger {
             .unwrap()
             .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
             .collect::<Vec<_>>();
-        let (proof, pi) = generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
+        let (proof, pi) = generate_state_update_proof::<_, _, _, _>(
             &mut self.rng,
             &pk,
             &stake_table_entries,
@@ -270,6 +273,7 @@ impl MockLedger {
             &sigs,
             &self.state,
             &self.threshold,
+            STAKE_TABLE_CAPACITY,
         )
         .expect("Fail to generate state proof");
         (pi, proof)
@@ -301,7 +305,7 @@ impl MockLedger {
 
         let srs = {
             // load SRS from Aztec's ceremony
-            let srs = ark_srs::aztec20::kzg10_setup(2u64.pow(16) as usize + 2)
+            let srs = ark_srs::kzg10::aztec20::setup(2u64.pow(16) as usize + 2)
                 .expect("Aztec SRS fail to load");
             // convert to Jellyfish type
             // TODO: (alex) use constructor instead https://github.com/EspressoSystems/jellyfish/issues/440
@@ -312,14 +316,14 @@ impl MockLedger {
                 powers_of_h: vec![srs.h, srs.beta_h],
             }
         };
-        let (pk, _) = preprocess::<STAKE_TABLE_CAPACITY>(&srs)
+        let (pk, _) = preprocess(&srs, STAKE_TABLE_CAPACITY)
             .expect("Fail to preprocess state prover circuit");
         let stake_table_entries = adv_st
             .try_iter(SnapshotVersion::LastEpochStart)
             .unwrap()
             .map(|(_, stake_amount, schnorr_key)| (schnorr_key, stake_amount))
             .collect::<Vec<_>>();
-        let (proof, pi) = generate_state_update_proof::<_, _, _, _, STAKE_TABLE_CAPACITY>(
+        let (proof, pi) = generate_state_update_proof::<_, _, _, _>(
             &mut self.rng,
             &pk,
             &stake_table_entries,
@@ -327,6 +331,7 @@ impl MockLedger {
             &sigs,
             &new_state,
             &self.threshold, // it's fine to use the old threshold
+            STAKE_TABLE_CAPACITY,
         )
         .expect("Fail to generate state proof");
 
@@ -430,7 +435,7 @@ pub fn gen_plonk_proof_for_test(
     // 1. Simulate universal setup
     let rng = &mut jf_utils::test_rng();
     let srs = {
-        let aztec_srs = ark_srs::aztec20::kzg10_setup(1024).expect("Aztec SRS fail to load");
+        let aztec_srs = ark_srs::kzg10::aztec20::setup(1024).expect("Aztec SRS fail to load");
 
         UnivariateUniversalParams {
             powers_of_g: aztec_srs.powers_of_g,
@@ -476,8 +481,8 @@ pub fn gen_plonk_proof_for_test(
         .iter()
         .zip(prove_keys.iter())
         .enumerate()
-        .for_each(|(i, (cs, pk))| {
-            let extra_msg = Some(format!("extra message: {}", i).into_bytes());
+        .for_each(|(_, (cs, pk))| {
+            let extra_msg = Some(vec![]); // We set extra_msg="" for the contract tests to pass
             proofs.push(
                 PlonkKzgSnark::<Bn254>::prove::<_, _, SolidityTranscript>(
                     rng,
@@ -514,6 +519,11 @@ pub fn gen_circuit_for_test<F: PrimeField>(m: usize, a0: usize) -> Result<PlonkC
     let c = cs.create_public_variable(
         (cs.witness(b[1])? + cs.witness(a[0])?) * (cs.witness(b[1])? - cs.witness(a[0])?),
     )?;
+
+    // Create other public variables so that the number of public inputs is 8
+    for _i in 0..5 {
+        cs.create_public_variable(F::from(0u64))?;
+    }
 
     // Create gates:
     // 1. a0 + ... + a_{4*m-1} = b0 * b1
