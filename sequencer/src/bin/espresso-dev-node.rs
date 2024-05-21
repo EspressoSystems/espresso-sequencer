@@ -176,13 +176,15 @@ mod tests {
         art::async_sleep,
         logging::{setup_backtrace, setup_logging},
     };
+    use async_std::stream::StreamExt;
     use committable::{Commitment, Committable};
     use es_version::SequencerVersion;
     use escargot::CargoBuild;
-    use hotshot_query_service::data_source::sql::testing::TmpDb;
+    use futures::TryStreamExt;
+    use hotshot_query_service::{availability::BlockQueryData, data_source::sql::testing::TmpDb};
     use portpicker::pick_unused_port;
     use reqwest::StatusCode;
-    use sequencer::Transaction;
+    use sequencer::{SeqTypes, Transaction};
     use sequencer_utils::AnvilOptions;
 
     // If this test failed and you are doing changes on the following stuff, please
@@ -232,17 +234,22 @@ mod tests {
         );
         println!("commitment task url: {}", commitment_task_url);
 
-        let sequencer_get_header_url =
-            format!("http://localhost:{}/availability/header/3", api_port);
-        println!("sequencer url: {}", sequencer_get_header_url);
-
-        // Waiting for the test node running completely
-        async_sleep(Duration::from_secs(100)).await;
-
         let client = reqwest::Client::new();
         let api_client = surf_disco::Client::<hotshot_query_service::Error, SequencerVersion>::new(
             format!("http://localhost:{}", api_port).parse().unwrap(),
         );
+
+        // Wait until some blocks have been decided.
+        tracing::info!("waiting for blocks");
+        let _ = api_client
+            .socket("availability/stream/blocks/0")
+            .subscribe::<BlockQueryData<SeqTypes>>()
+            .await
+            .unwrap()
+            .take(4)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
 
         let hotshot_contract = client
             .get(commitment_task_url)
