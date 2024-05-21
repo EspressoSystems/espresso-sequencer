@@ -162,7 +162,7 @@
               description = "Spell checking";
               entry = "typos";
               pass_filenames = true;
-              excludes = [ "contract-bindings/" "data/" ];
+              # Add excludes to the .typos.toml file instead
             };
             nixpkgs-fmt.enable = true;
           };
