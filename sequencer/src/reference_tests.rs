@@ -32,10 +32,11 @@ use hotshot_types::traits::{
     signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
 };
 use jf_merkle_tree::MerkleTreeScheme;
+use pretty_assertions::assert_eq;
 use sequencer_utils::commitment_to_u256;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
-use std::str::FromStr;
+use std::{path::Path, str::FromStr};
 
 fn reference_ns_table() -> NameSpaceTable<TxTableEntryWord> {
     NameSpaceTable::from_bytes([0; 48])
@@ -119,42 +120,48 @@ fn reference_transaction() -> Transaction {
 
 const REFERENCE_TRANSACTION_COMMITMENT: &str = "TX~jmYCutMVgguprgpZHywPwkehwXfibQx951gh4LSLmfwp";
 
-macro_rules! load_reference {
-    ($name:expr) => {
-        serde_json::from_str(include_str!(std::concat!("../../data/", $name, ".json"))).unwrap()
-    };
-}
-
 fn reference_test<T: Committable + Serialize + DeserializeOwned>(
-    serialized: Value,
+    name: &str,
     reference: T,
     commitment: &str,
 ) {
     setup_logging();
     setup_backtrace();
 
+    // Load the expected serialization from the repo.
+    let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data");
+    let expected_bytes = std::fs::read(data_dir.join(format!("{name}.json"))).unwrap();
+    let expected: Value = serde_json::from_slice(&expected_bytes).unwrap();
+
     // Check that the reference object matches the expected serialized form.
     let actual = serde_json::to_value(&reference).unwrap();
-    assert_eq!(
-        serialized,
-        actual,
-        r#"
-Serialized object does not match expected JSON. If you intended to make a breaking change to the
-API, you may replace the reference JSON file in /data with the "actual" output below. Otherwise,
-revert your changes which have caused a change in the serialization of this data structure.
 
-Expected:
-{}
+    if actual != expected {
+        let actual_pretty = serde_json::to_string_pretty(&actual).unwrap();
+        let expected_pretty = serde_json::to_string_pretty(&expected).unwrap();
 
-Actual:
-{}
+        // Write the actual output to a file to make it easier to compare with/replace the expected
+        // file if the serialization change was actually intended.
+        let actual_path = data_dir.join(format!("{name}-actual.json"));
+        std::fs::write(&actual_path, actual_pretty.as_bytes()).unwrap();
+
+        // Fail the test with an assertion that outputs a nice diff between the prettified JSON
+        // objects.
+        assert_eq!(
+            expected_pretty,
+            actual_pretty,
+            r#"
+Serialized {name} does not match expected JSON. The actual serialization has been written to {}. If
+you intended to make a breaking change to the API, you may replace the reference JSON file in
+/data/{name}.json with /data/{name}-actual.json. Otherwise, revert your changes which have caused a
+change in the serialization of this data structure.
 "#,
-        serde_json::to_string_pretty(&serialized).unwrap(),
-        serde_json::to_string_pretty(&actual).unwrap()
-    );
+            actual_path.display()
+        );
+    }
 
     // Check that we can deserialize from the reference JSON object.
-    let parsed: T = serde_json::from_value(serialized).unwrap();
+    let parsed: T = serde_json::from_value(expected).unwrap();
     assert_eq!(
         reference.commit(),
         parsed.commit(),
@@ -190,7 +197,7 @@ Actual: {actual}
 #[test]
 fn test_reference_ns_table() {
     reference_test(
-        load_reference!("ns_table"),
+        "ns_table",
         reference_ns_table(),
         REFERENCE_NS_TABLE_COMMITMENT,
     );
@@ -199,7 +206,7 @@ fn test_reference_ns_table() {
 #[test]
 fn test_reference_l1_block() {
     reference_test(
-        load_reference!("l1_block"),
+        "l1_block",
         reference_l1_block(),
         REFERENCE_L1_BLOCK_COMMITMENT,
     );
@@ -208,7 +215,7 @@ fn test_reference_l1_block() {
 #[test]
 fn test_reference_chain_config() {
     reference_test(
-        load_reference!("chain_config"),
+        "chain_config",
         reference_chain_config(),
         REFERENCE_CHAIN_CONFIG_COMMITMENT,
     );
@@ -217,7 +224,7 @@ fn test_reference_chain_config() {
 #[test]
 fn test_reference_fee_info() {
     reference_test(
-        load_reference!("fee_info"),
+        "fee_info",
         reference_fee_info(),
         REFERENCE_FEE_INFO_COMMITMENT,
     );
@@ -225,17 +232,13 @@ fn test_reference_fee_info() {
 
 #[test]
 fn test_reference_header() {
-    reference_test(
-        load_reference!("header"),
-        reference_header(),
-        REFERENCE_HEADER_COMMITMENT,
-    );
+    reference_test("header", reference_header(), REFERENCE_HEADER_COMMITMENT);
 }
 
 #[test]
 fn test_reference_transaction() {
     reference_test(
-        load_reference!("transaction"),
+        "transaction",
         reference_transaction(),
         REFERENCE_TRANSACTION_COMMITMENT,
     );

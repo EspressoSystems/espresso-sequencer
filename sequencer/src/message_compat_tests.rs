@@ -41,7 +41,9 @@ use hotshot_types::{
     vid::vid_scheme,
 };
 use jf_vid::VidScheme;
+use pretty_assertions::assert_eq;
 use serde_json::Value;
+use std::path::Path;
 use vbs::version::Version;
 
 #[test]
@@ -215,27 +217,37 @@ fn test_message_compat() {
         .map(|kind| Message { kind, sender })
         .collect::<Vec<Message<SeqTypes>>>();
 
+    // Load the expected serialization from the repo.
+    let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data");
+    let expected_bytes = std::fs::read(data_dir.join("messages.json")).unwrap();
+    let expected: Value = serde_json::from_slice(&expected_bytes).unwrap();
+
     // Ensure the current serialization implementation generates the same JSON as the committed
     // reference.
     let actual = serde_json::to_value(&messages).unwrap();
-    let expected: Value = serde_json::from_str(include_str!("../../data/messages.json")).unwrap();
-    assert_eq!(
-        actual,
-        expected,
-        r#"
-Serialized messages do not match expected JSON. If you intended to make a breaking change to the API
-you may replace the reference JSON file /data/messages.json with the "actual" output below.
-Otherwise, revert your changes which have caused a change in the serialization of HotShot messages.
+    if actual != expected {
+        let actual_pretty = serde_json::to_string_pretty(&actual).unwrap();
+        let expected_pretty = serde_json::to_string_pretty(&expected).unwrap();
 
-Expected:
-{}
+        // Write the actual output to a file to make it easier to compare with/replace the expected
+        // file if the serialization change was actually intended.
+        let actual_path = data_dir.join("messages-actual.json");
+        std::fs::write(&actual_path, actual_pretty.as_bytes()).unwrap();
 
-Actual:
-{}
-"#,
-        serde_json::to_string_pretty(&expected).unwrap(),
-        serde_json::to_string_pretty(&actual).unwrap()
-    );
+        // Fail the test with an assertion that outputs a nice diff between the prettified JSON
+        // objects.
+        assert_eq!(
+            expected_pretty,
+            actual_pretty,
+            r#"
+    Serialized messages do not match expected JSON. The actual serialization has been written to {}.
+    If you intended to make a breaking change to the API you may replace the reference JSON file
+    /data/messages.json with /data/messages-actual.json. Otherwise, revert your changes which have
+    caused a change in the serialization of HotShot messages.
+    "#,
+            actual_path.display()
+        );
+    }
 
     // Ensure the current `Message` type can be parsed from the committed reference JSON.
     let parsed: Vec<Message<SeqTypes>> = serde_json::from_value(expected).unwrap();
