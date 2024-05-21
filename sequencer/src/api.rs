@@ -1,10 +1,10 @@
-use self::data_source::StateSignatureDataSource;
+use self::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
 use crate::{
     network,
     persistence::SequencerPersistence,
     state::{BlockMerkleTree, FeeAccountProof},
     state_signature::StateSigner,
-    Node, NodeState, SeqTypes, SequencerContext, Transaction,
+    Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
 };
 use anyhow::Context;
 use async_once_cell::Lazy;
@@ -21,7 +21,7 @@ use hotshot::types::{Event, SystemContextHandle};
 use hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_state_prover::service::light_client_genesis_from_stake_table;
-use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody};
+use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody, HotShotConfig};
 use jf_merkle_tree::MerkleTreeScheme;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
@@ -117,6 +117,18 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     async fn node_state(&self) -> &NodeState {
         &self.consensus.as_ref().get().await.get_ref().node_state
+    }
+
+    async fn hotshot_config(&self) -> HotShotConfig<PubKey> {
+        self.consensus
+            .as_ref()
+            .get()
+            .await
+            .get_ref()
+            .handle
+            .hotshot
+            .config
+            .clone()
     }
 }
 
@@ -227,6 +239,22 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
         let tree = &state.block_merkle_tree;
         let frontier = tree.lookup(tree.num_leaves() - 1).expect_ok()?.1;
         Ok(frontier)
+    }
+}
+
+impl<N: network::Type, D: Sync, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+    HotShotConfigDataSource for StorageState<N, P, D, Ver>
+{
+    async fn get_config(&self) -> PublicHotShotConfig {
+        self.as_ref().hotshot_config().await.into()
+    }
+}
+
+impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+    HotShotConfigDataSource for ApiState<N, P, Ver>
+{
+    async fn get_config(&self) -> PublicHotShotConfig {
+        self.hotshot_config().await.into()
     }
 }
 

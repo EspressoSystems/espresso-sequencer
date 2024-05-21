@@ -2,8 +2,8 @@
 
 use super::{
     data_source::{
-        provider, CatchupDataSource, SequencerDataSource, StateSignatureDataSource,
-        SubmitDataSource,
+        provider, CatchupDataSource, HotShotConfigDataSource, SequencerDataSource,
+        StateSignatureDataSource, SubmitDataSource,
     },
     endpoints, fs, sql,
     update::update_loop,
@@ -43,6 +43,7 @@ pub struct Options {
     pub submit: Option<Submit>,
     pub status: Option<Status>,
     pub catchup: Option<Catchup>,
+    pub config: Option<Config>,
     pub state: Option<State>,
     pub hotshot_events: Option<HotshotEvents>,
     pub explorer: Option<Explorer>,
@@ -58,6 +59,7 @@ impl From<Http> for Options {
             submit: None,
             status: None,
             catchup: None,
+            config: None,
             state: None,
             hotshot_events: None,
             explorer: None,
@@ -97,6 +99,12 @@ impl Options {
     /// Add a catchup API module.
     pub fn catchup(mut self, opt: Catchup) -> Self {
         self.catchup = Some(opt);
+        self
+    }
+
+    /// Add a config API module.
+    pub fn config(mut self, opt: Config) -> Self {
+        self.config = Some(opt);
         self
     }
 
@@ -390,8 +398,12 @@ impl Options {
     where
         S: 'static + Send + Sync + ReadState + WriteState,
         P: SequencerPersistence,
-        S::State:
-            Send + Sync + SubmitDataSource<N, P> + StateSignatureDataSource<N> + CatchupDataSource,
+        S::State: Send
+            + Sync
+            + SubmitDataSource<N, P>
+            + StateSignatureDataSource<N>
+            + CatchupDataSource
+            + HotShotConfigDataSource,
         N: network::Type,
     {
         let bind_version = Ver::instance();
@@ -410,6 +422,10 @@ impl Options {
 
         let state_signature_api = endpoints::state_signature(bind_version)?;
         app.register_module("state-signature", state_signature_api)?;
+
+        if self.config.is_some() {
+            app.register_module("config", endpoints::config(bind_version)?)?;
+        }
 
         Ok(())
     }
@@ -479,6 +495,10 @@ pub struct Status;
 /// Options for the catchup API module.
 #[derive(Parser, Clone, Copy, Debug, Default)]
 pub struct Catchup;
+
+/// Options for the config API module.
+#[derive(Parser, Clone, Copy, Debug, Default)]
+pub struct Config;
 
 /// Options for the query API module.
 #[derive(Parser, Clone, Debug, Default)]

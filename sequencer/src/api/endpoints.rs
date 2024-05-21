@@ -1,8 +1,15 @@
 //! Sequencer-specific API endpoint handlers.
 
+use serde::de::Error as _;
+use std::{
+    collections::{HashMap, HashSet},
+    env,
+};
+
 use super::{
     data_source::{
-        CatchupDataSource, SequencerDataSource, StateSignatureDataSource, SubmitDataSource,
+        CatchupDataSource, HotShotConfigDataSource, SequencerDataSource, StateSignatureDataSource,
+        SubmitDataSource,
     },
     StorageState,
 };
@@ -285,4 +292,52 @@ where
         &Default::default(),
     )?;
     Ok(api)
+}
+
+pub(super) fn config<S, Ver: StaticVersionType + 'static>(_: Ver) -> Result<Api<S, Error, Ver>>
+where
+    S: 'static + Send + Sync + ReadState,
+    S::State: Send + Sync + HotShotConfigDataSource,
+{
+    let toml = toml::from_str::<toml::Value>(include_str!("../../api/config.toml"))?;
+    let mut api = Api::<S, Error, Ver>::new(toml)?;
+
+    let env_variables = get_public_env_vars()
+        .map_err(|err| Error::catch_all(StatusCode::InternalServerError, format!("{err:#}")))?;
+
+    api.get("hotshot", |_, state| {
+        async move { Ok(state.get_config().await) }.boxed()
+    })?
+    .get("env", move |_, _| {
+        {
+            let env_variables = env_variables.clone();
+            async move { Ok(env_variables) }
+        }
+        .boxed()
+    })?;
+
+    Ok(api)
+}
+
+fn get_public_env_vars() -> Result<Vec<String>> {
+    let toml: toml::Value = toml::from_str(include_str!("../../api/public-env-vars.toml"))?;
+
+    let keys = toml
+        .get("variables")
+        .ok_or_else(|| toml::de::Error::custom("variables not found"))?
+        .as_array()
+        .ok_or_else(|| toml::de::Error::custom("variables is not an array"))?
+        .clone()
+        .into_iter()
+        .map(|v| v.try_into())
+        .collect::<Result<HashSet<String>, toml::de::Error>>()?;
+
+    let hashmap: HashMap<String, String> = env::vars().collect();
+    let mut public_env_vars: Vec<String> = Vec::new();
+    for key in keys {
+        let value = hashmap.get(&key).cloned().unwrap_or_default();
+        public_env_vars.push(format!("{key}={value}"));
+    }
+
+    Ok(public_env_vars)
 }

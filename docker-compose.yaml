@@ -212,7 +212,7 @@ services:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
       - "$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT"
     # Run the full API server with all modules, Postgres storage
-    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- submit -- hotshot-events
+    command: sequencer -- storage-sql -- http -- query -- catchup -- status -- submit -- hotshot-events -- config
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_CDN_ENDPOINT
