@@ -186,6 +186,8 @@ mod tests {
     use reqwest::StatusCode;
     use sequencer::{SeqTypes, Transaction};
     use sequencer_utils::AnvilOptions;
+    use surf_disco::Client;
+    use tide_disco::error::ServerError;
 
     // If this test failed and you are doing changes on the following stuff, please
     // sync your changes to [`espresso-sequencer-go`](https://github.com/EspressoSystems/espresso-sequencer-go)
@@ -197,8 +199,8 @@ mod tests {
         setup_logging();
         setup_backtrace();
         let anvil = AnvilOptions::default().spawn().await;
-        // let commitment_task_port = pick_unused_port().unwrap();
-        let commitment_task_port = 10002;
+        let commitment_task_port = pick_unused_port().unwrap();
+
         let api_port = pick_unused_port().unwrap();
 
         let db = TmpDb::init().await;
@@ -222,9 +224,8 @@ mod tests {
                 "ESPRESSO_SEQUENCER_POSTGRES_PORT",
                 postgres_port.to_string(),
             )
-            .env("ESPRESSO_SEQUENCER_POSTGRES_USER", "root")
+            .env("ESPRESSO_SEQUENCER_POSTGRES_USER", "postgres")
             .env("ESPRESSO_SEQUENCER_POSTGRES_PASSWORD", "password")
-            .env("ESPRESSO_SEQUENCER_POSTGRES_DATABASE", "sequencer")
             .spawn()
             .unwrap();
 
@@ -235,9 +236,10 @@ mod tests {
         println!("commitment task url: {}", commitment_task_url);
 
         let client = reqwest::Client::new();
-        let api_client = surf_disco::Client::<hotshot_query_service::Error, SequencerVersion>::new(
-            format!("http://localhost:{}", api_port).parse().unwrap(),
-        );
+
+        let api_client: Client<ServerError, SequencerVersion> =
+            Client::new(format!("http://localhost:{api_port}").parse().unwrap());
+        api_client.connect(None).await;
 
         // Wait until some blocks have been decided.
         tracing::info!("waiting for blocks");
