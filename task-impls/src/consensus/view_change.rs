@@ -5,17 +5,15 @@ use anyhow::{ensure, Result};
 use async_broadcast::Sender;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 use hotshot_types::{
     consensus::Consensus,
-    traits::node_implementation::{ConsensusTime, NodeType},
+    event::{Event, EventType},
+    traits::node_implementation::{ConsensusTime, NodeImplementation, NodeType},
 };
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::JoinHandle;
 use tracing::{debug, error};
 
 use crate::{
+    consensus::helpers::TemporaryProposalRecvCombinedType,
     events::HotShotEvent,
     helpers::{broadcast_event, cancel_task},
 };
@@ -31,50 +29,62 @@ pub(crate) const DONT_SEND_VIEW_CHANGE_EVENT: bool = false;
 ///
 /// # Errors
 /// Returns an [`anyhow::Error`] when the new view is not greater than the current view.
-pub(crate) async fn update_view<TYPES: NodeType>(
+pub(crate) async fn update_view<TYPES: NodeType, I: NodeImplementation<TYPES>>(
+    task_state: &mut TemporaryProposalRecvCombinedType<TYPES, I>,
     new_view: TYPES::Time,
     event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
-    timeout: u64,
     consensus: Arc<RwLock<Consensus<TYPES>>>,
-    cur_view: &mut TYPES::Time,
-    timeout_task: &mut Option<JoinHandle<()>>,
     send_view_change_event: bool,
 ) -> Result<()> {
     ensure!(
-        new_view > *cur_view,
+        new_view > task_state.cur_view,
         "New view is not greater than our current view"
     );
 
-    debug!("Updating view from {} to {}", **cur_view, *new_view);
+    let old_view = task_state.cur_view;
 
-    if **cur_view / 100 != *new_view / 100 {
+    debug!("Updating view from {} to {}", *old_view, *new_view);
+
+    if *old_view / 100 != *new_view / 100 {
         // TODO (https://github.com/EspressoSystems/HotShot/issues/2296):
         // switch to info! when INFO logs become less cluttered
         error!("Progress: entered view {:>6}", *new_view);
     }
 
     // cancel the old timeout task
-    if let Some(timeout_task) = timeout_task.take() {
+    if let Some(timeout_task) = task_state.timeout_task.take() {
         cancel_task(timeout_task).await;
     }
 
-    *cur_view = new_view;
+    task_state.cur_view = new_view;
 
     // The next view is just the current view + 1
-    let next_view = *cur_view + 1;
+    let next_view = task_state.cur_view + 1;
 
     if send_view_change_event {
-        broadcast_event(Arc::new(HotShotEvent::ViewChange(new_view)), event_stream).await;
+        futures::join! {
+            broadcast_event(Arc::new(HotShotEvent::ViewChange(new_view)), event_stream),
+            broadcast_event(
+                Event {
+                    view_number: old_view,
+                    event: EventType::ViewFinished {
+                        view_number: old_view,
+                    },
+                },
+                &task_state.output_event_stream,
+            )
+        };
     }
 
     // Spawn a timeout task if we did actually update view
-    *timeout_task = Some(async_spawn({
+    task_state.timeout_task = Some(async_spawn({
         let stream = event_stream.clone();
         // Nuance: We timeout on the view + 1 here because that means that we have
         // not seen evidence to transition to this new view
         let view_number = next_view;
+        let timeout = Duration::from_millis(task_state.timeout);
         async move {
-            async_sleep(Duration::from_millis(timeout)).await;
+            async_sleep(timeout).await;
             broadcast_event(
                 Arc::new(HotShotEvent::Timeout(TYPES::Time::new(*view_number))),
                 &stream,
@@ -86,15 +96,15 @@ pub(crate) async fn update_view<TYPES: NodeType>(
     consensus
         .metrics
         .current_view
-        .set(usize::try_from(cur_view.u64()).unwrap());
+        .set(usize::try_from(task_state.cur_view.u64()).unwrap());
 
     // Do the comparison before the subtraction to avoid potential overflow, since
     // `last_decided_view` may be greater than `cur_view` if the node is catching up.
-    if usize::try_from(cur_view.u64()).unwrap()
+    if usize::try_from(task_state.cur_view.u64()).unwrap()
         > usize::try_from(consensus.last_decided_view().u64()).unwrap()
     {
         consensus.metrics.number_of_views_since_last_decide.set(
-            usize::try_from(cur_view.u64()).unwrap()
+            usize::try_from(task_state.cur_view.u64()).unwrap()
                 - usize::try_from(consensus.last_decided_view().u64()).unwrap(),
         );
     }

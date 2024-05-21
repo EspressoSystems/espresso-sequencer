@@ -582,11 +582,11 @@ pub async fn publish_proposal_if_able<TYPES: NodeType>(
 
 /// TEMPORARY TYPE: Quorum proposal recv task state when using dependency tasks
 #[cfg(feature = "dependency-tasks")]
-type TemporaryProposalRecvCombinedType<TYPES, I> = QuorumProposalRecvTaskState<TYPES, I>;
+pub(crate) type TemporaryProposalRecvCombinedType<TYPES, I> = QuorumProposalRecvTaskState<TYPES, I>;
 
 /// TEMPORARY TYPE: Consensus task state when not using dependency tasks
 #[cfg(not(feature = "dependency-tasks"))]
-type TemporaryProposalRecvCombinedType<TYPES, I> = ConsensusTaskState<TYPES, I>;
+pub(crate) type TemporaryProposalRecvCombinedType<TYPES, I> = ConsensusTaskState<TYPES, I>;
 
 // TODO: Fix `clippy::too_many_lines`.
 /// Handle the received quorum proposal.
@@ -626,13 +626,11 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
     }
 
     // NOTE: We could update our view with a valid TC but invalid QC, but that is not what we do here
-    if let Err(e) = update_view::<TYPES>(
+    if let Err(e) = update_view::<TYPES, I>(
+        task_state,
         view,
         &event_stream,
-        task_state.timeout,
         Arc::clone(&task_state.consensus),
-        &mut task_state.cur_view,
-        &mut task_state.timeout_task,
         SEND_VIEW_CHANGE_EVENT,
     )
     .await
