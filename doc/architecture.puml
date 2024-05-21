@@ -1,19 +1,17 @@
 @startuml
 package "Espresso Sequencer Network" as Network {
-    component "Sequencer\nNodes" as Nodes
+    component "Other\nSequencer\nNodes" as Nodes
     package CDN {
         component Broker
         component Marshal
         database KeyDB
     }
-}
 
 'CDN Layout
 Broker -> KeyDB: state
 KeyDB -> Marshal: state
 Nodes <--> CDN: consensus\nmessages
 
-package "Espresso Sequencer" as Espresso {
     database "Postgres" as DB
     package "Sequencer Node" as Seq {
         component "APIs" {
@@ -41,12 +39,11 @@ package "Espresso Sequencer" as Espresso {
     Query --> QS
 }
 
-Nodes -up-> Catchup: missing\nstate
-Nodes <-up-> Libp2p: consensus\nmessages
+Nodes -up-> Catchup: "missing\nstate" " "
+Nodes <--> Libp2p: consensus\nmessages
 "CDN Client" <--> CDN: consensus\nmessages
 
 QS --> DB
-QS -[hidden]down-> APIs
 Signer -down-> Relay: state
 Seq -right-> Builder: claim block
 Relay --> HSProver: state
@@ -54,12 +51,12 @@ Relay --> HSProver: state
 Events -> Builder: " " "transactions"
 Builder -left-> Seq: block
 
-package "Layer 2s" as L2 {
-    component "Rollup 1" as L2_1 {
-        component "API (e.g. JSON-RPC)" as L2_1_RPC
-        component Executor as L2_1_Exec
-        component Prover as L2_1_Prover
-        database "State DB" as L2_1_State
+package "Layer 2s / Rollups" as L2s {
+    component "Rollup N" as L2 {
+        component "API (e.g. JSON-RPC)" as L2_RPC
+        component Executor as L2_Exec
+        component Prover as L2_Prover
+        database "State DB" as L2_State
     }
 }
 package "Ethereum Layer 1" as L1 {
@@ -67,13 +64,13 @@ package "Ethereum Layer 1" as L1 {
         component "Light Client\nContract" as LC_L1
         component "Fee\nContract" as Fee_L1
     }
-    package "Rollup Contracts" as L2_L1 {
-        component "Rollup 1\nContract" as L2_1_L1
+    package "Rollup Contracts" {
+        component "Rollup N\nContract" as L2_L1
     }
 }
 
 entity User
-User -Up-> L2_1_RPC : "transactions,\nstate queries" " "
+User -Up-> L2_RPC : "transactions,\nstate queries" " "
 note top of link
 1. Many clients submit
     transactions to each
@@ -82,13 +79,13 @@ note top of link
     shown)
 end note
 
-L2_1_RPC --> Submit : "transaction\nRollup 1 ID" " "
+L2_RPC --> Submit : "transaction\nNamespaceId Rollup N" " "
 note top of link
 2. L2s forward transactions to sequencer.
 end note
 
-Query -up-> L2_1_Exec : Block
-note right of link
+Query -up-> L2_Exec : Block
+note top of link
 3. Sequencer produces blocks --
     ordered lists of transactions.
     L2s receive blocks and execute
@@ -103,7 +100,7 @@ note right of link
     then stores the block commitment.
 end note
 
-L2_1_Prover -> L2_1_L1 : rollup\nstate\nproof
+L2_Prover -> L2_L1 : rollup\nstate\nproof
 note bottom of link
 5. Rollups post
     updated state
@@ -121,9 +118,9 @@ note bottom of link
 end note
 
 ' L2 1 details
-L2_1_RPC <-up- L2_1_State : Read state
-L2_1_Exec -up-> L2_1_State : Write state
-L2_1_Prover <-up- L2_1_State : Read State
+L2_RPC <-up- L2_State : Read state
+L2_Exec -up-> L2_State : Write state
+L2_Prover <-up- L2_State : Read State
 
 Builder --> Fee_L1: deposit\nfee
 Fee_L1 -up-> Validated: fee\ndeposits
