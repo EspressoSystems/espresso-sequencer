@@ -7,11 +7,11 @@
 //! references objects and their known serializations and commitments to check that their
 //! implementations are compatible with this reference implementation.
 //!
-//! The serialized form of each reference object, in JSON form, is available in the `data` directory
-//! of the repo for this crate. These JSON files are compiled into the crate binary and checked
-//! against the reference objects in this module to prevent unintentional changes to the
-//! serialization format. Thus, these JSON objects can be used as test vectors for a port of the
-//! serialiation scheme to another language or framework.
+//! The serialized form of each reference object, in both JSON and binary forms, is available in the
+//! `data` directory of the repo for this crate. These files checked against the reference objects
+//! in this module to prevent unintentional changes to the serialization format. Thus, these
+//! serialized files can be used as test vectors for a port of the serialiation scheme to another
+//! language or framework.
 //!
 //! To get the byte representation or U256 representation of a commitment for testing in other
 //! packages, run the tests and look for "commitment bytes" or "commitment U256" in the logs.
@@ -27,6 +27,7 @@ use crate::{
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
+use es_version::SequencerVersion;
 use hotshot_types::traits::{
     block_contents::vid_commitment, block_contents::TestableBlock,
     signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
@@ -37,6 +38,9 @@ use sequencer_utils::commitment_to_u256;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use std::{path::Path, str::FromStr};
+use vbs::BinarySerializer;
+
+type Serializer = vbs::Serializer<SequencerVersion>;
 
 fn reference_ns_table() -> NameSpaceTable<TxTableEntryWord> {
     NameSpaceTable::from_bytes([0; 48])
@@ -167,6 +171,38 @@ change in the serialization of this data structure.
         parsed.commit(),
         "Reference object commitment does not match commitment of parsed JSON. This is indicative of
         inconsistency or non-determinism in the commitment scheme.",
+    );
+
+    // Check that the reference object matches the expected binary form.
+    let expected = std::fs::read(data_dir.join(format!("{name}.bin"))).unwrap();
+    let actual = Serializer::serialize(&reference).unwrap();
+    if actual != expected {
+        // Write the actual output to a file to make it easier to compare with/replace the expected
+        // file if the serialization change was actually intended.
+        let actual_path = data_dir.join(format!("{name}-actual.bin"));
+        std::fs::write(&actual_path, &actual).unwrap();
+
+        // Fail the test with an assertion that outputs a diff.
+        assert_eq!(
+            expected,
+            actual,
+            r#"
+Serialized {name} does not match expected binary file. The actual serialization has been written to
+{}. If you intended to make a breaking change to the API, you may replace the reference file in
+/data/{name}.bin with /data/{name}-actual.bin. Otherwise, revert your changes which have caused a
+change in the serialization of this data structure.
+"#,
+            actual_path.display()
+        );
+    }
+
+    // Check that we can deserialize from the reference binary object.
+    let parsed: T = Serializer::deserialize(&expected).unwrap();
+    assert_eq!(
+        reference.commit(),
+        parsed.commit(),
+        "Reference object commitment does not match commitment of parsed binary object. This is
+        indicative of inconsistency or non-determinism in the commitment scheme.",
     );
 
     // Print information about the commitment that might be useful in generating tests for other

@@ -16,6 +16,7 @@
 
 use crate::{Leaf, NodeState, Payload, PubKey, SeqTypes, Transaction};
 use committable::Committable;
+use es_version::SequencerVersion;
 use hotshot::traits::election::static_committee::GeneralStaticCommittee;
 use hotshot_types::{
     data::{
@@ -44,7 +45,9 @@ use jf_vid::VidScheme;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use std::path::Path;
-use vbs::version::Version;
+use vbs::{version::Version, BinarySerializer};
+
+type Serializer = vbs::Serializer<SequencerVersion>;
 
 #[test]
 fn test_message_compat() {
@@ -251,5 +254,33 @@ fn test_message_compat() {
 
     // Ensure the current `Message` type can be parsed from the committed reference JSON.
     let parsed: Vec<Message<SeqTypes>> = serde_json::from_value(expected).unwrap();
+    assert_eq!(parsed, messages);
+
+    // Ensure the current serialization implementation generates the same binary output as the
+    // committed reference.
+    let expected = std::fs::read(data_dir.join("messages.bin")).unwrap();
+    let actual = Serializer::serialize(&messages).unwrap();
+    if actual != expected {
+        // Write the actual output to a file to make it easier to compare with/replace the expected
+        // file if the serialization change was actually intended.
+        let actual_path = data_dir.join("messages-actual.bin");
+        std::fs::write(&actual_path, &actual).unwrap();
+
+        // Fail the test with an assertion that outputs a diff.
+        assert_eq!(
+            expected,
+            actual,
+            r#"
+    Serialized messages do not match expected binary. The actual serialization has been written to
+    {}. If you intended to make a breaking change to the API you may replace the reference binary
+    file /data/messages.bin with /data/messages-actual.bin. Otherwise, revert your changes which
+    have caused a change in the serialization of HotShot messages.
+    "#,
+            actual_path.display()
+        );
+    }
+
+    // Ensure the current `Message` type can be parsed from the committed reference binary.
+    let parsed: Vec<Message<SeqTypes>> = Serializer::deserialize(&expected).unwrap();
     assert_eq!(parsed, messages);
 }
