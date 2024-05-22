@@ -16,16 +16,18 @@ package "Espresso Sequencer Network" as Network {
         database "Postgres" as DB
         component "APIs" {
             port Catchup
-            port HTTP
             port Status
             port Submit
             port Query
-            port "Hotshot\nEvents\nStream" as Events
+            port "Hotshot\nEvents\nStream" as EventsStream
             component "HotShot\nQuery\nService" as QS
+            component "HotShot Events" as Events
         }
-        component "Networking"{
-            component Libp2p
-            component "CDN Client"
+        package HotShot {
+            component "Networking"{
+                component Libp2p
+                component "CDN Client"
+            }
         }
 
         package State as State {
@@ -48,7 +50,12 @@ Signer -down-> Relay: state
 Seq -right-> Builder: claim block
 Relay --> HSProver: state
 
-Events -> Builder: " " "transactions"
+Events -up-> EventsStream
+Events -up-> Validated
+Networking -down-> Events
+EventsStream -> Builder: " " "transactions"
+Validated -> DB
+Catchup -> DB
 Builder -left-> Seq: block
 
 package "Layer 2s / Rollups" as L2s {
@@ -70,52 +77,62 @@ package "Ethereum Layer 1" as L1 {
 }
 
 entity User
-User -Up-> L2_RPC : "transactions,\nstate queries" " "
-note top of link
-1. Many clients submit
-    transactions to each
-    L2 simultaneously (for
-    clarity only one is
-    shown)
-end note
+User -Up-> L2_RPC : transactions,\nstate queries
+' note top of link
+' 1. Many clients submit
+'     transactions to each
+'     L2 simultaneously (for
+'     clarity only one is
+'     shown)
+' end note
 
 L2_RPC --> Submit : "transaction\nNamespaceId Rollup N" " "
-note top of link
-2. L2s forward transactions to sequencer.
-end note
+/'
+ ' note top of link
+ ' 2. L2s forward transactions to sequencer.
+ ' end note
+ '/
 
-Query -up-> L2_Exec : Block
-note top of link
-3. Sequencer produces blocks --
-    ordered lists of transactions.
-    L2s receive blocks and execute
-    transactions for their rollup.
-end note
+Query -up-> L2_Exec : Block\n(sequenced transactions)
+/'
+ ' note top of link
+ ' 3. Sequencer produces blocks --
+ '     ordered lists of transactions.
+ '     L2s receive blocks and execute
+ '     transactions for their rollup.
+ ' end note
+ '/
 
 HSProver -down-> LC_L1 : HotShot\nstate\nproof
-note right of link
-4. Sequencer posts succinct commitment
-    to block to L1. Contract verifies proof
-    of sequencing (Quorum Certificate)
-    then stores the block commitment.
-end note
+/'
+ ' note right of link
+ ' 4. Sequencer posts succinct commitment
+ '     to block to L1. Contract verifies proof
+ '     of sequencing (Quorum Certificate)
+ '     then stores the block commitment.
+ ' end note
+ '/
 
 L2_Prover -> L2_L1 : rollup\nstate\nproof
-note bottom of link
-5. Rollups post
-    updated state
-    to L1. ZK-rollups
-    include a proof.
-end note
+/'
+ ' note bottom of link
+ ' 5. Rollups post
+ '     updated state
+ '     to L1. ZK-rollups
+ '     include a proof.
+ ' end note
+ '/
 
 LC_L1 -> L2_L1
-note bottom of link
-6. Rollup contracts read certified sequence
-    of block commitments from sequencer
-    contract. Verify state transition proofs
-    against this sequence (ZKR) or wait for
-    fraud proof against this sequence (ORU).
-end note
+/'
+ ' note bottom of link
+ ' 6. Rollup contracts read certified sequence
+ '     of block commitments from sequencer
+ '     contract. Verify state transition proofs
+ '     against this sequence (ZKR) or wait for
+ '     fraud proof against this sequence (ORU).
+ ' end note
+ '/
 
 ' L2 1 details
 L2_RPC <-up- L2_State : Read state
