@@ -14,10 +14,7 @@ use super::{
     StorageState,
 };
 use crate::{
-    block::payload::{parse_ns_payload, NamespaceProof},
-    network,
-    persistence::SequencerPersistence,
-    NamespaceId, SeqTypes, Transaction,
+    block2::NsProof, network, persistence::SequencerPersistence, NamespaceId, SeqTypes, Transaction,
 };
 use anyhow::Result;
 use async_std::sync::{Arc, RwLock};
@@ -45,7 +42,7 @@ use vbs::version::StaticVersionType;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
-    pub proof: NamespaceProof,
+    pub proof: NsProof,
     pub transactions: Vec<Transaction>,
 }
 
@@ -99,27 +96,13 @@ where
                 }
             )?;
 
-            let proof = block
-                .payload()
-                .namespace_with_proof(
-                    block.payload().get_ns_table(),
-                    ns_id,
-                    common.common().clone(),
-                )
-                .context(CustomSnafu {
+            let proof =
+                NsProof::new(block.payload(), ns_id, common.common()).context(CustomSnafu {
                     message: format!("failed to make proof for namespace {ns_id}"),
                     status: StatusCode::NotFound,
                 })?;
 
-            let transactions = if let NamespaceProof::Existence {
-                ref ns_payload_flat,
-                ..
-            } = proof
-            {
-                parse_ns_payload(ns_payload_flat, ns_id)
-            } else {
-                Vec::new()
-            };
+            let transactions = proof.export_all_txs();
 
             Ok(NamespaceProofQueryData {
                 transactions,

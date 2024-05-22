@@ -41,7 +41,7 @@ fn basic_correctness() {
         );
 
         // test correct number of nss, txs
-        assert_eq!(block.ns_table().iter_test().count(), test.nss.len());
+        assert_eq!(block.ns_table().iter().count(), test.nss.len());
         assert_eq!(block.len(block.ns_table()), all_txs.len());
         assert_eq!(block.iter(block.ns_table()).count(), all_txs.len());
 
@@ -76,10 +76,9 @@ fn basic_correctness() {
         );
 
         // test iterate over all namespaces
-        assert_eq!(block.ns_table().iter_test().count(), test.nss.len());
         for ns_id in block
             .ns_table()
-            .iter_test()
+            .iter()
             .map(|i| block.ns_table().read_ns_id(&i))
         {
             tracing::info!("test ns_id {ns_id}");

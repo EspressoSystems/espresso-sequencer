@@ -1,5 +1,5 @@
 use crate::{
-    block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
+    block2::NsTable,
     chain_config::ResolvableChainConfig,
     eth_signature_key::BuilderSignature,
     l1_client::L1Snapshot,
@@ -78,7 +78,7 @@ pub struct Header {
 
     pub payload_commitment: VidCommitment,
     pub builder_commitment: BuilderCommitment,
-    pub ns_table: NameSpaceTable<TxTableEntryWord>,
+    pub ns_table: NsTable,
     /// Root Commitment of Block Merkle Tree
     pub block_merkle_tree_root: BlockMerkleCommitment,
     /// Root Commitment of `FeeMerkleTree`
@@ -128,18 +128,6 @@ impl Committable for Header {
         // We use the tag "BLOCK" since blocks are identified by the hash of their header. This will
         // thus be more intuitive to users than "HEADER".
         "BLOCK".into()
-    }
-}
-
-impl Committable for NameSpaceTable<TxTableEntryWord> {
-    fn commit(&self) -> Commitment<Self> {
-        RawCommitmentBuilder::new(&Self::tag())
-            .var_size_bytes(self.get_bytes())
-            .finalize()
-    }
-
-    fn tag() -> String {
-        "NSTABLE".into()
     }
 }
 
@@ -459,14 +447,10 @@ impl ExplorerHeader<SeqTypes> for Header {
     }
 
     fn namespace_ids(&self) -> Vec<Self::NamespaceId> {
-        let l = self.ns_table.len();
-        let mut result: Vec<Self::NamespaceId> = Vec::with_capacity(l);
-        for i in 0..l {
-            let (ns_id, _) = self.ns_table.get_table_entry(i);
-            result.push(ns_id);
-        }
-
-        result
+        self.ns_table
+            .iter()
+            .map(|i| self.ns_table.read_ns_id(&i))
+            .collect()
     }
 }
 
@@ -743,7 +727,7 @@ mod test_headers {
         pub validated_state: ValidatedState,
         pub leaf: Leaf,
         pub header: Header,
-        pub ns_table: NameSpaceTable<TxTableEntryWord>,
+        pub ns_table: NsTable,
     }
 
     impl Default for GenesisForTest {
@@ -752,7 +736,7 @@ mod test_headers {
             let validated_state = ValidatedState::genesis(&instance_state).0;
             let leaf = Leaf::genesis(&instance_state);
             let header = leaf.block_header().clone();
-            let ns_table = leaf.block_payload().unwrap().get_ns_table().clone();
+            let ns_table = leaf.block_payload().unwrap().ns_table().clone();
             Self {
                 instance_state,
                 validated_state,

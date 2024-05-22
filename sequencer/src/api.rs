@@ -717,7 +717,7 @@ mod api_tests {
                 .unwrap();
             ns_query_res
                 .proof
-                .verify(&vid, &header.payload_commitment, &header.ns_table)
+                .verify(&header.ns_table, &header.payload_commitment, xxx)
                 .unwrap();
 
             found_empty_block = found_empty_block || ns_query_res.transactions.is_empty();

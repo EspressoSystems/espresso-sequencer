@@ -199,3 +199,17 @@ impl PayloadByteLen {
         self.0.try_into().unwrap()
     }
 }
+
+#[cfg(any(test, feature = "testing"))]
+impl hotshot_types::traits::block_contents::TestableBlock for Payload {
+    fn genesis() -> Self {
+        BlockPayload::from_transactions([], &Default::default())
+            .unwrap()
+            .0
+    }
+
+    fn txn_count(&self) -> u64 {
+        use hotshot_query_service::availability::QueryablePayload;
+        self.len(&self.ns_table) as u64
+    }
+}

@@ -8,6 +8,7 @@ use crate::{
     },
     NamespaceId,
 };
+use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::traits::EncodeBytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{collections::HashSet, sync::Arc};
@@ -18,8 +19,8 @@ const NS_OFFSET_BYTE_LEN: usize = 4;
 const NS_ID_BYTE_LEN: usize = 4;
 
 /// TODO explain: similar API to `NsPayload`
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct NsTable(Vec<u8>);
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct NsTable(#[serde(with = "base64_bytes")] Vec<u8>);
 
 impl NsTable {
     /// TODO delete method [`NsTable::from_bytes_vec`] after `BlockPayload`
@@ -75,6 +76,11 @@ impl NsTable {
         NsPayloadRange::new(start, end)
     }
 
+    /// Iterator over all unique namespaces in the namespace table.
+    pub fn iter(&self) -> impl Iterator<Item = <NsIter as Iterator>::Item> + '_ {
+        NsIter::new(self)
+    }
+
     // PRIVATE HELPERS START HERE
 
     /// Read the number of namespaces declared in the namespace table. This
@@ -94,17 +100,17 @@ impl NsTable {
             index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
         usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.0[start..start + NS_OFFSET_BYTE_LEN])
     }
-
-    /// Iterator over all unique namespaces in the namespace table.
-    fn iter(&self) -> impl Iterator<Item = <NsIter as Iterator>::Item> + '_ {
-        NsIter::new(self)
-    }
 }
 
-#[cfg(test)]
-impl NsTable {
-    pub fn iter_test(&self) -> impl Iterator<Item = <NsIter as Iterator>::Item> + '_ {
-        self.iter()
+impl Committable for NsTable {
+    fn commit(&self) -> Commitment<Self> {
+        RawCommitmentBuilder::new(&Self::tag())
+            .var_size_bytes(&self.0)
+            .finalize()
+    }
+
+    fn tag() -> String {
+        "NSTABLE".into()
     }
 }
 

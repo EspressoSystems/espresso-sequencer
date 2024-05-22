@@ -130,4 +130,31 @@ impl NsProof {
     pub fn is_existence(&self) -> bool {
         self.existence.is_some()
     }
+
+    /// Return all transactions in the namespace whose payload is proven by
+    /// `self`.
+    ///
+    /// # Design warning
+    ///
+    /// This method relies on a promise that a [`NsProof`] stores the entire
+    /// namespace payload. If in the future we wish to remove the payload from a
+    /// [`NsProof`] then this method can no longer be supported.
+    ///
+    /// In that case, use the following a workaround:
+    /// - Given a [`NamespaceId`], get a [`NsIndex`] `i` via
+    ///   [`NsTable::find_ns_id`].
+    /// - Use `i` to get a [`NsPayload`] `p` via [`Payload::ns_payload`].
+    /// - Use `p` to get the desired [`Vec<Transaction>`] via
+    ///   [`NsPayload::export_all_txs`].
+    ///
+    /// This workaround duplicates the work done in [`NsProof::new`]. If you
+    /// don't like that then you could instead hack [`NsProof::new`] to return a
+    /// pair `(NsProof, Vec<Transaction>)`.
+    pub fn export_all_txs(&self) -> Vec<Transaction> {
+        if let Some(existence) = &self.existence {
+            existence.ns_payload.export_all_txs(&self.ns_id)
+        } else {
+            Vec::new()
+        }
+    }
 }
