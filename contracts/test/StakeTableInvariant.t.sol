@@ -278,7 +278,8 @@ contract StakeTableInvariant_Tests is Test {
         });
         uint32 numBlocksPerEpoch = 4;
         uint64 churnRate = 10;
-        lightClientContract = new LightClientMock(genesis, numBlocksPerEpoch);
+        uint32 delayThreshold = 8;
+        lightClientContract = new LightClientMock(genesis, numBlocksPerEpoch, delayThreshold);
         stakeTable = new S(address(token), address(lightClientContract), churnRate);
         handler =
             new StakeTableHandlerTest(stakeTable, exampleTokenCreator, token, lightClientContract);

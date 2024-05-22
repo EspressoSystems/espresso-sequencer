@@ -18,6 +18,7 @@ import { BN254 } from "bn254/BN254.sol";
 contract LightClientCommonTest is Test {
     LCMock public lc;
     uint32 public constant BLOCKS_PER_EPOCH_TEST = 3;
+    uint32 public constant DELAY_THRESHOLD = 6;
     LC.LightClientState public genesis;
     // this constant should be consistent with `hotshot_contract::light_client.rs`
     uint64 internal constant STAKE_TABLE_CAPACITY = 10;
@@ -26,12 +27,14 @@ contract LightClientCommonTest is Test {
     address public admin = makeAddr("admin");
     address public permissionedProver = makeAddr("prover");
 
-    function deployAndInitProxy(LC.LightClientState memory state, uint32 numBlocksPerEpoch)
-        public
-        returns (address payable, address)
-    {
+    function deployAndInitProxy(
+        LC.LightClientState memory state,
+        uint32 numBlocksPerEpoch,
+        uint32 delayThreshold
+    ) public returns (address payable, address) {
         //deploy light client test with a proxy
-        (lcTestProxy, admin, state) = deployer.deployContract(state, numBlocksPerEpoch, admin);
+        (lcTestProxy, admin, state) =
+            deployer.deployContract(state, numBlocksPerEpoch, delayThreshold, admin);
 
         //cast the proxy to be of type light client test
         lc = LCMock(lcTestProxy);
@@ -57,7 +60,7 @@ contract LightClientCommonTest is Test {
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
         genesis = state;
 
-        (lcTestProxy, admin) = deployAndInitProxy(genesis, BLOCKS_PER_EPOCH_TEST);
+        (lcTestProxy, admin) = deployAndInitProxy(genesis, BLOCKS_PER_EPOCH_TEST, DELAY_THRESHOLD);
 
         bytes32 expectedStakeTableComm = lc.computeStakeTableComm(state);
         assertEq(votingSTComm, expectedStakeTableComm);
@@ -90,11 +93,13 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     }
 
     // @dev helper function to be able to initialize the contract and capture the revert error
-    function initWithExpectRevert(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch)
-        private
-    {
+    function initWithExpectRevert(
+        LC.LightClientState memory _genesis,
+        uint32 _blocksPerEpoch,
+        uint32 _delayThreshold
+    ) private {
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCMock(_genesis, _blocksPerEpoch);
+        lc = new LCMock(_genesis, _blocksPerEpoch, _delayThreshold);
     }
 
     function test_RevertWhen_InvalidGenesis() external {
@@ -102,33 +107,33 @@ contract LightClient_constructor_Test is LightClientCommonTest {
 
         // wrong viewNum would revert
         badGenesis.viewNum = 1;
-        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST, DELAY_THRESHOLD);
         badGenesis.viewNum = genesis.viewNum; // revert to correct
 
         // wrong blockHeight would revert
         badGenesis.blockHeight = 1;
-        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST, DELAY_THRESHOLD);
         badGenesis.blockHeight = genesis.blockHeight; // revert to correct
 
         // zero-valued stake table commitments would revert
         badGenesis.stakeTableBlsKeyComm = BN254.ScalarField.wrap(0);
-        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST, DELAY_THRESHOLD);
         badGenesis.stakeTableBlsKeyComm = genesis.stakeTableBlsKeyComm; // revert to correct
         badGenesis.stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(0);
-        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST, DELAY_THRESHOLD);
         badGenesis.stakeTableSchnorrKeyComm = genesis.stakeTableSchnorrKeyComm; // revert to correct
         badGenesis.stakeTableAmountComm = BN254.ScalarField.wrap(0);
 
-        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST, DELAY_THRESHOLD);
         badGenesis.stakeTableAmountComm = genesis.stakeTableAmountComm; // revert to correct
 
         // zero-valued threshold would revert
         badGenesis.threshold = 0;
-        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST, DELAY_THRESHOLD);
         badGenesis.threshold = genesis.threshold; // revert to correct
 
         // zero-valued BLOCK_PER_EPOCH would revert
-        initWithExpectRevert(genesis, 0);
+        initWithExpectRevert(genesis, 0, 0);
     }
 }
 
@@ -330,7 +335,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
         genesis = state;
-        (lcTestProxy, admin) = deployAndInitProxy(genesis, BLOCKS_PER_EPOCH_TEST);
+        (lcTestProxy, admin) = deployAndInitProxy(genesis, BLOCKS_PER_EPOCH_TEST, DELAY_THRESHOLD);
 
         genesis = state;
 
@@ -384,14 +389,16 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     /// forge-config: default.fuzz.runs = 4
     /// forge-config: quick.fuzz.runs = 1
     /// forge-config: ci.fuzz.runs = 10
-    function test_UpdateAfterSkippedBlocks(uint32 numBlockSkipped, uint32 numBlockPerEpoch)
-        external
-    {
+    function test_UpdateAfterSkippedBlocks(
+        uint32 numBlockSkipped,
+        uint32 numBlockPerEpoch,
+        uint32 delayThreshold
+    ) external {
         numBlockPerEpoch = uint32(bound(numBlockPerEpoch, 2, 10));
         numBlockSkipped = uint32(bound(numBlockSkipped, 1, numBlockPerEpoch - 1));
 
         // re-assign LightClient with the same genesis but different numBlockPerEpoch
-        deployAndInitProxy(genesis, numBlockPerEpoch);
+        deployAndInitProxy(genesis, numBlockPerEpoch, delayThreshold);
 
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
@@ -611,5 +618,109 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         vm.expectRevert(LC.InvalidProof.selector);
         vm.prank(permissionedProver);
         lc.newFinalizedState(newState, proof);
+    }
+}
+
+contract LightClient_delayThresholdTest is LightClientCommonTest {
+    LC.LightClientState internal newState;
+    V.PlonkProof internal newProof;
+
+    function setUp() public {
+        init();
+        // Assert owner is correctly set, add this to check owner state
+        assertEq(lc.owner(), admin, "Admin should be the owner.");
+
+        string[] memory cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-consecutive-finalized-states";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[4] = vm.toString(uint64(1));
+        cmds[5] = vm.toString(uint64(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        newState = states[1];
+        newProof = proofs[1];
+    }
+
+    function test_RevertWhenUpdateThresholdFromNonAdmin() public {
+        vm.prank(makeAddr("randomAddress"));
+        uint32 newThreshold = 20;
+        vm.expectRevert();
+        lc.updateDelayThreshold(newThreshold);
+    }
+
+    function test_UpdateThresholdSuccessfully() public {
+        vm.prank(admin);
+        uint32 newThreshold = 20;
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewDelayThreshold(newThreshold);
+        lc.updateDelayThreshold(newThreshold);
+        assertEq(lc.delayThreshold(), newThreshold, "Threshold should be updated.");
+    }
+
+    function test_RevertWhenNoChangeRequiredForSameDelayThreshold() public {
+        uint32 sameThreshold = lc.delayThreshold();
+        assertEq(sameThreshold, DELAY_THRESHOLD);
+        vm.prank(admin);
+        vm.expectRevert(LC.NoChangeRequired.selector);
+        lc.updateDelayThreshold(sameThreshold); // Same as initial
+    }
+
+    function test_revertWhenInvalidDelayThresholdZero() public {
+        vm.prank(admin);
+        vm.expectRevert(LC.InvalidDelayThreshold.selector);
+        lc.updateDelayThreshold(0); // Invalid, as it's below 1
+    }
+
+    function test_1lBlockUpdatesIsUpdated() public {
+        uint256 blockUpdatesCount = lc.getL1BlockUpdatesCount();
+
+        // Update the state and thus the l1BlockUpdates array would be updated
+        vm.prank(permissionedProver);
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+        lc.newFinalizedState(newState, newProof);
+
+        assertEq(lc.getL1BlockUpdatesCount(), blockUpdatesCount + 1);
+    }
+
+    function test_hotshotIsLive() public view {
+        uint256 blockUpdatesCount = lc.getL1BlockUpdatesCount();
+        assertGe(blockUpdatesCount, 1);
+        assertTrue(lc.isHotshotAlive(2));
+    }
+
+    function test_hotshotIsLiveFunctionWhenHotShotIsDown() public {
+        uint256[] memory updates = new uint256[](5);
+        updates[0] = 1;
+        updates[1] = updates[0] + DELAY_THRESHOLD / 2;
+        updates[2] = updates[1] + DELAY_THRESHOLD / 2;
+        updates[3] = updates[2] + DELAY_THRESHOLD + 5;
+        updates[4] = updates[3] + DELAY_THRESHOLD / 2;
+        lc.createFakeL1BlockUpdates(updates);
+
+        assertEq(lc.getL1BlockUpdatesCount(), 5);
+        assertEq(lc.delayThreshold(), DELAY_THRESHOLD);
+
+        // Hotshot should be live
+        assertTrue(lc.isHotshotAlive(updates[1] - 1));
+
+        // Hotshot should be live
+        assertTrue(lc.isHotshotAlive(updates[2]));
+
+        // Hotshot should be down
+        assertFalse(lc.isHotshotAlive(updates[2] + DELAY_THRESHOLD + 2));
+
+        /* TODO 
+        should there be a calculation from numUpdates since firstupdate to determine if hotshot was
+        live?
+        */
+
+        // Hotshot should be live
+        assertTrue(lc.isHotshotAlive(updates[4] + 1));
     }
 }

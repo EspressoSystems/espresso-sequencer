@@ -58,6 +58,7 @@ contract StakeTable_Test is StakeTableCommonTest {
     LCTest public lc;
     LC.LightClientState public genesis;
     uint32 public constant BLOCKS_PER_EPOCH_TEST = 10;
+    uint32 public constant DELAY_THRESHOLD = 20;
 
     uint256 public constant INITIAL_BALANCE = 1_000_000_000;
     address public exampleTokenCreator;
@@ -120,7 +121,8 @@ contract StakeTable_Test is StakeTableCommonTest {
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
         genesis = state;
-        lc = new LCTest(genesis, BLOCKS_PER_EPOCH_TEST);
+
+        lc = new LCTest(genesis, BLOCKS_PER_EPOCH_TEST, DELAY_THRESHOLD);
         stakeTable = new S(address(token), address(lc), 10);
     }
 

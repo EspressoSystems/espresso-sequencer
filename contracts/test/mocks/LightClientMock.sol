@@ -10,8 +10,10 @@ import { LightClientStateUpdateVKMock as VkLib } from "./LightClientStateUpdateV
 
 /// @dev A helper that wraps LightClient contract for testing
 contract LightClientMock is LC {
-    constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch) LC() {
-        _initializeState(genesis, numBlockPerEpoch);
+    constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch, uint32 delayThreshold)
+        LC()
+    {
+        _initializeState(genesis, numBlockPerEpoch, delayThreshold);
     }
 
     /// @dev Directly mutate `currentEpoch` variable for test
@@ -46,5 +48,9 @@ contract LightClientMock is LC {
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
+    }
+
+    function createFakeL1BlockUpdates(uint256[] memory values) public {
+        l1BlockUpdates = values;
     }
 }

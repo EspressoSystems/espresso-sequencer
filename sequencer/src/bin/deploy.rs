@@ -165,7 +165,7 @@ async fn main() -> anyhow::Result<()> {
 
         let genesis = light_client_genesis(&opt.orchestrator_url, opt.stake_table_capacity).await?;
         let data = light_client
-            .initialize(genesis.into(), u32::MAX, owner)
+            .initialize(genesis.into(), u32::MAX, u32::MAX, owner)
             .calldata()
             .context("calldata for initialize transaction not available")?;
         contracts
