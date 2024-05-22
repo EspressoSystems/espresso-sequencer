@@ -26,7 +26,10 @@ use std::{
 pub struct Options {
     /// Storage path for persistent data.
     #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
-    pub path: PathBuf,
+    path: PathBuf,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_STORE_UNDECIDED_STATE", hide = true)]
+    store_undecided_state: bool,
 }
 
 impl Default for Options {
@@ -35,12 +38,28 @@ impl Default for Options {
     }
 }
 
+impl Options {
+    pub fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            store_undecided_state: false,
+        }
+    }
+
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
 #[async_trait]
 impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
     async fn create(self) -> anyhow::Result<Persistence> {
-        Ok(Persistence(self.path))
+        Ok(Persistence {
+            path: self.path,
+            store_undecided_state: self.store_undecided_state,
+        })
     }
 
     async fn reset(self) -> anyhow::Result<()> {
@@ -50,31 +69,34 @@ impl PersistenceOptions for Options {
 
 /// File system backed persistence.
 #[derive(Clone, Debug)]
-pub struct Persistence(PathBuf);
+pub struct Persistence {
+    path: PathBuf,
+    store_undecided_state: bool,
+}
 
 impl Persistence {
     fn config_path(&self) -> PathBuf {
-        self.0.join("hotshot.cfg")
+        self.path.join("hotshot.cfg")
     }
 
     fn voted_view_path(&self) -> PathBuf {
-        self.0.join("highest_voted_view")
+        self.path.join("highest_voted_view")
     }
 
     fn anchor_leaf_path(&self) -> PathBuf {
-        self.0.join("anchor_leaf")
+        self.path.join("anchor_leaf")
     }
 
     fn vid_dir_path(&self) -> PathBuf {
-        self.0.join("vid")
+        self.path.join("vid")
     }
 
     fn da_dir_path(&self) -> PathBuf {
-        self.0.join("da")
+        self.path.join("da")
     }
 
     fn undecided_state_path(&self) -> PathBuf {
-        self.0.join("undecided_state")
+        self.path.join("undecided_state")
     }
 
     /// Overwrite a file if a condition is met.
@@ -141,7 +163,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
-        let view_number = view.get_u64();
+        let view_number = view.u64();
 
         let delete_files = |dir_path: PathBuf| -> anyhow::Result<()> {
             if !dir_path.is_dir() {
@@ -198,10 +220,10 @@ impl SequencerPersistence for Persistence {
                 let mut height_bytes = [0; 8];
                 file.read_exact(&mut height_bytes).context("read height")?;
                 let height = u64::from_le_bytes(height_bytes);
-                if height >= leaf.get_height() {
+                if height >= leaf.height() {
                     tracing::warn!(
                         saved_height = height,
-                        new_height = leaf.get_height(),
+                        new_height = leaf.height(),
                         "not writing anchor leaf because saved leaf has newer height",
                     );
                     return Ok(false);
@@ -213,7 +235,7 @@ impl SequencerPersistence for Persistence {
             },
             |mut file| {
                 // Save the new leaf. First we write the height.
-                file.write_all(&leaf.get_height().to_le_bytes())
+                file.write_all(&leaf.height().to_le_bytes())
                     .context("write height")?;
                 // Now serialize and write out the actual leaf and its corresponding QC.
                 let bytes = bincode::serialize(&(leaf, qc)).context("serialize leaf")?;
@@ -258,9 +280,7 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
         let dir_path = self.da_dir_path();
 
-        let file_path = dir_path
-            .join(view.get_u64().to_string())
-            .with_extension("txt");
+        let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
 
         if !file_path.exists() {
             return Ok(None);
@@ -279,9 +299,7 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
         let dir_path = self.vid_dir_path();
 
-        let file_path = dir_path
-            .join(view.get_u64().to_string())
-            .with_extension("txt");
+        let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
 
         if !file_path.exists() {
             return Ok(None);
@@ -297,7 +315,7 @@ impl SequencerPersistence for Persistence {
         &mut self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        let view_number = proposal.data.get_view_number().get_u64();
+        let view_number = proposal.data.view_number().u64();
         let dir_path = self.vid_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
@@ -322,7 +340,7 @@ impl SequencerPersistence for Persistence {
         &mut self,
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        let view_number = proposal.data.get_view_number().get_u64();
+        let view_number = proposal.data.view_number().u64();
         let dir_path = self.da_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create da dir")?;
@@ -362,7 +380,7 @@ impl SequencerPersistence for Persistence {
                 Ok(saved_view < view)
             },
             |mut file| {
-                file.write_all(&view.get_u64().to_le_bytes())?;
+                file.write_all(&view.u64().to_le_bytes())?;
                 Ok(())
             },
         )
@@ -372,6 +390,10 @@ impl SequencerPersistence for Persistence {
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        if !self.store_undecided_state {
+            return Ok(());
+        }
+
         self.replace(
             &self.undecided_state_path(),
             |_| {
@@ -403,7 +425,7 @@ mod testing {
         }
 
         async fn connect(storage: &Self::Storage) -> Self {
-            Persistence(storage.path().into())
+            Options::new(storage.path().into()).create().await.unwrap()
         }
     }
 }

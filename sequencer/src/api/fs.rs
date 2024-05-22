@@ -11,7 +11,7 @@ impl SequencerDataSource for DataSource {
     type Options = Options;
 
     async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self> {
-        let path = Path::new(&opt.path);
+        let path = Path::new(opt.path());
         let data_source = {
             if reset {
                 FileSystemDataSource::create(path, provider).await?
@@ -41,18 +41,11 @@ mod impl_testable_data_source {
         }
 
         fn persistence_options(storage: &Self::Storage) -> Self::Options {
-            Options {
-                path: storage.path().into(),
-            }
+            Options::new(storage.path().into())
         }
 
         fn options(storage: &Self::Storage, opt: api::Options) -> api::Options {
-            opt.query_fs(
-                Default::default(),
-                Options {
-                    path: storage.path().into(),
-                },
-            )
+            opt.query_fs(Default::default(), Options::new(storage.path().into()))
         }
     }
 }

@@ -24,6 +24,7 @@ use jf_merkle_tree::prelude::*;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use time::OffsetDateTime;
+use vbs::version::Version;
 
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -157,7 +158,7 @@ impl Header {
         chain_config: ChainConfig,
     ) -> anyhow::Result<Self> {
         // Increment height.
-        let parent_header = parent_leaf.get_block_header();
+        let parent_header = parent_leaf.block_header();
         let height = parent_header.height + 1;
 
         // Ensure the timestamp does not decrease. We can trust `parent.timestamp` because `parent`
@@ -271,8 +272,8 @@ impl BlockHeader<SeqTypes> for Header {
         skip_all,
         fields(
             node_id = instance_state.node_id,
-            view = ?parent_leaf.get_view_number(),
-            height = parent_leaf.get_block_header().height,
+            view = ?parent_leaf.view_number(),
+            height = parent_leaf.block_header().height,
         ),
     )]
 
@@ -285,10 +286,11 @@ impl BlockHeader<SeqTypes> for Header {
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
         builder_fee: BuilderFee<SeqTypes>,
         _vid_common: VidCommon,
+        _version: Version,
     ) -> Result<Self, Self::Error> {
         let chain_config = instance_state.chain_config;
-        let height = parent_leaf.get_height();
-        let view = parent_leaf.get_view_number();
+        let height = parent_leaf.height();
+        let view = parent_leaf.view_number();
 
         let mut validated_state = parent_state.clone();
 
@@ -303,7 +305,7 @@ impl BlockHeader<SeqTypes> for Header {
                 .get_finalized_deposits(
                     addr,
                     parent_leaf
-                        .get_block_header()
+                        .block_header()
                         .l1_finalized
                         .map(|block_info| block_info.number),
                     block_info.number,
@@ -525,7 +527,7 @@ mod test_headers {
             parent.l1_finalized = self.parent_l1_finalized;
 
             let mut parent_leaf = genesis.leaf.clone();
-            *parent_leaf.get_block_header_mut() = parent.clone();
+            *parent_leaf.block_header_mut() = parent.clone();
 
             let block_merkle_tree =
                 BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap();
@@ -749,8 +751,8 @@ mod test_headers {
             let instance_state = NodeState::mock();
             let validated_state = ValidatedState::genesis(&instance_state).0;
             let leaf = Leaf::genesis(&instance_state);
-            let header = leaf.get_block_header().clone();
-            let ns_table = leaf.get_block_payload().unwrap().get_ns_table().clone();
+            let header = leaf.block_header().clone();
+            let ns_table = leaf.block_payload().unwrap().get_ns_table().clone();
             Self {
                 instance_state,
                 validated_state,
@@ -771,7 +773,7 @@ mod test_headers {
 
         let mut parent_header = genesis.header.clone();
         let mut parent_leaf = genesis.leaf.clone();
-        *parent_leaf.get_block_header_mut() = parent_header.clone();
+        *parent_leaf.block_header_mut() = parent_header.clone();
 
         // Populate the tree with an initial `push`.
         block_merkle_tree.push(genesis.header.commit()).unwrap();
@@ -871,12 +873,12 @@ mod test_headers {
         parent_header.fee_merkle_tree_root = fee_merkle_tree_root;
 
         let mut parent_leaf = genesis.leaf.clone();
-        *parent_leaf.get_block_header_mut() = parent_header.clone();
+        *parent_leaf.block_header_mut() = parent_header.clone();
 
         // Forget the state to trigger lookups in Header::new
         let forgotten_state = parent_state.forget();
         genesis_state.peers = Arc::new(MockStateCatchup::from_iter([(
-            parent_leaf.get_view_number(),
+            parent_leaf.view_number(),
             Arc::new(parent_state.clone()),
         )]));
         // Get a proposal from a parent
@@ -904,6 +906,7 @@ mod test_headers {
             ns_table,
             builder_fee,
             vid_common.clone(),
+            hotshot_types::constants::BASE_VERSION,
         )
         .await
         .unwrap();

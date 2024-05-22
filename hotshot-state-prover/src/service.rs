@@ -128,8 +128,8 @@ async fn init_stake_table_from_orchestrator(
                             .into_iter()
                             .for_each(|config| {
                                 st.register(
-                                    *config.stake_table_entry.get_key(),
-                                    config.stake_table_entry.get_stake(),
+                                    *config.stake_table_entry.key(),
+                                    config.stake_table_entry.stake(),
                                     config.state_ver_key,
                                 )
                                 .expect("Key registration shouldn't fail.");

@@ -158,7 +158,7 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
             match client
                 .get::<AccountQueryData>(&format!(
                     "catchup/{height}/{}/account/{account}",
-                    view.get_u64(),
+                    view.u64(),
                 ))
                 .send()
                 .await
@@ -185,7 +185,7 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
         for client in self.clients.iter() {
             tracing::info!("Fetching frontier from {}", client.url);
             match client
-                .get::<BlocksFrontier>(&format!("catchup/{height}/{}/blocks", view.get_u64()))
+                .get::<BlocksFrontier>(&format!("catchup/{height}/{}/blocks", view.u64()))
                 .send()
                 .await
             {

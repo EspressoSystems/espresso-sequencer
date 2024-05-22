@@ -108,13 +108,16 @@ where
             if let Some(catchup) = modules.catchup {
                 http_opt = http_opt.catchup(catchup);
             }
+
             if let Some(hotshot_events) = modules.hotshot_events {
                 http_opt = http_opt.hotshot_events(hotshot_events);
             }
             if let Some(explorer) = modules.explorer {
                 http_opt = http_opt.explorer(explorer);
             }
-
+            if let Some(config) = modules.config {
+                http_opt = http_opt.config(config);
+            }
             http_opt
                 .serve(
                     move |metrics| {
@@ -209,9 +212,7 @@ mod test {
             if let Err(err) = init_with_storage(
                 modules,
                 opt,
-                fs::Options {
-                    path: tmp.path().into(),
-                },
+                fs::Options::new(tmp.path().into()),
                 SEQUENCER_VERSION,
             )
             .await

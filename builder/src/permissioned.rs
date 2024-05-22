@@ -28,7 +28,7 @@ use hotshot_types::{
     event::Event,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
-    traits::{election::Membership, metrics::Metrics},
+    traits::{election::Membership, metrics::Metrics, EncodeBytes},
     utils::BuilderCommitment,
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
@@ -407,9 +407,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
         let vid_commitment = {
             // TODO we should not need to collect payload bytes just to compute vid_commitment
-            let payload_bytes = genesis_payload
-                .encode()
-                .expect("unable to encode genesis payload");
+            let payload_bytes = genesis_payload.encode();
             vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
         };
 
