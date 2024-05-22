@@ -20,14 +20,14 @@ package "Espresso Sequencer Network" as Network {
             port Submit
             port Query
             port "Hotshot\nEvents\nStream" as EventsStream
-            component "HotShot\nQuery\nService" as QS
-            component "HotShot Events" as Events
         }
+        component "HotShot\nQuery\nService" as QS
         package HotShot {
             component "Networking"{
                 component Libp2p
                 component "CDN Client"
             }
+            component "HotShot Events" as Events
         }
 
         package State as State {
@@ -41,7 +41,7 @@ package "Espresso Sequencer Network" as Network {
     Query --> QS
 }
 
-Nodes -up-> Catchup: "missing\nstate" " "
+Nodes -> Catchup: "missing\nstate" " "
 Nodes <--> Libp2p: consensus\nmessages
 "CDN Client" <--> CDN: consensus\nmessages
 
@@ -51,7 +51,7 @@ Seq -right-> Builder: claim block
 Relay --> HSProver: state
 
 Events -up-> EventsStream
-Events -up-> Validated
+Events -down-> Validated
 Networking -down-> Events
 EventsStream -> Builder: " " "transactions"
 Validated -> DB
