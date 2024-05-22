@@ -3,19 +3,19 @@ use crate::{
         full_payload::ns_table::{NsIndex, NsTable, NsTableBuilder},
         namespace_payload::{Index, Iter, NsPayload, NsPayloadBuilder, NsPayloadRange, TxProof},
     },
-    NamespaceId, Transaction,
+    NamespaceId, NodeState, Transaction,
 };
-use commit::{Commitment, Committable};
+use committable::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{
-    traits::BlockPayload,
+    traits::{BlockPayload, EncodeBytes},
     utils::BuilderCommitment,
     vid::{VidCommon, VidSchemeType},
 };
-use jf_primitives::vid::VidScheme;
+use jf_vid::VidScheme;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {
@@ -34,7 +34,7 @@ impl Payload {
         &self.ns_table
     }
     pub fn byte_len(&self) -> PayloadByteLen {
-        PayloadByteLen(self.payload.len())
+        PayloadByteLen(self.payload.len().try_into().unwrap())
     }
     pub fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
         NsPayload::from_bytes_slice(&self.payload[range.as_block_range()])
@@ -61,18 +61,13 @@ impl Payload {
 impl BlockPayload for Payload {
     type Error = crate::Error;
     type Transaction = Transaction;
-
-    // TODO change to `NsTable` after `BlockPayload` trait has been changed to
-    // remove `Self::Metadata` args.
-    type Metadata = Vec<u8>;
-
-    // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
-    // https://github.com/EspressoSystems/HotShot/issues/2115
-    type Encode<'a> = std::iter::Cloned<<&'a Vec<u8> as IntoIterator>::IntoIter>;
+    type Instance = NodeState;
+    type Metadata = NsTable;
 
     // TODO change `BlockPayload` trait: return type should not include `Self::Metadata`
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,
+        _instance_state: &Self::Instance, // TODO use this arg
     ) -> Result<(Self, Self::Metadata), Self::Error> {
         // add each tx to its namespace
         let mut ns_builders = HashMap::<NamespaceId, NsPayloadBuilder>::new();
@@ -89,31 +84,26 @@ impl BlockPayload for Payload {
             ns_table_builder.append_entry(ns_id, payload.len());
         }
         let ns_table = ns_table_builder.into_ns_table();
-        let metadata = ns_table.as_bytes_slice().to_vec();
+        let metadata = ns_table.clone();
         Ok((Self { payload, ns_table }, metadata))
     }
 
-    // TODO change `BlockPayload` trait: arg type `&Self::Metadata` should not
-    // be a reference.
-    fn from_bytes<I>(block_payload_bytes: I, ns_table: &Self::Metadata) -> Self
-    where
-        I: Iterator<Item = u8>,
-    {
+    // TODO avoid cloning the entire payload here?
+    fn from_bytes(block_payload_bytes: &[u8], ns_table: &Self::Metadata) -> Self {
         Self {
-            payload: block_payload_bytes.into_iter().collect(),
-            ns_table: NsTable::from_bytes_vec(A(()), ns_table.clone()),
+            payload: block_payload_bytes.to_vec(),
+            ns_table: ns_table.clone(),
         }
     }
 
-    // TODO change `BlockPayload` trait: return type should not include `Self::Metadata`
+    // TODO remove
     fn genesis() -> (Self, Self::Metadata) {
-        Self::from_transactions([]).unwrap()
-    }
+        // this is only called from `Leaf::genesis`. Since we are
+        // passing empty list, max_block_size is irrelevant so we can
+        // use the mock NodeState. A future update to HotShot should
+        // make a change there to remove the need for this workaround.
 
-    // TODO change `BlockPayload::Encode` trait bounds to enable copyless encoding such as AsRef<[u8]>
-    // https://github.com/EspressoSystems/HotShot/issues/2115
-    fn encode(&self) -> Result<Self::Encode<'_>, Self::Error> {
-        Ok(self.payload.iter().cloned())
+        Self::from_transactions([], &NodeState::mock()).unwrap()
     }
 
     // TODO change `BlockPayload` trait: remove arg `Self::Metadata`
@@ -135,10 +125,11 @@ impl BlockPayload for Payload {
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
 
-    // TODO change `BlockPayload` trait: remove arg `Self::Metadata`
-    // TODO change return type so it's not a reference! :facepalm:
-    fn get_transactions(&self, _metadata: &Self::Metadata) -> &Vec<Self::Transaction> {
-        todo!()
+    fn transactions<'a>(
+        &'a self,
+        metadata: &'a Self::Metadata,
+    ) -> impl 'a + Iterator<Item = Self::Transaction> {
+        self.enumerate(metadata).map(|(_, t)| t)
     }
 }
 
@@ -178,8 +169,14 @@ impl Display for Payload {
 }
 
 impl Committable for Payload {
-    fn commit(&self) -> commit::Commitment<Self> {
+    fn commit(&self) -> committable::Commitment<Self> {
         todo!()
+    }
+}
+
+impl EncodeBytes for Payload {
+    fn encode(&self) -> Arc<[u8]> {
+        Arc::from(self.payload.as_ref())
     }
 }
 
@@ -187,7 +184,7 @@ impl Committable for Payload {
 /// constructed in this module.
 pub struct A(());
 
-pub struct PayloadByteLen(usize);
+pub struct PayloadByteLen(u32);
 
 impl PayloadByteLen {
     pub fn from_vid_common(common: &VidCommon) -> Self {
@@ -199,6 +196,6 @@ impl PayloadByteLen {
 
     // TODO restrict visibility?
     pub fn as_usize(&self) -> usize {
-        self.0
+        self.0.try_into().unwrap()
     }
 }

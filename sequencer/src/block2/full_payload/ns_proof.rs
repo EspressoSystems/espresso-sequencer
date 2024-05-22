@@ -8,7 +8,7 @@ use crate::{
 use hotshot_types::vid::{
     vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType,
 };
-use jf_primitives::vid::{
+use jf_vid::{
     payload_prover::{PayloadProver, Statement},
     VidScheme,
 };
@@ -52,7 +52,13 @@ impl NsProof {
         };
 
         let ns_payload_range = payload.ns_table().ns_range(&ns_index, &payload_byte_len);
-        let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
+
+        // TODO vid_scheme() arg should be u32
+        let vid = vid_scheme(
+            VidSchemeType::get_num_storage_nodes(common)
+                .try_into()
+                .unwrap(),
+        );
 
         Some(NsProof {
             ns_id,
@@ -89,7 +95,11 @@ impl NsProof {
 
         match (ns_index, &self.existence) {
             (Some(ns_index), Some(pf)) => {
-                let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
+                let vid = vid_scheme(
+                    VidSchemeType::get_num_storage_nodes(common)
+                        .try_into()
+                        .unwrap(),
+                );
                 let range = ns_table
                     .ns_range(&ns_index, &PayloadByteLen::from_vid_common(common))
                     .as_block_range();

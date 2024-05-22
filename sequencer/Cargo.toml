@@ -13,6 +13,7 @@ libp2p = []
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 fluent-asserter = "0.1.9"
 hotshot-query-service = { workspace = true, features = ["testing"] }
+hotshot-testing = { workspace = true }
 rand = "0.8.5"
 reqwest = { workspace = true }
 tempfile = "3.9.0"

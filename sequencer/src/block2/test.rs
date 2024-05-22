@@ -3,13 +3,13 @@ use crate::{
         full_payload::{NsProof, Payload},
         namespace_payload::TxProof,
     },
-    NamespaceId, Transaction,
+    NamespaceId, NodeState, Transaction,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot::traits::BlockPayload;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::vid::vid_scheme;
-use jf_primitives::vid::VidScheme;
+use jf_vid::VidScheme;
 use rand::RngCore;
 use std::collections::HashMap;
 
@@ -31,20 +31,19 @@ fn basic_correctness() {
         let mut all_txs = test.all_txs();
         tracing::info!("test case {} nss {} txs", test.nss.len(), all_txs.len());
 
-        let block = Payload::from_transactions(test.all_txs()).unwrap().0;
+        let block = Payload::from_transactions(test.all_txs(), &NodeState::mock())
+            .unwrap()
+            .0;
         tracing::info!(
             "ns_table {:?}, payload {:?}",
             block.ns_table().as_bytes_slice(),
             block.as_byte_slice()
         );
 
-        // TODO temporary until we remove `meta` arg from `QueryablePayload` trait
-        let meta = block.ns_table().as_bytes_slice().to_vec();
-
         // test correct number of nss, txs
         assert_eq!(block.ns_table().iter_test().count(), test.nss.len());
-        assert_eq!(block.len(&meta), all_txs.len());
-        assert_eq!(block.iter(&meta).count(), all_txs.len());
+        assert_eq!(block.len(block.ns_table()), all_txs.len());
+        assert_eq!(block.iter(block.ns_table()).count(), all_txs.len());
 
         tracing::info!("all_txs {:?}", all_txs);
 
@@ -54,7 +53,7 @@ fn basic_correctness() {
         };
 
         // test iterate over all txs
-        for tx_index in block.iter(&meta) {
+        for tx_index in block.iter(block.ns_table()) {
             let tx = block.transaction(&tx_index).unwrap();
             tracing::info!("tx {:?}, {:?}", tx_index, tx);
 

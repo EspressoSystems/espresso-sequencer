@@ -8,8 +8,9 @@ use crate::{
     },
     NamespaceId,
 };
+use hotshot_types::traits::EncodeBytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 // TODO explain: the constants that dictate ns table data sizes
 const NUM_NSS_BYTE_LEN: usize = 4;
@@ -138,6 +139,12 @@ impl NsTableBuilder {
         bytes[..NUM_NSS_BYTE_LEN]
             .copy_from_slice(&usize_to_bytes::<NUM_NSS_BYTE_LEN>(self.num_entries));
         NsTable(bytes)
+    }
+}
+
+impl EncodeBytes for NsTable {
+    fn encode(&self) -> Arc<[u8]> {
+        Arc::from(self.0.as_ref())
     }
 }
 
