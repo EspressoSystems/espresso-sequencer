@@ -4022,7 +4022,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.21"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.22#4dc6959aadfdf876a622ff5d3686715b20ba4065"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.23#978778b3852d57f0239cdb448a097845e67024a6"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4044,6 +4044,7 @@ dependencies = [
  "surf-disco",
  "tagged-base64",
  "tide-disco",
+ "tokio",
  "tracing",
  "vbs",
 ]
