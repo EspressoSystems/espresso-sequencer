@@ -47,17 +47,12 @@ struct Args {
     )]
     account_index: u32,
     /// Port that the HTTP API will use.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT", default_value = "8770")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
     sequencer_api_port: u16,
     /// If provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_COMMITMENT_TASK_PORT",
-        default_value = "8772"
-    )]
+    #[clap(short, long, env = "ESPRESSO_COMMITMENT_TASK_PORT")]
     commitment_task_port: u16,
 
     #[clap(flatten)]
@@ -164,13 +159,13 @@ fn start_commitment_server<Ver: StaticVersionType + 'static>(
     app.register_module("api", api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    spawn(app.serve(format!("0.0.0.0:{port}"), bind_version));
+    spawn(app.serve(format!("localhost:{port}"), bind_version));
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{process::Child, time::Duration};
 
     use async_compatibility_layer::{
         art::async_sleep,
@@ -181,13 +176,23 @@ mod tests {
     use es_version::SequencerVersion;
     use escargot::CargoBuild;
     use futures::TryStreamExt;
-    use hotshot_query_service::{availability::BlockQueryData, data_source::sql::testing::TmpDb};
+    use hotshot_query_service::{
+        availability::{BlockQueryData, TransactionQueryData},
+        data_source::sql::testing::TmpDb,
+    };
+    use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
-    use reqwest::StatusCode;
-    use sequencer::{SeqTypes, Transaction};
-    use sequencer_utils::AnvilOptions;
+    use sequencer::{state::BlockMerkleTree, Header, SeqTypes, Transaction};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
+
+    pub struct BackgroundProcess(Child);
+
+    impl Drop for BackgroundProcess {
+        fn drop(&mut self) {
+            self.0.kill().unwrap();
+        }
+    }
 
     // If this test failed and you are doing changes on the following stuff, please
     // sync your changes to [`espresso-sequencer-go`](https://github.com/EspressoSystems/espresso-sequencer-go)
@@ -198,7 +203,7 @@ mod tests {
     async fn dev_node_test() {
         setup_logging();
         setup_backtrace();
-        let anvil = AnvilOptions::default().spawn().await;
+
         let commitment_task_port = pick_unused_port().unwrap();
 
         let api_port = pick_unused_port().unwrap();
@@ -206,14 +211,13 @@ mod tests {
         let db = TmpDb::init().await;
         let postgres_port = db.port();
 
-        let mut child_process = CargoBuild::new()
+        let process = CargoBuild::new()
             .bin("espresso-dev-node")
             .features("testing")
             .current_target()
             .run()
             .unwrap()
             .command()
-            .env("ESPRESSO_SEQUENCER_L1_PROVIDER", anvil.url().to_string())
             .env(
                 "ESPRESSO_COMMITMENT_TASK_PORT",
                 commitment_task_port.to_string(),
@@ -229,38 +233,36 @@ mod tests {
             .spawn()
             .unwrap();
 
-        let commitment_task_url = format!(
-            "http://localhost:{}/api/hotshot_contract",
-            commitment_task_port
-        );
-        println!("commitment task url: {}", commitment_task_url);
-
-        let client = reqwest::Client::new();
+        let _process = BackgroundProcess(process);
 
         let api_client: Client<ServerError, SequencerVersion> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
         api_client.connect(None).await;
 
-        // Wait until some blocks have been decided.
         tracing::info!("waiting for blocks");
         let _ = api_client
             .socket("availability/stream/blocks/0")
             .subscribe::<BlockQueryData<SeqTypes>>()
             .await
             .unwrap()
-            .take(4)
+            .take(10)
             .try_collect::<Vec<_>>()
             .await
             .unwrap();
 
-        let hotshot_contract = client
-            .get(commitment_task_url)
+        let commitment_api_client: Client<ServerError, SequencerVersion> = Client::new(
+            format!("http://localhost:{commitment_task_port}/api")
+                .parse()
+                .unwrap(),
+        );
+        commitment_api_client.connect(None).await;
+
+        let hotshot_contract = commitment_api_client
+            .get::<String>("hotshot_contract")
             .send()
             .await
-            .unwrap()
-            .text()
-            .await
             .unwrap();
+
         assert!(!hotshot_contract.is_empty());
 
         let tx = Transaction::new(100.into(), vec![1, 2, 3]);
@@ -277,51 +279,37 @@ mod tests {
         assert_eq!(hash, tx_hash);
 
         async_sleep(Duration::from_secs(5)).await;
-        let resp = client
-            .get(format!(
-                "http://localhost:{}/availability/transaction/hash/{}",
-                api_port, tx_hash
+        api_client
+            .get::<TransactionQueryData<SeqTypes>>(&format!(
+                "availability/transaction/hash/{}",
+                tx_hash
             ))
             .send()
             .await
-            .unwrap()
-            .status();
-        assert_eq!(resp, StatusCode::OK);
+            .unwrap();
 
         // These endpoints are currently used in `espresso-sequencer-go`. These checks
         // serve as reminders of syncing the API updates to go client repo when they change.
         {
-            api_get_test(
-                &client,
-                format!("http://localhost:{}/status/block-height", api_port),
-            )
-            .await;
-            api_get_test(
-                &client,
-                format!("http://localhost:{}/availability/header/1/3", api_port),
-            )
-            .await;
-            api_get_test(
-                &client,
-                format!(
-                    "http://localhost:{}/availability/block/3/namespace/100",
-                    api_port
-                ),
-            )
-            .await;
-            api_get_test(
-                &client,
-                format!("http://localhost:{}/block-state/2/3", api_port),
-            )
-            .await
+            api_client
+                .get::<u64>("status/block-height")
+                .send()
+                .await
+                .unwrap();
+
+            api_client
+                .get::<Header>("availability/header/3")
+                .send()
+                .await
+                .unwrap();
+
+            api_client
+                .get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>("block-state/3/2")
+                .send()
+                .await
+                .unwrap();
         }
 
-        child_process.kill().unwrap();
         drop(db);
-    }
-
-    async fn api_get_test(client: &reqwest::Client, url: String) {
-        let resp_status = client.get(url).send().await.unwrap().status();
-        assert_eq!(resp_status, StatusCode::OK);
     }
 }
