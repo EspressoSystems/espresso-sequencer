@@ -12,9 +12,24 @@ Consisting of a data availability solution and a decentralized network of nodes 
 rollups can leverage the Espresso Sequencer to give developers and end users fast confirmations, low (and fair) fees,
 and robust infrastructure.
 
-[Documentation](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme)
+[Official Documentation](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme)
+
+### Architecture
+
+This diagram below depicts a simplified view of the current architecture of the Espresso Sequencer.
 
 ![Architecture diagram](./doc/architecture.svg)
+
+The sequence diagram below serves as a complement to the architecture diagram. The following interactions are depicted.
+
+1. Builders deposit funds into the fee contract on Ethereum Layer 1. These funds are later used to pay fees.
+1. Users submit transactions to the Submit APIs of sequencer nodes.
+1. The leader/proposer obtains a block from a builder.
+1. HotShot consensus creates new blocks containing sequenced rollup transactions.
+1. A proof for a HotShot state update is created and verified in the Light Client smart contract.
+1. A rollup proves a state transition by sending a proof to its rollup smart contract.
+
+![Sequence diagram](./doc/sequence-diagram.svg)
 
 # Running the demo
 

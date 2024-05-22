@@ -1,0 +1,77 @@
+@startuml
+!pragma teoz true
+actor User
+
+box rollup #LightYellow
+    participant "API\n(RPC)" as rpc
+    participant "Prover" as rprover
+    participant "Executor" as executor
+end box
+
+box Espresso Sequencer Network #MistyRose
+    box Sequencer Node #Bisque
+        box APIs #LightCyan
+            participant "Submit\nAPI" as submit
+            participant "Query\nAPI" as query
+        end box
+        participant "HotShot\nEvents\nStream" as events
+        participant "Validated\nState" as ValidatedState
+        participant "State\nSigner" as signer
+    end box
+
+    participant Builder
+    participant "HotShot\nLeader" as leader
+    participant CDN
+    participant Libp2p
+    participant "HotShot\nreplicas" as replicas
+    participant "HotShot\nstate\nrelay\nservice" as relay
+    participant "HotShot\nstate\nprover\nservice" as prover
+end box
+
+box "Ethereum L1" #LightGrey
+    participant "Rollup\nContract" as RC
+    participant "Light\nClient\nContract" as LC
+    participant "Fee\nContract" as fee
+end box
+
+group 1. Fee Deposit
+    Builder -> fee: fee deposit
+end group
+
+group 2. Transaction Submisssion
+    User -> rpc: transaction
+    rpc -> submit: transaction, namespace ID
+    events -> Builder: transactions
+end group
+
+group 3. Leader obtains block
+    Builder -> leader: available blocks
+    leader -> Builder: claim block
+end group
+
+group 4. HotShot consensus
+    leader <-> replicas: consensus messages
+    & leader <-> Libp2p:
+    & Libp2p <-> replicas:
+    & replicas -> CDN:
+    fee -> ValidatedState: credit fee deposit
+    ValidatedState -> ValidatedState: apply header\ncharge fee
+end group
+
+group 5. HotShot proving
+    signer -> relay: state
+    relay -> prover: state
+    prover -> "Light\nClient\nContract" as LC: proof
+    LC -> LC: verify
+end group
+
+group 6. Rollup proving
+    query -> executor: block
+    executor -> rprover: block
+    rprover -> RC: rollup state proof
+
+    group verify
+        LC -> "Rollup\nContract" as RC: HotShot\ncommitment
+    end group
+end group
+@enduml
