@@ -59,7 +59,7 @@ group 4. HotShot consensus
 end group
 
 group 5. HotShot proving
-    signer -> relay: state
+    signer -> relay: state + signature
     relay -> prover: state + signature bundle
     prover -> "Light\nClient\nContract" as LC: proof
     LC -> LC: verify
