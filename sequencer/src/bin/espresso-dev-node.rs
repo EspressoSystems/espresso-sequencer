@@ -278,20 +278,16 @@ mod tests {
         let tx_hash = tx.commit();
         assert_eq!(hash, tx_hash);
 
-        loop {
-            let res = api_client
-                .get::<TransactionQueryData<SeqTypes>>(&format!(
-                    "availability/transaction/hash/{}",
-                    tx_hash
-                ))
-                .send()
-                .await;
-            if res.is_ok() {
-                break;
-            }
-
-            sleep(Duration::from_secs(3));
-            continue;
+        while api_client
+            .get::<TransactionQueryData<SeqTypes>>(&format!(
+                "availability/transaction/hash/{}",
+                tx_hash
+            ))
+            .send()
+            .await
+            .is_err()
+        {
+            sleep(Duration::from_secs(3))
         }
 
         // These endpoints are currently used in `espresso-sequencer-go`. These checks
@@ -310,24 +306,18 @@ mod tests {
                 .unwrap();
 
             api_client
-                .get::<NamespaceProofQueryData>(&format!("availability/block/2/namespace/0"))
+                .get::<NamespaceProofQueryData>("availability/block/2/namespace/0")
                 .send()
                 .await
                 .unwrap();
 
-            loop {
-                let res = api_client
-                    .get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>(
-                        "block-state/3/2",
-                    )
-                    .send()
-                    .await;
-                if res.is_ok() {
-                    break;
-                }
-
-                sleep(Duration::from_secs(3));
-                continue;
+            while api_client
+                .get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>("block-state/3/2")
+                .send()
+                .await
+                .is_err()
+            {
+                sleep(Duration::from_secs(3))
             }
         }
 
