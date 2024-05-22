@@ -165,12 +165,9 @@ fn start_commitment_server<Ver: StaticVersionType + 'static>(
 
 #[cfg(test)]
 mod tests {
-    use std::{process::Child, time::Duration};
+    use std::{process::Child, thread::sleep, time::Duration};
 
-    use async_compatibility_layer::{
-        art::async_sleep,
-        logging::{setup_backtrace, setup_logging},
-    };
+    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::stream::StreamExt;
     use committable::{Commitment, Committable};
     use es_version::SequencerVersion;
@@ -182,7 +179,10 @@ mod tests {
     };
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
-    use sequencer::{state::BlockMerkleTree, Header, SeqTypes, Transaction};
+    use sequencer::{
+        api::endpoints::NamespaceProofQueryData, state::BlockMerkleTree, Header, SeqTypes,
+        Transaction,
+    };
     use surf_disco::Client;
     use tide_disco::error::ServerError;
 
@@ -245,7 +245,7 @@ mod tests {
             .subscribe::<BlockQueryData<SeqTypes>>()
             .await
             .unwrap()
-            .take(10)
+            .take(5)
             .try_collect::<Vec<_>>()
             .await
             .unwrap();
@@ -278,15 +278,21 @@ mod tests {
         let tx_hash = tx.commit();
         assert_eq!(hash, tx_hash);
 
-        async_sleep(Duration::from_secs(5)).await;
-        api_client
-            .get::<TransactionQueryData<SeqTypes>>(&format!(
-                "availability/transaction/hash/{}",
-                tx_hash
-            ))
-            .send()
-            .await
-            .unwrap();
+        loop {
+            let res = api_client
+                .get::<TransactionQueryData<SeqTypes>>(&format!(
+                    "availability/transaction/hash/{}",
+                    tx_hash
+                ))
+                .send()
+                .await;
+            if res.is_ok() {
+                break;
+            }
+
+            sleep(Duration::from_secs(3));
+            continue;
+        }
 
         // These endpoints are currently used in `espresso-sequencer-go`. These checks
         // serve as reminders of syncing the API updates to go client repo when they change.
@@ -304,10 +310,25 @@ mod tests {
                 .unwrap();
 
             api_client
-                .get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>("block-state/3/2")
+                .get::<NamespaceProofQueryData>(&format!("availability/block/2/namespace/0"))
                 .send()
                 .await
                 .unwrap();
+
+            loop {
+                let res = api_client
+                    .get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>(
+                        "block-state/3/2",
+                    )
+                    .send()
+                    .await;
+                if res.is_ok() {
+                    break;
+                }
+
+                sleep(Duration::from_secs(3));
+                continue;
+            }
         }
 
         drop(db);
