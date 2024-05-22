@@ -31,9 +31,6 @@ package "Espresso Sequencer Network" as Network #MistyRose {
             component "Status"
             component "Query" as Query
         }
-        /'
-         ' component "HotShot\nQuery\nService" as QS
-         '/
         package HotShot {
             component "Networking"{
                 component Libp2p
@@ -51,24 +48,28 @@ package "Espresso Sequencer Network" as Network #MistyRose {
     component "HotShot state\nprover service" as HSProver
     component "HotShot state\nrelay service" as Relay
     component "Builder" as Builder
-    /'
-     ' Query --> QS
-     '/
 }
 
+' Network
 Nodes --> Catchup: " " "missing\nstate"
 Nodes <--> Libp2p: consensus\nmessages
 "CDN Client" <--> CDN: consensus\nmessages
 
-Query --> DB
+' HotShot state
 Signer -down-> Relay: state
-Builder --> HotShot: block
 Relay --> HSProver: state
 
+' Builder
+Builder --> HotShot: block
+EventsStream -> Builder: transactions
+
+' Events
+Networking -> Events
 Events -up-> EventsStream
 Events -down-> Validated
-Networking -> Events
-EventsStream -> Builder: transactions
+
+' Storage
+Query --> DB
 Validated -up-> DB
 Catchup --> DB
 
@@ -90,65 +91,18 @@ package "Ethereum Layer 1" as L1 #LightGray {
     }
 }
 
+' Transaction submission
 entity User
 User -Up-> L2_RPC : transactions,\nstate queries
-' note top of link
-' 1. Many clients submit
-'     transactions to each
-'     L2 simultaneously (for
-'     clarity only one is
-'     shown)
-' end note
-
 L2_RPC --> Submit : "transaction\nNamespaceId Rollup N" " "
-/'
- ' note top of link
- ' 2. L2s forward transactions to sequencer.
- ' end note
- '/
-
 Query -up-> L2_Exec : " " "Block\n(sequenced transactions)"
-/'
- ' note top of link
- ' 3. Sequencer produces blocks --
- '     ordered lists of transactions.
- '     L2s receive blocks and execute
- '     transactions for their rollup.
- ' end note
- '/
 
+' L1 details
 HSProver -down-> LC_L1 : HotShot\nstate\nproof
-/'
- ' note right of link
- ' 4. Sequencer posts succinct commitment
- '     to block to L1. Contract verifies proof
- '     of sequencing (Quorum Certificate)
- '     then stores the block commitment.
- ' end note
- '/
-
 L2_Prover -> L2_L1 : rollup\nstate\nproof
-/'
- ' note bottom of link
- ' 5. Rollups post
- '     updated state
- '     to L1. ZK-rollups
- '     include a proof.
- ' end note
- '/
-
 LC_L1 -> L2_L1 : HotShot\ncommitment
-/'
- ' note bottom of link
- ' 6. Rollup contracts read certified sequence
- '     of block commitments from sequencer
- '     contract. Verify state transition proofs
- '     against this sequence (ZKR) or wait for
- '     fraud proof against this sequence (ORU).
- ' end note
- '/
 
-' L2 1 details
+' L2 details
 L2_RPC <-up- L2_State : Read state
 L2_Exec -up-> L2_State : Write state
 L2_Prover <-up- L2_State : Read State
