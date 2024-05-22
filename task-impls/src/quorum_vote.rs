@@ -145,26 +145,27 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> HandleDepOutput
         )
         .await;
 
-        #[cfg(feature = "dependency-tasks")]
-        {
-            let Some(proposal) = cur_proposal else {
-                error!("No proposal received, but it should be.");
-                return;
-            };
-            // For this vote task, we'll update the state in storage without voting in this function,
-            // then vote later.
-            update_state_and_vote_if_able::<TYPES, I>(
-                self.view_number,
-                proposal,
-                self.public_key.clone(),
-                self.consensus,
-                Arc::clone(&self.storage),
-                self.quorum_membership,
-                self.instance_state,
-                PhantomData,
-            )
-            .await;
-        }
+        // TODO
+        // #[cfg(feature = "dependency-tasks")]
+        // {
+        //     let Some(proposal) = cur_proposal else {
+        //         error!("No proposal received, but it should be.");
+        //         return;
+        //     };
+        //     // For this vote task, we'll update the state in storage without voting in this function,
+        //     // then vote later.
+        //     update_state_and_vote_if_able::<TYPES, I>(
+        //         self.view_number,
+        //         proposal,
+        //         self.public_key.clone(),
+        //         self.consensus,
+        //         Arc::clone(&self.storage),
+        //         self.quorum_membership,
+        //         self.instance_state,
+        //         PhantomData,
+        //     )
+        //     .await;
+        // }
 
         // Create and send the vote.
         let Some(leaf) = leaf else {

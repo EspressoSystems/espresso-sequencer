@@ -156,8 +156,17 @@ pub enum HotShotEvent<TYPES: NodeType> {
 
     /* Consensus State Update Events */
     /// A undecided view has been created and added to the validated state storage.
-    ValidatedStateUpdate(TYPES::Time, View<TYPES>),
+    ValidatedStateUpdated(TYPES::Time, View<TYPES>),
 
-    /// A new anchor view has been successfully reached by this node.
+    /// A new locked view has been created (2-chain)
+    LockedViewUpdated(TYPES::Time),
+
+    /// A new anchor view has been successfully reached by this node (3-chain).
     LastDecidedViewUpdated(TYPES::Time),
+
+    /// A new high_qc has been reached by this node.
+    UpdateHighQc(QuorumCertificate<TYPES>),
+
+    /// A new undecided view has been proposed.
+    NewUndecidedView(Leaf<TYPES>),
 }

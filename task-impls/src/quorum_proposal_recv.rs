@@ -22,6 +22,7 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, warn};
+use vbs::version::Version;
 
 use crate::{
     consensus::helpers::{handle_quorum_proposal_recv, parent_leaf_and_state},
@@ -91,6 +92,9 @@ pub struct QuorumProposalRecvTaskState<TYPES: NodeType, I: NodeImplementation<TY
 
     /// The node's id
     pub id: u64,
+
+    /// Current version of consensus
+    pub version: Version,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<TYPES, I> {
@@ -116,7 +120,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
     ) {
         #[cfg(feature = "dependency-tasks")]
         if let HotShotEvent::QuorumProposalRecv(proposal, sender) = event.as_ref() {
-            match handle_quorum_proposal_recv(proposal, sender, event_stream.clone(), self).await {
+            match handle_quorum_proposal_recv(
+                proposal,
+                sender,
+                event_stream.clone(),
+                self,
+                self.version,
+            )
+            .await
+            {
                 Ok(Some(current_proposal)) => {
                     // Build the parent leaf since we didn't find it during the proposal check.
                     let parent_leaf = match parent_leaf_and_state(
