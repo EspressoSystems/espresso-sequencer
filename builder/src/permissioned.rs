@@ -439,8 +439,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             req_receiver,
             global_state_clone,
             NonZeroUsize::new(1).unwrap(),
-            bootstrapped_view,
-            buffered_view_num_count as u64,
             maximize_txns_count_timeout_duration,
             instance_state
                 .chain_config()
