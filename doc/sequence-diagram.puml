@@ -34,11 +34,11 @@ box "Ethereum L1" #LightGrey
     participant "Fee\nContract" as fee
 end box
 
-group 1. Fee Deposit
+group 1. Fee deposit
     Builder -> fee: fee deposit
 end group
 
-group 2. Transaction Submisssion
+group 2. Transaction submisssion
     User -> rpc: transaction
     rpc -> submit: transaction, namespace ID
     events -> Builder: transactions
@@ -59,8 +59,8 @@ group 4. HotShot consensus
 end group
 
 group 5. HotShot proving
-    signer -> relay: state + signature
-    relay -> prover: state + signature bundle
+    signer -> relay: state, signature
+    relay -> prover: state, signature bundle
     prover -> "Light\nClient\nContract" as LC: proof
     LC -> LC: verify
 end group

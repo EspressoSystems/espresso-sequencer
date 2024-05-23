@@ -21,6 +21,9 @@ package "Espresso Sequencer Network" as Network #MistyRose {
     Broker -> KeyDB: state
     KeyDB -> Marshal: state
     Nodes <--> CDN: consensus\nmessages
+    note top of link
+        4. HotShot consensus
+    end note
 
     component "Sequencer Node" as Seq #Bisque {
         database "Postgres" as DB
@@ -56,11 +59,17 @@ Nodes <--> Libp2p: consensus\nmessages
 "CDN Client" <--> CDN: consensus\nmessages
 
 ' HotShot state
-Signer -down-> Relay: state
-Relay --> HSProver: state
+Signer -down-> Relay: state,\nsignature
+note top of link
+    5. HotShot proving
+end note
+Relay --> HSProver: state,\nsignature bundle
 
 ' Builder
-Builder --> HotShot: block
+Builder --> HotShot: espresso block
+note top of link
+    3. Leader obtains block
+end note
 EventsStream -> Builder: transactions
 
 ' Events
@@ -94,12 +103,18 @@ package "Ethereum Layer 1" as L1 #LightGray {
 ' Transaction submission
 entity User
 User -Up-> L2_RPC : transactions,\nstate queries
+note top of link
+    2. Transaction submission
+end note
 L2_RPC --> Submit : "transaction\nNamespaceId Rollup N" " "
 Query -up-> L2_Exec : " " "Block\n(sequenced transactions)"
 
 ' L1 details
 HSProver -down-> LC_L1 : HotShot\nstate\nproof
-L2_Prover -> L2_L1 : rollup\nstate\nproof
+L2_Prover -> L2_L1 : rollup state proof
+note top of link
+    6. Rollup proving
+end note
 LC_L1 -> L2_L1 : HotShot\ncommitment
 
 ' L2 details
@@ -107,7 +122,10 @@ L2_RPC <-up- L2_State : Read state
 L2_Exec -up-> L2_State : Write state
 L2_Prover <-up- L2_State : Read State
 
-Builder --> Fee_L1: deposit\nfee
+Builder --> Fee_L1: deposit\nether
+note top of link
+    1. Fee deposit
+end note
 Fee_L1 -up-> Validated: fee\ndeposits
 
 @enduml
