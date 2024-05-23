@@ -10,6 +10,9 @@ pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 
+mod message_compat_tests;
+mod reference_tests;
+
 use anyhow::Context;
 use async_std::sync::RwLock;
 use async_trait::async_trait;

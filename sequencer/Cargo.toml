@@ -14,6 +14,7 @@ espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.gi
 fluent-asserter = "0.1.9"
 hotshot-query-service = { workspace = true, features = ["testing"] }
 hotshot-testing = { workspace = true }
+pretty_assertions = { workspace = true }
 rand = "0.8.5"
 reqwest = { workspace = true }
 tempfile = "3.9.0"
@@ -77,7 +78,6 @@ jf-rescue = { workspace = true }
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
-lazy_static = "1.4"
 num-traits = "0.2.18"
 portpicker = { workspace = true }
 rand = "0.8.5"
