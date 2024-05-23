@@ -686,42 +686,43 @@ impl ResourceManager<Header> {
         // Sanity check the window: prev and next should be correct bookends.
         if let Some(prev) = &window.prev {
             ensure!(
-                prev.timestamp < start,
-                format!("prev header {} is later than {start}", prev.height)
+                prev.timestamp() < start,
+                format!("prev header {} is later than {start}", prev.height())
             );
         }
         if let Some(next) = &window.next {
             ensure!(
-                next.timestamp >= end,
-                format!("next header {} is earlier than {end}", next.height)
+                next.timestamp() >= end,
+                format!("next header {} is earlier than {end}", next.height())
             );
         }
         // Each header in the window proper should have an appropriate timestamp.
         let mut prev = window.prev;
         for header in window.window {
             ensure!(
-                header.timestamp >= start && header.timestamp < end,
+                header.timestamp() >= start && header.timestamp() < end,
                 format!(
                     "header {} with timestamp {} is not in window [{start}, {end})",
-                    header.height, header.timestamp
+                    header.height(),
+                    header.timestamp()
                 )
             );
 
             if let Some(prev) = prev {
                 ensure!(
-                    prev.height + 1 == header.height,
+                    prev.height() + 1 == header.height(),
                     format!(
                         "headers in window from {start} to {end} are not consecutive (prev = {}, curr = {})",
-                        prev.height,
-                        header.height,
+                        prev.height(),
+                        header.height(),
                     ),
                 );
                 ensure!(
-                    prev.timestamp <= header.timestamp,
+                    prev.timestamp() <= header.timestamp(),
                     format!(
                         "headers in window from {start} to {end} have decreasing timestamps (prev = {}, curr = {})",
-                        prev.timestamp,
-                        header.timestamp,
+                        prev.timestamp(),
+                        header.timestamp(),
                     ),
                 );
             }
@@ -781,9 +782,13 @@ impl ResourceManager<Header> {
 
         // Check that the proof proves inclusion of `index_header` at position `index` relative to
         // `block_header`.
-        BlockMerkleTree::verify(block_header.block_merkle_tree_root.digest(), index, &proof)
-            .context("malformed merkle proof")?
-            .or_else(|_| bail!("invalid merkle proof"))?;
+        BlockMerkleTree::verify(
+            block_header.block_merkle_tree_root().digest(),
+            index,
+            &proof,
+        )
+        .context("malformed merkle proof")?
+        .or_else(|_| bail!("invalid merkle proof"))?;
         ensure!(
             proof.elem() == Some(&index_header.commit()),
             "merkle proof is for wrong element: {:?} != {:?}",
@@ -799,19 +804,19 @@ impl ResourceManager<Header> {
                     "get block proof by state commitment",
                     block,
                     index,
-                    commitment = %block_header.block_merkle_tree_root,
+                    commitment = %block_header.block_merkle_tree_root(),
                 ),
                 || async {
                     self.client
                         .get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>(&format!(
                             "block-state/commit/{}/{index}",
-                            block_header.block_merkle_tree_root,
+                            block_header.block_merkle_tree_root(),
                         ))
                         .send()
                         .await
                         .context(format!(
                             "getting merkle proof {},{index}",
-                            block_header.block_merkle_tree_root
+                            block_header.block_merkle_tree_root()
                         ))
                 },
             )
@@ -840,7 +845,7 @@ impl ResourceManager<Header> {
                     .context(format!("getting header {builder}"))
             })
             .await?;
-        let builder_address = builder_header.fee_info.account();
+        let builder_address = builder_header.fee_info().account();
 
         // Get the header of the state snapshot we're going to query so we can later verify our
         // results.
@@ -873,7 +878,7 @@ impl ResourceManager<Header> {
         // Check that the proof is valid relative to `builder_header`.
         if proof.elem().is_some() {
             FeeMerkleTree::verify(
-                block_header.fee_merkle_tree_root.digest(),
+                block_header.fee_merkle_tree_root().digest(),
                 builder_address,
                 &proof,
             )
@@ -881,7 +886,7 @@ impl ResourceManager<Header> {
             .or_else(|_| bail!("invalid membership proof"))?;
         } else {
             ensure!(
-                FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root)
+                FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root())
                     .non_membership_verify(builder_address, &proof)
                     .context("malformed non-membership proof")?,
                 "invalid non-membership proof"
@@ -896,19 +901,19 @@ impl ResourceManager<Header> {
                     "get account proof by state commitment",
                     block,
                     %builder_address,
-                    commitment = %block_header.fee_merkle_tree_root,
+                    commitment = %block_header.fee_merkle_tree_root(),
                 ),
                 || async {
                     self.client
                         .get::<<FeeMerkleTree as MerkleTreeScheme>::MembershipProof>(&format!(
                             "fee-state/commit/{}/{builder_address}",
-                            block_header.fee_merkle_tree_root,
+                            block_header.fee_merkle_tree_root(),
                         ))
                         .send()
                         .await
                         .context(format!(
                             "getting merkle proof {},{builder_address}",
-                            block_header.fee_merkle_tree_root
+                            block_header.fee_merkle_tree_root()
                         ))
                 },
             )
@@ -940,11 +945,11 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
                     .context(format!("fetching header {block}"))
             })
             .await?;
-        if header.ns_table.is_empty() {
+        if header.ns_table().is_empty() {
             tracing::info!("not fetching namespace because block {block} is empty");
             return Ok(());
         }
-        let ns = header.ns_table.get_table_entry(index).0;
+        let ns = header.ns_table().get_table_entry(index).0;
 
         let ns_proof: NamespaceProofQueryData = self
             .retry(info_span!("fetch namespace", %ns), || async {
@@ -970,7 +975,7 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
         ensure!(
             ns_proof
                 .proof
-                .verify(&vid, &header.payload_commitment, &header.ns_table)
+                .verify(&vid, &header.payload_commitment(), header.ns_table())
                 .is_some(),
             format!("namespace proof for {block}:{ns} is invalid")
         );

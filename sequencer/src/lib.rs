@@ -870,18 +870,18 @@ mod test {
             // the fields which should be monotonic are.
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
                 let header = leaf.block_header().clone();
-                if header.height == 0 {
+                if header.height() == 0 {
                     parent = header;
                     continue;
                 }
-                assert_eq!(header.height, parent.height + 1);
-                assert!(header.timestamp >= parent.timestamp);
-                assert!(header.l1_head >= parent.l1_head);
-                assert!(header.l1_finalized >= parent.l1_finalized);
+                assert_eq!(header.height(), parent.height() + 1);
+                assert!(header.timestamp() >= parent.timestamp());
+                assert!(header.l1_head() >= parent.l1_head());
+                assert!(header.l1_finalized() >= parent.l1_finalized());
                 parent = header;
             }
 
-            if parent.height >= success_height {
+            if parent.height() >= success_height {
                 break;
             }
         }

@@ -29,11 +29,33 @@ use vbs::version::Version;
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Header {
-    /// A commitment to a ChainConfig or a full ChainConfig.
-    pub chain_config: ResolvableChainConfig,
+    pub(crate) chain_config: ResolvableChainConfig,
+    pub(crate) height: u64,
+    pub(crate) timestamp: u64,
+    pub(crate) l1_head: u64,
+    pub(crate) l1_finalized: Option<L1BlockInfo>,
+    pub(crate) payload_commitment: VidCommitment,
+    pub(crate) builder_commitment: BuilderCommitment,
+    pub(crate) ns_table: NameSpaceTable<TxTableEntryWord>,
+    pub(crate) block_merkle_tree_root: BlockMerkleCommitment,
+    pub(crate) fee_merkle_tree_root: FeeMerkleCommitment,
+    pub(crate) fee_info: FeeInfo,
+    pub(crate) builder_signature: Option<BuilderSignature>,
+}
 
-    pub height: u64,
-    pub timestamp: u64,
+impl Header {
+    /// A commitment to a ChainConfig or a full ChainConfig.
+    pub fn chain_config(&self) -> &ResolvableChainConfig {
+        &self.chain_config
+    }
+
+    pub fn height(&self) -> u64 {
+        self.height
+    }
+
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp
+    }
 
     /// The Espresso block header includes a reference to the current head of the L1 chain.
     ///
@@ -58,69 +80,102 @@ pub struct Header {
     ///
     /// Rollups that want a stronger guarantee of finality, or that want Espresso to attest to data
     /// from the L1 block that might change in reorgs, can instead use the latest L1 _finalized_
-    /// block at the time this L2 block was sequenced: `l1_finalized`.
-    pub l1_head: u64,
+    /// block at the time this L2 block was sequenced: [`Self::l1_finalized`].
+    pub fn l1_head(&self) -> u64 {
+        self.l1_head
+    }
 
     /// The Espresso block header includes information a bout the latest finalized L1 block.
     ///
-    /// Similar to `l1_head`, rollups can use this information to implement a bridge between the L1
-    /// and L2 while retaining the finality of low-latency block confirmations from HotShot. Since
-    /// this information describes the finalized L1 block, a bridge using this L1 block will have
-    /// much higher latency than a bridge using `l1_head`. In exchange, rollups that use the
-    /// finalized block do not have to worry about L1 reorgs, and can inject verifiable attestations
-    /// to the L1 block metadata (such as its timestamp or hash) into their execution layers, since
-    /// Espresso replicas will sign this information for the finalized L1 block.
+    /// Similar to [`l1_head`](Self::l1_head), rollups can use this information to implement a
+    /// bridge between the L1 and L2 while retaining the finality of low-latency block confirmations
+    /// from HotShot. Since this information describes the finalized L1 block, a bridge using this
+    /// L1 block will have much higher latency than a bridge using [`l1_head`](Self::l1_head). In
+    /// exchange, rollups that use the finalized block do not have to worry about L1 reorgs, and can
+    /// inject verifiable attestations to the L1 block metadata (such as its timestamp or hash) into
+    /// their execution layers, since Espresso replicas will sign this information for the finalized
+    /// L1 block.
     ///
     /// This block may be `None` in the rare case where Espresso has started shortly after the
     /// genesis of the L1, and the L1 has yet to finalize a block. In all other cases it will be
     /// `Some`.
-    pub l1_finalized: Option<L1BlockInfo>,
+    pub fn l1_finalized(&self) -> Option<L1BlockInfo> {
+        self.l1_finalized
+    }
 
-    pub payload_commitment: VidCommitment,
-    pub builder_commitment: BuilderCommitment,
-    pub ns_table: NameSpaceTable<TxTableEntryWord>,
+    pub fn payload_commitment(&self) -> VidCommitment {
+        self.payload_commitment
+    }
+
+    pub fn builder_commitment(&self) -> &BuilderCommitment {
+        &self.builder_commitment
+    }
+
+    pub fn ns_table(&self) -> &NameSpaceTable<TxTableEntryWord> {
+        &self.ns_table
+    }
+
     /// Root Commitment of Block Merkle Tree
-    pub block_merkle_tree_root: BlockMerkleCommitment,
+    pub fn block_merkle_tree_root(&self) -> BlockMerkleCommitment {
+        self.block_merkle_tree_root
+    }
+
     /// Root Commitment of `FeeMerkleTree`
-    pub fee_merkle_tree_root: FeeMerkleCommitment,
+    pub fn fee_merkle_tree_root(&self) -> FeeMerkleCommitment {
+        self.fee_merkle_tree_root
+    }
+
     /// Fee paid by the block builder
-    pub fee_info: FeeInfo,
+    pub fn fee_info(&self) -> FeeInfo {
+        self.fee_info
+    }
+
     /// Account (etheruem address) of builder
     ///
     /// This signature is not considered formally part of the header; it is just evidence proving
-    /// that other parts of the header (`fee_info`) are correct. It exists in the header so that it
-    /// is available to all nodes to be used during validation. But since it is checked during
-    /// consensus, any downstream client who has a proof of consensus finality of a header can trust
-    /// that `fee_info` is correct without relying on the signature. Thus, this signature is not
-    /// included in the header commitment.
-    pub builder_signature: Option<BuilderSignature>,
+    /// that other parts of the header ([`fee_info`](Self::fee_info)) are correct. It exists in the
+    /// header so that it is available to all nodes to be used during validation. But since it is
+    /// checked during consensus, any downstream client who has a proof of consensus finality of a
+    /// header can trust that [`fee_info`](Self::fee_info) is correct without relying on the
+    /// signature. Thus, this signature is not included in the header commitment.
+    pub fn builder_signature(&self) -> Option<BuilderSignature> {
+        self.builder_signature
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+/// Expose some fields directly for tests that need to directly manipulate or construct headers.
+impl Header {
+    pub fn set_height(&mut self, height: u64) {
+        self.height = height;
+    }
 }
 
 impl Committable for Header {
     fn commit(&self) -> Commitment<Self> {
         let mut bmt_bytes = vec![];
-        self.block_merkle_tree_root
+        self.block_merkle_tree_root()
             .serialize_with_mode(&mut bmt_bytes, ark_serialize::Compress::Yes)
             .unwrap();
         let mut fmt_bytes = vec![];
-        self.fee_merkle_tree_root
+        self.fee_merkle_tree_root()
             .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
             .unwrap();
 
         RawCommitmentBuilder::new(&Self::tag())
-            .field("chain_config", self.chain_config.commit())
-            .u64_field("height", self.height)
-            .u64_field("timestamp", self.timestamp)
-            .u64_field("l1_head", self.l1_head)
-            .optional("l1_finalized", &self.l1_finalized)
+            .field("chain_config", self.chain_config().commit())
+            .u64_field("height", self.height())
+            .u64_field("timestamp", self.timestamp())
+            .u64_field("l1_head", self.l1_head())
+            .optional("l1_finalized", &self.l1_finalized())
             .constant_str("payload_commitment")
-            .fixed_size_bytes(self.payload_commitment.as_ref().as_ref())
+            .fixed_size_bytes(self.payload_commitment().as_ref().as_ref())
             .constant_str("builder_commitment")
-            .fixed_size_bytes(self.builder_commitment.as_ref())
-            .field("ns_table", self.ns_table.commit())
+            .fixed_size_bytes(self.builder_commitment().as_ref())
+            .field("ns_table", self.ns_table().commit())
             .var_size_field("block_merkle_tree_root", &bmt_bytes)
             .var_size_field("fee_merkle_tree_root", &fmt_bytes)
-            .field("fee_info", self.fee_info.commit())
+            .field("fee_info", self.fee_info().commit())
             .finalize()
     }
 
@@ -888,7 +943,7 @@ mod test_headers {
         let key_pair = EthKeyPair::for_test();
         let fee_amount = 0u64;
         let payload_commitment = parent_header.payload_commitment;
-        let builder_commitment = parent_header.builder_commitment();
+        let builder_commitment = parent_header.builder_commitment().clone();
         let ns_table = genesis.ns_table;
         let fee_signature =
             FeeAccount::sign_fee(&key_pair, fee_amount, &ns_table, &payload_commitment).unwrap();

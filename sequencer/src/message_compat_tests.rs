@@ -83,7 +83,7 @@ fn test_message_compat() {
         view: ViewNumber::genesis(),
     };
     let da_data = DaData {
-        payload_commit: block_header.payload_commitment,
+        payload_commit: block_header.payload_commitment(),
     };
 
     let consensus_messages = [

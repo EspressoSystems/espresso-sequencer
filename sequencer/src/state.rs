@@ -215,11 +215,11 @@ pub fn validate_proposal(
 
     // validate `ChainConfig`
     anyhow::ensure!(
-        proposal.chain_config.commit() == expected_chain_config.commit(),
+        proposal.chain_config().commit() == expected_chain_config.commit(),
         anyhow::anyhow!(
             "Invalid Chain Config: local={:?}, proposal={:?}",
             expected_chain_config,
-            proposal.chain_config
+            proposal.chain_config()
         )
     );
 
@@ -230,25 +230,25 @@ pub fn validate_proposal(
         anyhow::anyhow!(
             "Invalid Payload Size: local={:?}, proposal={:?}",
             expected_chain_config,
-            proposal.chain_config
+            proposal.chain_config()
         )
     );
     anyhow::ensure!(
-        proposal.fee_info.amount() >= expected_chain_config.base_fee * block_size,
+        proposal.fee_info().amount() >= expected_chain_config.base_fee * block_size,
         format!(
             "insufficient fee: block_size={block_size}, base_fee={:?}, proposed_fee={:?}",
             expected_chain_config.base_fee,
-            proposal.fee_info.amount()
+            proposal.fee_info().amount()
         )
     );
 
     // validate height
     anyhow::ensure!(
-        proposal.height == parent_header.height + 1,
+        proposal.height() == parent_header.height() + 1,
         anyhow::anyhow!(
             "Invalid Height Error: {}, {}",
-            parent_header.height,
-            proposal.height
+            parent_header.height(),
+            proposal.height()
         )
     );
 
@@ -259,21 +259,21 @@ pub fn validate_proposal(
 
     let block_merkle_tree_root = block_merkle_tree.commitment();
     anyhow::ensure!(
-        proposal.block_merkle_tree_root == block_merkle_tree_root,
+        proposal.block_merkle_tree_root() == block_merkle_tree_root,
         anyhow::anyhow!(
             "Invalid Block Root Error: local={}, proposal={}",
             block_merkle_tree_root,
-            proposal.block_merkle_tree_root
+            proposal.block_merkle_tree_root()
         )
     );
 
     let fee_merkle_tree_root = fee_merkle_tree.commitment();
     anyhow::ensure!(
-        proposal.fee_merkle_tree_root == fee_merkle_tree_root,
+        proposal.fee_merkle_tree_root() == fee_merkle_tree_root,
         anyhow::anyhow!(
             "Invalid Fee Root Error: local={}, proposal={}",
             fee_merkle_tree_root,
-            proposal.fee_merkle_tree_root
+            proposal.fee_merkle_tree_root()
         )
     );
     Ok(())
@@ -294,15 +294,19 @@ fn charge_fee(
 fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
     // Beware of Malice!
     let signature = proposed_header
-        .builder_signature
+        .builder_signature()
         .ok_or_else(|| anyhow::anyhow!("Builder signature not found"))?;
-    let fee_amount = proposed_header.fee_info.amount().as_u64().context(format!(
-        "fee amount out of range: {:?}",
-        proposed_header.fee_info.amount()
-    ))?;
+    let fee_amount = proposed_header
+        .fee_info()
+        .amount()
+        .as_u64()
+        .context(format!(
+            "fee amount out of range: {:?}",
+            proposed_header.fee_info().amount()
+        ))?;
     // verify signature
     anyhow::ensure!(
-        proposed_header.fee_info.account.validate_fee_signature(
+        proposed_header.fee_info().account.validate_fee_signature(
             &signature,
             fee_amount,
             proposed_header.metadata(),
@@ -327,16 +331,16 @@ async fn compute_state_update(
     // Check internal consistency.
     let parent_header = parent_leaf.block_header();
     ensure!(
-        state.block_merkle_tree.commitment() == parent_header.block_merkle_tree_root,
+        state.block_merkle_tree.commitment() == parent_header.block_merkle_tree_root(),
         "internal error! in-memory block tree {:?} does not match parent header {:?}",
         state.block_merkle_tree.commitment(),
-        parent_header.block_merkle_tree_root
+        parent_header.block_merkle_tree_root()
     );
     ensure!(
-        state.fee_merkle_tree.commitment() == parent_header.fee_merkle_tree_root,
+        state.fee_merkle_tree.commitment() == parent_header.fee_merkle_tree_root(),
         "internal error! in-memory fee tree {:?} does not match parent header {:?}",
         state.fee_merkle_tree.commitment(),
-        parent_header.fee_merkle_tree_root
+        parent_header.fee_merkle_tree_root()
     );
 
     state.apply_header(instance, parent_leaf, header).await
@@ -568,7 +572,7 @@ impl ValidatedState {
         // in this block.
         let missing_accounts = self.forgotten_accounts(
             [
-                proposed_header.fee_info.account,
+                proposed_header.fee_info().account,
                 instance.chain_config().fee_recipient,
             ]
             .into_iter()
@@ -633,7 +637,7 @@ impl ValidatedState {
         charge_fee(
             &mut validated_state,
             &mut delta,
-            proposed_header.fee_info,
+            proposed_header.fee_info(),
             instance.chain_config().fee_recipient,
         )?;
 
@@ -647,7 +651,7 @@ pub async fn get_l1_deposits(
     parent_leaf: &Leaf,
 ) -> Vec<FeeInfo> {
     if let (Some(addr), Some(block_info)) =
-        (instance.chain_config.fee_contract, header.l1_finalized)
+        (instance.chain_config.fee_contract, header.l1_finalized())
     {
         instance
             .l1_client
@@ -655,7 +659,7 @@ pub async fn get_l1_deposits(
                 addr,
                 parent_leaf
                     .block_header()
-                    .l1_finalized
+                    .l1_finalized()
                     .map(|block_info| block_info.number),
                 block_info.number,
             )
@@ -754,19 +758,19 @@ impl HotShotState<SeqTypes> for ValidatedState {
     ///
     /// This can also be used to rebuild the state for catchup.
     fn from_header(block_header: &Header) -> Self {
-        let fee_merkle_tree = if block_header.fee_merkle_tree_root.size() == 0 {
+        let fee_merkle_tree = if block_header.fee_merkle_tree_root().size() == 0 {
             // If the commitment tells us that the tree is supposed to be empty, it is convenient to
             // just create an empty tree, rather than a commitment-only tree.
             FeeMerkleTree::new(FEE_MERKLE_TREE_HEIGHT)
         } else {
-            FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root)
+            FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root())
         };
-        let block_merkle_tree = if block_header.block_merkle_tree_root.size() == 0 {
+        let block_merkle_tree = if block_header.block_merkle_tree_root().size() == 0 {
             // If the commitment tells us that the tree is supposed to be empty, it is convenient to
             // just create an empty tree, rather than a commitment-only tree.
             BlockMerkleTree::new(BLOCK_MERKLE_TREE_HEIGHT)
         } else {
-            BlockMerkleTree::from_commitment(block_header.block_merkle_tree_root)
+            BlockMerkleTree::from_commitment(block_header.block_merkle_tree_root())
         };
         Self {
             fee_merkle_tree,

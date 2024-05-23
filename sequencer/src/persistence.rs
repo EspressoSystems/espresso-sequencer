@@ -140,7 +140,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                 (Leaf::genesis(&state), QuorumCertificate::genesis(&state))
             }
         };
-        let validated_state = if leaf.block_header().height == 0 {
+        let validated_state = if leaf.height() == 0 {
             // If we are starting from genesis, we can provide the full state.
             Some(Arc::new(ValidatedState::genesis(&state).0))
         } else {
@@ -283,7 +283,7 @@ mod persistence_tests {
 
         // Store a newer leaf, make sure storage gets updated.
         let mut leaf2 = leaf1.clone();
-        leaf2.block_header_mut().height += 1;
+        leaf2.block_header_mut().set_height(leaf1.height() + 1);
         let mut qc2 = qc1.clone();
         qc2.data.leaf_commit = leaf2.commit();
         qc2.vote_commitment = qc2.data.commit();
