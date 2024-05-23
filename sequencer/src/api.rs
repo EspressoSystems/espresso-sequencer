@@ -628,8 +628,7 @@ mod api_tests {
     use endpoints::NamespaceProofQueryData;
     use es_version::SequencerVersion;
     use futures::stream::StreamExt;
-    use hotshot_query_service::availability::LeafQueryData;
-    use hotshot_types::vid::vid_scheme;
+    use hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
     use portpicker::pick_unused_port;
     use surf_disco::Client;
     use test_helpers::{
@@ -661,7 +660,6 @@ mod api_tests {
         setup_logging();
         setup_backtrace();
 
-        let vid = vid_scheme(5);
         let txn = Transaction::new(Default::default(), vec![1, 2, 3, 4]);
 
         // Start query service.
@@ -715,9 +713,18 @@ mod api_tests {
                 .send()
                 .await
                 .unwrap();
+            let vid_common: VidCommonQueryData<SeqTypes> = client
+                .get(&format!("availability/vid/common/{block_num}"))
+                .send()
+                .await
+                .unwrap();
             ns_query_res
                 .proof
-                .verify(&header.ns_table, &header.payload_commitment, xxx)
+                .verify(
+                    &header.ns_table,
+                    &header.payload_commitment,
+                    vid_common.common(),
+                )
                 .unwrap();
 
             found_empty_block = found_empty_block || ns_query_res.transactions.is_empty();
