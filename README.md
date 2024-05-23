@@ -18,6 +18,13 @@ and robust infrastructure.
 
 This diagram below depicts a simplified view of the current architecture of the Espresso Sequencer.
 
+- Glossary
+  - Namespace: an identifier to distinguish rollups, akin to an Ethereum chain ID
+  - Rollup transaction: an transaction a user submits to a rollup, usually an EVM transaction
+  - Transaction: a transaction inside the Espresso Sequencer: a rollup transaction plus a namespace ID of the rollup
+  - Rollup block: a block in a rollup consisting only of transactions in this rollup
+  - Espresso block: a block produced by the Espresso sequencer containing transactions of multiple rollups
+
 ![Architecture diagram](./doc/architecture.svg)
 
 The sequence diagram below serves as a complement to the architecture diagram. The following interactions are depicted.

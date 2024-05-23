@@ -54,7 +54,7 @@ package "Espresso Sequencer Network" as Network #MistyRose {
 }
 
 ' Network
-Nodes --> Catchup: " " "missing\nstate"
+Nodes <-- Catchup: " " "missing\nstate"
 Nodes <--> Libp2p: consensus\nmessages
 "CDN Client" <--> CDN: consensus\nmessages
 
@@ -66,21 +66,22 @@ end note
 Relay --> HSProver: state,\nsignature bundle
 
 ' Builder
-Builder --> HotShot: espresso block
+Builder --> HotShot: Espresso block
 note top of link
-    3. Leader obtains block
+    3. Leader obtains
+    Espresso block
 end note
 EventsStream -> Builder: transactions
 
 ' Events
-Networking -> Events
-Events -up-> EventsStream
+Networking <-up-> Events
+Events -up-> EventsStream: events
 Events -down-> Validated
 
 ' Storage
 Query --> DB
 Validated -up-> DB
-Catchup --> DB
+DB --> Catchup: " " "missing\nstate"
 
 package "Layer 2s / Rollups" as L2s #LightYellow {
     component "Rollup N" as L2 {
@@ -102,12 +103,13 @@ package "Ethereum Layer 1" as L1 #LightGray {
 
 ' Transaction submission
 entity User
-User -Up-> L2_RPC : transactions,\nstate queries
+User -Up-> L2_RPC : rollup transaction,\nstate queries
 note top of link
     2. Transaction submission
 end note
-L2_RPC --> Submit : "transaction\nNamespaceId Rollup N" " "
-Query -up-> L2_Exec : " " "Block\n(sequenced transactions)"
+L2_RPC --> Submit : "transaction" " "
+Submit -> Events: "transaction" " "
+Query -up-> L2_Exec : " " "Espresso header,\n transactions in namespace"
 
 ' L1 details
 HSProver -down-> LC_L1 : HotShot\nstate\nproof

@@ -39,12 +39,12 @@ group 1. Fee deposit
 end group
 
 group 2. Transaction submisssion
-    User -> rpc: transaction
-    rpc -> submit: transaction, namespace ID
+    User -> rpc: rollup transaction
+    rpc -> submit: transaction
     events -> Builder: transactions
 end group
 
-group 3. Leader obtains block
+group 3. Leader obtains Espresso block
     Builder -> leader: available blocks
     leader -> Builder: claim block
 end group
@@ -66,8 +66,11 @@ group 5. HotShot proving
 end group
 
 group 6. Rollup proving
-    query -> executor: block
-    executor -> rprover: block
+    loop N (rollup blocks per proof) times
+    query -> executor: Espresso header,\ntransactions in namespace
+    executor -> executor: verify namespace proof
+    executor -> rprover: rollup block
+                           end
     rprover -> RC: rollup state proof
 
     group verify
