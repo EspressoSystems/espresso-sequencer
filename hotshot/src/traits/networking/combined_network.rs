@@ -245,21 +245,24 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                         quorum_p2p,
                     ),
                 );
+
+                // We want to  the message cache between the two networks
+                let message_cache = Arc::new(RwLock::new(LruCache::new(
+                    NonZeroUsize::new(COMBINED_NETWORK_CACHE_SIZE).unwrap(),
+                )));
+
+                // Create the quorum and da networks
                 let quorum_net = Self {
                     networks: Arc::new(quorum_networks),
-                    message_cache: Arc::new(RwLock::new(LruCache::new(
-                        NonZeroUsize::new(COMBINED_NETWORK_CACHE_SIZE).unwrap(),
-                    ))),
                     primary_fail_counter: Arc::new(AtomicU64::new(0)),
                     primary_down: Arc::new(AtomicBool::new(false)),
+                    message_cache: Arc::clone(&message_cache),
                     delayed_tasks: Arc::default(),
                     delay_duration: Arc::new(RwLock::new(secondary_network_delay)),
                 };
                 let da_net = Self {
                     networks: Arc::new(da_networks),
-                    message_cache: Arc::new(RwLock::new(LruCache::new(
-                        NonZeroUsize::new(COMBINED_NETWORK_CACHE_SIZE).unwrap(),
-                    ))),
+                    message_cache,
                     primary_fail_counter: Arc::new(AtomicU64::new(0)),
                     primary_down: Arc::new(AtomicBool::new(false)),
                     delayed_tasks: Arc::default(),
@@ -436,19 +439,19 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
         };
 
         let mut filtered_msgs = Vec::with_capacity(msgs.len());
+
+        // For each message,
         for msg in msgs {
-            // see if we've already seen this message
-            if !self
-                .message_cache
-                .read()
-                .await
-                .contains(&calculate_hash_of(&msg))
-            {
+            // Calculate hash of the message
+            let message_hash = calculate_hash_of(&msg);
+
+            // Add the hash to the cache
+            if !self.message_cache.read().await.contains(&message_hash) {
+                // If the message is not in the cache, process it
                 filtered_msgs.push(msg.clone());
-                self.message_cache
-                    .write()
-                    .await
-                    .put(calculate_hash_of(&msg), ());
+
+                // Add it to the cache
+                self.message_cache.write().await.put(message_hash, ());
             }
         }
 

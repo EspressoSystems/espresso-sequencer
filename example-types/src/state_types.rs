@@ -12,6 +12,7 @@ use hotshot_types::{
     },
     vid::VidCommon,
 };
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use vbs::version::Version;
 
@@ -104,14 +105,20 @@ impl<TYPES: NodeType> ValidatedState<TYPES> for TestValidatedState {
 impl<TYPES: NodeType<BlockPayload = TestBlockPayload>> TestableState<TYPES> for TestValidatedState {
     fn create_random_transaction(
         _state: Option<&Self>,
-        _rng: &mut dyn rand::RngCore,
+        rng: &mut dyn rand::RngCore,
         padding: u64,
     ) -> <TYPES::BlockPayload as BlockPayload>::Transaction {
         /// clippy appeasement for `RANDOM_TX_BASE_SIZE`
         const RANDOM_TX_BASE_SIZE: usize = 8;
-        TestTransaction::new(vec![
-            0;
-            RANDOM_TX_BASE_SIZE + usize::try_from(padding).unwrap()
-        ])
+
+        // Generate a random transaction
+        let mut tx = rng.gen::<[u8; RANDOM_TX_BASE_SIZE]>().to_vec();
+
+        // Create and add padding to the transaction
+        let padding = vec![0; padding.try_into().expect("transaction padding too large")];
+        tx.extend(padding);
+
+        // Return the transaction
+        TestTransaction::new(tx)
     }
 }
