@@ -10,8 +10,6 @@ if [ -z "${IN_NIX_SHELL-}" ]; then
     export "PATH=${TARGET_DIR}/release:$PATH"
 fi
 
-export PATH=./target/release:$PATH
-
 ESPRESSO_BASE_STORAGE_PATH=$(mktemp -d -t espresso-XXXXXXXX)
 export ESPRESSO_BASE_STORAGE_PATH
 echo "Using sequencer storage path: $ESPRESSO_BASE_STORAGE_PATH"
