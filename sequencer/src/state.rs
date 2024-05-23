@@ -60,7 +60,7 @@ pub struct ValidatedState {
     pub fee_merkle_tree: FeeMerkleTree,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Delta {
     pub fees_delta: HashSet<FeeAccount>,
 }
