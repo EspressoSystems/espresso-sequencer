@@ -560,6 +560,7 @@ pub mod testing {
                 Duration::from_millis(2000),
                 15,
                 Duration::from_millis(500),
+                Duration::from_millis(100),
             )
             .await
             .unwrap();

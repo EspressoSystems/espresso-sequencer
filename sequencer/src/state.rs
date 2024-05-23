@@ -46,7 +46,7 @@ use sequencer_utils::impl_to_fixed_bytes;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
-use std::{collections::HashSet, ops::Add, str::FromStr};
+use std::{collections::BTreeSet, ops::Add, str::FromStr};
 use vbs::version::Version;
 
 const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
@@ -60,9 +60,9 @@ pub struct ValidatedState {
     pub fee_merkle_tree: FeeMerkleTree,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub struct Delta {
-    pub fees_delta: HashSet<FeeAccount>,
+    pub fees_delta: BTreeSet<FeeAccount>,
 }
 
 impl StateDelta for Delta {}

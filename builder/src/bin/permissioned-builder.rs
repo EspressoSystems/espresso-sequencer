@@ -178,6 +178,16 @@ pub struct PermissionedBuilderOptions {
     /// Base Fee for a block
     #[clap(long, env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE", default_value = "0")]
     base_fee: u64,
+
+    /// The amount of time a builder can spend garbage collecting transactions.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_BUILDER_GARBAGE_COLLECT_DURATION",
+        default_value = "100ms",
+        value_parser = parse_duration
+    )]
+    txn_garbage_collect_duration: Duration,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -293,6 +303,7 @@ async fn main() -> anyhow::Result<()> {
         txn_timeout_duration,
         opt.base_fee,
         opt.max_block_size,
+        opt.txn_garbage_collect_duration,
     )
     .await?;
 

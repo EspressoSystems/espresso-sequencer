@@ -87,6 +87,7 @@ impl BuilderConfig {
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
+        txn_garbage_collect_duration: Duration,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
@@ -159,6 +160,7 @@ impl BuilderConfig {
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
+            txn_garbage_collect_duration,
         );
 
         // spawn the builder event loop

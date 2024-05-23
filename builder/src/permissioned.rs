@@ -143,6 +143,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     maximize_txns_count_timeout_duration: Duration,
     base_fee: u64,
     max_block_size: u64,
+    txn_garbage_collect_duration: Duration,
 ) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -187,7 +188,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Initialize the push CDN network (and perform the initial connection)
     let cdn_network = PushCdnNetwork::new(
         network_params.cdn_endpoint,
-        vec![Topic::Global, Topic::DA],
+        vec![Topic::Global, Topic::Da],
         KeyPair {
             public_key: WrappedSignatureKey(my_config.public_key),
             private_key: my_config.private_key.clone(),
@@ -288,6 +289,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         max_api_timeout_duration,
         buffered_view_num_count,
         maximize_txns_count_timeout_duration,
+        txn_garbage_collect_duration,
     )
     .await?;
 
@@ -383,6 +385,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
+        txn_garbage_collect_duration: Duration,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
@@ -446,6 +449,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
+            txn_garbage_collect_duration,
         );
 
         let hotshot_handle_clone = hotshot_handle.clone();

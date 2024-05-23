@@ -87,6 +87,16 @@ struct NonPermissionedBuilderOptions {
         default_value = "15"
     )]
     buffer_view_num_count: usize,
+
+    /// The amount of time a builder can spend garbage collecting transactions.
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_BUILDER_GARBAGE_COLLECT_DURATION",
+        default_value = "100ms",
+        value_parser = parse_duration
+    )]
+    txn_garbage_collect_duration: Duration,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -138,6 +148,9 @@ async fn main() -> anyhow::Result<()> {
 
     let buffer_view_num_count = opt.buffer_view_num_count;
 
+    // How long can the builder spend garbage collecting?
+    let txn_garbage_collect_duration = opt.txn_garbage_collect_duration;
+
     let _builder_config = BuilderConfig::init(
         builder_key_pair,
         bootstrapped_view,
@@ -149,6 +162,7 @@ async fn main() -> anyhow::Result<()> {
         api_response_timeout_duration,
         buffer_view_num_count,
         txn_timeout_duration,
+        txn_garbage_collect_duration,
     )
     .await;
 
