@@ -2219,8 +2219,10 @@ where
                 FROM header AS h
                 JOIN payload AS p ON
                     p.height = h.height
-                ORDER BY h.height DESC
-                LIMIT 50",
+                WHERE
+                    h.height IN (SELECT height FROM header ORDER BY height DESC LIMIT 50)
+                ORDER BY h.height ASC 
+                ",
                 Vec::<Box<dyn ToSql + Send + Sync>>::new(),
             ).await?;
 
