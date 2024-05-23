@@ -5,7 +5,6 @@ use crate::{
     },
     NamespaceId, NodeState, Transaction,
 };
-use committable::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{
     traits::{BlockPayload, EncodeBytes},
@@ -107,14 +106,6 @@ impl BlockPayload for Payload {
     }
 
     // TODO change `BlockPayload` trait: remove arg `Self::Metadata`
-    fn transaction_commitments(
-        &self,
-        _metadata: &Self::Metadata,
-    ) -> Vec<Commitment<Self::Transaction>> {
-        todo!()
-    }
-
-    // TODO change `BlockPayload` trait: remove arg `Self::Metadata`
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
         let ns_table_bytes = self.ns_table.as_bytes_slice();
         let mut digest = sha2::Sha256::new();
@@ -152,12 +143,15 @@ impl QueryablePayload for Payload {
         Iter::new(self)
     }
 
+    // TODO change `QueryablePayload` trait: add arg `VidCommon`
     // TODO change `QueryablePayload` trait: remove arg `Self::Metadata`
     fn transaction_with_proof(
         &self,
         _meta: &Self::Metadata,
         _index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
+        // TODO need a `VidCommon` to proceed
+        // TxProof::new(index, self, common)
         todo!()
     }
 }
@@ -165,12 +159,6 @@ impl QueryablePayload for Payload {
 impl Display for Payload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:#?}")
-    }
-}
-
-impl Committable for Payload {
-    fn commit(&self) -> committable::Commitment<Self> {
-        todo!()
     }
 }
 
