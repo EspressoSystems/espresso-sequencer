@@ -940,11 +940,11 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
                     .context(format!("fetching header {block}"))
             })
             .await?;
-        if header.ns_table.is_empty() {
+        if header.ns_table.iter().count() == 0 {
             tracing::info!("not fetching namespace because block {block} is empty");
             return Ok(());
         }
-        let ns = header.ns_table.get_table_entry(index).0;
+        let ns = header.ns_table.read_ns_id(index);
 
         let ns_proof: NamespaceProofQueryData = self
             .retry(info_span!("fetch namespace", %ns), || async {
@@ -970,7 +970,11 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
         ensure!(
             ns_proof
                 .proof
-                .verify(&vid, &header.payload_commitment, &header.ns_table)
+                .verify(
+                    &header.ns_table,
+                    &header.payload_commitment,
+                    vid_common.common()
+                )
                 .is_some(),
             format!("namespace proof for {block}:{ns} is invalid")
         );
