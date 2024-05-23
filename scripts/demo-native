@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # If we aren't in a nix shell (where this handled in flake.nix) add the target
-# directory to the path so that the process-compose binary can be found.
+# directory to the path so that the binaries are found by process-compose.
 if [ -z "${IN_NIX_SHELL-}" ]; then
     REPO_ROOT="$(dirname "$(dirname "$(readlink -fm "$0")")")"
     # Default to CARGO_TARGET_DIR if set, otherwise use the default target directory.
