@@ -130,17 +130,12 @@ pub(crate) async fn handle_view_change<TYPES: NodeType, I: NodeImplementation<TY
     let old_view_number = task_state.cur_view;
     debug!("Updating view from {old_view_number:?} to {new_view_number:?}");
 
-    // Cancel the old timeout task
-    if let Some(timeout_task) = task_state.timeout_task.take() {
-        cancel_task(timeout_task).await;
-    }
-
     // Move this node to the next view
     task_state.cur_view = new_view_number;
 
     // Spawn a timeout task if we did actually update view
     let timeout = task_state.timeout;
-    task_state.timeout_task = Some(async_spawn({
+    let new_timeout_task = async_spawn({
         let stream = sender.clone();
         // Nuance: We timeout on the view + 1 here because that means that we have
         // not seen evidence to transition to this new view
@@ -153,7 +148,14 @@ pub(crate) async fn handle_view_change<TYPES: NodeType, I: NodeImplementation<TY
             )
             .await;
         }
-    }));
+    });
+
+    // Cancel the old timeout task
+    cancel_task(std::mem::replace(
+        &mut task_state.timeout_task,
+        new_timeout_task,
+    ))
+    .await;
 
     let consensus = task_state.consensus.read().await;
     consensus

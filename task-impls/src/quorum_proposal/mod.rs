@@ -80,7 +80,7 @@ pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>
     pub round_start_delay: u64,
 
     /// timeout task handle
-    pub timeout_task: Option<JoinHandle<()>>,
+    pub timeout_task: JoinHandle<()>,
 
     /// This node's storage ref
     pub storage: Arc<RwLock<I::Storage>>,

@@ -77,7 +77,7 @@ pub struct Consensus2TaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
 
     /// Timeout task handle
-    pub timeout_task: Option<JoinHandle<()>>,
+    pub timeout_task: JoinHandle<()>,
 
     /// View timeout from config.
     pub timeout: u64,

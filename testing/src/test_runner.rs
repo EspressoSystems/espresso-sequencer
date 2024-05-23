@@ -333,6 +333,11 @@ where
 
         let (mut builder_task, builder_url) =
             B::start(config.num_nodes_with_stake.into(), B::Config::default()).await;
+
+        // Collect uninitialized nodes because we need to wait for all networks to be ready before starting the tasks
+        let mut uninitialized_nodes = Vec::new();
+        let mut networks_ready = Vec::new();
+
         for i in 0..total {
             let mut config = config.clone();
             let node_id = self.next_node_id;
@@ -365,6 +370,17 @@ where
 
             let networks = (self.launcher.resource_generator.channel_generator)(node_id).await;
             let storage = (self.launcher.resource_generator.storage)(node_id);
+
+            // Create a future that waits for the networks to be ready
+            let network0 = networks.0.clone();
+            let network1 = networks.1.clone();
+            let networks_ready_future = async move {
+                network0.wait_for_ready().await;
+                network1.wait_for_ready().await;
+            };
+
+            // Collect it so we can wait for all networks to be ready before starting the tasks
+            networks_ready.push(networks_ready_future);
 
             if self.launcher.metadata.skip_late && late_start.contains(&node_id) {
                 self.late_start.insert(
@@ -403,21 +419,30 @@ where
                         },
                     );
                 } else {
-                    let handle = hotshot.run_tasks().await;
-                    if node_id == 1 {
-                        if let Some(task) = builder_task.take() {
-                            task.start(Box::new(handle.event_stream()))
-                        }
-                    }
-
-                    self.nodes.push(Node {
-                        node_id,
-                        networks,
-                        handle,
-                    });
+                    uninitialized_nodes.push((node_id, networks, hotshot));
                 }
             }
+
             results.push(node_id);
+        }
+
+        // Wait for all networks to be ready
+        join_all(networks_ready).await;
+
+        // Then start the necessary tasks
+        for (node_id, networks, hotshot) in uninitialized_nodes {
+            let handle = hotshot.run_tasks().await;
+            if node_id == 1 {
+                if let Some(task) = builder_task.take() {
+                    task.start(Box::new(handle.event_stream()))
+                }
+            }
+
+            self.nodes.push(Node {
+                node_id,
+                networks,
+                handle,
+            });
         }
 
         results

@@ -51,11 +51,6 @@ pub(crate) async fn update_view<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         error!("Progress: entered view {:>6}", *new_view);
     }
 
-    // cancel the old timeout task
-    if let Some(timeout_task) = task_state.timeout_task.take() {
-        cancel_task(timeout_task).await;
-    }
-
     task_state.cur_view = new_view;
 
     // The next view is just the current view + 1
@@ -77,7 +72,7 @@ pub(crate) async fn update_view<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     }
 
     // Spawn a timeout task if we did actually update view
-    task_state.timeout_task = Some(async_spawn({
+    let new_timeout_task = async_spawn({
         let stream = event_stream.clone();
         // Nuance: We timeout on the view + 1 here because that means that we have
         // not seen evidence to transition to this new view
@@ -91,7 +86,15 @@ pub(crate) async fn update_view<TYPES: NodeType, I: NodeImplementation<TYPES>>(
             )
             .await;
         }
-    }));
+    });
+
+    // Cancel the old timeout task
+    cancel_task(std::mem::replace(
+        &mut task_state.timeout_task,
+        new_timeout_task,
+    ))
+    .await;
+
     let consensus = consensus.upgradable_read().await;
     consensus
         .metrics
