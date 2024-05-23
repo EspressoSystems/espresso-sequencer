@@ -87,8 +87,8 @@ impl NsTable {
     /// quantity might exceed the number of entries that could fit in the
     /// namespace table.
     ///
-    /// For a correct count of the number of namespaces in this namespace table
-    /// use [`self.iter().count()`].
+    /// For a correct count of the number of unique namespaces in this
+    /// namespace table use `iter().count()`.
     fn read_num_nss(&self) -> usize {
         let num_nss_byte_len = NUM_NSS_BYTE_LEN.min(self.0.len());
         usize_from_bytes::<NUM_NSS_BYTE_LEN>(&self.0[..num_nss_byte_len])

@@ -667,7 +667,7 @@ mod test {
         vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
     };
     use hotshot_types::utils::BuilderCommitment;
-    use sequencer::block::payload::Payload;
+    use sequencer::block2::Payload;
     use sequencer::persistence::no_storage::{self, NoStorage};
     use sequencer::persistence::sql;
     use sequencer::{empty_builder_commitment, Header};

@@ -209,7 +209,6 @@ impl hotshot_types::traits::block_contents::TestableBlock for Payload {
     }
 
     fn txn_count(&self) -> u64 {
-        use hotshot_query_service::availability::QueryablePayload;
         self.len(&self.ns_table) as u64
     }
 }

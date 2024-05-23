@@ -31,14 +31,10 @@ use hotshot_query_service::{
     metrics::PrometheusMetrics,
     node::TimeWindowQueryData,
 };
-use hotshot_types::{
-    traits::metrics::{Counter, Gauge, Metrics as _},
-    vid::{vid_scheme, VidSchemeType},
-};
+use hotshot_types::traits::metrics::{Counter, Gauge, Metrics as _};
 use jf_merkle_tree::{
     ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
-use jf_vid::VidScheme;
 use rand::{seq::SliceRandom, RngCore};
 use sequencer::{
     api::endpoints::NamespaceProofQueryData,
@@ -940,11 +936,13 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
                     .context(format!("fetching header {block}"))
             })
             .await?;
-        if header.ns_table.iter().count() == 0 {
+        let num_namespaces = header.ns_table.iter().count();
+        if num_namespaces == 0 {
             tracing::info!("not fetching namespace because block {block} is empty");
             return Ok(());
         }
-        let ns = header.ns_table.read_ns_id(index);
+        let ns_index = header.ns_table.iter().nth(index % num_namespaces).unwrap();
+        let ns = header.ns_table.read_ns_id(&ns_index);
 
         let ns_proof: NamespaceProofQueryData = self
             .retry(info_span!("fetch namespace", %ns), || async {
@@ -966,7 +964,6 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
                     .context(format!("fetching VID common {block}"))
             })
             .await?;
-        let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(vid_common.common()) as usize);
         ensure!(
             ns_proof
                 .proof
