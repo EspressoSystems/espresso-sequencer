@@ -6,6 +6,14 @@ box rollup #LightYellow
     participant "API\n(RPC)" as rpc
     participant "Prover" as rprover
     participant "Executor" as executor
+    participant Proposer
+    participant Challenger
+end box
+
+box "Ethereum L1" #LightGrey
+    participant "Rollup\nContract" as RC
+    participant "Light\nClient\nContract" as LC
+    participant "Fee\nContract" as fee
 end box
 
 box Espresso Sequencer Network #MistyRose
@@ -26,12 +34,6 @@ box Espresso Sequencer Network #MistyRose
     participant "HotShot\nreplicas" as replicas
     participant "HotShot\nstate\nrelay\nservice" as relay
     participant "HotShot\nstate\nprover\nservice" as prover
-end box
-
-box "Ethereum L1" #LightGrey
-    participant "Rollup\nContract" as RC
-    participant "Light\nClient\nContract" as LC
-    participant "Fee\nContract" as fee
 end box
 
 group 1. Fee deposit
@@ -58,23 +60,32 @@ group 4. HotShot consensus
     ValidatedState -> ValidatedState: apply header\ncharge fee
 end group
 
-group 5. HotShot proving
+group 5. Rollup block production
+    query -> executor: Espresso header,\ntransactions in namespace
+    executor -> executor: verify\nnamespace\nproof
+    executor -> rprover: rollup block
+end group
+
+group 6. HotShot proving
     signer -> relay: state, signature
-    relay -> prover: state, signature bundle
+    relay -> prover: state,\nsignature bundle
     prover -> "Light\nClient\nContract" as LC: proof
     LC -> LC: verify
 end group
 
-group 6. Rollup proving
-    loop N (rollup blocks per proof) times
-    query -> executor: Espresso header,\ntransactions in namespace
-    executor -> executor: verify namespace proof
-    executor -> rprover: rollup block
-                           end
+group 7. Rollup proving
     rprover -> RC: rollup state proof
 
     group verify
         LC -> "Rollup\nContract" as RC: HotShot\ncommitment
     end group
+end group
+
+group 8. Rollup dispute
+    Challenger -> RC: start dispute
+    loop until dispute resolved
+    Proposer -> RC: continue dispute
+    LC --> RC: HotShot\ncommitment
+    Challenger -> RC: continue dispute
 end group
 @enduml

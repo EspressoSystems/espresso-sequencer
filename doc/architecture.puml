@@ -61,7 +61,7 @@ Nodes <--> Libp2p: consensus\nmessages
 ' HotShot state
 Signer -down-> Relay: state,\nsignature
 note top of link
-    5. HotShot proving
+    6. HotShot proving
 end note
 Relay --> HSProver: state,\nsignature bundle
 
@@ -110,12 +110,16 @@ end note
 L2_RPC --> Submit : "transaction" " "
 Submit -> Events: "transaction" " "
 Query -up-> L2_Exec : " " "Espresso header,\n transactions in namespace"
+note top of link
+    5. Rollup block production
+end note
+
 
 ' L1 details
 HSProver -down-> LC_L1 : HotShot\nstate\nproof
 L2_Prover -> L2_L1 : rollup state proof
 note top of link
-    6. Rollup proving
+    7. Rollup proving
 end note
 LC_L1 -> L2_L1 : HotShot\ncommitment
 
