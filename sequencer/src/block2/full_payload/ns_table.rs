@@ -19,7 +19,9 @@ const NS_OFFSET_BYTE_LEN: usize = 4;
 const NS_ID_BYTE_LEN: usize = 4;
 
 /// TODO explain: similar API to `NsPayload`
+#[repr(transparent)]
 #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(transparent)]
 pub struct NsTable(#[serde(with = "base64_bytes")] Vec<u8>);
 
 impl NsTable {

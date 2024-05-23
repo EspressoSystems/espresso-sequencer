@@ -43,10 +43,10 @@ use vbs::BinarySerializer;
 type Serializer = vbs::Serializer<SequencerVersion>;
 
 fn reference_ns_table() -> NsTable {
-    bincode::deserialize(&[0; 48]).unwrap()
+    <Payload as BlockPayload>::genesis().1
 }
 
-const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~GL-lEBAwNZDldxDpySRZQChNnmn9vNzdIAL8W9ENOuh_";
+const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~U80RI9Eh3NOKB_oDps_H8PVJGLaRc7Klt7oKBOQoywFn";
 
 fn reference_l1_block() -> L1BlockInfo {
     L1BlockInfo {
@@ -115,7 +115,7 @@ fn reference_header() -> Header {
     }
 }
 
-const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~6Ol30XYkdKaNFXw0QAkcif18Lk8V8qkC4M81qTlwL707";
+const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~sCY1yv3Zqyq6jRT5LZRk52e1a80GetGI3Ni1Mt5QD9Hj";
 
 fn reference_transaction() -> Transaction {
     let payload: [u8; 1024] = std::array::from_fn(|i| (i % (u8::MAX as usize)) as u8);
