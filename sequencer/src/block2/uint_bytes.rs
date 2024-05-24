@@ -69,13 +69,13 @@ uint_bytes_impl!(u64);
 
 /// Impl [`serde`] for type `$T` with methods named `$to_bytes`, `$from_bytes`
 /// of the form
-/// ```
+/// ```ignore
 /// $T::$to_bytes(&self) -> $B
 /// $T::$from_bytes(bytes: &[u8]) -> Self
 /// ```
 /// where `$B` is any type that impls [`serde::Deserialize`] and has a method
 /// `as_ref` of the form
-/// ```
+/// ```ignore
 /// $B::as_ref(&self) -> &[u8]
 /// ```
 /// Typical examples of `$B` include array `[u8; N]`, slice `&[u8]`, or
