@@ -63,7 +63,7 @@ impl BlockPayload for Payload {
     type Instance = NodeState;
     type Metadata = NsTable;
 
-    // TODO change `BlockPayload` trait: return type should not include `Self::Metadata`
+    // TODO(BlockPayload): return type should not include `Self::Metadata`
     fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction>,
         instance_state: &Self::Instance,
@@ -80,14 +80,14 @@ impl BlockPayload for Payload {
         let mut ns_builders = HashMap::<NamespaceId, NsPayloadBuilder>::new();
         for tx in transactions.into_iter() {
             // accounting for block byte length limit
+            block_byte_len += tx.payload().len() + NsPayloadBuilder::tx_overhead_byte_len();
             if !ns_builders.contains_key(&tx.namespace()) {
                 // each new namespace adds overhead
                 block_byte_len += NsTableBuilder::ns_overhead_byte_len()
                     + NsPayloadBuilder::fixed_overhead_byte_len();
             }
-            block_byte_len += tx.payload().len() + NsPayloadBuilder::tx_overhead_byte_len();
             if block_byte_len > max_block_byte_len {
-                tracing::warn!("transactions truncated to fit in maximum block byte length");
+                tracing::warn!("transactions truncated to fit in maximum block byte length {max_block_byte_len}");
                 break;
             }
 
@@ -125,7 +125,7 @@ impl BlockPayload for Payload {
         Self::from_transactions([], &NodeState::mock()).unwrap()
     }
 
-    // TODO change `BlockPayload` trait: remove arg `Self::Metadata`
+    // TODO(BlockPayload): remove arg `Self::Metadata`
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
         let ns_table_bytes = self.ns_table.as_bytes_slice();
         let mut digest = sha2::Sha256::new();
@@ -145,12 +145,12 @@ impl BlockPayload for Payload {
 }
 
 impl QueryablePayload for Payload {
-    // TODO change `QueryablePayload` trait: remove `Ord` bound from `TransactionIndex`
+    // TODO(QueryablePayload): remove `Ord` bound from `TransactionIndex`
     type TransactionIndex = Index;
     type Iter<'a> = Iter<'a>;
     type InclusionProof = TxProof;
 
-    // TODO change `QueryablePayload` trait: remove arg `Self::Metadata`
+    // TODO(QueryablePayload): remove arg `Self::Metadata`
     fn len(&self, _meta: &Self::Metadata) -> usize {
         // Counting txs is nontrivial. The easiest solution is to consume an
         // iterator. If performance is a concern then we could cache this count
@@ -158,19 +158,19 @@ impl QueryablePayload for Payload {
         self.iter(_meta).count()
     }
 
-    // TODO change `QueryablePayload` trait: remove arg `Self::Metadata`
+    // TODO(QueryablePayload): remove arg `Self::Metadata`
     fn iter<'a>(&'a self, _meta: &'a Self::Metadata) -> Self::Iter<'a> {
         Iter::new(self)
     }
 
-    // TODO change `QueryablePayload` trait: add arg `VidCommon`
-    // TODO change `QueryablePayload` trait: remove arg `Self::Metadata`
+    // TODO(QueryablePayload): add arg `VidCommon`
+    // TODO(QueryablePayload): remove arg `Self::Metadata`
     fn transaction_with_proof(
         &self,
         _meta: &Self::Metadata,
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
-        // TODO HACK! THE RETURNED PROOF WILL FAIL VERIFICATION.
+        // TODO HACK! THE RETURNED PROOF MIGHT FAIL VERIFICATION.
         //
         // Need a `VidCommon` to proceed. Need to modify `QueryablePayload`
         // trait to add a `VidCommon` arg. In the meantime tests fail if I leave
@@ -196,10 +196,8 @@ impl EncodeBytes for Payload {
     }
 }
 
-/// TODO explain: ZST to unlock visibility in other modules. can only be
-/// constructed in this module.
-pub struct A(());
-
+/// Byte length of a block payload, which includes all namespaces but *not* the
+/// namespace table.
 pub struct PayloadByteLen(u32);
 
 impl PayloadByteLen {

@@ -1,13 +1,20 @@
+//! Types related to a namespace payload and its transaction table.
+//!
+//! All code that needs to know the binary format of a namespace payload and its
+//! transaction table is restricted to this file.
+//!
+//! There are many newtypes in this file to facilitate transaction proofs.
 use crate::block2::uint_bytes::{bytes_serde_impl, usize_from_bytes, usize_to_bytes};
 use crate::Transaction;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
 
-// TODO explain: the constants that dictate tx table data sizes
+/// Byte lengths for the different items that could appear in a tx table.
 const NUM_TXS_BYTE_LEN: usize = 4;
 const TX_OFFSET_BYTE_LEN: usize = 4;
 
 /// Data that can be deserialized from a subslice of namespace payload bytes.
+///
 /// Companion trait for [`NsPayloadBytesRange`], which specifies the subslice of
 /// namespace payload bytes to read.
 pub trait FromNsPayloadBytes<'a> {
@@ -15,9 +22,10 @@ pub trait FromNsPayloadBytes<'a> {
     fn from_payload_bytes(bytes: &'a [u8]) -> Self;
 }
 
-/// Specifies a subslice of namespace payload bytes to read. Compantion trait
-/// for [`FromNsPayloadBytes`], which holds data that can be deserialized from
-/// that subslice of bytes.
+/// Specifies a subslice of namespace payload bytes to read.
+///
+/// Compantion trait for [`FromNsPayloadBytes`], which holds data that can be
+/// deserialized from that subslice of bytes.
 pub trait NsPayloadBytesRange<'a> {
     type Output: FromNsPayloadBytes<'a>;
 
@@ -33,8 +41,8 @@ pub struct NumTxs(usize);
 impl NumTxs {
     /// Returns the minimum of:
     /// - `num_txs`
-    /// - The maximum number of tx table entries that could fit in the namespace
-    ///   payload.
+    /// - The maximum number of tx table entries that could fit in a namespace
+    ///   whose byte length is `byte_len`.
     pub fn new(num_txs: &NumTxsUnchecked, byte_len: &NsPayloadByteLen) -> Self {
         Self(std::cmp::min(
             // Number of txs declared in the tx table
@@ -53,15 +61,16 @@ impl NumTxs {
 pub struct NsPayloadByteLen(usize);
 
 impl NsPayloadByteLen {
-    // TODO restrict visibility
+    // TODO restrict visibility?
     pub fn from_usize(n: usize) -> Self {
         Self(n)
     }
 }
 
 /// The part of a tx table that declares the number of txs in the payload.
-/// "Unchecked" because this quantity might be larger than the number of tx
-/// table entries that could fit into the namespace that contains it.
+///
+/// "Unchecked" because this quantity might exceed the number of tx table
+/// entries that could fit into the namespace that contains it.
 ///
 /// Use [`NumTxs`] for the actual number of txs in this namespace.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -110,7 +119,7 @@ impl NsPayloadBytesRange<'_> for NumTxsRange {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TxTableEntries {
     cur: usize,
-    prev: Option<usize>, // TODO no Option, just usize
+    prev: Option<usize>, // `None` if derived from the first transaction
 }
 
 // This serde impl uses Vec. We could save space by using an array of

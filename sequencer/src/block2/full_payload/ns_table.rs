@@ -1,6 +1,10 @@
+//! Types related to a namespace table.
+//!
+//! All code that needs to know the binary format of a namespace table is
+//! restricted to this file.
 use crate::{
     block2::{
-        full_payload::payload::{self, PayloadByteLen},
+        full_payload::payload::PayloadByteLen,
         namespace_payload::NsPayloadRange,
         uint_bytes::{
             bytes_serde_impl, u64_from_bytes, u64_to_bytes, usize_from_bytes, usize_to_bytes,
@@ -13,29 +17,24 @@ use hotshot_types::traits::EncodeBytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{collections::HashSet, sync::Arc};
 
-// TODO explain: the constants that dictate ns table data sizes
+/// Byte lengths for the different items that could appear in a namespace table.
 const NUM_NSS_BYTE_LEN: usize = 4;
 const NS_OFFSET_BYTE_LEN: usize = 4;
 const NS_ID_BYTE_LEN: usize = 8;
 
-/// TODO explain: similar API to `NsPayload`
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct NsTable(#[serde(with = "base64_bytes")] Vec<u8>);
 
 impl NsTable {
-    /// TODO delete method [`NsTable::from_bytes_vec`] after `BlockPayload`
-    /// trait has been changed to remove `Self::Metadata` args.
-    pub fn from_bytes_vec(_: payload::A, bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
-
     pub fn as_bytes_slice(&self) -> &[u8] {
         &self.0
     }
 
     /// Read the namespace id from the `index`th entry from the namespace table.
+    ///
+    /// TODO fallibility in case index is out of bounds!
     pub fn read_ns_id(&self, index: &NsIndex) -> NamespaceId {
         let start = index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
 
