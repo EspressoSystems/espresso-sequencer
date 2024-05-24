@@ -32,6 +32,16 @@ impl NsTable {
         &self.0
     }
 
+    /// Search the namespace table for the ns_index belonging to `ns_id`.
+    pub fn find_ns_id(&self, ns_id: &NamespaceId) -> Option<NsIndex> {
+        self.iter().find(|index| self.read_ns_id(index) == *ns_id)
+    }
+
+    /// Iterator over all unique namespaces in the namespace table.
+    pub fn iter(&self) -> impl Iterator<Item = <NsIter as Iterator>::Item> + '_ {
+        NsIter::new(self)
+    }
+
     /// Read the namespace id from the `index`th entry from the namespace table.
     ///
     /// `index` is not checked. Use [`Self::in_bounds`] as needed.
@@ -45,11 +55,6 @@ impl NsTable {
         NamespaceId::from(u64_from_bytes::<NS_ID_BYTE_LEN>(
             &self.0[start..start + NS_ID_BYTE_LEN],
         ))
-    }
-
-    /// Search the namespace table for the ns_index belonging to `ns_id`.
-    pub fn find_ns_id(&self, ns_id: &NamespaceId) -> Option<NsIndex> {
-        self.iter().find(|index| self.read_ns_id(index) == *ns_id)
     }
 
     /// Does the `index`th entry exist in the namespace table?
@@ -84,11 +89,6 @@ impl NsTable {
         }
         .min(end);
         NsPayloadRange::new(start, end)
-    }
-
-    /// Iterator over all unique namespaces in the namespace table.
-    pub fn iter(&self) -> impl Iterator<Item = <NsIter as Iterator>::Item> + '_ {
-        NsIter::new(self)
     }
 
     // PRIVATE HELPERS START HERE
