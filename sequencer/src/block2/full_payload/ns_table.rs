@@ -75,25 +75,11 @@ impl NsTable {
         index.0 < num_nss_with_duplicates
     }
 
+    // CRATE-VISIBLE HELPERS START HERE
+
     /// Read subslice range for the `index`th namespace from the namespace
     /// table.
-    ///
-    /// Returns `None` if the `index`th entry does not exist in the namespace
-    /// table.
-    pub fn ns_range(
-        &self,
-        index: &NsIndex,
-        payload_byte_len: &PayloadByteLen,
-    ) -> Option<NsPayloadRange> {
-        if !self.in_bounds(index) {
-            return None;
-        }
-        Some(self.ns_range_unchecked(index, payload_byte_len))
-    }
-
-    /// Like [`NsTable::ns_range`] except `index` is not checked to be in
-    /// bounds.
-    pub fn ns_range_unchecked(
+    pub(in crate::block2) fn ns_range(
         &self,
         index: &NsIndex,
         payload_byte_len: &PayloadByteLen,

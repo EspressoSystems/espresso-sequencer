@@ -51,9 +51,7 @@ impl NsProof {
             });
         };
 
-        let ns_payload_range = payload
-            .ns_table()
-            .ns_range_unchecked(&ns_index, &payload_byte_len);
+        let ns_payload_range = payload.ns_table().ns_range(&ns_index, &payload_byte_len);
 
         // TODO vid_scheme() arg should be u32
         let vid = vid_scheme(
@@ -103,7 +101,7 @@ impl NsProof {
                         .unwrap(),
                 );
                 let range = ns_table
-                    .ns_range_unchecked(&ns_index, &PayloadByteLen::from_vid_common(common))
+                    .ns_range(&ns_index, &PayloadByteLen::from_vid_common(common))
                     .as_block_range();
                 vid.payload_verify(
                     Statement {

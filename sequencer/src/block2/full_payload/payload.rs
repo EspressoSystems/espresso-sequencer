@@ -41,7 +41,7 @@ impl Payload {
 
     /// Convenience wrapper for [`Self::read_ns_payload`].
     pub fn ns_payload_unchecked(&self, index: &NsIndex) -> &NsPayload {
-        let ns_payload_range = self.ns_table().ns_range_unchecked(index, &self.byte_len());
+        let ns_payload_range = self.ns_table().ns_range(index, &self.byte_len());
         self.read_ns_payload(&ns_payload_range)
     }
 
