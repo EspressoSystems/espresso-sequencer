@@ -118,8 +118,8 @@ impl ValidTest {
         R: RngCore,
     {
         let mut nss = HashMap::new();
-        for (ns_index, tx_lens) in tx_lengths.into_iter().enumerate() {
-            let ns_id = NamespaceId::from(ns_index as u64);
+        for tx_lens in tx_lengths.into_iter() {
+            let ns_id = NamespaceId::from(rng.next_u64());
             for len in tx_lens {
                 let ns: &mut Vec<_> = nss.entry(ns_id).or_default();
                 ns.push(Transaction::new(ns_id, random_bytes(len, rng)));
