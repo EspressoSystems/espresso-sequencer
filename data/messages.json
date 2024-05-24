@@ -8,7 +8,7 @@
             "data": {
               "block_header": {
                 "block_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAQA",
-                "builder_commitment": "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_",
+                "builder_commitment": "BUILDER_COMMITMENT~_FlsTMQYXvjU_M1TpJFyrGe9BGPU9Di-qALdKJb2hegZ",
                 "builder_signature": null,
                 "chain_config": {
                   "chain_config": {
@@ -29,9 +29,7 @@
                 "height": 0,
                 "l1_finalized": null,
                 "l1_head": 0,
-                "ns_table": {
-                  "bytes": "AAAAAA=="
-                },
+                "ns_table": "AAAAAA==",
                 "payload_commitment": "HASH~AazstQer_ho1SqgGT0r10_Gs0BnjfbPBHJdSO3HHbp29",
                 "timestamp": 0
               },
@@ -319,9 +317,7 @@
                 2,
                 3
               ],
-              "metadata": {
-                "bytes": "AQAAAAEAAAALAAAA"
-              },
+              "metadata": "AQAAAAEAAAALAAAA",
               "view_number": 0
             },
             "signature": "BLS_SIG~g3CUcLMD7fnDsBhItKvSqXLwEqdWfvusSrgpL1GBAxf-SWFW0t32Agt2jrOiempjjpI7dBwYGgXv-0mvI4sGEEE"
