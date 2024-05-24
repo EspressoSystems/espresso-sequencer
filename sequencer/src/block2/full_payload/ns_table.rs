@@ -16,7 +16,7 @@ use std::{collections::HashSet, sync::Arc};
 // TODO explain: the constants that dictate ns table data sizes
 const NUM_NSS_BYTE_LEN: usize = 4;
 const NS_OFFSET_BYTE_LEN: usize = 4;
-const NS_ID_BYTE_LEN: usize = 4;
+const NS_ID_BYTE_LEN: usize = 8;
 
 /// TODO explain: similar API to `NsPayload`
 #[repr(transparent)]
