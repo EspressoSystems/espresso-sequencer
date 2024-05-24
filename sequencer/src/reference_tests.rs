@@ -29,8 +29,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
 use es_version::SequencerVersion;
 use hotshot_types::traits::{
-    block_contents::vid_commitment, block_contents::TestableBlock,
-    signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
+    block_contents::vid_commitment, signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
 };
 use jf_merkle_tree::MerkleTreeScheme;
 use pretty_assertions::assert_eq;
@@ -42,11 +41,17 @@ use vbs::BinarySerializer;
 
 type Serializer = vbs::Serializer<SequencerVersion>;
 
-fn reference_ns_table() -> NsTable {
-    <Payload as BlockPayload>::genesis().1
+fn reference_payload() -> Payload {
+    Payload::from_transactions(vec![reference_transaction()], &Default::default())
+        .unwrap()
+        .0
 }
 
-const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~U80RI9Eh3NOKB_oDps_H8PVJGLaRc7Klt7oKBOQoywFn";
+fn reference_ns_table() -> NsTable {
+    reference_payload().ns_table().clone()
+}
+
+const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~OwNTwTqGy4ZTcZdKCvTlgZ8KhNE12gykd6HkT12QZgtF";
 
 fn reference_l1_block() -> L1BlockInfo {
     L1BlockInfo {
@@ -86,7 +91,7 @@ fn reference_header() -> Header {
     let builder_key = FeeAccount::generated_from_seed_indexed(Default::default(), 0).1;
     let fee_info = reference_fee_info();
     let ns_table = reference_ns_table();
-    let payload = <Payload as TestableBlock>::genesis();
+    let payload = reference_payload();
     let payload_commitment = vid_commitment(&payload.encode(), 1);
     let builder_commitment = payload.builder_commitment(&ns_table);
     let builder_signature = FeeAccount::sign_fee(
@@ -115,7 +120,7 @@ fn reference_header() -> Header {
     }
 }
 
-const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~sCY1yv3Zqyq6jRT5LZRk52e1a80GetGI3Ni1Mt5QD9Hj";
+const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~OruBHYAJrsLaswrdNY9F1mDx4SN6kCcSOn6hQCaKXeAj";
 
 fn reference_transaction() -> Transaction {
     let payload: [u8; 1024] = std::array::from_fn(|i| (i % (u8::MAX as usize)) as u8);
