@@ -52,11 +52,11 @@ impl TxProof {
     ) -> Option<(Transaction, Self)> {
         let payload_byte_len = payload.byte_len();
         if !payload_byte_len.is_consistent(common) {
-            tracing::info!("payload byte len inconsistent with vid_common");
+            tracing::warn!("payload byte len inconsistent with vid_common");
             return None; // error: common inconsistent with self
         }
         if !payload.ns_table().in_bounds(index.ns()) {
-            tracing::info!("ns_index {:?} out of bounds", index.ns());
+            tracing::warn!("ns_index {:?} out of bounds", index.ns());
             return None; // error: ns index out of bounds
         }
         // check tx index below
@@ -124,7 +124,7 @@ impl TxProof {
         };
 
         let tx = {
-            let ns_id = payload.ns_table().read_ns_id(index.ns());
+            let ns_id = payload.ns_table().read_ns_id_unchecked(index.ns());
             let tx_payload = ns_payload
                 .read(&tx_payload_range)
                 .to_payload_bytes()

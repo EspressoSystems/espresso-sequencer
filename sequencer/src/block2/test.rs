@@ -79,7 +79,7 @@ fn basic_correctness() {
         for ns_id in block
             .ns_table()
             .iter()
-            .map(|i| block.ns_table().read_ns_id(&i))
+            .map(|i| block.ns_table().read_ns_id_unchecked(&i))
         {
             tracing::info!("test ns_id {ns_id}");
 

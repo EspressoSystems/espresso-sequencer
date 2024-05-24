@@ -449,7 +449,7 @@ impl ExplorerHeader<SeqTypes> for Header {
     fn namespace_ids(&self) -> Vec<Self::NamespaceId> {
         self.ns_table
             .iter()
-            .map(|i| self.ns_table.read_ns_id(&i))
+            .map(|i| self.ns_table.read_ns_id_unchecked(&i))
             .collect()
     }
 }
