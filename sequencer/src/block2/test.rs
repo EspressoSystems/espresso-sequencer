@@ -3,7 +3,7 @@ use crate::{
         full_payload::{NsProof, Payload},
         namespace_payload::TxProof,
     },
-    NamespaceId, NodeState, Transaction,
+    ChainConfig, NamespaceId, NodeState, Transaction,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot::traits::BlockPayload;
@@ -31,7 +31,7 @@ fn basic_correctness() {
         let mut all_txs = test.all_txs();
         tracing::info!("test case {} nss {} txs", test.nss.len(), all_txs.len());
 
-        let block = Payload::from_transactions(test.all_txs(), &NodeState::mock())
+        let block = Payload::from_transactions(test.all_txs(), &Default::default())
             .unwrap()
             .0;
         tracing::info!(
@@ -105,6 +105,51 @@ fn basic_correctness() {
             "not all test namespaces consumed by ns_iter"
         );
     }
+}
+
+#[test]
+fn enforce_max_block_size() {
+    setup_logging();
+    setup_backtrace();
+    let test_case = vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]];
+    let payload_byte_len_expected: usize = 119;
+    let ns_table_byte_len_expected: usize = 40;
+
+    let mut rng = jf_utils::test_rng();
+    let test = ValidTest::from_tx_lengths(test_case, &mut rng);
+    let tx_count_expected = test.all_txs().len();
+
+    // test: actual block size equals max block size
+    let instance_state = NodeState::default().with_chain_config(ChainConfig {
+        max_block_size: (payload_byte_len_expected + ns_table_byte_len_expected) as u64,
+        ..Default::default()
+    });
+
+    let block = Payload::from_transactions(test.all_txs(), &instance_state)
+        .unwrap()
+        .0;
+    assert_eq!(block.as_byte_slice().len(), payload_byte_len_expected);
+    assert_eq!(
+        block.ns_table().as_bytes_slice().len(),
+        ns_table_byte_len_expected
+    );
+    assert_eq!(block.len(block.ns_table()), tx_count_expected);
+
+    // test: actual block size exceeds max block size, so 1 tx is dropped
+    // WARN log should be emitted
+    let instance_state = NodeState::default().with_chain_config(ChainConfig {
+        max_block_size: (payload_byte_len_expected + ns_table_byte_len_expected - 1) as u64,
+        ..Default::default()
+    });
+    let block = Payload::from_transactions(test.all_txs(), &instance_state)
+        .unwrap()
+        .0;
+    assert!(block.as_byte_slice().len() < payload_byte_len_expected);
+    assert_eq!(
+        block.ns_table().as_bytes_slice().len(),
+        ns_table_byte_len_expected
+    );
+    assert_eq!(block.len(block.ns_table()), tx_count_expected - 1);
 }
 
 // TODO lots of infra here that could be reused in other tests.
