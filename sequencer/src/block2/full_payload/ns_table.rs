@@ -34,18 +34,11 @@ impl NsTable {
 
     /// Read the namespace id from the `index`th entry from the namespace table.
     ///
-    /// Returns `None` if the `index`th entry does not exist in the namespace
-    /// table.
-    pub fn read_ns_id(&self, index: &NsIndex) -> Option<NamespaceId> {
-        if !self.in_bounds(index) {
-            return None;
-        }
-        Some(self.read_ns_id_unchecked(index))
-    }
-
-    /// Like [`NsTable::read_ns_id`] except `index` is not checked to be in
-    /// bounds.
-    pub fn read_ns_id_unchecked(&self, index: &NsIndex) -> NamespaceId {
+    /// `index` is not checked. Use [`Self::in_bounds`] as needed.
+    ///
+    /// TODO I want to restrict visibility to `pub(crate)` or lower but this
+    /// method is currently used in `nasty-client`.
+    pub fn read_ns_id(&self, index: &NsIndex) -> NamespaceId {
         let start = index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
 
         // TODO hack to deserialize `NamespaceId` from `NS_ID_BYTE_LEN` bytes
@@ -56,8 +49,7 @@ impl NsTable {
 
     /// Search the namespace table for the ns_index belonging to `ns_id`.
     pub fn find_ns_id(&self, ns_id: &NamespaceId) -> Option<NsIndex> {
-        self.iter()
-            .find(|index| self.read_ns_id_unchecked(index) == *ns_id)
+        self.iter().find(|index| self.read_ns_id(index) == *ns_id)
     }
 
     /// Does the `index`th entry exist in the namespace table?
@@ -227,7 +219,7 @@ impl<'a> Iterator for NsIter<'a> {
             if !self.ns_table.in_bounds(&candidate_result) {
                 break None;
             }
-            let ns_id = self.ns_table.read_ns_id_unchecked(&candidate_result);
+            let ns_id = self.ns_table.read_ns_id(&candidate_result);
             self.cur_index += 1;
 
             // skip duplicate namespace IDs

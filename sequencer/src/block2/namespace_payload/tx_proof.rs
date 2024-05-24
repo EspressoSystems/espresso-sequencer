@@ -124,7 +124,7 @@ impl TxProof {
         };
 
         let tx = {
-            let ns_id = payload.ns_table().read_ns_id_unchecked(index.ns());
+            let ns_id = payload.ns_table().read_ns_id(index.ns());
             let tx_payload = ns_payload
                 .read(&tx_payload_range)
                 .to_payload_bytes()

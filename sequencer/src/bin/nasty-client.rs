@@ -942,7 +942,7 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
             return Ok(());
         }
         let ns_index = header.ns_table.iter().nth(index % num_namespaces).unwrap();
-        let ns = header.ns_table.read_ns_id(&ns_index).unwrap();
+        let ns = header.ns_table.read_ns_id(&ns_index);
 
         let ns_proof: NamespaceProofQueryData = self
             .retry(info_span!("fetch namespace", %ns), || async {
