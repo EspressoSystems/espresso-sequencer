@@ -19,6 +19,8 @@ use block::entry::TxTableEntryWord;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
 use ethers::types::{Address, U256};
+#[cfg(feature = "libp2p")]
+use futures::FutureExt;
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
@@ -419,20 +421,29 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
-    let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
-        config.clone(),
-        network_params.libp2p_bind_address,
-        &my_config.public_key,
-        // We need the private key so we can derive our Libp2p keypair
-        // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
-        &my_config.private_key,
-    )
-    .await
-    .with_context(|| "Failed to create libp2p network")?;
-
-    // Combine the communication channels
-    #[cfg(feature = "libp2p")]
     let (da_network, quorum_network) = {
+        let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
+            config.clone(),
+            network_params.libp2p_bind_address,
+            &my_config.public_key,
+            // We need the private key so we can derive our Libp2p keypair
+            // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
+            &my_config.private_key,
+        )
+        .await
+        .with_context(|| "Failed to create libp2p network")?;
+
+        tracing::warn!("Waiting for at least one connection to be initialized");
+        futures::select! {
+            _ = cdn_network.wait_for_ready().fuse() => {
+                tracing::warn!("CDN connection initialized");
+            },
+            _ = p2p_network.wait_for_ready().fuse() => {
+                tracing::warn!("P2P connection initialized");
+            },
+        };
+
+        // Combine the CDN and P2P networks
         (
             Arc::from(CombinedNetworks::new(
                 cdn_network.clone(),

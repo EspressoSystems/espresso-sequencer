@@ -181,7 +181,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     // If configured, override the supplied bootstrap nodes with the ones from the file
     if let Some(nodes) = network_params.libp2p_bootstrap_info {
-       nodes.populate_config(&mut config)?;
+        nodes.populate_config(&mut config)?;
     }
 
     tracing::info!(
