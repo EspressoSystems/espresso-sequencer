@@ -61,7 +61,7 @@ impl<'a> Iterator for Iter<'a> {
 
             if let Some(tx_index) = self
                 .tx_iter
-                .get_or_insert_with(|| self.block.ns_payload(ns_index).iter())
+                .get_or_insert_with(|| self.block.ns_payload_unchecked(ns_index).iter())
                 .next()
             {
                 return Some(Index {

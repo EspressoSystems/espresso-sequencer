@@ -61,7 +61,9 @@ impl TxProof {
         }
         // check tx index below
 
-        let ns_range = payload.ns_table().ns_range(index.ns(), &payload_byte_len);
+        let ns_range = payload
+            .ns_table()
+            .ns_range_unchecked(index.ns(), &payload_byte_len);
         let ns_byte_len = ns_range.byte_len();
         let ns_payload = payload.read_ns_payload(&ns_range);
         let vid = vid_scheme(
@@ -159,7 +161,8 @@ impl TxProof {
             tracing::info!("ns id {} does not exist", tx.namespace());
             return None; // error: ns id does not exist
         };
-        let ns_range = ns_table.ns_range(&ns_index, &PayloadByteLen::from_vid_common(common));
+        let ns_range =
+            ns_table.ns_range_unchecked(&ns_index, &PayloadByteLen::from_vid_common(common));
         let ns_byte_len = ns_range.byte_len();
 
         if !NumTxs::new(&self.payload_num_txs, &ns_byte_len).in_bounds(&self.tx_index) {

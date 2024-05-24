@@ -77,7 +77,27 @@ impl NsTable {
 
     /// Read subslice range for the `index`th namespace from the namespace
     /// table.
-    pub fn ns_range(&self, index: &NsIndex, payload_byte_len: &PayloadByteLen) -> NsPayloadRange {
+    ///
+    /// Returns `None` if the `index`th entry does not exist in the namespace
+    /// table.
+    pub fn ns_range(
+        &self,
+        index: &NsIndex,
+        payload_byte_len: &PayloadByteLen,
+    ) -> Option<NsPayloadRange> {
+        if !self.in_bounds(index) {
+            return None;
+        }
+        Some(self.ns_range_unchecked(index, payload_byte_len))
+    }
+
+    /// Like [`NsTable::ns_range`] except `index` is not checked to be in
+    /// bounds.
+    pub fn ns_range_unchecked(
+        &self,
+        index: &NsIndex,
+        payload_byte_len: &PayloadByteLen,
+    ) -> NsPayloadRange {
         let end = self.read_ns_offset(index).min(payload_byte_len.as_usize());
         let start = if index.0 == 0 {
             0

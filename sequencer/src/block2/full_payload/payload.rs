@@ -40,8 +40,8 @@ impl Payload {
     }
 
     /// Convenience wrapper for [`Self::read_ns_payload`].
-    pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
-        let ns_payload_range = self.ns_table().ns_range(index, &self.byte_len());
+    pub fn ns_payload_unchecked(&self, index: &NsIndex) -> &NsPayload {
+        let ns_payload_range = self.ns_table().ns_range_unchecked(index, &self.byte_len());
         self.read_ns_payload(&ns_payload_range)
     }
 
@@ -51,7 +51,7 @@ impl Payload {
         let Some(ns_id) = self.ns_table.read_ns_id(index.ns()) else {
             return None; // error: ns index out of bounds
         };
-        let ns_payload = self.ns_payload(index.ns());
+        let ns_payload = self.ns_payload_unchecked(index.ns());
         ns_payload.export_tx(&ns_id, index.tx())
     }
 }
