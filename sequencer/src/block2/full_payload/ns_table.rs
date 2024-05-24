@@ -241,13 +241,7 @@ impl<'a> Iterator for NsIter<'a> {
             if !self.ns_table.in_bounds(&candidate_result) {
                 break None;
             }
-            let Some(ns_id) = self.ns_table.read_ns_id(&candidate_result) else {
-                tracing::error!(
-                    "trusted source of NsIndex {} out of bounds",
-                    candidate_result.0
-                );
-                break None;
-            };
+            let ns_id = self.ns_table.read_ns_id_unchecked(&candidate_result);
             self.cur_index += 1;
 
             // skip duplicate namespace IDs
