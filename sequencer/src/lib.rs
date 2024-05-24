@@ -24,6 +24,7 @@ use ethers::types::{Address, U256};
 
 use l1_client::L1Client;
 
+use network::libp2p::BootstrapInfo;
 use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
@@ -281,10 +282,17 @@ pub struct NetworkParams {
     pub private_staking_key: BLSPrivKey,
     pub private_state_key: StateSignKey,
     pub state_peers: Vec<Url>,
+
     /// The address to send to other Libp2p nodes to contact us
     pub libp2p_advertise_address: SocketAddr,
     /// The address to bind to for Libp2p
     pub libp2p_bind_address: SocketAddr,
+
+    /// The (optional) bootstrap info for Libp2p.
+    ///
+    /// If supplied, these values will override the values
+    /// supplied by the orchestrator and the loaded config
+    pub libp2p_bootstrap_info: Option<BootstrapInfo>,
 }
 
 #[derive(Clone, Debug)]
@@ -350,7 +358,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
     let mut persistence = persistence_opt.clone().create().await?;
-    let (config, wait_for_orchestrator) = match persistence.load_config().await? {
+    let (mut config, wait_for_orchestrator) = match persistence.load_config().await? {
         Some(config) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
             (config, false)
@@ -381,6 +389,12 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             (config, true)
         }
     };
+
+    // If configured, override the supplied bootstrap nodes with the ones from the file
+    if let Some(nodes) = network_params.libp2p_bootstrap_info {
+        nodes.populate_config(&mut config)?;
+    }
+
     let node_index = config.node_index;
 
     // If we are a DA node, we need to subscribe to the DA topic

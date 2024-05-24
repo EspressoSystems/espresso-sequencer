@@ -61,6 +61,13 @@ pub struct PermissionedBuilderOptions {
     )]
     pub libp2p_advertise_address: String,
 
+    /// The path to the file containing the Libp2p bootstrap nodes (in TOML format)
+    ///
+    /// If supplied, this will be used to bootstrap into the network and override the
+    /// bootstrap nodes received from the orchestrator.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_BOOTSTRAP_FILE")]
+    pub libp2p_bootstrap_file: Option<String>,
+
     /// URL of the Light Client State Relay Server
     #[clap(
         long,
@@ -252,10 +259,21 @@ async fn main() -> anyhow::Result<()> {
         .find(|x| x.is_ipv4())
         .ok_or(anyhow::anyhow!("Failed to resolve Libp2p bind address"))?;
 
+    // If supplied, parse the Libp2p bootstrap info from the file
+    let libp2p_bootstrap_info = if let Some(libp2p_bootstrap_file) = opt.libp2p_bootstrap_file {
+        Some(
+            sequencer::network::libp2p::BootstrapInfo::load_from_file(libp2p_bootstrap_file)
+                .with_context(|| "Failed to load Libp2p bootstrap file")?,
+        )
+    } else {
+        None
+    };
+
     let network_params = NetworkParams {
         cdn_endpoint: opt.cdn_endpoint,
         libp2p_advertise_address,
         libp2p_bind_address,
+        libp2p_bootstrap_info,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
         private_staking_key: private_staking_key.clone(),

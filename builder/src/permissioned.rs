@@ -65,8 +65,10 @@ use hotshot_builder_core::{
 use hotshot_state_prover;
 use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 use jf_signature::bls_over_bn254::VerKey;
-use sequencer::state_signature::StakeTableCommitmentType;
-use sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, ChainConfig};
+use sequencer::{
+    catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, network::libp2p::BootstrapNode,
+    ChainConfig,
+};
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -78,6 +80,7 @@ use sequencer::{
     state_signature::{static_stake_table_commitment, StateSigner},
     BuilderParams, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey, SeqTypes,
 };
+use sequencer::{network::libp2p::BootstrapInfo, state_signature::StakeTableCommitmentType};
 use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
 use std::{net::Ipv4Addr, thread::Builder};
@@ -165,7 +168,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         derive_libp2p_peer_id::<<SeqTypes as NodeType>::SignatureKey>(&my_config.private_key)
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
-    let config = NetworkConfig::get_complete_config(
+    let mut config = NetworkConfig::get_complete_config(
         &orchestrator_client,
         my_config.clone(),
         // Register in our Libp2p advertise address and public key so other nodes
@@ -175,6 +178,11 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     )
     .await?
     .0;
+
+    // If configured, override the supplied bootstrap nodes with the ones from the file
+    if let Some(nodes) = network_params.libp2p_bootstrap_info {
+       nodes.populate_config(&mut config)?;
+    }
 
     tracing::info!(
     node_id = config.node_index,

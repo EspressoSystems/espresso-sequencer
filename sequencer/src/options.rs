@@ -80,6 +80,13 @@ pub struct Options {
     )]
     pub libp2p_advertise_address: String,
 
+    /// The path to the file containing the Libp2p bootstrap nodes (in TOML format)
+    ///
+    /// If supplied, this will be used to bootstrap into the network and override the
+    /// bootstrap nodes received from the orchestrator.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_LIBP2P_BOOTSTRAP_FILE")]
+    pub libp2p_bootstrap_file: Option<String>,
+
     /// URL of the Light Client State Relay Server
     #[clap(
         long,
