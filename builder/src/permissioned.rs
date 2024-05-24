@@ -446,6 +446,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
+             Duration::from_secs(7200),
         );
 
         let hotshot_handle_clone = hotshot_handle.clone();
