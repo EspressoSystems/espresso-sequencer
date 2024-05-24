@@ -23,12 +23,13 @@ Assuming you're in the root folder, run the following command:
 ts-node contracts/script/multisigTransactionProposals/safeSDK/setProverProposal.ts
 ```
 
+Open the the URL shown in the console to sign the transaction in the Safe UI.
+
 Once successful, all signers will see a transaction request on the SAFE UI e.g.
 `https://app.safe.global/transactions/queue?safe=$SAFE_MULTISIG_ADDRESS`
 
 Once the transaction has been signed by all signers and executed by one, you should be able to go to the light client
-proxy and read the permissioned prover address.
-`ts-node contracts/script/multisigTransactionProposals/setPermissionedProverProposal.ts <network_name> <lightClientContract> <proverAddress> <multisigWalletAddress>`
+proxy and read the permissioned prover address on etherscan.
 
 ## Disable Permissioned Prover
 

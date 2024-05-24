@@ -1,3 +1,4 @@
+import dotenv from "dotenv";
 import { ethers } from "ethers";
 import { EthersAdapter } from "@safe-global/protocol-kit";
 import SafeApiKit from "@safe-global/api-kit";
@@ -5,6 +6,8 @@ import Safe from "@safe-global/protocol-kit";
 import { getEnvVar, createSafeTransactionData, isValidEthereumAddress } from "./utils";
 
 async function main() {
+  dotenv.config();
+
   try {
     /**TODO
      * change from SEPOLIA_RPC_URL to production URL when deploying to production
