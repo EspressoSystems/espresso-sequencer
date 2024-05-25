@@ -5,7 +5,8 @@ mod tx_proof;
 mod types;
 
 pub use iter::{Index, Iter};
-pub use ns_payload::{NsPayload, NsPayloadOwned};
 pub use ns_payload_range::NsPayloadRange;
 pub use tx_proof::TxProof;
 pub use types::NsPayloadBuilder;
+
+pub(in crate::block2) use ns_payload::{NsPayload, NsPayloadOwned};

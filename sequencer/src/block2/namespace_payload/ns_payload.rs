@@ -11,7 +11,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-pub struct NsPayload([u8]);
+pub(in crate::block2) struct NsPayload([u8]);
 
 impl NsPayload {
     pub fn from_bytes_slice(bytes: &[u8]) -> &NsPayload {
@@ -92,7 +92,7 @@ impl NsPayload {
 #[repr(transparent)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(transparent)]
-pub struct NsPayloadOwned(#[serde(with = "base64_bytes")] Vec<u8>);
+pub(in crate::block2) struct NsPayloadOwned(#[serde(with = "base64_bytes")] Vec<u8>);
 
 /// Crazy boilerplate code to make it so that [`NsPayloadOwned`] is to
 /// [`NsPayload`] as [`Vec<T>`] is to `[T]`. See [How can I create newtypes for

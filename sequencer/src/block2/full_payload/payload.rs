@@ -29,15 +29,6 @@ impl Payload {
     pub fn ns_table(&self) -> &NsTable {
         &self.ns_table
     }
-    pub fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
-        NsPayload::from_bytes_slice(&self.payload[range.as_block_range()])
-    }
-
-    /// Convenience wrapper for [`Self::read_ns_payload`].
-    pub fn ns_payload_unchecked(&self, index: &NsIndex) -> &NsPayload {
-        let ns_payload_range = self.ns_table().ns_range(index, &self.byte_len());
-        self.read_ns_payload(&ns_payload_range)
-    }
 
     /// Like [`QueryablePayload::transaction_with_proof`] except without the
     /// proof.
@@ -51,6 +42,19 @@ impl Payload {
     }
 
     // CRATE-VISIBLE HELPERS START HERE
+
+    pub(in crate::block2) fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
+        NsPayload::from_bytes_slice(&self.payload[range.as_block_range()])
+    }
+
+    /// Convenience wrapper for [`Self::read_ns_payload`].
+    ///
+    /// `index` is not checked. Use `self.ns_table().in_bounds()` as needed.
+    pub(in crate::block2) fn ns_payload_unchecked(&self, index: &NsIndex) -> &NsPayload {
+        let ns_payload_range = self.ns_table().ns_range(index, &self.byte_len());
+        self.read_ns_payload(&ns_payload_range)
+    }
+
     pub(in crate::block2) fn byte_len(&self) -> PayloadByteLen {
         PayloadByteLen(self.payload.len())
     }
