@@ -37,7 +37,7 @@ impl Payload {
             return None;
         }
         let ns_id = self.ns_table.read_ns_id(index.ns());
-        let ns_payload = self.ns_payload_unchecked(index.ns());
+        let ns_payload = self.ns_payload(index.ns());
         ns_payload.export_tx(&ns_id, index.tx())
     }
 
@@ -50,7 +50,7 @@ impl Payload {
     /// Convenience wrapper for [`Self::read_ns_payload`].
     ///
     /// `index` is not checked. Use `self.ns_table().in_bounds()` as needed.
-    pub(in crate::block) fn ns_payload_unchecked(&self, index: &NsIndex) -> &NsPayload {
+    pub(in crate::block) fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
         let ns_payload_range = self.ns_table().ns_range(index, &self.byte_len());
         self.read_ns_payload(&ns_payload_range)
     }
