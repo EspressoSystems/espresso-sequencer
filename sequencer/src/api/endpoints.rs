@@ -160,6 +160,17 @@ where
             let tx = req
                 .body_auto::<Transaction, Ver>(Ver::instance())
                 .map_err(Error::from_request_error)?;
+
+            // Transactions with namespaces that do not fit in the u32
+            // cannot be included in the block.
+            // TODO: This issue will be addressed in the next release.
+            if tx.namespace() > NamespaceId::from(u32::MAX as u64) {
+                return Err(Error::Custom {
+                    message: "Transaction namespace > u32::MAX".to_string(),
+                    status: StatusCode::BadRequest,
+                });
+            }
+
             let hash = tx.commit();
             state
                 .submit(tx)
