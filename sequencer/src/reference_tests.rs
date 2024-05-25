@@ -22,7 +22,7 @@
 //! test.
 
 use crate::{
-    block2::NsTable, state::FeeInfo, ChainConfig, FeeAccount, Header, L1BlockInfo, Payload,
+    block::NsTable, state::FeeInfo, ChainConfig, FeeAccount, Header, L1BlockInfo, Payload,
     Transaction, ValidatedState,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};

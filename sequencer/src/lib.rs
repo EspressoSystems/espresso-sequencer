@@ -1,5 +1,5 @@
 pub mod api;
-pub mod block2;
+pub mod block;
 pub mod catchup;
 mod chain_config;
 pub mod context;
@@ -77,7 +77,7 @@ use std::time::Duration;
 #[cfg(feature = "libp2p")]
 use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
 
-pub use block2::Payload;
+pub use block::Payload;
 pub use chain_config::ChainConfig;
 pub use header::Header;
 pub use l1_client::L1BlockInfo;

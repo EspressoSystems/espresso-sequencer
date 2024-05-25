@@ -4,7 +4,7 @@
 //! transaction table is restricted to this file.
 //!
 //! There are many newtypes in this file to facilitate transaction proofs.
-use crate::block2::uint_bytes::{bytes_serde_impl, usize_from_bytes, usize_to_bytes};
+use crate::block::uint_bytes::{bytes_serde_impl, usize_from_bytes, usize_to_bytes};
 use crate::Transaction;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
@@ -257,7 +257,7 @@ impl<'a> NsPayloadBytesRange<'a> for TxPayloadRange {
 
 /// Index for an entry in a tx table.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(in crate::block2) struct TxIndex(usize);
+pub(in crate::block) struct TxIndex(usize);
 bytes_serde_impl!(TxIndex, to_bytes, [u8; NUM_TXS_BYTE_LEN], from_bytes);
 
 impl TxIndex {
@@ -269,7 +269,7 @@ impl TxIndex {
     }
 }
 
-pub(in crate::block2) struct TxIter(Range<usize>);
+pub(in crate::block) struct TxIter(Range<usize>);
 
 impl TxIter {
     pub fn new(num_txs: &NumTxs) -> Self {
@@ -292,7 +292,7 @@ impl Iterator for TxIter {
 /// when you're done. The returned bytes include a well-formed tx table and all
 /// tx payloads.
 #[derive(Default)]
-pub(in crate::block2) struct NsPayloadBuilder {
+pub(in crate::block) struct NsPayloadBuilder {
     tx_table_entries: Vec<u8>,
     tx_bodies: Vec<u8>,
 }

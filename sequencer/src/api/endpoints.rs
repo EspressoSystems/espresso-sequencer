@@ -14,7 +14,7 @@ use super::{
     StorageState,
 };
 use crate::{
-    block2::NsProof, network, persistence::SequencerPersistence, NamespaceId, SeqTypes, Transaction,
+    block::NsProof, network, persistence::SequencerPersistence, NamespaceId, SeqTypes, Transaction,
 };
 use anyhow::Result;
 use async_std::sync::{Arc, RwLock};

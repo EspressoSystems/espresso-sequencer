@@ -1,5 +1,5 @@
 use crate::{
-    block2::{
+    block::{
         full_payload::{NsProof, Payload},
         namespace_payload::TxProof,
     },

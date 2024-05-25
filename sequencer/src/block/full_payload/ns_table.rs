@@ -3,7 +3,7 @@
 //! All code that needs to know the binary format of a namespace table is
 //! restricted to this file.
 use crate::{
-    block2::{
+    block::{
         full_payload::payload::PayloadByteLen,
         namespace_payload::NsPayloadRange,
         uint_bytes::{
@@ -72,7 +72,7 @@ impl NsTable {
 
     /// Read subslice range for the `index`th namespace from the namespace
     /// table.
-    pub(in crate::block2) fn ns_range(
+    pub(in crate::block) fn ns_range(
         &self,
         index: &NsIndex,
         payload_byte_len: &PayloadByteLen,
@@ -190,7 +190,7 @@ impl NsIndex {
 }
 
 /// Return type for [`Payload::ns_iter`].
-pub(in crate::block2) struct NsIter<'a> {
+pub(in crate::block) struct NsIter<'a> {
     cur_index: usize,
     repeat_nss: HashSet<NamespaceId>,
     ns_table: &'a NsTable,

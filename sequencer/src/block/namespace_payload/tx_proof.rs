@@ -1,5 +1,5 @@
 use crate::{
-    block2::{
+    block::{
         full_payload::{
             NsTable, {Payload, PayloadByteLen},
         },

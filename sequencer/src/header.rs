@@ -1,5 +1,5 @@
 use crate::{
-    block2::NsTable,
+    block::NsTable,
     chain_config::ResolvableChainConfig,
     eth_signature_key::BuilderSignature,
     l1_client::L1Snapshot,

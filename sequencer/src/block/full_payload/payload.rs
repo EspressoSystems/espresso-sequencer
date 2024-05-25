@@ -1,5 +1,5 @@
 use crate::{
-    block2::{
+    block::{
         full_payload::ns_table::{NsIndex, NsTable, NsTableBuilder},
         namespace_payload::{Index, Iter, NsPayload, NsPayloadBuilder, NsPayloadRange, TxProof},
     },
@@ -43,19 +43,19 @@ impl Payload {
 
     // CRATE-VISIBLE HELPERS START HERE
 
-    pub(in crate::block2) fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
+    pub(in crate::block) fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
         NsPayload::from_bytes_slice(&self.payload[range.as_block_range()])
     }
 
     /// Convenience wrapper for [`Self::read_ns_payload`].
     ///
     /// `index` is not checked. Use `self.ns_table().in_bounds()` as needed.
-    pub(in crate::block2) fn ns_payload_unchecked(&self, index: &NsIndex) -> &NsPayload {
+    pub(in crate::block) fn ns_payload_unchecked(&self, index: &NsIndex) -> &NsPayload {
         let ns_payload_range = self.ns_table().ns_range(index, &self.byte_len());
         self.read_ns_payload(&ns_payload_range)
     }
 
-    pub(in crate::block2) fn byte_len(&self) -> PayloadByteLen {
+    pub(in crate::block) fn byte_len(&self) -> PayloadByteLen {
         PayloadByteLen(self.payload.len())
     }
 }
@@ -201,7 +201,7 @@ impl EncodeBytes for Payload {
 
 /// Byte length of a block payload, which includes all namespaces but *not* the
 /// namespace table.
-pub(in crate::block2) struct PayloadByteLen(usize);
+pub(in crate::block) struct PayloadByteLen(usize);
 
 impl PayloadByteLen {
     /// Extract payload byte length from a [`VidCommon`] and construct a new [`Self`] from it.
@@ -214,7 +214,7 @@ impl PayloadByteLen {
         self.0 == usize::try_from(VidSchemeType::get_payload_byte_len(common)).unwrap()
     }
 
-    pub(in crate::block2::full_payload) fn as_usize(&self) -> usize {
+    pub(in crate::block::full_payload) fn as_usize(&self) -> usize {
         self.0
     }
 }

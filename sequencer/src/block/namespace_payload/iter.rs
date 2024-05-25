@@ -1,4 +1,4 @@
-use crate::block2::{
+use crate::block::{
     full_payload::{NsIndex, NsIter, Payload},
     namespace_payload::types::{TxIndex, TxIter},
 };
@@ -15,7 +15,7 @@ impl Index {
     pub fn ns(&self) -> &NsIndex {
         &self.ns_index
     }
-    pub(in crate::block2) fn tx(&self) -> &TxIndex {
+    pub(in crate::block) fn tx(&self) -> &TxIndex {
         &self.tx_index
     }
 }
