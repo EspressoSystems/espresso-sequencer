@@ -34,7 +34,7 @@ impl NsTable {
     }
 
     /// Iterator over all unique namespaces in the namespace table.
-    pub fn iter(&self) -> impl Iterator<Item = <NsIter as Iterator>::Item> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = NsIndex> + '_ {
         NsIter::new(self)
     }
 
@@ -190,7 +190,7 @@ impl NsIndex {
 }
 
 /// Return type for [`Payload::ns_iter`].
-pub struct NsIter<'a> {
+pub(in crate::block2) struct NsIter<'a> {
     cur_index: usize,
     repeat_nss: HashSet<NamespaceId>,
     ns_table: &'a NsTable,
