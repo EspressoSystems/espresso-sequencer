@@ -28,10 +28,6 @@ const NS_ID_BYTE_LEN: usize = 8;
 pub struct NsTable(#[serde(with = "base64_bytes")] Vec<u8>);
 
 impl NsTable {
-    pub fn as_bytes_slice(&self) -> &[u8] {
-        &self.0
-    }
-
     /// Search the namespace table for the ns_index belonging to `ns_id`.
     pub fn find_ns_id(&self, ns_id: &NamespaceId) -> Option<NsIndex> {
         self.iter().find(|index| self.read_ns_id(index) == *ns_id)
@@ -73,6 +69,10 @@ impl NsTable {
     }
 
     // CRATE-VISIBLE HELPERS START HERE
+
+    pub(in crate::block2) fn as_bytes_slice(&self) -> &[u8] {
+        &self.0
+    }
 
     /// Read subslice range for the `index`th namespace from the namespace
     /// table.
