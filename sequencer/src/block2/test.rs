@@ -8,7 +8,7 @@ use crate::{
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot::traits::BlockPayload;
 use hotshot_query_service::availability::QueryablePayload;
-use hotshot_types::vid::vid_scheme;
+use hotshot_types::{traits::EncodeBytes, vid::vid_scheme};
 use jf_vid::VidScheme;
 use rand::RngCore;
 use std::collections::HashMap;
@@ -36,7 +36,7 @@ fn basic_correctness() {
             .0;
         tracing::info!(
             "ns_table {:?}, payload {:?}",
-            block.ns_table().as_bytes_slice(),
+            block.ns_table().encode(),
             block.as_byte_slice()
         );
 
@@ -129,10 +129,7 @@ fn enforce_max_block_size() {
         .unwrap()
         .0;
     assert_eq!(block.as_byte_slice().len(), payload_byte_len_expected);
-    assert_eq!(
-        block.ns_table().as_bytes_slice().len(),
-        ns_table_byte_len_expected
-    );
+    assert_eq!(block.ns_table().encode().len(), ns_table_byte_len_expected);
     assert_eq!(block.len(block.ns_table()), tx_count_expected);
 
     // test: actual block size exceeds max block size, so 1 tx is dropped
@@ -145,10 +142,7 @@ fn enforce_max_block_size() {
         .unwrap()
         .0;
     assert!(block.as_byte_slice().len() < payload_byte_len_expected);
-    assert_eq!(
-        block.ns_table().as_bytes_slice().len(),
-        ns_table_byte_len_expected
-    );
+    assert_eq!(block.ns_table().encode().len(), ns_table_byte_len_expected);
     assert_eq!(block.len(block.ns_table()), tx_count_expected - 1);
 }
 

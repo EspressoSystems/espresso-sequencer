@@ -70,10 +70,6 @@ impl NsTable {
 
     // CRATE-VISIBLE HELPERS START HERE
 
-    pub(in crate::block2) fn as_bytes_slice(&self) -> &[u8] {
-        &self.0
-    }
-
     /// Read subslice range for the `index`th namespace from the namespace
     /// table.
     pub(in crate::block2) fn ns_range(
@@ -109,6 +105,12 @@ impl NsTable {
         let start =
             index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
         usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.0[start..start + NS_OFFSET_BYTE_LEN])
+    }
+}
+
+impl EncodeBytes for NsTable {
+    fn encode(&self) -> Arc<[u8]> {
+        Arc::from(self.0.as_ref())
     }
 }
 
@@ -170,12 +172,6 @@ impl NsTableBuilder {
     /// entry.
     pub const fn ns_overhead_byte_len() -> usize {
         NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN
-    }
-}
-
-impl EncodeBytes for NsTable {
-    fn encode(&self) -> Arc<[u8]> {
-        Arc::from(self.0.as_ref())
     }
 }
 

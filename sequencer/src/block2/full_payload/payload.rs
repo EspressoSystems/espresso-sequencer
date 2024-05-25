@@ -127,7 +127,7 @@ impl BlockPayload for Payload {
 
     // TODO(BlockPayload): remove arg `Self::Metadata`
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
-        let ns_table_bytes = self.ns_table.as_bytes_slice();
+        let ns_table_bytes = self.ns_table.encode();
         let mut digest = sha2::Sha256::new();
         digest.update((self.payload.len() as u64).to_le_bytes());
         digest.update((ns_table_bytes.len() as u64).to_le_bytes());
