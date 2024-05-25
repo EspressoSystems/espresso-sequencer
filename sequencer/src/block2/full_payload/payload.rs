@@ -26,9 +26,6 @@ pub struct Payload {
 }
 
 impl Payload {
-    pub fn as_byte_slice(&self) -> &[u8] {
-        &self.payload
-    }
     pub fn ns_table(&self) -> &NsTable {
         &self.ns_table
     }

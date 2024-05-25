@@ -37,7 +37,7 @@ fn basic_correctness() {
         tracing::info!(
             "ns_table {:?}, payload {:?}",
             block.ns_table().encode(),
-            block.as_byte_slice()
+            block.encode()
         );
 
         // test correct number of nss, txs
@@ -48,7 +48,7 @@ fn basic_correctness() {
         tracing::info!("all_txs {:?}", all_txs);
 
         let (vid_commit, vid_common) = {
-            let disperse_data = vid.disperse(block.as_byte_slice()).unwrap();
+            let disperse_data = vid.disperse(block.encode()).unwrap();
             (disperse_data.commit, disperse_data.common)
         };
 
@@ -128,7 +128,7 @@ fn enforce_max_block_size() {
     let block = Payload::from_transactions(test.all_txs(), &instance_state)
         .unwrap()
         .0;
-    assert_eq!(block.as_byte_slice().len(), payload_byte_len_expected);
+    assert_eq!(block.encode().len(), payload_byte_len_expected);
     assert_eq!(block.ns_table().encode().len(), ns_table_byte_len_expected);
     assert_eq!(block.len(block.ns_table()), tx_count_expected);
 
@@ -141,7 +141,7 @@ fn enforce_max_block_size() {
     let block = Payload::from_transactions(test.all_txs(), &instance_state)
         .unwrap()
         .0;
-    assert!(block.as_byte_slice().len() < payload_byte_len_expected);
+    assert!(block.encode().len() < payload_byte_len_expected);
     assert_eq!(block.ns_table().encode().len(), ns_table_byte_len_expected);
     assert_eq!(block.len(block.ns_table()), tx_count_expected - 1);
 }

@@ -5,8 +5,9 @@ use crate::{
     },
     NamespaceId, Transaction,
 };
-use hotshot_types::vid::{
-    vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType,
+use hotshot_types::{
+    traits::EncodeBytes,
+    vid::{vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType},
 };
 use jf_vid::{
     payload_prover::{PayloadProver, Statement},
@@ -65,7 +66,7 @@ impl NsProof {
             existence: Some(NsProofExistence {
                 ns_payload: payload.read_ns_payload(&ns_payload_range).to_owned(),
                 ns_proof: vid
-                    .payload_proof(payload.as_byte_slice(), ns_payload_range.as_block_range())
+                    .payload_proof(payload.encode(), ns_payload_range.as_block_range())
                     .ok()?,
             }),
         })

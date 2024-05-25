@@ -14,7 +14,10 @@ use crate::{
     Transaction,
 };
 use hotshot_query_service::{VidCommitment, VidCommon};
-use hotshot_types::vid::{vid_scheme, SmallRangeProofType, VidSchemeType};
+use hotshot_types::{
+    traits::EncodeBytes,
+    vid::{vid_scheme, SmallRangeProofType, VidSchemeType},
+};
 use jf_vid::{
     payload_prover::{PayloadProver, Statement},
     VidScheme,
@@ -61,6 +64,8 @@ impl TxProof {
         }
         // check tx index below
 
+        let payload_bytes_arc = payload.encode(); // pacify borrow checker
+        let payload_bytes = payload_bytes_arc.as_ref();
         let ns_range = payload.ns_table().ns_range(index.ns(), &payload_byte_len);
         let ns_byte_len = ns_range.byte_len();
         let ns_payload = payload.read_ns_payload(&ns_range);
@@ -84,10 +89,7 @@ impl TxProof {
         }
 
         let payload_proof_num_txs = vid
-            .payload_proof(
-                payload.as_byte_slice(),
-                ns_range.block_range(&num_txs_range),
-            )
+            .payload_proof(payload_bytes, ns_range.block_range(&num_txs_range))
             .ok()?;
 
         // Read the tx table entries for this tx and compute a proof of
@@ -95,11 +97,8 @@ impl TxProof {
         let tx_table_entries_range = TxTableEntriesRange::new(index.tx());
         let payload_tx_table_entries = ns_payload.read(&tx_table_entries_range);
         let payload_proof_tx_table_entries = {
-            vid.payload_proof(
-                payload.as_byte_slice(),
-                ns_range.block_range(&tx_table_entries_range),
-            )
-            .ok()?
+            vid.payload_proof(payload_bytes, ns_range.block_range(&tx_table_entries_range))
+                .ok()?
         };
 
         // Read the tx payload and compute a proof of correctness.
@@ -113,13 +112,13 @@ impl TxProof {
                 index.ns(),
                 index.tx(),
                 range,
-                &payload.as_byte_slice()[range.clone()]
+                &payload_bytes[range.clone()]
             );
 
             if range.is_empty() {
                 None
             } else {
-                Some(vid.payload_proof(payload.as_byte_slice(), range).ok()?)
+                Some(vid.payload_proof(payload_bytes, range).ok()?)
             }
         };
 
