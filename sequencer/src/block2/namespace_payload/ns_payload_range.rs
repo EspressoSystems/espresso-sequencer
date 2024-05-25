@@ -3,7 +3,7 @@ use std::ops::Range;
 
 /// Index range for a namespace payload inside a block payload.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct NsPayloadRange(Range<usize>);
+pub(in crate::block2) struct NsPayloadRange(Range<usize>);
 
 impl NsPayloadRange {
     /// TODO restrict visibility?
