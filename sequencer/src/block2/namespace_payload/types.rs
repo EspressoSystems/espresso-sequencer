@@ -292,7 +292,7 @@ impl Iterator for TxIter {
 /// when you're done. The returned bytes include a well-formed tx table and all
 /// tx payloads.
 #[derive(Default)]
-pub struct NsPayloadBuilder {
+pub(in crate::block2) struct NsPayloadBuilder {
     tx_table_entries: Vec<u8>,
     tx_bodies: Vec<u8>,
 }
