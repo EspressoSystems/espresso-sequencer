@@ -257,7 +257,7 @@ impl<'a> NsPayloadBytesRange<'a> for TxPayloadRange {
 
 /// Index for an entry in a tx table.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct TxIndex(usize);
+pub(in crate::block2) struct TxIndex(usize);
 bytes_serde_impl!(TxIndex, to_bytes, [u8; NUM_TXS_BYTE_LEN], from_bytes);
 
 impl TxIndex {
@@ -269,7 +269,7 @@ impl TxIndex {
     }
 }
 
-pub struct TxIter(Range<usize>);
+pub(in crate::block2) struct TxIter(Range<usize>);
 
 impl TxIter {
     pub fn new(num_txs: &NumTxs) -> Self {
