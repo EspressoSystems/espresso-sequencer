@@ -30,7 +30,7 @@ impl Payload {
         &self.ns_table
     }
     pub fn byte_len(&self) -> PayloadByteLen {
-        PayloadByteLen(self.payload.len().try_into().unwrap())
+        PayloadByteLen(self.payload.len())
     }
     pub fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
         NsPayload::from_bytes_slice(&self.payload[range.as_block_range()])
@@ -195,19 +195,21 @@ impl EncodeBytes for Payload {
 
 /// Byte length of a block payload, which includes all namespaces but *not* the
 /// namespace table.
-pub struct PayloadByteLen(u32);
+pub struct PayloadByteLen(usize);
 
 impl PayloadByteLen {
+    /// Extract payload byte length from a [`VidCommon`] and construct a new [`Self`] from it.
     pub fn from_vid_common(common: &VidCommon) -> Self {
-        Self(VidSchemeType::get_payload_byte_len(common))
-    }
-    pub fn is_consistent(&self, common: &VidCommon) -> bool {
-        self.0 == VidSchemeType::get_payload_byte_len(common)
+        Self(usize::try_from(VidSchemeType::get_payload_byte_len(common)).unwrap())
     }
 
-    // TODO restrict visibility?
-    pub fn as_usize(&self) -> usize {
-        self.0.try_into().unwrap()
+    /// Is the payload byte length declared in a [`VidCommon`] equal [`Self`]?
+    pub fn is_consistent(&self, common: &VidCommon) -> bool {
+        self.0 == usize::try_from(VidSchemeType::get_payload_byte_len(common)).unwrap()
+    }
+
+    pub(in crate::block2::full_payload) fn as_usize(&self) -> usize {
+        self.0
     }
 }
 
