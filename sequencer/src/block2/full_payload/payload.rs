@@ -29,9 +29,6 @@ impl Payload {
     pub fn ns_table(&self) -> &NsTable {
         &self.ns_table
     }
-    pub fn byte_len(&self) -> PayloadByteLen {
-        PayloadByteLen(self.payload.len())
-    }
     pub fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
         NsPayload::from_bytes_slice(&self.payload[range.as_block_range()])
     }
@@ -51,6 +48,11 @@ impl Payload {
         let ns_id = self.ns_table.read_ns_id(index.ns());
         let ns_payload = self.ns_payload_unchecked(index.ns());
         ns_payload.export_tx(&ns_id, index.tx())
+    }
+
+    // CRATE-VISIBLE HELPERS START HERE
+    pub(in crate::block2) fn byte_len(&self) -> PayloadByteLen {
+        PayloadByteLen(self.payload.len())
     }
 }
 
@@ -195,7 +197,7 @@ impl EncodeBytes for Payload {
 
 /// Byte length of a block payload, which includes all namespaces but *not* the
 /// namespace table.
-pub struct PayloadByteLen(usize);
+pub(in crate::block2) struct PayloadByteLen(usize);
 
 impl PayloadByteLen {
     /// Extract payload byte length from a [`VidCommon`] and construct a new [`Self`] from it.
