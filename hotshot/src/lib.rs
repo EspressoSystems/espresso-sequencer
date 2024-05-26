@@ -308,25 +308,59 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         Ok(inner)
     }
 
-    /// "Starts" consensus by sending a `QcFormed` event
+    /// "Starts" consensus by sending a `QcFormed`, `ViewChange`, and `ValidatedStateUpdated` events
     ///
     /// # Panics
     /// Panics if sending genesis fails
     pub async fn start_consensus(&self) {
+        #[cfg(feature = "dependncy-tasks")]
+        error!("HotShot is running with the dependency tasks feature enabled!!");
         debug!("Starting Consensus");
         let consensus = self.consensus.read().await;
+
+        #[allow(clippy::panic)]
         self.internal_event_stream
             .0
             .broadcast_direct(Arc::new(HotShotEvent::ViewChange(self.start_view)))
             .await
-            .expect("Genesis Broadcast failed");
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Genesis Broadcast failed; event = ViewChange({:?})",
+                    self.start_view
+                )
+            });
+        #[cfg(feature = "dependency-tasks")]
+        {
+            if let Some(validated_state) = consensus.validated_state_map().get(&self.start_view) {
+                #[allow(clippy::panic)]
+                self.internal_event_stream
+                    .0
+                    .broadcast_direct(Arc::new(HotShotEvent::ValidatedStateUpdated(
+                        TYPES::Time::new(*self.start_view),
+                        validated_state.clone(),
+                    )))
+                    .await
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "Genesis Broadcast failed; event = ValidatedStateUpdated({:?})",
+                            self.start_view,
+                        )
+                    });
+            }
+        }
+        #[allow(clippy::panic)]
         self.internal_event_stream
             .0
             .broadcast_direct(Arc::new(HotShotEvent::QcFormed(either::Left(
                 consensus.high_qc().clone(),
             ))))
             .await
-            .expect("Genesis Broadcast failed");
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Genesis Broadcast failed; event = QcFormed(either::Left({:?}))",
+                    consensus.high_qc()
+                )
+            });
 
         {
             // Some applications seem to expect a leaf decide event for the genesis leaf,

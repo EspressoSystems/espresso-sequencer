@@ -9,8 +9,8 @@ use async_std::task::JoinHandle;
 use futures::future::join_all;
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
-    consensus::{CommitmentAndMetadata, Consensus},
-    data::{QuorumProposal, ViewChangeEvidence},
+    consensus::Consensus,
+    data::ViewChangeEvidence,
     event::Event,
     simple_certificate::UpgradeCertificate,
     traits::{
@@ -25,10 +25,15 @@ use tracing::{debug, error, instrument, warn};
 use vbs::version::Version;
 
 use crate::{
-    consensus::helpers::{handle_quorum_proposal_recv, parent_leaf_and_state},
+    consensus::helpers::parent_leaf_and_state,
     events::HotShotEvent,
     helpers::{broadcast_event, cancel_task},
 };
+
+use self::handlers::handle_quorum_proposal_recv;
+
+/// Event handlers for this task.
+mod handlers;
 
 /// The state for the quorum proposal task. Contains all of the information for
 /// handling [`HotShotEvent::QuorumProposalRecv`] events.
@@ -120,15 +125,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
     ) {
         #[cfg(feature = "dependency-tasks")]
         if let HotShotEvent::QuorumProposalRecv(proposal, sender) = event.as_ref() {
-            match handle_quorum_proposal_recv(
-                proposal,
-                sender,
-                event_stream.clone(),
-                self,
-                self.version,
-            )
-            .await
-            {
+            match handle_quorum_proposal_recv(proposal, sender, &event_stream, self).await {
                 Ok(Some(current_proposal)) => {
                     // Build the parent leaf since we didn't find it during the proposal check.
                     let parent_leaf = match parent_leaf_and_state(
@@ -142,7 +139,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
                     {
                         Ok((parent_leaf, _ /* state */)) => parent_leaf,
                         Err(error) => {
-                            warn!(?error, "Failed to get parent leaf and state");
+                            warn!("Failed to get parent leaf and state during VoteNow data construction; error = {error:#}");
                             return;
                         }
                     };

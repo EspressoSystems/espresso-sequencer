@@ -39,11 +39,9 @@ pub(crate) enum ProposalDependency {
     /// For the `QcFormed` event timeout branch.
     TimeoutCert,
 
-    /// For the `QuroumProposalValidated` event after validating `QuorumProposalRecv`.
+    /// For the `QuroumProposalValidated` event after validating `QuorumProposalRecv` or the
+    /// `LivenessCheckProposalRecv` event during the liveness check in `QuorumProposalRecv`.
     Proposal,
-
-    /// For the `ProposeNow` event.
-    ProposeNow,
 
     /// For the `VidShareValidated` event.
     VidShare,
@@ -178,23 +176,12 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
 
     #[allow(clippy::no_effect_underscore_binding)]
     async fn handle_dep_result(self, res: Self::Output) {
-        let mut payload_commitment = None;
         let mut commit_and_metadata: Option<CommitmentAndMetadata<TYPES>> = None;
         let mut timeout_certificate = None;
         let mut view_sync_finalize_cert = None;
         let mut vid_share = None;
         for event in res.iter().flatten().flatten() {
             match event.as_ref() {
-                HotShotEvent::QuorumProposalValidated(proposal, _) => {
-                    let proposal_payload_comm = proposal.block_header.payload_commitment();
-                    if let Some(comm) = payload_commitment {
-                        if proposal_payload_comm != comm {
-                            return;
-                        }
-                    } else {
-                        payload_commitment = Some(proposal_payload_comm);
-                    }
-                }
                 HotShotEvent::SendPayloadCommitmentAndMetadata(
                     payload_commitment,
                     builder_commitment,
@@ -221,24 +208,13 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
                 HotShotEvent::ViewSyncFinalizeCertificate2Recv(cert) => {
                     view_sync_finalize_cert = Some(cert.clone());
                 }
-                HotShotEvent::ProposeNow(_, pdd) => {
-                    commit_and_metadata = Some(pdd.commitment_and_metadata.clone());
-                    match &pdd.secondary_proposal_information {
-                        hotshot_types::consensus::SecondaryProposalInformation::QuorumProposalAndCertificate(quorum_proposal, _) => {
-                            payload_commitment = Some(quorum_proposal.block_header.payload_commitment());
-                        },
-                        hotshot_types::consensus::SecondaryProposalInformation::Timeout(tc) => {
-                            timeout_certificate = Some(tc.clone());
-                        }
-                        hotshot_types::consensus::SecondaryProposalInformation::ViewSync(vsc) => {
-                            view_sync_finalize_cert = Some(vsc.clone());
-                        },
-                    }
-                }
                 HotShotEvent::VidShareValidated(share) => {
                     vid_share = Some(share.clone());
                 }
-                _ => {}
+                _ => {
+                    // LivenessCheckProposalRecv and QuorumProposalValidated are implicitly
+                    // handled here.
+                }
             }
         }
 

@@ -50,9 +50,12 @@ use crate::{
 
 /// Validate the state and safety and liveness of a proposal then emit
 /// a `QuorumProposalValidated` event.
+///
+/// TODO - This should just take the QuorumProposalRecv task state after
+/// we merge the dependency tasks.
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_lines)]
-async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
+pub async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
     proposal: Proposal<TYPES, QuorumProposal<TYPES>>,
     parent_leaf: Leaf<TYPES>,
     consensus: Arc<RwLock<Consensus<TYPES>>>,
@@ -577,24 +580,16 @@ pub async fn publish_proposal_if_able<TYPES: NodeType>(
     }
 }
 
-/// TEMPORARY TYPE: Quorum proposal recv task state when using dependency tasks
-#[cfg(feature = "dependency-tasks")]
-pub(crate) type TemporaryProposalRecvCombinedType<TYPES, I> = QuorumProposalRecvTaskState<TYPES, I>;
-
-/// TEMPORARY TYPE: Consensus task state when not using dependency tasks
-#[cfg(not(feature = "dependency-tasks"))]
-pub(crate) type TemporaryProposalRecvCombinedType<TYPES, I> = ConsensusTaskState<TYPES, I>;
-
 // TODO: Fix `clippy::too_many_lines`.
 /// Handle the received quorum proposal.
 ///
 /// Returns the proposal that should be used to set the `cur_proposal` for other tasks.
 #[allow(clippy::too_many_lines)]
-pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<TYPES>>(
+pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
     sender: &TYPES::SignatureKey,
     event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
-    task_state: &mut TemporaryProposalRecvCombinedType<TYPES, I>,
+    task_state: &mut ConsensusTaskState<TYPES, I>,
     version: Version,
 ) -> Result<Option<QuorumProposal<TYPES>>> {
     let sender = sender.clone();
@@ -623,11 +618,14 @@ pub async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<
     }
 
     // NOTE: We could update our view with a valid TC but invalid QC, but that is not what we do here
-    if let Err(e) = update_view::<TYPES, I>(
-        task_state,
+    if let Err(e) = update_view::<TYPES>(
         view,
         &event_stream,
+        task_state.timeout,
         Arc::clone(&task_state.consensus),
+        &mut task_state.cur_view,
+        &mut task_state.timeout_task,
+        &task_state.output_event_stream,
         SEND_VIEW_CHANGE_EVENT,
     )
     .await

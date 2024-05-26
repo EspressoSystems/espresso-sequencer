@@ -11,13 +11,10 @@ use tracing::{debug, error};
 
 pub use crate::utils::{View, ViewInner};
 use crate::{
-    data::{Leaf, QuorumProposal, VidDisperseShare},
+    data::{Leaf, VidDisperseShare},
     error::HotShotError,
     message::Proposal,
-    simple_certificate::{
-        DaCertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
-        ViewSyncFinalizeCertificate2,
-    },
+    simple_certificate::{DaCertificate, QuorumCertificate, UpgradeCertificate},
     traits::{
         block_contents::BuilderFee,
         metrics::{Counter, Gauge, Histogram, Metrics, NoMetrics},
@@ -493,24 +490,4 @@ pub struct CommitmentAndMetadata<TYPES: NodeType> {
     pub fee: BuilderFee<TYPES>,
     /// View number this block is for
     pub block_view: TYPES::Time,
-}
-
-/// Helper type to hold the optional secondary information required to propose.
-#[derive(Eq, Hash, PartialEq, Debug, Clone)]
-pub enum SecondaryProposalInformation<TYPES: NodeType> {
-    /// The quorum proposal and certificate needed to propose.
-    QuorumProposalAndCertificate(QuorumProposal<TYPES>, QuorumCertificate<TYPES>),
-    /// The timeout certificate which we can propose from.
-    Timeout(TimeoutCertificate<TYPES>),
-    /// The view sync certificate which we can propose from.
-    ViewSync(ViewSyncFinalizeCertificate2<TYPES>),
-}
-
-/// Dependency data required to submit a proposal
-#[derive(Eq, Hash, PartialEq, Debug, Clone)]
-pub struct ProposalDependencyData<TYPES: NodeType> {
-    /// The primary data in a proposal.
-    pub commitment_and_metadata: CommitmentAndMetadata<TYPES>,
-    /// The secondary data in a proposal
-    pub secondary_proposal_information: SecondaryProposalInformation<TYPES>,
 }

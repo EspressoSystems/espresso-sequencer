@@ -136,6 +136,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                     ProposalDependency::Proposal => {
                         if let HotShotEvent::QuorumProposalValidated(proposal, _) = event {
                             proposal.view_number() + 1
+                        } else if let HotShotEvent::QuorumProposalLivenessValidated(proposal) =
+                            event
+                        {
+                            proposal.view_number() + 1
                         } else {
                             return false;
                         }
@@ -149,13 +153,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                             _fee,
                         ) = event
                         {
-                            *view_number
-                        } else {
-                            return false;
-                        }
-                    }
-                    ProposalDependency::ProposeNow => {
-                        if let HotShotEvent::ProposeNow(view_number, _) = event {
                             *view_number
                         } else {
                             return false;
@@ -222,12 +219,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             event_receiver.clone(),
         );
 
-        let mut propose_now_dependency = self.create_event_dependency(
-            ProposalDependency::ProposeNow,
-            view_number,
-            event_receiver.clone(),
-        );
-
         let mut vid_share_dependency = self.create_event_dependency(
             ProposalDependency::VidShare,
             view_number,
@@ -241,13 +232,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
         );
 
         match event.as_ref() {
-            HotShotEvent::ProposeNow(..) => {
-                propose_now_dependency.mark_as_completed(Arc::clone(&event));
-            }
             HotShotEvent::SendPayloadCommitmentAndMetadata(..) => {
                 payload_commitment_dependency.mark_as_completed(Arc::clone(&event));
             }
-            HotShotEvent::QuorumProposalValidated(..) => {
+            // All proposals are equivalent in this case.
+            HotShotEvent::QuorumProposalValidated(..)
+            | HotShotEvent::QuorumProposalLivenessValidated(_) => {
                 proposal_dependency.mark_as_completed(event);
             }
             HotShotEvent::QcFormed(quorum_certificate) => match quorum_certificate {
@@ -292,7 +282,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
         }
 
         AndDependency::from_deps(vec![OrDependency::from_deps(vec![
-            AndDependency::from_deps(vec![AndDependency::from_deps(vec![propose_now_dependency])]),
             AndDependency::from_deps(vec![
                 OrDependency::from_deps(vec![AndDependency::from_deps(vec![
                     payload_commitment_dependency,
@@ -393,9 +382,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             HotShotEvent::VersionUpgrade(version) => {
                 self.version = *version;
             }
-            HotShotEvent::ProposeNow(view_number, _) => {
+            HotShotEvent::QuorumProposalLivenessValidated(proposal) => {
+                // We may not be able to propose off of this, but we still spin up an event just in case
+                // the other data is already here, we're still proposing for view + 1 here.
                 self.create_dependency_task_if_new(
-                    *view_number,
+                    proposal.view_number() + 1,
                     event_receiver,
                     event_sender,
                     Arc::clone(&event),
@@ -461,10 +452,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                 );
             }
             HotShotEvent::QuorumProposalValidated(proposal, _) => {
-                let new_view = proposal.view_number;
+                let view_number = proposal.view_number();
 
                 // All nodes get the latest proposed view as a proxy of `cur_view` of olde.
-                if !self.update_latest_proposed_view(new_view).await {
+                if !self.update_latest_proposed_view(view_number).await {
                     tracing::trace!("Failed to update latest proposed view");
                     return;
                 }
@@ -477,14 +468,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                 }
 
                 self.create_dependency_task_if_new(
-                    new_view + 1,
+                    view_number + 1,
                     event_receiver,
                     event_sender,
                     Arc::clone(&event),
                 );
             }
             HotShotEvent::QuorumProposalSend(proposal, _) => {
-                let view = proposal.data.view_number;
+                let view = proposal.data.view_number();
                 if !self.update_latest_proposed_view(view).await {
                     tracing::trace!("Failed to update latest proposed view");
                     return;
@@ -556,7 +547,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState
                 | HotShotEvent::QcFormed(_)
                 | HotShotEvent::SendPayloadCommitmentAndMetadata(..)
                 | HotShotEvent::ViewSyncFinalizeCertificate2Recv(_)
-                | HotShotEvent::ProposeNow(..)
+                | HotShotEvent::QuorumProposalLivenessValidated(..)
                 | HotShotEvent::QuorumProposalSend(..)
                 | HotShotEvent::VidShareValidated(_)
                 | HotShotEvent::ValidatedStateUpdated(..)
