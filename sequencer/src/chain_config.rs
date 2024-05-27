@@ -7,12 +7,18 @@ use committable::{Commitment, Committable};
 use derive_more::{From, Into};
 use ethers::types::{Address, U256};
 use itertools::Either;
-use sequencer_utils::impl_to_fixed_bytes;
+use sequencer_utils::{deserialize_from_decimal, impl_to_fixed_bytes, serialize_as_decimal};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 #[derive(Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, From, Into)]
-pub struct ChainId(U256);
+pub struct ChainId(
+    #[serde(
+        serialize_with = "serialize_as_decimal",
+        deserialize_with = "deserialize_from_decimal"
+    )]
+    U256,
+);
 
 impl_to_fixed_bytes!(ChainId, U256);
 
