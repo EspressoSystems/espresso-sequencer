@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use async_broadcast::broadcast;
 use async_compatibility_layer::art::async_timeout;
@@ -10,7 +10,7 @@ use crate::events::{HotShotEvent, HotShotTaskCompleted};
 /// The state for the test harness task. Keeps track of which events and how many we expect to get
 pub struct TestHarnessState<TYPES: NodeType> {
     /// The expected events we get from the test.  Maps an event to the number of times we expect to see it
-    expected_output: HashMap<HotShotEvent<TYPES>, usize>,
+    expected_output: Vec<HotShotEvent<TYPES>>,
     /// If true we won't fail the test if extra events come in
     allow_extra_output: bool,
 }
@@ -46,7 +46,7 @@ impl<TYPES: NodeType> TaskState for TestHarnessState<TYPES> {
 #[allow(clippy::panic)]
 pub async fn run_harness<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>>> + Send + 'static>(
     input: Vec<HotShotEvent<TYPES>>,
-    expected_output: HashMap<HotShotEvent<TYPES>, usize>,
+    expected_output: Vec<HotShotEvent<TYPES>>,
     state: S,
     allow_extra_output: bool,
 ) where
@@ -111,17 +111,20 @@ pub fn handle_event<TYPES: NodeType>(
     // * We haven't received all expected outputs yet.
     if !allow_extra_output || !state.expected_output.is_empty() {
         assert!(
-            state.expected_output.contains_key(&event),
+            state.expected_output.contains(&event),
             "Got an unexpected event: {event:?}",
         );
     }
 
-    let num_expected = state.expected_output.get_mut(&event).unwrap();
-    if *num_expected == 1 {
-        state.expected_output.remove(&event);
-    } else {
-        *num_expected -= 1;
-    }
+    // NOTE: We only care about finding a single instance of the output event, and we just
+    // iteratively remove the entries until they're gone.
+    let idx = state
+        .expected_output
+        .iter()
+        .position(|x| *x == *event)
+        .unwrap();
+
+    state.expected_output.remove(idx);
 
     if state.expected_output.is_empty() {
         tracing::info!("test harness task completed");

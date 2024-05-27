@@ -1,18 +1,18 @@
-use std::collections::HashMap;
-
 use hotshot::{tasks::task_state::CreateTaskState, types::SystemContextHandle};
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
-use hotshot_task_impls::events::HotShotEvent;
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use hotshot_task_impls::{
+    events::HotShotEvent, harness::run_harness, view_sync::ViewSyncTaskState,
+};
+use hotshot_testing::task_helpers::build_system_handle;
+use hotshot_types::{
+    data::ViewNumber, simple_vote::ViewSyncPreCommitData,
+    traits::node_implementation::ConsensusTime,
+};
 
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_view_sync_task() {
-    use hotshot_task_impls::{harness::run_harness, view_sync::ViewSyncTaskState};
-    use hotshot_testing::task_helpers::build_system_handle;
-    use hotshot_types::simple_vote::ViewSyncPreCommitData;
-
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -34,15 +34,15 @@ async fn test_view_sync_task() {
     tracing::error!("Vote in test is {:?}", vote.clone());
 
     let mut input = Vec::new();
-    let mut output = HashMap::new();
+    let mut output = Vec::new();
 
     input.push(HotShotEvent::Timeout(ViewNumber::new(2)));
     input.push(HotShotEvent::Timeout(ViewNumber::new(3)));
 
     input.push(HotShotEvent::Shutdown);
 
-    output.insert(HotShotEvent::ViewChange(ViewNumber::new(2)), 1);
-    output.insert(HotShotEvent::ViewSyncPreCommitVoteSend(vote.clone()), 1);
+    output.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
+    output.push(HotShotEvent::ViewSyncPreCommitVoteSend(vote.clone()));
 
     let view_sync_state = ViewSyncTaskState::<
         TestTypes,
