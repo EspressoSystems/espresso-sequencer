@@ -842,10 +842,13 @@ mod test {
         api.get("get_payload", move |_, _| {
             async move {
                 // No matter what data we are asked for, always respond with dummy data.
-                Ok(PayloadQueryData::<MockTypes>::genesis(
-                    &Default::default(),
-                    &Default::default(),
-                ).await)
+                Ok(
+                    PayloadQueryData::<MockTypes>::genesis(
+                        &Default::default(),
+                        &Default::default(),
+                    )
+                    .await,
+                )
             }
             .boxed()
         })

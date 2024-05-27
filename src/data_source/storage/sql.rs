@@ -3306,7 +3306,8 @@ mod test {
         let mut leaf = LeafQueryData::<MockTypes>::genesis(
             &TestValidatedState::default(),
             &TestInstanceState {},
-        ).await;
+        )
+        .await;
         // insert some mock data
         for i in 0..20 {
             leaf.leaf.block_header_mut().block_number = i;
@@ -3379,7 +3380,8 @@ mod test {
         let mut leaf = LeafQueryData::<MockTypes>::genesis(
             &TestValidatedState::default(),
             &TestInstanceState {},
-        ).await;
+        )
+        .await;
         // insert some mock data
         for i in 0..20 {
             leaf.leaf.block_header_mut().block_number = i;
