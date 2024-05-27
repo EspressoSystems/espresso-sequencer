@@ -11,6 +11,7 @@ use ethers::{
     signers::{coins_bip39::English, Signer as _},
     types::U256,
 };
+use serde::{Deserialize as _, Serialize as _};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::{
@@ -348,6 +349,31 @@ macro_rules! impl_to_fixed_bytes {
     };
 }
 
+/// Serialize a U256 type as a decimal string for human readable serialization
+pub fn serialize_as_decimal<S>(value: &U256, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    if serializer.is_human_readable() {
+        serializer.serialize_str(&value.to_string())
+    } else {
+        value.serialize(serializer)
+    }
+}
+
+/// Deserialize a U256 type from a decimal string for human readable serialization
+pub fn deserialize_from_decimal<'de, D>(deserializer: D) -> Result<U256, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    if deserializer.is_human_readable() {
+        let s = String::deserialize(deserializer)?;
+        U256::from_dec_str(&s).map_err(serde::de::Error::custom)
+    } else {
+        U256::deserialize(deserializer)
+    }
+}
+
 /// send a transaction and wait for confirmation before returning the tx receipt and block included.
 pub async fn contract_send<M: Middleware, T: Detokenize, E>(
     call: &ContractCall<M, T>,
@@ -440,6 +466,8 @@ async fn wait_for_transaction_to_be_mined<P: JsonRpcClient>(
 mod test {
     use super::*;
     use committable::RawCommitmentBuilder;
+    use serde::{Deserialize, Serialize};
+    use serde_json::Value;
 
     struct TestCommittable;
 
@@ -454,6 +482,40 @@ mod test {
         assert_eq!(
             TestCommittable.commit(),
             u256_to_commitment(commitment_to_u256(TestCommittable.commit())).unwrap()
+        );
+    }
+    #[derive(Debug, Serialize, Deserialize, PartialEq)]
+    struct AsDecimal(
+        #[serde(
+            serialize_with = "serialize_as_decimal",
+            deserialize_with = "deserialize_from_decimal"
+        )]
+        U256,
+    );
+
+    #[test]
+    fn test_serde_json_as_decimal() {
+        let value = AsDecimal(U256::from(123));
+        let serialized = serde_json::to_string(&value).unwrap();
+
+        // The value is serialized as decimal string
+        let json_value: Value = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(json_value.as_str().unwrap(), "123");
+
+        // Deserialization produces the original value
+        let deserialized: AsDecimal = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, value);
+    }
+
+    #[test]
+    fn test_serde_bincode_unchanged() {
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        struct AsDefault(U256);
+        let custom = AsDecimal(U256::from(123));
+        let default = AsDefault(U256::from(123));
+        assert_eq!(
+            bincode::serialize(&custom).unwrap(),
+            bincode::serialize(&default).unwrap(),
         );
     }
 }

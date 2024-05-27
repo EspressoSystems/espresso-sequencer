@@ -9,8 +9,8 @@
   "chain_config": {
     "chain_config": {
       "Left": {
-        "base_fee": "0x0",
-        "chain_id": "0x8a19",
+        "base_fee": "0",
+        "chain_id": "35353",
         "fee_contract": "0x0000000000000000000000000000000000000000",
         "fee_recipient": "0x0000000000000000000000000000000000000000",
         "max_block_size": 10240
@@ -19,7 +19,7 @@
   },
   "fee_info": {
     "account": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
-    "amount": "0x0"
+    "amount": "0"
   },
   "fee_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUAAAAAAAAAAAAAAAAAAAAKA",
   "height": 42,
