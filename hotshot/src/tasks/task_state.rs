@@ -80,13 +80,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
-    for VidTaskState<TYPES, I, SystemContextHandle<TYPES, I>>
+    for VidTaskState<TYPES, I>
 {
-    async fn create_from(
-        handle: &SystemContextHandle<TYPES, I>,
-    ) -> VidTaskState<TYPES, I, SystemContextHandle<TYPES, I>> {
+    async fn create_from(handle: &SystemContextHandle<TYPES, I>) -> VidTaskState<TYPES, I> {
         VidTaskState {
-            api: handle.clone(),
             consensus: handle.hotshot.consensus(),
             cur_view: handle.cur_view().await,
             vote_collector: None,

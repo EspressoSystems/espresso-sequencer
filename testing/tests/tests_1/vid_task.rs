@@ -1,15 +1,19 @@
-use std::{collections::HashMap, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
-use hotshot::types::SignatureKey;
+use hotshot::{tasks::task_state::CreateTaskState, types::SignatureKey};
 use hotshot_example_types::{
     block_types::{TestBlockPayload, TestMetadata, TestTransaction},
-    node_types::TestTypes,
+    node_types::{MemoryImpl, TestTypes},
     state_types::TestInstanceState,
 };
-use hotshot_task_impls::{events::HotShotEvent, vid::VidTaskState};
-use hotshot_testing::task_helpers::{build_system_handle, vid_scheme_from_view_number};
+use hotshot_task_impls::{events::HotShotEvent::*, vid::VidTaskState};
+use hotshot_testing::{
+    predicates::event::exact,
+    script::{run_test_script, TestScriptStage},
+    task_helpers::{build_system_handle, vid_scheme_from_view_number},
+};
 use hotshot_types::{
-    data::{null_block, DaProposal, VidDisperse, VidDisperseShare, ViewNumber},
+    data::{null_block, DaProposal, VidDisperse, ViewNumber},
     traits::{
         consensus_api::ConsensusApi,
         election::Membership,
@@ -22,7 +26,6 @@ use jf_vid::{precomputable::Precomputable, VidScheme};
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_vid_task() {
-    use hotshot_task_impls::harness::run_harness;
     use hotshot_types::message::Proposal;
 
     async_compatibility_layer::logging::setup_logging();
@@ -69,69 +72,41 @@ async fn test_vid_task() {
         signature: message.signature.clone(),
         _pd: PhantomData,
     };
-    let vid_share_proposals: Vec<_> = VidDisperseShare::from_vid_disperse(vid_disperse.clone())
-        .into_iter()
-        .map(|vid_disperse_share| {
-            vid_disperse_share
-                .to_proposal(handle.private_key())
-                .expect("Failed to sign block payload!")
-        })
-        .collect();
-    let vid_share_proposal = vid_share_proposals[0].clone();
 
-    let mut input = Vec::new();
-    let mut output = HashMap::new();
-
-    // In view 1, node 2 is the next leader.
-    input.push(HotShotEvent::ViewChange(ViewNumber::new(1)));
-    input.push(HotShotEvent::ViewChange(ViewNumber::new(2)));
-    input.push(HotShotEvent::BlockRecv(
-        encoded_transactions,
-        TestMetadata,
-        ViewNumber::new(2),
-        null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {}).unwrap(),
-        vid_precompute,
-    ));
-    input.push(HotShotEvent::BlockReady(
-        vid_disperse.clone(),
-        ViewNumber::new(2),
-    ));
-
-    input.push(HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key));
-    input.push(HotShotEvent::VidShareRecv(vid_share_proposal.clone()));
-    input.push(HotShotEvent::Shutdown);
-
-    output.insert(
-        HotShotEvent::BlockReady(vid_disperse, ViewNumber::new(2)),
-        1,
-    );
-
-    output.insert(
-        HotShotEvent::SendPayloadCommitmentAndMetadata(
-            payload_commitment,
-            builder_commitment,
-            TestMetadata,
-            ViewNumber::new(2),
-            null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
-                .unwrap(),
-        ),
-        1,
-    );
-    output.insert(
-        HotShotEvent::VidDisperseSend(vid_proposal.clone(), pub_key),
-        1,
-    );
-
-    let vid_state = VidTaskState {
-        api: handle.clone(),
-        consensus: handle.hotshot.consensus(),
-        cur_view: ViewNumber::new(0),
-        vote_collector: None,
-        network: handle.hotshot.networks.quorum_network.clone(),
-        membership: handle.hotshot.memberships.vid_membership.clone().into(),
-        public_key: handle.public_key(),
-        private_key: handle.private_key().clone(),
-        id: handle.hotshot.id,
+    let view_1 = TestScriptStage {
+        inputs: vec![ViewChange(ViewNumber::new(1))],
+        outputs: vec![],
+        asserts: vec![],
     };
-    run_harness(input, output, vid_state, false).await;
+    let view_2 = TestScriptStage {
+        inputs: vec![
+            ViewChange(ViewNumber::new(2)),
+            BlockRecv(
+                encoded_transactions,
+                TestMetadata,
+                ViewNumber::new(2),
+                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
+                    .unwrap(),
+                vid_precompute,
+            ),
+        ],
+        outputs: vec![
+            exact(SendPayloadCommitmentAndMetadata(
+                payload_commitment,
+                builder_commitment,
+                TestMetadata,
+                ViewNumber::new(2),
+                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
+                    .unwrap(),
+            )),
+            exact(BlockReady(vid_disperse, ViewNumber::new(2))),
+            exact(VidDisperseSend(vid_proposal.clone(), pub_key)),
+        ],
+        asserts: vec![],
+    };
+
+    let vid_state = VidTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+    let script = vec![view_1, view_2];
+
+    run_test_script(script, vid_state).await;
 }
