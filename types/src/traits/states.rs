@@ -4,7 +4,7 @@
 //! compatibilities over the current network state, which is modified by the transactions contained
 //! within blocks.
 
-use std::{error::Error, fmt::Debug, future::Future, hash::Hash};
+use std::{error::Error, fmt::Debug, future::Future};
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use vbs::version::Version;
@@ -24,7 +24,7 @@ pub trait InstanceState: Debug + Send + Sync {}
 
 /// Application-specific state delta, which will be used to store a list of merkle tree entries.
 pub trait StateDelta:
-    Debug + PartialEq + Eq + Hash + Send + Sync + Serialize + for<'a> Deserialize<'a>
+    Debug + PartialEq + Eq + Send + Sync + Serialize + for<'a> Deserialize<'a>
 {
 }
 
@@ -38,7 +38,7 @@ pub trait StateDelta:
 /// produce a new state, with the modifications from the block applied
 /// ([`validate_and_apply_header`](`ValidatedState::validate_and_apply_header))
 pub trait ValidatedState<TYPES: NodeType>:
-    Serialize + DeserializeOwned + Debug + Default + Hash + PartialEq + Eq + Send + Sync
+    Serialize + DeserializeOwned + Debug + Default + PartialEq + Eq + Send + Sync
 {
     /// The error type for this particular type of ledger state
     type Error: Error + Debug + Send + Sync;

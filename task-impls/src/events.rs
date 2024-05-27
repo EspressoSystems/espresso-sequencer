@@ -22,11 +22,11 @@ use vbs::version::Version;
 use crate::view_sync::ViewSyncPhase;
 
 /// Marker that the task completed
-#[derive(Eq, Hash, PartialEq, Debug, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct HotShotTaskCompleted;
 
 /// All of the possible events that can be passed between Sequecning `HotShot` tasks
-#[derive(Eq, Hash, PartialEq, Debug, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum HotShotEvent<TYPES: NodeType> {
     /// Shutdown the task

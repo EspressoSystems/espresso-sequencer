@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -57,24 +57,7 @@ pub fn all<TYPES>(events: Vec<HotShotEvent<TYPES>>) -> Box<TestPredicate<Arc<Hot
 where
     TYPES: NodeType,
 {
-    let info = format!("{:?}", events);
-    let mut set: HashSet<_> = events.into_iter().collect();
-
-    let function = move |e: &Arc<HotShotEvent<TYPES>>| match set.take(e.as_ref()) {
-        Some(_) => {
-            if set.is_empty() {
-                PredicateResult::Pass
-            } else {
-                PredicateResult::Incomplete
-            }
-        }
-        None => PredicateResult::Fail,
-    };
-
-    Box::new(TestPredicate {
-        function: Arc::new(RwLock::new(function)),
-        info,
-    })
+    all_predicates(events.into_iter().map(exact).collect())
 }
 
 pub fn all_predicates<TYPES: NodeType>(
