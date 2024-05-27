@@ -136,7 +136,7 @@ where
     D: AvailabilityDataSource<Types> + Send + Sync,
     U: Send + Sync,
     Types: NodeType,
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
 {
     type LeafRange<R> = D::LeafRange<R>
     where
@@ -341,7 +341,7 @@ where
     D: ExplorerStorage<Types> + Send + Sync,
     U: Send + Sync,
     Types: NodeType,
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
     Header<Types>: ExplorerHeader<Types> + QueryableHeader<Types>,
     Transaction<Types>: ExplorerTransaction,
 {

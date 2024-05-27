@@ -35,8 +35,9 @@ pub type LeafHash<Types> = Commitment<Leaf<Types>>;
 /// payload, so we can commit to the entire block simply by hashing the header.
 pub type BlockHash<Types> = Commitment<Header<Types>>;
 pub type TransactionHash<Types> = Commitment<Transaction<Types>>;
-pub type TransactionIndex<Types> = <Payload<Types> as QueryablePayload>::TransactionIndex;
-pub type TransactionInclusionProof<Types> = <Payload<Types> as QueryablePayload>::InclusionProof;
+pub type TransactionIndex<Types> = <Payload<Types> as QueryablePayload<Types>>::TransactionIndex;
+pub type TransactionInclusionProof<Types> =
+    <Payload<Types> as QueryablePayload<Types>>::InclusionProof;
 
 pub type Timestamp = time::OffsetDateTime;
 
@@ -52,7 +53,7 @@ pub trait QueryableHeader<Types: NodeType>: BlockHeader<Types> {
 /// the default implementations may be inefficient (e.g. performing an O(n) search, or computing an
 /// unnecessary inclusion proof). It is good practice to override these default implementations if
 /// your block type supports more efficient implementations (e.g. sublinear indexing by hash).
-pub trait QueryablePayload: traits::BlockPayload {
+pub trait QueryablePayload<Types: NodeType>: traits::BlockPayload<Types> {
     /// An index which can be used to efficiently retrieve a transaction for the block.
     ///
     /// This is left abstract so that different block implementations can index transactions
@@ -222,10 +223,13 @@ impl<Types: NodeType> LeafQueryData<Types> {
         Ok(Self { leaf, qc })
     }
 
-    pub fn genesis(instance_state: &Types::InstanceState) -> Self {
+    pub async fn genesis(
+        validated_state: &Types::ValidatedState,
+        instance_state: &Types::InstanceState,
+    ) -> Self {
         Self {
-            leaf: Leaf::genesis(instance_state),
-            qc: QuorumCertificate::genesis(instance_state),
+            leaf: Leaf::genesis(validated_state, instance_state).await,
+            qc: QuorumCertificate::genesis(validated_state, instance_state).await,
         }
     }
 
@@ -273,7 +277,7 @@ pub struct BlockQueryData<Types: NodeType> {
 impl<Types: NodeType> BlockQueryData<Types> {
     pub fn new(header: Header<Types>, payload: Payload<Types>) -> Self
     where
-        Payload<Types>: QueryablePayload,
+        Payload<Types>: QueryablePayload<Types>,
     {
         Self {
             hash: header.commit(),
@@ -284,11 +288,14 @@ impl<Types: NodeType> BlockQueryData<Types> {
         }
     }
 
-    pub fn genesis(instance_state: &Types::InstanceState) -> Self
+    pub async fn genesis(
+        validated_state: &Types::ValidatedState,
+        instance_state: &Types::InstanceState,
+    ) -> Self
     where
-        Payload<Types>: QueryablePayload,
+        Payload<Types>: QueryablePayload<Types>,
     {
-        let leaf = Leaf::<Types>::genesis(instance_state);
+        let leaf = Leaf::<Types>::genesis(validated_state, instance_state).await;
         Self::new(leaf.block_header().clone(), leaf.block_payload().unwrap())
     }
 
@@ -323,7 +330,7 @@ impl<Types: NodeType> BlockQueryData<Types> {
 
 impl<Types: NodeType> BlockQueryData<Types>
 where
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
 {
     pub fn transaction(&self, ix: &TransactionIndex<Types>) -> Option<Transaction<Types>> {
         self.payload().transaction(self.metadata(), ix)
@@ -380,11 +387,16 @@ impl<Types: NodeType> From<BlockQueryData<Types>> for PayloadQueryData<Types> {
 }
 
 impl<Types: NodeType> PayloadQueryData<Types> {
-    pub fn genesis(instance_state: &Types::InstanceState) -> Self
+    pub async fn genesis(
+        validated_state: &Types::ValidatedState,
+        instance_state: &Types::InstanceState,
+    ) -> Self
     where
-        Payload<Types>: QueryablePayload,
+        Payload<Types>: QueryablePayload<Types>,
     {
-        BlockQueryData::genesis(instance_state).into()
+        BlockQueryData::genesis(validated_state, instance_state)
+            .await
+            .into()
     }
 
     pub fn hash(&self) -> VidCommitment {
@@ -429,8 +441,11 @@ impl<Types: NodeType> VidCommonQueryData<Types> {
         }
     }
 
-    pub fn genesis(instance_state: &Types::InstanceState) -> Self {
-        let leaf = Leaf::<Types>::genesis(instance_state);
+    pub async fn genesis(
+        validated_state: &Types::ValidatedState,
+        instance_state: &Types::InstanceState,
+    ) -> Self {
+        let leaf = Leaf::<Types>::genesis(validated_state, instance_state).await;
         let payload = leaf.block_payload().unwrap();
         let bytes = payload.encode();
         let disperse = vid_scheme(GENESIS_VID_NUM_STORAGE_NODES)
@@ -463,7 +478,7 @@ impl<Types: NodeType> HeightIndexed for VidCommonQueryData<Types> {
 #[serde(bound = "")]
 pub struct TransactionQueryData<Types: NodeType>
 where
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
 {
     transaction: Transaction<Types>,
     hash: TransactionHash<Types>,
@@ -475,7 +490,7 @@ where
 
 impl<Types: NodeType> TransactionQueryData<Types>
 where
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
 {
     pub(crate) fn new(
         block: &BlockQueryData<Types>,
@@ -597,7 +612,7 @@ pub struct TransactionSummaryQueryData<Types: NodeType> {
 // contentions.
 impl<Types: NodeType> From<BlockQueryData<Types>> for BlockSummaryQueryData<Types>
 where
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
 {
     fn from(value: BlockQueryData<Types>) -> Self {
         BlockSummaryQueryData {

@@ -842,7 +842,10 @@ mod test {
         api.get("get_payload", move |_, _| {
             async move {
                 // No matter what data we are asked for, always respond with dummy data.
-                Ok(PayloadQueryData::<MockTypes>::genesis(&Default::default()))
+                Ok(PayloadQueryData::<MockTypes>::genesis(
+                    &Default::default(),
+                    &Default::default(),
+                ).await)
             }
             .boxed()
         })
@@ -850,7 +853,11 @@ mod test {
         .get("get_vid_common", move |_, _| {
             async move {
                 // No matter what data we are asked for, always respond with dummy data.
-                Ok(VidCommonQueryData::<MockTypes>::genesis(&Default::default()))
+                Ok(VidCommonQueryData::<MockTypes>::genesis(
+                    &Default::default(),
+                    &Default::default(),
+                )
+                .await)
             }
             .boxed()
         })
