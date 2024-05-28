@@ -15,6 +15,7 @@ members = [
   "contracts/rust/gen-vk-contract",
   "hotshot-state-prover",
   "sequencer",
+  "types",
   "utils",
 ]
 
@@ -40,6 +41,7 @@ base64-bytes = "0.1"
 blake3 = "1.5"
 clap = { version = "4.4", features = ["derive", "env", "string"] }
 cld = "0.5"
+derivative = "2.2"
 derive_more = "0.99.17"
 es-version = { git = "https://github.com/EspressoSystems/es-version.git", branch = "main" }
 dotenvy = "0.15"
@@ -95,7 +97,9 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4
   "std",
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
+num-traits = "0.2"
 snafu = "0.8"
+static_assertions = "1.1"
 strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.6"
 tagged-base64 = "0.4"

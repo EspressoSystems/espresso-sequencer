@@ -2841,6 +2841,28 @@ version = "0.4.1"
 source = "git+https://github.com/espressosystems/espresso-systems-common?tag=0.4.1#2e889e878866c2a5cce1daaab947f7c93d5811ae"
 
 [[package]]
+name = "espresso-types"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ark-serialize",
+ "base64-bytes",
+ "committable",
+ "contract-bindings",
+ "derivative",
+ "derive_more",
+ "ethers",
+ "hotshot-types",
+ "itertools 0.12.1",
+ "jf-merkle-tree",
+ "num-traits",
+ "sequencer-utils",
+ "serde",
+ "static_assertions",
+ "vbs",
+]
+
+[[package]]
 name = "etcetera"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
