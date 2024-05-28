@@ -142,6 +142,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error NoChangeRequired();
     /// @notice If the delay threshold for lightclient updates is too low or too high
     error InvalidDelayThreshold();
+    /// @notice Invalid L1 Block for checking HotShot liveness, premature or in the future
+    error InvalidL1BlockForCheckingHotShotLiveness();
 
     /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
@@ -384,57 +386,49 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice checks the L1BlockUpdates array and the delayThreshold to determine if hotshot was
     /// down at a specified L1 block number
-    function isHotshotAlive(uint256 l1BlockNumber) public view returns (bool) {
-        // The block being requested is in the future so return false
-        // if(l1BlockNumber>block.number){
-        //     return true;
-        // }
+    function wasL1Updated(uint256 l1BlockNumber) public view returns (bool) {
+        uint256 updatesCount = l1BlockUpdates.length;
 
-        // If there is only one block recorded then use the block ledger's current block as the
-        // 'nextBlock'
-        if (l1BlockUpdates.length == 1) {
-            if (
-                block.number - l1BlockUpdates[0] >= delayThreshold
-                    && l1BlockNumber - l1BlockUpdates[0] >= delayThreshold
-            ) {
-                return false;
-            }
+        // Handling Edge Cases
+        // Edgecase 1: The block is in the future or in the past before HotShot was live
+        if (l1BlockNumber > block.number || (updatesCount > 0 && l1BlockNumber < l1BlockUpdates[0]))
+        {
+            revert InvalidL1BlockForCheckingHotShotLiveness();
+        }
+
+        // Edgecase 2: There have only been two HotShot updates so far
+        // we only start checking if HotShot is live after it has received atleast two updates
+        if (updatesCount < 2) {
             return true;
         }
 
-        uint256 prevBlock;
-        uint256 nextBlock;
+        for (uint256 i = 0; i < updatesCount; i++) {
+            uint256 blockStart = l1BlockUpdates[i];
+            uint256 blockEnd = (i < updatesCount - 1) ? l1BlockUpdates[i + 1] : block.number;
 
-        /**
-         * TODO: a check for a block number that's too small? e.g before the genesis block was
-         * recorded?
-         */
-        for (uint256 i = 0; i < (l1BlockUpdates.length - 1); i++) {
-            prevBlock = l1BlockUpdates[i];
-            nextBlock = l1BlockUpdates[i + 1];
-
-            //if we're at the last item in the array, the nextBlock is the block ledger's block
-            // number
-            if (i == l1BlockUpdates.length - 1) {
-                nextBlock = block.number;
-            }
-
-            if (prevBlock <= l1BlockNumber && nextBlock >= l1BlockNumber) {
-                // Now we've found the range for that block number, let's check if the delay
-                // threshold has been met/surpassed
-                if (
-                    nextBlock - prevBlock >= delayThreshold
-                        && l1BlockNumber - prevBlock >= delayThreshold //make sure the block is only in
-                        // the range considered to be past the delay threshold
-                ) {
-                    return false;
+            // If thupdatesCount in this block range
+            if (blockStart <= l1BlockNumber && blockEnd >= l1BlockNumber) {
+                // If the range is in the initial updates, return true
+                if (i < 2 && blockEnd != block.number) {
+                    return true;
                 }
-                // The delay threshold has not been met and it's in the range that we're searching
-                // for so hotshot was not down
-                return true;
+
+                return
+                    !isDelayThresholdSurpassed(blockStart, blockEnd, delayThreshold, l1BlockNumber);
             }
         }
-        return true;
+
+        return false;
+    }
+
+    function isDelayThresholdSurpassed(
+        uint256 blockStart,
+        uint256 blockEnd,
+        uint256 delayThreshold,
+        uint256 l1BlockNumber
+    ) internal pure returns (bool) {
+        return
+            blockEnd - blockStart >= delayThreshold && l1BlockNumber - blockStart >= delayThreshold;
     }
 
     function getL1BlockUpdatesCount() public view returns (uint256) {

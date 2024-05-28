@@ -625,6 +625,13 @@ contract LightClient_delayThresholdTest is LightClientCommonTest {
     LC.LightClientState internal newState;
     V.PlonkProof internal newProof;
 
+    /**
+     * Liveness test cases to consider
+     * Outside of HotShot threshold, revert
+     * OnlyOneUpdate - HotShot is live
+     * OnlyTwoUpdates - HotShot is live unless blockNumber is past the 2nd blockupdate and past the
+     * threshold
+     */
     function setUp() public {
         init();
         // Assert owner is correctly set, add this to check owner state
@@ -688,39 +695,170 @@ contract LightClient_delayThresholdTest is LightClientCommonTest {
         assertEq(lc.getL1BlockUpdatesCount(), blockUpdatesCount + 1);
     }
 
-    function test_hotshotIsLive() public view {
-        uint256 blockUpdatesCount = lc.getL1BlockUpdatesCount();
-        assertGe(blockUpdatesCount, 1);
-        assertTrue(lc.isHotshotAlive(2));
-    }
-
-    function test_hotshotIsLiveFunctionWhenHotShotIsDown() public {
+    function test_hotshotIsLiveFunctionWhenNoDelayOccurred() public {
+        // DELAY_THRESHOLD = 6
         uint256[] memory updates = new uint256[](5);
         updates[0] = 1;
-        updates[1] = updates[0] + DELAY_THRESHOLD / 2;
-        updates[2] = updates[1] + DELAY_THRESHOLD / 2;
-        updates[3] = updates[2] + DELAY_THRESHOLD + 5;
-        updates[4] = updates[3] + DELAY_THRESHOLD / 2;
+        updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
+        updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
+        updates[3] = updates[2] + DELAY_THRESHOLD + 5; // 18
+        updates[4] = updates[3] + DELAY_THRESHOLD / 2; // 21
         lc.createFakeL1BlockUpdates(updates);
+
+        // set the current block to block number larger than the l1 block numbers used in this test
+        vm.roll(updates[4] + (DELAY_THRESHOLD * 5));
 
         assertEq(lc.getL1BlockUpdatesCount(), 5);
         assertEq(lc.delayThreshold(), DELAY_THRESHOLD);
 
-        // Hotshot should be live
-        assertTrue(lc.isHotshotAlive(updates[1] - 1));
+        // Hotshot should be live (l1BlockNumber = 3)
+        assertTrue(lc.wasL1Updated(updates[1] - 1));
+
+        // Hotshot should be live (l1BlockNumber = 7)
+        assertTrue(lc.wasL1Updated(updates[2]));
+    }
+
+    function test_hotshotIsDownWhenADelayExists() public {
+        // DELAY_THRESHOLD = 6
+        uint256[] memory updates = new uint256[](5);
+        updates[0] = 1;
+        updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
+        updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
+        updates[3] = updates[2] + DELAY_THRESHOLD + 5; // 18
+        updates[4] = updates[3] + DELAY_THRESHOLD / 2; // 21
+        lc.createFakeL1BlockUpdates(updates);
+
+        // set the current block to block number larger than the l1 block numbers used in this test
+        vm.roll(updates[4] + (DELAY_THRESHOLD * 5));
+
+        // Hotshot should be down (l1BlockNumber = 15)
+        // for a block that should have been recorded but wasn't due to a delay
+        assertFalse(lc.wasL1Updated(updates[2] + DELAY_THRESHOLD + 2));
+    }
+
+    function test_hotshotIsLiveWhenThereAreOnlyTwoUpdates() public {
+        uint256[] memory updates = new uint256[](2);
+        updates[0] = 1;
+        updates[1] = updates[0] + DELAY_THRESHOLD + 5;
+        lc.createFakeL1BlockUpdates(updates);
+
+        vm.roll(updates[1] * 2);
+
+        assertEq(lc.getL1BlockUpdatesCount(), 2);
+        assertEq(lc.delayThreshold(), DELAY_THRESHOLD);
 
         // Hotshot should be live
-        assertTrue(lc.isHotshotAlive(updates[2]));
-
-        // Hotshot should be down
-        assertFalse(lc.isHotshotAlive(updates[2] + DELAY_THRESHOLD + 2));
-
-        /* TODO 
-        should there be a calculation from numUpdates since firstupdate to determine if hotshot was
-        live?
-        */
+        assertTrue(lc.wasL1Updated(updates[0] + 2));
 
         // Hotshot should be live
-        assertTrue(lc.isHotshotAlive(updates[4] + 1));
+        assertTrue(lc.wasL1Updated(updates[1] - 1));
+    }
+
+    function test_hotshotIsDownWhenThereAreOnlyTwoUpdatesButTheRequestedBlockIsPastTheLastBlockAndThreshold(
+    ) public {
+        uint256[] memory updates = new uint256[](2);
+        updates[0] = 1;
+        updates[1] = updates[0] + DELAY_THRESHOLD + 5; //12
+        lc.createFakeL1BlockUpdates(updates);
+
+        vm.roll(DELAY_THRESHOLD * 5);
+
+        assertEq(lc.getL1BlockUpdatesCount(), 2);
+        assertEq(lc.delayThreshold(), DELAY_THRESHOLD);
+
+        // Hotshot should be live
+        assertTrue(lc.wasL1Updated(updates[0] + 2)); //3
+
+        // Hotshot should be live
+        assertTrue(lc.wasL1Updated(updates[1] - 1)); //11
+
+        // Hotshot should be down even though the block is in the future because the threshold was
+        // met
+        assertFalse(lc.wasL1Updated(updates[1] + DELAY_THRESHOLD * 2)); //24
+    }
+
+    function test_hotshotIsLiveWhenThereIsOnlyOneUpdateAndTheRequestedBlockIsPastTheLastBlockAndThreshold(
+    ) public {
+        uint256[] memory updates = new uint256[](1);
+        updates[0] = 1;
+        lc.createFakeL1BlockUpdates(updates);
+
+        vm.roll(DELAY_THRESHOLD * 3);
+
+        assertEq(lc.getL1BlockUpdatesCount(), 1);
+        assertEq(lc.delayThreshold(), DELAY_THRESHOLD);
+
+        // Hotshot should be live
+        assertTrue(lc.wasL1Updated(updates[0] + 2)); //3
+
+        // Hotshot should be live even though the block is in the future and the threshold was met
+        assertTrue(lc.wasL1Updated(updates[0] + DELAY_THRESHOLD * 2)); //24
+    }
+
+    function test_hotShotIsDownWhenBlockIsHigherThanLastRecordedAndTheDelayThresholdHasPassed()
+        public
+    {
+        // DELAY_THRESHOLD = 6
+        uint256[] memory updates = new uint256[](3);
+        updates[0] = 1;
+        updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
+        updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 21
+        lc.createFakeL1BlockUpdates(updates);
+
+        // set the current block to block number larger than the l1 block numbers used in this test
+        vm.roll(updates[2] + (DELAY_THRESHOLD * 5));
+
+        // Hotshot should be down (l1BlockNumber = 29)
+        // in a block that's higher than the last recorded and past the delay threshold
+        assertFalse(lc.wasL1Updated(updates[2] + DELAY_THRESHOLD + 3));
+    }
+
+    function test_hotShotIsLiveWhenBlockIsHigherThanLastRecordedAndTheDelayThresholdHasNotPassed()
+        public
+    {
+        // DELAY_THRESHOLD = 6
+        uint256[] memory updates = new uint256[](3);
+        updates[0] = 1;
+        updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
+        updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 21
+        lc.createFakeL1BlockUpdates(updates);
+
+        // set the current block to block number larger than the l1 block numbers used in this test
+        vm.roll(updates[2] + (DELAY_THRESHOLD * 5));
+
+        // Hotshot should be live (l1BlockNumber = 24)
+        assertTrue(lc.wasL1Updated(updates[2] + 3));
+    }
+
+    function test_revertWhenBlockInFuture() public {
+        // DELAY_THRESHOLD = 6
+        uint256[] memory updates = new uint256[](2);
+        updates[0] = 1;
+        updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
+        lc.createFakeL1BlockUpdates(updates);
+
+        // set the current block
+        uint256 currBlock = 20;
+        vm.roll(currBlock);
+
+        vm.expectRevert(LC.InvalidL1BlockForCheckingHotShotLiveness.selector);
+
+        lc.wasL1Updated(currBlock + 5);
+    }
+
+    function test_revertWhenBlockBeforeHotShotFirstBlock() public {
+        // DELAY_THRESHOLD = 6
+        uint256[] memory updates = new uint256[](2);
+        updates[0] = 1;
+        updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
+        lc.createFakeL1BlockUpdates(updates);
+
+        // set the current block
+        uint256 currBlock = 20;
+        vm.roll(currBlock);
+
+        vm.expectRevert(LC.InvalidL1BlockForCheckingHotShotLiveness.selector);
+
+        lc.wasL1Updated(updates[0] - 1);
     }
 }
