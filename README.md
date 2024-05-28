@@ -16,7 +16,10 @@ and robust infrastructure.
 
 ### Architecture
 
-This diagram below depicts a simplified view of the current architecture of the Espresso Sequencer.
+This diagram below depicts a simplified view of the current architecture of the Espresso Sequencer. The diagram includes
+views of an Espresso Sequencer node, the Espresso Sequencer Network (nodes, CDN, builders, prover, state relay service),
+two rollups (one ZK rollup "Z", one optimistic rollup "O") that use the Espresso Sequencer for sequencing and some
+important L1 contracts.
 
 - Glossary
   - Namespace: an identifier to distinguish rollups, akin to an Ethereum chain ID

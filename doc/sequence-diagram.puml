@@ -2,12 +2,17 @@
 !pragma teoz true
 actor User
 
-box rollup #LightYellow
-    participant "API\n(RPC)" as rpc
-    participant "Prover" as rprover
-    participant "Executor" as executor
-    participant Proposer
-    participant Challenger
+box Layer 2s / Rollups #LightYellow
+    box "Optimistic Rollup O" #LightGreen
+        participant "API\n(RPC)" as orrpc
+        participant Proposer
+        participant Challenger
+    end box
+    box "ZK Rollup Z" #LightBlue
+        participant "API\n(RPC)" as zkrpc
+        participant "Prover" as rprover
+        participant "Executor" as executor
+    end box
 end box
 
 box "Ethereum L1" #LightGrey
@@ -41,8 +46,10 @@ group 1. Fee deposit
 end group
 
 group 2. Transaction submisssion
-    User -> rpc: rollup transaction
-    rpc -> submit: transaction
+    User -> orrpc: rollup O transaction
+    orrpc -> submit: transaction
+    User -> zkrpc: rollup Z transaction
+    zkrpc -> submit: transaction
     events -> Builder: transactions
 end group
 
@@ -73,19 +80,18 @@ group 6. HotShot proving
     LC -> LC: verify
 end group
 
-group 7. Rollup proving
+group 7. ZK Rollup proving
     rprover -> RC: rollup state proof
-
     group verify
         LC -> "Rollup\nContract" as RC: HotShot\ncommitment
     end group
 end group
 
-group 8. Rollup dispute
-    Challenger -> RC: start dispute
+group 8. Optimistic Rollup dispute
+    Challenger -> RC: challenge
     loop until dispute resolved
-    Proposer -> RC: continue dispute
+    Proposer -> RC: respond
     LC --> RC: HotShot\ncommitment
-    Challenger -> RC: continue dispute
+    Challenger -> RC: respond
 end group
 @enduml

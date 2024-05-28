@@ -1,26 +1,17 @@
 @startuml
 
-skinparam package<<Layout>> {
-  borderColor Transparent
-  backgroundColor Transparent
-  fontColor Transparent
-  stereotypeFontColor Transparent
-}
-
 package "Espresso Sequencer Network" as Network #MistyRose {
-    package CDNLayout <<Layout>> {
-        component "Other\nSequencer\nNodes" as Nodes
-        package CDN {
-            component Broker
-            component Marshal
-            database KeyDB
-        }
+    component "Other\nSequencer\nNodes" as Nodes
+    package CDN {
+        component Broker
+        component Marshal
+        database KeyDB
     }
 
     'CDN Layout
     Broker -> KeyDB: state
     KeyDB -> Marshal: state
-    Nodes <--> CDN: consensus\nmessages
+    Nodes <-up-> CDN: consensus\nmessages
     note top of link
         4. HotShot consensus
     end note
@@ -84,11 +75,15 @@ Validated -up-> DB
 DB --> Catchup: " " "missing\nstate"
 
 package "Layer 2s / Rollups" as L2s #LightYellow {
-    component "Rollup N" as L2 {
-        component "API (e.g. JSON-RPC)" as L2_RPC
-        component Executor as L2_Exec
-        component Prover as L2_Prover
-        database "State DB" as L2_State
+    component "zk Rollup Z" as ZK #LightBlue {
+        component "API (e.g. JSON-RPC)" as ZK_RPC
+        component Executor as ZK_Exec
+        component Prover as ZK_Prover
+    }
+    component "Optimistic Rollup O" #LightGreen {
+        component "API (e.g. JSON-RPC)" as OR_RPC
+        component Proposer
+        component Challenger
     }
 }
 package "Ethereum Layer 1" as L1 #LightGray {
@@ -97,36 +92,45 @@ package "Ethereum Layer 1" as L1 #LightGray {
         component "Fee\nContract" as Fee_L1
     }
     package "Rollup Contracts" {
-        component "Rollup N\nContract" as L2_L1
+        component "zk Rollup Z\nContract" as ZK_L1
+        component "OR Rollup O\nContract" as OR_L1
     }
 }
 
 ' Transaction submission
 entity User
-User -Up-> L2_RPC : rollup transaction,\nstate queries
+User --> ZK_RPC : rollup transaction,\nstate queries
 note top of link
     2. Transaction submission
 end note
-L2_RPC --> Submit : "transaction" " "
+User --> OR_RPC
+
+ZK_RPC --> Submit : "transaction" " "
 Submit -> Events: "transaction" " "
-Query -up-> L2_Exec : " " "Espresso header,\n transactions in namespace"
+Query -up-> ZK_Exec : " " "Espresso header,\n transactions in namespace"
 note top of link
     5. Rollup block production
 end note
+Query -up-> Proposer: " " "Espresso header,\n transactions in namespace"
 
 
 ' L1 details
 HSProver -down-> LC_L1 : HotShot\nstate\nproof
-L2_Prover -> L2_L1 : rollup state proof
-note top of link
-    7. Rollup proving
-end note
-LC_L1 -> L2_L1 : HotShot\ncommitment
+LC_L1 -up-> ZK_L1 : " " "HotShot\ncommitment"
+LC_L1 -up-> OR_L1 : " " "HotShot\ncommitment"
 
-' L2 details
-L2_RPC <-up- L2_State : Read state
-L2_Exec -up-> L2_State : Write state
-L2_Prover <-up- L2_State : Read State
+' ZK proof
+ZK_Prover -> ZK_L1 : rollup state proof
+note top of link
+    7. ZK Rollup proving
+end note
+
+' OR dispute
+Proposer -> OR_L1: respond
+Challenger -> OR_L1: challenge
+note top of link
+    8. OR dispute
+end note
 
 Builder --> Fee_L1: deposit\nether
 note top of link
