@@ -39,7 +39,7 @@ use std::{collections::HashMap, fmt::Display, sync::Arc};
 pub struct Payload {
     // Concatenated payload bytes for each namespace
     #[serde(with = "base64_bytes")]
-    payload: Vec<u8>,
+    ns_payloads: Vec<u8>,
 
     ns_table: NsTable,
 }
@@ -63,7 +63,7 @@ impl Payload {
     // CRATE-VISIBLE HELPERS START HERE
 
     pub(in crate::block) fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
-        NsPayload::from_bytes_slice(&self.payload[range.as_block_range()])
+        NsPayload::from_bytes_slice(&self.ns_payloads[range.as_block_range()])
     }
 
     /// Convenience wrapper for [`Self::read_ns_payload`].
@@ -75,7 +75,7 @@ impl Payload {
     }
 
     pub(in crate::block) fn byte_len(&self) -> PayloadByteLen {
-        PayloadByteLen(self.payload.len())
+        PayloadByteLen(self.ns_payloads.len())
     }
 }
 
@@ -126,13 +126,19 @@ impl BlockPayload for Payload {
         }
         let ns_table = ns_table_builder.into_ns_table();
         let metadata = ns_table.clone();
-        Ok((Self { payload, ns_table }, metadata))
+        Ok((
+            Self {
+                ns_payloads: payload,
+                ns_table,
+            },
+            metadata,
+        ))
     }
 
     // TODO avoid cloning the entire payload here?
     fn from_bytes(block_payload_bytes: &[u8], ns_table: &Self::Metadata) -> Self {
         Self {
-            payload: block_payload_bytes.to_vec(),
+            ns_payloads: block_payload_bytes.to_vec(),
             ns_table: ns_table.clone(),
         }
     }
@@ -151,9 +157,9 @@ impl BlockPayload for Payload {
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
         let ns_table_bytes = self.ns_table.encode();
         let mut digest = sha2::Sha256::new();
-        digest.update((self.payload.len() as u64).to_le_bytes());
+        digest.update((self.ns_payloads.len() as u64).to_le_bytes());
         digest.update((ns_table_bytes.len() as u64).to_le_bytes());
-        digest.update(&self.payload);
+        digest.update(&self.ns_payloads);
         digest.update(ns_table_bytes);
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
@@ -198,7 +204,7 @@ impl QueryablePayload for Payload {
         // trait to add a `VidCommon` arg. In the meantime tests fail if I leave
         // it `todo!()`, so this hack allows tests to pass.
         let common = hotshot_types::vid::vid_scheme(10)
-            .disperse(&self.payload)
+            .disperse(&self.ns_payloads)
             .unwrap()
             .common;
 
@@ -214,7 +220,7 @@ impl Display for Payload {
 
 impl EncodeBytes for Payload {
     fn encode(&self) -> Arc<[u8]> {
-        Arc::from(self.payload.as_ref())
+        Arc::from(self.ns_payloads.as_ref())
     }
 }
 
