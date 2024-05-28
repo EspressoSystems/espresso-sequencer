@@ -6,6 +6,7 @@ authors = { workspace = true }
 edition = { workspace = true }
 
 [features]
+default = ["libp2p"]
 libp2p = ["sequencer/libp2p"]
 
 [dependencies]
