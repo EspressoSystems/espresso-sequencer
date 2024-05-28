@@ -43,7 +43,7 @@ use jf_merkle_tree::{
 };
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
-use sequencer_utils::impl_to_fixed_bytes;
+use sequencer_utils::{deserialize_from_decimal, impl_to_fixed_bytes, serialize_as_decimal};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -963,7 +963,13 @@ impl Committable for FeeInfo {
     Into,
 )]
 #[display(fmt = "{_0}")]
-pub struct FeeAmount(U256);
+pub struct FeeAmount(
+    #[serde(
+        serialize_with = "serialize_as_decimal",
+        deserialize_with = "deserialize_from_decimal"
+    )]
+    U256,
+);
 
 impl_to_fixed_bytes!(FeeAmount, U256);
 
