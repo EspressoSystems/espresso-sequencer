@@ -17,6 +17,7 @@ required-features = ["testing"]
 escargot = "0.5.10"
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 hotshot-query-service = { workspace = true, features = ["testing"] }
+pretty_assertions = { workspace = true }
 rand = "0.8.5"
 reqwest = { workspace = true }
 tempfile = "3.9.0"
@@ -39,7 +40,7 @@ async-std = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 base64-bytes = { workspace = true }
-bincode = "1.3.3"
+bincode = { workspace = true }
 blake3 = { workspace = true }
 bytesize = { workspace = true }
 
@@ -80,7 +81,6 @@ jf-rescue = { workspace = true }
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
-lazy_static = "1.4"
 num-traits = "0.2.18"
 portpicker = { workspace = true }
 rand = "0.8.5"

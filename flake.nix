@@ -160,9 +160,10 @@
             spell-checking = {
               enable = true;
               description = "Spell checking";
-              entry = "typos";
+              # --force-exclude to exclude excluded files if they are passed as arguments
+              entry = "typos --force-exclude";
               pass_filenames = true;
-              excludes = [ "contract-bindings/" ];
+              # Add excludes to the .typos.toml file instead
             };
             nixpkgs-fmt.enable = true;
           };
