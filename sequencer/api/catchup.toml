@@ -49,5 +49,10 @@ root node at the requested block height and view.
 PATH = ["/chain-config/:commitment"]
 ":commitment" = "TaggedBase64"
 DOC = """
-TODO:
+
+This endpoint retrieves the chain config from a peer that matches the specified `:commitment`.
+This is only called when the state does not have full chain config which is different from the genesis one.
+This can happen if the node missed a protocol upgrade.
+
+Returns the chain config -- this includes parameters such as `max_block_size`, `chain_id`, `base_fee`, and `fee_recipient`.
 """

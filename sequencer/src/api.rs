@@ -828,6 +828,7 @@ mod test {
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StatePeers},
+        chain_config::ResolvableChainConfig,
         persistence::no_storage,
         state::{FeeAccount, FeeAmount, ValidatedState},
         testing::TestConfig,
@@ -1054,6 +1055,55 @@ mod test {
                 break;
             }
         }
+    }
+
+    #[async_std::test]
+    async fn test_validated_state_chain_config() {
+        setup_logging();
+        setup_backtrace();
+
+        let mut state = ValidatedState::default();
+        // ValidatedState only has the default chain config commitment.
+        // NodeState also has the default ChainConfig.
+        // Therefore, both commitments would match.
+        // This would update the ValidatedState's chain config to NodeState's ChainConfig.
+        state.chain_config = ChainConfig::default().commit().into();
+
+        // Start a sequencer network without catchup module
+        let port = pick_unused_port().expect("No ports free");
+        let mut network = TestNetwork::with_state(
+            Options::from(options::Http { port }),
+            std::array::from_fn(|_| state.clone()),
+            [no_storage::Options; TestConfig::NUM_NODES],
+            std::array::from_fn(|_| MockStateCatchup::default()),
+        )
+        .await;
+
+        network
+            .server
+            .event_stream()
+            .filter(|event| future::ready(matches!(event.event, EventType::Decide { .. })))
+            .take(4)
+            .collect::<Vec<_>>()
+            .await;
+
+        let decided_state = network.server.consensus().decided_state().await;
+        assert_eq!(
+            decided_state.chain_config,
+            ResolvableChainConfig::from(ChainConfig::default())
+        );
+
+        for peer in &network.peers {
+            let state = peer.consensus().decided_state().await;
+            assert_eq!(
+                state.chain_config,
+                ResolvableChainConfig::from(ChainConfig::default())
+            );
+        }
+
+        network.stop_consensus().await;
+
+        drop(network);
     }
 
     #[async_std::test]

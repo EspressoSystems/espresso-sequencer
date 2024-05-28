@@ -312,7 +312,7 @@ where
         &self,
         _commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        bail!("not supported");
+        bail!("chain config catchup is not supported for SQL data source");
     }
 }
 
@@ -564,7 +564,6 @@ pub mod mock {
             Ok(())
         }
 
-        //TODO : ???
         async fn try_fetch_chain_config(
             &self,
             _commitment: Commitment<ChainConfig>,

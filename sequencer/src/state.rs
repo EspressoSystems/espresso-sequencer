@@ -565,6 +565,13 @@ impl<T> SequencerStateDataSource for T where
 }
 
 impl ValidatedState {
+    /// Retrieves the `ChainConfig`.
+    ///
+    ///  Returns the `NodeState` `ChainConfig` if the `ValidatedState` `ChainConfig` commitment matches the `NodeState` `ChainConfig`` commitment.
+    ///  If the commitments do not match, it returns the `ChainConfig` available in either `ValidatedState` or proposed header.
+    ///  If neither has the `ChainConfig`, it fetches the config from the peers.
+    ///
+    /// Returns an error if the proposed header's `ChainConfig` commitment does not match the `ValidatedState` `ChainConfig` commitment,
     pub(crate) async fn get_chain_config(
         &self,
         instance: &NodeState,

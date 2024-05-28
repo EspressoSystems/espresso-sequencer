@@ -54,6 +54,9 @@ impl BlockPayload<SeqTypes> for Payload<TxTableEntryWord> {
     /// https://github.com/EspressoSystems/espresso-sequencer/issues/757
     ///
     /// TODO(746) refactor and make pretty "table" code for tx, namespace tables?
+    ///
+    /// This function also performs catchup from peers
+    /// when the ValidatedState's chain config commitment differs from the NodeState's chain config, and the ValidatedState does not have full chain config.
     async fn from_transactions(
         txs: impl IntoIterator<Item = Self::Transaction> + Send,
         validated_state: &Self::ValidatedState,
