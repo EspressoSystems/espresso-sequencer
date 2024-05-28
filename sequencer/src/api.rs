@@ -408,7 +408,7 @@ pub mod test_helpers {
         }
 
         pub fn light_client_genesis(&self) -> ParsedLightClientState {
-            let st = self.cfg.stake_table(STAKE_TABLE_CAPACITY_FOR_TEST);
+            let st = self.cfg.stake_table(STAKE_TABLE_CAPACITY_FOR_TEST as usize);
             light_client_genesis_from_stake_table(st).unwrap()
         }
 
