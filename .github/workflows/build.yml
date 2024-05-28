@@ -52,6 +52,11 @@ jobs:
         run: |
           cargo build --locked --release --workspace
 
+      - name: Build Espresso Dev Node
+        # Espresso Dev Node currently requires testing feature, so it is built separately.
+        run: |
+          cargo build --locked --release --features testing --bin espresso-dev-node
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -97,6 +102,11 @@ jobs:
       - name: Build
         run: |
           cargo build --locked --release --workspace
+
+      - name: Build Espresso Dev Node
+        # Espresso Dev Node currently requires testing feature, so it is built separately.
+        run: |
+          cargo build --locked --release --features testing --bin espresso-dev-node
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
