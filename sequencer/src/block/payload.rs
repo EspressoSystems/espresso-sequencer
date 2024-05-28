@@ -173,7 +173,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
                 block_size += size_of::<TxTableEntry>() as u64;
             }
 
-            if block_size > chain_config.max_block_size {
+            if block_size > *chain_config.max_block_size {
                 break;
             }
 
@@ -375,7 +375,7 @@ mod test {
 
         let n_txs = target_payload_total as u64 / tx_size;
         let chain_config = ChainConfig {
-            max_block_size,
+            max_block_size: max_block_size.into(),
             ..Default::default()
         };
 

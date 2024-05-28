@@ -1,4 +1,4 @@
-use crate::{api, persistence, ChainConfig};
+use crate::{api, persistence};
 use anyhow::{bail, Context};
 use bytesize::ByteSize;
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
@@ -6,8 +6,6 @@ use cld::ClDuration;
 use core::fmt::Display;
 use derivative::Derivative;
 use derive_more::From;
-use ethers::types::Address;
-use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
 use snafu::Snafu;
@@ -89,6 +87,15 @@ pub struct Options {
     #[derivative(Debug(format_with = "Display::fmt"))]
     pub state_relay_server_url: Url,
 
+    /// Path to TOML file containing genesis state.
+    #[clap(
+        long,
+        name = "GENESIS_FILE",
+        env = "ESPRESSO_SEQUENCER_GENESIS_FILE",
+        default_value = "/genesis/demo.toml"
+    )]
+    pub genesis_file: PathBuf,
+
     /// Path to file containing private keys.
     ///
     /// The file should follow the .env format, with two keys:
@@ -137,16 +144,6 @@ pub struct Options {
     #[clap(raw = true)]
     modules: Vec<String>,
 
-    /// Prefunded the builder accounts. Use for demo purposes only.
-    ///
-    /// Comma-separated list of Ethereum addresses.
-    #[clap(
-        long,
-        env = "ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS",
-        value_delimiter = ','
-    )]
-    pub prefunded_builder_accounts: Vec<Address>,
-
     /// Url we will use for RPC communication with L1.
     #[clap(
         long,
@@ -155,10 +152,6 @@ pub struct Options {
     )]
     #[derivative(Debug(format_with = "Display::fmt"))]
     pub l1_provider_url: Url,
-
-    /// L1 block number from which to start the Espresso chain.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_GENESIS")]
-    pub l1_genesis: Option<u64>,
 
     /// Maximum number of L1 blocks that can be scanned for events in a single query.
     #[clap(
@@ -176,13 +169,6 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
     #[derivative(Debug(format_with = "fmt_urls"))]
     pub state_peers: Vec<Url>,
-
-    /// Stake table capacity for the prover circuit
-    #[clap(long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
-    pub stake_table_capacity: usize,
-
-    #[clap(flatten)]
-    pub chain_config: ChainConfig,
 }
 
 impl Options {

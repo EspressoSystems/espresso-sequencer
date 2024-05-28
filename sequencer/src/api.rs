@@ -247,9 +247,9 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
         let node_state = self.node_state().await;
-        let node_state_cf = node_state.chain_config();
+        let node_state_cf = node_state.chain_config;
         if node_state_cf.commit() == commitment {
-            return Ok(*node_state_cf);
+            return Ok(node_state_cf);
         }
 
         let state = self.consensus().await.decided_state().await;
@@ -330,7 +330,7 @@ mod test_helpers {
     use surf_disco::Client;
     use tide_disco::error::ServerError;
 
-    pub const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
+    pub const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
     pub struct TestNetwork<P: SequencerPersistence> {
         pub server: SequencerContext<network::Memory, P, SequencerVersion>,
