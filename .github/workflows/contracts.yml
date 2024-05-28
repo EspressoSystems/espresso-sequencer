@@ -28,7 +28,7 @@ jobs:
         uses: cachix/install-nix-action@V27
 
       - name: Enable Cachix
-        uses: cachix/cachix-action@v14
+        uses: cachix/cachix-action@v15
         # If PR is from a non-collaborator (e. g. dependabot) the secrets are missing and the login to cachix fails.
         continue-on-error: true
         with:
