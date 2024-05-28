@@ -5,7 +5,7 @@ use async_lock::RwLock;
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::Consensus,
-    data::VidDisperseShare,
+    data::{VidDisperse, VidDisperseShare},
     message::Proposal,
     traits::{
         election::Membership,
@@ -18,7 +18,7 @@ use tracing::{debug, error, instrument, warn};
 
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
-    helpers::{broadcast_event, calculate_vid_disperse},
+    helpers::broadcast_event,
 };
 
 /// Tracks state of a VID task
@@ -61,7 +61,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> VidTaskState<TYPES, I> {
                 let payload =
                     <TYPES as NodeType>::BlockPayload::from_bytes(encoded_transactions, metadata);
                 let builder_commitment = payload.builder_commitment(metadata);
-                let vid_disperse = calculate_vid_disperse(
+                let vid_disperse = VidDisperse::calculate_vid_disperse(
                     Arc::clone(encoded_transactions),
                     &Arc::clone(&self.membership),
                     *view_number,

@@ -13,13 +13,17 @@ use std::{
 
 use anyhow::{ensure, Result};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::spawn_blocking;
 use bincode::Options;
 use committable::{Commitment, CommitmentBoundsArkless, Committable, RawCommitmentBuilder};
 use derivative::Derivative;
-use jf_vid::VidDisperse as JfVidDisperse;
+use jf_vid::{precomputable::Precomputable, VidDisperse as JfVidDisperse, VidScheme};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+#[cfg(async_executor_impl = "tokio")]
+use tokio::task::spawn_blocking;
 use tracing::error;
 
 use crate::{
@@ -39,7 +43,7 @@ use crate::{
         BlockPayload,
     },
     utils::bincode_opts,
-    vid::{VidCommitment, VidCommon, VidSchemeType, VidShare},
+    vid::{vid_scheme, VidCommitment, VidCommon, VidPrecomputeData, VidSchemeType, VidShare},
     vote::{Certificate, HasViewNumber},
 };
 
@@ -173,6 +177,36 @@ impl<TYPES: NodeType> VidDisperse<TYPES> {
             common: vid_disperse.common,
             payload_commitment: vid_disperse.commit,
         }
+    }
+
+    /// Calculate the vid disperse information from the payload given a view and membership,
+    /// optionally using precompute data from builder
+    ///
+    /// # Panics
+    /// Panics if the VID calculation fails, this should not happen.
+    #[allow(clippy::panic)]
+    pub async fn calculate_vid_disperse(
+        txns: Arc<[u8]>,
+        membership: &Arc<TYPES::Membership>,
+        view: TYPES::Time,
+        precompute_data: Option<VidPrecomputeData>,
+    ) -> Self {
+        let num_nodes = membership.total_nodes();
+
+        let vid_disperse = spawn_blocking(move || {
+            precompute_data
+                .map_or_else(
+                    || vid_scheme(num_nodes).disperse(Arc::clone(&txns)),
+                    |data| vid_scheme(num_nodes).disperse_precompute(Arc::clone(&txns), &data)
+                )
+                .unwrap_or_else(|err| panic!("VID disperse failure:(num_storage nodes,payload_byte_len)=({num_nodes},{}) error: {err}", txns.len()))
+        }).await;
+        #[cfg(async_executor_impl = "tokio")]
+        // Tokio's JoinHandle's `Output` is `Result<T, JoinError>`, while in async-std it's just `T`
+        // Unwrap here will just propagate any panic from the spawned task, it's not a new place we can panic.
+        let vid_disperse = vid_disperse.unwrap();
+
+        Self::from_membership(view, vid_disperse, membership.as_ref())
     }
 }
 

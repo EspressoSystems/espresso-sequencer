@@ -1,6 +1,7 @@
 use std::{marker::PhantomData, sync::Arc};
 
 use async_broadcast::Sender;
+use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::spawn_blocking;
@@ -16,6 +17,7 @@ use hotshot_types::{
         block_contents::vid_commitment,
         consensus_api::ConsensusApi,
         election::Membership,
+        network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::SignatureKey,
         storage::Storage,
@@ -217,6 +219,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     .update_saved_payloads(view, Arc::clone(&proposal.data.encoded_transactions))
                 {
                     tracing::trace!("{e:?}");
+                }
+                // Optimistically calculate and update VID if we know that the primary network is down.
+                if self.da_network.is_primary_down() {
+                    let consensus = Arc::clone(&self.consensus);
+                    let membership = Arc::clone(&self.quorum_membership);
+                    let pk = self.private_key.clone();
+                    async_spawn(async move {
+                        consensus
+                            .write()
+                            .await
+                            .calculate_and_update_vid(view, membership, &pk)
+                            .await;
+                    });
                 }
             }
             HotShotEvent::DaVoteRecv(ref vote) => {
