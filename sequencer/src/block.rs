@@ -56,10 +56,14 @@ impl BlockPayload<SeqTypes> for Payload<TxTableEntryWord> {
     /// TODO(746) refactor and make pretty "table" code for tx, namespace tables?
     async fn from_transactions(
         txs: impl IntoIterator<Item = Self::Transaction> + Send,
-        _validated_state: &Self::ValidatedState,
+        validated_state: &Self::ValidatedState,
         instance_state: &Self::Instance,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
-        let payload = Payload::from_txs(txs, &instance_state.chain_config)?;
+        let cf = validated_state
+            .get_chain_config(&instance_state, &validated_state.chain_config)
+            .await;
+
+        let payload = Payload::from_txs(txs, &cf)?;
         let ns_table = payload.get_ns_table().clone(); // TODO don't clone ns_table
         Some((payload, ns_table)).context(BlockBuildingSnafu)
     }

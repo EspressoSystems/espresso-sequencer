@@ -559,6 +559,21 @@ impl<T> SequencerStateDataSource for T where
 }
 
 impl ValidatedState {
+    pub(crate) async fn get_chain_config(
+        &self,
+        instance: &NodeState,
+        cf: &ResolvableChainConfig,
+    ) -> ChainConfig {
+        if cf.commit() == instance.chain_config.commit() {
+            instance.chain_config
+        } else {
+            match cf.resolve() {
+                Some(cf) => cf,
+                None => ChainConfig::default(), // TODO: DO CATCHUP
+            }
+        }
+    }
+
     pub(crate) async fn apply_header(
         &self,
         instance: &NodeState,
@@ -571,17 +586,19 @@ impl ValidatedState {
         let l1_deposits = get_l1_deposits(instance, proposed_header, parent_leaf).await;
 
         let mut validated_state = self.clone();
+        let chain_config = validated_state
+            .get_chain_config(instance, &proposed_header.chain_config)
+            .await;
+
+        validated_state.chain_config = chain_config.into();
 
         // Find missing fee state entries. We will need to use the builder account which is paying a
         // fee and the recipient account which is receiving it, plus any counts receiving deposits
         // in this block.
         let missing_accounts = self.forgotten_accounts(
-            [
-                proposed_header.fee_info.account,
-                instance.chain_config().fee_recipient,
-            ]
-            .into_iter()
-            .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
+            [proposed_header.fee_info.account, chain_config.fee_recipient]
+                .into_iter()
+                .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
         );
 
         let parent_height = parent_leaf.height();
@@ -643,7 +660,7 @@ impl ValidatedState {
             &mut validated_state,
             &mut delta,
             proposed_header.fee_info,
-            instance.chain_config().fee_recipient,
+            chain_config.fee_recipient,
         )?;
 
         Ok((validated_state, delta))
