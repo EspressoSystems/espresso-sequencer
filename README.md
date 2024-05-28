@@ -38,7 +38,7 @@ The sequence diagram below serves as a complement to the architecture diagram. T
 4. HotShot consensus creates new blocks containing sequenced rollup transactions.
 5. A rollup produces a rollup block with transactions sequenced by the Espresso sequencer.
 6. A proof for a HotShot state update is created and verified in the Light Client smart contract.
-7. A ZK rollup proves a correct state transation by sending a proof to its rollup smart contract.
+7. A ZK rollup proves a correct state transaction by sending a proof to its rollup smart contract.
 8. A dispute is settled in an optimistic rollup. If necessary, the HotShot commitment is read from the Light Client
    contract.
 
