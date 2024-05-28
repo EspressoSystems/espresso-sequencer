@@ -309,7 +309,7 @@ pub mod test_helpers {
     use tide_disco::error::ServerError;
     use url::Url;
 
-    pub const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
+    pub const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
     pub struct TestNetwork<P: SequencerPersistence> {
         pub server: SequencerContext<network::Memory, P, SequencerVersion>,

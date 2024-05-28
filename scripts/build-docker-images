@@ -17,6 +17,9 @@ cleanup(){
     rm -rfv ${WORKDIR}
 }
 
+# Copy data files to Docker context.
+cp -r data/genesis ${WORKDIR}/genesis
+
 for ARCH in "amd64" "arm64"; do
   case "$ARCH" in
     amd64)

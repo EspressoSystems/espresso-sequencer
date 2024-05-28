@@ -95,7 +95,7 @@ strum = { workspace = true }
 surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
 tide-disco = { workspace = true }
-time = "0.3"
+time = { workspace = true }
 tokio-postgres = { version = "0.7", default-features = false, features = [ # disabling the default features removes dependence on the tokio runtime
     "with-serde_json-1",
 ] }
