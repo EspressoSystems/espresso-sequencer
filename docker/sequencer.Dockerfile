@@ -23,6 +23,10 @@ RUN chmod +x /bin/keygen
 COPY target/$TARGETARCH/release/pub-key /bin/pub-key
 RUN chmod +x /bin/pub-key
 
+# Install genesis files for all supported configurations. The desired configuration can be chosen by
+# setting `ESPRESSO_SEQUENCER_GENESIS_FILE`.
+COPY data/genesis /genesis
+
 # Set a path to save the consensus config on startup.
 #
 # Upon restart, the config will be loaded from this file and the node will be able to resume
