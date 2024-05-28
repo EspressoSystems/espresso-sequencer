@@ -59,9 +59,22 @@ impl BlockPayload<SeqTypes> for Payload<TxTableEntryWord> {
         validated_state: &Self::ValidatedState,
         instance_state: &Self::Instance,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
-        let cf = validated_state
-            .get_chain_config(&instance_state, &validated_state.chain_config)
-            .await;
+        let validated_state_cf = validated_state.chain_config;
+        let instance_state_cf = instance_state.chain_config;
+
+        let cf = if validated_state_cf.commit() == instance_state_cf.commit() {
+            instance_state_cf
+        } else {
+            match validated_state_cf.resolve() {
+                Some(cf) => cf,
+                None => instance_state
+                    .peers
+                    .as_ref()
+                    .fetch_chain_config(validated_state_cf.commit())
+                    .await
+                    .unwrap(), // TODO:
+            }
+        };
 
         let payload = Payload::from_txs(txs, &cf)?;
         let ns_table = payload.get_ns_table().clone(); // TODO don't clone ns_table

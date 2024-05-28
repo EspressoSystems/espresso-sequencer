@@ -562,14 +562,29 @@ impl ValidatedState {
     pub(crate) async fn get_chain_config(
         &self,
         instance: &NodeState,
-        cf: &ResolvableChainConfig,
-    ) -> ChainConfig {
-        if cf.commit() == instance.chain_config.commit() {
-            instance.chain_config
-        } else {
-            match cf.resolve() {
-                Some(cf) => cf,
-                None => ChainConfig::default(), // TODO: DO CATCHUP
+        header_cf: &ResolvableChainConfig,
+    ) -> anyhow::Result<ChainConfig> {
+        if header_cf.commit() != self.chain_config.commit() {
+            bail!(
+                "Proposed header chain config commit={} expected={}",
+                header_cf.commit(),
+                self.chain_config.commit()
+            );
+        }
+
+        if self.chain_config.commit() == instance.chain_config.commit() {
+            return Ok(instance.chain_config);
+        }
+
+        match (self.chain_config.resolve(), header_cf.resolve()) {
+            (Some(cf), _) => Ok(cf),
+            (_, Some(cf)) => Ok(cf),
+            (None, None) => {
+                instance
+                    .peers
+                    .as_ref()
+                    .fetch_chain_config(self.chain_config.commit())
+                    .await
             }
         }
     }
@@ -588,7 +603,7 @@ impl ValidatedState {
         let mut validated_state = self.clone();
         let chain_config = validated_state
             .get_chain_config(instance, &proposed_header.chain_config)
-            .await;
+            .await?;
 
         validated_state.chain_config = chain_config.into();
 

@@ -8,10 +8,11 @@ use super::{
 use crate::{
     network,
     persistence::{self, SequencerPersistence},
-    PubKey, SeqTypes, Transaction,
+    ChainConfig, PubKey, SeqTypes, Transaction,
 };
 use anyhow::bail;
 use async_trait::async_trait;
+use committable::Commitment;
 use ethers::prelude::Address;
 use futures::future::Future;
 use hotshot_query_service::{
@@ -139,6 +140,15 @@ pub(crate) trait CatchupDataSource {
         // memory.
         async {
             bail!("merklized state catchup is not supported for this data source");
+        }
+    }
+
+    fn get_chain_config(
+        &self,
+        _commitment: Commitment<ChainConfig>,
+    ) -> impl Send + Future<Output = anyhow::Result<ChainConfig>> {
+        async {
+            bail!("chain config catchup is not supported for this data source");
         }
     }
 }

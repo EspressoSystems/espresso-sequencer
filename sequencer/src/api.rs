@@ -4,12 +4,13 @@ use crate::{
     persistence::SequencerPersistence,
     state::{BlockMerkleTree, FeeAccountProof},
     state_signature::StateSigner,
-    Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
+    ChainConfig, Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
 };
-use anyhow::Context;
+use anyhow::{bail, Context};
 use async_once_cell::Lazy;
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
+use committable::{Commitment, Committable};
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use ethers::prelude::{Address, U256};
@@ -238,6 +239,29 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
         let tree = &state.block_merkle_tree;
         let frontier = tree.lookup(tree.num_leaves() - 1).expect_ok()?.1;
         Ok(frontier)
+    }
+
+    #[tracing::instrument(skip(self))]
+    async fn get_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        let node_state = self.node_state().await;
+        let node_state_cf = node_state.chain_config();
+        if node_state_cf.commit() == commitment {
+            return Ok(*node_state_cf);
+        }
+
+        let state = self.consensus().await.decided_state().await;
+        let state_cf = state.chain_config;
+
+        if state_cf.commit() != commitment {
+            bail!("chain config for commitment={commitment} not found in decided state");
+        }
+
+        state_cf.resolve().context(format!(
+            "cannot resolve to a full chain config for commitment={commitment}"
+        ))
     }
 }
 

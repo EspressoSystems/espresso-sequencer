@@ -44,3 +44,10 @@ decided view.
 Returns the blocks Merkle tree frontier -- the path to the most recently appended leaf, relative to
 root node at the requested block height and view.
 """
+
+[route.chainconfig]
+PATH = ["/chain-config/:commitment"]
+":commitment" = "TaggedBase64"
+DOC = """
+TODO:
+"""

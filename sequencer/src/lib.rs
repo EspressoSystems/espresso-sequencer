@@ -270,6 +270,8 @@ pub enum Error {
     MerkleTreeError { error: String },
 
     BlockBuilding,
+
+    ChainConfigNotFound,
 }
 
 #[derive(Clone, Debug)]
