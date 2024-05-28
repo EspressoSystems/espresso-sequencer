@@ -26,14 +26,13 @@ use tokio::task::JoinHandle;
 use tracing::{debug, instrument, warn};
 use vbs::version::Version;
 
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
-};
-
 use self::{
     dependency_handle::{ProposalDependency, ProposalDependencyHandle},
     handlers::handle_quorum_proposal_validated,
+};
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, cancel_task},
 };
 
 mod dependency_handle;

@@ -1,11 +1,18 @@
-use std::{cmp::max, marker::PhantomData, sync::Arc};
+use std::{
+    cmp::max,
+    marker::PhantomData,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 
 use committable::Committable;
+use futures::{FutureExt, Stream};
 use hotshot::types::{BLSPubKey, SignatureKey, SystemContextHandle};
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestMetadata, TestTransaction},
     node_types::{MemoryImpl, TestTypes},
-    state_types::TestInstanceState,
+    state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_types::{
     data::{DaProposal, Leaf, QuorumProposal, VidDisperseShare, ViewChangeEvidence, ViewNumber},
@@ -52,7 +59,7 @@ pub struct TestView {
 }
 
 impl TestView {
-    pub fn genesis(
+    pub async fn genesis(
         quorum_membership: &<TestTypes as NodeType>::Membership,
         da_membership: &<TestTypes as NodeType>::Membership,
     ) -> Self {
@@ -61,9 +68,18 @@ impl TestView {
         let transactions = Vec::new();
 
         let (block_payload, metadata) =
-            TestBlockPayload::from_transactions(transactions.clone(), &TestInstanceState {})
-                .unwrap();
-        let builder_commitment = block_payload.builder_commitment(&metadata);
+            <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
+                transactions.clone(),
+                &TestValidatedState::default(),
+                &TestInstanceState {},
+            )
+            .await
+            .unwrap();
+
+        let builder_commitment = <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(
+            &block_payload,
+            &metadata,
+        );
 
         let (private_key, public_key) = key_pair_for_id(*genesis_view);
 
@@ -97,7 +113,11 @@ impl TestView {
         let quorum_proposal_inner = QuorumProposal::<TestTypes> {
             block_header: block_header.clone(),
             view_number: genesis_view,
-            justify_qc: QuorumCertificate::genesis(&TestInstanceState {}),
+            justify_qc: QuorumCertificate::genesis(
+                &TestValidatedState::default(),
+                &TestInstanceState {},
+            )
+            .await,
             upgrade_certificate: None,
             proposal_certificate: None,
         };
@@ -157,7 +177,7 @@ impl TestView {
     /// this method can be used to start from an ancestor (whose view is at least one view older
     /// than the current view) and construct valid views without the data structures in the task
     /// failing by expecting views that they has never seen.
-    pub fn next_view_from_ancestor(&self, ancestor: TestView) -> Self {
+    pub async fn next_view_from_ancestor(&self, ancestor: TestView) -> Self {
         let old = ancestor;
         let old_view = old.view_number;
 
@@ -181,9 +201,17 @@ impl TestView {
         let leader_public_key = public_key;
 
         let (block_payload, metadata) =
-            TestBlockPayload::from_transactions(transactions.clone(), &TestInstanceState {})
-                .unwrap();
-        let builder_commitment = block_payload.builder_commitment(&metadata);
+            <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
+                transactions.clone(),
+                &TestValidatedState::default(),
+                &TestInstanceState {},
+            )
+            .await
+            .unwrap();
+        let builder_commitment = <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(
+            &block_payload,
+            &metadata,
+        );
 
         let payload_commitment = da_payload_commitment(quorum_membership, transactions.clone());
 
@@ -348,8 +376,8 @@ impl TestView {
         }
     }
 
-    pub fn next_view(&self) -> Self {
-        self.next_view_from_ancestor(self.clone())
+    pub async fn next_view(&self) -> Self {
+        self.next_view_from_ancestor(self.clone()).await
     }
 
     pub fn create_quorum_vote(
@@ -474,28 +502,35 @@ impl TestViewGenerator {
         }
     }
 
-    pub fn next_from_anscestor_view(&mut self, ancestor: TestView) {
+    pub async fn next_from_anscestor_view(&mut self, ancestor: TestView) {
         if let Some(ref view) = self.current_view {
-            self.current_view = Some(view.next_view_from_ancestor(ancestor))
+            self.current_view = Some(view.next_view_from_ancestor(ancestor).await)
         } else {
             tracing::error!("Cannot attach ancestor to genesis view.");
         }
     }
 }
 
-impl Iterator for TestViewGenerator {
+impl Stream for TestViewGenerator {
     type Item = TestView;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(view) = &self.current_view {
-            self.current_view = Some(TestView::next_view(view));
-        } else {
-            self.current_view = Some(TestView::genesis(
-                &self.quorum_membership,
-                &self.da_membership,
-            ));
-        }
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let qm = &self.quorum_membership.clone();
+        let da = &self.da_membership.clone();
+        let curr_view = &self.current_view.clone();
 
-        self.current_view.clone()
+        let mut fut = if let Some(ref view) = curr_view {
+            async move { TestView::next_view(view).await }.boxed()
+        } else {
+            async move { TestView::genesis(qm, da).await }.boxed()
+        };
+
+        match fut.as_mut().poll(cx) {
+            Poll::Ready(test_view) => {
+                self.current_view = Some(test_view.clone());
+                Poll::Ready(Some(test_view))
+            }
+            Poll::Pending => Poll::Pending,
+        }
     }
 }

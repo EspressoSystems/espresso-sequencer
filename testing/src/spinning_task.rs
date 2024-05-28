@@ -2,7 +2,10 @@ use std::collections::{BTreeMap, HashMap};
 
 use either::{Left, Right};
 use hotshot::{traits::TestableNodeImplementation, types::EventType, HotShotInitializer};
-use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
+use hotshot_example_types::{
+    state_types::{TestInstanceState, TestValidatedState},
+    storage_types::TestStorage,
+};
 use hotshot_task::task::{Task, TaskState, TestTaskState};
 use hotshot_types::{
     data::Leaf,
@@ -62,7 +65,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TaskState for Spinni
 }
 
 impl<
-        TYPES: NodeType<InstanceState = TestInstanceState>,
+        TYPES: NodeType<InstanceState = TestInstanceState, ValidatedState = TestValidatedState>,
         I: TestableNodeImplementation<TYPES>,
         N: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
     > TestTaskState for SpinningTask<TYPES, I>

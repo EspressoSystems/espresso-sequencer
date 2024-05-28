@@ -23,7 +23,7 @@ pub struct AvailableBlockInfo<TYPES: NodeType> {
 #[serde(bound = "")]
 pub struct AvailableBlockData<TYPES: NodeType> {
     pub block_payload: TYPES::BlockPayload,
-    pub metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
+    pub metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     pub signature:
         <<TYPES as NodeType>::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,
     pub sender: <TYPES as NodeType>::BuilderSignatureKey,

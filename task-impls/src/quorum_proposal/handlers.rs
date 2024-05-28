@@ -20,9 +20,8 @@ use hotshot_types::{
 };
 use tracing::debug;
 
-use crate::{events::HotShotEvent, helpers::broadcast_event};
-
 use super::QuorumProposalTaskState;
+use crate::{events::HotShotEvent, helpers::broadcast_event};
 
 /// Helper type to give names and to the output values of the leaf chain traversal operation.
 #[derive(Debug)]

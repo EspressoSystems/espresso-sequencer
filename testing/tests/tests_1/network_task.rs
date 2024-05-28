@@ -26,6 +26,8 @@ use hotshot_types::{
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[allow(clippy::too_many_lines)]
 async fn test_network_task() {
+    use futures::StreamExt;
+
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -63,7 +65,7 @@ async fn test_network_task() {
     task_reg.run_task(task).await;
 
     let mut generator = TestViewGenerator::generate(membership.clone(), membership);
-    let view = generator.next().unwrap();
+    let view = generator.next().await.unwrap();
 
     let (out_tx, mut out_rx) = async_broadcast::broadcast(10);
     add_network_message_task(task_reg, out_tx.clone(), channel.clone()).await;
@@ -88,6 +90,8 @@ async fn test_network_task() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_network_storage_fail() {
+    use futures::StreamExt;
+
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -126,7 +130,7 @@ async fn test_network_storage_fail() {
     task_reg.run_task(task).await;
 
     let mut generator = TestViewGenerator::generate(membership.clone(), membership);
-    let view = generator.next().unwrap();
+    let view = generator.next().await.unwrap();
 
     let (out_tx, mut out_rx) = async_broadcast::broadcast(10);
     add_network_message_task(task_reg, out_tx.clone(), channel.clone()).await;

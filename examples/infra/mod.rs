@@ -336,7 +336,7 @@ pub trait RunDa<
     >,
 > where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
-    <TYPES as NodeType>::BlockPayload: TestableBlock,
+    <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
     TYPES: NodeType<Transaction = TestTransaction>,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
@@ -353,6 +353,7 @@ pub trait RunDa<
     /// Note: sequencing leaf does not have state, so does not return state
     async fn initialize_state_and_hotshot(&self) -> SystemContextHandle<TYPES, NODE> {
         let initializer = hotshot::HotShotInitializer::<TYPES>::from_genesis(TestInstanceState {})
+            .await
             .expect("Couldn't generate genesis block");
 
         let config = self.config();
@@ -608,7 +609,7 @@ impl<
     > RunDa<TYPES, PushCdnNetwork<TYPES>, PushCdnNetwork<TYPES>, NODE> for PushCdnDaRun<TYPES>
 where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
-    <TYPES as NodeType>::BlockPayload: TestableBlock,
+    <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
 {
@@ -700,7 +701,7 @@ impl<
     > for Libp2pDaRun<TYPES>
 where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
-    <TYPES as NodeType>::BlockPayload: TestableBlock,
+    <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
 {
@@ -792,7 +793,7 @@ impl<
     > RunDa<TYPES, CombinedNetworks<TYPES>, CombinedNetworks<TYPES>, NODE> for CombinedDaRun<TYPES>
 where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
-    <TYPES as NodeType>::BlockPayload: TestableBlock,
+    <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
     Leaf<TYPES>: TestableLeaf,
     Self: Sync,
 {
@@ -865,7 +866,6 @@ where
 pub async fn main_entry_point<
     TYPES: NodeType<
         Transaction = TestTransaction,
-        BlockPayload = TestBlockPayload,
         BlockHeader = TestBlockHeader,
         InstanceState = TestInstanceState,
     >,
@@ -882,7 +882,7 @@ pub async fn main_entry_point<
     args: ValidatorArgs,
 ) where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
-    <TYPES as NodeType>::BlockPayload: TestableBlock,
+    <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
     Leaf<TYPES>: TestableLeaf,
 {
     setup_logging();

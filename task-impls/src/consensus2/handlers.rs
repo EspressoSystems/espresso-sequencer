@@ -15,13 +15,12 @@ use hotshot_types::{
 };
 use tracing::debug;
 
+use super::Consensus2TaskState;
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
     helpers::{broadcast_event, cancel_task},
     vote_collection::{create_vote_accumulator, AccumulatorInfo, HandleVoteEvent},
 };
-
-use super::Consensus2TaskState;
 
 /// Handle a `QuorumVoteRecv` event.
 pub(crate) async fn handle_quorum_vote_recv<TYPES: NodeType, I: NodeImplementation<TYPES>>(

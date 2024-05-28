@@ -7,9 +7,9 @@ use hotshot_task_impls::{
     events::HotShotEvent::*, quorum_proposal_recv::QuorumProposalRecvTaskState,
 };
 use hotshot_testing::{
+    helpers::build_system_handle,
     predicates::event::{exact, vote_now},
     script::{run_test_script, TestScriptStage},
-    helpers::build_system_handle,
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
@@ -38,7 +38,7 @@ async fn test_quorum_proposal_recv_task() {
     let mut dacs = Vec::new();
     let mut vids = Vec::new();
     let mut leaves = Vec::new();
-    for view in (&mut generator).take(2) {
+    for view in (&mut generator).take(2).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(view.create_quorum_vote(&handle));
@@ -106,7 +106,7 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
     let mut dacs = Vec::new();
     let mut vids = Vec::new();
     let mut leaves = Vec::new();
-    for view in (&mut generator).take(4) {
+    for view in (&mut generator).take(4).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
         votes.push(view.create_quorum_vote(&handle));

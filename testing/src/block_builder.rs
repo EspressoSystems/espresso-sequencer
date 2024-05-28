@@ -561,9 +561,13 @@ async fn build_block<TYPES: NodeType>(
 where
     <TYPES as NodeType>::InstanceState: Default,
 {
-    let (block_payload, metadata) =
-        TYPES::BlockPayload::from_transactions(transactions, &Default::default())
-            .expect("failed to build block payload from transactions");
+    let (block_payload, metadata) = TYPES::BlockPayload::from_transactions(
+        transactions,
+        &Default::default(),
+        &Default::default(),
+    )
+    .await
+    .expect("failed to build block payload from transactions");
 
     let commitment = block_payload.builder_commitment(&metadata);
 

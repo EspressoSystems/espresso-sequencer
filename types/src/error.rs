@@ -38,7 +38,7 @@ pub enum HotShotError<TYPES: NodeType> {
     #[snafu(display("Failed to build or verify a block: {source}"))]
     BlockError {
         /// The underlying block error.
-        source: <TYPES::BlockPayload as BlockPayload>::Error,
+        source: <TYPES::BlockPayload as BlockPayload<TYPES>>::Error,
     },
     /// Failure in networking layer
     #[snafu(display("Failure in networking layer: {source}"))]

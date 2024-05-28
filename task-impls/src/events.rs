@@ -110,14 +110,14 @@ pub enum HotShotEvent<TYPES: NodeType> {
     SendPayloadCommitmentAndMetadata(
         VidCommitment,
         BuilderCommitment,
-        <TYPES::BlockPayload as BlockPayload>::Metadata,
+        <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         TYPES::Time,
         BuilderFee<TYPES>,
     ),
     /// Event when the transactions task has sequenced transactions. Contains the encoded transactions, the metadata, and the view number
     BlockRecv(
         Arc<[u8]>,
-        <TYPES::BlockPayload as BlockPayload>::Metadata,
+        <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         TYPES::Time,
         BuilderFee<TYPES>,
         VidPrecomputeData,

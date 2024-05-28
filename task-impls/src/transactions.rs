@@ -165,26 +165,19 @@ impl<
                         .number_of_empty_blocks_proposed
                         .add(1);
 
+                    let membership_total_nodes = self.membership.total_nodes();
+
                     // Calculate the builder fee for the empty block
-                    let Some(builder_fee) = null_block::builder_fee(
-                        self.membership.total_nodes(),
-                        self.instance_state.as_ref(),
-                    ) else {
+                    let Some(builder_fee) = null_block::builder_fee(membership_total_nodes) else {
                         error!("Failed to get builder fee");
                         return None;
                     };
 
                     // Create an empty block payload and metadata
-                    let Ok((_, metadata)) = <TYPES as NodeType>::BlockPayload::from_transactions(
-                        vec![],
-                        &self.instance_state,
-                    ) else {
-                        error!("Failed to create empty block payload");
-                        return None;
-                    };
+                    let (_, metadata) = <TYPES as NodeType>::BlockPayload::empty();
 
                     let (_, precompute_data) =
-                        precompute_vid_commitment(&[], self.membership.total_nodes());
+                        precompute_vid_commitment(&[], membership_total_nodes);
 
                     // Broadcast the empty block
                     broadcast_event(

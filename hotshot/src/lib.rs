@@ -57,15 +57,13 @@ use tasks::{add_request_network_task, add_response_task, add_vid_task};
 use tracing::{debug, instrument, trace};
 use vbs::version::Version;
 
+#[cfg(not(feature = "dependency-tasks"))]
+use crate::tasks::add_consensus_task;
 #[cfg(feature = "dependency-tasks")]
 use crate::tasks::{
     add_consensus2_task, add_quorum_proposal_recv_task, add_quorum_proposal_task,
     add_quorum_vote_task,
 };
-
-#[cfg(not(feature = "dependency-tasks"))]
-use crate::tasks::add_consensus_task;
-
 use crate::{
     tasks::{
         add_da_task, add_network_event_task, add_network_message_task, add_transaction_task,
@@ -368,6 +366,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             if self.anchored_leaf.view_number() == TYPES::Time::genesis() {
                 let (validated_state, state_delta) =
                     TYPES::ValidatedState::genesis(&self.instance_state);
+
+                let qc = Arc::new(
+                    QuorumCertificate::genesis(&validated_state, self.instance_state.as_ref())
+                        .await,
+                );
+
                 broadcast_event(
                     Event {
                         view_number: self.anchored_leaf.view_number(),
@@ -378,7 +382,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                                 Some(Arc::new(state_delta)),
                                 None,
                             )]),
-                            qc: Arc::new(QuorumCertificate::genesis(self.instance_state.as_ref())),
+                            qc,
                             block_size: None,
                         },
                     },
@@ -801,14 +805,18 @@ impl<TYPES: NodeType> HotShotInitializer<TYPES> {
     /// initialize from genesis
     /// # Errors
     /// If we are unable to apply the genesis block to the default state
-    pub fn from_genesis(instance_state: TYPES::InstanceState) -> Result<Self, HotShotError<TYPES>> {
+    pub async fn from_genesis(
+        instance_state: TYPES::InstanceState,
+    ) -> Result<Self, HotShotError<TYPES>> {
         let (validated_state, state_delta) = TYPES::ValidatedState::genesis(&instance_state);
+        let high_qc = QuorumCertificate::genesis(&validated_state, &instance_state).await;
+
         Ok(Self {
-            inner: Leaf::genesis(&instance_state),
+            inner: Leaf::genesis(&validated_state, &instance_state).await,
             validated_state: Some(Arc::new(validated_state)),
             state_delta: Some(Arc::new(state_delta)),
             start_view: TYPES::Time::new(0),
-            high_qc: QuorumCertificate::genesis(&instance_state),
+            high_qc,
             undecided_leafs: Vec::new(),
             undecided_state: BTreeMap::new(),
             instance_state,

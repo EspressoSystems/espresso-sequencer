@@ -54,7 +54,9 @@ pub async fn build_system_handle(
     let storage = (launcher.resource_generator.storage)(node_id);
     let config = launcher.resource_generator.config.clone();
 
-    let initializer = HotShotInitializer::<TestTypes>::from_genesis(TestInstanceState {}).unwrap();
+    let initializer = HotShotInitializer::<TestTypes>::from_genesis(TestInstanceState {})
+        .await
+        .unwrap();
 
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
     let private_key = config.my_own_validator_config.private_key.clone();

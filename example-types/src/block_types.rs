@@ -4,6 +4,7 @@ use std::{
     sync::Arc,
 };
 
+use async_trait::async_trait;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
     data::{BlockError, Leaf},
@@ -21,7 +22,10 @@ use snafu::Snafu;
 use time::OffsetDateTime;
 use vbs::version::Version;
 
-use crate::{node_types::TestTypes, state_types::TestInstanceState};
+use crate::{
+    node_types::TestTypes,
+    state_types::{TestInstanceState, TestValidatedState},
+};
 
 /// The transaction in a [`TestBlockPayload`].
 #[derive(Default, PartialEq, Eq, Hash, Serialize, Deserialize, Clone, Debug)]
@@ -134,7 +138,7 @@ impl Display for TestBlockPayload {
     }
 }
 
-impl TestableBlock for TestBlockPayload {
+impl<TYPES: NodeType> TestableBlock<TYPES> for TestBlockPayload {
     fn genesis() -> Self {
         Self::genesis()
     }
@@ -159,14 +163,17 @@ impl EncodeBytes for TestBlockPayload {
     }
 }
 
-impl BlockPayload for TestBlockPayload {
+#[async_trait]
+impl<TYPES: NodeType> BlockPayload<TYPES> for TestBlockPayload {
     type Error = BlockError;
     type Instance = TestInstanceState;
     type Transaction = TestTransaction;
     type Metadata = TestMetadata;
+    type ValidatedState = TestValidatedState;
 
-    fn from_transactions(
-        transactions: impl IntoIterator<Item = Self::Transaction>,
+    async fn from_transactions(
+        transactions: impl IntoIterator<Item = Self::Transaction> + Send,
+        _validated_state: &Self::ValidatedState,
         _instance_state: &Self::Instance,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
         let txns_vec: Vec<TestTransaction> = transactions.into_iter().collect();
@@ -197,6 +204,10 @@ impl BlockPayload for TestBlockPayload {
         }
 
         Self { transactions }
+    }
+
+    fn empty() -> (Self, Self::Metadata) {
+        (Self::genesis(), TestMetadata)
     }
 
     fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
@@ -239,7 +250,7 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
         parent_leaf: &Leaf<TYPES>,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        _metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
+        _metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         _builder_fee: BuilderFee<TYPES>,
         _vid_common: VidCommon,
         _version: Version,
@@ -264,7 +275,7 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
         _instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        _metadata: <TYPES::BlockPayload as BlockPayload>::Metadata,
+        _metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     ) -> Self {
         Self {
             block_number: 0,
@@ -282,7 +293,7 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
         self.payload_commitment
     }
 
-    fn metadata(&self) -> &<TYPES::BlockPayload as BlockPayload>::Metadata {
+    fn metadata(&self) -> &<TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata {
         &TestMetadata
     }
 

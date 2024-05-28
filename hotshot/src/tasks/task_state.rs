@@ -1,3 +1,9 @@
+use std::{
+    collections::{BTreeMap, HashMap},
+    marker::PhantomData,
+    sync::{atomic::AtomicBool, Arc},
+};
+
 use async_trait::async_trait;
 use hotshot_task_impls::{
     builder::BuilderClient, consensus::ConsensusTaskState, consensus2::Consensus2TaskState,
@@ -10,12 +16,6 @@ use hotshot_types::traits::{
     consensus_api::ConsensusApi,
     node_implementation::{ConsensusTime, NodeImplementation, NodeType},
 };
-use std::{
-    collections::{BTreeMap, HashMap},
-    marker::PhantomData,
-    sync::{atomic::AtomicBool, Arc},
-};
-
 use vbs::version::StaticVersionType;
 
 use crate::types::SystemContextHandle;

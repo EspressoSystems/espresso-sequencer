@@ -1,6 +1,6 @@
 //! Provides an event-streaming handle for a [`SystemContext`] running in the background
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use async_broadcast::{InactiveReceiver, Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
@@ -18,7 +18,6 @@ use hotshot_types::{
     traits::{election::Membership, node_implementation::NodeType},
     BoxSyncFuture,
 };
-use std::time::Duration;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 

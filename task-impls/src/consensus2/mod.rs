@@ -1,10 +1,10 @@
-use async_broadcast::Sender;
-use hotshot_task::task::Task;
 use std::sync::Arc;
-use tracing::instrument;
 
+use async_broadcast::Sender;
 use async_lock::RwLock;
-use hotshot_task::task::TaskState;
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::JoinHandle;
+use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     consensus::Consensus,
     event::Event,
@@ -15,17 +15,14 @@ use hotshot_types::{
         signature_key::SignatureKey,
     },
 };
-
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-
-use crate::{events::HotShotEvent, vote_collection::VoteCollectionTaskState};
+use tracing::instrument;
 
 use self::handlers::{
     handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
 };
+use crate::{events::HotShotEvent, vote_collection::VoteCollectionTaskState};
 
 /// Alias for Optional type for Vote Collectors
 type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>;

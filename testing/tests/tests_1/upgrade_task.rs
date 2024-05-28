@@ -3,6 +3,7 @@
 
 use std::time::Duration;
 
+use futures::StreamExt;
 use hotshot::{tasks::task_state::CreateTaskState, types::SystemContextHandle};
 use hotshot_example_types::{
     block_types::{TestMetadata, TestTransaction},
@@ -63,7 +64,7 @@ async fn test_consensus_task_upgrade() {
 
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
-    for view in (&mut generator).take(2) {
+    for view in (&mut generator).take(2).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         votes.push(view.create_quorum_vote(&handle));
         dacs.push(view.da_certificate.clone());
@@ -73,7 +74,7 @@ async fn test_consensus_task_upgrade() {
 
     generator.add_upgrade(upgrade_data);
 
-    for view in generator.take(4) {
+    for view in generator.take(4).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         votes.push(view.create_quorum_vote(&handle));
         dacs.push(view.da_certificate.clone());
@@ -198,7 +199,7 @@ async fn test_upgrade_and_consensus_task() {
 
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
-    for view in (&mut generator).take(1) {
+    for view in (&mut generator).take(1).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         votes.push(view.create_quorum_vote(&handle));
         dacs.push(view.da_certificate.clone());
@@ -209,7 +210,7 @@ async fn test_upgrade_and_consensus_task() {
 
     generator.add_upgrade(upgrade_data.clone());
 
-    for view in generator.take(4) {
+    for view in generator.take(4).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         votes.push(view.create_quorum_vote(&handle));
         dacs.push(view.da_certificate.clone());
@@ -253,8 +254,7 @@ async fn test_upgrade_and_consensus_task() {
                 proposals[2].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(3),
-                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
-                    .unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
             QcFormed(either::Either::Left(proposals[2].data.justify_qc.clone())),
         ],
@@ -358,7 +358,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
 
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
-    for view in (&mut generator).take(1) {
+    for view in (&mut generator).take(1).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         votes.push(view.create_quorum_vote(&handle));
         dacs.push(view.da_certificate.clone());
@@ -369,7 +369,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
 
     generator.add_upgrade(upgrade_data.clone());
 
-    for view in (&mut generator).take(3) {
+    for view in (&mut generator).take(3).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         votes.push(view.create_quorum_vote(&handle));
         dacs.push(view.da_certificate.clone());
@@ -382,7 +382,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
     // Our node should vote affirmatively on this.
     generator.add_transactions(vec![]);
 
-    for view in (&mut generator).take(1) {
+    for view in (&mut generator).take(1).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         votes.push(view.create_quorum_vote(&handle));
         dacs.push(view.da_certificate.clone());
@@ -394,7 +394,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
     // We set the transactions to something not null for view 6, but we expect the node to emit a quorum proposal where they are still null.
     generator.add_transactions(vec![TestTransaction::new(vec![0])]);
 
-    for view in (&mut generator).take(1) {
+    for view in (&mut generator).take(1).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         votes.push(view.create_quorum_vote(&handle));
         dacs.push(view.da_certificate.clone());
@@ -406,7 +406,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
     // For view 7, we set the transactions to something not null. The node should fail to vote on this.
     generator.add_transactions(vec![TestTransaction::new(vec![0])]);
 
-    for view in generator.take(1) {
+    for view in generator.take(1).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         votes.push(view.create_quorum_vote(&handle));
         dacs.push(view.da_certificate.clone());
@@ -440,8 +440,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 proposals[1].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(2),
-                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
-                    .unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
         ],
         vec![
@@ -452,8 +451,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 proposals[2].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(3),
-                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
-                    .unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
             QuorumProposalRecv(proposals[2].clone(), leaders[2]),
         ],
@@ -465,8 +463,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 proposals[3].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(4),
-                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
-                    .unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
             QuorumProposalRecv(proposals[3].clone(), leaders[3]),
         ],
@@ -478,8 +475,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 proposals[4].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(5),
-                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
-                    .unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
             QuorumProposalRecv(proposals[4].clone(), leaders[4]),
         ],
@@ -491,8 +487,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 proposals[5].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(6),
-                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
-                    .unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
             QcFormed(either::Either::Left(proposals[5].data.justify_qc.clone())),
         ],
@@ -504,8 +499,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 proposals[6].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(7),
-                null_block::builder_fee(quorum_membership.total_nodes(), &TestInstanceState {})
-                    .unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
             QuorumProposalRecv(proposals[6].clone(), leaders[6]),
         ],

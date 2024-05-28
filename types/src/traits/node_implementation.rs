@@ -65,7 +65,7 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
         state: Option<&TYPES::ValidatedState>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <TYPES::BlockPayload as BlockPayload>::Transaction;
+    ) -> <TYPES::BlockPayload as BlockPayload<TYPES>>::Transaction;
 
     /// Creates random transaction if possible
     /// otherwise panics
@@ -74,7 +74,7 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
         leaf: &Leaf<TYPES>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <TYPES::BlockPayload as BlockPayload>::Transaction;
+    ) -> <TYPES::BlockPayload as BlockPayload<TYPES>>::Transaction;
 
     /// generate a genesis block
     fn block_genesis() -> TYPES::BlockPayload;
@@ -96,7 +96,7 @@ pub trait TestableNodeImplementation<TYPES: NodeType>: NodeImplementation<TYPES>
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TestableNodeImplementation<TYPES> for I
 where
     TYPES::ValidatedState: TestableState<TYPES>,
-    TYPES::BlockPayload: TestableBlock,
+    TYPES::BlockPayload: TestableBlock<TYPES>,
     I::QuorumNetwork: TestableNetworkingImplementation<TYPES>,
     I::DaNetwork: TestableNetworkingImplementation<TYPES>,
 {
@@ -104,7 +104,7 @@ where
         state: Option<&TYPES::ValidatedState>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <TYPES::BlockPayload as BlockPayload>::Transaction {
+    ) -> <TYPES::BlockPayload as BlockPayload<TYPES>>::Transaction {
         <TYPES::ValidatedState as TestableState<TYPES>>::create_random_transaction(
             state, rng, padding,
         )
@@ -114,16 +114,16 @@ where
         leaf: &Leaf<TYPES>,
         rng: &mut dyn rand::RngCore,
         padding: u64,
-    ) -> <TYPES::BlockPayload as BlockPayload>::Transaction {
+    ) -> <TYPES::BlockPayload as BlockPayload<TYPES>>::Transaction {
         Leaf::create_random_transaction(leaf, rng, padding)
     }
 
     fn block_genesis() -> TYPES::BlockPayload {
-        <TYPES::BlockPayload as TestableBlock>::genesis()
+        <TYPES::BlockPayload as TestableBlock<TYPES>>::genesis()
     }
 
     fn txn_count(block: &TYPES::BlockPayload) -> u64 {
-        <TYPES::BlockPayload as TestableBlock>::txn_count(block)
+        <TYPES::BlockPayload as TestableBlock<TYPES>>::txn_count(block)
     }
 
     fn gen_networks(
@@ -201,7 +201,12 @@ pub trait NodeType:
     /// The block type that this hotshot setup is using.
     ///
     /// This should be the same block that `ValidatedState::BlockPayload` is using.
-    type BlockPayload: BlockPayload<Instance = Self::InstanceState, Transaction = Self::Transaction>;
+    type BlockPayload: BlockPayload<
+        Self,
+        Instance = Self::InstanceState,
+        Transaction = Self::Transaction,
+        ValidatedState = Self::ValidatedState,
+    >;
     /// The signature key that this hotshot setup is using.
     type SignatureKey: SignatureKey;
     /// The transaction type that this hotshot setup is using.

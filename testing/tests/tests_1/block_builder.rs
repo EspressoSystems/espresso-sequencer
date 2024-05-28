@@ -86,10 +86,14 @@ async fn test_random_block_builder() {
         .expect("Failed to claim block");
 
     // Test claiming non-existent block
-    let commitment_for_non_existent_block = TestBlockPayload {
-        transactions: vec![TestTransaction::new(vec![0; 1])],
-    }
-    .builder_commitment(&TestMetadata);
+    let commitment_for_non_existent_block =
+        <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(
+            &TestBlockPayload {
+                transactions: vec![TestTransaction::new(vec![0; 1])],
+            },
+            &TestMetadata,
+        );
+
     let result = client
         .claim_block(
             commitment_for_non_existent_block,
