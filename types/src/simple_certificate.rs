@@ -189,8 +189,9 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
         }
     }
 
-    /// Test whether a view is in the interim period prior to the new version taking effect.
-    pub fn in_interim(&self, view: TYPES::Time) -> bool {
+    /// Given an upgrade certificate and a view, tests whether the view is in the period
+    /// where we are upgrading, which requires that we propose with null blocks.
+    pub fn upgrading_in(&self, view: TYPES::Time) -> bool {
         view > self.data.old_version_last_view && view < self.data.new_version_first_view
     }
 }

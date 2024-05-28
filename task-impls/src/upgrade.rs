@@ -222,8 +222,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                             old_version: Version { major: 0, minor: 1 },
                             new_version: Version { major: 1, minor: 0 },
                             new_version_hash: vec![1, 1, 0, 0, 1],
-                            old_version_last_block: TYPES::Time::new(15),
-                            new_version_first_block: TYPES::Time::new(18),
+                            old_version_last_view: TYPES::Time::new(15),
+                            new_version_first_view: TYPES::Time::new(18),
+                            decide_by: TYPES::Time::new(12),
                         };
 
                         let upgrade_proposal = UpgradeProposal {

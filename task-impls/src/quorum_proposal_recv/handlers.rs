@@ -1,12 +1,11 @@
 #![allow(dead_code)]
 
+use std::sync::Arc;
+
 use anyhow::{bail, Context, Result};
+use async_broadcast::{broadcast, Sender};
 use async_lock::RwLockUpgradableReadGuard;
 use committable::Committable;
-use std::sync::Arc;
-use tracing::{debug, warn};
-
-use async_broadcast::{broadcast, Sender};
 use hotshot_types::{
     data::{Leaf, QuorumProposal},
     message::Proposal,
@@ -20,7 +19,9 @@ use hotshot_types::{
     utils::{View, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
+use tracing::{debug, warn};
 
+use super::QuorumProposalRecvTaskState;
 use crate::{
     consensus::{
         helpers::{validate_proposal_safety_and_liveness, validate_proposal_view_and_certs},
@@ -29,8 +30,6 @@ use crate::{
     events::HotShotEvent,
     helpers::broadcast_event,
 };
-
-use super::QuorumProposalRecvTaskState;
 
 /// Broadcast the proposal in the event that the parent state is not found for
 /// a given `proposal`, but it still passes the liveness check. Optionally return

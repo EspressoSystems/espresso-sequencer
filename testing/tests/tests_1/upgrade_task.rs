@@ -145,6 +145,7 @@ async fn test_consensus_task_upgrade() {
         outputs: vec![
             exact(ViewChange(ViewNumber::new(5))),
             quorum_proposal_validated(),
+            upgrade_decided(),
             leaf_decided(),
         ],
         asserts: vec![decided_upgrade_cert()],
@@ -391,8 +392,9 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
         views.push(view.clone());
     }
 
-    // We set the transactions to something not null for view 6, but we expect the node to emit a quorum proposal where they are still null.
-    generator.add_transactions(vec![TestTransaction::new(vec![0])]);
+    // The transactions task generates an empty transaction set in this view, 
+    // because we are proposing between versions.
+    generator.add_transactions(vec![]);
 
     for view in (&mut generator).take(1).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
@@ -537,6 +539,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 output_asserts: vec![
                     exact(ViewChange(ViewNumber::new(4))),
                     quorum_proposal_validated(),
+                    upgrade_decided(),
                     leaf_decided(),
                     quorum_vote_send(),
                 ],

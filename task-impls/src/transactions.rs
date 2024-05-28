@@ -15,6 +15,7 @@ use hotshot_types::{
     consensus::Consensus,
     data::{null_block, Leaf},
     event::{Event, EventType},
+    simple_certificate::UpgradeCertificate,
     traits::{
         block_contents::{precompute_vid_commitment, BuilderFee, EncodeBytes},
         consensus_api::ConsensusApi,
@@ -80,6 +81,8 @@ pub struct TransactionTaskState<
     pub instance_state: Arc<TYPES::InstanceState>,
     /// This state's ID
     pub id: u64,
+    /// Decided upgrade certificate
+    pub decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
 }
 
 impl<
@@ -108,6 +111,9 @@ impl<
                     .await;
                 return None;
             }
+            HotShotEvent::UpgradeDecided(cert) => {
+                self.decided_upgrade_certificate = Some(cert.clone());
+            }
             HotShotEvent::ViewChange(view) => {
                 let view = *view;
                 debug!("view change in transactions to view {:?}", view);
@@ -129,11 +135,24 @@ impl<
                 }
                 let block_view = if make_block { view } else { view + 1 };
 
+                // Request a block from the builder unless we are between versions.
+                let block = {
+                    if self
+                        .decided_upgrade_certificate
+                        .as_ref()
+                        .is_some_and(|cert| cert.upgrading_in(block_view))
+                    {
+                        None
+                    } else {
+                        self.wait_for_block().await
+                    }
+                };
+
                 if let Some(BuilderResponses {
                     block_data,
                     blocks_initial_info,
                     block_header,
-                }) = self.wait_for_block().await
+                }) = block
                 {
                     broadcast_event(
                         Arc::new(HotShotEvent::BlockRecv(
@@ -400,6 +419,7 @@ impl<
             HotShotEvent::TransactionsRecv(_)
                 | HotShotEvent::Shutdown
                 | HotShotEvent::ViewChange(_)
+                | HotShotEvent::UpgradeDecided(_)
         )
     }
 

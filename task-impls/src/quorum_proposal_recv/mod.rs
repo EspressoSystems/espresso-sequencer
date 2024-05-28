@@ -24,13 +24,12 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, warn};
 use vbs::version::Version;
 
+use self::handlers::handle_quorum_proposal_recv;
 use crate::{
     consensus::helpers::parent_leaf_and_state,
     events::HotShotEvent,
     helpers::{broadcast_event, cancel_task},
 };
-
-use self::handlers::handle_quorum_proposal_recv;
 
 /// Event handlers for this task.
 mod handlers;

@@ -171,6 +171,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType>
             instance_state: handle.hotshot.instance_state(),
             id: handle.hotshot.id,
             builder_client: BuilderClient::new(handle.hotshot.config.builder_url.clone()),
+            decided_upgrade_certificate: None,
         }
     }
 }

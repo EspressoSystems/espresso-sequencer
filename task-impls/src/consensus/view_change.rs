@@ -1,20 +1,19 @@
 use core::time::Duration;
 use std::sync::Arc;
 
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::JoinHandle;
-
 use anyhow::{ensure, Result};
 use async_broadcast::Sender;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::JoinHandle;
 use hotshot_types::{
     consensus::Consensus,
     event::{Event, EventType},
     traits::node_implementation::{ConsensusTime, NodeType},
 };
+#[cfg(async_executor_impl = "tokio")]
+use tokio::task::JoinHandle;
 use tracing::{debug, error};
 
 use crate::{

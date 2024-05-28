@@ -132,6 +132,17 @@ where
     Box::new(EventPredicate { check, info })
 }
 
+pub fn upgrade_decided<TYPES>() -> Box<EventPredicate<TYPES>>
+where
+    TYPES: NodeType,
+{
+    let info = "UpgradeDecided".to_string();
+    let check: EventCallback<TYPES> =
+        Arc::new(move |e: Arc<HotShotEvent<TYPES>>| matches!(e.as_ref(), UpgradeDecided(_)));
+
+    Box::new(EventPredicate { check, info })
+}
+
 pub fn quorum_vote_send<TYPES>() -> Box<EventPredicate<TYPES>>
 where
     TYPES: NodeType,
