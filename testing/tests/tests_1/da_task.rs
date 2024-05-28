@@ -10,7 +10,7 @@ use hotshot_task_impls::{da::DaTaskState, events::HotShotEvent::*};
 use hotshot_testing::{
     predicates::event::exact,
     script::{run_test_script, TestScriptStage},
-    task_helpers::build_system_handle,
+    helpers::build_system_handle,
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{

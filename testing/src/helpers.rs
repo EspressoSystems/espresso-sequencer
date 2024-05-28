@@ -12,7 +12,7 @@ use hotshot::{
 use hotshot_example_types::{
     block_types::TestTransaction,
     node_types::{MemoryImpl, TestTypes},
-    state_types::TestInstanceState,
+    state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
@@ -27,6 +27,7 @@ use hotshot_types::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
     },
+    utils::{View, ViewInner},
     vid::{vid_scheme, VidCommitment, VidSchemeType},
     vote::{Certificate, HasViewNumber, Vote},
 };
@@ -306,4 +307,40 @@ pub async fn build_vote(
     )
     .expect("Failed to create quorum vote");
     GeneralConsensusMessage::<TestTypes>::Vote(vote)
+}
+
+/// This function permutes the provided input vector `inputs`, given some order provided within the
+/// `order` vector.
+///
+/// # Examples
+/// let output = permute_input_with_index_order(vec![1, 2, 3], vec![2, 1, 0]);
+/// // Output is [3, 2, 1] now
+pub fn permute_input_with_index_order<T>(inputs: Vec<T>, order: Vec<usize>) -> Vec<T>
+where
+    T: Clone,
+{
+    let mut ordered_inputs = Vec::with_capacity(inputs.len());
+    for &index in &order {
+        ordered_inputs.push(inputs[index].clone());
+    }
+    ordered_inputs
+}
+
+/// This function will create a fake [`View`] from a provided [`Leaf`].
+pub fn build_fake_view_with_leaf(leaf: Leaf<TestTypes>) -> View<TestTypes> {
+    build_fake_view_with_leaf_and_state(leaf, TestValidatedState::default())
+}
+
+/// This function will create a fake [`View`] from a provided [`Leaf`] and `state`.
+pub fn build_fake_view_with_leaf_and_state(
+    leaf: Leaf<TestTypes>,
+    state: TestValidatedState,
+) -> View<TestTypes> {
+    View {
+        view_inner: ViewInner::Leaf {
+            leaf: leaf.commit(),
+            state: state.into(),
+            delta: None,
+        },
+    }
 }

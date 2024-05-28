@@ -16,7 +16,7 @@ use hotshot_task_impls::{
 use hotshot_testing::{
     predicates::{event::*, upgrade::*},
     script::{Expectations, TaskScript},
-    task_helpers::vid_share,
+    helpers::vid_share,
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
@@ -33,7 +33,7 @@ use vbs::version::Version;
 async fn test_consensus_task_upgrade() {
     use hotshot_testing::{
         script::{run_test_script, TestScriptStage},
-        task_helpers::build_system_handle,
+        helpers::build_system_handle,
     };
 
     async_compatibility_layer::logging::setup_logging();
@@ -166,7 +166,7 @@ async fn test_consensus_task_upgrade() {
 async fn test_upgrade_and_consensus_task() {
     use std::sync::Arc;
 
-    use hotshot_testing::task_helpers::build_system_handle;
+    use hotshot_testing::helpers::build_system_handle;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -328,7 +328,7 @@ async fn test_upgrade_and_consensus_task() {
 ///   - we correctly propose with a null block payload in view 6, even if we have indications to do otherwise (via SendPayloadCommitmentAndMetadata, VID etc).
 ///   - we correctly reject a QuorumProposal with a non-null block payload in view 7.
 async fn test_upgrade_and_consensus_task_blank_blocks() {
-    use hotshot_testing::task_helpers::build_system_handle;
+    use hotshot_testing::helpers::build_system_handle;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();

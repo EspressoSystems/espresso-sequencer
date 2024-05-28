@@ -194,8 +194,8 @@ pub struct VoteDependencyData<TYPES: NodeType> {
     /// parent leaf.
     pub parent_leaf: Leaf<TYPES>,
 
-    /// The Vid disperse proposal.
-    pub disperse_share: Proposal<TYPES, VidDisperseShare<TYPES>>,
+    /// The VID share proposal.
+    pub vid_share: Proposal<TYPES, VidDisperseShare<TYPES>>,
 
     /// The DA certificate.
     pub da_cert: DaCertificate<TYPES>,

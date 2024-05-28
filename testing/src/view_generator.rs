@@ -26,7 +26,7 @@ use hotshot_types::{
 };
 use sha2::{Digest, Sha256};
 
-use crate::task_helpers::{
+use crate::helpers::{
     build_cert, build_da_certificate, build_vid_proposal, da_payload_commitment, key_pair_for_id,
 };
 

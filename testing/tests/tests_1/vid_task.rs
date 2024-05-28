@@ -10,7 +10,7 @@ use hotshot_task_impls::{events::HotShotEvent::*, vid::VidTaskState};
 use hotshot_testing::{
     predicates::event::exact,
     script::{run_test_script, TestScriptStage},
-    task_helpers::{build_system_handle, vid_scheme_from_view_number},
+    helpers::{build_system_handle, vid_scheme_from_view_number},
 };
 use hotshot_types::{
     data::{null_block, DaProposal, VidDisperse, ViewNumber},

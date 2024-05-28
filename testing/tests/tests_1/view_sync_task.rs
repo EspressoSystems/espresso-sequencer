@@ -3,7 +3,7 @@ use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
 use hotshot_task_impls::{
     events::HotShotEvent, harness::run_harness, view_sync::ViewSyncTaskState,
 };
-use hotshot_testing::task_helpers::build_system_handle;
+use hotshot_testing::helpers::build_system_handle;
 use hotshot_types::{
     data::ViewNumber, simple_vote::ViewSyncPreCommitData,
     traits::node_implementation::ConsensusTime,

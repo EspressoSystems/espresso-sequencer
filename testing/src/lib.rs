@@ -7,7 +7,7 @@
 )]
 
 /// Helpers for initializing system context handle and building tasks.
-pub mod task_helpers;
+pub mod helpers;
 
 ///  builder
 pub mod test_builder;
@@ -44,9 +44,6 @@ pub mod script;
 
 /// view generator for tests
 pub mod view_generator;
-
-/// helper functions for test scripts
-pub mod test_helpers;
 
 /// global event at the test level
 #[derive(Clone, Debug)]

@@ -154,7 +154,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
                             );
                         return;
                     };
-                    let Some(disperse_share) = vid_shares.get(&self.public_key) else {
+                    let Some(vid_share) = vid_shares.get(&self.public_key) else {
                         error!("Did not get a VID share for our public key, aborting vote");
                         return;
                     };
@@ -174,7 +174,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
                             VoteDependencyData {
                                 quorum_proposal: current_proposal,
                                 parent_leaf,
-                                disperse_share: disperse_share.clone(),
+                                vid_share: vid_share.clone(),
                                 da_cert: da_cert.clone(),
                             },
                         )),
