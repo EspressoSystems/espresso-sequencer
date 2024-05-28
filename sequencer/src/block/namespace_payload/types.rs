@@ -4,6 +4,106 @@
 //! transaction table is restricted to this file.
 //!
 //! There are many newtypes in this file to facilitate transaction proofs.
+//!
+//! # Binary format of a namespace payload
+//!
+//! Any sequence of bytes is a valid [`NsPayload`].
+//!
+//! A namespace payload consists of two concatenated byte sequences:
+//! - `tx_table`: transaction table
+//! - `tx_payloads`: transaction payloads
+//!
+//! # Transaction table
+//!
+//! Byte lengths for the different items that could appear in a `tx_table` are
+//! specified in local private constants [`NUM_TXS_BYTE_LEN`],
+//! [`TX_OFFSET_BYTE_LEN`].
+//!
+//! ## Number of entries in the transaction table
+//!
+//! The first [`NUM_TXS_BYTE_LEN`] bytes of the `tx_table` indicate the number
+//! `n` of entries in the table as a little-endian unsigned integer. If the
+//! entire namespace payload byte length is smaller than [`NUM_TXS_BYTE_LEN`]
+//! then the missing bytes are zero-padded.
+//!
+//! The bytes in the namespace payload beyond the first [`NUM_TXS_BYTE_LEN`]
+//! bytes encode entries in the `tx_table`. Each entry consumes exactly
+//! [`TX_OFFSET_BYTE_LEN`] bytes.
+//!
+//! The number `n` could be anything, including a number much larger than the
+//! number of entries that could fit in the namespace payload. As such, the
+//! actual number of entries in the `tx_table` is defined as the minimum of `n`
+//! and the maximum number of whole `tx_table` entries that could fit in the
+//! namespace payload.
+//!
+//! The `tx_payloads` consist of any bytes in the namespace payload beyond the
+//! `tx_table`.
+//!
+//! ## Transaction table entry
+//!
+//! Each entry in the `tx_table` is exactly [`TX_OFFSET_BYTE_LEN`] bytes. These
+//! bytes indicate the end-index of a transaction in the namespace payload
+//! bytes. This end-index is a little-endian unsigned integer.
+//!
+//! This offset is relative to the end of the `tx_table` within the current
+//! namespace.
+//!
+//! ### Example
+//!
+//! Suppose a block payload has 3000 bytes and 3 namespaces of 1000 bytes each.
+//! Suppose the `tx_table` for final namespace in the block has byte length 100,
+//! and suppose an entry in that `tx_table` indicates an end-index of `10`. The
+//! actual end-index of that transaction relative to the current namespace is
+//! `110`: `10` bytes for the offset plus `100` bytes for the `tx_table`.
+//! Relative to the entire block payload, the end-index of that transaction is
+//! `2110`: `10` bytes for the offset plus `100` bytes for the `tx_table` plus
+//! `2000` bytes for this namespace.
+//!
+//! # How to deduce a transaction's byte range
+//!
+//! In order to extract the payload bytes of a single transaction `T` from the
+//! namespace payload one needs both the start- and end-indices for `T`.
+//!
+//! See [`TxPayloadRange::new`] for clarification. What follows is a description
+//! of what's implemented in [`TxPayloadRange::new`].
+//!
+//! If `T` occupies the `i`th entry in the `tx_table` for `i>0` then the
+//! start-index for `T` is defined as the end-index of the `(i-1)`th entry in
+//! the table.
+//!
+//! Thus, both start- and end-indices for any transaction `T` can be read from a
+//! contiguous, constant-size byte range in the `tx_table`. This property
+//! facilitates transaction proofs.
+//!
+//! The start-index of the 0th entry in the table is implicitly defined to be
+//! `0`.
+//!
+//! The start- and end-indices `(declared_start, declared_end)` declared in the
+//! `tx_table` could be anything. As such, the actual start- and end-indices
+//! `(start, end)` are defined so as to ensure that the byte range is
+//! well-defined and in-bounds for the namespace payload:
+//! ```ignore
+//! end = min(declared_end, namespace_payload_byte_length)
+//! start = min(declared_start, end)
+//! ```
+//!
+//! To get the byte range for `T` relative to the current namespace, the above
+//! range is translated by the byte length of the `tx_table` *as declared in the
+//! `tx_table` itself*, suitably truncated to fit within the current namespace.
+//!
+//! In particular, if the `tx_table` declares a huge number `n` of entries that
+//! cannot fit into the namespace payload then all transactions in this
+//! namespace have a zero-length byte range whose start- and end-indices are
+//! both `namespace_payload_byte_length`.
+//!
+//! In a "honestly-prepared" `tx_table` the end-index of the final transaction
+//! equals the byte length of the namespace payload minus the byte length of the
+//! `tx_table`. (Otherwise the namespace payload might have bytes that are not
+//! included in any transaction.)
+//!
+//! It is possible that a `tx_table` table could indicate two distinct
+//! transactions whose byte ranges overlap, though no "honestly-prepared"
+//! `tx_table` would do this.
 use crate::block::uint_bytes::{bytes_serde_impl, usize_from_bytes, usize_to_bytes};
 use crate::Transaction;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

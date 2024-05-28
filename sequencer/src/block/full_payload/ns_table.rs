@@ -67,8 +67,7 @@ const NS_ID_BYTE_LEN: usize = 8;
 /// The next [`NS_OFFSET_BYTE_LEN`] bytes of each table entry indicate the
 /// end-index of a namespace in the block payload bytes
 /// [`Payload`](super::payload::Payload). This end-index is a little-endian
-/// unsigned integer. In what follows we describe how to interpret this unsigned
-/// integer in order to deduce a namespace's byte range.
+/// unsigned integer.
 ///
 /// # How to deduce a namespace's byte range
 ///

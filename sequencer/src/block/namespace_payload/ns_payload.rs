@@ -7,6 +7,12 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
+/// Raw binary data for a single namespace's payload.
+///
+/// Any sequence of bytes is a valid [`NsPayload`].
+///
+/// See module-level documentation [`types`](super::types) for a full
+/// specification of the binary format of a namespace.
 pub(in crate::block) struct NsPayload([u8]);
 
 impl NsPayload {
