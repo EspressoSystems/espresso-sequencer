@@ -24,7 +24,7 @@ pub trait FromNsPayloadBytes<'a> {
 
 /// Specifies a subslice of namespace payload bytes to read.
 ///
-/// Compantion trait for [`FromNsPayloadBytes`], which holds data that can be
+/// Companion trait for [`FromNsPayloadBytes`], which holds data that can be
 /// deserialized from that subslice of bytes.
 pub trait NsPayloadBytesRange<'a> {
     type Output: FromNsPayloadBytes<'a>;

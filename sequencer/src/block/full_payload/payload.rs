@@ -16,6 +16,25 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::{collections::HashMap, fmt::Display, sync::Arc};
 
+/// Raw payload data for an entire block.
+///
+/// A block consists of two sequences of arbitrary bytes:
+/// - `ns_table`: namespace table
+/// - `ns_payloads`: namespace payloads
+///
+/// Any sequence of bytes is a valid `ns_table`. Any sequence of bytes is a
+/// valid `ns_payloads`. The contents of `ns_table` determine how to interpret
+/// `ns_payload`.
+///
+/// # Namespace table
+///
+/// See [`NsTable`] for the format of a namespace table.
+///
+/// # Namespace payloads
+///
+/// A concatenation of payload bytes for multiple individual namespaces.
+/// Namespace boundaries are dictated by `ns_table`. See [`NsPayload`] for the
+/// format of a namespace payload.
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {
     // Concatenated payload bytes for each namespace

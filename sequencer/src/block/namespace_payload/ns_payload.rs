@@ -1,7 +1,3 @@
-//! The only thing [`NsPayload2`] does is naively read from its payload given a
-//! byte range. It doesn't know anything about the underlying binary format.
-//! That's all done in `xxx`.
-
 use crate::{
     block::namespace_payload::types::{
         FromNsPayloadBytes, NsPayloadByteLen, NsPayloadBytesRange, NumTxs, NumTxsRange,
@@ -52,6 +48,8 @@ impl NsPayload {
 
     /// Return a transaction from this namespace. Set its namespace ID to
     /// `ns_id`.
+    ///
+    /// Return `None` if `index` is out of bounds.
     pub fn export_tx(&self, ns_id: &NamespaceId, index: &TxIndex) -> Option<Transaction> {
         let num_txs_unchecked = self.read_num_txs();
         let num_txs = NumTxs::new(&num_txs_unchecked, &self.byte_len());
