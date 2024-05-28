@@ -283,7 +283,7 @@ impl BlockHeader<SeqTypes> for Header {
         parent_leaf: &Leaf,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+        metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: BuilderFee<SeqTypes>,
         _vid_common: VidCommon,
         _version: Version,
@@ -380,11 +380,12 @@ impl BlockHeader<SeqTypes> for Header {
         instance_state: &NodeState,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+        ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
     ) -> Self {
         let ValidatedState {
             fee_merkle_tree,
             block_merkle_tree,
+            ..
         } = ValidatedState::genesis(instance_state).0;
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
@@ -415,7 +416,9 @@ impl BlockHeader<SeqTypes> for Header {
         self.payload_commitment
     }
 
-    fn metadata(&self) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata {
+    fn metadata(
+        &self,
+    ) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata {
         &self.ns_table
     }
 
@@ -541,6 +544,7 @@ mod test_headers {
             let mut validated_state = ValidatedState {
                 block_merkle_tree: block_merkle_tree.clone(),
                 fee_merkle_tree,
+                chain_config: genesis.instance_state.chain_config.into(),
             };
 
             let (fee_account, fee_key) = FeeAccount::generated_from_seed_indexed([0; 32], 0);
@@ -750,7 +754,10 @@ mod test_headers {
         fn default() -> Self {
             let instance_state = NodeState::mock();
             let validated_state = ValidatedState::genesis(&instance_state).0;
-            let leaf = Leaf::genesis(&instance_state);
+
+            //TODO(abdul): Change this
+            let leaf = async_std::task::block_on(Leaf::genesis(&validated_state, &instance_state));
+
             let header = leaf.block_header().clone();
             let ns_table = leaf.block_payload().unwrap().get_ns_table().clone();
             Self {

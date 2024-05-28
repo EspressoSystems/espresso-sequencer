@@ -4,6 +4,7 @@ use clap::Parser;
 use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
 use ethers::types::U256;
+use hotshot::traits::ValidatedState;
 use hotshot_types::data::ViewNumber;
 use hotshot_types::traits::node_implementation::ConsensusTime;
 use sequencer::{eth_signature_key::EthKeyPair, options::parse_size, ChainConfig, L1Params};
@@ -131,6 +132,10 @@ async fn main() -> anyhow::Result<()> {
     let instance_state =
         build_instance_state(l1_params, opt.state_peers, chain_config, sequencer_version).unwrap();
 
+    // ??
+
+    let validated_state = ValidatedState::genesis(&instance_state).0;
+
     let api_response_timeout_duration = opt.max_api_timeout_duration;
 
     // make the txn timeout as 1/4 of the api_response_timeout_duration
@@ -144,6 +149,7 @@ async fn main() -> anyhow::Result<()> {
         opt.channel_capacity,
         opt.node_count,
         instance_state,
+        validated_state,
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,

@@ -1,6 +1,7 @@
 use crate::{
-    api::data_source::CatchupDataSource, catchup::SqlStateCatchup, eth_signature_key::EthKeyPair,
-    ChainConfig, Header, Leaf, NodeState, SeqTypes,
+    api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
+    chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair, ChainConfig, Header, Leaf,
+    NodeState, SeqTypes,
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use ark_serialize::{
@@ -58,9 +59,10 @@ pub struct ValidatedState {
     pub block_merkle_tree: BlockMerkleTree,
     /// Fee Merkle Tree
     pub fee_merkle_tree: FeeMerkleTree,
+    pub chain_config: ResolvableChainConfig,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Delta {
     pub fees_delta: HashSet<FeeAccount>,
 }
@@ -83,9 +85,13 @@ impl Default for ValidatedState {
             Vec::<(FeeAccount, FeeAmount)>::new(),
         )
         .unwrap();
+
+        let chain_config = ResolvableChainConfig::from(ChainConfig::default());
+
         Self {
             block_merkle_tree,
             fee_merkle_tree,
+            chain_config,
         }
     }
 }
@@ -200,6 +206,7 @@ impl ValidatedState {
             block_merkle_tree: BlockMerkleTree::from_commitment(
                 self.block_merkle_tree.commitment(),
             ),
+            chain_config: ResolvableChainConfig::from(self.chain_config.commit()),
         }
     }
 }
@@ -255,6 +262,7 @@ pub fn validate_proposal(
     let ValidatedState {
         block_merkle_tree,
         fee_merkle_tree,
+        ..
     } = state;
 
     let block_merkle_tree_root = block_merkle_tree.commitment();
@@ -351,6 +359,7 @@ async fn store_state_update(
     let ValidatedState {
         fee_merkle_tree,
         block_merkle_tree,
+        ..
     } = state;
     let Delta { fees_delta } = delta;
 
@@ -771,6 +780,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         Self {
             fee_merkle_tree,
             block_merkle_tree,
+            chain_config: block_header.chain_config,
         }
     }
     /// Construct a genesis validated state.
@@ -1238,6 +1248,7 @@ impl FeeAccountProof {
 #[cfg(test)]
 mod test {
     use super::*;
+    use async_compatibility_layer::art::async_test;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use hotshot_types::vid::vid_scheme;
     use jf_vid::VidScheme;
@@ -1281,8 +1292,8 @@ mod test {
         FeeAccountProof::prove(&tree, account2).unwrap();
     }
 
-    #[test]
-    fn test_validation_max_block_size() {
+    #[async_test]
+    async fn test_validation_max_block_size() {
         setup_logging();
         setup_backtrace();
 
@@ -1296,7 +1307,9 @@ mod test {
             base_fee: 0.into(),
             ..Default::default()
         });
-        let parent = Leaf::genesis(&instance);
+
+        let validated_state = ValidatedState::genesis(&instance).0;
+        let parent = Leaf::genesis(&validated_state, &instance).await;
         let header = parent.block_header();
 
         // Validation fails because the proposed block exceeds the maximum block size.
@@ -1305,8 +1318,8 @@ mod test {
         tracing::info!(%err, "task failed successfully");
     }
 
-    #[test]
-    fn test_validation_base_fee() {
+    #[async_test]
+    async fn test_validation_base_fee() {
         setup_logging();
         setup_backtrace();
 
@@ -1320,7 +1333,10 @@ mod test {
             max_block_size,
             ..Default::default()
         });
-        let parent = Leaf::genesis(&instance);
+
+        let validated_state = ValidatedState::genesis(&instance).0;
+
+        let parent = Leaf::genesis(&validated_state, &instance).await;
         let header = parent.block_header();
 
         // Validation fails because the genesis fee (0) is too low.

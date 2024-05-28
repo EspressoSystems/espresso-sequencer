@@ -86,7 +86,7 @@ fn reference_header() -> Header {
     let builder_key = FeeAccount::generated_from_seed_indexed(Default::default(), 0).1;
     let fee_info = reference_fee_info();
     let ns_table = reference_ns_table();
-    let payload = <Payload<_> as TestableBlock>::genesis();
+    let payload = <Payload<_> as TestableBlock<_>>::genesis();
     let payload_commitment = vid_commitment(&payload.encode(), 1);
     let builder_commitment = payload.builder_commitment(&ns_table);
     let builder_signature = FeeAccount::sign_fee(

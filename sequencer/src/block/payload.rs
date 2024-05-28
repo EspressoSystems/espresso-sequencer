@@ -2,6 +2,7 @@ use crate::block::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block::payload;
 use crate::block::tables::NameSpaceTable;
 use crate::block::tables::TxTable;
+use crate::SeqTypes;
 use crate::{BlockBuildingSnafu, ChainConfig, Error, NamespaceId, Transaction};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use derivative::Derivative;
@@ -152,7 +153,9 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     }
 
     pub fn from_txs(
-        txs: impl IntoIterator<Item = <payload::Payload<TxTableEntryWord> as BlockPayload>::Transaction>,
+        txs: impl IntoIterator<
+            Item = <payload::Payload<TxTableEntryWord> as BlockPayload<SeqTypes>>::Transaction,
+        >,
         chain_config: &ChainConfig,
     ) -> Result<Self, Error> {
         let mut namespaces: HashMap<NamespaceId, NamespaceInfo> = Default::default();
@@ -183,7 +186,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
 
     fn update_namespace_with_tx(
         namespaces: &mut HashMap<NamespaceId, NamespaceInfo>,
-        tx: <Payload<TxTableEntryWord> as BlockPayload>::Transaction,
+        tx: <Payload<TxTableEntryWord> as BlockPayload<SeqTypes>>::Transaction,
     ) {
         let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().unwrap(); // TODO (Philippe) error handling
 
@@ -317,13 +320,11 @@ pub fn parse_ns_payload(ns_bytes: &[u8], ns_id: NamespaceId) -> Vec<Transaction>
 }
 
 #[cfg(any(test, feature = "testing"))]
-impl hotshot_types::traits::block_contents::TestableBlock
+impl hotshot_types::traits::block_contents::TestableBlock<SeqTypes>
     for Payload<crate::block::entry::TxTableEntryWord>
 {
     fn genesis() -> Self {
-        BlockPayload::from_transactions([], &Default::default())
-            .unwrap()
-            .0
+        BlockPayload::empty().0
     }
 
     fn txn_count(&self) -> u64 {
@@ -344,8 +345,9 @@ mod test {
             tx_iterator::TxIndex,
         },
         transaction::NamespaceId,
-        ChainConfig, NodeState, Transaction,
+        ChainConfig, NodeState, Transaction, ValidatedState,
     };
+    use async_compatibility_layer::art::async_test;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
@@ -396,12 +398,12 @@ mod test {
         assert_eq!(payload.txn_count(), txs.len() as u64);
     }
 
-    #[test]
-    fn basic_correctness() {
-        check_basic_correctness::<TxTableEntryWord>()
+    #[async_test]
+    async fn basic_correctness() {
+        check_basic_correctness::<TxTableEntryWord>().await
     }
 
-    fn check_basic_correctness<TableWord: TableWordTraits>() {
+    async fn check_basic_correctness<TableWord: TableWordTraits>() {
         // play with this
         let test_cases = [
             // 1 namespace only
@@ -515,8 +517,13 @@ mod test {
             let all_txs_iter = derived_nss
                 .iter()
                 .flat_map(|(_ns_id, ns)| ns.txs.iter().cloned());
-            let (block, actual_ns_table) =
-                Payload::from_transactions(all_txs_iter, &NodeState::mock()).unwrap();
+            let (block, actual_ns_table) = Payload::from_transactions(
+                all_txs_iter,
+                &ValidatedState::default(),
+                &NodeState::mock(),
+            )
+            .await
+            .unwrap();
             let disperse_data = vid.disperse(&block.raw_payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF

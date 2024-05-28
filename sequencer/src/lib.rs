@@ -387,7 +387,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     let topics = {
         let mut topics = vec![Topic::Global];
         if is_da {
-            topics.push(Topic::DA);
+            topics.push(Topic::Da);
         }
         topics
     };
@@ -843,7 +843,9 @@ mod test {
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], &NodeState::mock()).unwrap();
+                Payload::from_transactions([], &ValidatedState::default(), &NodeState::mock())
+                    .await
+                    .unwrap();
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload.encode();

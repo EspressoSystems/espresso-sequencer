@@ -555,6 +555,7 @@ pub mod testing {
                 channel_capacity,
                 node_count,
                 node_state,
+                ValidatedState::default(),
                 hotshot_events_streaming_api_url,
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
@@ -619,6 +620,7 @@ pub mod testing {
                 bootstrapped_view,
                 channel_capacity,
                 node_state,
+                ValidatedState::default(),
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
                 15,
@@ -701,10 +703,12 @@ mod test {
         }
 
         let genesis_state = NodeState::mock();
+        let validated_state = ValidatedState::default();
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], &genesis_state)
+                Payload::from_transactions([], &validated_state, &genesis_state)
+                    .await
                     .expect("unable to create genesis payload");
             let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
             let genesis_commitment = {
