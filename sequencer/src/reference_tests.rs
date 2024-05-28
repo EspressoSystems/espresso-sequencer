@@ -63,7 +63,7 @@ const REFERENCE_L1_BLOCK_COMMITMENT: &str = "L1BLOCK~4HpzluLK2Isz3RdPNvNrDAyQcWO
 fn reference_chain_config() -> ChainConfig {
     ChainConfig {
         chain_id: 0x8a19.into(),
-        max_block_size: 10240,
+        max_block_size: 10240.into(),
         base_fee: 0.into(),
         fee_contract: Some(Default::default()),
         fee_recipient: Default::default(),
