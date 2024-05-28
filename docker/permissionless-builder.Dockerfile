@@ -7,6 +7,10 @@ RUN apt-get update \
     &&  rm -rf /var/lib/apt/lists/*
 ENTRYPOINT ["tini", "--"]
 
+# Install genesis files for all supported configurations. The desired configuration can be chosen by
+# setting `ESPRESSO_BUILDER`.
+COPY data/genesis /genesis
+
 # Download an SRS file to avoid download at runtime
 ENV AZTEC_SRS_PATH=/kzg10-aztec20-srs-1048584.bin
 RUN curl -LO https://github.com/EspressoSystems/ark-srs/releases/download/v0.2.0/$AZTEC_SRS_PATH
