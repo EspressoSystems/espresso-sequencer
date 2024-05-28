@@ -8,7 +8,7 @@ RUN apt-get update \
 ENTRYPOINT ["tini", "--"]
 
 # Install genesis files for all supported configurations. The desired configuration can be chosen by
-# setting `ESPRESSO_BUILDER`.
+# setting `ESPRESSO_BUILDER_GENESIS_FILE`.
 COPY data/genesis /genesis
 
 # Download an SRS file to avoid download at runtime
