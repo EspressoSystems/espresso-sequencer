@@ -30,6 +30,9 @@ test:
     cargo build --bin diff-test --release
     cargo test --release --all-features
 
+clippy:
+    cargo clippy --workspace --all-features --all-targets -- -D warnings
+
 # Helpful shortcuts for local development
 dev-orchestrator:
     target/release/orchestrator -p 8080 -n 1
