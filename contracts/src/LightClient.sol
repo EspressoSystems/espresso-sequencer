@@ -355,6 +355,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice checks the L1BlockUpdates array and the delayThreshold to determine if hotshot was
     /// down at a specified L1 block number
+    /// @param l1BlockNumber This L1 block number used to reference a point in time when this light
+    /// client contract was expected to be updated in a given threshold
+    /// @param delayThreshold The delay threshold used to determined if this Light Client contract
+    /// was updated in the desired time (measured in blocks)
     function wasL1Updated(uint256 l1BlockNumber, uint256 delayThreshold)
         public
         view
@@ -397,6 +401,16 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return false;
     }
 
+    /// @notice the criteria that determines whether the delayThreshold was passed for the given
+    /// reference L1 block, l1BlockNumber and delayThreshold
+    /// @param blockStart The start of the block range found in the l1BlockUpdates array and used to
+    /// determine if the delay threshold was passed for a given L1 block
+    /// @param blockEnd The end of the block range used to determine if the delay threshold was
+    /// passed for a given L1 block
+    /// @param l1BlockNumber This L1 block number used to reference a point in time when this light
+    /// client contract was expected to be updated in a given threshold
+    /// @param delayThreshold The delay threshold used to determined if this Light Client contract
+    /// was updated in the desired time (measured in blocks)
     function isDelayThresholdSurpassed(
         uint256 blockStart,
         uint256 blockEnd,
