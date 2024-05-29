@@ -3263,6 +3263,7 @@ dependencies = [
  "anyhow",
  "ark-serialize",
  "async-compatibility-layer",
+ "async-lock 3.3.0",
  "async-std",
  "async-trait",
  "atomic_store",

@@ -21,6 +21,7 @@
 //! implementations of [`Provider`] for various data availability sources.
 //!
 
+use async_lock::Semaphore;
 use async_std::{
     sync::{Arc, Mutex},
     task::{sleep, spawn},
@@ -58,6 +59,7 @@ const BACKOFF_FACTOR: u32 = 4;
 // spam our peers, and since backoff allows us to first try a few times with a faster delay, we can
 // safely wait a long while before retrying failed requests.
 const DEFAULT_RETRY_DELAY: Duration = Duration::from_secs(5 * 60);
+const DEFAULT_RATE_LIMIT: usize = 32;
 
 /// A callback to process the result of a request.
 ///
@@ -83,6 +85,7 @@ pub struct Fetcher<T, C> {
     #[derivative(Debug = "ignore")]
     in_progress: Arc<Mutex<HashMap<T, BTreeSet<C>>>>,
     retry_delay: Duration,
+    permit: Arc<Semaphore>,
 }
 
 impl<T, C> Default for Fetcher<T, C> {
@@ -90,6 +93,7 @@ impl<T, C> Default for Fetcher<T, C> {
         Self {
             in_progress: Default::default(),
             retry_delay: DEFAULT_RETRY_DELAY,
+            permit: Arc::new(Semaphore::new(DEFAULT_RATE_LIMIT)),
         }
     }
 }
@@ -130,6 +134,7 @@ impl<T, C> Fetcher<T, C> {
         C: Callback<T::Response> + 'static,
     {
         let in_progress = self.in_progress.clone();
+        let permit = self.permit.clone();
         let max_retry_delay = self.retry_delay;
 
         spawn(async move {
@@ -158,6 +163,8 @@ impl<T, C> Fetcher<T, C> {
             // Now we are responsible for fetching the object, reach out to the provider.
             let mut delay = min(MIN_RETRY_DELAY, max_retry_delay);
             let res = loop {
+                // Acquire a permit from the semaphore to rate limit the number of concurrent fetch requests
+                permit.acquire().await;
                 if let Some(res) = provider.fetch(req).await {
                     break res;
                 }
