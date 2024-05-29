@@ -108,7 +108,7 @@ pub struct BuilderContext<
     Ver: StaticVersionType + 'static,
 > {
     /// The consensus handle
-    pub hotshot_handle: Consensus<N, P>,
+    pub hotshot_handle: Arc<Consensus<N, P>>,
 
     /// Index of this sequencer node
     pub node_index: u64,
@@ -462,6 +462,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             Arc::new(validated_state),
         );
 
+        let hotshot_handle_clone = Arc::clone(&hotshot_handle);
         // spawn the builder service
         async_spawn(async move {
             run_permissioned_standalone_builder_service(
@@ -469,7 +470,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 da_sender,
                 qc_sender,
                 decide_sender,
-                Arc::clone(&hotshot_handle),
+                hotshot_handle_clone,
             )
             .await;
         });

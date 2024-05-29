@@ -4079,7 +4079,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.21"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=daily-build#7a69015cf189ee1c6750852325dffa3d5c4f3e27"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=daily-build#55e77a7a368c4c39dbdffe0b21547fdd38a73a9a"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -10664,9 +10664,9 @@ dependencies = [
 
 [[package]]
 name = "vbs"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "971bcbd6c41e4e53fa9eab95b2a8ddaf1826be2f3e86b4101efebc8c3a17fde0"
+checksum = "1da07d9ca0c69892851ff70256392d1b0c6408a0007cc87409b1ca3064821e9b"
 dependencies = [
  "anyhow",
  "bincode",

@@ -58,7 +58,7 @@ impl BlockPayload<SeqTypes> for Payload<TxTableEntryWord> {
     /// when the ValidatedState's chain config commitment differs from the NodeState's chain config, and the ValidatedState does not have full chain config.
     async fn from_transactions(
         txs: impl IntoIterator<Item = Self::Transaction> + Send,
-        validated_state: &Self::ValidatedState,
+        _validated_state: &Self::ValidatedState,
         instance_state: &Self::Instance,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
         let payload = Payload::from_txs(txs, &instance_state.chain_config)?;
