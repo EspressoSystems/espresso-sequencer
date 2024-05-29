@@ -90,6 +90,10 @@ pub struct Options {
 
     #[clap(long, env = "ESPRESSO_SEQUENCER_STORE_UNDECIDED_STATE", hide = true)]
     pub(crate) store_undecided_state: bool,
+
+    // Specifies the maximum number of concurrent fetch requests allowed from peers.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_FETCH_RATE_LIMIT")]
+    pub(crate) fetch_rate_limit: Option<usize>,
 }
 
 impl TryFrom<Options> for Config {
