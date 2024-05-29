@@ -103,6 +103,11 @@ impl<T, C> Fetcher<T, C> {
         self.retry_delay = retry_delay;
         self
     }
+
+    pub fn with_rate_limit(mut self, rate_limit: usize) -> Self {
+        self.permit = Arc::new(Semaphore::new(rate_limit));
+        self
+    }
 }
 
 impl<T, C> Fetcher<T, C> {
@@ -164,7 +169,7 @@ impl<T, C> Fetcher<T, C> {
             let mut delay = min(MIN_RETRY_DELAY, max_retry_delay);
             let res = loop {
                 // Acquire a permit from the semaphore to rate limit the number of concurrent fetch requests
-                permit.acquire().await;
+                let permit = permit.acquire().await;
                 if let Some(res) = provider.fetch(req).await {
                     break res;
                 }
@@ -181,6 +186,7 @@ impl<T, C> Fetcher<T, C> {
                 // accumulating because a peer which _should_ have the resource isn't providing it.
                 // In this case, we would require manual intervention on the peer anyways.
                 tracing::warn!("failed to fetch {req:?}, will retry in {delay:?}");
+                drop(permit);
                 sleep(delay).await;
 
                 // Try a few times with a short delay, on the off chance that the problem resolves

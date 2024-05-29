@@ -136,6 +136,7 @@ pub struct Builder<Types, S, P> {
     storage: S,
     provider: P,
     retry_delay: Option<Duration>,
+    rate_limit: Option<usize>,
     range_chunk_size: usize,
     minor_scan_interval: Duration,
     major_scan_interval: usize,
@@ -152,6 +153,7 @@ impl<Types, S, P> Builder<Types, S, P> {
             storage,
             provider,
             retry_delay: None,
+            rate_limit: None,
             range_chunk_size: 25,
             // By default, we run minor proactive scans fairly frequently: once every minute. These
             // scans are cheap (moreso the more frequently they run) and can help us keep up with
@@ -173,6 +175,12 @@ impl<Types, S, P> Builder<Types, S, P> {
     /// Set the maximum delay between retries of fetches.
     pub fn with_retry_delay(mut self, retry_delay: Duration) -> Self {
         self.retry_delay = Some(retry_delay);
+        self
+    }
+
+    /// Set the maximum delay between retries of fetches.
+    pub fn with_rate_limit(mut self, with_rate_limit: usize) -> Self {
+        self.rate_limit = Some(with_rate_limit);
         self
     }
 
@@ -898,6 +906,12 @@ where
             payload_fetcher = payload_fetcher.with_retry_delay(delay);
             leaf_fetcher = leaf_fetcher.with_retry_delay(delay);
             vid_common_fetcher = vid_common_fetcher.with_retry_delay(delay);
+        }
+
+        if let Some(limit) = builder.rate_limit {
+            payload_fetcher = payload_fetcher.with_rate_limit(limit);
+            leaf_fetcher = leaf_fetcher.with_rate_limit(limit);
+            vid_common_fetcher = vid_common_fetcher.with_rate_limit(limit);
         }
 
         let height = builder.storage.block_height().await? as u64;
