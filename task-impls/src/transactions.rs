@@ -3,14 +3,15 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{bail, Context};
-use async_broadcast::Sender;
+use anyhow::{bail, Context, Result};
+use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::async_sleep;
 use async_lock::RwLock;
+use async_trait::async_trait;
 use hotshot_builder_api::block_info::{
     AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo,
 };
-use hotshot_task::task::{Task, TaskState};
+use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::Consensus,
     data::{null_block, Leaf},
@@ -18,7 +19,6 @@ use hotshot_types::{
     simple_certificate::UpgradeCertificate,
     traits::{
         block_contents::{precompute_vid_commitment, BuilderFee, EncodeBytes},
-        consensus_api::ConsensusApi,
         election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
@@ -48,15 +48,18 @@ pub struct BuilderResponses<TYPES: NodeType> {
     /// It contains the final block information
     pub block_header: AvailableBlockHeaderInput<TYPES>,
 }
+
 /// Tracks state of a Transaction task
 pub struct TransactionTaskState<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
-    A: ConsensusApi<TYPES, I> + 'static,
     Ver: StaticVersionType,
 > {
     /// The state's api
-    pub api: A,
+    pub builder_timeout: Duration,
+
+    /// Output events to application
+    pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
 
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
@@ -85,12 +88,8 @@ pub struct TransactionTaskState<
     pub decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
 }
 
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        A: ConsensusApi<TYPES, I> + 'static,
-        Ver: StaticVersionType,
-    > TransactionTaskState<TYPES, I, A, Ver>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType>
+    TransactionTaskState<TYPES, I, Ver>
 {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction task", level = "error")]
@@ -101,14 +100,17 @@ impl<
     ) -> Option<HotShotTaskCompleted> {
         match event.as_ref() {
             HotShotEvent::TransactionsRecv(transactions) => {
-                self.api
-                    .send_event(Event {
+                broadcast_event(
+                    Event {
                         view_number: self.cur_view,
                         event: EventType::Transactions {
                             transactions: transactions.clone(),
                         },
-                    })
-                    .await;
+                    },
+                    &self.output_event_stream,
+                )
+                .await;
+
                 return None;
             }
             HotShotEvent::UpgradeDecided(cert) => {
@@ -270,10 +272,9 @@ impl<
             }
         };
 
-        while task_start_time.elapsed() < self.api.builder_timeout() {
+        while task_start_time.elapsed() < self.builder_timeout {
             match async_compatibility_layer::art::async_timeout(
-                self.api
-                    .builder_timeout()
+                self.builder_timeout
                     .saturating_sub(task_start_time.elapsed()),
                 self.block_from_builder(parent_comm, view_num, &parent_comm_sig),
             )
@@ -401,37 +402,23 @@ impl<
     }
 }
 
+#[async_trait]
 /// task state implementation for Transactions Task
-impl<
-        TYPES: NodeType,
-        I: NodeImplementation<TYPES>,
-        A: ConsensusApi<TYPES, I> + 'static,
-        Ver: StaticVersionType + 'static,
-    > TaskState for TransactionTaskState<TYPES, I, A, Ver>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'static> TaskState
+    for TransactionTaskState<TYPES, I, Ver>
 {
-    type Event = Arc<HotShotEvent<TYPES>>;
-
-    type Output = HotShotTaskCompleted;
-
-    fn filter(&self, event: &Arc<HotShotEvent<TYPES>>) -> bool {
-        !matches!(
-            event.as_ref(),
-            HotShotEvent::TransactionsRecv(_)
-                | HotShotEvent::Shutdown
-                | HotShotEvent::ViewChange(_)
-                | HotShotEvent::UpgradeDecided(_)
-        )
-    }
+    type Event = HotShotEvent<TYPES>;
 
     async fn handle_event(
-        event: Self::Event,
-        task: &mut Task<Self>,
-    ) -> Option<HotShotTaskCompleted> {
-        let sender = task.clone_sender();
-        task.state_mut().handle(event, sender).await
+        &mut self,
+        event: Arc<Self::Event>,
+        sender: &Sender<Arc<Self::Event>>,
+        _receiver: &Receiver<Arc<Self::Event>>,
+    ) -> Result<()> {
+        self.handle(event, sender.clone()).await;
+
+        Ok(())
     }
 
-    fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event.as_ref(), HotShotEvent::Shutdown)
-    }
+    async fn cancel_subtasks(&mut self) {}
 }

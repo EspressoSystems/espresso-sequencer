@@ -8,9 +8,9 @@ use hotshot_example_types::{
 };
 use hotshot_task_impls::{events::HotShotEvent::*, vid::VidTaskState};
 use hotshot_testing::{
+    helpers::{build_system_handle, vid_scheme_from_view_number},
     predicates::event::exact,
     script::{run_test_script, TestScriptStage},
-    helpers::{build_system_handle, vid_scheme_from_view_number},
 };
 use hotshot_types::{
     data::{null_block, DaProposal, VidDisperse, ViewNumber},

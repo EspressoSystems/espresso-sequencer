@@ -2,14 +2,15 @@ use std::{collections::BTreeMap, sync::Arc};
 
 #[cfg(not(feature = "dependency-tasks"))]
 use anyhow::Result;
-use async_broadcast::Sender;
+use async_broadcast::{Receiver, Sender};
 #[cfg(not(feature = "dependency-tasks"))]
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
+use async_trait::async_trait;
 use futures::future::join_all;
-use hotshot_task::task::{Task, TaskState};
+use hotshot_task::task::TaskState;
 #[cfg(not(feature = "dependency-tasks"))]
 use hotshot_types::data::VidDisperseShare;
 #[cfg(not(feature = "dependency-tasks"))]
@@ -347,7 +348,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     let result = collector
                         .as_mut()
                         .unwrap()
-                        .handle_event(Arc::clone(&event), &event_stream)
+                        .handle_vote_event(Arc::clone(&event), &event_stream)
                         .await;
 
                     if result == Some(HotShotTaskCompleted) {
@@ -386,7 +387,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     let result = collector
                         .as_mut()
                         .unwrap()
-                        .handle_event(Arc::clone(&event), &event_stream)
+                        .handle_vote_event(Arc::clone(&event), &event_stream)
                         .await;
 
                     if result == Some(HotShotTaskCompleted) {
@@ -729,39 +730,33 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
     }
 }
 
+#[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for ConsensusTaskState<TYPES, I> {
-    type Event = Arc<HotShotEvent<TYPES>>;
-    type Output = ();
-    fn filter(&self, event: &Arc<HotShotEvent<TYPES>>) -> bool {
-        !matches!(
-            event.as_ref(),
-            HotShotEvent::QuorumProposalRecv(_, _)
-                | HotShotEvent::QuorumVoteRecv(_)
-                | HotShotEvent::QuorumProposalValidated(..)
-                | HotShotEvent::QcFormed(_)
-                | HotShotEvent::UpgradeCertificateFormed(_)
-                | HotShotEvent::DaCertificateRecv(_)
-                | HotShotEvent::ViewChange(_)
-                | HotShotEvent::SendPayloadCommitmentAndMetadata(..)
-                | HotShotEvent::Timeout(_)
-                | HotShotEvent::TimeoutVoteRecv(_)
-                | HotShotEvent::VidShareRecv(..)
-                | HotShotEvent::ViewSyncFinalizeCertificate2Recv(_)
-                | HotShotEvent::QuorumVoteSend(_)
-                | HotShotEvent::QuorumProposalSend(_, _)
-                | HotShotEvent::Shutdown,
-        )
+    type Event = HotShotEvent<TYPES>;
+
+    async fn handle_event(
+        &mut self,
+        event: Arc<Self::Event>,
+        sender: &Sender<Arc<Self::Event>>,
+        _receiver: &Receiver<Arc<Self::Event>>,
+    ) -> Result<()> {
+        self.handle(event, sender.clone()).await;
+
+        Ok(())
     }
-    async fn handle_event(event: Self::Event, task: &mut Task<Self>) -> Option<()>
-    where
-        Self: Sized,
-    {
-        let sender = task.clone_sender();
-        tracing::trace!("sender queue len {}", sender.len());
-        task.state_mut().handle(event, sender).await;
-        None
-    }
-    fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event.as_ref(), HotShotEvent::Shutdown)
+
+    async fn cancel_subtasks(&mut self) {
+        while !self.spawned_tasks.is_empty() {
+            let Some((_, handles)) = self.spawned_tasks.pop_first() else {
+                break;
+            };
+
+            for handle in handles {
+                #[cfg(async_executor_impl = "async-std")]
+                handle.cancel().await;
+                #[cfg(async_executor_impl = "tokio")]
+                handle.abort();
+            }
+        }
     }
 }

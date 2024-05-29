@@ -50,19 +50,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: StaticVersionType> Create
             _phantom: PhantomData,
             id: handle.hotshot.id,
             shutdown_flag: Arc::new(AtomicBool::new(false)),
+            spawned_tasks: BTreeMap::new(),
         }
     }
 }
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
-    for UpgradeTaskState<TYPES, I, SystemContextHandle<TYPES, I>>
+    for UpgradeTaskState<TYPES, I>
 {
-    async fn create_from(
-        handle: &SystemContextHandle<TYPES, I>,
-    ) -> UpgradeTaskState<TYPES, I, SystemContextHandle<TYPES, I>> {
+    async fn create_from(handle: &SystemContextHandle<TYPES, I>) -> UpgradeTaskState<TYPES, I> {
         UpgradeTaskState {
-            api: handle.clone(),
+            output_event_stream: handle.hotshot.external_event_stream.0.clone(),
             cur_view: handle.cur_view().await,
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             quorum_network: Arc::clone(&handle.hotshot.networks.quorum_network),
@@ -98,14 +97,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
-    for DaTaskState<TYPES, I, SystemContextHandle<TYPES, I>>
+    for DaTaskState<TYPES, I>
 {
-    async fn create_from(
-        handle: &SystemContextHandle<TYPES, I>,
-    ) -> DaTaskState<TYPES, I, SystemContextHandle<TYPES, I>> {
+    async fn create_from(handle: &SystemContextHandle<TYPES, I>) -> DaTaskState<TYPES, I> {
         DaTaskState {
-            api: handle.clone(),
             consensus: handle.hotshot.consensus(),
+            output_event_stream: handle.hotshot.external_event_stream.0.clone(),
             da_membership: handle.hotshot.memberships.da_membership.clone().into(),
             da_network: Arc::clone(&handle.hotshot.networks.da_network),
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
@@ -121,11 +118,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
-    for ViewSyncTaskState<TYPES, I, SystemContextHandle<TYPES, I>>
+    for ViewSyncTaskState<TYPES, I>
 {
-    async fn create_from(
-        handle: &SystemContextHandle<TYPES, I>,
-    ) -> ViewSyncTaskState<TYPES, I, SystemContextHandle<TYPES, I>> {
+    async fn create_from(handle: &SystemContextHandle<TYPES, I>) -> ViewSyncTaskState<TYPES, I> {
         let cur_view = handle.cur_view().await;
         ViewSyncTaskState {
             current_view: cur_view,
@@ -139,7 +134,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
                 .into(),
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
-            api: handle.clone(),
             num_timeouts_tracked: 0,
             replica_task_map: HashMap::default().into(),
             pre_commit_relay_map: HashMap::default().into(),
@@ -154,14 +148,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
 
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType>
-    CreateTaskState<TYPES, I>
-    for TransactionTaskState<TYPES, I, SystemContextHandle<TYPES, I>, Ver>
+    CreateTaskState<TYPES, I> for TransactionTaskState<TYPES, I, Ver>
 {
     async fn create_from(
         handle: &SystemContextHandle<TYPES, I>,
-    ) -> TransactionTaskState<TYPES, I, SystemContextHandle<TYPES, I>, Ver> {
+    ) -> TransactionTaskState<TYPES, I, Ver> {
         TransactionTaskState {
-            api: handle.clone(),
+            builder_timeout: handle.builder_timeout(),
+            output_event_stream: handle.hotshot.external_event_stream.0.clone(),
             consensus: handle.hotshot.consensus(),
             cur_view: handle.cur_view().await,
             network: Arc::clone(&handle.hotshot.networks.quorum_network),

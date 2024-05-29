@@ -1,14 +1,16 @@
 use std::{collections::HashMap, sync::Arc};
 
+use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
+use async_trait::async_trait;
 use committable::Committable;
 use hotshot_task::{
     dependency::{AndDependency, EventDependency, OrDependency},
     dependency_task::{DependencyTask, HandleDepOutput},
-    task::{Task, TaskState},
+    task::TaskState,
 };
 use hotshot_types::{
     consensus::Consensus,
@@ -536,32 +538,27 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
     }
 }
 
+#[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for QuorumVoteTaskState<TYPES, I> {
-    type Event = Arc<HotShotEvent<TYPES>>;
-    type Output = ();
-    fn filter(&self, event: &Arc<HotShotEvent<TYPES>>) -> bool {
-        !matches!(
-            event.as_ref(),
-            HotShotEvent::DaCertificateRecv(_)
-                | HotShotEvent::VidShareRecv(..)
-                | HotShotEvent::QuorumVoteDependenciesValidated(_)
-                | HotShotEvent::VoteNow(..)
-                | HotShotEvent::QuorumProposalValidated(..)
-                | HotShotEvent::ValidatedStateUpdated(..)
-                | HotShotEvent::Shutdown,
-        )
+    type Event = HotShotEvent<TYPES>;
+
+    async fn handle_event(
+        &mut self,
+        event: Arc<Self::Event>,
+        sender: &Sender<Arc<Self::Event>>,
+        receiver: &Receiver<Arc<Self::Event>>,
+    ) -> Result<()> {
+        self.handle(event, receiver.clone(), sender.clone()).await;
+
+        Ok(())
     }
-    async fn handle_event(event: Self::Event, task: &mut Task<Self>) -> Option<()>
-    where
-        Self: Sized,
-    {
-        let receiver = task.subscribe();
-        let sender = task.clone_sender();
-        tracing::trace!("sender queue len {}", sender.len());
-        task.state_mut().handle(event, receiver, sender).await;
-        None
-    }
-    fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event.as_ref(), HotShotEvent::Shutdown)
+
+    async fn cancel_subtasks(&mut self) {
+        for handle in self.vote_dependencies.drain().map(|(_view, handle)| handle) {
+            #[cfg(async_executor_impl = "async-std")]
+            handle.cancel().await;
+            #[cfg(async_executor_impl = "tokio")]
+            handle.abort();
+        }
     }
 }

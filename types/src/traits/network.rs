@@ -245,7 +245,6 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
     async fn wait_for_ready(&self);
 
     /// Blocks until the network is shut down
-    /// then returns true
     fn shut_down<'a, 'b>(&'a self) -> BoxSyncFuture<'b, ()>
     where
         'a: 'b,

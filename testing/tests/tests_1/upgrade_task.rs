@@ -15,9 +15,9 @@ use hotshot_task_impls::{
     consensus::ConsensusTaskState, events::HotShotEvent::*, upgrade::UpgradeTaskState,
 };
 use hotshot_testing::{
+    helpers::vid_share,
     predicates::{event::*, upgrade::*},
     script::{Expectations, TaskScript},
-    helpers::vid_share,
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
@@ -33,8 +33,8 @@ use vbs::version::Version;
 /// Tests that we correctly update our internal consensus state when reaching a decided upgrade certificate.
 async fn test_consensus_task_upgrade() {
     use hotshot_testing::{
-        script::{run_test_script, TestScriptStage},
         helpers::build_system_handle,
+        script::{run_test_script, TestScriptStage},
     };
 
     async_compatibility_layer::logging::setup_logging();
@@ -118,9 +118,11 @@ async fn test_consensus_task_upgrade() {
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(3))),
-            quorum_proposal_validated(),
-            leaf_decided(),
-            exact(QuorumVoteSend(votes[2].clone())),
+            all_predicates(vec![
+                quorum_proposal_validated(),
+                leaf_decided(),
+                exact(QuorumVoteSend(votes[2].clone())),
+            ]),
         ],
         asserts: vec![no_decided_upgrade_cert()],
     };
@@ -133,9 +135,11 @@ async fn test_consensus_task_upgrade() {
         ],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(4))),
-            quorum_proposal_validated(),
-            leaf_decided(),
-            exact(QuorumVoteSend(votes[3].clone())),
+            all_predicates(vec![
+                quorum_proposal_validated(),
+                leaf_decided(),
+                exact(QuorumVoteSend(votes[3].clone())),
+            ]),
         ],
         asserts: vec![no_decided_upgrade_cert()],
     };
@@ -144,9 +148,7 @@ async fn test_consensus_task_upgrade() {
         inputs: vec![QuorumProposalRecv(proposals[4].clone(), leaders[4])],
         outputs: vec![
             exact(ViewChange(ViewNumber::new(5))),
-            quorum_proposal_validated(),
-            upgrade_decided(),
-            leaf_decided(),
+            all_predicates(vec![quorum_proposal_validated(), upgrade_decided(), leaf_decided()]),
         ],
         asserts: vec![decided_upgrade_cert()],
     };
@@ -225,12 +227,7 @@ async fn test_upgrade_and_consensus_task() {
         .map(|h| views[2].create_upgrade_vote(upgrade_data.clone(), &h.0));
 
     let consensus_state = ConsensusTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
-    let mut upgrade_state = UpgradeTaskState::<
-        TestTypes,
-        MemoryImpl,
-        SystemContextHandle<TestTypes, MemoryImpl>,
-    >::create_from(&handle)
-    .await;
+    let mut upgrade_state = UpgradeTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
 
     upgrade_state.should_vote = |_| true;
 
@@ -261,7 +258,8 @@ async fn test_upgrade_and_consensus_task() {
         ],
     ];
 
-    let consensus_script = TaskScript {
+    let mut consensus_script = TaskScript {
+        timeout: Duration::from_millis(35),
         state: consensus_state,
         expectations: vec![
             Expectations {
@@ -291,7 +289,8 @@ async fn test_upgrade_and_consensus_task() {
         ],
     };
 
-    let upgrade_script = TaskScript {
+    let mut upgrade_script = TaskScript {
+        timeout: Duration::from_millis(35),
         state: upgrade_state,
         expectations: vec![
             Expectations {
@@ -313,7 +312,7 @@ async fn test_upgrade_and_consensus_task() {
         ],
     };
 
-    test_scripts![inputs, consensus_script, upgrade_script];
+    test_scripts![inputs, consensus_script, upgrade_script].await;
 }
 
 #[cfg(not(feature = "dependency-tasks"))]
@@ -418,12 +417,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
     }
 
     let consensus_state = ConsensusTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
-    let mut upgrade_state = UpgradeTaskState::<
-        TestTypes,
-        MemoryImpl,
-        SystemContextHandle<TestTypes, MemoryImpl>,
-    >::create_from(&handle)
-    .await;
+    let mut upgrade_state = UpgradeTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
 
     upgrade_state.should_vote = |_| true;
 
@@ -507,7 +501,8 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
         ],
     ];
 
-    let consensus_script = TaskScript {
+    let mut consensus_script = TaskScript {
+        timeout: Duration::from_millis(35),
         state: consensus_state,
         expectations: vec![
             Expectations {
@@ -571,7 +566,8 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
         ],
     };
 
-    let upgrade_script = TaskScript {
+    let mut upgrade_script = TaskScript {
+        timeout: Duration::from_millis(35),
         state: upgrade_state,
         expectations: vec![
             Expectations {
@@ -605,5 +601,5 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
         ],
     };
 
-    test_scripts![inputs, consensus_script, upgrade_script];
+    test_scripts![inputs, consensus_script, upgrade_script].await;
 }

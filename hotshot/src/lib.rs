@@ -26,14 +26,16 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use committable::Committable;
 use futures::join;
-use hotshot_task::task::TaskRegistry;
+use hotshot_task::task::{ConsensusTaskRegistry, NetworkTaskRegistry};
 use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event, network};
 // Internal
 /// Reexport error type
 pub use hotshot_types::error::HotShotError;
 use hotshot_types::{
     consensus::{Consensus, ConsensusMetricsValue, View, ViewInner},
-    constants::{BASE_VERSION, EVENT_CHANNEL_SIZE, EXTERNAL_EVENT_CHANNEL_SIZE, STATIC_VER_0_1},
+    constants::{
+        Version01, BASE_VERSION, EVENT_CHANNEL_SIZE, EXTERNAL_EVENT_CHANNEL_SIZE, STATIC_VER_0_1,
+    },
     data::Leaf,
     event::{EventType, LeafInfo},
     message::{DataMessage, Message, MessageKind},
@@ -53,22 +55,12 @@ use hotshot_types::{
 // External
 /// Reexport rand crate
 pub use rand;
-use tasks::{add_request_network_task, add_response_task, add_vid_task};
+use tasks::{add_request_network_task, add_response_task};
 use tracing::{debug, instrument, trace};
 use vbs::version::Version;
 
-#[cfg(not(feature = "dependency-tasks"))]
-use crate::tasks::add_consensus_task;
-#[cfg(feature = "dependency-tasks")]
-use crate::tasks::{
-    add_consensus2_task, add_quorum_proposal_recv_task, add_quorum_proposal_task,
-    add_quorum_vote_task,
-};
 use crate::{
-    tasks::{
-        add_da_task, add_network_event_task, add_network_message_task, add_transaction_task,
-        add_upgrade_task, add_view_sync_task,
-    },
+    tasks::{add_consensus_tasks, add_network_event_task, add_network_message_task},
     traits::NodeImplementation,
     types::{Event, SystemContextHandle},
 };
@@ -561,8 +553,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// For a list of which tasks are being spawned, see this module's documentation.
     #[allow(clippy::too_many_lines)]
     pub async fn run_tasks(&self) -> SystemContextHandle<TYPES, I> {
-        // ED Need to set first first number to 1, or properly trigger the change upon start
-        let registry = Arc::new(TaskRegistry::default());
+        let consensus_registry = ConsensusTaskRegistry::new();
+        let network_registry = NetworkTaskRegistry::new();
 
         let output_event_stream = self.external_event_stream.clone();
         let internal_event_stream = self.internal_event_stream.clone();
@@ -574,171 +566,60 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let vid_membership = self.memberships.vid_membership.clone();
         let view_sync_membership = self.memberships.view_sync_membership.clone();
 
-        let (event_tx, event_rx) = internal_event_stream.clone();
-
-        let handle = SystemContextHandle {
-            registry: Arc::clone(&registry),
+        let mut handle = SystemContextHandle {
+            consensus_registry,
+            network_registry,
             output_event_stream: output_event_stream.clone(),
             internal_event_stream: internal_event_stream.clone(),
             hotshot: self.clone().into(),
             storage: Arc::clone(&self.storage),
         };
 
-        add_network_message_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            Arc::clone(&quorum_network),
-        )
-        .await;
-        add_network_message_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            Arc::clone(&da_network),
-        )
-        .await;
+        add_network_message_task(&mut handle, Arc::clone(&quorum_network)).await;
+        add_network_message_task(&mut handle, Arc::clone(&da_network)).await;
 
-        if let Some(request_rx) = da_network.spawn_request_receiver_task(STATIC_VER_0_1).await {
-            add_response_task(
-                Arc::clone(&registry),
-                event_rx.activate_cloned(),
-                request_rx,
-                &handle,
-            )
-            .await;
-            add_request_network_task(
-                Arc::clone(&registry),
-                event_tx.clone(),
-                event_rx.activate_cloned(),
-                &handle,
-            )
-            .await;
+        if let Some(request_receiver) = da_network.spawn_request_receiver_task(STATIC_VER_0_1).await
+        {
+            add_response_task(&mut handle, request_receiver).await;
+            add_request_network_task(&mut handle).await;
         }
 
         add_network_event_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
+            &mut handle,
             Arc::clone(&quorum_network),
             quorum_membership.clone(),
             network::quorum_filter,
-            Arc::clone(&handle.storage()),
         )
         .await;
         add_network_event_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
+            &mut handle,
             Arc::clone(&quorum_network),
             quorum_membership,
             network::upgrade_filter,
-            Arc::clone(&handle.storage()),
         )
         .await;
         add_network_event_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
+            &mut handle,
             Arc::clone(&da_network),
             da_membership,
             network::da_filter,
-            Arc::clone(&handle.storage()),
         )
         .await;
         add_network_event_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
+            &mut handle,
             Arc::clone(&quorum_network),
             view_sync_membership,
             network::view_sync_filter,
-            Arc::clone(&handle.storage()),
         )
         .await;
         add_network_event_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
+            &mut handle,
             Arc::clone(&quorum_network),
             vid_membership,
             network::vid_filter,
-            Arc::clone(&handle.storage()),
         )
         .await;
-        #[cfg(not(feature = "dependency-tasks"))]
-        add_consensus_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
-            &handle,
-        )
-        .await;
-        add_da_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
-            &handle,
-        )
-        .await;
-        add_vid_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
-            &handle,
-        )
-        .await;
-        add_transaction_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
-            &handle,
-        )
-        .await;
-        add_view_sync_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
-            &handle,
-        )
-        .await;
-        add_upgrade_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
-            &handle,
-        )
-        .await;
-        #[cfg(feature = "dependency-tasks")]
-        add_quorum_proposal_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
-            &handle,
-        )
-        .await;
-        #[cfg(feature = "dependency-tasks")]
-        add_quorum_vote_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
-            &handle,
-        )
-        .await;
-        #[cfg(feature = "dependency-tasks")]
-        add_quorum_proposal_recv_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
-            &handle,
-        )
-        .await;
-        #[cfg(feature = "dependency-tasks")]
-        add_consensus2_task(
-            Arc::clone(&registry),
-            event_tx.clone(),
-            event_rx.activate_cloned(),
-            &handle,
-        )
-        .await;
+        add_consensus_tasks::<TYPES, I, Version01>(&mut handle).await;
         handle
     }
 }

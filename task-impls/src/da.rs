@@ -1,11 +1,13 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use async_broadcast::Sender;
+use anyhow::Result;
+use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::spawn_blocking;
-use hotshot_task::task::{Task, TaskState};
+use async_trait::async_trait;
+use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::{Consensus, View},
     data::DaProposal,
@@ -15,7 +17,6 @@ use hotshot_types::{
     simple_vote::{DaData, DaVote},
     traits::{
         block_contents::vid_commitment,
-        consensus_api::ConsensusApi,
         election::Membership,
         network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
@@ -42,13 +43,9 @@ use crate::{
 type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>;
 
 /// Tracks state of a DA task
-pub struct DaTaskState<
-    TYPES: NodeType,
-    I: NodeImplementation<TYPES>,
-    A: ConsensusApi<TYPES, I> + 'static,
-> {
-    /// The state's api
-    pub api: A,
+pub struct DaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+    /// Output events to application
+    pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
 
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
@@ -83,9 +80,7 @@ pub struct DaTaskState<
     pub storage: Arc<RwLock<I::Storage>>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static>
-    DaTaskState<TYPES, I, A>
-{
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "DA Main Task", level = "error")]
     pub async fn handle(
@@ -152,15 +147,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     return None;
                 }
                 // Proposal is fresh and valid, notify the application layer
-                self.api
-                    .send_event(Event {
+                broadcast_event(
+                    Event {
                         view_number: self.cur_view,
                         event: EventType::DaProposal {
                             proposal: proposal.clone(),
                             sender: sender.clone(),
                         },
-                    })
-                    .await;
+                    },
+                    &self.output_event_stream,
+                )
+                .await;
 
                 if !self.da_membership.has_stake(&self.public_key) {
                     debug!(
@@ -262,7 +259,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                     let result = collector
                         .as_mut()
                         .unwrap()
-                        .handle_event(Arc::clone(&event), &event_stream)
+                        .handle_vote_event(Arc::clone(&event), &event_stream)
                         .await;
 
                     if result == Some(HotShotTaskCompleted) {
@@ -332,43 +329,27 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 
                 error!("Shutting down because of shutdown signal!");
                 return Some(HotShotTaskCompleted);
             }
-            _ => {
-                error!("unexpected event {:?}", event);
-            }
+            _ => {}
         }
         None
     }
 }
 
+#[async_trait]
 /// task state implementation for DA Task
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, A: ConsensusApi<TYPES, I> + 'static> TaskState
-    for DaTaskState<TYPES, I, A>
-{
-    type Event = Arc<HotShotEvent<TYPES>>;
-
-    type Output = HotShotTaskCompleted;
-
-    fn filter(&self, event: &Arc<HotShotEvent<TYPES>>) -> bool {
-        !matches!(
-            event.as_ref(),
-            HotShotEvent::DaProposalRecv(_, _)
-                | HotShotEvent::DaVoteRecv(_)
-                | HotShotEvent::Shutdown
-                | HotShotEvent::BlockRecv(_, _, _, _, _)
-                | HotShotEvent::ViewChange(_)
-                | HotShotEvent::DaProposalValidated(_, _)
-        )
-    }
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for DaTaskState<TYPES, I> {
+    type Event = HotShotEvent<TYPES>;
 
     async fn handle_event(
-        event: Self::Event,
-        task: &mut Task<Self>,
-    ) -> Option<HotShotTaskCompleted> {
-        let sender = task.clone_sender();
-        task.state_mut().handle(event, sender).await
+        &mut self,
+        event: Arc<Self::Event>,
+        sender: &Sender<Arc<Self::Event>>,
+        _receiver: &Receiver<Arc<Self::Event>>,
+    ) -> Result<()> {
+        self.handle(event, sender.clone()).await;
+
+        Ok(())
     }
 
-    fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event.as_ref(), HotShotEvent::Shutdown)
-    }
+    async fn cancel_subtasks(&mut self) {}
 }

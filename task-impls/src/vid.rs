@@ -1,8 +1,10 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use async_broadcast::Sender;
+use anyhow::Result;
+use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
-use hotshot_task::task::{Task, TaskState};
+use async_trait::async_trait;
+use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::Consensus,
     data::{VidDisperse, VidDisperseShare},
@@ -25,7 +27,6 @@ use crate::{
 pub struct VidTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
-
     /// Reference to consensus. Leader will require a read lock on this.
     pub consensus: Arc<RwLock<Consensus<TYPES>>>,
     /// Network for all nodes
@@ -146,38 +147,26 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> VidTaskState<TYPES, I> {
             HotShotEvent::Shutdown => {
                 return Some(HotShotTaskCompleted);
             }
-            _ => {
-                error!("unexpected event {:?}", event);
-            }
+            _ => {}
         }
         None
     }
 }
 
+#[async_trait]
 /// task state implementation for VID Task
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for VidTaskState<TYPES, I> {
-    type Event = Arc<HotShotEvent<TYPES>>;
-
-    type Output = HotShotTaskCompleted;
+    type Event = HotShotEvent<TYPES>;
 
     async fn handle_event(
-        event: Self::Event,
-        task: &mut Task<Self>,
-    ) -> Option<HotShotTaskCompleted> {
-        let sender = task.clone_sender();
-        task.state_mut().handle(event, sender).await;
-        None
+        &mut self,
+        event: Arc<Self::Event>,
+        sender: &Sender<Arc<Self::Event>>,
+        _receiver: &Receiver<Arc<Self::Event>>,
+    ) -> Result<()> {
+        self.handle(event, sender.clone()).await;
+        Ok(())
     }
-    fn filter(&self, event: &Self::Event) -> bool {
-        !matches!(
-            event.as_ref(),
-            HotShotEvent::Shutdown
-                | HotShotEvent::BlockRecv(_, _, _, _, _)
-                | HotShotEvent::BlockReady(_, _)
-                | HotShotEvent::ViewChange(_)
-        )
-    }
-    fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event.as_ref(), HotShotEvent::Shutdown)
-    }
+
+    async fn cancel_subtasks(&mut self) {}
 }

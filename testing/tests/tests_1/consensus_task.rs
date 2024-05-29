@@ -11,13 +11,14 @@ use hotshot_example_types::{
 };
 use hotshot_task_impls::{consensus::ConsensusTaskState, events::HotShotEvent::*};
 use hotshot_testing::{
+    helpers::{
+        build_system_handle, key_pair_for_id, permute_input_with_index_order,
+        vid_scheme_from_view_number, vid_share,
+    },
     predicates::event::{
         exact, quorum_proposal_send, quorum_proposal_validated, quorum_vote_send, timeout_vote_send,
     },
     script::{run_test_script, TestScriptStage},
-    helpers::{
-        build_system_handle, vid_share, key_pair_for_id, vid_scheme_from_view_number, permute_input_with_index_order
-    },
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
@@ -121,8 +122,8 @@ async fn test_consensus_vote() {
     use hotshot::tasks::task_state::CreateTaskState;
     use hotshot_task_impls::{consensus::ConsensusTaskState, events::HotShotEvent::*};
     use hotshot_testing::{
-        script::{run_test_script, TestScriptStage},
         helpers::build_system_handle,
+        script::{run_test_script, TestScriptStage},
         view_generator::TestViewGenerator,
     };
 

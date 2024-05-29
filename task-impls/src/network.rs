@@ -1,9 +1,11 @@
 use std::{collections::HashMap, sync::Arc};
 
-use async_broadcast::Sender;
+use anyhow::Result;
+use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
-use hotshot_task::task::{Task, TaskState};
+use async_trait::async_trait;
+use hotshot_task::task::TaskState;
 use hotshot_types::{
     constants::{BASE_VERSION, STATIC_VER_0_1},
     data::{VidDisperse, VidDisperseShare},
@@ -20,7 +22,7 @@ use hotshot_types::{
     },
     vote::{HasViewNumber, Vote},
 };
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 use vbs::version::Version;
 
 use crate::{
@@ -77,27 +79,6 @@ pub fn view_sync_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bo
 pub struct NetworkMessageTaskState<TYPES: NodeType> {
     /// Sender to send internal events this task generates to other tasks
     pub event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
-}
-
-impl<TYPES: NodeType> TaskState for NetworkMessageTaskState<TYPES> {
-    type Event = Vec<Message<TYPES>>;
-    type Output = ();
-
-    async fn handle_event(event: Self::Event, task: &mut Task<Self>) -> Option<()>
-    where
-        Self: Sized,
-    {
-        task.state_mut().handle_messages(event).await;
-        None
-    }
-
-    fn filter(&self, _event: &Self::Event) -> bool {
-        false
-    }
-
-    fn should_shutdown(_event: &Self::Event) -> bool {
-        false
-    }
 }
 
 impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
@@ -212,41 +193,31 @@ pub struct NetworkEventTaskState<
     pub storage: Arc<RwLock<S>>,
 }
 
+#[async_trait]
 impl<
         TYPES: NodeType,
         COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
         S: Storage<TYPES> + 'static,
     > TaskState for NetworkEventTaskState<TYPES, COMMCHANNEL, S>
 {
-    type Event = Arc<HotShotEvent<TYPES>>;
-
-    type Output = HotShotTaskCompleted;
+    type Event = HotShotEvent<TYPES>;
 
     async fn handle_event(
-        event: Self::Event,
-        task: &mut Task<Self>,
-    ) -> Option<HotShotTaskCompleted> {
-        let membership = task.state_mut().membership.clone();
-        task.state_mut().handle_event(event, &membership).await
-    }
+        &mut self,
+        event: Arc<Self::Event>,
+        _sender: &Sender<Arc<Self::Event>>,
+        _receiver: &Receiver<Arc<Self::Event>>,
+    ) -> Result<()> {
+        let membership = self.membership.clone();
 
-    fn should_shutdown(event: &Self::Event) -> bool {
-        if matches!(event.as_ref(), HotShotEvent::Shutdown) {
-            info!("Network Task received Shutdown event");
-            return true;
+        if !(self.filter)(&event) {
+            self.handle(event, &membership).await;
         }
-        false
+
+        Ok(())
     }
 
-    fn filter(&self, event: &Self::Event) -> bool {
-        (self.filter)(event)
-            && !matches!(
-                event.as_ref(),
-                HotShotEvent::VersionUpgrade(_)
-                    | HotShotEvent::ViewChange(_)
-                    | HotShotEvent::Shutdown
-            )
-    }
+    async fn cancel_subtasks(&mut self) {}
 }
 
 impl<
@@ -260,7 +231,7 @@ impl<
     /// Returns the completion status.
     #[allow(clippy::too_many_lines)] // TODO https://github.com/EspressoSystems/HotShot/issues/1704
     #[instrument(skip_all, fields(view = *self.view), name = "Network Task", level = "error")]
-    pub async fn handle_event(
+    pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         membership: &TYPES::Membership,

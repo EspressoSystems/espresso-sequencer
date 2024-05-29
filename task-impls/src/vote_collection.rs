@@ -3,7 +3,6 @@ use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
 use async_broadcast::Sender;
 use async_trait::async_trait;
 use either::Either::{self, Left, Right};
-use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
     simple_certificate::{
         DaCertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
@@ -105,36 +104,6 @@ impl<
     }
 }
 
-impl<
-        TYPES: NodeType,
-        VOTE: Vote<TYPES>
-            + AggregatableVote<TYPES, VOTE, CERT>
-            + std::marker::Send
-            + std::marker::Sync
-            + 'static,
-        CERT: Certificate<TYPES, Voteable = VOTE::Commitment>
-            + Debug
-            + std::marker::Send
-            + std::marker::Sync
-            + 'static,
-    > TaskState for VoteCollectionTaskState<TYPES, VOTE, CERT>
-where
-    VoteCollectionTaskState<TYPES, VOTE, CERT>: HandleVoteEvent<TYPES, VOTE, CERT>,
-{
-    type Event = Arc<HotShotEvent<TYPES>>;
-
-    type Output = HotShotTaskCompleted;
-
-    async fn handle_event(event: Self::Event, task: &mut Task<Self>) -> Option<Self::Output> {
-        let sender = task.clone_sender();
-        task.state_mut().handle_event(event, &sender).await
-    }
-
-    fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event.as_ref(), HotShotEvent::Shutdown)
-    }
-}
-
 /// Trait for types which will handle a vote event.
 #[async_trait]
 pub trait HandleVoteEvent<TYPES, VOTE, CERT>
@@ -144,7 +113,7 @@ where
     CERT: Certificate<TYPES, Voteable = VOTE::Commitment> + Debug,
 {
     /// Handle a vote event
-    async fn handle_event(
+    async fn handle_vote_event(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,
@@ -211,7 +180,7 @@ where
         id: info.id,
     };
 
-    let result = state.handle_event(Arc::clone(&event), sender).await;
+    let result = state.handle_vote_event(Arc::clone(&event), sender).await;
 
     if result == Some(HotShotTaskCompleted) {
         // The protocol has finished
@@ -354,7 +323,7 @@ impl<TYPES: NodeType>
 impl<TYPES: NodeType> HandleVoteEvent<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>
     for QuorumVoteState<TYPES>
 {
-    async fn handle_event(
+    async fn handle_vote_event(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,
@@ -374,7 +343,7 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, QuorumVote<TYPES>, QuorumCertificat
 impl<TYPES: NodeType> HandleVoteEvent<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>>
     for UpgradeVoteState<TYPES>
 {
-    async fn handle_event(
+    async fn handle_vote_event(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,
@@ -393,7 +362,7 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, UpgradeVote<TYPES>, UpgradeCertific
 impl<TYPES: NodeType> HandleVoteEvent<TYPES, DaVote<TYPES>, DaCertificate<TYPES>>
     for DaVoteState<TYPES>
 {
-    async fn handle_event(
+    async fn handle_vote_event(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,
@@ -412,7 +381,7 @@ impl<TYPES: NodeType> HandleVoteEvent<TYPES, DaVote<TYPES>, DaCertificate<TYPES>
 impl<TYPES: NodeType> HandleVoteEvent<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>
     for TimeoutVoteState<TYPES>
 {
-    async fn handle_event(
+    async fn handle_vote_event(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,
@@ -432,7 +401,7 @@ impl<TYPES: NodeType>
     HandleVoteEvent<TYPES, ViewSyncPreCommitVote<TYPES>, ViewSyncPreCommitCertificate2<TYPES>>
     for ViewSyncPreCommitState<TYPES>
 {
-    async fn handle_event(
+    async fn handle_vote_event(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,
@@ -454,7 +423,7 @@ impl<TYPES: NodeType>
     HandleVoteEvent<TYPES, ViewSyncCommitVote<TYPES>, ViewSyncCommitCertificate2<TYPES>>
     for ViewSyncCommitVoteState<TYPES>
 {
-    async fn handle_event(
+    async fn handle_vote_event(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,
@@ -474,7 +443,7 @@ impl<TYPES: NodeType>
     HandleVoteEvent<TYPES, ViewSyncFinalizeVote<TYPES>, ViewSyncFinalizeCertificate2<TYPES>>
     for ViewSyncFinalizeVoteState<TYPES>
 {
-    async fn handle_event(
+    async fn handle_vote_event(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         sender: &Sender<Arc<HotShotEvent<TYPES>>>,

@@ -2,10 +2,12 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use async_broadcast::Sender;
+use anyhow::Result;
+use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
+use async_trait::async_trait;
 use futures::future::join_all;
 use hotshot_task::task::{Task, TaskState};
 use hotshot_types::{
@@ -190,28 +192,35 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
     }
 }
 
+#[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState
     for QuorumProposalRecvTaskState<TYPES, I>
 {
-    type Event = Arc<HotShotEvent<TYPES>>;
-    type Output = ();
-    fn filter(&self, event: &Arc<HotShotEvent<TYPES>>) -> bool {
-        !matches!(
-            event.as_ref(),
-            HotShotEvent::QuorumProposalRecv(..) | HotShotEvent::Shutdown
-        )
+    type Event = HotShotEvent<TYPES>;
+
+    async fn handle_event(
+        &mut self,
+        event: Arc<Self::Event>,
+        sender: &Sender<Arc<Self::Event>>,
+        _receiver: &Receiver<Arc<Self::Event>>,
+    ) -> Result<()> {
+        self.handle(event, sender.clone()).await;
+
+        Ok(())
     }
 
-    async fn handle_event(event: Self::Event, task: &mut Task<Self>) -> Option<()>
-    where
-        Self: Sized,
-    {
-        let sender = task.clone_sender();
-        task.state_mut().handle(event, sender).await;
-        None
-    }
+    async fn cancel_subtasks(&mut self) {
+        while !self.spawned_tasks.is_empty() {
+            let Some((_, handles)) = self.spawned_tasks.pop_first() else {
+                break;
+            };
 
-    fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event.as_ref(), HotShotEvent::Shutdown)
+            for handle in handles {
+                #[cfg(async_executor_impl = "async-std")]
+                handle.cancel().await;
+                #[cfg(async_executor_impl = "tokio")]
+                handle.abort();
+            }
+        }
     }
 }

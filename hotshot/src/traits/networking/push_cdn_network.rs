@@ -4,9 +4,9 @@ use std::{collections::BTreeSet, marker::PhantomData};
 #[cfg(feature = "hotshot-testing")]
 use std::{path::Path, sync::Arc, time::Duration};
 
+use async_compatibility_layer::channel::UnboundedSendError;
 #[cfg(feature = "hotshot-testing")]
-use async_compatibility_layer::art::async_spawn;
-use async_compatibility_layer::{art::async_sleep, channel::UnboundedSendError};
+use async_compatibility_layer::{art::async_sleep, art::async_spawn};
 use async_trait::async_trait;
 use bincode::config::Options;
 use cdn_broker::reexports::{

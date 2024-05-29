@@ -1,14 +1,16 @@
 use std::{collections::HashMap, sync::Arc};
 
+use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
+use async_trait::async_trait;
 use either::Either;
 use hotshot_task::{
     dependency::{AndDependency, EventDependency, OrDependency},
     dependency_task::DependencyTask,
-    task::{Task, TaskState},
+    task::TaskState,
 };
 use hotshot_types::{
     consensus::Consensus,
@@ -534,36 +536,33 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
     }
 }
 
+#[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState
     for QuorumProposalTaskState<TYPES, I>
 {
-    type Event = Arc<HotShotEvent<TYPES>>;
-    type Output = ();
-    fn filter(&self, event: &Self::Event) -> bool {
-        !matches!(
-            event.as_ref(),
-            HotShotEvent::QuorumProposalValidated(..)
-                | HotShotEvent::QcFormed(_)
-                | HotShotEvent::SendPayloadCommitmentAndMetadata(..)
-                | HotShotEvent::ViewSyncFinalizeCertificate2Recv(_)
-                | HotShotEvent::QuorumProposalLivenessValidated(..)
-                | HotShotEvent::QuorumProposalSend(..)
-                | HotShotEvent::VidShareValidated(_)
-                | HotShotEvent::ValidatedStateUpdated(..)
-                | HotShotEvent::UpdateHighQc(_)
-                | HotShotEvent::Shutdown
-        )
+    type Event = HotShotEvent<TYPES>;
+
+    async fn handle_event(
+        &mut self,
+        event: Arc<Self::Event>,
+        sender: &Sender<Arc<Self::Event>>,
+        receiver: &Receiver<Arc<Self::Event>>,
+    ) -> Result<()> {
+        self.handle(event, receiver.clone(), sender.clone()).await;
+
+        Ok(())
     }
-    async fn handle_event(event: Self::Event, task: &mut Task<Self>) -> Option<()>
-    where
-        Self: Sized,
-    {
-        let receiver = task.subscribe();
-        let sender = task.clone_sender();
-        task.state_mut().handle(event, receiver, sender).await;
-        None
-    }
-    fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event.as_ref(), HotShotEvent::Shutdown)
+
+    async fn cancel_subtasks(&mut self) {
+        for handle in self
+            .propose_dependencies
+            .drain()
+            .map(|(_view, handle)| handle)
+        {
+            #[cfg(async_executor_impl = "async-std")]
+            handle.cancel().await;
+            #[cfg(async_executor_impl = "tokio")]
+            handle.abort();
+        }
     }
 }

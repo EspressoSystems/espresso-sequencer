@@ -30,6 +30,9 @@ pub mod completion_task;
 /// task to spin nodes up and down
 pub mod spinning_task;
 
+/// the `TestTask` struct and associated trait/functions
+pub mod test_task;
+
 /// task for checking if view sync got activated
 pub mod view_sync_task;
 
@@ -44,10 +47,3 @@ pub mod script;
 
 /// view generator for tests
 pub mod view_generator;
-
-/// global event at the test level
-#[derive(Clone, Debug)]
-pub enum GlobalTestEvent {
-    /// the test is shutting down
-    ShutDown,
-}

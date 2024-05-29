@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use async_broadcast::broadcast;
 use async_compatibility_layer::art::async_timeout;
-use hotshot_task::task::{Task, TaskRegistry, TaskState};
+use hotshot_task::task::{ConsensusTaskRegistry, Task, TaskState};
 use hotshot_types::traits::node_implementation::NodeType;
 
 use crate::events::{HotShotEvent, HotShotTaskCompleted};
@@ -13,23 +13,6 @@ pub struct TestHarnessState<TYPES: NodeType> {
     expected_output: Vec<HotShotEvent<TYPES>>,
     /// If true we won't fail the test if extra events come in
     allow_extra_output: bool,
-}
-
-impl<TYPES: NodeType> TaskState for TestHarnessState<TYPES> {
-    type Event = Arc<HotShotEvent<TYPES>>;
-    type Output = HotShotTaskCompleted;
-
-    async fn handle_event(
-        event: Self::Event,
-        task: &mut Task<Self>,
-    ) -> Option<HotShotTaskCompleted> {
-        let extra = task.state_mut().allow_extra_output;
-        handle_event(event, task, extra)
-    }
-
-    fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event.as_ref(), HotShotEvent::Shutdown)
-    }
 }
 
 /// Runs a test by building the task using `build_fn` and then passing it the `input` events
@@ -44,7 +27,7 @@ impl<TYPES: NodeType> TaskState for TestHarnessState<TYPES> {
 /// Panics if any state the test expects is not set. Panicking causes a test failure
 #[allow(clippy::implicit_hasher)]
 #[allow(clippy::panic)]
-pub async fn run_harness<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>>> + Send + 'static>(
+pub async fn run_harness<TYPES, S: TaskState<Event = HotShotEvent<TYPES>> + Send + 'static>(
     input: Vec<HotShotEvent<TYPES>>,
     expected_output: Vec<HotShotEvent<TYPES>>,
     state: S,
@@ -52,37 +35,35 @@ pub async fn run_harness<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>>> +
 ) where
     TYPES: NodeType,
 {
-    let registry = Arc::new(TaskRegistry::default());
-    let mut tasks = vec![];
+    let mut registry = ConsensusTaskRegistry::new();
     // set up two broadcast channels so the test sends to the task and the task back to the test
     let (to_task, from_test) = broadcast(1024);
-    let (to_test, from_task) = broadcast(1024);
-    let test_state = TestHarnessState {
+    let (to_test, mut from_task) = broadcast(1024);
+    let mut test_state = TestHarnessState {
         expected_output,
         allow_extra_output,
     };
 
-    let test_task = Task::new(
-        to_test.clone(),
-        from_task.clone(),
-        Arc::clone(&registry),
-        test_state,
-    );
-    let task = Task::new(
-        to_test.clone(),
-        from_test.clone(),
-        Arc::clone(&registry),
-        state,
-    );
+    let task = Task::new(state, to_test.clone(), from_test.clone());
 
-    tasks.push(test_task.run());
-    tasks.push(task.run());
+    let handle = task.run();
+    let test_future = async move {
+        loop {
+            if let Ok(event) = from_task.recv_direct().await {
+                if let Some(HotShotTaskCompleted) = check_event(event, &mut test_state) {
+                    break;
+                }
+            }
+        }
+    };
+
+    registry.register(handle);
 
     for event in input {
         to_task.broadcast_direct(Arc::new(event)).await.unwrap();
     }
 
-    if async_timeout(Duration::from_secs(2), futures::future::join_all(tasks))
+    if async_timeout(Duration::from_secs(2), test_future)
         .await
         .is_err()
     {
@@ -100,16 +81,14 @@ pub async fn run_harness<TYPES, S: TaskState<Event = Arc<HotShotEvent<TYPES>>> +
 ///  # Panics
 /// Will panic to fail the test when it receives and unexpected event
 #[allow(clippy::needless_pass_by_value)]
-pub fn handle_event<TYPES: NodeType>(
+fn check_event<TYPES: NodeType>(
     event: Arc<HotShotEvent<TYPES>>,
-    task: &mut Task<TestHarnessState<TYPES>>,
-    allow_extra_output: bool,
+    state: &mut TestHarnessState<TYPES>,
 ) -> Option<HotShotTaskCompleted> {
-    let state = task.state_mut();
     // Check the output in either case:
     // * We allow outputs only in our expected output set.
     // * We haven't received all expected outputs yet.
-    if !allow_extra_output || !state.expected_output.is_empty() {
+    if !state.allow_extra_output || !state.expected_output.is_empty() {
         assert!(
             state.expected_output.contains(&event),
             "Got an unexpected event: {event:?}",

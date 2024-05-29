@@ -14,6 +14,7 @@ dependency-tasks = ["hotshot/dependency-tasks"]
 
 [dependencies]
 automod = "1.0.14"
+anyhow = { workspace = true }
 async-broadcast = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-lock = { workspace = true }

@@ -1,7 +1,8 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_spawn, async_timeout};
+use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use hotshot::traits::TestableNodeImplementation;
@@ -11,8 +12,7 @@ use snafu::Snafu;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 
-use super::GlobalTestEvent;
-use crate::test_runner::{HotShotTaskCompleted, Node};
+use crate::{test_runner::Node, test_task::TestEvent};
 
 /// the idea here is to run as long as we want
 
@@ -22,33 +22,33 @@ pub struct CompletionTaskErr {}
 
 /// Completion task state
 pub struct CompletionTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
-    pub tx: Sender<GlobalTestEvent>,
+    pub tx: Sender<TestEvent>,
 
-    pub rx: Receiver<GlobalTestEvent>,
+    pub rx: Receiver<TestEvent>,
     /// handles to the nodes in the test
-    pub(crate) handles: Vec<Node<TYPES, I>>,
+    pub(crate) handles: Arc<RwLock<Vec<Node<TYPES, I>>>>,
     /// Duration of the task.
     pub duration: Duration,
 }
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> CompletionTask<TYPES, I> {
-    pub fn run(mut self) -> JoinHandle<HotShotTaskCompleted> {
+    pub fn run(mut self) -> JoinHandle<()> {
         async_spawn(async move {
             if async_timeout(self.duration, self.wait_for_shutdown())
                 .await
                 .is_err()
             {
-                broadcast_event(GlobalTestEvent::ShutDown, &self.tx).await;
+                broadcast_event(TestEvent::Shutdown, &self.tx).await;
             }
-            for node in &self.handles {
-                node.handle.clone().shut_down().await;
+
+            for node in &mut self.handles.write().await.iter_mut() {
+                node.handle.shut_down().await;
             }
-            HotShotTaskCompleted::ShutDown
         })
     }
     async fn wait_for_shutdown(&mut self) {
         while let Ok(event) = self.rx.recv_direct().await {
-            if matches!(event, GlobalTestEvent::ShutDown) {
+            if matches!(event, TestEvent::Shutdown) {
                 tracing::error!("Completion Task shutting down");
                 return;
             }

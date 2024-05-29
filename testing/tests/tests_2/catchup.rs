@@ -12,6 +12,7 @@ async fn test_catchup() {
         spinning_task::{ChangeNode, SpinningTaskDescription, UpDown},
         test_builder::{TestDescription, TimingData},
     };
+
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
     let timing_data = TimingData {

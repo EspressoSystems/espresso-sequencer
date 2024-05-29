@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
-use async_broadcast::Sender;
+use anyhow::Result;
+use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
-use hotshot_task::task::{Task, TaskState};
+use async_trait::async_trait;
+use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::Consensus,
     event::Event,
@@ -141,31 +143,21 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Consensus2TaskState<TYPES, I
     }
 }
 
+#[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for Consensus2TaskState<TYPES, I> {
-    type Event = Arc<HotShotEvent<TYPES>>;
-    type Output = ();
+    type Event = HotShotEvent<TYPES>;
 
-    fn filter(&self, event: &Arc<HotShotEvent<TYPES>>) -> bool {
-        !matches!(
-            event.as_ref(),
-            HotShotEvent::QuorumVoteRecv(_)
-                | HotShotEvent::TimeoutVoteRecv(_)
-                | HotShotEvent::ViewChange(_)
-                | HotShotEvent::Timeout(_)
-                | HotShotEvent::LastDecidedViewUpdated(_)
-                | HotShotEvent::Shutdown
-        )
-    }
-    async fn handle_event(event: Self::Event, task: &mut Task<Self>) -> Option<()>
-    where
-        Self: Sized,
-    {
-        let sender = task.clone_sender();
-        task.state_mut().handle(event, sender).await;
-        None
+    async fn handle_event(
+        &mut self,
+        event: Arc<Self::Event>,
+        sender: &Sender<Arc<Self::Event>>,
+        _receiver: &Receiver<Arc<Self::Event>>,
+    ) -> Result<()> {
+        self.handle(event, sender.clone()).await;
+
+        Ok(())
     }
 
-    fn should_shutdown(event: &Self::Event) -> bool {
-        matches!(event.as_ref(), HotShotEvent::Shutdown)
-    }
+    /// Joins all subtasks.
+    async fn cancel_subtasks(&mut self) {}
 }
