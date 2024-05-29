@@ -92,7 +92,7 @@ pub struct Options {
     pub(crate) store_undecided_state: bool,
 
     // Specifies the maximum number of concurrent fetch requests allowed from peers.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_FETCH_RATE_LIMIT", hide = true)]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_FETCH_RATE_LIMIT")]
     pub(crate) fetch_rate_limit: Option<usize>,
 }
 
