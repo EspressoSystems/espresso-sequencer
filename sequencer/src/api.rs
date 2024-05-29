@@ -1062,12 +1062,14 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let mut state = ValidatedState::default();
         // ValidatedState only has the default chain config commitment.
         // NodeState also has the default ChainConfig.
         // Therefore, both commitments would match.
         // This would update the ValidatedState's chain config to NodeState's ChainConfig.
-        state.chain_config = ChainConfig::default().commit().into();
+        let state = ValidatedState {
+            chain_config: ChainConfig::default().commit().into(),
+            ..Default::default()
+        };
 
         // Start a sequencer network without catchup module
         let port = pick_unused_port().expect("No ports free");

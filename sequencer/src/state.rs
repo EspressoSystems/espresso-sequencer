@@ -577,13 +577,15 @@ impl ValidatedState {
         instance: &NodeState,
         header_cf: &ResolvableChainConfig,
     ) -> anyhow::Result<ChainConfig> {
-        if header_cf.commit() != self.chain_config.commit() {
-            bail!(
-                "Proposed header chain config commit={} expected={}",
-                header_cf.commit(),
-                self.chain_config.commit()
-            );
-        }
+        // TODO(abdul) : to be uncommented after we have upgrade mechanism
+
+        // if header_cf.commit() != self.chain_config.commit() {
+        //     bail!(
+        //         "Proposed header chain config commit={} expected={}",
+        //         header_cf.commit(),
+        //         self.chain_config.commit()
+        //     );
+        // }
 
         if self.chain_config.commit() == instance.chain_config.commit() {
             return Ok(instance.chain_config);
