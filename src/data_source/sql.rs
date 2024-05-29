@@ -380,11 +380,7 @@ pub mod testing {
         }
 
         async fn connect(tmp_db: &Self::Storage) -> Self {
-            tmp_db
-                .config()
-                .connect(Default::default())
-                .await
-                .unwrap()
+            tmp_db.config().connect(Default::default()).await.unwrap()
         }
 
         async fn reset(tmp_db: &Self::Storage) -> Self {
