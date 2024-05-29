@@ -2,7 +2,7 @@
 
 use serde::de::Error as _;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap},
     env,
 };
 
@@ -341,7 +341,7 @@ fn get_public_env_vars() -> Result<Vec<String>> {
         .clone()
         .into_iter()
         .map(|v| v.try_into())
-        .collect::<Result<HashSet<String>, toml::de::Error>>()?;
+        .collect::<Result<BTreeSet<String>, toml::de::Error>>()?;
 
     let hashmap: HashMap<String, String> = env::vars().collect();
     let mut public_env_vars: Vec<String> = Vec::new();

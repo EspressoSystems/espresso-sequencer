@@ -23,6 +23,3 @@ surf = "2.3.2"
 tempfile = "3.9.0"
 tracing = "0.1.37"
 url = "2.3.1"
-
-[dev-dependencies]
-bincode = { workspace = true }

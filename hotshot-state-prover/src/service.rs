@@ -107,7 +107,7 @@ async fn init_stake_table_from_orchestrator(
     orchestrator_url: &Url,
     stake_table_capacity: usize,
 ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
-    tracing::info!("Initializing stake table from HotShot orchestrator.");
+    tracing::info!("Initializing stake table from HotShot orchestrator {orchestrator_url}");
     let client = Client::<ServerError, OrchestratorVersion>::new(orchestrator_url.clone());
     loop {
         match client.get::<bool>("api/peer_pub_ready").send().await {
@@ -390,6 +390,7 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
     config: StateProverConfig,
     bind_version: Ver,
 ) {
+    tracing::info!("Stake table capacity: {}", config.stake_table_capacity);
     // TODO(#1022): maintain the following stake table
     let st = Arc::new(
         init_stake_table_from_orchestrator(&config.orchestrator_url, config.stake_table_capacity)

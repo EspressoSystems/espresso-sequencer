@@ -1,0 +1,97 @@
+@startuml
+!pragma teoz true
+actor User
+
+box Layer 2s / Rollups #LightYellow
+    box "Optimistic Rollup O" #LightGreen
+        participant "API\n(RPC)" as orrpc
+        participant Proposer
+        participant Challenger
+    end box
+    box "ZK Rollup Z" #LightBlue
+        participant "API\n(RPC)" as zkrpc
+        participant "Prover" as rprover
+        participant "Executor" as executor
+    end box
+end box
+
+box "Ethereum L1" #LightGrey
+    participant "Rollup\nContract" as RC
+    participant "Light\nClient\nContract" as LC
+    participant "Fee\nContract" as fee
+end box
+
+box Espresso Sequencer Network #MistyRose
+    box Sequencer Node #Bisque
+        box APIs #LightCyan
+            participant "Submit\nAPI" as submit
+            participant "Query\nAPI" as query
+        end box
+        participant "HotShot\nEvents\nStream" as events
+        participant "Validated\nState" as ValidatedState
+        participant "State\nSigner" as signer
+    end box
+
+    participant Builder
+    participant "HotShot\nLeader" as leader
+    participant CDN
+    participant Libp2p
+    participant "HotShot\nreplicas" as replicas
+    participant "HotShot\nstate\nrelay\nservice" as relay
+    participant "HotShot\nstate\nprover\nservice" as prover
+end box
+
+group 1. Fee deposit
+    Builder -> fee: fee deposit
+end group
+
+group 2. Transaction submisssion
+    User -> orrpc: rollup O transaction
+    orrpc -> submit: transaction
+    User -> zkrpc: rollup Z transaction
+    zkrpc -> submit: transaction
+    events -> Builder: transactions
+end group
+
+group 3. Leader obtains Espresso block
+    Builder -> leader: available blocks
+    leader -> Builder: claim block
+end group
+
+group 4. HotShot consensus
+    leader <-> replicas: consensus messages
+    & leader <-> Libp2p:
+    & Libp2p <-> replicas:
+    & replicas -> CDN:
+    fee -> ValidatedState: credit fee deposit
+    ValidatedState -> ValidatedState: apply header\ncharge fee
+end group
+
+group 5. Rollup block production
+    query -> executor: Espresso header,\ntransactions in namespace
+    executor -> executor: verify\nnamespace\nproof
+    executor -> rprover: rollup block
+end group
+
+group 6. HotShot proving
+    signer -> relay: state, signature
+    relay -> prover: state,\nsignature bundle
+    prover -> "Light\nClient\nContract" as LC: proof
+    LC -> LC: verify
+end group
+
+group 7. ZK Rollup proving
+    rprover -> RC: rollup state proof
+    group verify
+        LC -> "Rollup\nContract" as RC: HotShot\ncommitment
+    end group
+end group
+
+group 8. Optimistic Rollup dispute
+    Challenger -> RC: challenge
+    loop until dispute resolved
+    Proposer -> RC: respond
+    LC --> RC: HotShot\ncommitment
+    Challenger -> RC: respond
+end group
+@enduml
