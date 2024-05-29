@@ -663,7 +663,7 @@
                 <span class="kw">if </span>retry == max_retries {
                     <span class="kw">return </span><span class="prelude-val">Err</span>(err).context(<span class="string">"getting account balance"</span>);
                 } <span class="kw">else </span>{
-                    sleep(Duration::from_secs(<span class="number">1</span>)).<span class="kw">await</span>;
+                    sleep(Duration::from_secs(<span class="number">5</span>)).<span class="kw">await</span>;
                 }
             }
         }
