@@ -318,7 +318,7 @@ async fn get_espresso_balance(
                 if retry == max_retries {
                     return Err(err).context("getting account balance");
                 } else {
-                    sleep(Duration::from_secs(1)).await;
+                    sleep(Duration::from_secs(5)).await;
                 }
             }
         }
