@@ -14,6 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  RUSTFLAGS: --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"
   RUSTDOCFLAGS: --cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"
 
 jobs:
