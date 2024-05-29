@@ -130,7 +130,7 @@ pub fn define_api<State, Types: NodeType, Ver: StaticVersionType + 'static>(
 where
     State: 'static + Send + Sync + ReadState,
     <State as ReadState>::State: Send + Sync + AvailabilityDataSource<Types>,
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
 {
     let mut api = load_api::<State, Error, Ver>(
         options.api_path.as_ref(),
@@ -474,7 +474,7 @@ mod test {
     use async_std::sync::RwLock;
     use committable::Committable;
     use futures::future::FutureExt;
-    use hotshot_example_types::state_types::TestInstanceState;
+    use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
     use hotshot_types::{
         constants::{Version01, STATIC_VER_0_1},
         data::Leaf,
@@ -870,7 +870,8 @@ mod test {
         );
 
         // mock up some consensus data.
-        let leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
+        let leaf =
+            Leaf::<MockTypes>::genesis(&TestValidatedState::default(), &TestInstanceState {}).await;
 
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
 

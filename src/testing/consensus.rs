@@ -173,7 +173,9 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             config,
                             memberships,
                             networks,
-                            HotShotInitializer::from_genesis(TestInstanceState {}).unwrap(),
+                            HotShotInitializer::from_genesis(TestInstanceState {})
+                                .await
+                                .unwrap(),
                             ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                             hs_storage,
                         )
