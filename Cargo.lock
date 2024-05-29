@@ -8591,7 +8591,6 @@ dependencies = [
  "anyhow",
  "ark-serialize",
  "async-std",
- "bincode",
  "clap",
  "committable",
  "contract-bindings",
