@@ -59,7 +59,7 @@ struct ConsensusState<N: network::Type, P: SequencerPersistence, Ver: StaticVers
     node_state: NodeState,
 
     #[derivative(Debug = "ignore")]
-    handle: &SystemContextHandle<SeqTypes, Node<N, P>>,
+    handle: SystemContextHandle<SeqTypes, Node<N, P>>,
 }
 
 impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
