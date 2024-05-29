@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["cdn"],"struct":["Memory","Production"],"trait":["Type"]};

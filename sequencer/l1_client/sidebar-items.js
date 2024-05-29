@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_finalized_block"],"struct":["L1BlockInfo","L1Client","L1Snapshot"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["L1Finalized"],"struct":["Genesis","GenesisHeader","StakeTableConfig","Timestamp"]};

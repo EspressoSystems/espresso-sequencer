@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"sequencer":[["impl&lt;P: <a class=\"trait\" href=\"sequencer/persistence/trait.SequencerPersistence.html\" title=\"trait sequencer::persistence::SequencerPersistence\">SequencerPersistence</a>&gt; Storage&lt;<a class=\"struct\" href=\"sequencer/struct.SeqTypes.html\" title=\"struct sequencer::SeqTypes\">SeqTypes</a>&gt; for <a class=\"struct\" href=\"https://doc.rust-lang.org/1.78.0/alloc/sync/struct.Arc.html\" title=\"struct alloc::sync::Arc\">Arc</a>&lt;RwLock&lt;P&gt;&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

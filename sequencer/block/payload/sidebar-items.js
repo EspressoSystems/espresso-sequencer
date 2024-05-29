@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["NamespaceProof"],"fn":["parse_ns_payload"],"struct":["NamespaceInfo","Payload"],"trait":["NsIdTraits","OffsetTraits","TableWordTraits"]};

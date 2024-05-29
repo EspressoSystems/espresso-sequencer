@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"sequencer":[["impl&lt;T: SignatureKey&gt; SignatureScheme for <a class=\"struct\" href=\"sequencer/network/cdn/struct.WrappedSignatureKey.html\" title=\"struct sequencer::network::cdn::WrappedSignatureKey\">WrappedSignatureKey</a>&lt;T&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

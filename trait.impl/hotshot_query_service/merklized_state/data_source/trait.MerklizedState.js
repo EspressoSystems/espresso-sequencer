@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"sequencer":[["impl MerklizedState&lt;<a class=\"struct\" href=\"sequencer/struct.SeqTypes.html\" title=\"struct sequencer::SeqTypes\">SeqTypes</a>, { Self::ARITY }&gt; for <a class=\"type\" href=\"sequencer/state/type.BlockMerkleTree.html\" title=\"type sequencer::state::BlockMerkleTree\">BlockMerkleTree</a>"],["impl MerklizedState&lt;<a class=\"struct\" href=\"sequencer/struct.SeqTypes.html\" title=\"struct sequencer::SeqTypes\">SeqTypes</a>, { Self::ARITY }&gt; for <a class=\"type\" href=\"sequencer/state/type.FeeMerkleTree.html\" title=\"type sequencer::state::FeeMerkleTree\">FeeMerkleTree</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

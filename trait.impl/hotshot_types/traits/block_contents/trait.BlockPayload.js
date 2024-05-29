@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"sequencer":[["impl BlockPayload for <a class=\"struct\" href=\"sequencer/block/payload/struct.Payload.html\" title=\"struct sequencer::block::payload::Payload\">Payload</a>&lt;<a class=\"type\" href=\"sequencer/block/entry/type.TxTableEntryWord.html\" title=\"type sequencer::block::entry::TxTableEntryWord\">TxTableEntryWord</a>&gt;"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

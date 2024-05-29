@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["__BYTECODE","__DEPLOYED_BYTECODE"],"enum":["ERC1967ProxyErrors"],"fn":["__abi"],"static":["ERC1967PROXY_ABI","ERC1967PROXY_BYTECODE","ERC1967PROXY_DEPLOYED_BYTECODE"],"struct":["AddressEmptyCode","ERC1967InvalidImplementation","ERC1967NonPayable","ERC1967Proxy","FailedInnerCall","UpgradedFilter"]};

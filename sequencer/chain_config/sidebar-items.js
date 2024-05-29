@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["BlockSize","ChainConfig","ChainId","ResolvableChainConfig"]};
