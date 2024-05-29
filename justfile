@@ -1,6 +1,9 @@
 default:
     just --list
 
+doc *args:
+    cargo doc --no-deps --document-private-items {{args}}
+
 demo *args:
     docker compose up {{args}}
 
