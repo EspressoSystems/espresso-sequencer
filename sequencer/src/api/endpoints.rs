@@ -42,7 +42,7 @@ use vbs::version::StaticVersionType;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
-    pub proof: NsProof,
+    pub proof: Option<NsProof>,
     pub transactions: Vec<Transaction>,
 }
 
@@ -96,23 +96,25 @@ where
                 }
             )?;
 
-            let Some(ns_index) = block.payload().ns_table().find_ns_id(&ns_id) else {
+            if let Some(ns_index) = block.payload().ns_table().find_ns_id(&ns_id) {
+                let proof = NsProof::new(block.payload(), &ns_index, common.common()).context(
+                    CustomSnafu {
+                        message: format!("failed to make proof for namespace {ns_id}"),
+                        status: StatusCode::InternalServerError,
+                    },
+                )?;
+
+                Ok(NamespaceProofQueryData {
+                    transactions: proof.export_all_txs(&ns_id),
+                    proof: Some(proof),
+                })
+            } else {
                 // ns_id not found in ns_table
-                todo!();
-            };
-
-            let proof =
-                NsProof::new(block.payload(), &ns_index, common.common()).context(CustomSnafu {
-                    message: format!("failed to make proof for namespace {ns_id}"),
-                    status: StatusCode::NotFound,
-                })?;
-
-            let transactions = proof.export_all_txs(&ns_id);
-
-            Ok(NamespaceProofQueryData {
-                transactions,
-                proof,
-            })
+                Ok(NamespaceProofQueryData {
+                    proof: None,
+                    transactions: Vec::new(),
+                })
+            }
         }
         .boxed()
     })?;

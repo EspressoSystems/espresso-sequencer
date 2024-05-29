@@ -965,15 +965,20 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
             })
             .await?;
         ensure!(
+            ns_proof.proof.is_some(),
+            format!("missing namespace proof for {block}:{ns}")
+        );
+        ensure!(
             ns_proof
                 .proof
+                .unwrap()
                 .verify(
                     &header.ns_table,
                     &header.payload_commitment,
                     vid_common.common()
                 )
                 .is_some(),
-            format!("namespace proof for {block}:{ns} is invalid")
+            format!("failure to verify namespace proof for {block}:{ns}")
         );
 
         self.metrics.query_namespace_actions.add(1);

@@ -51,6 +51,8 @@ impl NsProof {
                 .ok()?, // error: failure to convert u32 to usize
         );
 
+        // TODO FIX: vid.payload_proof fails if ns_payload_range is empty!
+
         Some(NsProof {
             ns_index: index.clone(),
             ns_payload: payload.read_ns_payload(&ns_payload_range).to_owned(),
