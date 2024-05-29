@@ -96,13 +96,18 @@ where
                 }
             )?;
 
+            let Some(ns_index) = block.payload().ns_table().find_ns_id(&ns_id) else {
+                // ns_id not found in ns_table
+                todo!();
+            };
+
             let proof =
-                NsProof::new(block.payload(), ns_id, common.common()).context(CustomSnafu {
+                NsProof::new(block.payload(), &ns_index, common.common()).context(CustomSnafu {
                     message: format!("failed to make proof for namespace {ns_id}"),
                     status: StatusCode::NotFound,
                 })?;
 
-            let transactions = proof.export_all_txs();
+            let transactions = proof.export_all_txs(&ns_id);
 
             Ok(NamespaceProofQueryData {
                 transactions,

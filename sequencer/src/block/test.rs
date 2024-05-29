@@ -77,11 +77,8 @@ fn basic_correctness() {
         );
 
         // test iterate over all namespaces
-        for ns_id in block
-            .ns_table()
-            .iter()
-            .map(|i| block.ns_table().read_ns_id(&i))
-        {
+        for ns_index in block.ns_table().iter() {
+            let ns_id = block.ns_table().read_ns_id(&ns_index);
             tracing::info!("test ns_id {ns_id}");
 
             let txs = test
@@ -89,7 +86,7 @@ fn basic_correctness() {
                 .remove(&ns_id)
                 .expect("block ns_id missing from test");
 
-            let ns_proof = NsProof::new(&block, ns_id, &vid_common)
+            let ns_proof = NsProof::new(&block, &ns_index, &vid_common)
                 .expect("namespace_with_proof should succeed");
 
             let (ns_proof_txs, ns_proof_ns_id) = ns_proof

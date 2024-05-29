@@ -1,6 +1,6 @@
 use crate::{
     block::{
-        full_payload::{ns_table::NsTable, payload::Payload, payload::PayloadByteLen},
+        full_payload::{NsIndex, NsTable, Payload, PayloadByteLen},
         namespace_payload::NsPayloadOwned,
     },
     NamespaceId, Transaction,
@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 /// Proof of correctness for namespace payload bytes in a block.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct NsProof {
-    ns_id: NamespaceId,
+    ns_index: NsIndex,
     ns_payload: NsPayloadOwned,
     ns_proof: LargeRangeProofType,
 }
@@ -36,11 +36,13 @@ impl NsProof {
     /// conforms to this convention.) In the future we should change this API to
     /// conform to convention. But that would require a change to our RPC
     /// endpoint API at [`endpoints`](crate::api::endpoints), which is a hassle.
-    pub fn new(payload: &Payload, ns_id: NamespaceId, common: &VidCommon) -> Option<NsProof> {
+    pub fn new(payload: &Payload, index: &NsIndex, common: &VidCommon) -> Option<NsProof> {
         let payload_byte_len = payload.byte_len();
         payload_byte_len.is_consistent(common).ok()?;
-        let ns_index = payload.ns_table().find_ns_id(&ns_id)?;
-        let ns_payload_range = payload.ns_table().ns_range(&ns_index, &payload_byte_len);
+        if !payload.ns_table().in_bounds(index) {
+            return None; // error: index out of bounds
+        }
+        let ns_payload_range = payload.ns_table().ns_range(index, &payload_byte_len);
 
         // TODO vid_scheme() arg should be u32 to match get_num_storage_nodes
         let vid = vid_scheme(
@@ -50,7 +52,7 @@ impl NsProof {
         );
 
         Some(NsProof {
-            ns_id,
+            ns_index: index.clone(),
             ns_payload: payload.read_ns_payload(&ns_payload_range).to_owned(),
             ns_proof: vid
                 .payload_proof(payload.encode(), ns_payload_range.as_block_range())
@@ -78,9 +80,9 @@ impl NsProof {
         common: &VidCommon,
     ) -> Option<(Vec<Transaction>, NamespaceId)> {
         VidSchemeType::is_consistent(commit, common).ok()?;
-        let Some(ns_index) = ns_table.find_ns_id(&self.ns_id) else {
-            return None; // error: ns_id does not exist
-        };
+        if !ns_table.in_bounds(&self.ns_index) {
+            return None; // error: index out of bounds
+        }
 
         // TODO vid_scheme() arg should be u32 to match get_num_storage_nodes
         let vid = vid_scheme(
@@ -90,7 +92,7 @@ impl NsProof {
         );
 
         let range = ns_table
-            .ns_range(&ns_index, &PayloadByteLen::from_vid_common(common))
+            .ns_range(&self.ns_index, &PayloadByteLen::from_vid_common(common))
             .as_block_range();
         vid.payload_verify(
             Statement {
@@ -105,11 +107,13 @@ impl NsProof {
         .ok()?; // verification failure
 
         // verification succeeded, return some data
-        Some((self.ns_payload.export_all_txs(&self.ns_id), self.ns_id))
+        let ns_id = ns_table.read_ns_id(&self.ns_index);
+        Some((self.ns_payload.export_all_txs(&ns_id), ns_id))
     }
 
     /// Return all transactions in the namespace whose payload is proven by
-    /// `self`.
+    /// `self`. The namespace ID for each returned [`Transaction`] is set to
+    /// `ns_id`.
     ///
     /// # Design warning
     ///
@@ -118,8 +122,7 @@ impl NsProof {
     /// [`NsProof`] then this method can no longer be supported.
     ///
     /// In that case, use the following a workaround:
-    /// - Given a [`NamespaceId`], get a
-    ///   [`NsIndex`](crate::block::full_payload::NsIndex) `i` via
+    /// - Given a [`NamespaceId`], get a [`NsIndex`] `i` via
     ///   [`NsTable::find_ns_id`].
     /// - Use `i` to get a
     ///   [`NsPayload`](crate::block::namespace_payload::NsPayload) `p` via
@@ -130,7 +133,7 @@ impl NsProof {
     /// This workaround duplicates the work done in [`NsProof::new`]. If you
     /// don't like that then you could instead hack [`NsProof::new`] to return a
     /// pair `(NsProof, Vec<Transaction>)`.
-    pub fn export_all_txs(&self) -> Vec<Transaction> {
-        self.ns_payload.export_all_txs(&self.ns_id)
+    pub fn export_all_txs(&self, ns_id: &NamespaceId) -> Vec<Transaction> {
+        self.ns_payload.export_all_txs(ns_id)
     }
 }
