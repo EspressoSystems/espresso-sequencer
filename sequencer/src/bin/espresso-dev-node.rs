@@ -55,10 +55,6 @@ struct Args {
     #[clap(short, long, env = "ESPRESSO_COMMITMENT_TASK_PORT")]
     commitment_task_port: u16,
 
-    /// Port for connecting to the builder.
-    #[clap(short, long, env = "ESPRESSO_BUILDER_PORT")]
-    builder_port: u16,
-
     #[clap(flatten)]
     sql: persistence::sql::Options,
 }
