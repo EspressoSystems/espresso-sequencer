@@ -40,7 +40,7 @@ package "Espresso Sequencer Network" as Network #MistyRose {
 }
 
 ' Network
-Nodes <-up- Catchup: " " "missing\nstate"
+Nodes <-up- Catchup: "missing\nstate" " "
 Nodes <-> Libp2p: consensus\nmessages
 "CDN Client" <--> CDN: consensus\nmessages
 Nodes <--> CDN: consensus\nmessages
@@ -73,7 +73,7 @@ Events -down-> Validated
 ' Storage
 Query --> DB
 Validated -up-> DB
-DB --> Catchup: " " "missing\nstate"
+DB --> Catchup: missing\nstate
 
 package "Layer 2s / Rollups" as L2s #LightYellow {
     component "zk Rollup Z" as ZK #LightBlue {
@@ -111,7 +111,7 @@ end note
 User --> OR_RPC
 
 ZK_RPC --> Submit : "transaction" " "
-Submit -> Events: "transaction" " "
+Submit -> Events: transaction
 Query -up-> ZK_Exec : " " "Espresso\nheader,\nnamespace\ntransactions"
 note top of link
     5. Rollup
