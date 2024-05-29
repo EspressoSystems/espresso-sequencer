@@ -143,6 +143,14 @@
 <a href="#141" id="141">141</a>
 <a href="#142" id="142">142</a>
 <a href="#143" id="143">143</a>
+<a href="#144" id="144">144</a>
+<a href="#145" id="145">145</a>
+<a href="#146" id="146">146</a>
+<a href="#147" id="147">147</a>
+<a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a>
 </pre></div><pre class="rust"><code><span class="kw">use super</span>::{
     data_source::{CatchupDataSource, Provider, SequencerDataSource},
     AccountQueryData, BlocksFrontier,
@@ -172,13 +180,21 @@
     <span class="kw">type </span>Options = Options;
 
     <span class="kw">async fn </span>create(opt: <span class="self">Self</span>::Options, provider: Provider, reset: bool) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
+        <span class="kw">let </span>fetch_limit = opt.fetch_rate_limit;
         <span class="kw">let </span><span class="kw-2">mut </span>cfg = Config::try_from(opt)<span class="question-mark">?</span>;
+
         <span class="kw">if </span>reset {
             cfg = cfg.reset_schema();
         }
 
-        <span class="prelude-val">Ok</span>(cfg.connect(provider).<span class="kw">await</span><span class="question-mark">?</span>)
-    }
+        <span class="kw">let </span><span class="kw-2">mut </span>builder = cfg.builder(provider).<span class="kw">await</span><span class="question-mark">?</span>;
+
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(limit) = fetch_limit {
+            builder = builder.with_rate_limit(limit);
+        }
+
+        builder.build().<span class="kw">await
+    </span>}
 }
 
 <span class="kw">impl </span>CatchupDataSource <span class="kw">for </span>SqlStorage {
