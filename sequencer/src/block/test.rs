@@ -3,6 +3,7 @@ use crate::{
         full_payload::{NsProof, Payload},
         namespace_payload::TxProof,
     },
+    chain_config::BlockSize,
     ChainConfig, NamespaceId, NodeState, Transaction,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -121,7 +122,9 @@ fn enforce_max_block_size() {
 
     // test: actual block size equals max block size
     let instance_state = NodeState::default().with_chain_config(ChainConfig {
-        max_block_size: (payload_byte_len_expected + ns_table_byte_len_expected) as u64,
+        max_block_size: BlockSize::from(
+            (payload_byte_len_expected + ns_table_byte_len_expected) as u64,
+        ),
         ..Default::default()
     });
 
@@ -135,7 +138,9 @@ fn enforce_max_block_size() {
     // test: actual block size exceeds max block size, so 1 tx is dropped
     // WARN log should be emitted
     let instance_state = NodeState::default().with_chain_config(ChainConfig {
-        max_block_size: (payload_byte_len_expected + ns_table_byte_len_expected - 1) as u64,
+        max_block_size: BlockSize::from(
+            (payload_byte_len_expected + ns_table_byte_len_expected - 1) as u64,
+        ),
         ..Default::default()
     });
     let block = Payload::from_transactions(test.all_txs(), &instance_state)

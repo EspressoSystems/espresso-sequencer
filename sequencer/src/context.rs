@@ -1,3 +1,4 @@
+use anyhow::Context;
 use async_std::{
     sync::{Arc, RwLock},
     task::{spawn, JoinHandle},
@@ -72,7 +73,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         networks: Networks<SeqTypes, Node<N, P>>,
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
-        stake_table_capacity: usize,
+        stake_table_capacity: u64,
         _: Ver,
     ) -> anyhow::Result<Self> {
         let pub_key = config.my_own_validator_config.public_key;
@@ -107,8 +108,12 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             view_sync_membership: committee_membership.clone(),
         };
 
-        let stake_table_commit =
-            static_stake_table_commitment(&config.known_nodes_with_stake, stake_table_capacity);
+        let stake_table_commit = static_stake_table_commitment(
+            &config.known_nodes_with_stake,
+            stake_table_capacity
+                .try_into()
+                .context("stake table capacity out of range")?,
+        );
         let state_key_pair = config.my_own_validator_config.state_key_pair.clone();
 
         let event_streamer = Arc::new(RwLock::new(EventsStreamer::<SeqTypes>::new(

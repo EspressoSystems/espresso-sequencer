@@ -91,9 +91,7 @@ impl BlockPayload for Payload {
         instance_state: &Self::Instance,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
         // accounting for block byte length limit
-        let max_block_byte_len: usize = instance_state
-            .chain_config
-            .max_block_size
+        let max_block_byte_len: usize = u64::from(instance_state.chain_config.max_block_size)
             .try_into()
             .map_err(|_| Self::Error::BlockBuilding)?;
         let mut block_byte_len = NsTableBuilder::fixed_overhead_byte_len();
