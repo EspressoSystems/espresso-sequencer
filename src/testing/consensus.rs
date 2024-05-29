@@ -210,8 +210,8 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
 }
 
 impl<D: DataSourceLifeCycle> MockNetwork<D> {
-    pub fn handle(&self) -> SystemContextHandle<MockTypes, MockNodeImpl> {
-        self.nodes[0].hotshot.clone()
+    pub fn handle(&self) -> &SystemContextHandle<MockTypes, MockNodeImpl> {
+        &self.nodes[0].hotshot
     }
 
     pub async fn submit_transaction(&self, tx: MockTransaction) {
