@@ -22,7 +22,7 @@ contract LightClientUpgradeTest is Test {
 
     // deploy the first implementation with its proxy
     function setUp() public {
-        (proxy, admin, stateV1) = deployer.run(10, 5, 20);
+        (proxy, admin, stateV1) = deployer.run(10, 5);
         lcV1Proxy = LCV1(proxy);
     }
 

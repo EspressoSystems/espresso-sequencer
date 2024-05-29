@@ -43,9 +43,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice an permissioned prover is no longer needed to interact `newFinalizedState`
     event PermissionedProverNotRequired();
 
-    /// @notice new delay threshold for finalizedState updates on the the LightClient contract
-    event NewDelayThreshold(uint32);
-
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
@@ -89,9 +86,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice an array to store the L1 Block Heights where the finalizedState was updated
     uint256[] public l1BlockUpdates;
-
-    /// @notice the threshold used to determine if hotshot is down
-    uint32 public delayThreshold;
 
     // === Data Structure ===
     //
@@ -140,8 +134,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error PermissionedProverNotSet();
     /// @notice If the same mode or prover is sent to the function, then no change is required
     error NoChangeRequired();
-    /// @notice If the delay threshold for lightclient updates is too low or too high
-    error InvalidDelayThreshold();
     /// @notice Invalid L1 Block for checking HotShot liveness, premature or in the future
     error InvalidL1BlockForCheckingHotShotLiveness();
 
@@ -153,17 +145,15 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice This contract is called by the proxy when you deploy this contract
-    function initialize(
-        LightClientState memory genesis,
-        uint32 numBlocksPerEpoch,
-        uint32 _delayThreshold,
-        address owner
-    ) public initializer {
+    function initialize(LightClientState memory genesis, uint32 numBlocksPerEpoch, address owner)
+        public
+        initializer
+    {
         __Ownable_init(owner); //sets owner of the contract
         __UUPSUpgradeable_init();
         genesisState = 0;
         finalizedState = 1;
-        _initializeState(genesis, numBlocksPerEpoch, _delayThreshold);
+        _initializeState(genesis, numBlocksPerEpoch);
     }
 
     /// @notice Use this to get the implementation contract version
@@ -182,11 +172,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     // @dev Initialization of contract variables happens in this method because the LightClient
     // contract is upgradable and thus has its constructor method disabled.
-    function _initializeState(
-        LightClientState memory genesis,
-        uint32 numBlockPerEpoch,
-        uint32 _delayThreshold
-    ) internal {
+    function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch) internal {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
@@ -200,9 +186,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         ) {
             revert InvalidArgs();
         }
-
-        delayThreshold = _delayThreshold;
-
         states[genesisState] = genesis;
         states[finalizedState] = genesis;
 
@@ -370,23 +353,16 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    /// @notice updates the delay threshold which determines if hotshot is down
-    /// @dev if the number of blocks between the last l1 update and the number of blocks that has
-    /// passed since is > the delayThreshold then hotshot is considered down
-    function updateDelayThreshold(uint32 newThreshold) public onlyOwner {
-        if (newThreshold == delayThreshold) {
-            revert NoChangeRequired();
-        }
-        if (newThreshold < 1 || newThreshold > type(uint32).max) {
-            revert InvalidDelayThreshold();
-        }
-        delayThreshold = newThreshold;
-        emit NewDelayThreshold(newThreshold);
-    }
-
     /// @notice checks the L1BlockUpdates array and the delayThreshold to determine if hotshot was
     /// down at a specified L1 block number
-    function wasL1Updated(uint256 l1BlockNumber) public view returns (bool) {
+    function wasL1Updated(uint256 l1BlockNumber, uint256 delayThreshold)
+        public
+        view
+        returns (bool)
+    {
+        /**
+         * TODO: consider a revert if delayThreshold is invalid
+         */
         uint256 updatesCount = l1BlockUpdates.length;
 
         // Handling Edge Cases

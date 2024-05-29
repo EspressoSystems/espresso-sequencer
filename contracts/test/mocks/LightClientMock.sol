@@ -10,10 +10,8 @@ import { LightClientStateUpdateVKMock as VkLib } from "./LightClientStateUpdateV
 
 /// @dev A helper that wraps LightClient contract for testing
 contract LightClientMock is LC {
-    constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch, uint32 delayThreshold)
-        LC()
-    {
-        _initializeState(genesis, numBlockPerEpoch, delayThreshold);
+    constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch) LC() {
+        _initializeState(genesis, numBlockPerEpoch);
     }
 
     /// @dev Directly mutate `currentEpoch` variable for test
