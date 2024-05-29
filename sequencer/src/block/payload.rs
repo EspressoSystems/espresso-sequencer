@@ -6,7 +6,6 @@ use crate::{BlockBuildingSnafu, ChainConfig, Error, NamespaceId, SeqTypes, Trans
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use derivative::Derivative;
 use hotshot::traits::BlockPayload;
-use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::vid::{
     vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType,
 };
@@ -18,7 +17,6 @@ use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::default::Default;
-use std::marker::PhantomData;
 use std::mem::size_of;
 use std::{collections::HashMap, fmt::Display};
 use trait_set::trait_set;

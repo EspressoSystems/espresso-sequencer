@@ -2,7 +2,6 @@ use crate::{BlockBuildingSnafu, ChainConfig, NodeState, SeqTypes, Transaction, V
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
-use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::traits::{BlockPayload, EncodeBytes};
 use hotshot_types::utils::BuilderCommitment;
 use serde::{Deserialize, Serialize};
