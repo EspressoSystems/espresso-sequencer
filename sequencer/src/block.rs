@@ -1,6 +1,8 @@
-use crate::{BlockBuildingSnafu, NodeState, Transaction};
+use crate::{BlockBuildingSnafu, ChainConfig, NodeState, SeqTypes, Transaction, ValidatedState};
+use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
+use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::traits::{BlockPayload, EncodeBytes};
 use hotshot_types::utils::BuilderCommitment;
 use serde::{Deserialize, Serialize};
@@ -24,11 +26,13 @@ impl EncodeBytes for Payload<TxTableEntryWord> {
         Arc::from(self.raw_payload.clone())
     }
 }
-impl BlockPayload for Payload<TxTableEntryWord> {
+#[async_trait]
+impl BlockPayload<SeqTypes> for Payload<TxTableEntryWord> {
     type Error = crate::Error;
     type Transaction = Transaction;
     type Instance = NodeState;
     type Metadata = NsTable;
+    type ValidatedState = ValidatedState;
 
     /// Returns (Self, metadata).
     ///
@@ -50,8 +54,12 @@ impl BlockPayload for Payload<TxTableEntryWord> {
     /// https://github.com/EspressoSystems/espresso-sequencer/issues/757
     ///
     /// TODO(746) refactor and make pretty "table" code for tx, namespace tables?
-    fn from_transactions(
-        txs: impl IntoIterator<Item = Self::Transaction>,
+    ///
+    /// This function also performs catchup from peers
+    /// when the ValidatedState's chain config commitment differs from the NodeState's chain config, and the ValidatedState does not have full chain config.
+    async fn from_transactions(
+        txs: impl IntoIterator<Item = Self::Transaction> + Send,
+        validated_state: &Self::ValidatedState,
         instance_state: &Self::Instance,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
         let payload = Payload::from_txs(txs, &instance_state.chain_config)?;
@@ -64,16 +72,6 @@ impl BlockPayload for Payload<TxTableEntryWord> {
             raw_payload: encoded_transactions.to_vec(),
             ns_table: metadata.clone(), // TODO don't clone ns_table
         }
-    }
-
-    // TODO remove
-    fn genesis() -> (Self, Self::Metadata) {
-        // this is only called from `Leaf::genesis`. Since we are
-        // passing empty list, max_block_size is irrelevant so we can
-        // use the mock NodeState. A future update to HotShot should
-        // make a change there to remove the need for this workaround.
-
-        Self::from_transactions([], &NodeState::mock()).unwrap()
     }
 
     fn transaction_commitments(&self, meta: &Self::Metadata) -> Vec<Commitment<Self::Transaction>> {
@@ -97,5 +95,11 @@ impl BlockPayload for Payload<TxTableEntryWord> {
         metadata: &'a Self::Metadata,
     ) -> impl 'a + Iterator<Item = Self::Transaction> {
         self.enumerate(metadata).map(|(_, t)| t)
+    }
+
+    fn empty() -> (Self, Self::Metadata) {
+        let payload = Payload::from_txs(vec![], &ChainConfig::default()).unwrap();
+        let ns_table = payload.get_ns_table().clone();
+        (payload, ns_table)
     }
 }

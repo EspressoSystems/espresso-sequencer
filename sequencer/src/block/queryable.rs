@@ -1,6 +1,6 @@
-use crate::block::entry::TxTableEntryWord;
 use crate::block::payload::Payload;
 use crate::block::tables::TxTable;
+use crate::{block::entry::TxTableEntryWord, SeqTypes};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::vid::{vid_scheme, SmallRangeProofType};
 use jf_vid::payload_prover::{PayloadProver, Statement};
@@ -15,7 +15,7 @@ use super::{
 };
 
 // TODO don't hard-code TxTableEntryWord generic param
-impl QueryablePayload for Payload<TxTableEntryWord> {
+impl QueryablePayload<SeqTypes> for Payload<TxTableEntryWord> {
     type TransactionIndex = TxIndex;
     type Iter<'a> = TxIterator<'a, TxTableEntryWord>;
     type InclusionProof = TxInclusionProof;

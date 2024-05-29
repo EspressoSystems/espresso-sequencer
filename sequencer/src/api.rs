@@ -59,7 +59,7 @@ struct ConsensusState<N: network::Type, P: SequencerPersistence, Ver: StaticVers
     node_state: NodeState,
 
     #[derivative(Debug = "ignore")]
-    handle: SystemContextHandle<SeqTypes, Node<N, P>>,
+    handle: &SystemContextHandle<SeqTypes, Node<N, P>>,
 }
 
 impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
@@ -70,7 +70,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             state_signer: ctx.state_signer(),
             event_streamer: ctx.event_streamer(),
             node_state: ctx.node_state(),
-            handle: ctx.consensus().clone(),
+            handle: ctx.consensus(),
         }
     }
 }

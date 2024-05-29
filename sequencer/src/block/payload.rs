@@ -2,10 +2,11 @@ use crate::block::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block::payload;
 use crate::block::tables::NameSpaceTable;
 use crate::block::tables::TxTable;
-use crate::{BlockBuildingSnafu, ChainConfig, Error, NamespaceId, Transaction};
+use crate::{BlockBuildingSnafu, ChainConfig, Error, NamespaceId, SeqTypes, Transaction};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use derivative::Derivative;
 use hotshot::traits::BlockPayload;
+use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::vid::{
     vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType,
 };
@@ -17,6 +18,7 @@ use num_traits::PrimInt;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::default::Default;
+use std::marker::PhantomData;
 use std::mem::size_of;
 use std::{collections::HashMap, fmt::Display};
 use trait_set::trait_set;
@@ -152,7 +154,9 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
     }
 
     pub fn from_txs(
-        txs: impl IntoIterator<Item = <payload::Payload<TxTableEntryWord> as BlockPayload>::Transaction>,
+        txs: impl IntoIterator<
+            Item = <payload::Payload<TxTableEntryWord> as BlockPayload<SeqTypes>>::Transaction,
+        >,
         chain_config: &ChainConfig,
     ) -> Result<Self, Error> {
         let mut namespaces: HashMap<NamespaceId, NamespaceInfo> = Default::default();
@@ -183,7 +187,7 @@ impl<TableWord: TableWordTraits> Payload<TableWord> {
 
     fn update_namespace_with_tx(
         namespaces: &mut HashMap<NamespaceId, NamespaceInfo>,
-        tx: <Payload<TxTableEntryWord> as BlockPayload>::Transaction,
+        tx: <Payload<TxTableEntryWord> as BlockPayload<SeqTypes>>::Transaction,
     ) {
         let tx_bytes_len: TxTableEntry = tx.payload().len().try_into().unwrap(); // TODO (Philippe) error handling
 
@@ -317,7 +321,7 @@ pub fn parse_ns_payload(ns_bytes: &[u8], ns_id: NamespaceId) -> Vec<Transaction>
 }
 
 #[cfg(any(test, feature = "testing"))]
-impl hotshot_types::traits::block_contents::TestableBlock
+impl hotshot_types::traits::block_contents::TestableBlock<SeqTypes>
     for Payload<crate::block::entry::TxTableEntryWord>
 {
     fn genesis() -> Self {

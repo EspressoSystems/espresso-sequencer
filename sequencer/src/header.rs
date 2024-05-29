@@ -283,7 +283,7 @@ impl BlockHeader<SeqTypes> for Header {
         parent_leaf: &Leaf,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+        metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: BuilderFee<SeqTypes>,
         _vid_common: VidCommon,
         _version: Version,
@@ -380,7 +380,7 @@ impl BlockHeader<SeqTypes> for Header {
         instance_state: &NodeState,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+        ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
     ) -> Self {
         let ValidatedState {
             fee_merkle_tree,
@@ -419,7 +419,9 @@ impl BlockHeader<SeqTypes> for Header {
         self.payload_commitment
     }
 
-    fn metadata(&self) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata {
+    fn metadata(
+        &self,
+    ) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata {
         &self.ns_table
     }
 
