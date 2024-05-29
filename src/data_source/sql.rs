@@ -321,9 +321,7 @@ where
     /// [`build`](fetching::Builder::build). For a convenient constructor that uses the default
     /// fetching options, see [`Config::connect`].
     pub async fn connect(config: Config, provider: P) -> Result<Builder<Types, P>, Error> {
-        let builder = Self::builder(SqlStorage::connect(config).await?, provider);
-
-        Ok(builder)
+        Ok(Self::builder(SqlStorage::connect(config).await?, provider))
     }
 }
 
@@ -382,7 +380,11 @@ pub mod testing {
         }
 
         async fn connect(tmp_db: &Self::Storage) -> Self {
-            tmp_db.config().connect(Default::default()).await.unwrap()
+            tmp_db
+                .config()
+                .connect(Default::default())
+                .await
+                .unwrap()
         }
 
         async fn reset(tmp_db: &Self::Storage) -> Self {

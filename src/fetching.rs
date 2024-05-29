@@ -104,8 +104,8 @@ impl<T, C> Fetcher<T, C> {
         self
     }
 
-    pub fn with_rate_limit(mut self, rate_limit: usize) -> Self {
-        self.permit = Arc::new(Semaphore::new(rate_limit));
+    pub fn with_rate_limit(mut self, permit: Arc<Semaphore>) -> Self {
+        self.permit = permit;
         self
     }
 }

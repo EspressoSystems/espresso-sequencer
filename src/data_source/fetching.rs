@@ -98,6 +98,7 @@ use crate::{
     Header, Payload, QueryResult, Transaction, VidShare,
 };
 use anyhow::Context;
+use async_lock::Semaphore;
 use async_std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
     task::sleep,
@@ -909,9 +910,11 @@ where
         }
 
         if let Some(limit) = builder.rate_limit {
-            payload_fetcher = payload_fetcher.with_rate_limit(limit);
-            leaf_fetcher = leaf_fetcher.with_rate_limit(limit);
-            vid_common_fetcher = vid_common_fetcher.with_rate_limit(limit);
+            let permit = Arc::new(Semaphore::new(limit));
+
+            payload_fetcher = payload_fetcher.with_rate_limit(permit.clone());
+            leaf_fetcher = leaf_fetcher.with_rate_limit(permit.clone());
+            vid_common_fetcher = vid_common_fetcher.with_rate_limit(permit);
         }
 
         let height = builder.storage.block_height().await? as u64;
