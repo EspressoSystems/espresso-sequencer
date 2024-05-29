@@ -233,8 +233,13 @@ impl PayloadByteLen {
     }
 
     /// Is the payload byte length declared in a [`VidCommon`] equal [`Self`]?
-    pub fn is_consistent(&self, common: &VidCommon) -> bool {
-        self.0 == usize::try_from(VidSchemeType::get_payload_byte_len(common)).unwrap()
+    pub fn is_consistent(&self, common: &VidCommon) -> Result<(), ()> {
+        // failure to convert to usize implies that `common` cannot be
+        // consistent with `self`.
+        let expected =
+            usize::try_from(VidSchemeType::get_payload_byte_len(common)).map_err(|_| ())?;
+
+        (self.0 == expected).then_some(()).ok_or(())
     }
 
     pub(in crate::block::full_payload) fn as_usize(&self) -> usize {

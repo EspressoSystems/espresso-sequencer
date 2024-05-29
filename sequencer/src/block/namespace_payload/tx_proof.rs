@@ -54,10 +54,7 @@ impl TxProof {
         common: &VidCommon,
     ) -> Option<(Transaction, Self)> {
         let payload_byte_len = payload.byte_len();
-        if !payload_byte_len.is_consistent(common) {
-            tracing::warn!("payload byte len inconsistent with vid_common");
-            return None; // error: common inconsistent with self
-        }
+        payload_byte_len.is_consistent(common).ok()?;
         if !payload.ns_table().in_bounds(index.ns()) {
             tracing::warn!("ns_index {:?} out of bounds", index.ns());
             return None; // error: ns index out of bounds

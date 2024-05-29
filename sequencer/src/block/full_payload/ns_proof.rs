@@ -38,13 +38,8 @@ impl NsProof {
     /// endpoint API at [`endpoints`](crate::api::endpoints), which is a hassle.
     pub fn new(payload: &Payload, ns_id: NamespaceId, common: &VidCommon) -> Option<NsProof> {
         let payload_byte_len = payload.byte_len();
-        if !payload_byte_len.is_consistent(common) {
-            return None; // error: vid_common inconsistent with self
-        }
-        let Some(ns_index) = payload.ns_table().find_ns_id(&ns_id) else {
-            return None; // error: ns_id does not exist
-        };
-
+        payload_byte_len.is_consistent(common).ok()?;
+        let ns_index = payload.ns_table().find_ns_id(&ns_id)?;
         let ns_payload_range = payload.ns_table().ns_range(&ns_index, &payload_byte_len);
 
         // TODO vid_scheme() arg should be u32 to match get_num_storage_nodes
