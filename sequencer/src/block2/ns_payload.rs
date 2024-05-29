@@ -15,6 +15,8 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
 
+use super::ns_payload_range::NsPayloadRange;
+
 /// TODO explain: ZST to unlock visibility in other modules. can only be
 /// constructed in this module.
 pub struct A(());
@@ -45,6 +47,26 @@ impl NamespacePayloadBuilder {
         result.extend(self.tx_table_entries);
         result.extend(self.tx_bodies);
         result
+    }
+}
+
+pub struct NsPayload2<'a> {
+    // index: NsIndex, // TODO do we need this?
+    // id: NamespaceId, // TODO is it worth storing this here for export_tx?
+    range: NsPayloadRange,
+    bytes: &'a [u8],
+}
+
+impl<'a> NsPayload2<'a> {
+    /// TODO restrict visibility?
+    pub fn new(range: NsPayloadRange, bytes: &'a [u8]) -> Self {
+        Self { range, bytes }
+    }
+    pub fn as_byte_slice(&self) -> &[u8] {
+        self.bytes
+    }
+    pub fn range(&self) -> &NsPayloadRange {
+        &self.range
     }
 }
 
@@ -204,7 +226,7 @@ impl Payload {
     pub fn ns_payload(&self, index: &NsIndex) -> &NsPayload {
         let range = self
             .ns_table
-            .ns_payload_range(index, self.payload.len())
+            .ns_payload_range_deleteme(index, self.payload.len())
             .as_range();
         NsPayload::new(&self.payload[range])
     }

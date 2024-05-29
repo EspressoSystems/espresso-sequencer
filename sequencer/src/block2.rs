@@ -1,10 +1,13 @@
-use self::ns_table::NsTable;
 use crate::{NamespaceId, Transaction};
 use commit::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{traits::BlockPayload, utils::BuilderCommitment};
 use iter::{Index, Iter};
+use ns_iter::NsIndex;
 use ns_payload::NamespacePayloadBuilder;
+use ns_payload::NsPayload2;
+use ns_payload_range::NsPayloadRange;
+use ns_table::NsTable;
 use payload_bytes::{ns_id_as_bytes, ns_offset_as_bytes, num_nss_as_bytes};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -163,6 +166,40 @@ impl Display for Payload {
 impl Committable for Payload {
     fn commit(&self) -> commit::Commitment<Self> {
         todo!()
+    }
+}
+
+/// TODO explain: ZST to unlock visibility in other modules. can only be
+/// constructed in this module.
+pub struct A(());
+
+impl Payload {
+    /// TODO panics if index out of bounds
+    pub fn ns_payload2(&self, index: &NsIndex) -> NsPayload2 {
+        let range = self.ns_payload_range2(index);
+        let bytes = &self.payload[range.as_range()];
+        NsPayload2::new(range, bytes)
+    }
+
+    /// Read subslice range for the `index`th namespace from the namespace
+    /// table.
+    ///
+    /// It is the responsibility of the caller to ensure that the `index`th
+    /// entry is not a duplicate of a previous entry. Otherwise the returned
+    /// range will be invalid. (Can the caller even create his own `NsIndex`??)
+    ///
+    /// Returned range guaranteed to satisfy `start <= end <=
+    /// payload_byte_len`.
+    ///
+    /// Panics if `index >= self.num_nss()`.
+    fn ns_payload_range2(&self, index: &NsIndex) -> NsPayloadRange {
+        let end = self.ns_table.read_ns_offset(index).min(self.payload.len());
+        let start = self
+            .ns_table
+            .read_ns_offset_prev(index)
+            .unwrap_or(0)
+            .min(end);
+        NsPayloadRange::new2(A(()), start, end)
     }
 }
 

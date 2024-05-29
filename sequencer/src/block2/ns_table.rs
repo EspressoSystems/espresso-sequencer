@@ -100,6 +100,14 @@ impl NsTable {
         ns_offset_from_bytes(&self.0[start..start + NS_OFFSET_BYTE_LEN])
     }
 
+    /// Read the namespace offset from the `(index-1)`th entry from the
+    /// namespace table. Returns `None` if `index` is zero.
+    ///
+    /// Panics if `index >= self.num_nss()`.
+    pub fn read_ns_offset_prev(&self, index: &NsIndex) -> Option<usize> {
+        index.prev(A(())).map(|prev| self.read_ns_offset(&prev))
+    }
+
     /// Read subslice range for the `index`th namespace from the namespace
     /// table.
     ///
@@ -110,10 +118,14 @@ impl NsTable {
     /// Returned range guaranteed to satisfy `start <= end <=
     /// payload_byte_len`.
     ///
-    /// TODO remove `payload_byte_len` arg and do not check `end`?
+    /// TODO delete this in favor of ns_payload_range2
     ///
     /// Panics if `index >= self.num_nss()`.
-    pub fn ns_payload_range(&self, index: &NsIndex, payload_byte_len: usize) -> NsPayloadRange {
+    pub fn ns_payload_range_deleteme(
+        &self,
+        index: &NsIndex,
+        payload_byte_len: usize,
+    ) -> NsPayloadRange {
         let end = self.read_ns_offset(index).min(payload_byte_len);
         let start = index
             .prev(A(()))

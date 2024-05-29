@@ -29,7 +29,7 @@ impl NsProof {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 struct NsProofExistence {
     // TODO `#[serde(with = "base64_bytes")]` screws up serde for `NsPayloadOwned`.
-    ns_payload: NsPayloadOwned,
+    ns_payload: Vec<u8>,
     ns_proof: LargeRangeProofType,
 }
 
@@ -47,12 +47,9 @@ impl Payload {
                 existence: None,
             });
         };
-        let ns_payload = self.ns_payload(&ns_index).to_owned();
+        let ns_payload = self.ns_payload2(&ns_index);
         let ns_proof = {
-            let ns_payload_range = self
-                .ns_table
-                .ns_payload_range(&ns_index, self.payload.len())
-                .as_range();
+            let ns_payload_range = ns_payload.range().as_range();
             let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
             vid.payload_proof(&self.payload, ns_payload_range).ok()? // error: failure to make a payload proof
         };
@@ -60,7 +57,7 @@ impl Payload {
         Some(NsProof {
             ns_id,
             existence: Some(NsProofExistence {
-                ns_payload,
+                ns_payload: ns_payload.as_byte_slice().to_vec(),
                 ns_proof,
             }),
         })
@@ -101,7 +98,7 @@ impl NsProof {
                         Statement {
                             payload_subslice: pf.ns_payload.as_byte_slice(),
                             range: ns_table
-                                .ns_payload_range(
+                                .ns_payload_range_deleteme(
                                     &ns_index,
                                     VidSchemeType::get_payload_byte_len(common),
                                 )

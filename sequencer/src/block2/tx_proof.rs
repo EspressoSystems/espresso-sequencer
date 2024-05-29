@@ -34,6 +34,7 @@ pub struct TxProof {
     payload_proof_tx: Option<SmallRangeProofType>,
 }
 
+/// TODO don't impl Payload here
 impl Payload {
     pub fn transaction(&self, index: &Index) -> Option<Transaction> {
         // TODO check index.ns() in bounds
@@ -58,7 +59,7 @@ impl Payload {
         let ns_payload = self.ns_payload(index.ns());
         let ns_payload_range = self
             .ns_table
-            .ns_payload_range(index.ns(), self.payload.len());
+            .ns_payload_range_deleteme(index.ns(), self.payload.len());
 
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(common));
 

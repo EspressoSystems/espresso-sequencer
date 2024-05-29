@@ -1,5 +1,5 @@
 use crate::block2::{
-    ns_table, num_txs::NumTxs, payload_bytes::NUM_TXS_BYTE_LEN, tx_iter::TxIndex,
+    self, ns_table, num_txs::NumTxs, payload_bytes::NUM_TXS_BYTE_LEN, tx_iter::TxIndex,
     tx_table_entries::TxTableEntries,
 };
 use serde::{Deserialize, Serialize};
@@ -48,7 +48,11 @@ impl NsPayloadRange {
         self.0.clone()
     }
 
+    /// TODO delete one of these
     pub fn new(_: ns_table::A, start: usize, end: usize) -> Self {
+        Self(start..end)
+    }
+    pub fn new2(_: block2::A, start: usize, end: usize) -> Self {
         Self(start..end)
     }
 }
