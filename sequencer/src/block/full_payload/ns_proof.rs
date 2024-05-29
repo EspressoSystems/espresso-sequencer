@@ -19,72 +19,63 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct NsProof {
     ns_id: NamespaceId,
-    existence: Option<NsProofExistence>, // `None` if `ns_id` is not in the block.
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-struct NsProofExistence {
     ns_payload: NsPayloadOwned,
     ns_proof: LargeRangeProofType,
 }
 
 impl NsProof {
     /// Returns the payload bytes for namespace `ns_id`, along with a proof of
-    /// correctness for those bytes. Returns `None` on error.
+    /// correctness for those bytes. Returns `None` if `ns_id` is not in the
+    /// namespace table, or on error.
     ///
-    /// The namespace payload is included as a hidden field in the returned
-    /// [`NsProof`]. A conventional API would instead return `(NsPayload,
-    /// NsProof)` and [`NsProof`] would not contain the namespace payload.
-    /// ([`TxProof::new`](super::tx_proof::TxProof::new) conforms to this
-    /// convention.) In the future we should change this API to conform to
-    /// convention. But that would require a change to our RPC endpoint API at
-    /// [`endpoints`](crate::api::endpoints), which is a hassle.
+    /// The namespace payload [`NsPayloadOwned`] is included as a hidden field
+    /// in the returned [`NsProof`]. A conventional API would instead return
+    /// `(NsPayload, NsProof)` and [`NsProof`] would not contain the namespace
+    /// payload.
+    /// ([`TxProof::new`](crate::block::namespace_payload::TxProof::new)
+    /// conforms to this convention.) In the future we should change this API to
+    /// conform to convention. But that would require a change to our RPC
+    /// endpoint API at [`endpoints`](crate::api::endpoints), which is a hassle.
     pub fn new(payload: &Payload, ns_id: NamespaceId, common: &VidCommon) -> Option<NsProof> {
         let payload_byte_len = payload.byte_len();
         if !payload_byte_len.is_consistent(common) {
             return None; // error: vid_common inconsistent with self
         }
         let Some(ns_index) = payload.ns_table().find_ns_id(&ns_id) else {
-            // ns_id does not exist
-            return Some(NsProof {
-                ns_id,
-                existence: None,
-            });
+            return None; // error: ns_id does not exist
         };
 
         let ns_payload_range = payload.ns_table().ns_range(&ns_index, &payload_byte_len);
 
-        // TODO vid_scheme() arg should be u32
+        // TODO vid_scheme() arg should be u32 to match get_num_storage_nodes
         let vid = vid_scheme(
             VidSchemeType::get_num_storage_nodes(common)
                 .try_into()
-                .unwrap(),
+                .ok()?, // error: failure to convert u32 to usize
         );
 
         Some(NsProof {
             ns_id,
-            existence: Some(NsProofExistence {
-                ns_payload: payload.read_ns_payload(&ns_payload_range).to_owned(),
-                ns_proof: vid
-                    .payload_proof(payload.encode(), ns_payload_range.as_block_range())
-                    .ok()?,
-            }),
+            ns_payload: payload.read_ns_payload(&ns_payload_range).to_owned(),
+            ns_proof: vid
+                .payload_proof(payload.encode(), ns_payload_range.as_block_range())
+                .ok()?, // error: internal to payload_proof()
         })
     }
 
     /// Verify a [`NsProof`] against a payload commitment. Returns `None` on
     /// error or if verification fails.
     ///
-    /// There is no [`NsPayload`](super::ns_payload::NsPayload) arg because this
-    /// data is already included in the [`NsProof`]. See [`NsProof::new`] for
-    /// discussion.
+    /// There is no [`NsPayload`](crate::block::namespace_payload::NsPayload)
+    /// arg because this data is already included in the [`NsProof`]. See
+    /// [`NsProof::new`] for discussion.
     ///
     /// If verification is successful then return `(Vec<Transaction>,
     /// NamespaceId)` obtained by post-processing the underlying
-    /// [`NsPayload`](super::ns_payload::NsPayload). Why? This method might be
-    /// run by a client in a WASM environment who might be running non-Rust
-    /// code, in which case the client is unable to perform this post-processing
-    /// himself.
+    /// [`NsPayload`](crate::block::namespace_payload::NsPayload). Why? This
+    /// method might be run by a client in a WASM environment who might be
+    /// running non-Rust code, in which case the client is unable to perform
+    /// this post-processing himself.
     pub fn verify(
         &self,
         ns_table: &NsTable,
@@ -92,44 +83,34 @@ impl NsProof {
         common: &VidCommon,
     ) -> Option<(Vec<Transaction>, NamespaceId)> {
         VidSchemeType::is_consistent(commit, common).ok()?;
-        let ns_index = ns_table.find_ns_id(&self.ns_id);
+        let Some(ns_index) = ns_table.find_ns_id(&self.ns_id) else {
+            return None; // error: ns_id does not exist
+        };
 
-        match (ns_index, &self.existence) {
-            (Some(ns_index), Some(pf)) => {
-                let vid = vid_scheme(
-                    VidSchemeType::get_num_storage_nodes(common)
-                        .try_into()
-                        .unwrap(),
-                );
-                let range = ns_table
-                    .ns_range(&ns_index, &PayloadByteLen::from_vid_common(common))
-                    .as_block_range();
-                vid.payload_verify(
-                    Statement {
-                        payload_subslice: pf.ns_payload.as_bytes_slice(),
-                        range,
-                        commit,
-                        common,
-                    },
-                    &pf.ns_proof,
-                )
-                .ok()?
-                .ok()?;
+        // TODO vid_scheme() arg should be u32 to match get_num_storage_nodes
+        let vid = vid_scheme(
+            VidSchemeType::get_num_storage_nodes(common)
+                .try_into()
+                .ok()?, // error: failure to convert u32 to usize
+        );
 
-                // verification succeeded, return some data
-                Some((pf.ns_payload.export_all_txs(&self.ns_id), self.ns_id))
-            }
-            (None, None) => Some((Vec::new(), self.ns_id)), // successful verification of nonexistence
-            (None, Some(_)) | (Some(_), None) => {
-                tracing::info!("ns verify: expect [non]existence but found the opposite");
-                None // error: expect [non]existence but found the opposite
-            }
-        }
-    }
+        let range = ns_table
+            .ns_range(&ns_index, &PayloadByteLen::from_vid_common(common))
+            .as_block_range();
+        vid.payload_verify(
+            Statement {
+                payload_subslice: self.ns_payload.as_bytes_slice(),
+                range,
+                commit,
+                common,
+            },
+            &self.ns_proof,
+        )
+        .ok()? // error: internal to payload_verify()
+        .ok()?; // verification failure
 
-    /// Does this proof indicate existence or non-existence of a namespace id?
-    pub fn is_existence(&self) -> bool {
-        self.existence.is_some()
+        // verification succeeded, return some data
+        Some((self.ns_payload.export_all_txs(&self.ns_id), self.ns_id))
     }
 
     /// Return all transactions in the namespace whose payload is proven by
@@ -142,20 +123,19 @@ impl NsProof {
     /// [`NsProof`] then this method can no longer be supported.
     ///
     /// In that case, use the following a workaround:
-    /// - Given a [`NamespaceId`], get a [`NsIndex`] `i` via
+    /// - Given a [`NamespaceId`], get a
+    ///   [`NsIndex`](crate::block::full_payload::NsIndex) `i` via
     ///   [`NsTable::find_ns_id`].
-    /// - Use `i` to get a [`NsPayload`] `p` via [`Payload::ns_payload`].
+    /// - Use `i` to get a
+    ///   [`NsPayload`](crate::block::namespace_payload::NsPayload) `p` via
+    ///   [`Payload::ns_payload`].
     /// - Use `p` to get the desired [`Vec<Transaction>`] via
-    ///   [`NsPayload::export_all_txs`].
+    ///   [`NsPayload::export_all_txs`](crate::block::namespace_payload::NsPayload::export_all_txs).
     ///
     /// This workaround duplicates the work done in [`NsProof::new`]. If you
     /// don't like that then you could instead hack [`NsProof::new`] to return a
     /// pair `(NsProof, Vec<Transaction>)`.
     pub fn export_all_txs(&self) -> Vec<Transaction> {
-        if let Some(existence) = &self.existence {
-            existence.ns_payload.export_all_txs(&self.ns_id)
-        } else {
-            Vec::new()
-        }
+        self.ns_payload.export_all_txs(&self.ns_id)
     }
 }

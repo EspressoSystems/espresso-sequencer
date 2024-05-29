@@ -92,8 +92,6 @@ fn basic_correctness() {
             let ns_proof = NsProof::new(&block, ns_id, &vid_common)
                 .expect("namespace_with_proof should succeed");
 
-            assert!(ns_proof.is_existence());
-
             let (ns_proof_txs, ns_proof_ns_id) = ns_proof
                 .verify(block.ns_table(), &vid_commit, &vid_common)
                 .unwrap_or_else(|| panic!("namespace {} proof verification failure", ns_id));
