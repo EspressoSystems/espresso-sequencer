@@ -49,8 +49,9 @@
       # node=error: disable noisy anvil output
       RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
       RUST_BACKTRACE = 1;
-      RUSTFLAGS =
-        " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\" --cfg hotshot_example";
+      ASYNC_FLAGS = " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\" ";
+      RUSTFLAGS = "${ASYNC_FLAGS} --cfg hotshot_example";
+      RUSTDOCFLAGS = ASYNC_FLAGS;
       # Use a distinct target dir for builds from within nix shells.
       CARGO_TARGET_DIR = "target/nix";
 
@@ -92,7 +93,7 @@
         in
         import ./cross-shell.nix {
           inherit pkgs;
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS RUSTDOCFLAGS CARGO_TARGET_DIR;
         };
     in
     with pkgs; {
@@ -231,7 +232,7 @@
           '' + self.checks.${system}.pre-commit-check.shellHook;
           RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
           FOUNDRY_SOLC = "${solc}/bin/solc";
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS RUSTDOCFLAGS CARGO_TARGET_DIR;
         };
       devShells.crossShell =
         crossShell { config = "x86_64-unknown-linux-musl"; };
@@ -252,7 +253,7 @@
             protobuf # to compile libp2p-autonat
             toolchain
           ];
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS RUSTDOCFLAGS CARGO_TARGET_DIR;
         };
       devShells.coverage =
         let
@@ -291,7 +292,7 @@
             protobuf # to compile libp2p-autonat
             stableToolchain
           ];
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
+          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS RUSTDOCFLAGS CARGO_TARGET_DIR;
         };
     });
 }
