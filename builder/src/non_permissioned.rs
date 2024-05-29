@@ -36,7 +36,7 @@ use hotshot_types::{
 };
 use sequencer::{
     catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, ChainConfig, L1Params,
-    NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes,
+    NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes, ValidatedState,
 };
 
 use hotshot_events_service::{
@@ -87,6 +87,7 @@ impl BuilderConfig {
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
+        validated_state: ValidatedState,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
@@ -114,8 +115,10 @@ impl BuilderConfig {
         // builder api request channel
         let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
 
-        let (genesis_payload, genesis_ns_table) = Payload::from_transactions([], &instance_state)
-            .expect("genesis payload construction failed");
+        let (genesis_payload, genesis_ns_table) =
+            Payload::from_transactions([], &validated_state, &instance_state)
+                .await
+                .expect("genesis payload construction failed");
 
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
 
@@ -159,6 +162,8 @@ impl BuilderConfig {
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
+            Duration::from_secs(60),
+            Arc::new(validated_state),
         );
 
         // spawn the builder event loop

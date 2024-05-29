@@ -186,7 +186,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Initialize the push CDN network (and perform the initial connection)
     let cdn_network = PushCdnNetwork::new(
         network_params.cdn_endpoint,
-        vec![Topic::Global, Topic::DA],
+        vec![Topic::Global, Topic::Da],
         KeyPair {
             public_key: WrappedSignatureKey(my_config.public_key),
             private_key: my_config.private_key.clone(),
@@ -259,7 +259,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         chain_config: genesis.chain_config,
         l1_client,
         genesis_header: genesis.header,
-        genesis_state,
+        genesis_state: genesis_state.clone(),
         l1_genesis,
         peers: Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
         node_id: node_index,
@@ -283,7 +283,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     .await;
 
     let ctx = BuilderContext::init(
-        hotshot_handle,
+        Arc::new(hotshot_handle),
         state_signer,
         node_index,
         eth_key_pair,
@@ -294,6 +294,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         max_api_timeout_duration,
         buffered_view_num_count,
         maximize_txns_count_timeout_duration,
+        genesis_state,
     )
     .await?;
 
@@ -354,7 +355,9 @@ pub async fn init_hotshot<
         config,
         memberships,
         networks,
-        HotShotInitializer::from_genesis(instance_state).unwrap(),
+        HotShotInitializer::from_genesis(instance_state)
+            .await
+            .unwrap(),
         ConsensusMetricsValue::new(metrics),
         da_storage,
     )
@@ -378,7 +381,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     /// Constructor
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
-        hotshot_handle: Consensus<N, P>,
+        hotshot_handle: Arc<Consensus<N, P>>,
         state_signer: StateSigner<Ver>,
         node_index: u64,
         eth_key_pair: EthKeyPair,
@@ -389,6 +392,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
+        validated_state: ValidatedState,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
@@ -406,8 +410,10 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         // builder api request channel
         let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
 
-        let (genesis_payload, genesis_ns_table) = Payload::from_transactions([], &instance_state)
-            .expect("genesis payload construction failed");
+        let (genesis_payload, genesis_ns_table) =
+            Payload::from_transactions([], &validated_state, &instance_state)
+                .await
+                .expect("genesis payload construction failed");
 
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
 
@@ -452,9 +458,10 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
+            Duration::from_secs(60),
+            Arc::new(validated_state),
         );
 
-        let hotshot_handle_clone = hotshot_handle.clone();
         // spawn the builder service
         async_spawn(async move {
             run_permissioned_standalone_builder_service(
@@ -462,7 +469,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 da_sender,
                 qc_sender,
                 decide_sender,
-                hotshot_handle,
+                Arc::clone(&hotshot_handle),
             )
             .await;
         });
@@ -483,7 +490,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         run_builder_api_service(hotshot_builder_api_url.clone(), proxy_global_state);
 
         let ctx = Self {
-            hotshot_handle: hotshot_handle_clone,
+            hotshot_handle: Arc::clone(&hotshot_handle),
             node_index,
             state_signer: Arc::new(state_signer),
             wait_for_orchestrator: None,

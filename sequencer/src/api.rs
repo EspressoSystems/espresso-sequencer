@@ -59,7 +59,7 @@ struct ConsensusState<N: network::Type, P: SequencerPersistence, Ver: StaticVers
     node_state: NodeState,
 
     #[derivative(Debug = "ignore")]
-    handle: SystemContextHandle<SeqTypes, Node<N, P>>,
+    handle: Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>>>>,
 }
 
 impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
@@ -97,7 +97,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     fn event_stream(&self) -> impl Stream<Item = Event<SeqTypes>> + Unpin {
         let state = self.clone();
-        async move { state.consensus().await.event_stream() }
+        async move { state.consensus().await.read().await.event_stream() }
             .boxed()
             .flatten_stream()
     }
@@ -110,8 +110,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         &self.consensus.as_ref().get().await.get_ref().event_streamer
     }
 
-    async fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N, P>> {
-        &self.consensus.as_ref().get().await.get_ref().handle
+    async fn consensus(&self) -> Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>>>> {
+        Arc::clone(&self.consensus.as_ref().get().await.get_ref().handle)
     }
 
     async fn node_state(&self) -> &NodeState {
@@ -125,6 +125,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             .await
             .get_ref()
             .handle
+            .read()
+            .await
             .hotshot
             .config
             .clone()
@@ -165,7 +167,12 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
     SubmitDataSource<N, P> for ApiState<N, P, Ver>
 {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
-        self.consensus().await.submit_transaction(tx).await?;
+        self.consensus()
+            .await
+            .read()
+            .await
+            .submit_transaction(tx)
+            .await?;
         Ok(())
     }
 }
@@ -221,9 +228,16 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
         view: ViewNumber,
         account: Address,
     ) -> anyhow::Result<AccountQueryData> {
-        let state = self.consensus().await.state(view).await.context(format!(
-            "state not available for height {height}, view {view:?}"
-        ))?;
+        let state = self
+            .consensus()
+            .await
+            .read()
+            .await
+            .state(view)
+            .await
+            .context(format!(
+                "state not available for height {height}, view {view:?}"
+            ))?;
         let (proof, balance) = FeeAccountProof::prove(&state.fee_merkle_tree, account).context(
             format!("account {account} not available for height {height}, view {view:?}"),
         )?;
@@ -232,9 +246,16 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
 
     #[tracing::instrument(skip(self))]
     async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
-        let state = self.consensus().await.state(view).await.context(format!(
-            "state not available for height {height}, view {view:?}"
-        ))?;
+        let state = self
+            .consensus()
+            .await
+            .read()
+            .await
+            .state(view)
+            .await
+            .context(format!(
+                "state not available for height {height}, view {view:?}"
+            ))?;
         let tree = &state.block_merkle_tree;
         let frontier = tree.lookup(tree.num_leaves() - 1).expect_ok()?.1;
         Ok(frontier)
@@ -402,9 +423,15 @@ mod test_helpers {
         }
 
         pub async fn stop_consensus(&mut self) {
-            self.server.consensus_mut().shut_down().await;
+            let consensus = self.server.consensus();
+            let mut consensus_writer = consensus.write().await;
+            consensus_writer.shut_down().await;
+            drop(consensus_writer);
+
             for ctx in &mut self.peers {
-                ctx.consensus_mut().shut_down().await;
+                let consensus = ctx.consensus();
+                let mut consensus_writer = consensus.write().await;
+                consensus_writer.shut_down().await;
             }
         }
     }
@@ -559,10 +586,12 @@ mod test_helpers {
         }
 
         // Stop consensus running on the node so we freeze the decided and undecided states.
-        network.server.consensus_mut().shut_down().await;
+        let consensus = network.server.consensus();
+        let consensus_reader = consensus.read().await;
+        consensus_reader.shut_down().await;
 
         // Undecided fee state: absent account.
-        let leaf = network.server.consensus().decided_leaf().await;
+        let leaf = consensus_reader.decided_leaf().await;
         let height = leaf.height() + 1;
         let view = leaf.view_number() + 1;
         let res = client
