@@ -4171,11 +4171,12 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.23"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.25#337df31f577acdc5ecf9e628d1bfa1644b8ce6aa"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.26#7e1a763650825fd1b445d59ba08e2382eaf9e79d"
 dependencies = [
  "anyhow",
  "ark-serialize",
  "async-compatibility-layer",
+ "async-lock 3.3.0",
  "async-std",
  "async-trait",
  "atomic_store",
