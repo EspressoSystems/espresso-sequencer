@@ -56,7 +56,7 @@ impl<'a> Iterator for Iter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let Some(ns_index) = self.ns_iter.peek() else {
-                return None; // ns_iter consumed
+                break None; // ns_iter consumed
             };
 
             if let Some(tx_index) = self
@@ -64,7 +64,7 @@ impl<'a> Iterator for Iter<'a> {
                 .get_or_insert_with(|| self.block.ns_payload(ns_index).iter())
                 .next()
             {
-                return Some(Index {
+                break Some(Index {
                     ns_index: ns_index.clone(),
                     tx_index,
                 });
