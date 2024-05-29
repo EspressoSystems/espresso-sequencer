@@ -36,8 +36,6 @@ processes:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
     # script will think they're already deployed.
     command: unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --use-mock-contract --only hotshot,light-client
-    environment:
-      - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
     depends_on:
       demo-l1-network:
         condition: process_healthy
@@ -92,8 +90,6 @@ processes:
     command: state-prover -d
     environment:
       - MNEMONIC=$ESPRESSO_SEQUENCER_ETH_MNEMONIC
-      - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
-      - ESPRESSO_STATE_PROVER_UPDATE_INTERVAL=30s
       - RAYON_NUM_THREADS=$PROVER_RAYON_NUM_THREADS
     depends_on:
       orchestrator:

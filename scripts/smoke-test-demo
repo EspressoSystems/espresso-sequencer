@@ -46,14 +46,17 @@ function get_balance() {
 }
 
 function last_light_client_update() {
-    curl -s $L1_PROVIDER \
+    curl -s "$L1_PROVIDER" \
         -H "Content-Type: application/json" \
-        -d "{
-                \"method\": \"eth_getLogs\",
-                \"params\": [{\"address\": \"$ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS\"}],
-                \"id\": 1,
-                \"jsonrpc\": \"2.0\"
-            }" \
+        -d '{
+            "method": "eth_getLogs",
+            "params": [{
+                "fromBlock": "earliest",
+                "address": "'"$ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS"'"
+            }],
+            "id": 1,
+            "jsonrpc": "2.0"
+        }' \
     | jq '.result | .[-1].blockNumber // "0x0"' \
     | xargs printf "%d\n" # Convert from hex to decimal
 }
