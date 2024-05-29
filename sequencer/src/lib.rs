@@ -18,7 +18,6 @@ use async_std::sync::RwLock;
 use async_trait::async_trait;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
-use ethers::types::U256;
 use genesis::{GenesisHeader, L1Finalized};
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
@@ -500,7 +499,10 @@ pub mod testing {
         persistence::no_storage::{self, NoStorage},
     };
     use committable::Committable;
-    use ethers::utils::{Anvil, AnvilInstance};
+    use ethers::{
+        types::U256,
+        utils::{Anvil, AnvilInstance},
+    };
     use futures::{
         future::join_all,
         stream::{Stream, StreamExt},

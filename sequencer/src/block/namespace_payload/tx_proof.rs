@@ -237,14 +237,14 @@ impl TxProof {
                 }
                 (None, true) => {} // 0-length tx, nothing to verify
                 (None, false) => {
-                    tracing::info!(
+                    tracing::error!(
                         "tx verify: missing proof for nonempty tx payload range {:?}",
                         range
                     );
                     return None;
                 }
                 (Some(_), true) => {
-                    tracing::info!("tx verify: unexpected proof for empty tx payload range");
+                    tracing::error!("tx verify: unexpected proof for empty tx payload range");
                     return None;
                 }
             }

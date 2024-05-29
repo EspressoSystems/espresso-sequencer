@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 pub struct NsProof {
     ns_index: NsIndex,
     ns_payload: NsPayloadOwned,
-    ns_proof: LargeRangeProofType,
+    ns_proof: Option<LargeRangeProofType>, // `None` if ns_payload is empty
 }
 
 impl NsProof {
@@ -52,13 +52,19 @@ impl NsProof {
         );
 
         // TODO FIX: vid.payload_proof fails if ns_payload_range is empty!
+        let ns_proof = if ns_payload_range.as_block_range().is_empty() {
+            None
+        } else {
+            Some(
+                vid.payload_proof(payload.encode(), ns_payload_range.as_block_range())
+                    .ok()?, // error: internal to payload_proof()
+            )
+        };
 
         Some(NsProof {
             ns_index: index.clone(),
             ns_payload: payload.read_ns_payload(&ns_payload_range).to_owned(),
-            ns_proof: vid
-                .payload_proof(payload.encode(), ns_payload_range.as_block_range())
-                .ok()?, // error: internal to payload_proof()
+            ns_proof,
         })
     }
 
@@ -86,27 +92,44 @@ impl NsProof {
             return None; // error: index out of bounds
         }
 
-        // TODO vid_scheme() arg should be u32 to match get_num_storage_nodes
-        let vid = vid_scheme(
-            VidSchemeType::get_num_storage_nodes(common)
-                .try_into()
-                .ok()?, // error: failure to convert u32 to usize
-        );
-
         let range = ns_table
             .ns_range(&self.ns_index, &PayloadByteLen::from_vid_common(common))
             .as_block_range();
-        vid.payload_verify(
-            Statement {
-                payload_subslice: self.ns_payload.as_bytes_slice(),
-                range,
-                commit,
-                common,
-            },
-            &self.ns_proof,
-        )
-        .ok()? // error: internal to payload_verify()
-        .ok()?; // verification failure
+
+        match (&self.ns_proof, range.is_empty()) {
+            (Some(proof), false) => {
+                // TODO vid_scheme() arg should be u32 to match get_num_storage_nodes
+                let vid = vid_scheme(
+                    VidSchemeType::get_num_storage_nodes(common)
+                        .try_into()
+                        .ok()?, // error: failure to convert u32 to usize
+                );
+
+                vid.payload_verify(
+                    Statement {
+                        payload_subslice: self.ns_payload.as_bytes_slice(),
+                        range,
+                        commit,
+                        common,
+                    },
+                    proof,
+                )
+                .ok()? // error: internal to payload_verify()
+                .ok()?; // verification failure
+            }
+            (None, true) => {} // 0-length namespace, nothing to verify
+            (None, false) => {
+                tracing::error!(
+                    "ns verify: missing proof for nonempty ns payload range {:?}",
+                    range
+                );
+                return None;
+            }
+            (Some(_), true) => {
+                tracing::error!("ns verify: unexpected proof for empty ns payload range");
+                return None;
+            }
+        }
 
         // verification succeeded, return some data
         let ns_id = ns_table.read_ns_id(&self.ns_index);
