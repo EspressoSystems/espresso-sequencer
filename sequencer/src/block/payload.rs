@@ -325,9 +325,7 @@ impl hotshot_types::traits::block_contents::TestableBlock<SeqTypes>
     for Payload<crate::block::entry::TxTableEntryWord>
 {
     fn genesis() -> Self {
-        BlockPayload::from_transactions([], &Default::default())
-            .unwrap()
-            .0
+        BlockPayload::empty().0
     }
 
     fn txn_count(&self) -> u64 {

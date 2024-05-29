@@ -104,6 +104,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         &self,
         state: NodeState,
     ) -> anyhow::Result<HotShotInitializer<SeqTypes>> {
+        let genesis_validated_state = ValidatedState::genesis(&state).0;
         let highest_voted_view = match self
             .load_latest_acted_view()
             .await
@@ -137,12 +138,15 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             }
             None => {
                 tracing::info!("no saved leaf, starting from genesis leaf");
-                (Leaf::genesis(&state), QuorumCertificate::genesis(&state))
+                (
+                    Leaf::genesis(&genesis_validated_state, &state).await,
+                    QuorumCertificate::genesis(&genesis_validated_state, &state).await,
+                )
             }
         };
         let validated_state = if leaf.block_header().height == 0 {
             // If we are starting from genesis, we can provide the full state.
-            Some(Arc::new(ValidatedState::genesis(&state).0))
+            Some(Arc::new(genesis_validated_state))
         } else {
             // Otherwise, we will have to construct a sparse state and fetch missing data during
             // catchup.
