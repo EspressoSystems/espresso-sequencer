@@ -1247,7 +1247,14 @@ where
                         chunk_size,
                         start..block_height,
                     );
-                while blocks.next().await.is_some() {}
+                while let Some(fut) = blocks.next().await {
+                    // Wait for the block to be fetched. This slows down the scanner so that we
+                    // don't waste memory generating more active fetch tasks then we can handle at a
+                    // given time. Note that even with this await, all blocks within a chunk are
+                    // fetched in paralle, so this does not block the next block in the chunk, only
+                    // the next chunk until the current chunk completes.
+                    fut.await;
+                }
                 // We have to trigger a separate fetch of the VID data, since this is fetched
                 // independently of the block payload.
                 let mut vid = self
@@ -1256,7 +1263,11 @@ where
                         chunk_size,
                         start..block_height,
                     );
-                while vid.next().await.is_some() {}
+                while let Some(fut) = vid.next().await {
+                    // As above, limit the speed at which we spawn new fetches to the speed at which
+                    // we can process them.
+                    fut.await;
+                }
 
                 tracing::info!("completed proactive scan, will scan again in {minor_interval:?}");
                 sleep(minor_interval).await;
