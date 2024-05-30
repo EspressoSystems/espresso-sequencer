@@ -14,7 +14,7 @@ async fn test_quorum_vote_task_success() {
     use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState};
     use hotshot_testing::{
         helpers::build_system_handle,
-        predicates::event::{exact, quorum_vote_send},
+        predicates::event::{exact, quorum_vote_send, validated_state_updated},
         script::{run_test_script, TestScriptStage},
         view_generator::TestViewGenerator,
     };
@@ -32,12 +32,20 @@ async fn test_quorum_vote_task_success() {
     let mut leaves = Vec::new();
     let mut dacs = Vec::new();
     let mut vids = Vec::new();
+    let consensus = handle.hotshot.consensus().clone();
+    let mut consensus_writer = consensus.write().await;
     for view in (&mut generator).take(2).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         leaves.push(view.leaf.clone());
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
+        consensus_writer.update_validated_state_map(
+            view.quorum_proposal.data.view_number(),
+            build_fake_view_with_leaf(view.leaf.clone()),
+        );
+        consensus_writer.update_saved_leaves(view.leaf.clone());
     }
+    drop(consensus_writer);
 
     // Send the quorum proposal, DAC, VID share data, and validated state, in which case a dummy
     // vote can be formed and the view number will be updated.
@@ -55,6 +63,7 @@ async fn test_quorum_vote_task_success() {
             exact(DaCertificateValidated(dacs[1].clone())),
             exact(VidShareValidated(vids[1].0[0].clone())),
             exact(QuorumVoteDependenciesValidated(ViewNumber::new(2))),
+            validated_state_updated(),
             quorum_vote_send(),
         ],
         asserts: vec![],
@@ -73,7 +82,7 @@ async fn test_quorum_vote_task_vote_now() {
     use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState};
     use hotshot_testing::{
         helpers::build_system_handle,
-        predicates::event::{exact, quorum_vote_send},
+        predicates::event::{exact, quorum_vote_send, validated_state_updated},
         script::{run_test_script, TestScriptStage},
         view_generator::TestViewGenerator,
     };
@@ -103,6 +112,7 @@ async fn test_quorum_vote_task_vote_now() {
         inputs: vec![VoteNow(view.view_number, vote_dependency_data)],
         outputs: vec![
             exact(QuorumVoteDependenciesValidated(ViewNumber::new(1))),
+            validated_state_updated(),
             quorum_vote_send(),
         ],
         asserts: vec![],

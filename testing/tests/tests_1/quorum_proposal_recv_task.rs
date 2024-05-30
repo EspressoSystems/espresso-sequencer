@@ -1,6 +1,7 @@
 // TODO: Remove after integration
 #![allow(unused_imports)]
 
+use futures::StreamExt;
 use hotshot::tasks::task_state::CreateTaskState;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
 use hotshot_task_impls::{
@@ -161,7 +162,7 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
                 ),
             )),
             exact(NewUndecidedView(leaves[2].clone())),
-            exact(LivenessCheckProposalRecv(proposals[2].data.clone())),
+            exact(QuorumProposalLivenessValidated(proposals[2].data.clone())),
             vote_now(),
         ],
         asserts: vec![],

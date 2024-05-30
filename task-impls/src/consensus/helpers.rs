@@ -848,12 +848,6 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
         }
     }
 
-    // This is ALWAYS None if "dependency-tasks" is not active.
-    #[cfg(feature = "dependency-tasks")]
-    {
-        consensus.update_dontuse_decided_upgrade_cert(decided_upgrade_cert);
-    }
-
     drop(consensus);
 
     #[cfg(not(feature = "dependency-tasks"))]

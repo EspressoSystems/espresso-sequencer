@@ -267,3 +267,14 @@ where
         Arc::new(move |e: Arc<HotShotEvent<TYPES>>| matches!(e.as_ref(), VoteNow(..)));
     Box::new(EventPredicate { check, info })
 }
+
+pub fn validated_state_updated<TYPES>() -> Box<EventPredicate<TYPES>>
+where
+    TYPES: NodeType,
+{
+    let info = "ValidatedStateUpdated".to_string();
+    let check: EventCallback<TYPES> = Arc::new(move |e: Arc<HotShotEvent<TYPES>>| {
+        matches!(e.as_ref(), ValidatedStateUpdated(..))
+    });
+    Box::new(EventPredicate { check, info })
+}

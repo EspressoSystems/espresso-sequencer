@@ -9,7 +9,7 @@ use hotshot_example_types::{
 use hotshot_task_impls::{da::DaTaskState, events::HotShotEvent::*};
 use hotshot_testing::{
     helpers::build_system_handle,
-    predicates::event::exact,
+    predicates::event::{exact, validated_state_updated},
     script::{run_test_script, TestScriptStage},
     view_generator::TestViewGenerator,
 };
@@ -90,6 +90,7 @@ async fn test_da_task() {
         outputs: vec![
             exact(DaProposalValidated(proposals[1].clone(), leaders[1])),
             exact(DaVoteSend(votes[1].clone())),
+            validated_state_updated(),
         ],
         asserts: vec![],
     };

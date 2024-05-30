@@ -40,7 +40,7 @@ pub(crate) enum ProposalDependency {
     TimeoutCert,
 
     /// For the `QuroumProposalValidated` event after validating `QuorumProposalRecv` or the
-    /// `LivenessCheckProposalRecv` event during the liveness check in `QuorumProposalRecv`.
+    /// `QuorumProposalLivenessValidated` event during the liveness check in `QuorumProposalRecv`.
     Proposal,
 
     /// For the `VidShareValidated` event.
@@ -212,7 +212,7 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
                     vid_share = Some(share.clone());
                 }
                 _ => {
-                    // LivenessCheckProposalRecv and QuorumProposalValidated are implicitly
+                    // QuorumProposalLivenessValidated and QuorumProposalValidated are implicitly
                     // handled here.
                 }
             }

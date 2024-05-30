@@ -180,13 +180,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
                 #[cfg(async_executor_impl = "tokio")]
                 let payload_commitment = payload_commitment.unwrap();
 
-                let view = proposal.data.view_number();
+                let view_number = proposal.data.view_number();
                 // Generate and send vote
                 let Ok(vote) = DaVote::create_signed_vote(
                     DaData {
                         payload_commit: payload_commitment,
                     },
-                    view,
+                    view_number,
                     &self.public_key,
                     &self.private_key,
                 ) else {
@@ -202,19 +202,23 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
                 // Ensure this view is in the view map for garbage collection, but do not overwrite if
                 // there is already a view there: the replica task may have inserted a `Leaf` view which
                 // contains strictly more information.
-                if !consensus.validated_state_map().contains_key(&view) {
-                    consensus.update_validated_state_map(
-                        view,
-                        View {
-                            view_inner: ViewInner::Da { payload_commitment },
-                        },
-                    );
+                if !consensus.validated_state_map().contains_key(&view_number) {
+                    let view = View {
+                        view_inner: ViewInner::Da { payload_commitment },
+                    };
+                    consensus.update_validated_state_map(view_number, view.clone());
+                    broadcast_event(
+                        HotShotEvent::ValidatedStateUpdated(view_number, view).into(),
+                        &event_stream,
+                    )
+                    .await;
                 }
 
                 // Record the payload we have promised to make available.
-                if let Err(e) = consensus
-                    .update_saved_payloads(view, Arc::clone(&proposal.data.encoded_transactions))
-                {
+                if let Err(e) = consensus.update_saved_payloads(
+                    view_number,
+                    Arc::clone(&proposal.data.encoded_transactions),
+                ) {
                     tracing::trace!("{e:?}");
                 }
                 // Optimistically calculate and update VID if we know that the primary network is down.
@@ -223,7 +227,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
                     let membership = Arc::clone(&self.quorum_membership);
                     let pk = self.private_key.clone();
                     async_spawn(async move {
-                        Consensus::calculate_and_update_vid(consensus, view, membership, &pk).await;
+                        Consensus::calculate_and_update_vid(
+                            consensus,
+                            view_number,
+                            membership,
+                            &pk,
+                        )
+                        .await;
                     });
                 }
             }

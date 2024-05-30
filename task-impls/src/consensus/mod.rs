@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-#[cfg(not(feature = "dependency-tasks"))]
 use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 #[cfg(not(feature = "dependency-tasks"))]

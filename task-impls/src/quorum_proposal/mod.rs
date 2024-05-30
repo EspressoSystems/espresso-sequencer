@@ -282,13 +282,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             secondary_deps.push(AndDependency::from_deps(vec![qc_dependency]));
         }
 
+        let mut primary_deps = vec![payload_commitment_dependency, vid_share_dependency];
+
+        if *view_number > 1 {
+            primary_deps.push(validated_state_update_dependency);
+        }
+
         AndDependency::from_deps(vec![OrDependency::from_deps(vec![
             AndDependency::from_deps(vec![
-                OrDependency::from_deps(vec![AndDependency::from_deps(vec![
-                    payload_commitment_dependency,
-                    vid_share_dependency,
-                    validated_state_update_dependency,
-                ])]),
+                OrDependency::from_deps(vec![AndDependency::from_deps(primary_deps)]),
                 OrDependency::from_deps(secondary_deps),
             ]),
         ])])
