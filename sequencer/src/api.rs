@@ -400,7 +400,7 @@ pub mod test_helpers {
 
             // Hook the builder up to the event stream from the first node
             if let Some(builder_task) = builder_task {
-                builder_task.start(Box::new(handle_0.event_stream()));
+                builder_task.start(Box::new(handle_0.event_stream().await));
             }
 
             for ctx in &nodes {
@@ -516,7 +516,7 @@ pub mod test_helpers {
         let l1 = anvil.endpoint().parse().unwrap();
         let network =
             TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
-        let mut events = network.server.event_stream();
+        let mut events = network.server.event_stream().await;
 
         client.connect(None).await;
 
@@ -553,7 +553,14 @@ pub mod test_helpers {
         // Wait for block >=2 appears
         // It's waiting for an extra second to make sure that the signature is generated
         loop {
-            height = network.server.consensus().decided_leaf().await.height();
+            height = network
+                .server
+                .consensus()
+                .read()
+                .await
+                .decided_leaf()
+                .await
+                .height();
             sleep(std::time::Duration::from_secs(1)).await;
             if height >= 2 {
                 break;
@@ -585,12 +592,12 @@ pub mod test_helpers {
         let options = opt(Options::from(options::Http { port }).catchup(Default::default()));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let mut network =
+        let network =
             TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
         client.connect(None).await;
 
         // Wait for a few blocks to be decided.
-        let mut events = network.server.event_stream();
+        let mut events = network.server.event_stream().await;
         loop {
             if let Event {
                 event: EventType::Decide { leaf_chain, .. },
@@ -607,9 +614,16 @@ pub mod test_helpers {
         }
 
         // Stop consensus running on the node so we freeze the decided and undecided states.
+        // We'll let it go out of scope here since it's a write lock.
+        {
+            let consensus = network.server.consensus();
+            let mut consensus_writer = consensus.write().await;
+            consensus_writer.shut_down().await;
+        }
+
+        // Re-acquire a read lock to the consensus state.
         let consensus = network.server.consensus();
         let consensus_reader = consensus.read().await;
-        consensus_reader.shut_down().await;
 
         // Undecided fee state: absent account.
         let leaf = consensus_reader.decided_leaf().await;
@@ -631,6 +645,8 @@ pub mod test_helpers {
                     &network
                         .server
                         .consensus()
+                        .read()
+                        .await
                         .state(view)
                         .await
                         .unwrap()
@@ -650,6 +666,8 @@ pub mod test_helpers {
         let root = &network
             .server
             .consensus()
+            .read()
+            .await
             .state(view)
             .await
             .unwrap()
