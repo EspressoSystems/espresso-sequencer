@@ -10,4 +10,4 @@ ENTRYPOINT ["tini", "--"]
 COPY target/$TARGETARCH/release/espresso-bridge /bin/bridge
 RUN chmod +x /bin/bridge
 
-ENTRYPOINT [ "/bin/bridge"]
+CMD [ "/bin/bridge"]
