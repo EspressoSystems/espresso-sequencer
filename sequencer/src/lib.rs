@@ -514,6 +514,7 @@ pub mod testing {
     };
     use hotshot::types::{EventType::Decide, Message};
     use hotshot_stake_table::vec_based::StakeTable;
+    use hotshot_testing::block_builder::SimpleBuilderConfig;
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
@@ -528,10 +529,12 @@ pub mod testing {
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
-    pub async fn run_test_builder() -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
+    pub async fn run_test_builder(
+        _port: Option<u16>,
+    ) -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
         <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
             TestConfig::NUM_NODES,
-            (),
+            SimpleBuilderConfig::default(),
         )
         .await
     }
@@ -806,7 +809,7 @@ mod test {
         let url = anvil.url();
         let mut config = TestConfig::default_with_l1(url);
 
-        let (builder_task, builder_url) = run_test_builder().await;
+        let (builder_task, builder_url) = run_test_builder(None).await;
 
         config.set_builder_url(builder_url);
 
@@ -848,7 +851,7 @@ mod test {
         let url = anvil.url();
         let mut config = TestConfig::default_with_l1(url);
 
-        let (builder_task, builder_url) = run_test_builder().await;
+        let (builder_task, builder_url) = run_test_builder(None).await;
 
         config.set_builder_url(builder_url);
         let handles = config.init_nodes(ver).await;

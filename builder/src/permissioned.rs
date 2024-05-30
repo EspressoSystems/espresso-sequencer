@@ -381,7 +381,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     /// Constructor
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
-        hotshot_handle: Consensus<N, P>,
+        hotshot_handle: Arc<Consensus<N, P>>,
         state_signer: StateSigner<Ver>,
         node_index: u64,
         eth_key_pair: EthKeyPair,
@@ -457,10 +457,10 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 .base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
-            Arc::new(instance_state),
+            Arc::new(instance_state),       //??
+            Duration::from_secs(60),
             Arc::new(validated_state),
-            //??
-            Duration::from_secs(60)
+     
         );
 
         let hotshot_handle_clone = Arc::clone(&hotshot_handle);
@@ -471,7 +471,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 da_sender,
                 qc_sender,
                 decide_sender,
-                hotshot_handle,
+                hotshot_handle_clone,
             )
             .await;
         });

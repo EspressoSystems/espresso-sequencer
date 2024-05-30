@@ -348,7 +348,7 @@ pub mod test_helpers {
         ) -> Self {
             let mut cfg = TestConfig::default_with_l1(l1);
 
-            let (builder_task, builder_url) = run_test_builder().await;
+            let (builder_task, builder_url) = run_test_builder(None).await;
 
             cfg.set_builder_url(builder_url);
 
