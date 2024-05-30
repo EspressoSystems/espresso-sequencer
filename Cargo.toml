@@ -59,6 +59,7 @@ hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
