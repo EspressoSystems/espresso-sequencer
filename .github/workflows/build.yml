@@ -73,7 +73,7 @@ jobs:
             target/release/permissionless-builder
             target/release/nasty-client
             target/release/pub-key
-            target/release/bridge
+            target/release/espresso-bridge
 
   build-arm:
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
@@ -118,7 +118,7 @@ jobs:
             target/release/permissionless-builder
             target/release/nasty-client
             target/release/pub-key
-            target/release/bridge
+            target/release/espresso-bridge
 
   build-dockers:
     runs-on: ubuntu-latest
@@ -421,4 +421,4 @@ jobs:
       - name: Test docker demo
         run: |
           just demo &
-          timeout 600 scripts/smoke-test-demo
+          timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
