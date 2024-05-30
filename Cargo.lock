@@ -2873,6 +2873,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "escargot"
+version = "0.5.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f474c6844cbd04e783d0f25757583db4f491770ca618bedf2fb01815fc79939"
+dependencies = [
+ "log",
+ "once_cell",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "espresso-macros"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/espresso-macros.git?tag=0.1.0#9e0b0258c99757c567676c4dd92f1501db0cf580"
@@ -4233,6 +4245,7 @@ dependencies = [
  "anyhow",
  "ark-serialize",
  "async-compatibility-layer",
+ "async-lock 3.3.0",
  "async-std",
  "async-trait",
  "atomic_store",
@@ -8592,11 +8605,13 @@ dependencies = [
  "derive_more",
  "dotenvy",
  "es-version",
+ "escargot",
  "espresso-macros",
  "ethers",
  "ethers-contract-derive",
  "futures",
  "hotshot",
+ "hotshot-contract-adapter",
  "hotshot-events-service",
  "hotshot-orchestrator",
  "hotshot-query-service",
@@ -8650,7 +8665,6 @@ dependencies = [
  "anyhow",
  "ark-serialize",
  "async-std",
- "bincode",
  "clap",
  "committable",
  "contract-bindings",

@@ -49,10 +49,12 @@
       # node=error: disable noisy anvil output
       RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
       RUST_BACKTRACE = 1;
-      RUSTFLAGS =
-        " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\" --cfg hotshot_example";
+      ASYNC_FLAGS = " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\" ";
+      RUSTFLAGS = "${ASYNC_FLAGS} --cfg hotshot_example";
+      RUSTDOCFLAGS = ASYNC_FLAGS;
       # Use a distinct target dir for builds from within nix shells.
       CARGO_TARGET_DIR = "target/nix";
+      rustEnvVars = { inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS RUSTDOCFLAGS CARGO_TARGET_DIR; };
 
       solhintPkg = { buildNpmPackage, fetchFromGitHub }:
         buildNpmPackage rec {
@@ -90,10 +92,11 @@
             inherit overlays localSystem crossSystem;
           };
         in
-        import ./cross-shell.nix {
-          inherit pkgs;
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
-        };
+        import ./cross-shell.nix
+          {
+            inherit pkgs;
+            envVars = rustEnvVars;
+          };
     in
     with pkgs; {
       checks = {
@@ -124,8 +127,7 @@
             cargo-clippy = {
               enable = true;
               description = "Run clippy";
-              entry =
-                "cargo clippy --workspace --all-features --all-targets -- -D warnings";
+              entry = "just clippy";
               types_or = [ "rust" "toml" ];
               pass_filenames = false;
             };
@@ -181,7 +183,7 @@
           '';
           solc = pkgs.solc-bin.latest;
         in
-        mkShell {
+        mkShell (rustEnvVars // {
           buildInputs = [
             # Rust dependencies
             pkg-config
@@ -232,8 +234,7 @@
           '' + self.checks.${system}.pre-commit-check.shellHook;
           RUST_SRC_PATH = "${stableToolchain}/lib/rustlib/src/rust/library";
           FOUNDRY_SOLC = "${solc}/bin/solc";
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
-        };
+        });
       devShells.crossShell =
         crossShell { config = "x86_64-unknown-linux-musl"; };
       devShells.armCrossShell =
@@ -244,7 +245,7 @@
             extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
           };
         in
-        mkShell {
+        mkShell (rustEnvVars // {
           buildInputs = [
             # Rust dependencies
             pkg-config
@@ -253,13 +254,12 @@
             protobuf # to compile libp2p-autonat
             toolchain
           ];
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
-        };
+        });
       devShells.coverage =
         let
           toolchain = pkgs.rust-bin.nightly.latest.minimal;
         in
-        mkShell {
+        mkShell (rustEnvVars // {
           buildInputs = [
             # Rust dependencies
             pkg-config
@@ -269,13 +269,12 @@
             toolchain
             grcov
           ];
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
           CARGO_INCREMENTAL = "0";
           shellHook = ''
             RUSTFLAGS="$RUSTFLAGS -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests -Cdebuginfo=2"
           '';
           RUSTDOCFLAGS = "-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests";
-        };
+        });
 
       devShells.rustShell =
         let
@@ -283,7 +282,7 @@
             extensions = [ "rustfmt" "clippy" "llvm-tools-preview" "rust-src" ];
           };
         in
-        mkShell {
+        mkShell (rustEnvVars // {
           buildInputs = [
             # Rust dependencies
             pkg-config
@@ -292,7 +291,6 @@
             protobuf # to compile libp2p-autonat
             stableToolchain
           ];
-          inherit RUST_LOG RUST_BACKTRACE RUSTFLAGS CARGO_TARGET_DIR;
-        };
+        });
     });
 }

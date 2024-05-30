@@ -15,9 +15,6 @@ target/
 # Jetbrains editor
 .idea
 
-# vscode stuff
-.vscode/settings.json
-
 node_modules/
 
 **/*DS_Store
