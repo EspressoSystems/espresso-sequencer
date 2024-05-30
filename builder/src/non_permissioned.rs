@@ -165,7 +165,6 @@ impl BuilderConfig {
              //????
              Duration::from_secs(60),
             Arc::new(validated_state),
-           
         );
 
         // spawn the builder event loop
