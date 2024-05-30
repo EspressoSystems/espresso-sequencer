@@ -1232,15 +1232,11 @@ where
                 };
                 prev_height = block_height;
 
-                // Iterate over all blocks that we should have. Merely iterating over the `Fetch`es
-                // without awaiting them is enough to trigger active fetches of missing blocks,
-                // since we always trigger an active fetch when fetching by block number. Moreover,
-                // fetching the block is enough to trigger an active fetch of the corresponding leaf
-                // if it too is missing.
-                //
-                // The chunking behavior of `get_range` automatically ensures that, no matter how
-                // big the range is, we will release the read lock on storage every `chunk_size`
-                // items, so we don't starve out would-be writers.
+                // Iterate over all blocks that we should have. Fetching the block is enough to
+                // trigger an active fetch of the corresponding leaf if it too is missing. The
+                // chunking behavior of `get_range` automatically ensures that, no matter how big
+                // the range is, we will release the read lock on storage every `chunk_size` items,
+                // so we don't starve out would-be writers.
                 let mut blocks = self
                     .clone()
                     .get_range_with_chunk_size::<_, BlockQueryData<Types>>(
