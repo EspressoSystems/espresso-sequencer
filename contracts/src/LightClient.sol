@@ -87,6 +87,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice an array to store the L1 Block Heights where the finalizedState was updated
     uint256[] public l1BlockUpdates;
 
+    /// @notice an array to store the HotShot Block Heights and their respective HotShot
+    /// commitments
+    HotShotCommitment[] public hotShotCommitments;
+
     // === Data Structure ===
     //
     /// @notice The finalized HotShot state (as the digest of the entire HotShot state)
@@ -107,6 +111,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         BN254.ScalarField stakeTableSchnorrKeyComm;
         BN254.ScalarField stakeTableAmountComm;
         uint256 threshold;
+    }
+
+    /// @notice Simplified HotShot commitment struct
+    /// @param blockHeight The block height of the latest finalized HotShot block
+    /// @param blockCommRoot The merkle root of historical block commitments (BN254::ScalarField)
+    struct HotShotCommitment {
+        uint64 blockHeight;
+        BN254.ScalarField blockCommRoot;
     }
 
     /// @notice Event that a new finalized state has been successfully verified and updated
@@ -134,8 +146,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error PermissionedProverNotSet();
     /// @notice If the same mode or prover is sent to the function, then no change is required
     error NoChangeRequired();
-    /// @notice Invalid L1 Block for checking HotShot liveness, premature or in the future
-    error InvalidL1BlockForCheckingHotShotLiveness();
+    /// @notice Invalid L1 Block for checking Light Client Updates, premature or in the future
+    error InvalidL1BlockForCheckingL1Updates();
+    /// @notice Invalid HotShot Block for checking HotShot commitments, premature or in the future
+    error InvalidHotShotBlockForCheckingBlockCommitments();
 
     /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
@@ -201,6 +215,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         //add the L1 Block to L1BlockUpdates for the genesis state
         l1BlockUpdates.push(block.number);
+
+        // add the HotShot commitment for the genesis state
+        hotShotCommitments.push(HotShotCommitment(genesis.blockHeight, genesis.blockCommRoot));
     }
 
     // === State Modifying APIs ===
@@ -260,8 +277,19 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // upon successful verification, update the latest finalized state
         states[finalizedState] = newState;
 
-        //add the L1 Block to L1BlockUpdates for the updated finalized state
+        /**
+         * TODO purge elements from the l1BlockUpdates array after a decided number of blocks e.g. 14
+         * days of blocks
+         */
+        //add the L1 Block to L1BlockUpdates for the new finalized state
         l1BlockUpdates.push(block.number);
+
+        /**
+         * TODO purge elements from the hotShotCommitments array after a decided number of blocks
+         * e.g. 14 days of blocks
+         */
+        //add the blockheight and blockCommRoot to hotShotCommitments for the new finalized state
+        hotShotCommitments.push(HotShotCommitment(newState.blockHeight, newState.blockCommRoot));
 
         emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
     }
@@ -373,7 +401,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // Edgecase 1: The block is in the future or in the past before HotShot was live
         if (l1BlockNumber > block.number || (updatesCount > 0 && l1BlockNumber < l1BlockUpdates[0]))
         {
-            revert InvalidL1BlockForCheckingHotShotLiveness();
+            revert InvalidL1BlockForCheckingL1Updates();
         }
 
         // Edgecase 2: There have only been two HotShot updates so far
@@ -421,7 +449,34 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             blockEnd - blockStart >= delayThreshold && l1BlockNumber - blockStart >= delayThreshold;
     }
 
+    /// @notice get the number of L1 block updates
     function getL1BlockUpdatesCount() public view returns (uint256) {
         return l1BlockUpdates.length;
+    }
+
+    /// @notice get the HotShot commitment at the specified block height
+    /// @param hotShotBlockHeight hotShotBlockHeight
+    function getHotShotCommitment(uint256 hotShotBlockHeight)
+        public
+        view
+        returns (BN254.ScalarField)
+    {
+        uint256 commitmentsHeight = hotShotCommitments.length;
+        if (
+            hotShotCommitments[0].blockHeight > hotShotBlockHeight
+                || hotShotBlockHeight > hotShotCommitments[commitmentsHeight - 1].blockHeight
+        ) {
+            revert InvalidHotShotBlockForCheckingBlockCommitments();
+        }
+        for (uint256 i = 1; i < commitmentsHeight; i++) {
+            if (hotShotCommitments[i].blockHeight >= hotShotBlockHeight) {
+                return hotShotCommitments[i].blockCommRoot;
+            }
+        }
+    }
+
+    /// @notice get the number of HotShot block commitments
+    function getHotShotBlockCommitmentsCount() public view returns (uint256) {
+        return hotShotCommitments.length;
     }
 }

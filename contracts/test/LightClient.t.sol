@@ -615,7 +615,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     }
 }
 
-contract LightClient_delayThresholdTest is LightClientCommonTest {
+contract LightClient_L1UpdatesTest is LightClientCommonTest {
     LC.LightClientState internal newState;
     V.PlonkProof internal newProof;
 
@@ -801,7 +801,7 @@ contract LightClient_delayThresholdTest is LightClientCommonTest {
         uint256 currBlock = 20;
         vm.roll(currBlock);
 
-        vm.expectRevert(LC.InvalidL1BlockForCheckingHotShotLiveness.selector);
+        vm.expectRevert(LC.InvalidL1BlockForCheckingL1Updates.selector);
 
         lc.wasL1Updated(currBlock + 5, DELAY_THRESHOLD);
     }
@@ -817,8 +817,108 @@ contract LightClient_delayThresholdTest is LightClientCommonTest {
         uint256 currBlock = 20;
         vm.roll(currBlock);
 
-        vm.expectRevert(LC.InvalidL1BlockForCheckingHotShotLiveness.selector);
+        vm.expectRevert(LC.InvalidL1BlockForCheckingL1Updates.selector);
 
         lc.wasL1Updated(updates[0] - 1, DELAY_THRESHOLD);
+    }
+}
+
+contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
+    LC.LightClientState internal newState;
+    V.PlonkProof internal newProof;
+
+    /**
+     * Liveness test cases to consider
+     * Outside of HotShot threshold, revert
+     * OnlyOneUpdate - HotShot is live
+     * OnlyTwoUpdates - HotShot is live unless blockNumber is past the 2nd blockupdate and past the
+     * threshold
+     */
+    function setUp() public {
+        init();
+        // Assert owner is correctly set, add this to check owner state
+        assertEq(lc.owner(), admin, "Admin should be the owner.");
+
+        string[] memory cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-consecutive-finalized-states";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[4] = vm.toString(uint64(1));
+        cmds[5] = vm.toString(uint64(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        newState = _states[1];
+        newProof = _proofs[1];
+    }
+
+    function assertEqBN254(BN254.ScalarField a, BN254.ScalarField b) public pure {
+        assertEq(BN254.ScalarField.unwrap(a), BN254.ScalarField.unwrap(b));
+    }
+
+    function test_hotShotBlockCommIsUpdated() public {
+        uint256 blockCommCount = lc.getHotShotBlockCommitmentsCount();
+
+        // Update the state and thus the l1BlockUpdates array would be updated
+        vm.prank(permissionedProver);
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+        lc.newFinalizedState(newState, newProof);
+
+        assertEq(lc.getHotShotBlockCommitmentsCount(), blockCommCount + 1);
+    }
+
+    function test_hotShotBlockCommIsUpdatedXTimes() public {
+        uint256 blockCommCount = lc.getHotShotBlockCommitmentsCount();
+
+        string[] memory cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-consecutive-finalized-states";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[4] = vm.toString(uint64(1));
+        cmds[5] = vm.toString(uint64(1));
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState[] memory _states, V.PlonkProof[] memory _proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        uint256 statesCount = _states.length - 1;
+        // Update the state and thus the l1BlockUpdates array would be updated
+        for (uint8 i = 1; i <= statesCount; i++) {
+            LC.LightClientState memory newState = _states[i];
+            V.PlonkProof memory newProof = _proofs[i];
+            vm.prank(permissionedProver);
+            vm.expectEmit(true, true, true, true);
+            emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+            lc.newFinalizedState(newState, newProof);
+        }
+
+        assertEq(lc.getHotShotBlockCommitmentsCount(), blockCommCount + statesCount);
+    }
+
+    function test_GetHotShotCommitmentValid() public {
+        vm.prank(permissionedProver);
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
+        lc.newFinalizedState(newState, newProof);
+
+        // Test for a valid hotShotBlockHeight
+        BN254.ScalarField blockComm = lc.getHotShotCommitment(newState.blockHeight);
+        assertEqBN254(blockComm, newState.blockCommRoot);
+    }
+
+    function test_revertWhenGetHotShotCommitmentInvalidHigh() public {
+        // Get the highest HotShot blockheight recorded
+        uint256 numCommitments = lc.getHotShotBlockCommitmentsCount();
+        (uint64 blockHeight,) = lc.hotShotCommitments(numCommitments - 1);
+
+        // Expect revert when attempting to retrieve a block height higher than the highest one
+        // recorded
+        vm.expectRevert(LC.InvalidHotShotBlockForCheckingBlockCommitments.selector);
+        lc.getHotShotCommitment(blockHeight + 1);
     }
 }
