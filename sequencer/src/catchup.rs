@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use derive_more::From;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
+use rand::Rng;
 use serde::de::DeserializeOwned;
 use std::{cmp::min, fmt::Debug, sync::Arc, time::Duration};
 use surf_disco::Request;
@@ -19,6 +20,31 @@ use vbs::version::StaticVersionType;
 const MIN_RETRY_DELAY: Duration = Duration::from_millis(500);
 const MAX_RETRY_DELAY: Duration = Duration::from_secs(5);
 const BACKOFF_FACTOR: u32 = 2;
+// Exponential backoff jitter as a fraction of the backoff delay, (numerator, denominator).
+const BACKOFF_JITTER: (u64, u64) = (1, 10);
+
+#[must_use]
+fn backoff(delay: Duration) -> Duration {
+    if delay >= MAX_RETRY_DELAY {
+        return MAX_RETRY_DELAY;
+    }
+
+    let mut rng = rand::thread_rng();
+
+    // Increase the backoff by the backoff factor.
+    let ms = (delay * BACKOFF_FACTOR).as_millis() as u64;
+
+    // Sample a random jitter factor in the range [0, BACKOFF_JITTER.0 / BACKOFF_JITTER.1].
+    let jitter_num = rng.gen_range(0..BACKOFF_JITTER.0);
+    let jitter_den = BACKOFF_JITTER.1;
+
+    // Increase the delay by the jitter factor.
+    let jitter = ms * jitter_num / jitter_den;
+    let delay = Duration::from_millis(ms + jitter);
+
+    // Bound the delay by the maximum.
+    min(delay, MAX_RETRY_DELAY)
+}
 
 // This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.
@@ -73,11 +99,7 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
                     Err(err) => {
                         tracing::warn!(%account, ?delay, "Could not fetch account, retrying: {err:#}");
                         sleep(delay).await;
-
-                        // Try a few times with a short delay, on the off chance that the problem
-                        // resolves quickly. Back off until we eventually reach the maximum delay,
-                        // which should be pretty long.
-                        delay = min(delay * BACKOFF_FACTOR, MAX_RETRY_DELAY);
+                        delay = backoff(delay);
                     }
                 }
             };
@@ -112,11 +134,7 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
                         "Could not fetch frontier from any peer, retrying: {err:#}"
                     );
                     sleep(delay).await;
-
-                    // Try a few times with a short delay, on the off chance that the problem
-                    // resolves quickly. Back off until we eventually reach the maximum delay, which
-                    // should be pretty long.
-                    delay = min(delay * BACKOFF_FACTOR, MAX_RETRY_DELAY);
+                    delay = backoff(delay);
                 }
             }
         }
