@@ -3067,7 +3067,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "snafu",
- "surf-disco",
+ "surf-disco 0.6.0",
  "time 0.3.34",
  "tokio",
  "tracing",
@@ -3088,14 +3088,14 @@ dependencies = [
  "serde",
  "snafu",
  "tagged-base64",
- "tide-disco",
+ "tide-disco 0.6.0",
  "toml",
  "vbs",
 ]
 
 [[package]]
 name = "hotshot-events-service"
-version = "0.1.22"
+version = "0.1.23"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3112,9 +3112,9 @@ dependencies = [
  "portpicker",
  "serde",
  "snafu",
- "surf-disco",
+ "surf-disco 0.7.0",
  "tagged-base64",
- "tide-disco",
+ "tide-disco 0.7.0",
  "toml",
  "tracing",
  "vbs",
@@ -3171,9 +3171,9 @@ dependencies = [
  "serde",
  "serde-inline-default",
  "serde_json",
- "surf-disco",
+ "surf-disco 0.6.0",
  "thiserror",
- "tide-disco",
+ "tide-disco 0.6.0",
  "tokio",
  "toml",
  "tracing",
@@ -3222,7 +3222,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "snafu",
- "surf-disco",
+ "surf-disco 0.6.0",
  "tagged-base64",
  "time 0.3.34",
  "tokio",
@@ -7380,7 +7380,26 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "tide-disco",
+ "tide-disco 0.6.0",
+ "tracing",
+ "vbs",
+]
+
+[[package]]
+name = "surf-disco"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e4318abbbbc4d640c6cb45d29cd3c70cf517c751fae9b68f2f76a6ff1950da7"
+dependencies = [
+ "async-std",
+ "async-tungstenite",
+ "derivative",
+ "futures",
+ "hex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tide-disco 0.7.0",
  "tracing",
  "vbs",
 ]
@@ -7635,6 +7654,61 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fbf3579d6f1362fffc7d1686ed061537afe8a187fd0b18e0f5694ad17e977ff3"
 dependencies = [
  "anyhow",
+ "async-std",
+ "async-trait",
+ "clap",
+ "config",
+ "derivative",
+ "derive_more",
+ "dirs",
+ "edit-distance",
+ "futures",
+ "futures-util",
+ "http 1.1.0",
+ "include_dir",
+ "itertools 0.12.1",
+ "lazy_static",
+ "libc",
+ "markdown",
+ "maud",
+ "num-derive",
+ "num-traits",
+ "parking_lot",
+ "prometheus",
+ "reqwest",
+ "routefinder",
+ "semver 1.0.22",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "shellexpand",
+ "signal-hook",
+ "signal-hook-async-std",
+ "snafu",
+ "strum",
+ "strum_macros",
+ "tagged-base64",
+ "tide",
+ "tide-websockets",
+ "toml",
+ "tracing",
+ "tracing-distributed",
+ "tracing-futures",
+ "tracing-log",
+ "tracing-subscriber 0.3.18",
+ "url",
+ "vbs",
+]
+
+[[package]]
+name = "tide-disco"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44c9d803bc734a5cced767b36bb1caab87e9eb7eb144cffcab38160b084a8cef"
+dependencies = [
+ "anyhow",
+ "async-h1",
+ "async-lock 3.3.0",
  "async-std",
  "async-trait",
  "clap",
