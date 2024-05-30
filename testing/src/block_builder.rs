@@ -72,7 +72,7 @@ where
 
 /// Configuration for `SimpleBuilder`
 pub struct SimpleBuilderConfig {
-    port: u16,
+    pub port: u16,
 }
 
 impl Default for SimpleBuilderConfig {
