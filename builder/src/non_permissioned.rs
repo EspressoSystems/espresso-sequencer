@@ -283,7 +283,6 @@ mod test {
             [NonPermissionedBuilderTestConfig::SUBSCRIBED_DA_NODE_ID]
             .0
             .clone();
-
         // hotshot event streaming api url
         let hotshot_events_streaming_api_url = HotShotTestConfig::hotshot_event_streaming_api_url();
 

@@ -194,6 +194,7 @@ mod test {
             accounts: Default::default(),
             l1_finalized: Default::default(),
             header: Default::default(),
+            upgrades: Default::default(),
         };
         genesis.to_file(&genesis_file).unwrap();
 

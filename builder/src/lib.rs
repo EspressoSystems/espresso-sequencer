@@ -326,7 +326,7 @@ pub mod testing {
             bind_version: Ver,
             options: impl PersistenceOptions<Persistence = P>,
         ) -> Vec<(
-            SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
+            Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
             Option<StateSigner<Ver>>,
         )> {
             let num_staked_nodes = self.num_staked_nodes();
@@ -352,7 +352,7 @@ pub mod testing {
                         )
                         .await;
                     // wrapped in some because need to take later
-                    (hotshot_handle, Some(state_signer))
+                    (Arc::new(hotshot_handle), Some(state_signer))
                 }
             }))
             .await
@@ -456,7 +456,7 @@ pub mod testing {
             hotshot_events_api_url: Url,
             known_nodes_with_stake: Vec<PeerConfig<VerKey>>,
             num_non_staking_nodes: usize,
-            hotshot_context_handle: SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
+            hotshot_context_handle: Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
         ) {
             // create a event streamer
             let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
@@ -589,7 +589,7 @@ pub mod testing {
     {
         pub async fn init_permissioned_builder(
             hotshot_test_config: HotShotTestConfig,
-            hotshot_handle: SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
+            hotshot_handle: Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
             node_id: u64,
             state_signer: StateSigner<Ver>,
             hotshot_builder_api_url: Url,
@@ -617,7 +617,7 @@ pub mod testing {
             let bootstrapped_view = ViewNumber::new(0);
 
             let builder_context = BuilderContext::init(
-                hotshot_handle,
+                hotshot_handle.into(),
                 state_signer,
                 node_id,
                 key_pair,

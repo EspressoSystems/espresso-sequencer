@@ -7,8 +7,12 @@ use anyhow::Context;
 use derive_more::{Display, From, Into};
 use sequencer_utils::{impl_serde_from_string_or_integer, ser::FromStringOrInteger};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::{BTreeMap, HashMap},
+    path::Path,
+};
 use time::{format_description::well_known::Rfc3339 as TimestampFormat, OffsetDateTime};
+use vbs::version::Version;
 
 /// Initial configuration of an Espresso stake table.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -98,6 +102,12 @@ pub struct Genesis {
     pub accounts: HashMap<FeeAccount, FeeAmount>,
     pub l1_finalized: Option<L1Finalized>,
     pub header: GenesisHeader,
+    pub upgrades: BTreeMap<Version, Upgrade>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum Upgrade {
+    ChainConfig(ChainConfig),
 }
 
 impl Genesis {
@@ -118,8 +128,33 @@ impl Genesis {
 #[cfg(test)]
 mod test {
     use super::*;
+    use es_version::SEQUENCER_VERSION;
     use ethers::prelude::{Address, H160, H256};
+
     use toml::toml;
+
+    #[test]
+    fn test_to_toml() {
+        let cf = ChainConfig {
+            chain_id: 777.into(),
+            max_block_size: 1054.into(),
+            ..Default::default()
+        };
+
+        let mut upgrades: BTreeMap<Version, Upgrade> = BTreeMap::new();
+        upgrades.insert(SEQUENCER_VERSION.version(), Upgrade::ChainConfig(cf));
+
+        let genesis = Genesis {
+            upgrades,
+            chain_config: Default::default(),
+            stake_table: StakeTableConfig { capacity: 10 },
+            accounts: Default::default(),
+            l1_finalized: Default::default(),
+            header: Default::default(),
+        };
+
+        genesis.to_file("../tmp/genesis");
+    }
 
     #[test]
     fn test_genesis_from_toml_with_optional_fields() {
