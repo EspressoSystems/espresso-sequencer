@@ -472,23 +472,81 @@
 <a href="#470" id="470">470</a>
 <a href="#471" id="471">471</a>
 <a href="#472" id="472">472</a>
+<a href="#473" id="473">473</a>
+<a href="#474" id="474">474</a>
+<a href="#475" id="475">475</a>
+<a href="#476" id="476">476</a>
+<a href="#477" id="477">477</a>
+<a href="#478" id="478">478</a>
+<a href="#479" id="479">479</a>
+<a href="#480" id="480">480</a>
+<a href="#481" id="481">481</a>
+<a href="#482" id="482">482</a>
+<a href="#483" id="483">483</a>
+<a href="#484" id="484">484</a>
+<a href="#485" id="485">485</a>
+<a href="#486" id="486">486</a>
+<a href="#487" id="487">487</a>
+<a href="#488" id="488">488</a>
+<a href="#489" id="489">489</a>
+<a href="#490" id="490">490</a>
+<a href="#491" id="491">491</a>
+<a href="#492" id="492">492</a>
+<a href="#493" id="493">493</a>
+<a href="#494" id="494">494</a>
+<a href="#495" id="495">495</a>
+<a href="#496" id="496">496</a>
+<a href="#497" id="497">497</a>
+<a href="#498" id="498">498</a>
+<a href="#499" id="499">499</a>
+<a href="#500" id="500">500</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
     api::{data_source::CatchupDataSource, AccountQueryData, BlocksFrontier},
     persistence::PersistenceOptions,
     state::{BlockMerkleTree, FeeAccount, FeeMerkleCommitment},
 };
 <span class="kw">use </span>anyhow::{bail, Context};
-<span class="kw">use </span>async_std::sync::RwLock;
+<span class="kw">use </span>async_std::{sync::RwLock, task::sleep};
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>derive_more::From;
 <span class="kw">use </span>hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime <span class="kw">as _</span>};
 <span class="kw">use </span>jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
+<span class="kw">use </span>rand::Rng;
 <span class="kw">use </span>serde::de::DeserializeOwned;
-<span class="kw">use </span>std::{fmt::Debug, sync::Arc, time::Duration};
+<span class="kw">use </span>std::{cmp::min, fmt::Debug, sync::Arc, time::Duration};
 <span class="kw">use </span>surf_disco::Request;
 <span class="kw">use </span>tide_disco::error::ServerError;
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
+
+<span class="kw">const </span>MIN_RETRY_DELAY: Duration = Duration::from_millis(<span class="number">500</span>);
+<span class="kw">const </span>MAX_RETRY_DELAY: Duration = Duration::from_secs(<span class="number">5</span>);
+<span class="kw">const </span>BACKOFF_FACTOR: u32 = <span class="number">2</span>;
+<span class="comment">// Exponential backoff jitter as a fraction of the backoff delay, (numerator, denominator).
+</span><span class="kw">const </span>BACKOFF_JITTER: (u64, u64) = (<span class="number">1</span>, <span class="number">10</span>);
+
+<span class="attr">#[must_use]
+</span><span class="kw">fn </span>backoff(delay: Duration) -&gt; Duration {
+    <span class="kw">if </span>delay &gt;= MAX_RETRY_DELAY {
+        <span class="kw">return </span>MAX_RETRY_DELAY;
+    }
+
+    <span class="kw">let </span><span class="kw-2">mut </span>rng = rand::thread_rng();
+
+    <span class="comment">// Increase the backoff by the backoff factor.
+    </span><span class="kw">let </span>ms = (delay * BACKOFF_FACTOR).as_millis() <span class="kw">as </span>u64;
+
+    <span class="comment">// Sample a random jitter factor in the range [0, BACKOFF_JITTER.0 / BACKOFF_JITTER.1].
+    </span><span class="kw">let </span>jitter_num = rng.gen_range(<span class="number">0</span>..BACKOFF_JITTER.<span class="number">0</span>);
+    <span class="kw">let </span>jitter_den = BACKOFF_JITTER.<span class="number">1</span>;
+
+    <span class="comment">// Increase the delay by the jitter factor.
+    </span><span class="kw">let </span>jitter = ms * jitter_num / jitter_den;
+    <span class="kw">let </span>delay = Duration::from_millis(ms + jitter);
+
+    <span class="comment">// Bound the delay by the maximum.
+    </span>min(delay, MAX_RETRY_DELAY)
+}
 
 <span class="comment">// This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.
@@ -533,15 +591,17 @@
         <span class="kw">let </span><span class="kw-2">mut </span>ret = <span class="macro">vec!</span>[];
         <span class="kw">for </span>account <span class="kw">in </span>accounts {
             <span class="comment">// Retry until we succeed.
-            </span><span class="kw">let </span>account = <span class="kw">loop </span>{
+            </span><span class="kw">let </span><span class="kw-2">mut </span>delay = MIN_RETRY_DELAY;
+            <span class="kw">let </span>account = <span class="kw">loop </span>{
                 <span class="kw">match </span><span class="self">self
                     </span>.try_fetch_account(height, view, fee_merkle_tree_root, account)
                     .<span class="kw">await
                 </span>{
                     <span class="prelude-val">Ok</span>(account) =&gt; <span class="kw">break </span>account,
                     <span class="prelude-val">Err</span>(err) =&gt; {
-                        <span class="macro">tracing::warn!</span>(%account, <span class="string">"Could not fetch account, retrying: {err:#}"</span>);
-                        async_std::task::sleep(<span class="self">self</span>.retry_interval()).<span class="kw">await</span>;
+                        <span class="macro">tracing::warn!</span>(%account, <span class="question-mark">?</span>delay, <span class="string">"Could not fetch account, retrying: {err:#}"</span>);
+                        sleep(delay).<span class="kw">await</span>;
+                        delay = backoff(delay);
                     }
                 }
             };
@@ -565,21 +625,23 @@
         view: ViewNumber,
         mt: <span class="kw-2">&amp;mut </span>BlockMerkleTree,
     ) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="comment">// Retry until we succeed.
+        </span><span class="kw">let </span><span class="kw-2">mut </span>delay = MIN_RETRY_DELAY;
         <span class="kw">loop </span>{
             <span class="kw">match </span><span class="self">self</span>.try_remember_blocks_merkle_tree(height, view, mt).<span class="kw">await </span>{
                 <span class="prelude-val">Ok</span>(()) =&gt; <span class="kw">break</span>,
                 <span class="prelude-val">Err</span>(err) =&gt; {
-                    <span class="macro">tracing::warn!</span>(<span class="string">"Could not fetch frontier from any peer, retrying: {err:#}"</span>);
-                    async_std::task::sleep(<span class="self">self</span>.retry_interval()).<span class="kw">await</span>;
+                    <span class="macro">tracing::warn!</span>(
+                        <span class="question-mark">?</span>delay,
+                        <span class="string">"Could not fetch frontier from any peer, retrying: {err:#}"
+                    </span>);
+                    sleep(delay).<span class="kw">await</span>;
+                    delay = backoff(delay);
                 }
             }
         }
 
         <span class="prelude-val">Ok</span>(())
-    }
-
-    <span class="kw">fn </span>retry_interval(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Duration {
-        Duration::from_millis(<span class="number">100</span>)
     }
 }
 
@@ -601,7 +663,6 @@
 <span class="attr">#[derive(Debug, Clone, Default)]
 </span><span class="kw">pub struct </span>StatePeers&lt;Ver: StaticVersionType&gt; {
     clients: Vec&lt;Client&lt;ServerError, Ver&gt;&gt;,
-    interval: Duration,
 }
 
 <span class="kw">impl</span>&lt;Ver: StaticVersionType&gt; StatePeers&lt;Ver&gt; {
@@ -612,7 +673,6 @@
 
         <span class="self">Self </span>{
             clients: urls.into_iter().map(Client::new).collect(),
-            interval: Duration::from_secs(<span class="number">1</span>),
         }
     }
 }
@@ -682,10 +742,6 @@
             }
         }
         <span class="macro">bail!</span>(<span class="string">"Could not fetch frontier from any peer"</span>);
-    }
-
-    <span class="kw">fn </span>retry_interval(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Duration {
-        <span class="self">self</span>.interval
     }
 }
 
