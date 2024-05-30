@@ -1,14 +1,14 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_broadcast::Receiver;
-use async_compatibility_layer::art::async_spawn;
-use async_lock::{RwLock, RwLockUpgradableReadGuard};
+use async_compatibility_layer::art::{async_sleep, async_spawn};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use futures::{channel::mpsc, FutureExt, StreamExt};
 use hotshot_task::dependency::{Dependency, EventDependency};
 use hotshot_types::{
-    consensus::Consensus,
+    consensus::{Consensus, LockedConsensusState},
     data::VidDisperseShare,
     message::{DaConsensusMessage, DataMessage, Message, MessageKind, Proposal, SequencingMessage},
     traits::{
@@ -25,11 +25,11 @@ use vbs::{version::StaticVersionType, BinarySerializer, Serializer};
 
 use crate::events::HotShotEvent;
 
-/// Type alias for consensus state wrapped in a lock.
-type LockedConsensusState<TYPES> = Arc<RwLock<Consensus<TYPES>>>;
-
 /// Type alias for the channel that we receive requests from the network on.
 pub type RequestReceiver<TYPES> = mpsc::Receiver<(Message<TYPES>, ResponseChannel<Message<TYPES>>)>;
+
+/// Time to wait for txns before sending `ResponseMessage::NotFound`
+const TXNS_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// Task state for the Network Request Task. The task is responsible for handling
 /// requests sent to this node by the network.  It will validate the sender,
@@ -124,19 +124,49 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
         view: TYPES::Time,
         key: &TYPES::SignatureKey,
     ) -> Option<Proposal<TYPES, VidDisperseShare<TYPES>>> {
-        let consensus = self.consensus.upgradable_read().await;
-        let contained = consensus
+        let contained = self
+            .consensus
+            .read()
+            .await
             .vid_shares()
             .get(&view)
             .is_some_and(|m| m.contains_key(key));
         if !contained {
-            let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
-            consensus
-                .calculate_and_update_vid(view, Arc::clone(&self.quorum), &self.private_key)
-                .await;
-            return consensus.vid_shares().get(&view)?.get(key).cloned();
+            if Consensus::calculate_and_update_vid(
+                Arc::clone(&self.consensus),
+                view,
+                Arc::clone(&self.quorum),
+                &self.private_key,
+            )
+            .await
+            .is_none()
+            {
+                // Sleep in hope we receive txns in the meantime
+                async_sleep(TXNS_TIMEOUT).await;
+                Consensus::calculate_and_update_vid(
+                    Arc::clone(&self.consensus),
+                    view,
+                    Arc::clone(&self.quorum),
+                    &self.private_key,
+                )
+                .await?;
+            }
+            return self
+                .consensus
+                .read()
+                .await
+                .vid_shares()
+                .get(&view)?
+                .get(key)
+                .cloned();
         }
-        consensus.vid_shares().get(&view)?.get(key).cloned()
+        self.consensus
+            .read()
+            .await
+            .vid_shares()
+            .get(&view)?
+            .get(key)
+            .cloned()
     }
 
     /// Handle the request contained in the message. Returns the response we should send

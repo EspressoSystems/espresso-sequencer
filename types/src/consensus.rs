@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{ensure, Result};
+use async_lock::{RwLock, RwLockUpgradableReadGuard};
 use committable::{Commitment, Committable};
 use tracing::{debug, error};
 
@@ -34,6 +35,9 @@ pub type VidShares<TYPES> = BTreeMap<
     <TYPES as NodeType>::Time,
     HashMap<<TYPES as NodeType>::SignatureKey, Proposal<TYPES, VidDisperseShare<TYPES>>>,
 >;
+
+/// Type alias for consensus state wrapped in a lock.
+pub type LockedConsensusState<TYPES> = Arc<RwLock<Consensus<TYPES>>>;
 
 /// A reference to the consensus algorithm
 ///
@@ -476,22 +480,26 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             .expect("Decided state not found! Consensus internally inconsistent")
     }
 
+    /// Associated helper function:
+    /// Takes `LockedConsensusState` which will be updated; locks it for read and write accordingly.
     /// Calculates `VidDisperse` based on the view, the txns and the membership,
     /// and updates `vid_shares` map with the signed `VidDisperseShare` proposals.
     /// Returned `Option` indicates whether the update has actually happened or not.
     pub async fn calculate_and_update_vid(
-        &mut self,
+        consensus: LockedConsensusState<TYPES>,
         view: <TYPES as NodeType>::Time,
         membership: Arc<TYPES::Membership>,
         private_key: &<TYPES::SignatureKey as SignatureKey>::PrivateKey,
     ) -> Option<()> {
-        let txns = self.saved_payloads().get(&view)?;
+        let consensus = consensus.upgradable_read().await;
+        let txns = consensus.saved_payloads().get(&view)?;
         let vid =
             VidDisperse::calculate_vid_disperse(Arc::clone(txns), &membership, view, None).await;
         let shares = VidDisperseShare::from_vid_disperse(vid);
+        let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
         for share in shares {
             if let Some(prop) = share.to_proposal(private_key) {
-                self.update_vid_shares(view, prop);
+                consensus.update_vid_shares(view, prop);
             }
         }
         Some(())
