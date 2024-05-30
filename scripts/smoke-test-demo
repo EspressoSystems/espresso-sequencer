@@ -47,8 +47,8 @@ function get_balance() {
         )
     else
         # Otherwise, use Docker.
-        docker run -e RUST_LOG=off ghcr.io/espressosystems/espresso-sequencer/bridge:main \
-            espresso-bridge balance -e $SEQUENCER_API -a $1 -b $2
+        docker run --network="host" -e RUST_LOG=off ghcr.io/espressosystems/espresso-sequencer/bridge:main \
+            bridge balance -e $SEQUENCER_API -a $1 -b $2
     fi
 }
 
