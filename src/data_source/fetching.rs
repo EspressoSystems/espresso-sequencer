@@ -143,6 +143,7 @@ pub struct Builder<Types, S, P> {
     major_scan_interval: usize,
     major_scan_offset: usize,
     proactive_range_chunk_size: Option<usize>,
+    active_fetch_delay: Duration,
     proactive_fetching: bool,
     _types: PhantomData<Types>,
 }
@@ -168,6 +169,7 @@ impl<Types, S, P> Builder<Types, S, P> {
             // don't all pause for a major scan together.
             major_scan_offset: 0,
             proactive_range_chunk_size: None,
+            active_fetch_delay: Duration::from_millis(100),
             proactive_fetching: true,
             _types: Default::default(),
         }
@@ -237,6 +239,16 @@ impl<Types, S, P> Builder<Types, S, P> {
     /// whatever the normal range chunk size is.
     pub fn with_proactive_range_chunk_size(mut self, range_chunk_size: usize) -> Self {
         self.proactive_range_chunk_size = Some(range_chunk_size);
+        self
+    }
+
+    /// Add a delay between active fetches in proactive scans.
+    ///
+    /// This can be used to limit the rate at which this query service makes requests to other query
+    /// services during proactive scans. This is useful if the query service has a lot of blocks to
+    /// catch up on, as without a delay, scanning can be extremely burdensome on the peer.
+    pub fn with_active_fetch_delay(mut self, active_fetch_delay: Duration) -> Self {
+        self.active_fetch_delay = active_fetch_delay;
         self
     }
 
@@ -386,6 +398,7 @@ where
         let proactive_range_chunk_size = builder
             .proactive_range_chunk_size
             .unwrap_or(builder.range_chunk_size);
+        let active_fetch_delay = builder.active_fetch_delay;
 
         let fetcher = Arc::new(Fetcher::new(builder).await?);
         let scanner = if proactive_fetching {
@@ -396,6 +409,7 @@ where
                     major_interval,
                     major_offset,
                     proactive_range_chunk_size,
+                    active_fetch_delay,
                 ),
             ))
         } else {
@@ -1196,6 +1210,7 @@ where
         major_interval: usize,
         major_offset: usize,
         chunk_size: usize,
+        active_fetch_delay: Duration,
     ) {
         let mut prev_height = 0;
 
@@ -1243,13 +1258,19 @@ where
                         chunk_size,
                         start..block_height,
                     );
-                while let Some(fut) = blocks.next().await {
-                    // Wait for the block to be fetched. This slows down the scanner so that we
-                    // don't waste memory generating more active fetch tasks then we can handle at a
-                    // given time. Note that even with this await, all blocks within a chunk are
-                    // fetched in paralle, so this does not block the next block in the chunk, only
-                    // the next chunk until the current chunk completes.
-                    fut.await;
+                while let Some(fetch) = blocks.next().await {
+                    if let Fetch::Pending(fut) = fetch {
+                        // Wait for the block to be fetched. This slows down the scanner so that we
+                        // don't waste memory generating more active fetch tasks then we can handle
+                        // at a given time. Note that even with this await, all blocks within a
+                        // chunk are fetched in paralle, so this does not block the next block in
+                        // the chunk, only the next chunk until the current chunk completes.
+                        fut.await;
+
+                        // Add a bit of artifical latency to easy pressure on the catchup provider,
+                        // otherwise proactive scans can be highly intensive.
+                        sleep(active_fetch_delay).await;
+                    }
                 }
                 // We have to trigger a separate fetch of the VID data, since this is fetched
                 // independently of the block payload.
@@ -1259,10 +1280,13 @@ where
                         chunk_size,
                         start..block_height,
                     );
-                while let Some(fut) = vid.next().await {
-                    // As above, limit the speed at which we spawn new fetches to the speed at which
-                    // we can process them.
-                    fut.await;
+                while let Some(fetch) = vid.next().await {
+                    if let Fetch::Pending(fut) = fetch {
+                        // As above, limit the speed at which we spawn new fetches to the speed at
+                        // which we can process them.
+                        fut.await;
+                        sleep(active_fetch_delay).await;
+                    }
                 }
 
                 tracing::info!("completed proactive scan, will scan again in {minor_interval:?}");
