@@ -880,6 +880,39 @@
 <a href="#878" id="878">878</a>
 <a href="#879" id="879">879</a>
 <a href="#880" id="880">880</a>
+<a href="#881" id="881">881</a>
+<a href="#882" id="882">882</a>
+<a href="#883" id="883">883</a>
+<a href="#884" id="884">884</a>
+<a href="#885" id="885">885</a>
+<a href="#886" id="886">886</a>
+<a href="#887" id="887">887</a>
+<a href="#888" id="888">888</a>
+<a href="#889" id="889">889</a>
+<a href="#890" id="890">890</a>
+<a href="#891" id="891">891</a>
+<a href="#892" id="892">892</a>
+<a href="#893" id="893">893</a>
+<a href="#894" id="894">894</a>
+<a href="#895" id="895">895</a>
+<a href="#896" id="896">896</a>
+<a href="#897" id="897">897</a>
+<a href="#898" id="898">898</a>
+<a href="#899" id="899">899</a>
+<a href="#900" id="900">900</a>
+<a href="#901" id="901">901</a>
+<a href="#902" id="902">902</a>
+<a href="#903" id="903">903</a>
+<a href="#904" id="904">904</a>
+<a href="#905" id="905">905</a>
+<a href="#906" id="906">906</a>
+<a href="#907" id="907">907</a>
+<a href="#908" id="908">908</a>
+<a href="#909" id="909">909</a>
+<a href="#910" id="910">910</a>
+<a href="#911" id="911">911</a>
+<a href="#912" id="912">912</a>
+<a href="#913" id="913">913</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>block;
 <span class="kw">pub mod </span>catchup;
@@ -944,6 +977,7 @@
         metrics::Metrics,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
+        signature_key::{BuilderSignatureKey, StakeTableEntryType},
         states::InstanceState,
         storage::Storage,
     },
@@ -1383,7 +1417,6 @@
         persistence::no_storage::{<span class="self">self</span>, NoStorage},
     };
     <span class="kw">use </span>committable::Committable;
-    <span class="kw">use </span>ethers::utils::{Anvil, AnvilInstance};
     <span class="kw">use </span>futures::{
         future::join_all,
         stream::{Stream, StreamExt},
@@ -1393,16 +1426,15 @@
         BlockPayload,
     };
     <span class="kw">use </span>hotshot::types::{EventType::Decide, Message};
+    <span class="kw">use </span>hotshot_stake_table::vec_based::StakeTable;
     <span class="kw">use </span>hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
     <span class="kw">use </span>hotshot_types::{
         event::LeafInfo,
-        light_client::StateKeyPair,
-        traits::{
-            block_contents::BlockHeader, metrics::NoMetrics, signature_key::BuilderSignatureKey,
-        },
-        ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
+        light_client::{CircuitField, StateKeyPair, StateVerKey},
+        traits::{block_contents::BlockHeader, metrics::NoMetrics, stake_table::StakeTableScheme},
+        ExecutionType, HotShotConfig, PeerConfig,
     };
     <span class="kw">use </span>portpicker::pick_unused_port;
     <span class="kw">use </span>std::time::Duration;
@@ -1423,7 +1455,7 @@
         priv_keys: Vec&lt;BLSPrivKey&gt;,
         state_key_pairs: Vec&lt;StateKeyPair&gt;,
         master_map: Arc&lt;MasterMap&lt;Message&lt;SeqTypes&gt;, PubKey&gt;&gt;,
-        anvil: Arc&lt;AnvilInstance&gt;,
+        url: Url,
     }
 
     <span class="kw">impl </span>Default <span class="kw">for </span>TestConfig {
@@ -1484,7 +1516,7 @@
                 priv_keys,
                 state_key_pairs,
                 master_map,
-                anvil: Arc::new(Anvil::new().spawn()),
+                url: <span class="string">"http://localhost:8545"</span>.parse().unwrap(),
             }
         }
     }
@@ -1502,6 +1534,13 @@
 
         <span class="kw">pub fn </span>set_builder_url(<span class="kw-2">&amp;mut </span><span class="self">self</span>, builder_url: Url) {
             <span class="self">self</span>.config.builder_url = builder_url;
+        }
+
+        <span class="kw">pub fn </span>default_with_l1(l1: Url) -&gt; <span class="self">Self </span>{
+            TestConfig {
+                url: l1,
+                ..Default::default()
+            }
         }
 
         <span class="kw">pub async fn </span>init_nodes&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
@@ -1522,6 +1561,28 @@
             </span>}))
             .<span class="kw">await
         </span>}
+
+        <span class="kw">pub fn </span>stake_table(
+            <span class="kw-2">&amp;</span><span class="self">self</span>,
+            stake_table_capacity: usize,
+        ) -&gt; StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt; {
+            <span class="kw">let </span><span class="kw-2">mut </span>st =
+                StakeTable::&lt;BLSPubKey, StateVerKey, CircuitField&gt;::new(stake_table_capacity);
+            <span class="self">self</span>.config
+                .known_nodes_with_stake
+                .iter()
+                .for_each(|config| {
+                    st.register(
+                        <span class="kw-2">*</span>config.stake_table_entry.key(),
+                        config.stake_table_entry.stake(),
+                        config.state_ver_key.clone(),
+                    )
+                    .unwrap()
+                });
+            st.advance();
+            st.advance();
+            st
+        }
 
         <span class="attr">#[allow(clippy::too_many_arguments)]
         </span><span class="kw">pub async fn </span>init_node&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>, P: PersistenceOptions&gt;(
@@ -1563,7 +1624,7 @@
             <span class="kw">let </span>node_state = NodeState::new(
                 i <span class="kw">as </span>u64,
                 ChainConfig::default(),
-                L1Client::new(<span class="self">self</span>.anvil.endpoint().parse().unwrap(), <span class="number">10000</span>),
+                L1Client::new(<span class="self">self</span>.url.clone(), <span class="number">1000</span>),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).<span class="kw">await</span>,
             )
             .with_genesis(state);
@@ -1645,6 +1706,7 @@
             vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
         },
     };
+    <span class="kw">use </span>sequencer_utils::AnvilOptions;
     <span class="kw">use </span>testing::{wait_for_decide_on_handle, TestConfig};
 
     <span class="attr">#[async_std::test]
@@ -1653,7 +1715,9 @@
         setup_backtrace();
         <span class="kw">let </span>ver = SequencerVersion::instance();
         <span class="comment">// Assign `config` so it isn't dropped early.
-        </span><span class="kw">let </span><span class="kw-2">mut </span>config = TestConfig::default();
+        </span><span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
+        <span class="kw">let </span>url = anvil.url();
+        <span class="kw">let </span><span class="kw-2">mut </span>config = TestConfig::default_with_l1(url);
 
         <span class="kw">let </span>(builder_task, builder_url) = run_test_builder().<span class="kw">await</span>;
 
@@ -1693,7 +1757,9 @@
         <span class="kw">let </span>success_height = <span class="number">30</span>;
         <span class="kw">let </span>ver = SequencerVersion::instance();
         <span class="comment">// Assign `config` so it isn't dropped early.
-        </span><span class="kw">let </span><span class="kw-2">mut </span>config = TestConfig::default();
+        </span><span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
+        <span class="kw">let </span>url = anvil.url();
+        <span class="kw">let </span><span class="kw-2">mut </span>config = TestConfig::default_with_l1(url);
 
         <span class="kw">let </span>(builder_task, builder_url) = run_test_builder().<span class="kw">await</span>;
 

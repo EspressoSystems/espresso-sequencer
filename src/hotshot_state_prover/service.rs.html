@@ -696,6 +696,12 @@
 <a href="#694" id="694">694</a>
 <a href="#695" id="695">695</a>
 <a href="#696" id="696">696</a>
+<a href="#697" id="697">697</a>
+<a href="#698" id="698">698</a>
+<a href="#699" id="699">699</a>
+<a href="#700" id="700">700</a>
+<a href="#701" id="701">701</a>
+<a href="#702" id="702">702</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! A light client prover service
 
 </span><span class="kw">use </span><span class="kw">crate</span>::snark::{generate_state_update_proof, Proof, ProvingKey};
@@ -857,11 +863,17 @@
     stake_table_capacity: usize,
 ) -&gt; anyhow::Result&lt;ParsedLightClientState&gt; {
     <span class="kw">let </span>st = init_stake_table_from_orchestrator(orchestrator_url, stake_table_capacity).<span class="kw">await</span>;
+    light_client_genesis_from_stake_table(st)
+}
+
+<span class="attr">#[inline]
+</span><span class="kw">pub fn </span>light_client_genesis_from_stake_table(
+    st: StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt;,
+) -&gt; anyhow::Result&lt;ParsedLightClientState&gt; {
     <span class="kw">let </span>(bls_comm, schnorr_comm, stake_comm) = st
         .commitment(SnapshotVersion::LastEpochStart)
         .expect(<span class="string">"Commitment computation shouldn't fail."</span>);
     <span class="kw">let </span>threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)<span class="question-mark">?</span>);
-
     <span class="kw">let </span>pi = <span class="macro">vec!</span>[
         u256_to_field(threshold),
         F::from(<span class="number">0_u64</span>), <span class="comment">// Arbitrary value for view number

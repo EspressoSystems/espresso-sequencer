@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Contract"],"fn":["deploy_light_client_contract","deploy_mock_light_client_contract"],"struct":["Contracts","DeployedContracts"]};
+window.SIDEBAR_ITEMS = {"enum":["Contract","ContractGroup"],"fn":["deploy","deploy_light_client_contract","deploy_mock_light_client_contract","should_deploy"],"struct":["Contracts","DeployedContracts"]};

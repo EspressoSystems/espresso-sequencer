@@ -10,6 +10,7 @@ var srcIndex = new Map(JSON.parse('[\
 ["dev_cdn",["",[],["dev-cdn.rs"]]],\
 ["diff_test",["",[],["main.rs"]]],\
 ["espresso_bridge",["",[],["espresso-bridge.rs"]]],\
+["espresso_dev_node",["",[],["espresso-dev-node.rs"]]],\
 ["eval_domain",["",[],["eval_domain.rs"]]],\
 ["gen_demo_genesis",["",[],["gen-demo-genesis.rs"]]],\
 ["gen_vk_contract",["",[],["main.rs"]]],\

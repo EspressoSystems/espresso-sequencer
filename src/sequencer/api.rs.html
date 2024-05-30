@@ -1164,6 +1164,45 @@
 <a href="#1162" id="1162">1162</a>
 <a href="#1163" id="1163">1163</a>
 <a href="#1164" id="1164">1164</a>
+<a href="#1165" id="1165">1165</a>
+<a href="#1166" id="1166">1166</a>
+<a href="#1167" id="1167">1167</a>
+<a href="#1168" id="1168">1168</a>
+<a href="#1169" id="1169">1169</a>
+<a href="#1170" id="1170">1170</a>
+<a href="#1171" id="1171">1171</a>
+<a href="#1172" id="1172">1172</a>
+<a href="#1173" id="1173">1173</a>
+<a href="#1174" id="1174">1174</a>
+<a href="#1175" id="1175">1175</a>
+<a href="#1176" id="1176">1176</a>
+<a href="#1177" id="1177">1177</a>
+<a href="#1178" id="1178">1178</a>
+<a href="#1179" id="1179">1179</a>
+<a href="#1180" id="1180">1180</a>
+<a href="#1181" id="1181">1181</a>
+<a href="#1182" id="1182">1182</a>
+<a href="#1183" id="1183">1183</a>
+<a href="#1184" id="1184">1184</a>
+<a href="#1185" id="1185">1185</a>
+<a href="#1186" id="1186">1186</a>
+<a href="#1187" id="1187">1187</a>
+<a href="#1188" id="1188">1188</a>
+<a href="#1189" id="1189">1189</a>
+<a href="#1190" id="1190">1190</a>
+<a href="#1191" id="1191">1191</a>
+<a href="#1192" id="1192">1192</a>
+<a href="#1193" id="1193">1193</a>
+<a href="#1194" id="1194">1194</a>
+<a href="#1195" id="1195">1195</a>
+<a href="#1196" id="1196">1196</a>
+<a href="#1197" id="1197">1197</a>
+<a href="#1198" id="1198">1198</a>
+<a href="#1199" id="1199">1199</a>
+<a href="#1200" id="1200">1200</a>
+<a href="#1201" id="1201">1201</a>
+<a href="#1202" id="1202">1202</a>
+<a href="#1203" id="1203">1203</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="self">self</span>::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
 <span class="kw">use crate</span>::{
     network,
@@ -1186,6 +1225,7 @@
 <span class="kw">use </span>hotshot::types::{Event, SystemContextHandle};
 <span class="kw">use </span>hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
 <span class="kw">use </span>hotshot_query_service::data_source::ExtensibleDataSource;
+<span class="kw">use </span>hotshot_state_prover::service::light_client_genesis_from_stake_table;
 <span class="kw">use </span>hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody, HotShotConfig};
 <span class="kw">use </span>jf_merkle_tree::MerkleTreeScheme;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
@@ -1441,8 +1481,8 @@
     </span>}
 }
 
-<span class="attr">#[cfg(test)]
-</span><span class="kw">mod </span>test_helpers {
+<span class="attr">#[cfg(any(test, feature = <span class="string">"testing"</span>))]
+</span><span class="kw">pub mod </span>test_helpers {
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use crate</span>::{
         catchup::{mock::MockStateCatchup, StateCatchup},
@@ -1454,13 +1494,14 @@
     <span class="kw">use </span>async_std::task::sleep;
     <span class="kw">use </span>committable::Committable;
     <span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
-    <span class="kw">use </span>ethers::prelude::Address;
+    <span class="kw">use </span>ethers::{prelude::Address, utils::Anvil};
     <span class="kw">use </span>futures::{
         future::{join_all, FutureExt},
         stream::StreamExt,
     };
     <span class="kw">use </span>hotshot::types::{Event, EventType};
 
+    <span class="kw">use </span>hotshot_contract_adapter::light_client::ParsedLightClientState;
     <span class="kw">use </span>hotshot_types::{
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
@@ -1471,6 +1512,7 @@
     <span class="kw">use </span>std::time::Duration;
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>tide_disco::error::ServerError;
+    <span class="kw">use </span>url::Url;
 
     <span class="kw">pub const </span>STAKE_TABLE_CAPACITY_FOR_TEST: u64 = <span class="number">10</span>;
 
@@ -1486,8 +1528,9 @@
             state: [ValidatedState; TestConfig::NUM_NODES],
             persistence: [<span class="kw">impl </span>PersistenceOptions&lt;Persistence = P&gt;; TestConfig::NUM_NODES],
             catchup: [<span class="kw">impl </span>StateCatchup + <span class="lifetime">'static</span>; TestConfig::NUM_NODES],
+            l1: Url,
         ) -&gt; <span class="self">Self </span>{
-            <span class="kw">let </span><span class="kw-2">mut </span>cfg = TestConfig::default();
+            <span class="kw">let </span><span class="kw-2">mut </span>cfg = TestConfig::default_with_l1(l1);
 
             <span class="kw">let </span>(builder_task, builder_url) = run_test_builder().<span class="kw">await</span>;
 
@@ -1557,15 +1600,22 @@
         <span class="kw">pub async fn </span>new(
             opt: Options,
             persistence: [<span class="kw">impl </span>PersistenceOptions&lt;Persistence = P&gt;; TestConfig::NUM_NODES],
+            l1: Url,
         ) -&gt; <span class="self">Self </span>{
             <span class="self">Self</span>::with_state(
                 opt,
                 Default::default(),
                 persistence,
                 std::array::from_fn(|<span class="kw">_</span>| MockStateCatchup::default()),
+                l1,
             )
             .<span class="kw">await
         </span>}
+
+        <span class="kw">pub fn </span>light_client_genesis(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ParsedLightClientState {
+            <span class="kw">let </span>st = <span class="self">self</span>.cfg.stake_table(STAKE_TABLE_CAPACITY_FOR_TEST <span class="kw">as </span>usize);
+            light_client_genesis_from_stake_table(st).unwrap()
+        }
 
         <span class="kw">pub async fn </span>stop_consensus(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
             <span class="self">self</span>.server.consensus_mut().shut_down().<span class="kw">await</span>;
@@ -1591,8 +1641,10 @@
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(url);
 
         <span class="kw">let </span>options = opt(Options::from(options::Http { port }).status(Default::default()));
+        <span class="kw">let </span>anvil = Anvil::new().spawn();
+        <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span>_network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).<span class="kw">await</span>;
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).<span class="kw">await</span>;
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         <span class="comment">// The status API is well tested in the query service repo. Here we are just smoke testing
@@ -1638,7 +1690,10 @@
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(url);
 
         <span class="kw">let </span>options = opt(Options::from(options::Http { port }).submit(Default::default()));
-        <span class="kw">let </span>network = TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).<span class="kw">await</span>;
+        <span class="kw">let </span>anvil = Anvil::new().spawn();
+        <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
+        <span class="kw">let </span>network =
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).<span class="kw">await</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream();
 
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
@@ -1667,7 +1722,10 @@
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(url);
 
         <span class="kw">let </span>options = opt(Options::from(options::Http { port }));
-        <span class="kw">let </span>network = TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).<span class="kw">await</span>;
+        <span class="kw">let </span>anvil = Anvil::new().spawn();
+        <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
+        <span class="kw">let </span>network =
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).<span class="kw">await</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>height: u64;
         <span class="comment">// Wait for block &gt;=2 appears
@@ -1703,8 +1761,10 @@
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(url);
 
         <span class="kw">let </span>options = opt(Options::from(options::Http { port }).catchup(Default::default()));
+        <span class="kw">let </span>anvil = Anvil::new().spawn();
+        <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span><span class="kw-2">mut </span>network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).<span class="kw">await</span>;
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).<span class="kw">await</span>;
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         <span class="comment">// Wait for a few blocks to be decided.
@@ -1793,6 +1853,7 @@
     <span class="kw">use </span>data_source::testing::TestableSequencerDataSource;
     <span class="kw">use </span>endpoints::NamespaceProofQueryData;
     <span class="kw">use </span>es_version::SequencerVersion;
+    <span class="kw">use </span>ethers::utils::Anvil;
     <span class="kw">use </span>futures::stream::StreamExt;
     <span class="kw">use </span>hotshot_query_service::availability::LeafQueryData;
     <span class="kw">use </span>hotshot_types::vid::vid_scheme;
@@ -1833,9 +1894,12 @@
         <span class="comment">// Start query service.
         </span><span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>storage = D::create_storage().<span class="kw">await</span>;
+        <span class="kw">let </span>anvil = Anvil::new().spawn();
+        <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span>network = TestNetwork::new(
             D::options(<span class="kw-2">&amp;</span>storage, options::Http { port }.into()).submit(Default::default()),
             [no_storage::Options; TestConfig::NUM_NODES],
+            l1,
         )
         .<span class="kw">await</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream();
@@ -1933,8 +1997,10 @@
         })
         .hotshot_events(hotshot_events);
 
+        <span class="kw">let </span>anvil = Anvil::new().spawn();
+        <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span>_network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).<span class="kw">await</span>;
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).<span class="kw">await</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>subscribed_events = client
             .socket(<span class="string">"hotshot-events/events"</span>)
@@ -1979,10 +2045,9 @@
     <span class="kw">use </span>async_std::task::sleep;
     <span class="kw">use </span>committable::Commitment;
     <span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
-    <span class="kw">use </span>futures::{
-        future::{<span class="self">self</span>, join_all},
-        stream::{StreamExt, TryStreamExt},
-    };
+    <span class="kw">use </span>ethers::utils::Anvil;
+    <span class="kw">use </span>futures::future::{<span class="self">self</span>, join_all};
+    <span class="kw">use </span>futures::stream::{StreamExt, TryStreamExt};
     <span class="kw">use </span>hotshot::types::EventType;
     <span class="kw">use </span>hotshot_query_service::{
         availability::{BlockQueryData, LeafQueryData},
@@ -2011,8 +2076,10 @@
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(url);
         <span class="kw">let </span>options = Options::from(options::Http { port });
+        <span class="kw">let </span>anvil = Anvil::new().spawn();
+        <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span>_network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).<span class="kw">await</span>;
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).<span class="kw">await</span>;
 
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
         <span class="kw">let </span>health = client.get::&lt;AppHealth&gt;(<span class="string">"healthcheck"</span>).send().<span class="kw">await</span>.unwrap();
@@ -2054,8 +2121,10 @@
                 .status(Default::default()),
         );
 
+        <span class="kw">let </span>anvil: ethers::utils::AnvilInstance = Anvil::new().spawn();
+        <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span><span class="kw-2">mut </span>network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).<span class="kw">await</span>;
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).<span class="kw">await</span>;
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(url);
 
@@ -2114,6 +2183,8 @@
 
         <span class="comment">// Start a sequencer network, using the query service for catchup.
         </span><span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
+        <span class="kw">let </span>anvil = Anvil::new().spawn();
+        <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::with_state(
             Options::from(options::Http { port }).catchup(Default::default()),
             Default::default(),
@@ -2123,6 +2194,7 @@
                     .parse()
                     .unwrap()])
             }),
+            l1,
         )
         .<span class="kw">await</span>;
 
@@ -2213,6 +2285,8 @@
             .try_into()
             .unwrap();
         <span class="kw">let </span>port = pick_unused_port().unwrap();
+        <span class="kw">let </span>anvil = Anvil::new().spawn();
+        <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::with_state(
             SqlDataSource::options(<span class="kw-2">&amp;</span>storage[<span class="number">0</span>], options::Http { port }.into())
                 .state(Default::default())
@@ -2220,6 +2294,7 @@
             Default::default(),
             persistence,
             std::array::from_fn(|<span class="kw">_</span>| MockStateCatchup::default()),
+            l1,
         )
         .<span class="kw">await</span>;
 
@@ -2272,6 +2347,8 @@
 
         <span class="comment">// Start up again, resuming from the last decided leaf.
         </span><span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
+        <span class="kw">let </span>anvil = Anvil::new().spawn();
+        <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span>persistence = storage
             .iter()
             .map(&lt;SqlDataSource <span class="kw">as </span>TestableSequencerDataSource&gt;::persistence_options)
@@ -2291,6 +2368,7 @@
                     .parse()
                     .unwrap()])
             }),
+            l1,
         )
         .<span class="kw">await</span>;
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; =
