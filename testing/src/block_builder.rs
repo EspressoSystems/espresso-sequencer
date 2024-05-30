@@ -70,6 +70,19 @@ where
     }
 }
 
+/// Configuration for `SimpleBuilder`
+pub struct SimpleBuilderConfig {
+    port: u16,
+}
+
+impl Default for SimpleBuilderConfig {
+    fn default() -> Self {
+        Self {
+            port: portpicker::pick_unused_port().expect("No free ports"),
+        }
+    }
+}
+
 pub struct SimpleBuilderImplementation;
 
 #[async_trait]
@@ -77,14 +90,13 @@ impl<TYPES: NodeType> TestBuilderImplementation<TYPES> for SimpleBuilderImplemen
 where
     <TYPES as NodeType>::InstanceState: Default,
 {
-    type Config = ();
+    type Config = SimpleBuilderConfig;
 
     async fn start(
         num_storage_nodes: usize,
-        _config: Self::Config,
+        config: Self::Config,
     ) -> (Option<Box<dyn BuilderTask<TYPES>>>, Url) {
-        let port = portpicker::pick_unused_port().expect("No free ports");
-        let url = Url::parse(&format!("http://localhost:{port}")).expect("Valid URL");
+        let url = Url::parse(&format!("http://localhost:{0}", config.port)).expect("Valid URL");
         let (source, task) = make_simple_builder(num_storage_nodes).await;
 
         let builder_api = hotshot_builder_api::builder::define_api::<

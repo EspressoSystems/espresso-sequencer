@@ -43,7 +43,8 @@ use hotshot_orchestrator::{
     },
 };
 use hotshot_testing::block_builder::{
-    RandomBuilderImplementation, SimpleBuilderImplementation, TestBuilderImplementation,
+    RandomBuilderImplementation, SimpleBuilderConfig, SimpleBuilderImplementation,
+    TestBuilderImplementation,
 };
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -939,7 +940,7 @@ pub async fn main_entry_point<
             let (builder_task, builder_url) =
                 <SimpleBuilderImplementation as TestBuilderImplementation<TYPES>>::start(
                     run_config.config.num_nodes_with_stake.into(),
-                    (),
+                    SimpleBuilderConfig::default(),
                 )
                 .await;
 
