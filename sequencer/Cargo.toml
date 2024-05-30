@@ -9,6 +9,9 @@ edition = "2021"
 testing = ["hotshot-testing"]
 libp2p = []
 
+[profile.release]
+debug = true
+
 [dev-dependencies]
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 hotshot-query-service = { workspace = true, features = ["testing"] }
