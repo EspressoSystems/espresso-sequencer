@@ -1,5 +1,4 @@
 var srcIndex = new Map(JSON.parse('[\
-["bridge",["",[],["bridge.rs"]]],\
 ["builder",["",[],["lib.rs","non_permissioned.rs","permissioned.rs"]]],\
 ["cdn_broker",["",[],["cdn-broker.rs"]]],\
 ["cdn_marshal",["",[],["cdn-marshal.rs"]]],\
@@ -10,6 +9,7 @@ var srcIndex = new Map(JSON.parse('[\
 ["deploy",["",[],["deploy.rs"]]],\
 ["dev_cdn",["",[],["dev-cdn.rs"]]],\
 ["diff_test",["",[],["main.rs"]]],\
+["espresso_bridge",["",[],["espresso-bridge.rs"]]],\
 ["eval_domain",["",[],["eval_domain.rs"]]],\
 ["gen_demo_genesis",["",[],["gen-demo-genesis.rs"]]],\
 ["gen_vk_contract",["",[],["main.rs"]]],\
