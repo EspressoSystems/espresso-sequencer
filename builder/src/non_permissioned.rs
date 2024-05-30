@@ -163,8 +163,7 @@ impl BuilderConfig {
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
              //????
-             Duration::from_secs(60),
-            Arc::new(validated_state),
+            Arc::new(validated_state),  Duration::from_secs(60),
         );
 
         // spawn the builder event loop
