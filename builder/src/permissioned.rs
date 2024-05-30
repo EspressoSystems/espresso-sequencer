@@ -460,7 +460,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             Arc::new(instance_state),       //??
             Duration::from_secs(60),
             Arc::new(validated_state),
-     
         );
 
         let hotshot_handle_clone = Arc::clone(&hotshot_handle);
