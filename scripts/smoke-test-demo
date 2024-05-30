@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
+set -eE
 
-set -e
+# Duplicate some debugging information to stdout in case the process exits
+trap 'error_handler "${LINENO}" "$BASH_COMMAND"' ERR INT
+error_handler() {
+  local lineno=$1
+  local msg=$2
+  echo "Failed at line $lineno: msg: $msg"
+}
 
 # load env vars in .env
 set -a; source .env; set +a;
@@ -32,16 +39,16 @@ function wait_for() {
 
 # usage: get_balance <address> <block>
 function get_balance() {
-    if which bridge > /dev/null ; then
-        # If the bridge program is built locally, use it.
+    if which espresso-bridge > /dev/null 2>&1 ; then
+        # If the espresso-bridge program is built locally, use it.
         (
             unset MNEMONIC
-            RUST_LOG=off bridge balance -e $SEQUENCER_API -a $1 -b $2
+            RUST_LOG=off espresso-bridge balance -e $SEQUENCER_API -a $1 -b $2
         )
     else
         # Otherwise, use Docker.
         docker run -e RUST_LOG=off ghcr.io/espressosystems/espresso-sequencer/bridge:main \
-            bridge balance -e $SEQUENCER_API -a $1 -b $2
+            espresso-bridge balance -e $SEQUENCER_API -a $1 -b $2
     fi
 }
 
@@ -66,14 +73,14 @@ wait_for 300 "demo load generator" "$LOAD_GENERATOR/healthcheck"
 
 # Get the block height and number of transactions, wait some time, and check that these numbers have
 # both increased.
-block_height=`curl -sL $SEQUENCER_API/node/block-height`
-num_tx=`curl -sL $SEQUENCER_API/node/transactions/count`
+block_height=$(curl -sL $SEQUENCER_API/node/block-height)
+num_tx=$(curl -sL $SEQUENCER_API/node/transactions/count)
 # Get the balance of the builder and fee recipient accounts. The former should decrease over time
 # while the latter should increase.
-builder_balance=`get_balance 0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f $block_height`
-recipient_balance=`get_balance 0x0000000000000000000000000000000000000000 $block_height`
+builder_balance=$(get_balance 0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f $block_height)
+recipient_balance=$(get_balance 0x0000000000000000000000000000000000000000 $block_height)
 # Get the last L1 block where the light client was updated. This should increase over time.
-light_client_updated=`last_light_client_update`
+light_client_updated=$(last_light_client_update)
 
 echo "Initial state:"
 echo "  block_height: $block_height"
