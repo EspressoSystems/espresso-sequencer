@@ -41,7 +41,7 @@ pub struct SequencerContext<
 > {
     /// The consensus handle
     #[derivative(Debug = "ignore")]
-    handle: Consensus<N, P>,
+    handle: Arc<RwLock<Consensus<N, P>>>,
 
     /// Context for generating state signatures.
     state_signer: Arc<StateSigner<Ver>>,
@@ -162,7 +162,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         let events = handle.event_stream();
 
         let mut ctx = Self {
-            handle,
+            handle: Arc::new(RwLock::new(handle)),
             state_signer: Arc::new(state_signer),
             tasks: Default::default(),
             detached: false,
@@ -201,12 +201,12 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     }
 
     /// Stream consensus events.
-    pub fn event_stream(&self) -> impl Stream<Item = Event<SeqTypes>> {
-        self.handle.event_stream()
+    pub async fn event_stream(&self) -> impl Stream<Item = Event<SeqTypes>> {
+        self.handle.read().await.event_stream()
     }
 
     pub async fn submit_transaction(&self, tx: Transaction) -> anyhow::Result<()> {
-        self.handle.submit_transaction(tx).await?;
+        self.handle.read().await.submit_transaction(tx).await?;
         Ok(())
     }
 
@@ -216,17 +216,12 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     }
 
     /// Return a reference to the underlying consensus handle.
-    pub fn consensus(&self) -> &Consensus<N, P> {
-        &self.handle
+    pub fn consensus(&self) -> Arc<RwLock<Consensus<N, P>>> {
+        Arc::clone(&self.handle)
     }
 
     pub fn node_state(&self) -> NodeState {
         self.node_state.clone()
-    }
-
-    /// Return a mutable reference to the underlying consensus handle.
-    pub fn consensus_mut(&mut self) -> &mut Consensus<N, P> {
-        &mut self.handle
     }
 
     /// Start participating in consensus.
@@ -238,7 +233,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 .await;
         }
         tracing::warn!("starting consensus");
-        self.handle.hotshot.start_consensus().await;
+        self.handle.read().await.hotshot.start_consensus().await;
     }
 
     /// Spawn a background task attached to this context.
@@ -252,7 +247,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     /// Stop participating in consensus.
     pub async fn shut_down(&mut self) {
         tracing::info!("shutting down SequencerContext");
-        self.handle.shut_down().await;
+        self.handle.write().await.shut_down().await;
         self.tasks.shut_down().await;
     }
 

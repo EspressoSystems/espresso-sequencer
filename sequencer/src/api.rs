@@ -4,13 +4,12 @@ use crate::{
     persistence::SequencerPersistence,
     state::{BlockMerkleTree, FeeAccountProof},
     state_signature::StateSigner,
-    ChainConfig, Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
+    Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
 };
-use anyhow::{bail, Context};
+use anyhow::Context;
 use async_once_cell::Lazy;
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
-use committable::{Commitment, Committable};
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use ethers::prelude::{Address, U256};
@@ -61,7 +60,7 @@ struct ConsensusState<N: network::Type, P: SequencerPersistence, Ver: StaticVers
     node_state: NodeState,
 
     #[derivative(Debug = "ignore")]
-    handle: SystemContextHandle<SeqTypes, Node<N, P>>,
+    handle: Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>>>>,
 }
 
 impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
@@ -72,7 +71,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             state_signer: ctx.state_signer(),
             event_streamer: ctx.event_streamer(),
             node_state: ctx.node_state(),
-            handle: ctx.consensus().clone(),
+            handle: ctx.consensus(),
         }
     }
 }
@@ -99,7 +98,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     fn event_stream(&self) -> impl Stream<Item = Event<SeqTypes>> + Unpin {
         let state = self.clone();
-        async move { state.consensus().await.event_stream() }
+        async move { state.consensus().await.read().await.event_stream() }
             .boxed()
             .flatten_stream()
     }
@@ -112,8 +111,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         &self.consensus.as_ref().get().await.get_ref().event_streamer
     }
 
-    async fn consensus(&self) -> &SystemContextHandle<SeqTypes, Node<N, P>> {
-        &self.consensus.as_ref().get().await.get_ref().handle
+    async fn consensus(&self) -> Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>>>> {
+        Arc::clone(&self.consensus.as_ref().get().await.get_ref().handle)
     }
 
     async fn node_state(&self) -> &NodeState {
@@ -127,6 +126,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             .await
             .get_ref()
             .handle
+            .read()
+            .await
             .hotshot
             .config
             .clone()
@@ -167,7 +168,12 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
     SubmitDataSource<N, P> for ApiState<N, P, Ver>
 {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
-        self.consensus().await.submit_transaction(tx).await?;
+        self.consensus()
+            .await
+            .read()
+            .await
+            .submit_transaction(tx)
+            .await?;
         Ok(())
     }
 }
@@ -223,9 +229,16 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
         view: ViewNumber,
         account: Address,
     ) -> anyhow::Result<AccountQueryData> {
-        let state = self.consensus().await.state(view).await.context(format!(
-            "state not available for height {height}, view {view:?}"
-        ))?;
+        let state = self
+            .consensus()
+            .await
+            .read()
+            .await
+            .state(view)
+            .await
+            .context(format!(
+                "state not available for height {height}, view {view:?}"
+            ))?;
         let (proof, balance) = FeeAccountProof::prove(&state.fee_merkle_tree, account).context(
             format!("account {account} not available for height {height}, view {view:?}"),
         )?;
@@ -234,35 +247,19 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
 
     #[tracing::instrument(skip(self))]
     async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
-        let state = self.consensus().await.state(view).await.context(format!(
-            "state not available for height {height}, view {view:?}"
-        ))?;
+        let state = self
+            .consensus()
+            .await
+            .read()
+            .await
+            .state(view)
+            .await
+            .context(format!(
+                "state not available for height {height}, view {view:?}"
+            ))?;
         let tree = &state.block_merkle_tree;
         let frontier = tree.lookup(tree.num_leaves() - 1).expect_ok()?.1;
         Ok(frontier)
-    }
-
-    #[tracing::instrument(skip(self))]
-    async fn get_chain_config(
-        &self,
-        commitment: Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig> {
-        let node_state = self.node_state().await;
-        let node_state_cf = node_state.chain_config;
-        if node_state_cf.commit() == commitment {
-            return Ok(node_state_cf);
-        }
-
-        let state = self.consensus().await.decided_state().await;
-        let state_cf = state.chain_config;
-
-        if state_cf.commit() != commitment {
-            bail!("chain config for commitment={commitment} not found in decided state");
-        }
-
-        state_cf.resolve().context(format!(
-            "cannot resolve to a full chain config for commitment={commitment}"
-        ))
     }
 }
 
@@ -403,7 +400,7 @@ pub mod test_helpers {
 
             // Hook the builder up to the event stream from the first node
             if let Some(builder_task) = builder_task {
-                builder_task.start(Box::new(handle_0.event_stream()));
+                builder_task.start(Box::new(handle_0.event_stream().await));
             }
 
             for ctx in &nodes {
@@ -437,9 +434,15 @@ pub mod test_helpers {
         }
 
         pub async fn stop_consensus(&mut self) {
-            self.server.consensus_mut().shut_down().await;
+            let consensus = self.server.consensus();
+            let mut consensus_writer = consensus.write().await;
+            consensus_writer.shut_down().await;
+            drop(consensus_writer);
+
             for ctx in &mut self.peers {
-                ctx.consensus_mut().shut_down().await;
+                let consensus = ctx.consensus();
+                let mut consensus_writer = consensus.write().await;
+                consensus_writer.shut_down().await;
             }
         }
     }
@@ -513,7 +516,7 @@ pub mod test_helpers {
         let l1 = anvil.endpoint().parse().unwrap();
         let network =
             TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
-        let mut events = network.server.event_stream();
+        let mut events = network.server.event_stream().await;
 
         client.connect(None).await;
 
@@ -550,7 +553,14 @@ pub mod test_helpers {
         // Wait for block >=2 appears
         // It's waiting for an extra second to make sure that the signature is generated
         loop {
-            height = network.server.consensus().decided_leaf().await.height();
+            height = network
+                .server
+                .consensus()
+                .read()
+                .await
+                .decided_leaf()
+                .await
+                .height();
             sleep(std::time::Duration::from_secs(1)).await;
             if height >= 2 {
                 break;
@@ -582,12 +592,12 @@ pub mod test_helpers {
         let options = opt(Options::from(options::Http { port }).catchup(Default::default()));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let mut network =
+        let network =
             TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
         client.connect(None).await;
 
         // Wait for a few blocks to be decided.
-        let mut events = network.server.event_stream();
+        let mut events = network.server.event_stream().await;
         loop {
             if let Event {
                 event: EventType::Decide { leaf_chain, .. },
@@ -604,10 +614,19 @@ pub mod test_helpers {
         }
 
         // Stop consensus running on the node so we freeze the decided and undecided states.
-        network.server.consensus_mut().shut_down().await;
+        // We'll let it go out of scope here since it's a write lock.
+        {
+            let consensus = network.server.consensus();
+            let mut consensus_writer = consensus.write().await;
+            consensus_writer.shut_down().await;
+        }
+
+        // Re-acquire a read lock to the consensus state.
+        let consensus = network.server.consensus();
+        let consensus_reader = consensus.read().await;
 
         // Undecided fee state: absent account.
-        let leaf = network.server.consensus().decided_leaf().await;
+        let leaf = consensus_reader.decided_leaf().await;
         let height = leaf.height() + 1;
         let view = leaf.view_number() + 1;
         let res = client
@@ -626,6 +645,8 @@ pub mod test_helpers {
                     &network
                         .server
                         .consensus()
+                        .read()
+                        .await
                         .state(view)
                         .await
                         .unwrap()
@@ -645,6 +666,8 @@ pub mod test_helpers {
         let root = &network
             .server
             .consensus()
+            .read()
+            .await
             .state(view)
             .await
             .unwrap()
@@ -855,7 +878,6 @@ mod test {
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StatePeers},
-        chain_config::ResolvableChainConfig,
         persistence::no_storage,
         state::{FeeAccount, FeeAmount, ValidatedState},
         testing::TestConfig,
@@ -1088,57 +1110,6 @@ mod test {
                 break;
             }
         }
-    }
-
-    #[async_std::test]
-    async fn test_validated_state_chain_config() {
-        setup_logging();
-        setup_backtrace();
-
-        // ValidatedState only has the default chain config commitment.
-        // NodeState also has the default ChainConfig.
-        // Therefore, both commitments would match.
-        // This would update the ValidatedState's chain config to NodeState's ChainConfig.
-        let state = ValidatedState {
-            chain_config: ChainConfig::default().commit().into(),
-            ..Default::default()
-        };
-
-        // Start a sequencer network without catchup module
-        let port = pick_unused_port().expect("No ports free");
-        let mut network = TestNetwork::with_state(
-            Options::from(options::Http { port }),
-            std::array::from_fn(|_| state.clone()),
-            [no_storage::Options; TestConfig::NUM_NODES],
-            std::array::from_fn(|_| MockStateCatchup::default()),
-        )
-        .await;
-
-        network
-            .server
-            .event_stream()
-            .filter(|event| future::ready(matches!(event.event, EventType::Decide { .. })))
-            .take(4)
-            .collect::<Vec<_>>()
-            .await;
-
-        let decided_state = network.server.consensus().decided_state().await;
-        assert_eq!(
-            decided_state.chain_config,
-            ResolvableChainConfig::from(ChainConfig::default())
-        );
-
-        for peer in &network.peers {
-            let state = peer.consensus().decided_state().await;
-            assert_eq!(
-                state.chain_config,
-                ResolvableChainConfig::from(ChainConfig::default())
-            );
-        }
-
-        network.stop_consensus().await;
-
-        drop(network);
     }
 
     #[async_std::test]

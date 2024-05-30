@@ -3,4 +3,5 @@
         "CARGO_TARGET_DIR": "target/vscode_rust_analyzer",
         "RUSTFLAGS": " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\""
     },
+    "rust-analyzer.cargo.features": "all",
 }

@@ -47,18 +47,19 @@ dotenvy = "0.15"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "abdul/pass-validated-state" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 # Hotshot imports
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "abdul/pass-validated-state" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "abdul/update-hotshot" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", branch = "abdul/update-hotshot" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "abdul/pass-validated-state" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "abdul/update-hotshot" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", branch = "abdul/pass-validated-state" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "daily-build" }
+hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", branch = "daily-build" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "daily-build" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", branch = "abdul/pass-validated-state" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "abdul/pass-validated-state" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "abdul/pass-validated-state" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
@@ -98,9 +99,9 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
 snafu = "0.8"
 strum = { version = "0.26", features = ["derive"] }
-surf-disco = "0.6"
+surf-disco = "0.7"
 tagged-base64 = "0.4"
-tide-disco = "0.6"
+tide-disco = "0.7"
 time = "0.3"
 tracing = "0.1"
 bytesize = "1.3"

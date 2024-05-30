@@ -153,19 +153,22 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         &self,
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
+        // Retry until we succeed.
+        let mut delay = MIN_RETRY_DELAY;
+
         loop {
             match self.try_fetch_chain_config(commitment).await {
                 Ok(cf) => return Ok(cf),
                 Err(err) => {
-                    tracing::warn!("Could not fetch chain config from any peer, retrying: {err:#}");
-                    async_std::task::sleep(self.retry_interval()).await;
+                    tracing::warn!(
+                        ?delay,
+                        "Could not fetch chain config from any peer, retrying: {err:#}"
+                    );
+                    sleep(delay).await;
+                    delay = backoff(delay);
                 }
             }
         }
-    }
-
-    fn retry_interval(&self) -> Duration {
-        Duration::from_millis(100)
     }
 }
 
@@ -288,10 +291,6 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
             }
         }
         bail!("Could not fetch chain config from any peer");
-    }
-
-    fn retry_interval(&self) -> Duration {
-        self.interval
     }
 }
 
