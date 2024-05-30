@@ -4182,8 +4182,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-query-service"
-version = "0.1.23"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.26#7e1a763650825fd1b445d59ba08e2382eaf9e79d"
+version = "0.1.27"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=jb/limit-proactive-scan#a719fb942366d1b4b65ef0b8a777732289a781a3"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -7417,7 +7417,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19de2de2a00075bf566bee3bd4db014b11587e84184d3f7a791bc17f1a8e9e48"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.60",
