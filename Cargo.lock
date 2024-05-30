@@ -635,7 +635,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "258b52a1aa741b9f09783b2d86cf0aeeb617bbf847f6933340a39644227acbdb"
 dependencies = [
- "event-listener 5.3.0",
+ "event-listener 5.3.1",
  "event-listener-strategy 0.5.2",
  "futures-core",
  "pin-project-lite 0.2.14",
@@ -1332,9 +1332,9 @@ dependencies = [
 
 [[package]]
 name = "blst"
-version = "0.3.11"
+version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c94087b935a822949d3291a9989ad2b2051ea141eda0fd4e478a75f6aa3e604b"
+checksum = "62dc83a094a71d43eeadd254b1ec2d24cb6a0bb6cadce00df51f0db594711a32"
 dependencies = [
  "cc",
  "glob",
@@ -1486,9 +1486,9 @@ dependencies = [
 
 [[package]]
 name = "capnp"
-version = "0.19.5"
+version = "0.19.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3aed85272154b3c0bfda873c40395f13adcfbc89696bf639a512291077f8cd17"
+checksum = "de71387912cac7dd3cb7c219e09628411620a18061bba58c71453c26ae7bf66a"
 dependencies = [
  "embedded-io",
 ]
@@ -1926,9 +1926,9 @@ dependencies = [
 
 [[package]]
 name = "const-hex"
-version = "1.11.4"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70ff96486ccc291d36a958107caf2c0af8c78c0af7d31ae2f35ce055130de1a6"
+checksum = "94fb8a24a26d37e1ffd45343323dc9fe6654ceea44c12f2fcb3d7ac29e610bc6"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -3264,9 +3264,9 @@ dependencies = [
 
 [[package]]
 name = "event-listener"
-version = "5.3.0"
+version = "5.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d9944b8ca13534cdfb2800775f8dd4902ff3fc75a50101466decadfdf322a24"
+checksum = "6032be9bd27023a771701cc49f9f053c751055f71efb2e0ae5c15809093675ba"
 dependencies = [
  "concurrent-queue",
  "parking",
@@ -3289,7 +3289,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f214dc438f977e6d4e3500aaa277f5ad94ca83fbbd9b1a15713ce2344ccc5a1"
 dependencies = [
- "event-listener 5.3.0",
+ "event-listener 5.3.1",
  "pin-project-lite 0.2.14",
 ]
 
@@ -4027,7 +4027,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#95dc95f6ecd5bb2085c0b3588b70d08fe2397fae"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=ss/fee-upgrade#53669fb01cdda37395f8421c568e22b9b6d0c8b3"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4072,7 +4072,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#95dc95f6ecd5bb2085c0b3588b70d08fe2397fae"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=ss/fee-upgrade#53669fb01cdda37395f8421c568e22b9b6d0c8b3"
 dependencies = [
  "async-trait",
  "clap",
@@ -4091,7 +4091,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.21"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=daily-build#6b1f25f3660229fb220fd23c6ab1a6a73a3b8348"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=abdul/update-hotshot#af1cca8d7ee1ea14cea36fd98b97c4ff6575df10"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4143,8 +4143,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-events-service"
-version = "0.1.23"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=daily-build#9b5891dd85b98baf42058131219d425514447325"
+version = "0.1.22"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=abdul/update-hotshot#b89e29d44881fec8f1fb21db853dfee26aeaa79d"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4169,7 +4169,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#95dc95f6ecd5bb2085c0b3588b70d08fe2397fae"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=ss/fee-upgrade#53669fb01cdda37395f8421c568e22b9b6d0c8b3"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4200,7 +4200,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#95dc95f6ecd5bb2085c0b3588b70d08fe2397fae"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=ss/fee-upgrade#53669fb01cdda37395f8421c568e22b9b6d0c8b3"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4211,7 +4211,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#95dc95f6ecd5bb2085c0b3588b70d08fe2397fae"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=ss/fee-upgrade#53669fb01cdda37395f8421c568e22b9b6d0c8b3"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4240,7 +4240,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.27"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=daily-build#2f2aa3adf38c344b63e380d3375086341f4be3c9"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=abdul/update-hotshot#0fd5941387b2f293bc8effd4bea7739b50e16260"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4294,7 +4294,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#95dc95f6ecd5bb2085c0b3588b70d08fe2397fae"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=ss/fee-upgrade#53669fb01cdda37395f8421c568e22b9b6d0c8b3"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4365,7 +4365,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#95dc95f6ecd5bb2085c0b3588b70d08fe2397fae"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=ss/fee-upgrade#53669fb01cdda37395f8421c568e22b9b6d0c8b3"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4380,7 +4380,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#95dc95f6ecd5bb2085c0b3588b70d08fe2397fae"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=ss/fee-upgrade#53669fb01cdda37395f8421c568e22b9b6d0c8b3"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4415,7 +4415,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#95dc95f6ecd5bb2085c0b3588b70d08fe2397fae"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=ss/fee-upgrade#53669fb01cdda37395f8421c568e22b9b6d0c8b3"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4456,7 +4456,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#95dc95f6ecd5bb2085c0b3588b70d08fe2397fae"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=ss/fee-upgrade#53669fb01cdda37395f8421c568e22b9b6d0c8b3"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -4704,9 +4704,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-util"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d8d52be92d09acc2e01dddb7fde3ad983fc6489c7db4837e605bc3fca4cb63e"
+checksum = "7b875924a60b96e5d7b9ae7b066540b1dd1cbd90d1828f54c92e02a283351c56"
 dependencies = [
  "bytes 1.6.0",
  "futures-channel",
@@ -5719,7 +5719,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?branch=main#95dc95f6ecd5bb2085c0b3588b70d08fe2397fae"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=ss/fee-upgrade#53669fb01cdda37395f8421c568e22b9b6d0c8b3"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -7465,7 +7465,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn 2.0.66",
@@ -10189,7 +10189,7 @@ dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "winnow 0.6.8",
+ "winnow 0.6.9",
 ]
 
 [[package]]
@@ -10681,9 +10681,9 @@ dependencies = [
 
 [[package]]
 name = "vbs"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "971bcbd6c41e4e53fa9eab95b2a8ddaf1826be2f3e86b4101efebc8c3a17fde0"
+checksum = "1da07d9ca0c69892851ff70256392d1b0c6408a0007cc87409b1ca3064821e9b"
 dependencies = [
  "anyhow",
  "bincode",
@@ -11140,9 +11140,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.6.8"
+version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3c52e9c97a68071b23e836c9380edae937f17b9c4667bd021973efc689f618d"
+checksum = "86c949fede1d13936a99f14fafd3e76fd642b556dd2ce96287fbe2e0151bfac6"
 dependencies = [
  "memchr",
 ]

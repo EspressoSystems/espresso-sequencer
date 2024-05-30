@@ -216,6 +216,10 @@ pub struct PublicHotShotConfig {
     pub builder_timeout: Duration,
     pub data_request_delay: Duration,
     pub builder_url: Url,
+    pub start_proposing_view: u64,
+    pub stop_proposing_view: u64,
+    pub start_voting_view: u64,
+    pub stop_voting_view: u64,
 }
 
 impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
@@ -244,6 +248,10 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             builder_timeout,
             data_request_delay,
             builder_url,
+            start_proposing_view,
+            stop_proposing_view,
+            start_voting_view,
+            stop_voting_view,
         } = v;
 
         Self {
@@ -267,6 +275,10 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             builder_timeout,
             data_request_delay,
             builder_url,
+            start_proposing_view,
+            stop_proposing_view,
+            start_voting_view,
+            stop_voting_view,
         }
     }
 }

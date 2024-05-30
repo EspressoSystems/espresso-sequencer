@@ -599,6 +599,10 @@ pub mod testing {
                     known_nodes_with_stake.clone().len() as u64,
                     known_nodes_with_stake.clone().len() as u64,
                 ),
+                start_proposing_view: 0,
+                stop_proposing_view: 0,
+                start_voting_view: 0,
+                stop_voting_view: 0,
             };
 
             Self {
