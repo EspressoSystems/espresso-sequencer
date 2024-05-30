@@ -20,6 +20,7 @@ use futures::{
 use hotshot::types::{Event, SystemContextHandle};
 use hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
 use hotshot_query_service::data_source::ExtensibleDataSource;
+use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody, HotShotConfig};
 use jf_merkle_tree::MerkleTreeScheme;
 use serde::{Deserialize, Serialize};
@@ -275,8 +276,8 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
     }
 }
 
-#[cfg(test)]
-mod test_helpers {
+#[cfg(any(test, feature = "testing"))]
+pub mod test_helpers {
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StateCatchup},
@@ -288,13 +289,14 @@ mod test_helpers {
     use async_std::task::sleep;
     use committable::Committable;
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
-    use ethers::prelude::Address;
+    use ethers::{prelude::Address, utils::Anvil};
     use futures::{
         future::{join_all, FutureExt},
         stream::StreamExt,
     };
     use hotshot::types::{Event, EventType};
 
+    use hotshot_contract_adapter::light_client::ParsedLightClientState;
     use hotshot_types::{
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
@@ -305,6 +307,7 @@ mod test_helpers {
     use std::time::Duration;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
+    use url::Url;
 
     pub const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
@@ -320,8 +323,9 @@ mod test_helpers {
             state: [ValidatedState; TestConfig::NUM_NODES],
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
             catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
+            l1: Url,
         ) -> Self {
-            let mut cfg = TestConfig::default();
+            let mut cfg = TestConfig::default_with_l1(l1);
 
             let (builder_task, builder_url) = run_test_builder().await;
 
@@ -391,14 +395,21 @@ mod test_helpers {
         pub async fn new(
             opt: Options,
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
+            l1: Url,
         ) -> Self {
             Self::with_state(
                 opt,
                 Default::default(),
                 persistence,
                 std::array::from_fn(|_| MockStateCatchup::default()),
+                l1,
             )
             .await
+        }
+
+        pub fn light_client_genesis(&self) -> ParsedLightClientState {
+            let st = self.cfg.stake_table(STAKE_TABLE_CAPACITY_FOR_TEST as usize);
+            light_client_genesis_from_stake_table(st).unwrap()
         }
 
         pub async fn stop_consensus(&mut self) {
@@ -425,8 +436,10 @@ mod test_helpers {
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).status(Default::default()));
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         let _network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
         client.connect(None).await;
 
         // The status API is well tested in the query service repo. Here we are just smoke testing
@@ -472,7 +485,10 @@ mod test_helpers {
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
-        let network = TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network =
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
         let mut events = network.server.event_stream();
 
         client.connect(None).await;
@@ -501,7 +517,10 @@ mod test_helpers {
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }));
-        let network = TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network =
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
 
         let mut height: u64;
         // Wait for block >=2 appears
@@ -537,8 +556,10 @@ mod test_helpers {
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
         let options = opt(Options::from(options::Http { port }).catchup(Default::default()));
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         let mut network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
         client.connect(None).await;
 
         // Wait for a few blocks to be decided.
@@ -627,6 +648,7 @@ mod api_tests {
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
     use es_version::SequencerVersion;
+    use ethers::utils::Anvil;
     use futures::stream::StreamExt;
     use hotshot_query_service::availability::LeafQueryData;
     use hotshot_types::vid::vid_scheme;
@@ -667,9 +689,12 @@ mod api_tests {
         // Start query service.
         let port = pick_unused_port().expect("No ports free");
         let storage = D::create_storage().await;
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         let network = TestNetwork::new(
             D::options(&storage, options::Http { port }.into()).submit(Default::default()),
             [no_storage::Options; TestConfig::NUM_NODES],
+            l1,
         )
         .await;
         let mut events = network.server.event_stream();
@@ -767,8 +792,10 @@ mod api_tests {
         })
         .hotshot_events(hotshot_events);
 
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         let _network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
 
         let mut subscribed_events = client
             .socket("hotshot-events/events")
@@ -813,10 +840,9 @@ mod test {
     use async_std::task::sleep;
     use committable::Commitment;
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
-    use futures::{
-        future::{self, join_all},
-        stream::{StreamExt, TryStreamExt},
-    };
+    use ethers::utils::Anvil;
+    use futures::future::{self, join_all};
+    use futures::stream::{StreamExt, TryStreamExt};
     use hotshot::types::EventType;
     use hotshot_query_service::{
         availability::{BlockQueryData, LeafQueryData},
@@ -845,8 +871,10 @@ mod test {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
         let options = Options::from(options::Http { port });
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         let _network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
 
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
@@ -888,8 +916,10 @@ mod test {
                 .status(Default::default()),
         );
 
+        let anvil: ethers::utils::AnvilInstance = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         let mut network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES]).await;
+            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
@@ -948,6 +978,8 @@ mod test {
 
         // Start a sequencer network, using the query service for catchup.
         let port = pick_unused_port().expect("No ports free");
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         let mut network = TestNetwork::with_state(
             Options::from(options::Http { port }).catchup(Default::default()),
             Default::default(),
@@ -957,6 +989,7 @@ mod test {
                     .parse()
                     .unwrap()])
             }),
+            l1,
         )
         .await;
 
@@ -1047,6 +1080,8 @@ mod test {
             .try_into()
             .unwrap();
         let port = pick_unused_port().unwrap();
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         let mut network = TestNetwork::with_state(
             SqlDataSource::options(&storage[0], options::Http { port }.into())
                 .state(Default::default())
@@ -1054,6 +1089,7 @@ mod test {
             Default::default(),
             persistence,
             std::array::from_fn(|_| MockStateCatchup::default()),
+            l1,
         )
         .await;
 
@@ -1106,6 +1142,8 @@ mod test {
 
         // Start up again, resuming from the last decided leaf.
         let port = pick_unused_port().expect("No ports free");
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
         let persistence = storage
             .iter()
             .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
@@ -1125,6 +1163,7 @@ mod test {
                     .parse()
                     .unwrap()])
             }),
+            l1,
         )
         .await;
         let client: Client<ServerError, SequencerVersion> =

@@ -62,6 +62,7 @@ use hotshot_types::{
         metrics::Metrics,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
+        signature_key::{BuilderSignatureKey, StakeTableEntryType},
         states::InstanceState,
         storage::Storage,
     },
@@ -501,7 +502,6 @@ pub mod testing {
         persistence::no_storage::{self, NoStorage},
     };
     use committable::Committable;
-    use ethers::utils::{Anvil, AnvilInstance};
     use futures::{
         future::join_all,
         stream::{Stream, StreamExt},
@@ -511,16 +511,15 @@ pub mod testing {
         BlockPayload,
     };
     use hotshot::types::{EventType::Decide, Message};
+    use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
     use hotshot_types::{
         event::LeafInfo,
-        light_client::StateKeyPair,
-        traits::{
-            block_contents::BlockHeader, metrics::NoMetrics, signature_key::BuilderSignatureKey,
-        },
-        ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
+        light_client::{CircuitField, StateKeyPair, StateVerKey},
+        traits::{block_contents::BlockHeader, metrics::NoMetrics, stake_table::StakeTableScheme},
+        ExecutionType, HotShotConfig, PeerConfig,
     };
     use portpicker::pick_unused_port;
     use std::time::Duration;
@@ -541,7 +540,7 @@ pub mod testing {
         priv_keys: Vec<BLSPrivKey>,
         state_key_pairs: Vec<StateKeyPair>,
         master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
-        anvil: Arc<AnvilInstance>,
+        url: Url,
     }
 
     impl Default for TestConfig {
@@ -602,7 +601,7 @@ pub mod testing {
                 priv_keys,
                 state_key_pairs,
                 master_map,
-                anvil: Arc::new(Anvil::new().spawn()),
+                url: "http://localhost:8545".parse().unwrap(),
             }
         }
     }
@@ -622,6 +621,13 @@ pub mod testing {
             self.config.builder_url = builder_url;
         }
 
+        pub fn default_with_l1(l1: Url) -> Self {
+            TestConfig {
+                url: l1,
+                ..Default::default()
+            }
+        }
+
         pub async fn init_nodes<Ver: StaticVersionType + 'static>(
             &self,
             bind_version: Ver,
@@ -639,6 +645,28 @@ pub mod testing {
                 .await
             }))
             .await
+        }
+
+        pub fn stake_table(
+            &self,
+            stake_table_capacity: usize,
+        ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
+            let mut st =
+                StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(stake_table_capacity);
+            self.config
+                .known_nodes_with_stake
+                .iter()
+                .for_each(|config| {
+                    st.register(
+                        *config.stake_table_entry.key(),
+                        config.stake_table_entry.stake(),
+                        config.state_ver_key.clone(),
+                    )
+                    .unwrap()
+                });
+            st.advance();
+            st.advance();
+            st
         }
 
         #[allow(clippy::too_many_arguments)]
@@ -681,7 +709,7 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 ChainConfig::default(),
-                L1Client::new(self.anvil.endpoint().parse().unwrap(), 10000),
+                L1Client::new(self.url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
             )
             .with_genesis(state);
@@ -763,6 +791,7 @@ mod test {
             vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
         },
     };
+    use sequencer_utils::AnvilOptions;
     use testing::{wait_for_decide_on_handle, TestConfig};
 
     #[async_std::test]
@@ -771,7 +800,9 @@ mod test {
         setup_backtrace();
         let ver = SequencerVersion::instance();
         // Assign `config` so it isn't dropped early.
-        let mut config = TestConfig::default();
+        let anvil = AnvilOptions::default().spawn().await;
+        let url = anvil.url();
+        let mut config = TestConfig::default_with_l1(url);
 
         let (builder_task, builder_url) = run_test_builder().await;
 
@@ -811,7 +842,9 @@ mod test {
         let success_height = 30;
         let ver = SequencerVersion::instance();
         // Assign `config` so it isn't dropped early.
-        let mut config = TestConfig::default();
+        let anvil = AnvilOptions::default().spawn().await;
+        let url = anvil.url();
+        let mut config = TestConfig::default_with_l1(url);
 
         let (builder_task, builder_url) = run_test_builder().await;
 

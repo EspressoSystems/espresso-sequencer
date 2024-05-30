@@ -9,7 +9,12 @@ edition = "2021"
 testing = ["hotshot-testing"]
 libp2p = []
 
+[[bin]]
+name = "espresso-dev-node"
+required-features = ["testing"]
+
 [dev-dependencies]
+escargot = "0.5.10"
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 hotshot-query-service = { workspace = true, features = ["testing"] }
 pretty_assertions = { workspace = true }
@@ -56,6 +61,7 @@ ethers-contract-derive = "2.0.10"
 futures = { workspace = true }
 
 hotshot = { workspace = true }
+hotshot-contract-adapter = { workspace = true }
 hotshot-events-service = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
