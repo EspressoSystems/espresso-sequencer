@@ -514,7 +514,6 @@ pub mod testing {
     };
     use hotshot::types::{EventType::Decide, Message};
     use hotshot_stake_table::vec_based::StakeTable;
-    use hotshot_testing::block_builder::SimpleBuilderConfig;
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
@@ -534,7 +533,7 @@ pub mod testing {
     ) -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
         <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
             TestConfig::NUM_NODES,
-            SimpleBuilderConfig::default(),
+            (),
         )
         .await
     }
