@@ -38,6 +38,8 @@ pub fn quorum_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool 
             | HotShotEvent::QuorumVoteSend(_)
             | HotShotEvent::DacSend(_, _)
             | HotShotEvent::TimeoutVoteSend(_)
+            | HotShotEvent::VersionUpgrade(_)
+            | HotShotEvent::ViewChange(_)
     )
 }
 
@@ -45,7 +47,10 @@ pub fn quorum_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool 
 pub fn upgrade_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
     !matches!(
         event.as_ref(),
-        HotShotEvent::UpgradeProposalSend(_, _) | HotShotEvent::UpgradeVoteSend(_)
+        HotShotEvent::UpgradeProposalSend(_, _)
+            | HotShotEvent::UpgradeVoteSend(_)
+            | HotShotEvent::VersionUpgrade(_)
+            | HotShotEvent::ViewChange(_)
     )
 }
 
@@ -53,13 +58,21 @@ pub fn upgrade_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool
 pub fn da_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
     !matches!(
         event.as_ref(),
-        HotShotEvent::DaProposalSend(_, _) | HotShotEvent::DaVoteSend(_)
+        HotShotEvent::DaProposalSend(_, _)
+            | HotShotEvent::DaVoteSend(_)
+            | HotShotEvent::VersionUpgrade(_)
+            | HotShotEvent::ViewChange(_)
     )
 }
 
 /// vid filter
 pub fn vid_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
-    !matches!(event.as_ref(), HotShotEvent::VidDisperseSend(_, _))
+    !matches!(
+        event.as_ref(),
+        HotShotEvent::VidDisperseSend(_, _)
+            | HotShotEvent::VersionUpgrade(_)
+            | HotShotEvent::ViewChange(_)
+    )
 }
 
 /// view sync filter
@@ -72,6 +85,8 @@ pub fn view_sync_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bo
             | HotShotEvent::ViewSyncPreCommitVoteSend(_)
             | HotShotEvent::ViewSyncCommitVoteSend(_)
             | HotShotEvent::ViewSyncFinalizeVoteSend(_)
+            | HotShotEvent::VersionUpgrade(_)
+            | HotShotEvent::ViewChange(_)
     )
 }
 /// the network message task state

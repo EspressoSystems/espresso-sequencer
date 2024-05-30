@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use async_broadcast::Receiver;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
