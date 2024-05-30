@@ -4,17 +4,21 @@ use crate::{
     state::{BlockMerkleTree, FeeAccount, FeeMerkleCommitment},
 };
 use anyhow::{bail, Context};
-use async_std::sync::RwLock;
+use async_std::{sync::RwLock, task::sleep};
 use async_trait::async_trait;
 use derive_more::From;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
 use serde::de::DeserializeOwned;
-use std::{fmt::Debug, sync::Arc, time::Duration};
+use std::{cmp::min, fmt::Debug, sync::Arc, time::Duration};
 use surf_disco::Request;
 use tide_disco::error::ServerError;
 use url::Url;
 use vbs::version::StaticVersionType;
+
+const MIN_RETRY_DELAY: Duration = Duration::from_millis(500);
+const MAX_RETRY_DELAY: Duration = Duration::from_secs(5);
+const BACKOFF_FACTOR: u32 = 2;
 
 // This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.
@@ -59,6 +63,7 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         let mut ret = vec![];
         for account in accounts {
             // Retry until we succeed.
+            let mut delay = MIN_RETRY_DELAY;
             let account = loop {
                 match self
                     .try_fetch_account(height, view, fee_merkle_tree_root, account)
@@ -66,8 +71,13 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
                 {
                     Ok(account) => break account,
                     Err(err) => {
-                        tracing::warn!(%account, "Could not fetch account, retrying: {err:#}");
-                        async_std::task::sleep(self.retry_interval()).await;
+                        tracing::warn!(%account, ?delay, "Could not fetch account, retrying: {err:#}");
+                        sleep(delay).await;
+
+                        // Try a few times with a short delay, on the off chance that the problem
+                        // resolves quickly. Back off until we eventually reach the maximum delay,
+                        // which should be pretty long.
+                        delay = min(delay * BACKOFF_FACTOR, MAX_RETRY_DELAY);
                     }
                 }
             };
@@ -91,21 +101,27 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
+        // Retry until we succeed.
+        let mut delay = MIN_RETRY_DELAY;
         loop {
             match self.try_remember_blocks_merkle_tree(height, view, mt).await {
                 Ok(()) => break,
                 Err(err) => {
-                    tracing::warn!("Could not fetch frontier from any peer, retrying: {err:#}");
-                    async_std::task::sleep(self.retry_interval()).await;
+                    tracing::warn!(
+                        ?delay,
+                        "Could not fetch frontier from any peer, retrying: {err:#}"
+                    );
+                    sleep(delay).await;
+
+                    // Try a few times with a short delay, on the off chance that the problem
+                    // resolves quickly. Back off until we eventually reach the maximum delay, which
+                    // should be pretty long.
+                    delay = min(delay * BACKOFF_FACTOR, MAX_RETRY_DELAY);
                 }
             }
         }
 
         Ok(())
-    }
-
-    fn retry_interval(&self) -> Duration {
-        Duration::from_millis(100)
     }
 }
 
@@ -127,7 +143,6 @@ pub(crate) async fn local_and_remote(
 #[derive(Debug, Clone, Default)]
 pub struct StatePeers<Ver: StaticVersionType> {
     clients: Vec<Client<ServerError, Ver>>,
-    interval: Duration,
 }
 
 impl<Ver: StaticVersionType> StatePeers<Ver> {
@@ -138,7 +153,6 @@ impl<Ver: StaticVersionType> StatePeers<Ver> {
 
         Self {
             clients: urls.into_iter().map(Client::new).collect(),
-            interval: Duration::from_secs(1),
         }
     }
 }
@@ -208,10 +222,6 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
             }
         }
         bail!("Could not fetch frontier from any peer");
-    }
-
-    fn retry_interval(&self) -> Duration {
-        self.interval
     }
 }
 
