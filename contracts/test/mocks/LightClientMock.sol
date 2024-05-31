@@ -48,11 +48,11 @@ contract LightClientMock is LC {
         }
     }
 
-    function createFakeL1BlockUpdates(uint256[] memory values) public {
-        // Set the l1BlockUpdates to a fresh array
-        l1BlockUpdates = new uint256[](values.length);
+    function setStateUpdateBlockNumbers(uint256[] memory values) public {
+        // Empty the array
+        delete stateUpdateBlockNumbers;
 
         // Set the l1BlockUpdates to the new values
-        l1BlockUpdates = values;
+        stateUpdateBlockNumbers = values;
     }
 }

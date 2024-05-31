@@ -85,7 +85,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     bool public permissionedProverEnabled;
 
     /// @notice an array to store the L1 Block Heights where the finalizedState was updated
-    uint256[] public l1BlockUpdates;
+    uint256[] public stateUpdateBlockNumbers;
 
     /// @notice an array to store the HotShot Block Heights and their respective HotShot
     /// commitments
@@ -147,9 +147,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice If the same mode or prover is sent to the function, then no change is required
     error NoChangeRequired();
     /// @notice Invalid L1 Block for checking Light Client Updates, premature or in the future
-    error InvalidL1BlockForCheckingL1Updates();
+    error InvalidL1BlockForStateUpdateCheck();
     /// @notice Invalid HotShot Block for checking HotShot commitments, premature or in the future
-    error InvalidHotShotBlockForCheckingBlockCommitments();
+    error InvalidHotShotBlockForCommitmentCheck();
 
     /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
@@ -214,7 +214,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         frozenThreshold = genesis.threshold;
 
         //add the L1 Block to L1BlockUpdates for the genesis state
-        l1BlockUpdates.push(block.number);
+        stateUpdateBlockNumbers.push(block.number);
 
         // add the HotShot commitment for the genesis state
         hotShotCommitments.push(HotShotCommitment(genesis.blockHeight, genesis.blockCommRoot));
@@ -282,7 +282,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
          * days of blocks
          */
         //add the L1 Block to L1BlockUpdates for the new finalized state
-        l1BlockUpdates.push(block.number);
+        stateUpdateBlockNumbers.push(block.number);
 
         /**
          * TODO purge elements from the hotShotCommitments array after a decided number of blocks
@@ -395,18 +395,18 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 prevBlock;
         bool prevBlockFound;
 
-        uint256 updatesCount = l1BlockUpdates.length;
+        uint256 updatesCount = stateUpdateBlockNumbers.length;
 
         // Handling Edge Cases
         // Edgecase 1: The block is in the future or in the past before HotShot was live
         if (l1BlockNumber > block.number || updatesCount < 3) {
-            revert InvalidL1BlockForCheckingL1Updates();
+            revert InvalidL1BlockForStateUpdateCheck();
         }
 
-        for (uint256 i = l1BlockUpdates.length - 1; i > 1; i--) {
-            if (l1BlockUpdates[i] <= l1BlockNumber) {
+        for (uint256 i = stateUpdateBlockNumbers.length - 1; i > 1; i--) {
+            if (stateUpdateBlockNumbers[i] <= l1BlockNumber) {
                 prevBlockFound = true;
-                prevBlock = l1BlockUpdates[i];
+                prevBlock = stateUpdateBlockNumbers[i];
                 break;
             }
         }
@@ -414,15 +414,15 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // If no snapshot is found, we don't have enough history stored to tell whether HotShot was
         // down.
         if (!prevBlockFound) {
-            revert InvalidL1BlockForCheckingL1Updates();
+            revert InvalidL1BlockForStateUpdateCheck();
         }
 
         return l1BlockNumber - prevBlock <= delayThreshold;
     }
 
     /// @notice get the number of L1 block updates
-    function getL1BlockUpdatesCount() public view returns (uint256) {
-        return l1BlockUpdates.length;
+    function getStateUpdateBlockNumbersCount() public view returns (uint256) {
+        return stateUpdateBlockNumbers.length;
     }
 
     /// @notice get the HotShot commitment at the specified block height
@@ -430,14 +430,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function getHotShotCommitment(uint256 hotShotBlockHeight)
         public
         view
-        returns (BN254.ScalarField)
+        returns (BN254.ScalarField hotShotCommitment)
     {
         uint256 commitmentsHeight = hotShotCommitments.length;
         if (
             hotShotCommitments[0].blockHeight > hotShotBlockHeight
                 || hotShotBlockHeight > hotShotCommitments[commitmentsHeight - 1].blockHeight
         ) {
-            revert InvalidHotShotBlockForCheckingBlockCommitments();
+            revert InvalidHotShotBlockForCommitmentCheck();
         }
         for (uint256 i = 1; i < commitmentsHeight; i++) {
             if (hotShotCommitments[i].blockHeight >= hotShotBlockHeight) {

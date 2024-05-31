@@ -648,7 +648,7 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
     }
 
     function test_1lBlockUpdatesIsUpdated() public {
-        uint256 blockUpdatesCount = lc.getL1BlockUpdatesCount();
+        uint256 blockUpdatesCount = lc.getStateUpdateBlockNumbersCount();
 
         // Update the state and thus the l1BlockUpdates array would be updated
         vm.prank(permissionedProver);
@@ -656,7 +656,7 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
         emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
         lc.newFinalizedState(newState, newProof);
 
-        assertEq(lc.getL1BlockUpdatesCount(), blockUpdatesCount + 1);
+        assertEq(lc.getStateUpdateBlockNumbersCount(), blockUpdatesCount + 1);
     }
 
     function test_hotshotIsLiveFunctionWhenNoDelayOccurred() public {
@@ -667,16 +667,16 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
         updates[3] = updates[2] + DELAY_THRESHOLD + 5; // 18
         updates[4] = updates[3] + DELAY_THRESHOLD / 2; // 21
-        lc.createFakeL1BlockUpdates(updates);
+        lc.setStateUpdateBlockNumbers(updates);
 
         // set the current block to block number larger than the l1 block numbers used in this test
         vm.roll(updates[4] + (DELAY_THRESHOLD * 5));
 
-        assertEq(lc.getL1BlockUpdatesCount(), 5);
+        assertEq(lc.getStateUpdateBlockNumbersCount(), 5);
 
         // Reverts as it's within the first two updates which aren't valid times to check since it
         // was just getting initialized
-        vm.expectRevert(LC.InvalidL1BlockForCheckingL1Updates.selector);
+        vm.expectRevert(LC.InvalidL1BlockForStateUpdateCheck.selector);
         lc.wasL1Updated(updates[1] - 1, DELAY_THRESHOLD);
 
         // Hotshot should be live (l1BlockNumber = 7)
@@ -691,7 +691,7 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
         updates[3] = updates[2] + DELAY_THRESHOLD + 5; // 18
         updates[4] = updates[3] + DELAY_THRESHOLD / 2; // 21
-        lc.createFakeL1BlockUpdates(updates);
+        lc.setStateUpdateBlockNumbers(updates);
 
         // set the current block to block number larger than the l1 block numbers used in this test
         vm.roll(updates[4] + (DELAY_THRESHOLD * 5));
@@ -705,26 +705,26 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
         uint256[] memory updates = new uint256[](2);
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD + 5; //12
-        lc.createFakeL1BlockUpdates(updates);
+        lc.setStateUpdateBlockNumbers(updates);
 
         vm.roll(DELAY_THRESHOLD * 5);
 
-        assertEq(lc.getL1BlockUpdatesCount(), 2);
+        assertEq(lc.getStateUpdateBlockNumbersCount(), 2);
 
-        vm.expectRevert(LC.InvalidL1BlockForCheckingL1Updates.selector);
+        vm.expectRevert(LC.InvalidL1BlockForStateUpdateCheck.selector);
         lc.wasL1Updated(updates[0] + 2, DELAY_THRESHOLD); //3
     }
 
     function test_revertWhenThereIsOnlyOneUpdate() public {
         uint256[] memory updates = new uint256[](1);
         updates[0] = 1;
-        lc.createFakeL1BlockUpdates(updates);
+        lc.setStateUpdateBlockNumbers(updates);
 
         vm.roll(DELAY_THRESHOLD * 3);
 
-        assertEq(lc.getL1BlockUpdatesCount(), 1);
+        assertEq(lc.getStateUpdateBlockNumbersCount(), 1);
 
-        vm.expectRevert(LC.InvalidL1BlockForCheckingL1Updates.selector);
+        vm.expectRevert(LC.InvalidL1BlockForStateUpdateCheck.selector);
         lc.wasL1Updated(updates[0] + 2, DELAY_THRESHOLD); //3
     }
 
@@ -734,13 +734,13 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 21
-        lc.createFakeL1BlockUpdates(updates);
+        lc.setStateUpdateBlockNumbers(updates);
 
         vm.roll(DELAY_THRESHOLD * 5);
 
-        assertEq(lc.getL1BlockUpdatesCount(), 3);
+        assertEq(lc.getStateUpdateBlockNumbersCount(), 3);
 
-        vm.expectRevert(LC.InvalidL1BlockForCheckingL1Updates.selector);
+        vm.expectRevert(LC.InvalidL1BlockForStateUpdateCheck.selector);
         lc.wasL1Updated(updates[0] + 2, DELAY_THRESHOLD); //3
     }
 
@@ -752,7 +752,7 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 21
-        lc.createFakeL1BlockUpdates(updates);
+        lc.setStateUpdateBlockNumbers(updates);
 
         // set the current block to block number larger than the l1 block numbers used in this test
         vm.roll(updates[2] + (DELAY_THRESHOLD * 5));
@@ -770,7 +770,7 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 21
-        lc.createFakeL1BlockUpdates(updates);
+        lc.setStateUpdateBlockNumbers(updates);
 
         // set the current block to block number larger than the l1 block numbers used in this test
         vm.roll(updates[2] + (DELAY_THRESHOLD * 5));
@@ -784,13 +784,13 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
         uint256[] memory updates = new uint256[](2);
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
-        lc.createFakeL1BlockUpdates(updates);
+        lc.setStateUpdateBlockNumbers(updates);
 
         // set the current block
         uint256 currBlock = 20;
         vm.roll(currBlock);
 
-        vm.expectRevert(LC.InvalidL1BlockForCheckingL1Updates.selector);
+        vm.expectRevert(LC.InvalidL1BlockForStateUpdateCheck.selector);
 
         lc.wasL1Updated(currBlock + 5, DELAY_THRESHOLD);
     }
@@ -800,13 +800,13 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
         uint256[] memory updates = new uint256[](2);
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
-        lc.createFakeL1BlockUpdates(updates);
+        lc.setStateUpdateBlockNumbers(updates);
 
         // set the current block
         uint256 currBlock = 20;
         vm.roll(currBlock);
 
-        vm.expectRevert(LC.InvalidL1BlockForCheckingL1Updates.selector);
+        vm.expectRevert(LC.InvalidL1BlockForStateUpdateCheck.selector);
 
         lc.wasL1Updated(updates[0] - 1, DELAY_THRESHOLD);
     }
@@ -907,7 +907,7 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
 
         // Expect revert when attempting to retrieve a block height higher than the highest one
         // recorded
-        vm.expectRevert(LC.InvalidHotShotBlockForCheckingBlockCommitments.selector);
+        vm.expectRevert(LC.InvalidHotShotBlockForCommitmentCheck.selector);
         lc.getHotShotCommitment(blockHeight + 1);
     }
 }
