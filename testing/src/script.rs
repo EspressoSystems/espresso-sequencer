@@ -167,6 +167,31 @@ pub async fn run_test_script<TYPES, S: TaskState<Event = HotShotEvent<TYPES>> + 
     }
 }
 
+pub enum InputOrder<TYPES: NodeType> {
+    Random(Vec<HotShotEvent<TYPES>>),
+    Serial(Vec<HotShotEvent<TYPES>>),
+}
+
+#[macro_export]
+macro_rules! random {
+    ($($x:expr),* $(,)?) => {
+        {
+            let inputs = vec![$($x),*];
+            InputOrder::Random(inputs)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! serial {
+    ($($x:expr),* $(,)?) => {
+        {
+            let inputs = vec![$($x),*];
+            InputOrder::Serial(inputs)
+        }
+    };
+}
+
 pub struct TaskScript<TYPES: NodeType, S> {
     /// The time to wait on the receiver for this script.
     pub timeout: Duration,
@@ -177,6 +202,15 @@ pub struct TaskScript<TYPES: NodeType, S> {
 pub struct Expectations<TYPES: NodeType, S> {
     pub output_asserts: Vec<Box<dyn Predicate<Arc<HotShotEvent<TYPES>>>>>,
     pub task_state_asserts: Vec<Box<dyn Predicate<S>>>,
+}
+
+impl<TYPES: NodeType, S> Expectations<TYPES, S> {
+    pub fn from_outputs(output_asserts: Vec<Box<dyn Predicate<Arc<HotShotEvent<TYPES>>>>>) -> Self {
+        Self {
+            output_asserts,
+            task_state_asserts: vec![],
+        }
+    }
 }
 
 pub fn panic_extra_output_in_script<S>(stage_number: usize, script_name: String, output: &S)
@@ -223,13 +257,17 @@ pub async fn validate_output_or_panic_in_script<S: std::fmt::Debug>(
     script_name: String,
     output: &S,
     assert: &dyn Predicate<S>,
-) {
-    assert!(
-        assert.evaluate(output).await == PredicateResult::Pass,
-        "Stage {} | Output in {} failed to satisfy: {:?}.\n\nReceived:\n\n{:?}",
-        stage_number,
-        script_name,
-        assert,
-        output
-    );
+) -> PredicateResult {
+    let result = assert.evaluate(output).await;
+
+    match result {
+        PredicateResult::Pass => result,
+        PredicateResult::Incomplete => result,
+        PredicateResult::Fail => {
+            panic!(
+                "Stage {} | Output in {} failed to satisfy: {:?}.\n\nReceived:\n\n{:?}",
+                stage_number, script_name, assert, output
+            )
+        }
+    }
 }

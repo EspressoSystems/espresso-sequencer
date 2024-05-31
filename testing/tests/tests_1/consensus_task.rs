@@ -35,7 +35,17 @@ use sha2::Digest;
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_task() {
+    use std::time::Duration;
+
     use hotshot_example_types::{block_types::TestMetadata, state_types::TestValidatedState};
+    use hotshot_macros::{run_test, test_scripts};
+    use hotshot_testing::{
+        all_predicates,
+        predicates::event::all_predicates,
+        random,
+        script::{Expectations, InputOrder, TaskScript},
+        serial,
+    };
     use hotshot_types::data::null_block;
 
     async_compatibility_layer::logging::setup_logging();
@@ -68,31 +78,19 @@ async fn test_consensus_task() {
         vids.push(view.vid_proposal.clone());
     }
 
-    // Run view 1 (the genesis stage).
-    let view_1 = TestScriptStage {
-        inputs: vec![
+    let cert = proposals[1].data.justify_qc.clone();
+    let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
+
+    let inputs = vec![
+        random![
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             DaCertificateRecv(dacs[0].clone()),
             VidShareRecv(vid_share(&vids[0].0, handle.public_key())),
         ],
-        outputs: vec![
-            exact(ViewChange(ViewNumber::new(1))),
-            quorum_proposal_validated(),
-            exact(QuorumVoteSend(votes[0].clone())),
-        ],
-        asserts: vec![],
-    };
-
-    let cert = proposals[1].data.justify_qc.clone();
-    let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
-
-    // Run view 2 and propose.
-    let view_2 = TestScriptStage {
-        inputs: vec![
+        serial![
             VidShareRecv(vid_share(&vids[1].0, handle.public_key())),
             QuorumProposalRecv(proposals[1].clone(), leaders[1]),
             QcFormed(either::Left(cert)),
-            // We must have a payload commitment and metadata to propose.
             SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
@@ -101,17 +99,29 @@ async fn test_consensus_task() {
                 null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
             ),
         ],
-        outputs: vec![
+    ];
+
+    let expectations = vec![
+        Expectations::from_outputs(all_predicates![
+            exact(ViewChange(ViewNumber::new(1))),
+            quorum_proposal_validated(),
+            exact(QuorumVoteSend(votes[0].clone())),
+        ]),
+        Expectations::from_outputs(all_predicates![
             exact(ViewChange(ViewNumber::new(2))),
             quorum_proposal_validated(),
             quorum_proposal_send(),
-        ],
-        asserts: vec![],
-    };
+        ]),
+    ];
 
     let consensus_state = ConsensusTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+    let mut consensus_script = TaskScript {
+        timeout: Duration::from_millis(35),
+        state: consensus_state,
+        expectations,
+    };
 
-    run_test_script(vec![view_1, view_2], consensus_state).await;
+    run_test![inputs, consensus_script].await;
 }
 
 #[cfg(test)]

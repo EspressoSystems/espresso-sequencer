@@ -92,6 +92,15 @@ pub fn all_predicates<TYPES: NodeType>(
     })
 }
 
+#[macro_export]
+macro_rules! all_predicates {
+    ($($x:expr),* $(,)?) => {
+        {
+            vec![all_predicates(vec![$($x),*])]
+        }
+    };
+}
+
 #[async_trait]
 impl<TYPES> Predicate<Arc<HotShotEvent<TYPES>>> for EventPredicate<TYPES>
 where
