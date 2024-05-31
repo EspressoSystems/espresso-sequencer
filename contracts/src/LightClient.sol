@@ -98,7 +98,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @param blockHeight The block height of the latest finalized block
     /// @param blockCommRoot The merkle root of historical block commitments (BN254::ScalarField)
     /// @param feeLedgerComm The commitment to the fee ledger state (type: BN254::ScalarField)
-    /// @param stakeTableBlsKeyComm The commitment to the BlsVerKey column of the stake table
+    /// @param stakeTableBlsKeyComm The commitment to the BlsVerKey column of the stake tableg
     /// @param stakeTableSchnorrKeyComm The commitment to the SchnorrVerKey column of the table
     /// @param stakeTableAmountComm The commitment to the stake amount column of the stake table
     /// @param threshold The (stake-weighted) quorum threshold for a QC to be considered as valid
@@ -392,61 +392,32 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         view
         returns (bool)
     {
-        /**
-         * TODO: consider a revert if delayThreshold is invalid
-         */
+        uint256 prevBlock;
+        bool prevBlockFound;
+
         uint256 updatesCount = l1BlockUpdates.length;
 
         // Handling Edge Cases
         // Edgecase 1: The block is in the future or in the past before HotShot was live
-        if (l1BlockNumber > block.number || (updatesCount > 0 && l1BlockNumber < l1BlockUpdates[0]))
-        {
+        if (l1BlockNumber > block.number || updatesCount < 3) {
             revert InvalidL1BlockForCheckingL1Updates();
         }
 
-        // Edgecase 2: There have only been two HotShot updates so far
-        // we only start checking if HotShot is live after it has received atleast two updates
-        if (updatesCount < 2) {
-            return true;
-        }
-
-        for (uint256 i = 0; i < updatesCount; i++) {
-            uint256 blockStart = l1BlockUpdates[i];
-            uint256 blockEnd = (i < updatesCount - 1) ? l1BlockUpdates[i + 1] : block.number;
-
-            // If thupdatesCount in this block range
-            if (blockStart <= l1BlockNumber && blockEnd >= l1BlockNumber) {
-                // If the range is in the initial updates, return true
-                if (i < 2 && blockEnd != block.number) {
-                    return true;
-                }
-
-                return
-                    !isDelayThresholdSurpassed(blockStart, blockEnd, delayThreshold, l1BlockNumber);
+        for (uint256 i = l1BlockUpdates.length - 1; i > 1; i--) {
+            if (l1BlockUpdates[i] <= l1BlockNumber) {
+                prevBlockFound = true;
+                prevBlock = l1BlockUpdates[i];
+                break;
             }
         }
 
-        return false;
-    }
+        // If no snapshot is found, we don't have enough history stored to tell whether HotShot was
+        // down.
+        if (!prevBlockFound) {
+            revert InvalidL1BlockForCheckingL1Updates();
+        }
 
-    /// @notice the criteria that determines whether the delayThreshold was passed for the given
-    /// reference L1 block, l1BlockNumber and delayThreshold
-    /// @param blockStart The start of the block range found in the l1BlockUpdates array and used to
-    /// determine if the delay threshold was passed for a given L1 block
-    /// @param blockEnd The end of the block range used to determine if the delay threshold was
-    /// passed for a given L1 block
-    /// @param l1BlockNumber This L1 block number used to reference a point in time when this light
-    /// client contract was expected to be updated in a given threshold
-    /// @param delayThreshold The delay threshold used to determined if this Light Client contract
-    /// was updated in the desired time (measured in blocks)
-    function isDelayThresholdSurpassed(
-        uint256 blockStart,
-        uint256 blockEnd,
-        uint256 delayThreshold,
-        uint256 l1BlockNumber
-    ) internal pure returns (bool) {
-        return
-            blockEnd - blockStart >= delayThreshold && l1BlockNumber - blockStart >= delayThreshold;
+        return l1BlockNumber - prevBlock <= delayThreshold;
     }
 
     /// @notice get the number of L1 block updates

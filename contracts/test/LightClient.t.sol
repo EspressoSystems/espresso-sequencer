@@ -674,8 +674,10 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
 
         assertEq(lc.getL1BlockUpdatesCount(), 5);
 
-        // Hotshot should be live (l1BlockNumber = 3)
-        assertTrue(lc.wasL1Updated(updates[1] - 1, DELAY_THRESHOLD));
+        // Reverts as it's within the first two updates which aren't valid times to check since it
+        // was just getting initialized
+        vm.expectRevert(LC.InvalidL1BlockForCheckingL1Updates.selector);
+        lc.wasL1Updated(updates[1] - 1, DELAY_THRESHOLD);
 
         // Hotshot should be live (l1BlockNumber = 7)
         assertTrue(lc.wasL1Updated(updates[2], DELAY_THRESHOLD));
@@ -699,25 +701,7 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
         assertFalse(lc.wasL1Updated(updates[2] + DELAY_THRESHOLD + 2, DELAY_THRESHOLD));
     }
 
-    function test_hotshotIsLiveWhenThereAreOnlyTwoUpdates() public {
-        uint256[] memory updates = new uint256[](2);
-        updates[0] = 1;
-        updates[1] = updates[0] + DELAY_THRESHOLD + 5;
-        lc.createFakeL1BlockUpdates(updates);
-
-        vm.roll(updates[1] * 2);
-
-        assertEq(lc.getL1BlockUpdatesCount(), 2);
-
-        // Hotshot should be live
-        assertTrue(lc.wasL1Updated(updates[0] + 2, DELAY_THRESHOLD));
-
-        // Hotshot should be live
-        assertTrue(lc.wasL1Updated(updates[1] - 1, DELAY_THRESHOLD));
-    }
-
-    function test_hotshotIsDownWhenThereAreOnlyTwoUpdatesButTheRequestedBlockIsPastTheLastBlockAndThreshold(
-    ) public {
+    function test_revertWhenThereAreOnlyTwoUpdates() public {
         uint256[] memory updates = new uint256[](2);
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD + 5; //12
@@ -727,19 +711,11 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
 
         assertEq(lc.getL1BlockUpdatesCount(), 2);
 
-        // Hotshot should be live
-        assertTrue(lc.wasL1Updated(updates[0] + 2, DELAY_THRESHOLD)); //3
-
-        // Hotshot should be live
-        assertTrue(lc.wasL1Updated(updates[1] - 1, DELAY_THRESHOLD)); //11
-
-        // Hotshot should be down even though the block is in the future because the threshold was
-        // met
-        assertFalse(lc.wasL1Updated(updates[1] + DELAY_THRESHOLD * 2, DELAY_THRESHOLD)); //24
+        vm.expectRevert(LC.InvalidL1BlockForCheckingL1Updates.selector);
+        lc.wasL1Updated(updates[0] + 2, DELAY_THRESHOLD); //3
     }
 
-    function test_hotshotIsLiveWhenThereIsOnlyOneUpdateAndTheRequestedBlockIsPastTheLastBlockAndThreshold(
-    ) public {
+    function test_revertWhenThereIsOnlyOneUpdate() public {
         uint256[] memory updates = new uint256[](1);
         updates[0] = 1;
         lc.createFakeL1BlockUpdates(updates);
@@ -748,11 +724,24 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
 
         assertEq(lc.getL1BlockUpdatesCount(), 1);
 
-        // Hotshot should be live
-        assertTrue(lc.wasL1Updated(updates[0] + 2, DELAY_THRESHOLD)); //3
+        vm.expectRevert(LC.InvalidL1BlockForCheckingL1Updates.selector);
+        lc.wasL1Updated(updates[0] + 2, DELAY_THRESHOLD); //3
+    }
 
-        // Hotshot should be live even though the block is in the future and the threshold was met
-        assertTrue(lc.wasL1Updated(updates[0] + DELAY_THRESHOLD * 2, DELAY_THRESHOLD)); //24
+    function test_revertWhenBlockRequestedWithinFirstTwoUpdates() public {
+        // DELAY_THRESHOLD = 6
+        uint256[] memory updates = new uint256[](3);
+        updates[0] = 1;
+        updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
+        updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 21
+        lc.createFakeL1BlockUpdates(updates);
+
+        vm.roll(DELAY_THRESHOLD * 5);
+
+        assertEq(lc.getL1BlockUpdatesCount(), 3);
+
+        vm.expectRevert(LC.InvalidL1BlockForCheckingL1Updates.selector);
+        lc.wasL1Updated(updates[0] + 2, DELAY_THRESHOLD); //3
     }
 
     function test_hotShotIsDownWhenBlockIsHigherThanLastRecordedAndTheDelayThresholdHasPassed()
@@ -806,7 +795,7 @@ contract LightClient_L1UpdatesTest is LightClientCommonTest {
         lc.wasL1Updated(currBlock + 5, DELAY_THRESHOLD);
     }
 
-    function test_revertWhenBlockBeforeHotShotFirstBlock() public {
+    function test_revertWhenRequestedBlockIsBeforeHotShotFirstBlock() public {
         // DELAY_THRESHOLD = 6
         uint256[] memory updates = new uint256[](2);
         updates[0] = 1;
