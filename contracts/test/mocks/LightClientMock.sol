@@ -55,4 +55,14 @@ contract LightClientMock is LC {
         // Set the stateUpdateBlockNumbers to the new values
         stateUpdateBlockNumbers = values;
     }
+
+    function setHotShotCommitments(HotShotCommitment[] memory values) public {
+        // Empty the array
+        delete hotShotCommitments;
+
+        // Set the hotShotCommitments to the new values
+        for (uint256 i = 0; i < values.length; i++) {
+            hotShotCommitments.push(values[i]);
+        }
+    }
 }
