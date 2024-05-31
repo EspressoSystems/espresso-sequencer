@@ -1,0 +1,32 @@
+@startuml
+
+[Espresso Consensus] as EspCons
+[Collect & Filter] as CF
+[COMMs Equivalence] as CE
+[AND] as AND
+
+[zkVM] as ZK
+BLOCK_COMM_ESP --> EspCons
+"<b>STATE_SIGS_ESP</b>" --> EspCons
+BLOCK_NUMBER_ESP --> EspCons
+
+BLOCK_COMM_ESP --> CF
+"<b>ROLLUP_TXS</b>" --> CE
+
+COMM_TXS_ROLLUP --> CE
+COMM_TXS_ESP --> CE
+COMM_TXS_ESP --> CF
+
+"COMM_STATE_VM i" --> ZK
+"COMM_STATE_VM i+1" --> ZK
+COMM_TXS_ROLLUP --> ZK
+
+EspCons -> AND
+ZK --> AND
+CE --> AND
+CF --> AND
+
+AND --> OUTPUT
+
+
+@enduml
