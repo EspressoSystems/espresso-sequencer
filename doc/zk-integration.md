@@ -20,10 +20,6 @@ contract RollupContract1 {
 
         previousState = currentState;
 
-        if (blockNumberEspresso <= lastBlockNumberEspresso) {
-            revert();
-        }
-
         // TODO call to Espresso contract
         if (escapeHatch){
             bytes[] publicInputs = [
@@ -39,6 +35,10 @@ contract RollupContract1 {
             );
 
         } else { // No escape hatch, use the state of the Espresso sequencer
+
+            if (blockNumberEspresso <= lastBlockNumberEspresso) {
+                revert();
+            }
 
             bytes[] publicInputs = [
                         previousState,
@@ -79,10 +79,6 @@ contract RollupContract2 {
 
         previousState = currentState;
 
-        if (blockNumberEspresso <= lastBlockNumberEspresso) {
-            revert();
-        }
-
         // TODO call to Espresso contract
         if (escapeHatch){
             bytes[] publicInputs = [
@@ -100,6 +96,10 @@ contract RollupContract2 {
         } else { // No escape hatch, use the state of the Espresso sequencer
 
             (blockCommEspresso,  blockNumberEspresso) = EspressoLightClientContract.getLastBlockCommitment();
+
+            if (blockNumberEspresso <= lastBlockNumberEspresso) {
+                revert();
+            }
 
             bytes[] publicInputs = [
                 previousState,
