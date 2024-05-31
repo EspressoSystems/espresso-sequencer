@@ -213,7 +213,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         frozenStakeTableCommitment = initStakeTableComm;
         frozenThreshold = genesis.threshold;
 
-        //add the L1 Block to L1BlockUpdates for the genesis state
+        //add the L1 Block to stateUpdateBlockNumbers for the genesis state
         stateUpdateBlockNumbers.push(block.number);
 
         // add the HotShot commitment for the genesis state
@@ -278,10 +278,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         states[finalizedState] = newState;
 
         /**
-         * TODO purge elements from the l1BlockUpdates array after a decided number of blocks e.g. 14
+         * TODO purge elements from the stateUpdateBlockNumbers array after a decided number of
+         * blocks e.g. 14
          * days of blocks
          */
-        //add the L1 Block to L1BlockUpdates for the new finalized state
+        //add the L1 Block to stateUpdateBlockNumbers for the new finalized state
         stateUpdateBlockNumbers.push(block.number);
 
         /**
@@ -381,7 +382,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    /// @notice checks the L1BlockUpdates array and the delayThreshold to determine if hotshot was
+    /// @notice checks the stateUpdateBlockNumbers array and the delayThreshold to determine if
+    /// hotshot was
     /// down at a specified L1 block number
     /// @param l1BlockNumber This L1 block number used to reference a point in time when this light
     /// client contract was expected to be updated in a given threshold

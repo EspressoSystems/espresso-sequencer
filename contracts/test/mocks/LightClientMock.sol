@@ -52,7 +52,7 @@ contract LightClientMock is LC {
         // Empty the array
         delete stateUpdateBlockNumbers;
 
-        // Set the l1BlockUpdates to the new values
+        // Set the stateUpdateBlockNumbers to the new values
         stateUpdateBlockNumbers = values;
     }
 }
