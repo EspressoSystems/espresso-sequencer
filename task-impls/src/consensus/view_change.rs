@@ -1,4 +1,3 @@
-use core::time::Duration;
 use std::sync::Arc;
 
 use anyhow::{ensure, Result};
@@ -7,6 +6,8 @@ use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
+use chrono::Utc;
+use core::time::Duration;
 use hotshot_types::{
     consensus::Consensus,
     event::{Event, EventType},
@@ -40,9 +41,11 @@ pub(crate) async fn update_view<TYPES: NodeType>(
     timeout: u64,
     consensus: Arc<RwLock<Consensus<TYPES>>>,
     cur_view: &mut TYPES::Time,
+    cur_view_time: &mut i64,
     timeout_task: &mut JoinHandle<()>,
     output_event_stream: &Sender<Event<TYPES>>,
     send_view_change_event: bool,
+    is_old_view_leader: bool,
 ) -> Result<()> {
     ensure!(
         new_view > *cur_view,
@@ -104,6 +107,15 @@ pub(crate) async fn update_view<TYPES: NodeType>(
         .metrics
         .current_view
         .set(usize::try_from(cur_view.u64()).unwrap());
+    let new_view_time = Utc::now().timestamp();
+    if is_old_view_leader {
+        #[allow(clippy::cast_precision_loss)]
+        consensus
+            .metrics
+            .view_duration_as_leader
+            .add_point((new_view_time - *cur_view_time) as f64);
+    }
+    *cur_view_time = new_view_time;
 
     // Do the comparison before the subtraction to avoid potential overflow, since
     // `last_decided_view` may be greater than `cur_view` if the node is catching up.

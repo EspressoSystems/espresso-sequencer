@@ -3,6 +3,7 @@ use std::{sync::Arc, time::Duration};
 use anyhow::{ensure, Context, Result};
 use async_broadcast::Sender;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
+use chrono::Utc;
 use hotshot_types::{
     event::{Event, EventType},
     simple_certificate::{QuorumCertificate, TimeoutCertificate},
@@ -161,6 +162,15 @@ pub(crate) async fn handle_view_change<TYPES: NodeType, I: NodeImplementation<TY
         .metrics
         .current_view
         .set(usize::try_from(task_state.cur_view.u64()).unwrap());
+    let cur_view_time = Utc::now().timestamp();
+    if task_state.quorum_membership.leader(old_view_number) == task_state.public_key {
+        #[allow(clippy::cast_precision_loss)]
+        consensus
+            .metrics
+            .view_duration_as_leader
+            .add_point((cur_view_time - task_state.cur_view_time) as f64);
+    }
+    task_state.cur_view_time = cur_view_time;
 
     // Do the comparison before the subtraction to avoid potential overflow, since
     // `last_decided_view` may be greater than `cur_view` if the node is catching up.
@@ -243,6 +253,15 @@ pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>
         .metrics
         .number_of_timeouts
         .add(1);
+    if task_state.quorum_membership.leader(view_number) == task_state.public_key {
+        task_state
+            .consensus
+            .read()
+            .await
+            .metrics
+            .number_of_timeouts_as_leader
+            .add(1);
+    }
 
     Ok(())
 }

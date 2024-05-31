@@ -72,6 +72,9 @@ pub struct Consensus2TaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// The view number that this node is currently executing in.
     pub cur_view: TYPES::Time,
 
+    /// Timestamp this view starts at.
+    pub cur_view_time: i64,
+
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
 

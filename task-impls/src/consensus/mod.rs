@@ -81,6 +81,9 @@ pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// View number this view is executing in.
     pub cur_view: TYPES::Time,
 
+    /// Timestamp this view starts at.
+    pub cur_view_time: i64,
+
     /// The commitment to the current block payload and its metadata submitted to DA.
     pub payload_commitment_and_metadata: Option<CommitmentAndMetadata<TYPES>>,
 
@@ -544,9 +547,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     self.timeout,
                     Arc::clone(&self.consensus),
                     &mut self.cur_view,
+                    &mut self.cur_view_time,
                     &mut self.timeout_task,
                     &self.output_event_stream,
                     DONT_SEND_VIEW_CHANGE_EVENT,
+                    self.quorum_membership.leader(old_view_number) == self.public_key,
                 )
                 .await
                 {
@@ -602,6 +607,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                 .await;
                 let consensus = self.consensus.read().await;
                 consensus.metrics.number_of_timeouts.add(1);
+                if self.quorum_membership.leader(view) == self.public_key {
+                    consensus.metrics.number_of_timeouts_as_leader.add(1);
+                }
             }
             #[cfg(not(feature = "dependency-tasks"))]
             HotShotEvent::SendPayloadCommitmentAndMetadata(

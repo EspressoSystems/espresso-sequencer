@@ -109,6 +109,8 @@ pub struct ConsensusMetricsValue {
     pub number_of_views_since_last_decide: Box<dyn Gauge>,
     /// Number of views that are in-flight since the last anchor view
     pub number_of_views_per_decide_event: Box<dyn Histogram>,
+    /// Duration of views as leader
+    pub view_duration_as_leader: Box<dyn Histogram>,
     /// Number of invalid QCs we've seen since the last commit.
     pub invalid_qc: Box<dyn Gauge>,
     /// Number of outstanding transactions
@@ -117,6 +119,8 @@ pub struct ConsensusMetricsValue {
     pub outstanding_transactions_memory_size: Box<dyn Gauge>,
     /// Number of views that timed out
     pub number_of_timeouts: Box<dyn Counter>,
+    /// Number of views that timed out as leader
+    pub number_of_timeouts_as_leader: Box<dyn Counter>,
     /// The number of empty blocks that have been proposed
     pub number_of_empty_blocks_proposed: Box<dyn Counter>,
 }
@@ -135,12 +139,16 @@ impl ConsensusMetricsValue {
                 .create_gauge(String::from("number_of_views_since_last_decide"), None),
             number_of_views_per_decide_event: metrics
                 .create_histogram(String::from("number_of_views_per_decide_event"), None),
+            view_duration_as_leader: metrics
+                .create_histogram(String::from("view_duration_as_leader"), None),
             invalid_qc: metrics.create_gauge(String::from("invalid_qc"), None),
             outstanding_transactions: metrics
                 .create_gauge(String::from("outstanding_transactions"), None),
             outstanding_transactions_memory_size: metrics
                 .create_gauge(String::from("outstanding_transactions_memory_size"), None),
             number_of_timeouts: metrics.create_counter(String::from("number_of_timeouts"), None),
+            number_of_timeouts_as_leader: metrics
+                .create_counter(String::from("number_of_timeouts_as_leader"), None),
             number_of_empty_blocks_proposed: metrics
                 .create_counter(String::from("number_of_empty_blocks_proposed"), None),
         }
