@@ -3097,33 +3097,42 @@ pub mod testing {
             let db = Self {
                 host,
                 port,
-                container_id,
+                container_id: container_id.clone(),
             };
 
             // Wait for the database to be ready.
-            while !Command::new("psql")
+            while Command::new("docker")
                 .args([
+                    "exec",
+                    &container_id,
+                    "pg_isready",
                     "-h",
-                    &(db.host()),
-                    "-p",
-                    &(db.port().to_string()),
+                    "localhost",
                     "-U",
                     "postgres",
                 ])
                 .env("PGPASSWORD", "password")
                 // Null input so the command terminates as soon as it manages to connect.
                 .stdin(Stdio::null())
-                // Output from this command is not useful, it's just a prompt.
+                // Discard command output.
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .status()
-                .unwrap()
-                .success()
+                // We should ensure the exit status. A simple `unwrap`
+                // would panic on unrelated errors (such as network
+                // connection failures)
+                .and_then(|status| {
+                    status
+                        .success()
+                        .then_some(true)
+                        // Any ol' Error will do
+                        .ok_or(std::io::Error::from_raw_os_error(666))
+                })
+                .is_err()
             {
                 tracing::warn!("database is not ready");
                 sleep(Duration::from_secs(1)).await;
             }
-
             db
         }
 
