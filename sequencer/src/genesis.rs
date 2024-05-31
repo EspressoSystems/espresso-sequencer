@@ -184,7 +184,7 @@ mod test {
         assert_eq!(
             genesis.l1_finalized,
             Some(L1Finalized::Block(L1BlockInfo {
-                number: 64,
+                number: 64.into(),
                 timestamp: 0x123def.into(),
                 hash: H256([
                     0x80, 0xf5, 0xdd, 0x11, 0xf2, 0xbd, 0xda, 0x28, 0x14, 0xcb, 0x1a, 0xd9, 0x4e,

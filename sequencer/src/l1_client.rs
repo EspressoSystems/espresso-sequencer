@@ -16,7 +16,7 @@
 //!   snapshot, which will cause the block builder to propose with a slightly old snapshot, but they
 //!   will still be able to propose on time.
 
-use crate::state::FeeInfo;
+use crate::{eth::L1BlockNum, state::FeeInfo};
 use async_std::task::sleep;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::FeeContract;
@@ -35,7 +35,7 @@ use url::Url;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
-    pub number: u64,
+    pub number: L1BlockNum,
     pub timestamp: U256,
     pub hash: H256,
 }
@@ -60,7 +60,7 @@ pub struct L1Snapshot {
     /// the _number_ of this block in the chain: L1 block numbers will always be sequentially
     /// increasing. Therefore, the sequencer does not have to worry about reorgs invalidating this
     /// snapshot.
-    pub head: u64,
+    pub head: L1BlockNum,
 
     /// The snapshot also includes information about the latest finalized L1 block.
     ///
@@ -79,7 +79,7 @@ impl Committable for L1BlockInfo {
         self.timestamp.to_little_endian(&mut timestamp);
 
         RawCommitmentBuilder::new(&Self::tag())
-            .u64_field("number", self.number)
+            .u64_field("number", self.number.into())
             // `RawCommitmentBuilder` doesn't have a `u256_field` method, so we simulate it:
             .constant_str("timestamp")
             .fixed_size_bytes(&timestamp)
@@ -100,17 +100,17 @@ pub struct L1Client {
     /// `Provider` from `ethers-provider`.
     provider: Arc<Provider<Http>>,
     /// Maximum number of L1 blocks that can be scanned for events in a single query.
-    events_max_block_range: u64,
+    events_max_block_range: L1BlockNum,
 }
 
 impl L1Client {
     /// Instantiate an `L1Client` for a given `Url`.
-    pub fn new(url: Url, events_max_block_range: u64) -> Self {
+    pub fn new(url: Url, events_max_block_range: impl Into<L1BlockNum>) -> Self {
         let provider = Arc::new(Provider::new(Http::new(url)));
         Self {
             retry_delay: Duration::from_secs(1),
             provider,
-            events_max_block_range,
+            events_max_block_range: events_max_block_range.into(),
         }
     }
     /// Get a snapshot from the l1.
@@ -123,7 +123,8 @@ impl L1Client {
     ///
     /// If the desired block number is not finalized yet, this function will block until it becomes
     /// finalized.
-    pub async fn wait_for_finalized_block(&self, number: u64) -> L1BlockInfo {
+    pub async fn wait_for_finalized_block(&self, number: impl Into<L1BlockNum>) -> L1BlockInfo {
+        let number = number.into();
         let interval = self.provider.get_interval();
 
         // Wait for the block to finalize.
@@ -151,18 +152,18 @@ impl L1Client {
             let block = match self.provider.get_block(number).await {
                 Ok(Some(block)) => block,
                 Ok(None) => {
-                    tracing::error!(number, "no such block");
+                    tracing::error!(?number, "no such block");
                     sleep(interval).await;
                     continue;
                 }
                 Err(err) => {
-                    tracing::error!(%err, number, "failed to get L1 block");
+                    tracing::error!(%err, ?number, "failed to get L1 block");
                     sleep(interval).await;
                     continue;
                 }
             };
             let Some(hash) = block.hash else {
-                tracing::error!(number, ?block, "L1 block has no hash");
+                tracing::error!(?number, ?block, "L1 block has no hash");
                 sleep(interval).await;
                 continue;
             };
@@ -175,10 +176,10 @@ impl L1Client {
     }
 
     /// Proxy to `Provider.get_block_number`.
-    async fn get_block_number(&self) -> u64 {
+    async fn get_block_number(&self) -> L1BlockNum {
         loop {
             match self.provider.get_block_number().await {
-                Ok(n) => return n.as_u64(),
+                Ok(n) => return n.into(),
                 Err(e) => {
                     tracing::warn!("Blocknumber error: {}", e);
                     sleep(self.retry_delay).await;
@@ -200,12 +201,14 @@ impl L1Client {
     }
     /// Get fee info for each `Deposit` occurring between `prev`
     /// and `new`. Returns `Vec<FeeInfo>`
-    pub async fn get_finalized_deposits(
+    pub async fn get_finalized_deposits<T: Into<L1BlockNum>>(
         &self,
         fee_contract_address: Address,
-        prev_finalized: Option<u64>,
-        new_finalized: u64,
+        prev_finalized: Option<T>,
+        new_finalized: T,
     ) -> Vec<FeeInfo> {
+        let prev_finalized = prev_finalized.map(Into::into);
+        let new_finalized = new_finalized.into();
         // No new blocks have been finalized, therefore there are no
         // new deposits.
         if prev_finalized >= Some(new_finalized) {
@@ -214,7 +217,8 @@ impl L1Client {
 
         // `prev` should have already been processed unless we
         // haven't processed *any* blocks yet.
-        let prev = prev_finalized.map(|prev| prev + 1).unwrap_or(0);
+        let one = L1BlockNum::from(1);
+        let prev = prev_finalized.map(|prev| prev + one).unwrap_or_default();
 
         // Divide the range `prev_finalized..=new_finalized` into chunks of size
         // `events_max_block_range`.
@@ -222,13 +226,13 @@ impl L1Client {
         let end = new_finalized;
         let chunk_size = self.events_max_block_range;
         let chunks = std::iter::from_fn(move || {
-            let chunk_end = min(start + chunk_size - 1, end);
+            let chunk_end = min(start + chunk_size - one, end);
             if chunk_end < start {
                 return None;
             }
 
             let chunk = (start, chunk_end);
-            start = chunk_end + 1;
+            start = chunk_end + one;
             Some(chunk)
         });
 
@@ -237,21 +241,21 @@ impl L1Client {
             let retry_delay = self.retry_delay;
             let fee_contract = FeeContract::new(fee_contract_address, self.provider.clone());
             async move {
-                tracing::debug!(from, to, "fetch events in range");
+                tracing::debug!(?from, ?to, "fetch events in range");
 
                 // query for deposit events, loop until successful.
                 loop {
                     match fee_contract
                         .deposit_filter()
                         .address(fee_contract.address().into())
-                        .from_block(from)
-                        .to_block(to)
+                        .from_block(from.as_u64())
+                        .to_block(to.as_u64())
                         .query()
                         .await
                     {
                         Ok(events) => break stream::iter(events),
                         Err(err) => {
-                            tracing::warn!(from, to, %err, "Fee Event Error");
+                            tracing::warn!(?from, ?to, %err, "Fee Event Error");
                             sleep(retry_delay).await;
                         }
                     }
@@ -285,7 +289,7 @@ async fn get_finalized_block<P: JsonRpcClient>(
         .ok_or_else(|| ProviderError::CustomError("finalized block has no hash".into()))?;
 
     Ok(Some(L1BlockInfo {
-        number: number.as_u64(),
+        number: number.as_u64().into(),
         timestamp: block.timestamp,
         hash,
     }))
@@ -322,7 +326,7 @@ mod test {
         assert_eq!("anvil/v0.2.0", version);
 
         // compare response of underlying provider w/ `get_block_number`
-        let expected_head = provider.get_block_number().await.unwrap().as_u64();
+        let expected_head: L1BlockNum = provider.get_block_number().await.unwrap().into();
         let head = l1_client.get_block_number().await;
         assert_eq!(expected_head, head);
 
@@ -492,13 +496,16 @@ mod test {
         let provider = &l1_client.provider;
 
         // Wait for a block 10 blocks in the future.
-        let block_height = provider.get_block_number().await.unwrap().as_u64();
-        let block = l1_client.wait_for_finalized_block(block_height + 10).await;
-        assert_eq!(block.number, block_height + 10);
+        let block_height = l1_client.get_block_number().await;
+        let future_block_height = block_height + L1BlockNum::from(10);
+        let block = l1_client
+            .wait_for_finalized_block(future_block_height)
+            .await;
+        assert_eq!(block.number, future_block_height);
 
         // Compare against underlying provider.
         let true_block = provider
-            .get_block(block_height + 10)
+            .get_block(future_block_height)
             .await
             .unwrap()
             .unwrap();

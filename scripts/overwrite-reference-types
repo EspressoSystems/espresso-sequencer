@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+for f in data/*-actual*; do
+    echo "Overwriting serialized data: $(mv -v $f ${f/-actual/})"
+done

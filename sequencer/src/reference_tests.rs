@@ -50,7 +50,7 @@ const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~GL-lEBAwNZDldxDpySRZQChNnmn
 
 fn reference_l1_block() -> L1BlockInfo {
     L1BlockInfo {
-        number: 123,
+        number: 123.into(),
         timestamp: 0x456.into(),
         hash: "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
             .parse()
@@ -102,7 +102,7 @@ fn reference_header() -> Header {
     Header {
         height: 42,
         timestamp: 789,
-        l1_head: 124,
+        l1_head: 124.into(),
         l1_finalized: Some(reference_l1_block()),
         payload_commitment,
         builder_commitment,
@@ -139,6 +139,7 @@ fn reference_test<T: Committable + Serialize + DeserializeOwned>(
 
     // Check that the reference object matches the expected serialized form.
     let actual = serde_json::to_value(&reference).unwrap();
+    let actual_path = data_dir.join(format!("{name}-actual.json"));
 
     if actual != expected {
         let actual_pretty = serde_json::to_string_pretty(&actual).unwrap();
@@ -146,7 +147,6 @@ fn reference_test<T: Committable + Serialize + DeserializeOwned>(
 
         // Write the actual output to a file to make it easier to compare with/replace the expected
         // file if the serialization change was actually intended.
-        let actual_path = data_dir.join(format!("{name}-actual.json"));
         std::fs::write(&actual_path, actual_pretty.as_bytes()).unwrap();
 
         // Fail the test with an assertion that outputs a nice diff between the prettified JSON
@@ -164,6 +164,9 @@ change in the serialization of this data structure.
         );
     }
 
+    // If the test passed, remove the -actual file if it exists.
+    std::fs::remove_file(&actual_path).ok();
+
     // Check that we can deserialize from the reference JSON object.
     let parsed: T = serde_json::from_value(expected).unwrap();
     assert_eq!(
@@ -176,10 +179,10 @@ change in the serialization of this data structure.
     // Check that the reference object matches the expected binary form.
     let expected = std::fs::read(data_dir.join(format!("{name}.bin"))).unwrap();
     let actual = Serializer::serialize(&reference).unwrap();
+    let actual_path = data_dir.join(format!("{name}-actual.bin"));
     if actual != expected {
         // Write the actual output to a file to make it easier to compare with/replace the expected
         // file if the serialization change was actually intended.
-        let actual_path = data_dir.join(format!("{name}-actual.bin"));
         std::fs::write(&actual_path, &actual).unwrap();
 
         // Fail the test with an assertion that outputs a diff.
@@ -195,6 +198,8 @@ change in the serialization of this data structure.
             actual_path.display()
         );
     }
+    // If the test passed, remove the -actual file if it exists.
+    std::fs::remove_file(&actual_path).ok();
 
     // Check that we can deserialize from the reference binary object.
     let parsed: T = Serializer::deserialize(&expected).unwrap();

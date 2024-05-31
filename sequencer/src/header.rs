@@ -1,6 +1,7 @@
 use crate::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
     chain_config::ResolvableChainConfig,
+    eth::L1BlockNum,
     eth_signature_key::BuilderSignature,
     l1_client::L1Snapshot,
     state::{BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment},
@@ -59,7 +60,7 @@ pub struct Header {
     /// Rollups that want a stronger guarantee of finality, or that want Espresso to attest to data
     /// from the L1 block that might change in reorgs, can instead use the latest L1 _finalized_
     /// block at the time this L2 block was sequenced: `l1_finalized`.
-    pub l1_head: u64,
+    pub l1_head: L1BlockNum,
 
     /// The Espresso block header includes information a bout the latest finalized L1 block.
     ///
@@ -111,7 +112,7 @@ impl Committable for Header {
             .field("chain_config", self.chain_config.commit())
             .u64_field("height", self.height)
             .u64_field("timestamp", self.timestamp)
-            .u64_field("l1_head", self.l1_head)
+            .u64_field("l1_head", self.l1_head.into())
             .optional("l1_finalized", &self.l1_finalized)
             .constant_str("payload_commitment")
             .fixed_size_bytes(self.payload_commitment.as_ref().as_ref())
@@ -527,7 +528,7 @@ mod test_headers {
             let genesis = GenesisForTest::default();
             let mut parent = genesis.header.clone();
             parent.timestamp = self.parent_timestamp;
-            parent.l1_head = self.parent_l1_head;
+            parent.l1_head = self.parent_l1_head.into();
             parent.l1_finalized = self.parent_l1_finalized;
 
             let mut parent_leaf = genesis.leaf.clone();
@@ -563,7 +564,7 @@ mod test_headers {
                 genesis.ns_table,
                 &parent_leaf,
                 L1Snapshot {
-                    head: self.l1_head,
+                    head: self.l1_head.into(),
                     finalized: self.l1_finalized,
                 },
                 &self.l1_deposits,
@@ -598,9 +599,9 @@ mod test_headers {
         }
     }
 
-    fn l1_block(number: u64) -> L1BlockInfo {
+    fn l1_block(number: impl Into<L1BlockNum>) -> L1BlockInfo {
         L1BlockInfo {
-            number,
+            number: number.into(),
             ..Default::default()
         }
     }
@@ -651,7 +652,7 @@ mod test_headers {
     #[test]
     fn test_new_header_timestamp_behind_finalized_l1_block() {
         let l1_finalized = Some(L1BlockInfo {
-            number: 1,
+            number: 1.into(),
             timestamp: 1.into(),
             ..Default::default()
         });

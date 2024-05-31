@@ -6,6 +6,7 @@ use clap::Parser;
 use ethers::prelude::*;
 use futures::future::join_all;
 use itertools::Itertools;
+use sequencer::eth::L1BlockNum;
 use sequencer::{Header, L1BlockInfo};
 use std::cmp::max;
 use std::process::exit;
@@ -132,30 +133,30 @@ async fn get_header<Ver: StaticVersionType>(seq: &SequencerClient<Ver>, height: 
     }
 }
 
-async fn get_l1_block(l1: &Provider<Http>, height: u64) -> L1BlockInfo {
+async fn get_l1_block(l1: &Provider<Http>, number: L1BlockNum) -> L1BlockInfo {
     loop {
-        let block = match l1.get_block(height).await {
+        let block = match l1.get_block(number).await {
             Ok(Some(block)) => block,
             Ok(None) => {
-                tracing::warn!("L1 block {height} not yet available");
+                tracing::warn!("L1 block {number} not yet available");
                 sleep(Duration::from_secs(1)).await;
                 continue;
             }
             Err(err) => {
-                tracing::warn!("error fetching L1 block {height}: {err}");
+                tracing::warn!("error fetching L1 block {number}: {err}");
                 sleep(Duration::from_millis(100)).await;
                 continue;
             }
         };
 
         let Some(hash) = block.hash else {
-            tracing::warn!("L1 block {height} has no hash, might not be finalized yet");
+            tracing::warn!("L1 block {number} has no hash, might not be finalized yet");
             sleep(Duration::from_secs(1)).await;
             continue;
         };
 
         return L1BlockInfo {
-            number: height,
+            number,
             hash,
             timestamp: block.timestamp,
         };
