@@ -37,7 +37,9 @@ use hotshot_query_service::{
     },
     Error,
 };
-use hotshot_testing::block_builder::{SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation};
+use hotshot_testing::block_builder::{
+    SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
+};
 use hotshot_types::{
     consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
     traits::election::Membership, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
