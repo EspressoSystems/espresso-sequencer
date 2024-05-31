@@ -32,7 +32,9 @@ use hotshot::{
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
-use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
+use hotshot_testing::block_builder::{
+    SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
+};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
@@ -99,7 +101,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
         let (builder_task, builder_url) =
             <SimpleBuilderImplementation as TestBuilderImplementation<MockTypes>>::start(
                 NUM_NODES,
-                (),
+                SimpleBuilderConfig::default(),
             )
             .await;
 
