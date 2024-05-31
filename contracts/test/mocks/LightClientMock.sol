@@ -21,7 +21,7 @@ contract LightClientMock is LC {
 
     /// @dev Directly mutate `finalizedState` variable for test
     function setFinalizedState(LC.LightClientState memory state) public {
-        states[finalizedState] = state;
+        states[finalizedStateIndex] = state;
     }
 
     /// @dev override the production-implementation with test VK.
@@ -39,20 +39,24 @@ contract LightClientMock is LC {
         publicInput[2] = uint256(state.blockHeight);
         publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
         publicInput[4] = BN254.ScalarField.unwrap(state.feeLedgerComm);
-        publicInput[5] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableBlsKeyComm);
-        publicInput[6] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableSchnorrKeyComm);
-        publicInput[7] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableAmountComm);
+        publicInput[5] = BN254.ScalarField.unwrap(states[finalizedStateIndex].stakeTableBlsKeyComm);
+        publicInput[6] =
+            BN254.ScalarField.unwrap(states[finalizedStateIndex].stakeTableSchnorrKeyComm);
+        publicInput[7] = BN254.ScalarField.unwrap(states[finalizedStateIndex].stakeTableAmountComm);
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
     }
 
-    function createFakeL1BlockUpdates(uint256[] memory values) public {
-        // Set the l1BlockUpdates to a fresh array
-        l1BlockUpdates = new uint256[](values.length);
+    function setStateUpdateBlockNumbers(uint256[] memory values) public {
+        stateUpdateBlockNumbers = values;
+    }
 
-        // Set the l1BlockUpdates to the new values
-        l1BlockUpdates = values;
+    function setHotShotCommitments(HotShotCommitment[] memory values) public {
+        delete hotShotCommitments;
+        for (uint256 i = 0; i < values.length; i++) {
+            hotShotCommitments.push(values[i]);
+        }
     }
 }

@@ -52,10 +52,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint32 public blocksPerEpoch;
 
     /// @notice genesis block commitment index
-    uint32 internal genesisState;
+    uint32 internal genesisStateIndex;
 
     /// @notice Finalized HotShot's light client state index
-    uint32 internal finalizedState;
+    uint32 internal finalizedStateIndex;
 
     // === Storage ===
 
@@ -85,7 +85,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     bool public permissionedProverEnabled;
 
     /// @notice an array to store the L1 Block Heights where the finalizedState was updated
-    uint256[] public l1BlockUpdates;
+    uint256[] public stateUpdateBlockNumbers;
 
     /// @notice an array to store the HotShot Block Heights and their respective HotShot
     /// commitments
@@ -150,6 +150,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InvalidL1BlockForCheckingL1Updates();
     /// @notice Invalid HotShot Block for checking HotShot commitments, premature or in the future
     error InvalidHotShotBlockForCheckingBlockCommitments();
+    /// @notice Insufficient snapshot history to determine if LC was updated in time for a given L1
+    /// block number
+    error InsufficientSnapshotHistory();
 
     /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
@@ -165,8 +168,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     {
         __Ownable_init(owner); //sets owner of the contract
         __UUPSUpgradeable_init();
-        genesisState = 0;
-        finalizedState = 1;
+        genesisStateIndex = 0;
+        finalizedStateIndex = 1;
         _initializeState(genesis, numBlocksPerEpoch);
     }
 
@@ -200,8 +203,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         ) {
             revert InvalidArgs();
         }
-        states[genesisState] = genesis;
-        states[finalizedState] = genesis;
+        states[genesisStateIndex] = genesis;
+        states[finalizedStateIndex] = genesis;
 
         currentEpoch = 0;
 
@@ -214,7 +217,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         frozenThreshold = genesis.threshold;
 
         //add the L1 Block to L1BlockUpdates for the genesis state
-        l1BlockUpdates.push(block.number);
+        stateUpdateBlockNumbers.push(block.number);
 
         // add the HotShot commitment for the genesis state
         hotShotCommitments.push(HotShotCommitment(genesis.blockHeight, genesis.blockCommRoot));
@@ -255,7 +258,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint64 epochEndingBlockHeight = currentEpoch * blocksPerEpoch;
 
         // TODO consider saving gas in the case BLOCKS_PER_EPOCH == type(uint32).max
-        bool isNewEpoch = states[finalizedState].blockHeight == epochEndingBlockHeight;
+        bool isNewEpoch = states[finalizedStateIndex].blockHeight == epochEndingBlockHeight;
         if (!isNewEpoch && newState.blockHeight > epochEndingBlockHeight) {
             revert MissingLastBlockForCurrentEpoch(epochEndingBlockHeight);
         }
@@ -275,14 +278,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         verifyProof(newState, proof);
 
         // upon successful verification, update the latest finalized state
-        states[finalizedState] = newState;
+        states[finalizedStateIndex] = newState;
 
         /**
          * TODO purge elements from the l1BlockUpdates array after a decided number of blocks e.g. 14
          * days of blocks
          */
         //add the L1 Block to L1BlockUpdates for the new finalized state
-        l1BlockUpdates.push(block.number);
+        stateUpdateBlockNumbers.push(block.number);
 
         /**
          * TODO purge elements from the hotShotCommitments array after a decided number of blocks
@@ -296,12 +299,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @dev Simple getter function for the genesis state
     function getGenesisState() public view returns (LightClientState memory) {
-        return states[genesisState];
+        return states[genesisStateIndex];
     }
 
     /// @dev Simple getter function for the finalized state
     function getFinalizedState() public view returns (LightClientState memory) {
-        return states[finalizedState];
+        return states[finalizedStateIndex];
     }
 
     /// @notice Verify the Plonk proof, marked as `virtual` for easier testing as we can swap VK
@@ -319,9 +322,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         publicInput[2] = uint256(state.blockHeight);
         publicInput[3] = BN254.ScalarField.unwrap(state.blockCommRoot);
         publicInput[4] = BN254.ScalarField.unwrap(state.feeLedgerComm);
-        publicInput[5] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableBlsKeyComm);
-        publicInput[6] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableSchnorrKeyComm);
-        publicInput[7] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableAmountComm);
+        publicInput[5] = BN254.ScalarField.unwrap(states[finalizedStateIndex].stakeTableBlsKeyComm);
+        publicInput[6] =
+            BN254.ScalarField.unwrap(states[finalizedStateIndex].stakeTableSchnorrKeyComm);
+        publicInput[7] = BN254.ScalarField.unwrap(states[finalizedStateIndex].stakeTableAmountComm);
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
@@ -331,12 +335,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Advance to the next epoch (without any precondition check!)
     /// @dev This meant to be invoked only internally after appropriate precondition checks are done
     function _advanceEpoch() private {
-        bytes32 newStakeTableComm = computeStakeTableComm(states[finalizedState]);
+        bytes32 newStakeTableComm = computeStakeTableComm(states[finalizedStateIndex]);
         votingStakeTableCommitment = frozenStakeTableCommitment;
         frozenStakeTableCommitment = newStakeTableComm;
 
         votingThreshold = frozenThreshold;
-        frozenThreshold = states[finalizedState].threshold;
+        frozenThreshold = states[finalizedStateIndex].threshold;
 
         currentEpoch += 1;
         emit EpochChanged(currentEpoch);
@@ -381,52 +385,34 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    /// @notice checks the L1BlockUpdates array and the delayThreshold to determine if hotshot was
-    /// down at a specified L1 block number
-    /// @param l1BlockNumber This L1 block number used to reference a point in time when this light
-    /// client contract was expected to be updated in a given threshold
-    /// @param delayThreshold The delay threshold used to determined if this Light Client contract
-    /// was updated in the desired time (measured in blocks)
-    function wasL1Updated(uint256 l1BlockNumber, uint256 delayThreshold)
-        public
-        view
-        returns (bool)
-    {
-        /**
-         * TODO: consider a revert if delayThreshold is invalid
-         */
-        uint256 updatesCount = l1BlockUpdates.length;
-
-        // Handling Edge Cases
-        // Edgecase 1: The block is in the future or in the past before HotShot was live
-        if (l1BlockNumber > block.number || (updatesCount > 0 && l1BlockNumber < l1BlockUpdates[0]))
-        {
-            revert InvalidL1BlockForCheckingL1Updates();
-        }
-
-        // Edgecase 2: There have only been two HotShot updates so far
-        // we only start checking if HotShot is live after it has received atleast two updates
-        if (updatesCount < 2) {
-            return true;
-        }
-
-        for (uint256 i = 0; i < updatesCount; i++) {
-            uint256 blockStart = l1BlockUpdates[i];
-            uint256 blockEnd = (i < updatesCount - 1) ? l1BlockUpdates[i + 1] : block.number;
-
-            // If thupdatesCount in this block range
-            if (blockStart <= l1BlockNumber && blockEnd >= l1BlockNumber) {
-                // If the range is in the initial updates, return true
-                if (i < 2 && blockEnd != block.number) {
-                    return true;
-                }
-
-                return
-                    !isDelayThresholdSurpassed(blockStart, blockEnd, delayThreshold, l1BlockNumber);
+    /// @notice checks that no more than delayThreshold blocks passed since the last update before
+    /// l1BlockNumber
+    /// @param blockNumber The L1 block number
+    /// @param threshold The number of blocks updates to this contract is allowed to lag behind
+    function lagOverThreshold(uint256 blockNumber, uint256 threshold) public view returns (bool) {
+        uint256 latestUpdateBefore;
+        bool updateFound;
+        // Iterate over updates in revers order to find the latest update before the given block
+        // number.
+        uint256 index = stateUpdateBlockNumbers.length - 1;
+        while (!updateFound) {
+            if (stateUpdateBlockNumbers[index] <= blockNumber) {
+                updateFound = true;
+                latestUpdateBefore = stateUpdateBlockNumbers[index];
             }
+            if (index == 0) {
+                break;
+            }
+            index--;
         }
 
-        return false;
+        // If no snapshot is found, we don't have enough history stored to tell whether HotShot was
+        // down.
+        if (!updateFound) {
+            revert InsufficientSnapshotHistory();
+        }
+
+        return blockNumber - latestUpdateBefore > threshold;
     }
 
     /// @notice the criteria that determines whether the delayThreshold was passed for the given
@@ -451,7 +437,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice get the number of L1 block updates
     function getL1BlockUpdatesCount() public view returns (uint256) {
-        return l1BlockUpdates.length;
+        return stateUpdateBlockNumbers.length;
     }
 
     /// @notice get the HotShot commitment at the specified block height
