@@ -144,6 +144,7 @@ pub struct Builder<Types, S, P> {
     major_scan_offset: usize,
     proactive_range_chunk_size: Option<usize>,
     active_fetch_delay: Duration,
+    chunk_fetch_delay: Duration,
     proactive_fetching: bool,
     _types: PhantomData<Types>,
 }
@@ -169,7 +170,8 @@ impl<Types, S, P> Builder<Types, S, P> {
             // don't all pause for a major scan together.
             major_scan_offset: 0,
             proactive_range_chunk_size: None,
-            active_fetch_delay: Duration::from_millis(100),
+            active_fetch_delay: Duration::from_millis(50),
+            chunk_fetch_delay: Duration::from_millis(100),
             proactive_fetching: true,
             _types: Default::default(),
         }
@@ -249,6 +251,22 @@ impl<Types, S, P> Builder<Types, S, P> {
     /// catch up on, as without a delay, scanning can be extremely burdensome on the peer.
     pub fn with_active_fetch_delay(mut self, active_fetch_delay: Duration) -> Self {
         self.active_fetch_delay = active_fetch_delay;
+        self
+    }
+
+    /// Adds a delay between chunk fetches during proactive scans.
+    ///
+    /// In a proactive scan, we retrieve a range of objects from a provider or local storage (e.g., a database).
+    /// Without a delay between fetching these chunks, the process can become very CPU-intensive, especially
+    /// when chunks are retrieved from local storage. While there is already a delay for active fetches
+    /// (`active_fetch_delay`), situations may arise when subscribed to an old stream that fetches most of the data
+    /// from local storage.
+    ///
+    /// This additional delay helps to limit constant maximum CPU usage
+    /// and ensures that local storage remains accessible to all processes,
+    /// not just the proactive scanner.
+    pub fn with_chunk_fetch_delay(mut self, chunk_fetch_delay: Duration) -> Self {
+        self.chunk_fetch_delay = chunk_fetch_delay;
         self
     }
 
@@ -398,7 +416,6 @@ where
         let proactive_range_chunk_size = builder
             .proactive_range_chunk_size
             .unwrap_or(builder.range_chunk_size);
-        let active_fetch_delay = builder.active_fetch_delay;
 
         let fetcher = Arc::new(Fetcher::new(builder).await?);
         let scanner = if proactive_fetching {
@@ -409,7 +426,6 @@ where
                     major_interval,
                     major_offset,
                     proactive_range_chunk_size,
-                    active_fetch_delay,
                 ),
             ))
         } else {
@@ -840,6 +856,10 @@ where
     leaf_fetcher: Arc<LeafFetcher<Types, S, P>>,
     vid_common_fetcher: Arc<VidCommonFetcher<Types, S, P>>,
     range_chunk_size: usize,
+    // Duration to sleep after each active fetch,
+    active_fetch_delay: Duration,
+    // Duration to sleep after each chunk fetched
+    chunk_fetch_delay: Duration,
 }
 
 #[derive(Debug)]
@@ -948,6 +968,8 @@ where
             leaf_fetcher: Arc::new(leaf_fetcher),
             vid_common_fetcher: Arc::new(vid_common_fetcher),
             range_chunk_size: builder.range_chunk_size,
+            active_fetch_delay: builder.active_fetch_delay,
+            chunk_fetch_delay: builder.chunk_fetch_delay,
         })
     }
 }
@@ -1015,9 +1037,14 @@ where
         R: RangeBounds<usize> + Send + 'static,
         T: RangedFetchable<Types>,
     {
+        let chunk_fetch_delay = self.chunk_fetch_delay;
         stream::iter(range_chunks(range, chunk_size))
             .then(move |chunk| self.clone().get_chunk(chunk))
             .flatten()
+            .then(move |obj| async move {
+                sleep(chunk_fetch_delay.clone()).await;
+                obj
+            })
             .boxed()
     }
 
@@ -1188,6 +1215,7 @@ where
 
         if req.might_exist(storage.height as usize, pruned_height) {
             T::active_fetch(self.clone(), storage, req).await;
+            sleep(self.active_fetch_delay).await;
         } else {
             tracing::debug!(
                 "not fetching object {req:?} that cannot exist at height {}",
@@ -1210,7 +1238,6 @@ where
         major_interval: usize,
         major_offset: usize,
         chunk_size: usize,
-        active_fetch_delay: Duration,
     ) {
         let mut prev_height = 0;
 
@@ -1258,20 +1285,7 @@ where
                         chunk_size,
                         start..block_height,
                     );
-                while let Some(fetch) = blocks.next().await {
-                    if let Fetch::Pending(fut) = fetch {
-                        // Wait for the block to be fetched. This slows down the scanner so that we
-                        // don't waste memory generating more active fetch tasks then we can handle
-                        // at a given time. Note that even with this await, all blocks within a
-                        // chunk are fetched in paralle, so this does not block the next block in
-                        // the chunk, only the next chunk until the current chunk completes.
-                        fut.await;
-
-                        // Add a bit of artifical latency to easy pressure on the catchup provider,
-                        // otherwise proactive scans can be highly intensive.
-                        sleep(active_fetch_delay).await;
-                    }
-                }
+                while blocks.next().await.is_some() {}
                 // We have to trigger a separate fetch of the VID data, since this is fetched
                 // independently of the block payload.
                 let mut vid = self
@@ -1280,14 +1294,7 @@ where
                         chunk_size,
                         start..block_height,
                     );
-                while let Some(fetch) = vid.next().await {
-                    if let Fetch::Pending(fut) = fetch {
-                        // As above, limit the speed at which we spawn new fetches to the speed at
-                        // which we can process them.
-                        fut.await;
-                        sleep(active_fetch_delay).await;
-                    }
-                }
+                while vid.next().await.is_some() {}
 
                 tracing::info!("completed proactive scan, will scan again in {minor_interval:?}");
                 sleep(minor_interval).await;
