@@ -1042,7 +1042,7 @@ where
             .then(move |chunk| self.clone().get_chunk(chunk))
             .flatten()
             .then(move |obj| async move {
-                sleep(chunk_fetch_delay.clone()).await;
+                sleep(chunk_fetch_delay).await;
                 obj
             })
             .boxed()
