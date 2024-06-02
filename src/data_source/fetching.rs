@@ -1038,12 +1038,26 @@ where
         T: RangedFetchable<Types>,
     {
         let chunk_fetch_delay = self.chunk_fetch_delay;
+        let active_fetch_delay = self.active_fetch_delay;
+
         stream::iter(range_chunks(range, chunk_size))
-            .then(move |chunk| self.clone().get_chunk(chunk))
+            .then(move |chunk| {
+                let self_clone = self.clone();
+                async move {
+                    {
+                        let chunk = self_clone.get_chunk(chunk).await;
+                        sleep(chunk_fetch_delay).await;
+                        chunk
+                    }
+                }
+            })
             .flatten()
-            .then(move |obj| async move {
-                sleep(chunk_fetch_delay).await;
-                obj
+            .then(move |f| async move {
+                match f {
+                    Fetch::Pending(_) => sleep(active_fetch_delay).await,
+                    Fetch::Ready(_) => (),
+                };
+                f
             })
             .boxed()
     }
@@ -1215,7 +1229,6 @@ where
 
         if req.might_exist(storage.height as usize, pruned_height) {
             T::active_fetch(self.clone(), storage, req).await;
-            sleep(self.active_fetch_delay).await;
         } else {
             tracing::debug!(
                 "not fetching object {req:?} that cannot exist at height {}",
