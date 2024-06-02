@@ -250,7 +250,15 @@ pub mod testing {
         async fn connect(db: &Self::Storage) -> Self {
             match db {
                 Storage::Sql(db) => {
-                    Self::Sql(db.config().connect(Default::default()).await.unwrap())
+                    let cfg = db.config();
+                    let builder = cfg
+                        .builder(Default::default())
+                        .await
+                        .unwrap()
+                        .with_active_fetch_delay(Duration::from_millis(1))
+                        .with_chunk_fetch_delay(Duration::from_millis(1));
+
+                    Self::Sql(builder.build().await.unwrap())
                 }
                 Storage::NoStorage { fetch_from_port } => {
                     tracing::info!("creating NoStorage node, fetching missing data from port {fetch_from_port}");
@@ -272,6 +280,10 @@ pub mod testing {
                             // don't have storage) and the test frequently goes back and looks up
                             // old objects.
                             .with_major_scan_interval(2)
+                            // add minor delay for active fetch
+                            .with_active_fetch_delay(Duration::from_millis(1))
+                            // add minor delay between chunks during proactive scan
+                            .with_chunk_fetch_delay(Duration::from_millis(1))
                             .build()
                             .await
                             .unwrap(),

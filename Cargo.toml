@@ -12,7 +12,7 @@
 
 [package]
 name = "hotshot-query-service"
-version = "0.1.27"
+version = "0.1.28"
 authors = ["Espresso Systems <hello@espressosys.com>"]
 edition = "2021"
 license = "GPL-3.0-or-later"
@@ -85,9 +85,9 @@ prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.8"
-surf-disco = "0.7"
+surf-disco = "0.6"
 tagged-base64 = "0.4"
-tide-disco = "0.7"
+tide-disco = "0.6"
 time = "0.3"
 toml = "0.8"
 tracing = "0.1"

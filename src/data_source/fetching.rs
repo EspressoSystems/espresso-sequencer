@@ -143,6 +143,8 @@ pub struct Builder<Types, S, P> {
     major_scan_interval: usize,
     major_scan_offset: usize,
     proactive_range_chunk_size: Option<usize>,
+    active_fetch_delay: Duration,
+    chunk_fetch_delay: Duration,
     proactive_fetching: bool,
     _types: PhantomData<Types>,
 }
@@ -168,6 +170,8 @@ impl<Types, S, P> Builder<Types, S, P> {
             // don't all pause for a major scan together.
             major_scan_offset: 0,
             proactive_range_chunk_size: None,
+            active_fetch_delay: Duration::from_millis(50),
+            chunk_fetch_delay: Duration::from_millis(100),
             proactive_fetching: true,
             _types: Default::default(),
         }
@@ -237,6 +241,32 @@ impl<Types, S, P> Builder<Types, S, P> {
     /// whatever the normal range chunk size is.
     pub fn with_proactive_range_chunk_size(mut self, range_chunk_size: usize) -> Self {
         self.proactive_range_chunk_size = Some(range_chunk_size);
+        self
+    }
+
+    /// Add a delay between active fetches in proactive scans.
+    ///
+    /// This can be used to limit the rate at which this query service makes requests to other query
+    /// services during proactive scans. This is useful if the query service has a lot of blocks to
+    /// catch up on, as without a delay, scanning can be extremely burdensome on the peer.
+    pub fn with_active_fetch_delay(mut self, active_fetch_delay: Duration) -> Self {
+        self.active_fetch_delay = active_fetch_delay;
+        self
+    }
+
+    /// Adds a delay between chunk fetches during proactive scans.
+    ///
+    /// In a proactive scan, we retrieve a range of objects from a provider or local storage (e.g., a database).
+    /// Without a delay between fetching these chunks, the process can become very CPU-intensive, especially
+    /// when chunks are retrieved from local storage. While there is already a delay for active fetches
+    /// (`active_fetch_delay`), situations may arise when subscribed to an old stream that fetches most of the data
+    /// from local storage.
+    ///
+    /// This additional delay helps to limit constant maximum CPU usage
+    /// and ensures that local storage remains accessible to all processes,
+    /// not just the proactive scanner.
+    pub fn with_chunk_fetch_delay(mut self, chunk_fetch_delay: Duration) -> Self {
+        self.chunk_fetch_delay = chunk_fetch_delay;
         self
     }
 
@@ -826,6 +856,10 @@ where
     leaf_fetcher: Arc<LeafFetcher<Types, S, P>>,
     vid_common_fetcher: Arc<VidCommonFetcher<Types, S, P>>,
     range_chunk_size: usize,
+    // Duration to sleep after each active fetch,
+    active_fetch_delay: Duration,
+    // Duration to sleep after each chunk fetched
+    chunk_fetch_delay: Duration,
 }
 
 #[derive(Debug)]
@@ -934,6 +968,8 @@ where
             leaf_fetcher: Arc::new(leaf_fetcher),
             vid_common_fetcher: Arc::new(vid_common_fetcher),
             range_chunk_size: builder.range_chunk_size,
+            active_fetch_delay: builder.active_fetch_delay,
+            chunk_fetch_delay: builder.chunk_fetch_delay,
         })
     }
 }
@@ -1001,9 +1037,34 @@ where
         R: RangeBounds<usize> + Send + 'static,
         T: RangedFetchable<Types>,
     {
+        let chunk_fetch_delay = self.chunk_fetch_delay;
+        let active_fetch_delay = self.active_fetch_delay;
+
         stream::iter(range_chunks(range, chunk_size))
-            .then(move |chunk| self.clone().get_chunk(chunk))
+            .then(move |chunk| {
+                let self_clone = self.clone();
+                async move {
+                    {
+                        let chunk = self_clone.get_chunk(chunk).await;
+
+                        // Introduce a delay (`chunk_fetch_delay`) between fetching chunks.
+                        // This helps to limit constant high CPU usage when fetching long range of data,
+                        // especially for older streams that fetch most of the data from local storage
+                        sleep(chunk_fetch_delay).await;
+                        chunk
+                    }
+                }
+            })
             .flatten()
+            .then(move |f| async move {
+                match f {
+                    // Introduce a delay (`active_fetch_delay`) for active fetches to reduce load on the catchup provider.
+                    // The delay applies between pending fetches, not between chunks.
+                    Fetch::Pending(_) => sleep(active_fetch_delay).await,
+                    Fetch::Ready(_) => (),
+                };
+                f
+            })
             .boxed()
     }
 
@@ -1232,15 +1293,11 @@ where
                 };
                 prev_height = block_height;
 
-                // Iterate over all blocks that we should have. Merely iterating over the `Fetch`es
-                // without awaiting them is enough to trigger active fetches of missing blocks,
-                // since we always trigger an active fetch when fetching by block number. Moreover,
-                // fetching the block is enough to trigger an active fetch of the corresponding leaf
-                // if it too is missing.
-                //
-                // The chunking behavior of `get_range` automatically ensures that, no matter how
-                // big the range is, we will release the read lock on storage every `chunk_size`
-                // items, so we don't starve out would-be writers.
+                // Iterate over all blocks that we should have. Fetching the block is enough to
+                // trigger an active fetch of the corresponding leaf if it too is missing. The
+                // chunking behavior of `get_range` automatically ensures that, no matter how big
+                // the range is, we will release the read lock on storage every `chunk_size` items,
+                // so we don't starve out would-be writers.
                 let mut blocks = self
                     .clone()
                     .get_range_with_chunk_size::<_, BlockQueryData<Types>>(
