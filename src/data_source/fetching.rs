@@ -1046,6 +1046,10 @@ where
                 async move {
                     {
                         let chunk = self_clone.get_chunk(chunk).await;
+
+                        // Introduce a delay (`chunk_fetch_delay`) between fetching chunks.
+                        // This helps to limit constant high CPU usage when fetching long range of data,
+                        // especially for older streams that fetch most of the data from local storage
                         sleep(chunk_fetch_delay).await;
                         chunk
                     }
@@ -1054,6 +1058,8 @@ where
             .flatten()
             .then(move |f| async move {
                 match f {
+                    // Introduce a delay (`active_fetch_delay`) for active fetches to reduce load on the catchup provider.
+                    // The delay applies between pending fetches, not between chunks.
                     Fetch::Pending(_) => sleep(active_fetch_delay).await,
                     Fetch::Ready(_) => (),
                 };
