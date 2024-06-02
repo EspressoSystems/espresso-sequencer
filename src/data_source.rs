@@ -452,7 +452,7 @@ pub mod persistence_tests {
         Leaf,
     };
     use committable::Committable;
-    use hotshot_example_types::state_types::TestInstanceState;
+    use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
     use hotshot_types::simple_certificate::QuorumCertificate;
 
     #[async_std::test]
@@ -463,8 +463,13 @@ pub mod persistence_tests {
         let mut ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let mut qc = QuorumCertificate::<MockTypes>::genesis(&TestInstanceState {});
-        let mut leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
+        let mut qc = QuorumCertificate::<MockTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState {},
+        )
+        .await;
+        let mut leaf =
+            Leaf::<MockTypes>::genesis(&TestValidatedState::default(), &TestInstanceState {}).await;
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
         leaf.block_header_mut().block_number += 1;
@@ -506,8 +511,13 @@ pub mod persistence_tests {
         let mut ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
-        let mut qc = QuorumCertificate::<MockTypes>::genesis(&TestInstanceState {});
-        let mut leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
+        let mut qc = QuorumCertificate::<MockTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState {},
+        )
+        .await;
+        let mut leaf =
+            Leaf::<MockTypes>::genesis(&TestValidatedState::default(), &TestInstanceState {}).await;
         // Increment the block number, to distinguish this block from the genesis block, which
         // already exists.
         leaf.block_header_mut().block_number += 1;
@@ -562,12 +572,16 @@ pub mod node_tests {
     };
     use committable::Committable;
     use futures::{future::join_all, stream::StreamExt};
+    use hotshot::traits::BlockPayload;
     use hotshot_example_types::{
-        block_types::{TestBlockHeader, TestBlockPayload, TestMetadata},
+        block_types::TestBlockPayload, node_types::TestTypes, state_types::TestValidatedState,
+    };
+    use hotshot_example_types::{
+        block_types::{TestBlockHeader, TestMetadata},
         state_types::TestInstanceState,
     };
     use hotshot_types::{
-        traits::block_contents::{vid_commitment, BlockPayload, EncodeBytes},
+        traits::block_contents::{vid_commitment, EncodeBytes},
         vid::{vid_scheme, VidSchemeType},
     };
     use jf_vid::VidScheme;
@@ -583,8 +597,20 @@ pub mod node_tests {
         let mut vid = vid_scheme(2);
 
         // Generate some mock leaves and blocks to insert.
-        let mut leaves = vec![LeafQueryData::<MockTypes>::genesis(&TestInstanceState {})];
-        let mut blocks = vec![BlockQueryData::<MockTypes>::genesis(&TestInstanceState {})];
+        let mut leaves = vec![
+            LeafQueryData::<MockTypes>::genesis(
+                &TestValidatedState::default(),
+                &TestInstanceState {},
+            )
+            .await,
+        ];
+        let mut blocks = vec![
+            BlockQueryData::<MockTypes>::genesis(
+                &TestValidatedState::default(),
+                &TestInstanceState {},
+            )
+            .await,
+        ];
         for i in 0..2 {
             let mut leaf = leaves[i].clone();
             leaf.leaf.block_header_mut().block_number += 1;
@@ -716,21 +742,31 @@ pub mod node_tests {
             // (since we insert more than 2 transactions total). The query service should still
             // count these as separate transactions and should include both duplicates when
             // computing the total size.
-            let (payload, metadata) = TestBlockPayload::from_transactions(
-                [mock_transaction(vec![i as u8 % 2])],
-                &TestInstanceState {},
-            )
-            .unwrap();
+            let (payload, metadata) =
+                <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
+                    [mock_transaction(vec![i as u8 % 2])],
+                    &TestValidatedState::default(),
+                    &TestInstanceState {},
+                )
+                .await
+                .unwrap();
             let encoded = payload.encode();
             let payload_commitment = vid_commitment(&encoded, 1);
             let header = TestBlockHeader {
                 block_number: i,
                 payload_commitment,
                 timestamp: i,
-                builder_commitment: payload.builder_commitment(&metadata),
+                builder_commitment:
+                    <TestBlockPayload as BlockPayload<TestTypes>>::builder_commitment(
+                        &payload, &metadata,
+                    ),
             };
 
-            let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
+            let mut leaf = LeafQueryData::<MockTypes>::genesis(
+                &TestValidatedState::default(),
+                &TestInstanceState {},
+            )
+            .await;
             *leaf.leaf.block_header_mut() = header.clone();
             let block = BlockQueryData::new(header, payload);
             ds.insert_leaf(leaf).await.unwrap();
@@ -782,7 +818,11 @@ pub mod node_tests {
         let disperse = vid.disperse([]).unwrap();
 
         // Insert test data with VID common and a share.
-        let leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
+        let leaf = LeafQueryData::<MockTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState {},
+        )
+        .await;
         let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
         ds.insert_leaf(leaf).await.unwrap();
         ds.insert_vid(common.clone(), Some(disperse.shares[0].clone()))
@@ -860,7 +900,7 @@ pub mod node_tests {
         // Recover payload.
         tracing::info!("recovering payload");
         let bytes = vid.recover_payload(&shares, common).unwrap();
-        let recovered = MockPayload::from_bytes(&bytes, &TestMetadata);
+        let recovered = <MockPayload as BlockPayload<TestTypes>>::from_bytes(&bytes, &TestMetadata);
         assert_eq!(recovered, *block.payload());
         assert_eq!(recovered.transactions, vec![txn]);
     }

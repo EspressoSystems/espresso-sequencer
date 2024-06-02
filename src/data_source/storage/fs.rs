@@ -55,7 +55,7 @@ const CACHED_VID_COMMON_COUNT: usize = 100;
 #[derive(custom_debug::Debug)]
 pub struct FileSystemStorage<Types: NodeType>
 where
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
 {
     index_by_leaf_hash: HashMap<LeafHash<Types>, u64>,
     index_by_block_hash: HashMap<BlockHash<Types>, u64>,
@@ -72,23 +72,23 @@ where
 }
 
 impl<Types: NodeType> PrunerConfig for FileSystemStorage<Types> where
-    Payload<Types>: QueryablePayload
+    Payload<Types>: QueryablePayload<Types>
 {
 }
 impl<Types: NodeType> PrunedHeightStorage for FileSystemStorage<Types>
 where
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
 {
     type Error = Infallible;
 }
 impl<Types: NodeType> PruneStorage for FileSystemStorage<Types> where
-    Payload<Types>: QueryablePayload
+    Payload<Types>: QueryablePayload<Types>
 {
 }
 
 impl<Types: NodeType> FileSystemStorage<Types>
 where
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
 {
     /// Create a new [FileSystemStorage] with storage at `path`.
@@ -238,7 +238,7 @@ where
 #[async_trait]
 impl<Types: NodeType> VersionedDataSource for FileSystemStorage<Types>
 where
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
 {
     type Error = PersistenceError;
 
@@ -303,7 +303,7 @@ where
 #[async_trait]
 impl<Types: NodeType> AvailabilityStorage<Types> for FileSystemStorage<Types>
 where
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
@@ -405,7 +405,7 @@ where
 #[async_trait]
 impl<Types: NodeType> UpdateAvailabilityData<Types> for FileSystemStorage<Types>
 where
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
 {
     type Error = PersistenceError;
@@ -479,7 +479,7 @@ fn update_index_by_hash<H: Eq + Hash, P: Ord>(index: &mut HashMap<H, P>, hash: H
 #[async_trait]
 impl<Types: NodeType> NodeDataSource<Types> for FileSystemStorage<Types>
 where
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
     Header<Types>: QueryableHeader<Types>,
 {
     async fn block_height(&self) -> QueryResult<usize> {
