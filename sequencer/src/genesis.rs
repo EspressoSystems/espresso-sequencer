@@ -177,7 +177,7 @@ mod upgrade_serialization {
 
                 while let Some(fields) = seq.next_element::<UpgradeFields>()? {
                     // add try_from in Version
-                    let version: Vec<_> = fields.version.split(".").collect();
+                    let version: Vec<_> = fields.version.split('.').collect();
 
                     let version = Version {
                         major: version[0].parse().expect("invalid version"),

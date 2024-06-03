@@ -646,12 +646,17 @@ impl ValidatedState {
         // Clone state to avoid mutation. Consumer can take update
         // through returned value.
 
-        let l1_deposits = get_l1_deposits(instance, proposed_header, parent_leaf).await;
-
         let mut validated_state = self.clone();
         let chain_config = validated_state
             .apply_chain_config(instance, &proposed_header.chain_config, version)
             .await?;
+        let l1_deposits = get_l1_deposits(
+            instance,
+            proposed_header,
+            parent_leaf,
+            chain_config.fee_contract,
+        )
+        .await;
 
         // Find missing fee state entries. We will need to use the builder account which is paying a
         // fee and the recipient account which is receiving it, plus any counts receiving deposits
@@ -732,10 +737,9 @@ pub async fn get_l1_deposits(
     instance: &NodeState,
     header: &Header,
     parent_leaf: &Leaf,
+    fee_contract_address: Option<Address>,
 ) -> Vec<FeeInfo> {
-    if let (Some(addr), Some(block_info)) =
-        (instance.chain_config.fee_contract, header.l1_finalized)
-    {
+    if let (Some(addr), Some(block_info)) = (fee_contract_address, header.l1_finalized) {
         instance
             .l1_client
             .get_finalized_deposits(

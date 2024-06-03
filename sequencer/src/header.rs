@@ -296,7 +296,7 @@ impl BlockHeader<SeqTypes> for Header {
         let chain_config = validated_state
             .chain_config
             .resolve()
-            .unwrap_or_else(|| instance_state.chain_config);
+            .unwrap_or(instance_state.chain_config);
 
         // Fetch the latest L1 snapshot.
         let l1_snapshot = instance_state.l1_client.snapshot().await;
