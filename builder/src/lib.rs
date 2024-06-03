@@ -613,7 +613,7 @@ pub mod testing {
             let bootstrapped_view = ViewNumber::new(0);
 
             let builder_context = BuilderContext::init(
-                hotshot_handle.clone(),
+                Arc::clone(&hotshot_handle),
                 state_signer,
                 node_id,
                 key_pair,
