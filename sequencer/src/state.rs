@@ -1,6 +1,7 @@
 use crate::{
-    api::data_source::CatchupDataSource, catchup::SqlStateCatchup, eth_signature_key::EthKeyPair,
-    ChainConfig, Header, Leaf, NodeState, SeqTypes,
+    api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
+    chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair, ChainConfig, Header, Leaf,
+    NodeState, SeqTypes,
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use ark_serialize::{
@@ -53,6 +54,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashSet, ops::Add, str::FromStr};
+use thiserror::Error;
 use vbs::version::Version;
 
 const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
@@ -210,53 +212,85 @@ impl ValidatedState {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum ProposalValidationError {
+    #[error("Invalid ChainConfig: (expected={expected:?}, proposal={proposal:?})")]
+    InvalidChainConfig {
+        expected: ChainConfig,
+        proposal: ResolvableChainConfig,
+    },
+
+    #[error("Invalid Payload Size: (expected={expected:?}, proposal={proposal:?})")]
+    MaxBlockSizeExceeded {
+        expected: ChainConfig,
+        proposal: ResolvableChainConfig,
+    },
+    #[error("Insufficient Fee: (block_size={block_size}, base_fee={base_fee:?}, proposed_fee={proposed_fee:?})")]
+    InsufficientFee {
+        block_size: u64,
+        base_fee: FeeAmount,
+        proposed_fee: FeeAmount,
+    },
+    #[error("Invalid Height: parent_height={parent_height}, proposal_height={proposal_height}")]
+    InvalidHeight {
+        parent_height: u64,
+        proposal_height: u64,
+    },
+    #[error("Invalid Block Root Error: expected={expected_root}, proposal={proposal_root}")]
+    InvalidBlockRoot {
+        expected_root: BlockMerkleCommitment,
+        proposal_root: BlockMerkleCommitment,
+    },
+    #[error("Invalid Fee Root Error: expected={expected_root}, proposal={proposal_root}")]
+    InvalidFeeRoot {
+        expected_root: FeeMerkleCommitment,
+        proposal_root: FeeMerkleCommitment,
+    },
+    #[error("Unknown validation error")]
+    Unknown,
+}
+
 pub fn validate_proposal(
     state: &ValidatedState,
     expected_chain_config: ChainConfig,
     parent_leaf: &Leaf,
     proposal: &Header,
     vid_common: &VidCommon,
-) -> anyhow::Result<()> {
+) -> Result<(), ProposalValidationError> {
     let parent_header = parent_leaf.block_header();
 
     // validate `ChainConfig`
-    anyhow::ensure!(
-        proposal.chain_config.commit() == expected_chain_config.commit(),
-        anyhow::anyhow!(
-            "Invalid Chain Config: local={:?}, proposal={:?}",
-            expected_chain_config,
-            proposal.chain_config
-        )
-    );
+    if proposal.chain_config.commit() != expected_chain_config.commit() {
+        return Err(ProposalValidationError::InvalidChainConfig {
+            expected: expected_chain_config,
+            proposal: proposal.chain_config,
+        });
+    }
 
     // validate block size and fee
     let block_size = VidSchemeType::get_payload_byte_len(vid_common) as u64;
-    anyhow::ensure!(
-        block_size < *expected_chain_config.max_block_size,
-        anyhow::anyhow!(
-            "Invalid Payload Size: local={:?}, proposal={:?}",
-            expected_chain_config,
-            proposal.chain_config
-        )
-    );
-    anyhow::ensure!(
-        proposal.fee_info.amount() >= expected_chain_config.base_fee * block_size,
-        format!(
-            "insufficient fee: block_size={block_size}, base_fee={:?}, proposed_fee={:?}",
-            expected_chain_config.base_fee,
-            proposal.fee_info.amount()
-        )
-    );
+    if block_size >= *expected_chain_config.max_block_size {
+        return Err(ProposalValidationError::MaxBlockSizeExceeded {
+            expected: expected_chain_config,
+            proposal: proposal.chain_config,
+        });
+    }
+
+    if proposal.fee_info.amount() < expected_chain_config.base_fee * block_size {
+        return Err(ProposalValidationError::InsufficientFee {
+            block_size,
+            base_fee: expected_chain_config.base_fee,
+            proposed_fee: proposal.fee_info.amount(),
+        });
+    }
 
     // validate height
-    anyhow::ensure!(
-        proposal.height == parent_header.height + 1,
-        anyhow::anyhow!(
-            "Invalid Height Error: {}, {}",
-            parent_header.height,
-            proposal.height
-        )
-    );
+    if proposal.height != parent_header.height + 1 {
+        return Err(ProposalValidationError::InvalidHeight {
+            parent_height: parent_header.height,
+            proposal_height: proposal.height,
+        });
+    }
 
     let ValidatedState {
         block_merkle_tree,
@@ -264,24 +298,21 @@ pub fn validate_proposal(
     } = state;
 
     let block_merkle_tree_root = block_merkle_tree.commitment();
-    anyhow::ensure!(
-        proposal.block_merkle_tree_root == block_merkle_tree_root,
-        anyhow::anyhow!(
-            "Invalid Block Root Error: local={}, proposal={}",
-            block_merkle_tree_root,
-            proposal.block_merkle_tree_root
-        )
-    );
+    if proposal.block_merkle_tree_root != block_merkle_tree_root {
+        return Err(ProposalValidationError::InvalidBlockRoot {
+            expected_root: block_merkle_tree_root,
+            proposal_root: proposal.block_merkle_tree_root,
+        });
+    }
 
     let fee_merkle_tree_root = fee_merkle_tree.commitment();
-    anyhow::ensure!(
-        proposal.fee_merkle_tree_root == fee_merkle_tree_root,
-        anyhow::anyhow!(
-            "Invalid Fee Root Error: local={}, proposal={}",
-            fee_merkle_tree_root,
-            proposal.fee_merkle_tree_root
-        )
-    );
+    if proposal.fee_merkle_tree_root == fee_merkle_tree_root {
+        return Err(ProposalValidationError::InvalidFeeRoot {
+            expected_root: fee_merkle_tree_root,
+            proposal_root: proposal.fee_merkle_tree_root,
+        });
+    }
+
     Ok(())
 }
 

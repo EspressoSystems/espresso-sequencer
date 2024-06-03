@@ -8628,6 +8628,7 @@ dependencies = [
  "surf-disco",
  "tagged-base64",
  "tempfile",
+ "thiserror",
  "tide-disco",
  "time 0.3.36",
  "tokio-postgres",
