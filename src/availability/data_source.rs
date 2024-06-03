@@ -116,7 +116,7 @@ impl<Types: NodeType> PartialOrd for BlockId<Types> {
 #[async_trait]
 pub trait AvailabilityDataSource<Types: NodeType>
 where
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
 {
     type LeafRange<R>: Stream<Item = Fetch<LeafQueryData<Types>>> + Unpin + Send + 'static
     where
