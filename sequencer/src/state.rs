@@ -226,9 +226,9 @@ pub enum ProposalValidationError {
         max_block_size: BlockSize,
         block_size: BlockSize,
     },
-    #[error("Insufficient Fee: (block_size={block_size}, base_fee={base_fee:?}, proposed_fee={proposed_fee:?})")]
+    #[error("Insufficient Fee: block_size={max_block_size}, base_fee={base_fee:?}, proposed_fee={proposed_fee:?}")]
     InsufficientFee {
-        block_size: u64,
+        max_block_size: BlockSize,
         base_fee: FeeAmount,
         proposed_fee: FeeAmount,
     },
@@ -279,7 +279,7 @@ pub fn validate_proposal(
 
     if proposal.fee_info.amount() < expected_chain_config.base_fee * block_size {
         return Err(ProposalValidationError::InsufficientFee {
-            block_size,
+            max_block_size: block_size.into(),
             base_fee: expected_chain_config.base_fee,
             proposed_fee: proposal.fee_info.amount(),
         });
@@ -1386,7 +1386,18 @@ mod test {
         // Validation fails because the proposed block exceeds the maximum block size.
         let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
             .unwrap_err();
+
         tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            err,
+            ProposalValidationError::MaxBlockSizeExceeded {
+                max_block_size: BlockSize::from_integer(MAX_BLOCK_SIZE as u64).unwrap(),
+                block_size: BlockSize::from_integer(
+                    VidSchemeType::get_payload_byte_len(&vid_common).into()
+                )
+                .unwrap()
+            }
+        );
     }
 
     #[async_std::test]
@@ -1410,7 +1421,16 @@ mod test {
         // Validation fails because the genesis fee (0) is too low.
         let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
             .unwrap_err();
+
         tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            err,
+            ProposalValidationError::InsufficientFee {
+                max_block_size: instance.chain_config.max_block_size,
+                base_fee: instance.chain_config.base_fee,
+                proposed_fee: header.fee_info.amount()
+            }
+        );
     }
 
     #[test]
