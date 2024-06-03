@@ -529,7 +529,7 @@ pub mod testing {
     pub async fn run_test_builder() -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
         <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
             TestConfig::NUM_NODES,
-            SimpleBuilderConfig { port: 1234 },
+            SimpleBuilderConfig::default(),
         )
         .await
     }
