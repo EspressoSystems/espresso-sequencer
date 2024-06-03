@@ -47,19 +47,19 @@ dotenvy = "0.15"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.55" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.56" }
 # Hotshot imports
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.55" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.23" }
-hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.23" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.55" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.29" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.55" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.56" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.25" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.25" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.56" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.30" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.56" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.55" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.55" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.55" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.56" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.56" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.56" }
+hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
@@ -99,9 +99,9 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
 snafu = "0.8"
 strum = { version = "0.26", features = ["derive"] }
-surf-disco = "0.6"
+surf-disco = "0.7"
 tagged-base64 = "0.4"
-tide-disco = "0.6"
+tide-disco = "0.7"
 time = "0.3"
 tracing = "0.1"
 bytesize = "1.3"

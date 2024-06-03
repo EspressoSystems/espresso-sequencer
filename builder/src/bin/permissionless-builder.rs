@@ -3,6 +3,7 @@ use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
+use hotshot::traits::ValidatedState;
 use hotshot_types::data::ViewNumber;
 use hotshot_types::traits::node_implementation::ConsensusTime;
 use sequencer::{eth_signature_key::EthKeyPair, Genesis, L1Params};
@@ -127,6 +128,7 @@ async fn main() -> anyhow::Result<()> {
     let txn_timeout_duration = api_response_timeout_duration / 4;
 
     let buffer_view_num_count = opt.buffer_view_num_count;
+    let validated_state = ValidatedState::genesis(&instance_state).0;
 
     let _builder_config = BuilderConfig::init(
         builder_key_pair,
@@ -139,6 +141,7 @@ async fn main() -> anyhow::Result<()> {
         api_response_timeout_duration,
         buffer_view_num_count,
         txn_timeout_duration,
+        validated_state,
     )
     .await;
 
