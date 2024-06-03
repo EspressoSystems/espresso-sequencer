@@ -586,6 +586,14 @@
 <a href="#584" id="584">584</a>
 <a href="#585" id="585">585</a>
 <a href="#586" id="586">586</a>
+<a href="#587" id="587">587</a>
+<a href="#588" id="588">588</a>
+<a href="#589" id="589">589</a>
+<a href="#590" id="590">590</a>
+<a href="#591" id="591">591</a>
+<a href="#592" id="592">592</a>
+<a href="#593" id="593">593</a>
+<a href="#594" id="594">594</a>
 </pre></div><pre class="rust"><code><span class="kw">use super</span>::{NetworkConfig, PersistenceOptions, SequencerPersistence};
 <span class="kw">use crate</span>::{
     catchup::{SqlStateCatchup, StateCatchup},
@@ -679,9 +687,17 @@
     <span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_STORE_UNDECIDED_STATE"</span>, hide = <span class="bool-val">true</span>)]
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) store_undecided_state: bool,
 
-    <span class="comment">// Specifies the maximum number of concurrent fetch requests allowed from peers.
+    <span class="doccomment">/// Specifies the maximum number of concurrent fetch requests allowed from peers.
     </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_FETCH_RATE_LIMIT"</span>)]
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) fetch_rate_limit: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+
+    <span class="doccomment">/// The minimum delay between active fetches in a stream.
+    </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_ACTIVE_FETCH_DELAY"</span>, value_parser = parse_duration)]
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) active_fetch_delay: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
+
+    <span class="doccomment">/// The minimum delay between loading chunks in a stream.
+    </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_CHUNK_FETCH_DELAY"</span>, value_parser = parse_duration)]
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) chunk_fetch_delay: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
 }
 
 <span class="kw">impl </span>TryFrom&lt;Options&gt; <span class="kw">for </span>Config {

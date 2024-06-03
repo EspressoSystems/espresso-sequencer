@@ -65,7 +65,7 @@
     <span class="doccomment">/// Reset file system storage.
     </span>Fs(persistence::fs::Options),
     <span class="doccomment">/// Reset SQL storage.
-    </span>Sql(persistence::sql::Options),
+    </span>Sql(Box&lt;persistence::sql::Options&gt;),
 }
 
 <span class="attr">#[async_std::main]
@@ -81,7 +81,7 @@
         </span>}
         Options::Sql(opt) =&gt; {
             <span class="macro">tracing::warn!</span>(<span class="string">"resetting SQL storage {opt:?}"</span>);
-            reset_storage(opt).<span class="kw">await
+            reset_storage(<span class="kw-2">*</span>opt).<span class="kw">await
         </span>}
     }
 }
