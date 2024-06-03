@@ -339,42 +339,68 @@ trait Queryable: DeserializeOwned + Debug + Eq {
     /// URL segment used to indicate that we want to fetch this resource by block hash.
     const HASH_URL_SEGMENT: &'static str;
 
+    /// URL segment used to indicate that we want to fetch this resource by payload hash.
+    ///
+    /// This may be none if the resource does not support fetching by payload hash.
+    const PAYLOAD_HASH_URL_SEGMENT: Option<&'static str>;
+
     fn hash(&self) -> String;
+    fn payload_hash(&self) -> String;
 }
 
 impl Queryable for BlockQueryData<SeqTypes> {
     const RESOURCE: Resource = Resource::Blocks;
     const HASH_URL_SEGMENT: &'static str = "hash";
+    const PAYLOAD_HASH_URL_SEGMENT: Option<&'static str> = Some("payload-hash");
 
     fn hash(&self) -> String {
         self.hash().to_string()
+    }
+
+    fn payload_hash(&self) -> String {
+        self.payload_hash().to_string()
     }
 }
 
 impl Queryable for LeafQueryData<SeqTypes> {
     const RESOURCE: Resource = Resource::Leaves;
     const HASH_URL_SEGMENT: &'static str = "hash";
+    const PAYLOAD_HASH_URL_SEGMENT: Option<&'static str> = None;
 
     fn hash(&self) -> String {
         self.hash().to_string()
+    }
+
+    fn payload_hash(&self) -> String {
+        self.payload_hash().to_string()
     }
 }
 
 impl Queryable for Header {
     const RESOURCE: Resource = Resource::Headers;
     const HASH_URL_SEGMENT: &'static str = "hash";
+    const PAYLOAD_HASH_URL_SEGMENT: Option<&'static str> = Some("payload-hash");
 
     fn hash(&self) -> String {
         self.commit().to_string()
+    }
+
+    fn payload_hash(&self) -> String {
+        self.payload_commitment.to_string()
     }
 }
 
 impl Queryable for PayloadQueryData<SeqTypes> {
     const RESOURCE: Resource = Resource::Payloads;
     const HASH_URL_SEGMENT: &'static str = "block-hash";
+    const PAYLOAD_HASH_URL_SEGMENT: Option<&'static str> = Some("hash");
 
     fn hash(&self) -> String {
         self.block_hash().to_string()
+    }
+
+    fn payload_hash(&self) -> String {
+        self.hash().to_string()
     }
 }
 
@@ -534,6 +560,37 @@ impl<T: Queryable> ResourceManager<T> {
                 Self::singular()
             )
         );
+
+        // Query by payload hash and check consistency.
+        if let Some(segment) = T::PAYLOAD_HASH_URL_SEGMENT {
+            let payload_hash = obj.payload_hash();
+            let by_payload_hash = self
+                .retry(
+                    info_span!(
+                        "query by payload hash",
+                        resource = Self::singular(),
+                        at,
+                        payload_hash
+                    ),
+                    || async {
+                        self.get::<T>(format!(
+                            "availability/{}/{segment}/{payload_hash}",
+                            Self::singular(),
+                        ))
+                        .await
+                    },
+                )
+                .await?;
+            // We might not get the exact object this time, due to non-uniqueness of payloads, but we
+            // should get an object with the same payload.
+            ensure!(
+                payload_hash == by_payload_hash.payload_hash(),
+                format!(
+                    "query for {} {at} by payload hash {payload_hash} is not consistent",
+                    Self::singular()
+                )
+            );
+        }
 
         self.metrics.query_actions[&T::RESOURCE].add(1);
         Ok(())
