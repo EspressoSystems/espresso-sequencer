@@ -870,7 +870,6 @@ mod test_headers {
                 proposal_root: proposal.block_merkle_tree_root
             }
         );
-        // assert_eq!(err, format!("{}", result.root_cause()).contains("Invalid Block Root Error"));
     }
 
     #[async_std::test]
