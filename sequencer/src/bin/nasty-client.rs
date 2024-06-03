@@ -32,7 +32,7 @@ use hotshot_query_service::{
     node::TimeWindowQueryData,
 };
 use hotshot_types::{
-    traits::metrics::{Counter, Gauge, Metrics as _},
+    traits::metrics::{Counter, Gauge, Histogram, Metrics as _},
     vid::{vid_scheme, VidSchemeType},
 };
 use jf_merkle_tree::{
@@ -56,7 +56,7 @@ use std::{
     time::{Duration, Instant},
 };
 use strum::{EnumDiscriminants, VariantArray};
-use surf_disco::{error::ClientError, socket, Url};
+use surf_disco::{error::ClientError, socket, Error, StatusCode, Url};
 use tide_disco::{error::ServerError, App};
 use time::OffsetDateTime;
 use toml::toml;
@@ -65,18 +65,6 @@ use tracing::info_span;
 /// An adversarial stress test for sequencer APIs.
 #[derive(Clone, Debug, Parser)]
 struct Options {
-    /// Timeout for HTTP requests.
-    ///
-    /// Requests that take longer than this will fail, causing an error log and an increment of the
-    /// `failed_actions` metric.
-    #[clap(
-        long,
-        env = "ESPRESSO_NASTY_CLIENT_HTTP_TIMEOUT",
-        default_value = "30s",
-        value_parser = parse_duration,
-    )]
-    http_timeout: Duration,
-
     /// Port on which to serve the nasty-client API.
     #[clap(
         short,
@@ -99,6 +87,30 @@ struct Options {
 
 #[derive(Clone, Copy, Debug, Parser)]
 struct ClientConfig {
+    /// Timeout for HTTP requests.
+    ///
+    /// Requests that take longer than this will fail, causing an error log and an increment of the
+    /// `failed_actions` metric.
+    #[clap(
+        long,
+        env = "ESPRESSO_NASTY_CLIENT_HTTP_TIMEOUT_ERROR",
+        default_value = "5s",
+        value_parser = parse_duration,
+    )]
+    http_timeout_error: Duration,
+
+    /// Timeout for issuing a warning due to slow HTTP requests.
+    ///
+    /// Requests that take longer than this but shorter than HTTP_TIMEOUT_ERROR will not generate an
+    /// error but will output a warning and increment a counter of slow HTTP requests.
+    #[clap(
+        long,
+        env = "ESPRESSO_NASTY_CLIENT_HTTP_TIMEOUT_WARNING",
+        default_value = "1s",
+        value_parser = parse_duration,
+    )]
+    http_timeout_warning: Duration,
+
     /// The maximum number of open WebSockets connections for each resource type at any time.
     #[clap(
         long,
@@ -239,6 +251,8 @@ struct Metrics {
     query_namespace_actions: Box<dyn Counter>,
     query_block_state_actions: Box<dyn Counter>,
     query_fee_state_actions: Box<dyn Counter>,
+    slow_requests: Box<dyn Counter>,
+    request_latency: Box<dyn Histogram>,
 }
 
 impl Metrics {
@@ -309,6 +323,12 @@ impl Metrics {
                 .create_counter("query_block_state_actions".into(), None),
             query_fee_state_actions: registry
                 .create_counter("query_fee_state_actions".into(), None),
+            slow_requests: registry
+                .subgroup("http".into())
+                .create_counter("slow_requests".into(), None),
+            request_latency: registry
+                .subgroup("http".into())
+                .create_histogram("latency".into(), Some("s".into())),
         }
     }
 }
@@ -382,7 +402,7 @@ impl<T: Queryable> ResourceManager<T> {
     fn new(opt: &Options, metrics: Arc<Metrics>) -> Self {
         Self {
             client: surf_disco::Client::builder(opt.url.clone())
-                .set_timeout(Some(opt.http_timeout))
+                .set_timeout(Some(opt.client_config.http_timeout_error))
                 .build(),
             open_streams: BTreeMap::new(),
             next_stream_id: 0,
@@ -451,17 +471,43 @@ impl<T: Queryable> ResourceManager<T> {
         }
     }
 
+    /// Send an HTTP GET request and deserialize the response.
+    ///
+    /// This method is a wrapper around `self.client.get()`, which adds instrumentation and metrics
+    /// for request latency.
+    async fn get<R: DeserializeOwned>(&self, path: impl Into<String>) -> anyhow::Result<R> {
+        let path = path.into();
+        tracing::debug!("-> GET {path}");
+
+        let start = Instant::now();
+        let res = self.client.get::<R>(&path).send().await;
+        let elapsed = start.elapsed();
+
+        let status = match &res {
+            Ok(_) => StatusCode::Ok,
+            Err(err) => err.status(),
+        };
+        tracing::debug!("<- GET {path} {} ({elapsed:?})", u16::from(status));
+
+        self.metrics
+            .request_latency
+            .add_point((elapsed.as_millis() as f64) / 1000.);
+        if elapsed >= self.cfg.http_timeout_warning {
+            self.metrics.slow_requests.add(1);
+            tracing::warn!(%path, ?elapsed, "slow request");
+        }
+
+        res.context(format!("GET {path}"))
+    }
+
     async fn query(&self, at: u64) -> anyhow::Result<()> {
         let at = self.adjust_index(at).await?;
         let obj = self
             .retry(
                 info_span!("query", resource = Self::singular(), at),
                 || async {
-                    self.client
-                        .get::<T>(&format!("availability/{}/{at}", Self::singular()))
-                        .send()
+                    self.get::<T>(format!("availability/{}/{at}", Self::singular()))
                         .await
-                        .context(format!("fetching {} {at}", Self::singular()))
                 },
             )
             .await?;
@@ -472,15 +518,12 @@ impl<T: Queryable> ResourceManager<T> {
             .retry(
                 info_span!("query by hash", resource = Self::singular(), at, hash),
                 || async {
-                    self.client
-                        .get(&format!(
-                            "availability/{}/{}/{hash}",
-                            Self::singular(),
-                            T::HASH_URL_SEGMENT,
-                        ))
-                        .send()
-                        .await
-                        .context(format!("fetching {} {hash}", Self::singular()))
+                    self.get(format!(
+                        "availability/{}/{}/{hash}",
+                        Self::singular(),
+                        T::HASH_URL_SEGMENT,
+                    ))
+                    .await
                 },
             )
             .await?;
@@ -597,7 +640,7 @@ impl<T: Queryable> ResourceManager<T> {
                             // local TCP buffer, and thus not generate any traffic on the idle TCP
                             // connection.
                             stream.refreshed = Instant::now();
-                            tracing::info!(
+                            tracing::debug!(
                                 refreshed = ?stream.refreshed,
                                 "{} stream refreshed due to blocking read",
                                 Self::singular(),
@@ -642,11 +685,8 @@ impl<T: Queryable> ResourceManager<T> {
             let id = *id;
             let expected = self
                 .retry(info_span!("fetching expected object"), || async {
-                    self.client
-                        .get(&format!("availability/{}/{pos}", Self::singular()))
-                        .send()
+                    self.get(format!("availability/{}/{pos}", Self::singular()))
                         .await
-                        .context(format!("fetching {} {pos}", Self::singular()))
                 })
                 .await?;
             ensure!(
@@ -663,12 +703,7 @@ impl<T: Queryable> ResourceManager<T> {
 
     async fn adjust_index(&self, at: u64) -> anyhow::Result<u64> {
         let block_height = loop {
-            let block_height: u64 = self
-                .client
-                .get("status/block-height")
-                .send()
-                .await
-                .context("getting block height")?;
+            let block_height: u64 = self.get("status/block-height").await?;
             if block_height == 0 {
                 // None of our tests work with an empty history, but if we just wait briefly there
                 // should be some blocks produced soon.
@@ -692,13 +727,10 @@ impl ResourceManager<Header> {
             .retry(
                 info_span!("timestamp window", resource = Self::singular(), start, end),
                 || async {
-                    self.client
-                        .get::<TimeWindowQueryData<Header>>(&format!(
-                            "node/header/window/{start}/{end}"
-                        ))
-                        .send()
-                        .await
-                        .context(format!("fetching timestamp window from {start} to {end}"))
+                    self.get::<TimeWindowQueryData<Header>>(format!(
+                        "node/header/window/{start}/{end}"
+                    ))
+                    .await
                 },
             )
             .await?;
@@ -769,33 +801,24 @@ impl ResourceManager<Header> {
         // going to look up from the Merkle tree, so we can later verify our results.
         let block_header = self
             .retry(info_span!("get block header", block), || async {
-                self.client
-                    .get::<Header>(&format!("availability/header/{block}"))
-                    .send()
+                self.get::<Header>(format!("availability/header/{block}"))
                     .await
-                    .context(format!("getting header {block}"))
             })
             .await?;
         let index_header = self
             .retry(info_span!("get index header", index), || async {
-                self.client
-                    .get::<Header>(&format!("availability/header/{index}"))
-                    .send()
+                self.get::<Header>(format!("availability/header/{index}"))
                     .await
-                    .context(format!("getting header {index}"))
             })
             .await?;
 
         // Get a Merkle proof for the block commitment at position `index` from state `block`.
         let proof = self
             .retry(info_span!("get block proof", block, index), || async {
-                self.client
-                    .get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>(&format!(
-                        "block-state/{block}/{index}"
-                    ))
-                    .send()
-                    .await
-                    .context(format!("getting merkle proof {block},{index}"))
+                self.get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>(format!(
+                    "block-state/{block}/{index}"
+                ))
+                .await
             })
             .await?;
 
@@ -822,17 +845,11 @@ impl ResourceManager<Header> {
                     commitment = %block_header.block_merkle_tree_root,
                 ),
                 || async {
-                    self.client
-                        .get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>(&format!(
-                            "block-state/commit/{}/{index}",
-                            block_header.block_merkle_tree_root,
-                        ))
-                        .send()
-                        .await
-                        .context(format!(
-                            "getting merkle proof {},{index}",
-                            block_header.block_merkle_tree_root
-                        ))
+                    self.get::<<BlockMerkleTree as MerkleTreeScheme>::MembershipProof>(format!(
+                        "block-state/commit/{}/{index}",
+                        block_header.block_merkle_tree_root,
+                    ))
+                    .await
                 },
             )
             .await?;
@@ -853,11 +870,8 @@ impl ResourceManager<Header> {
         // query.
         let builder_header = self
             .retry(info_span!("get builder header", builder), || async {
-                self.client
-                    .get::<Header>(&format!("availability/header/{builder}"))
-                    .send()
+                self.get::<Header>(format!("availability/header/{builder}"))
                     .await
-                    .context(format!("getting header {builder}"))
             })
             .await?;
         let builder_address = builder_header.fee_info.account();
@@ -866,11 +880,8 @@ impl ResourceManager<Header> {
         // results.
         let block_header = self
             .retry(info_span!("get block header", block), || async {
-                self.client
-                    .get::<Header>(&format!("availability/header/{block}"))
-                    .send()
+                self.get::<Header>(format!("availability/header/{block}"))
                     .await
-                    .context(format!("getting header {block}"))
             })
             .await?;
 
@@ -879,13 +890,10 @@ impl ResourceManager<Header> {
             .retry(
                 info_span!("get account proof", block, %builder_address),
                 || async {
-                    self.client
-                        .get::<<FeeMerkleTree as MerkleTreeScheme>::MembershipProof>(&format!(
-                            "fee-state/{block}/{builder_address}"
-                        ))
-                        .send()
-                        .await
-                        .context(format!("getting merkle proof {block},{builder_address}"))
+                    self.get::<<FeeMerkleTree as MerkleTreeScheme>::MembershipProof>(&format!(
+                        "fee-state/{block}/{builder_address}"
+                    ))
+                    .await
                 },
             )
             .await?;
@@ -919,17 +927,11 @@ impl ResourceManager<Header> {
                     commitment = %block_header.fee_merkle_tree_root,
                 ),
                 || async {
-                    self.client
-                        .get::<<FeeMerkleTree as MerkleTreeScheme>::MembershipProof>(&format!(
-                            "fee-state/commit/{}/{builder_address}",
-                            block_header.fee_merkle_tree_root,
-                        ))
-                        .send()
-                        .await
-                        .context(format!(
-                            "getting merkle proof {},{builder_address}",
-                            block_header.fee_merkle_tree_root
-                        ))
+                    self.get::<<FeeMerkleTree as MerkleTreeScheme>::MembershipProof>(format!(
+                        "fee-state/commit/{}/{builder_address}",
+                        block_header.fee_merkle_tree_root,
+                    ))
+                    .await
                 },
             )
             .await?;
@@ -953,11 +955,7 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
         // the namespace table.
         let header: Header = self
             .retry(info_span!("fetch header"), || async {
-                self.client
-                    .get(&format!("availability/header/{block}"))
-                    .send()
-                    .await
-                    .context(format!("fetching header {block}"))
+                self.get(format!("availability/header/{block}")).await
             })
             .await?;
         if header.ns_table.is_empty() {
@@ -968,22 +966,15 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
 
         let ns_proof: NamespaceProofQueryData = self
             .retry(info_span!("fetch namespace", %ns), || async {
-                self.client
-                    .get(&format!("availability/block/{block}/namespace/{ns}"))
-                    .send()
+                self.get(format!("availability/block/{block}/namespace/{ns}"))
                     .await
-                    .context(format!("fetching namespace {block}:{ns}"))
             })
             .await?;
 
         // Verify proof.
         let vid_common: VidCommonQueryData<SeqTypes> = self
             .retry(info_span!("fetch VID common"), || async {
-                self.client
-                    .get(&format!("availability/vid/common/{block}"))
-                    .send()
-                    .await
-                    .context(format!("fetching VID common {block}"))
+                self.get(format!("availability/vid/common/{block}")).await
             })
             .await?;
         let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(vid_common.common()) as usize);
@@ -1215,6 +1206,10 @@ async fn main() {
     let metrics = PrometheusMetrics::default();
     let total_actions = metrics.create_counter("total_actions".into(), None);
     let failed_actions = metrics.create_counter("failed_actions".into(), None);
+    metrics
+        .subgroup("http".into())
+        .create_gauge("slow_request_threshold".into(), Some("s".into()))
+        .set(opt.client_config.http_timeout_warning.as_secs() as usize);
     let mut client = Client::new(&opt, &metrics);
     let mut rng = rand::thread_rng();
 
