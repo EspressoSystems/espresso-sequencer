@@ -98,7 +98,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @param blockHeight The block height of the latest finalized block
     /// @param blockCommRoot The merkle root of historical block commitments (BN254::ScalarField)
     /// @param feeLedgerComm The commitment to the fee ledger state (type: BN254::ScalarField)
-    /// @param stakeTableBlsKeyComm The commitment to the BlsVerKey column of the stake tableg
+    /// @param stakeTableBlsKeyComm The commitment to the BlsVerKey column of the stake table
     /// @param stakeTableSchnorrKeyComm The commitment to the SchnorrVerKey column of the table
     /// @param stakeTableAmountComm The commitment to the stake amount column of the stake table
     /// @param threshold The (stake-weighted) quorum threshold for a QC to be considered as valid
@@ -277,18 +277,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // upon successful verification, update the latest finalized state
         states[finalizedState] = newState;
 
-        /**
-         * TODO purge elements from the stateUpdateBlockNumbers array after a decided number of
-         * blocks e.g. 14
-         * days of blocks
-         */
         //add the L1 Block to stateUpdateBlockNumbers for the new finalized state
         stateUpdateBlockNumbers.push(block.number);
 
-        /**
-         * TODO purge elements from the hotShotCommitments array after a decided number of blocks
-         * e.g. 14 days of blocks
-         */
         //add the blockheight and blockCommRoot to hotShotCommitments for the new finalized state
         hotShotCommitments.push(HotShotCommitment(newState.blockHeight, newState.blockCommRoot));
 
@@ -438,17 +429,16 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         returns (BN254.ScalarField hotShotCommitment)
     {
         uint256 commitmentsHeight = hotShotCommitments.length;
-        if (
-            hotShotCommitments[0].blockHeight > hotShotBlockHeight
-                || hotShotBlockHeight > hotShotCommitments[commitmentsHeight - 1].blockHeight
-        ) {
+        if (hotShotBlockHeight > hotShotCommitments[commitmentsHeight - 1].blockHeight) {
             revert InvalidHotShotBlockForCommitmentCheck();
         }
-        for (uint256 i = 1; i < commitmentsHeight; i++) {
+        for (uint256 i = 0; i < commitmentsHeight; i++) {
             if (hotShotCommitments[i].blockHeight >= hotShotBlockHeight) {
                 return hotShotCommitments[i].blockCommRoot;
             }
         }
+
+        return hotShotCommitments[commitmentsHeight - 1].blockCommRoot;
     }
 
     /// @notice get the number of HotShot block commitments

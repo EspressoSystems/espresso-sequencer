@@ -646,12 +646,9 @@ mod test {
     async fn test_read_contract_state() -> Result<()> {
         setup_logging();
         setup_backtrace();
-        println!("deploy contract");
         let anvil = Anvil::new().spawn();
         let dummy_genesis = ParsedLightClientState::dummy_genesis();
         let (_wallet, contract) = deploy_contract_for_test(&anvil, dummy_genesis.clone()).await?;
-
-        println!(" contract deployed");
 
         // now test if we can read from the contract
         assert_eq!(contract.blocks_per_epoch().call().await?, BLOCKS_PER_EPOCH);

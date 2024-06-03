@@ -882,12 +882,12 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         uint256 statesCount = _states.length - 1;
         // Update the state and thus the l1BlockUpdates array would be updated
         for (uint8 i = 1; i <= statesCount; i++) {
-            LC.LightClientState memory newState = _states[i];
-            V.PlonkProof memory newProof = _proofs[i];
+            LC.LightClientState memory state = _states[i];
+            V.PlonkProof memory proof = _proofs[i];
             vm.prank(permissionedProver);
             vm.expectEmit(true, true, true, true);
-            emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
-            lc.newFinalizedState(newState, newProof);
+            emit LC.NewState(state.viewNum, state.blockHeight, state.blockCommRoot);
+            lc.newFinalizedState(state, proof);
         }
 
         assertEq(lc.getHotShotBlockCommitmentsCount(), blockCommCount + statesCount);
