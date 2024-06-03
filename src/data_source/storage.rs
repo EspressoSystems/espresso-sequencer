@@ -71,7 +71,7 @@ pub trait AvailabilityStorage<Types>:
     UpdateAvailabilityData<Types> + VersionedDataSource + PruneStorage + Send + Sync
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>>;
     async fn get_block(&self, id: BlockId<Types>) -> QueryResult<BlockQueryData<Types>>;
@@ -125,7 +125,7 @@ where
     Types: NodeType,
     Header<Types>: explorer::traits::ExplorerHeader<Types> + QueryableHeader<Types>,
     Transaction<Types>: explorer::traits::ExplorerTransaction,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     /// `get_block_detail` is a method that retrieves the details of a specific
     /// block from the blockchain.  The block is identified by the given

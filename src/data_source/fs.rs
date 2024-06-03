@@ -149,7 +149,7 @@ pub type FileSystemDataSource<Types, P> = FetchingDataSource<Types, FileSystemSt
 
 impl<Types: NodeType, P> FileSystemDataSource<Types, P>
 where
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types>,
     P: AvailabilityProvider<Types>,
 {

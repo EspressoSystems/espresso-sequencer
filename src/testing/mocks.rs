@@ -95,7 +95,7 @@ impl HeightIndexed for MockHeader {
     }
 }
 
-impl<Types: NodeType> QueryablePayload<Types> for MockPayload {
+impl QueryablePayload for MockPayload {
     type TransactionIndex = usize;
     type Iter<'a> = Range<usize>;
     type InclusionProof = ();
@@ -105,7 +105,7 @@ impl<Types: NodeType> QueryablePayload<Types> for MockPayload {
     }
 
     fn iter(&self, meta: &Self::Metadata) -> Self::Iter<'_> {
-        0..<TestBlockPayload as QueryablePayload<Types>>::len(self, meta)
+        0..self.len(meta)
     }
 
     fn transaction_with_proof(

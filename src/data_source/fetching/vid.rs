@@ -56,7 +56,7 @@ where
 impl<Types> Fetchable<Types> for VidCommonQueryData<Types>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     type Request = VidCommonRequest<Types>;
 
@@ -106,7 +106,7 @@ where
 impl<Types> RangedFetchable<Types> for VidCommonQueryData<Types>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     type RangedRequest = VidCommonRequest<Types>;
 
@@ -127,7 +127,7 @@ pub(super) fn fetch_vid_common_with_header<Types, S, P>(
     header: Header<Types>,
 ) where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -190,7 +190,7 @@ impl<Types: NodeType, S, P> PartialOrd for VidCommonCallback<Types, S, P> {
 
 impl<Types: NodeType, S, P> Callback<VidCommon> for VidCommonCallback<Types, S, P>
 where
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     S: AvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {

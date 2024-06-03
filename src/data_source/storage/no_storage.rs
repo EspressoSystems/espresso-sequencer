@@ -56,7 +56,7 @@ impl PrunedHeightStorage for NoStorage {
 #[async_trait]
 impl<Types: NodeType> AvailabilityStorage<Types> for NoStorage
 where
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     async fn get_leaf(&self, _id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
         Err(QueryError::Missing)
@@ -129,7 +129,7 @@ where
 #[async_trait]
 impl<Types: NodeType> UpdateAvailabilityData<Types> for NoStorage
 where
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     type Error = Infallible;
 
@@ -153,7 +153,7 @@ where
 #[async_trait]
 impl<Types: NodeType> NodeDataSource<Types> for NoStorage
 where
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     async fn block_height(&self) -> QueryResult<usize> {
         Ok(0)

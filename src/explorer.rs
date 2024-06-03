@@ -241,7 +241,7 @@ where
     State: 'static + Send + Sync + ReadState,
     Header<Types>: ExplorerHeader<Types> + QueryableHeader<Types>,
     Transaction<Types>: ExplorerTransaction,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     <State as ReadState>::State: Send + Sync + ExplorerStorage<Types>,
 {
     let mut api = load_api::<State, Error, Ver>(

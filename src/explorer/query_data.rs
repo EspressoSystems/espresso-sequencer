@@ -168,7 +168,7 @@ where
 impl<Types: NodeType> TryFrom<BlockQueryData<Types>> for BlockDetail<Types>
 where
     BlockQueryData<Types>: HeightIndexed,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types> + ExplorerHeader<Types>,
     BalanceAmount<Types>: Into<MonetaryValue>,
 {
@@ -258,7 +258,7 @@ impl From<TimestampConversionError> for crate::QueryError {
 impl<Types: NodeType> TryFrom<BlockQueryData<Types>> for BlockSummary<Types>
 where
     BlockQueryData<Types>: HeightIndexed,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types> + ExplorerHeader<Types>,
 {
     type Error = TimestampConversionError;
@@ -344,7 +344,7 @@ impl<Types: NodeType>
     )> for TransactionSummary<Types>
 where
     BlockQueryData<Types>: HeightIndexed,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types> + ExplorerHeader<Types>,
     Transaction<Types>: ExplorerTransaction,
 {
@@ -378,7 +378,7 @@ impl<Types: NodeType>
     )> for TransactionDetailResponse<Types>
 where
     BlockQueryData<Types>: HeightIndexed,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types> + ExplorerHeader<Types>,
 {
     type Error = TimestampConversionError;
