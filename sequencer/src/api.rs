@@ -744,7 +744,7 @@ mod api_tests {
             l1,
         )
         .await;
-        let mut events = network.server.event_stream();
+        let mut events = network.server.event_stream().await;
 
         // Connect client.
         let client: Client<ServerError, SequencerVersion> =
@@ -1041,7 +1041,7 @@ mod test {
         .await;
 
         // Wait for replica 0 to reach a (non-genesis) decide, before disconnecting it.
-        let mut events = network.peers[0].event_stream();
+        let mut events = network.peers[0].event_stream().await;
         loop {
             let event = events.next().await.unwrap();
             let EventType::Decide { leaf_chain, .. } = event.event else {
@@ -1063,6 +1063,7 @@ mod test {
         network
             .server
             .event_stream()
+            .await
             .filter(|event| future::ready(matches!(event.event, EventType::Decide { .. })))
             .take(3)
             .collect::<Vec<_>>()
@@ -1083,7 +1084,7 @@ mod test {
                 SEQUENCER_VERSION,
             )
             .await;
-        let mut events = node.event_stream();
+        let mut events = node.event_stream().await;
 
         // Wait for a (non-genesis) block proposed by each node, to prove that the lagging node has
         // caught up and all nodes are in sync.
@@ -1181,7 +1182,9 @@ mod test {
         let decided_view = chain.last().unwrap().leaf().view_number();
 
         // Get the most recent state, for catchup.
-        let state = network.server.consensus().decided_state().await;
+        let consensus = network.server.consensus();
+        let consensus_reader = consensus.read().await;
+        let state = consensus_reader.decided_state().await;
         tracing::info!(?decided_view, ?state, "consensus state");
 
         // Fully shut down the API servers.

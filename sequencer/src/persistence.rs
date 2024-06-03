@@ -277,8 +277,8 @@ mod persistence_tests {
         assert_eq!(storage.load_anchor_leaf().await.unwrap(), None);
 
         // Store a leaf.
-        let leaf1 = Leaf::genesis(&NodeState::mock());
-        let qc1 = QuorumCertificate::genesis(&NodeState::mock());
+        let leaf1 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let qc1 = QuorumCertificate::genesis(&ValidatedState::default(), &NodeState::mock()).await;
         storage.save_anchor_leaf(&leaf1, &qc1).await.unwrap();
         assert_eq!(
             storage.load_anchor_leaf().await.unwrap().unwrap(),
@@ -363,7 +363,7 @@ mod persistence_tests {
             None
         );
 
-        let leaf = Leaf::genesis(&NodeState::mock());
+        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
         let payload = leaf.block_payload().unwrap();
         let bytes = payload.encode().to_vec();
         let disperse = vid_scheme(2).disperse(bytes).unwrap();

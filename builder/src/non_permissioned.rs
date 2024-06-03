@@ -279,10 +279,8 @@ mod test {
         let num_non_staking_nodes = hotshot_config.config.num_nodes_without_stake;
 
         // non-staking node handle
-        let hotshot_context_handle = handles
-            [NonPermissionedBuilderTestConfig::SUBSCRIBED_DA_NODE_ID]
-            .0
-            .clone();
+        let hotshot_context_handle =
+            &handles[NonPermissionedBuilderTestConfig::SUBSCRIBED_DA_NODE_ID].0;
 
         // hotshot event streaming api url
         let hotshot_events_streaming_api_url = HotShotTestConfig::hotshot_event_streaming_api_url();
@@ -292,7 +290,7 @@ mod test {
             hotshot_events_streaming_api_url.clone(),
             known_nodes_with_stake,
             num_non_staking_nodes,
-            hotshot_context_handle,
+            Arc::clone(&hotshot_context_handle),
         );
 
         // builder api url

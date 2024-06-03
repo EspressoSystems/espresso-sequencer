@@ -344,7 +344,7 @@ mod test {
             tx_iterator::TxIndex,
         },
         transaction::NamespaceId,
-        ChainConfig, NodeState, Transaction,
+        ChainConfig, NodeState, Transaction, ValidatedState,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
@@ -396,12 +396,12 @@ mod test {
         assert_eq!(payload.txn_count(), txs.len() as u64);
     }
 
-    #[test]
-    fn basic_correctness() {
-        check_basic_correctness::<TxTableEntryWord>()
+    #[async_std::test]
+    async fn basic_correctness() {
+        check_basic_correctness::<TxTableEntryWord>().await
     }
 
-    fn check_basic_correctness<TableWord: TableWordTraits>() {
+    async fn check_basic_correctness<TableWord: TableWordTraits>() {
         // play with this
         let test_cases = [
             // 1 namespace only
@@ -515,8 +515,13 @@ mod test {
             let all_txs_iter = derived_nss
                 .iter()
                 .flat_map(|(_ns_id, ns)| ns.txs.iter().cloned());
-            let (block, actual_ns_table) =
-                Payload::from_transactions(all_txs_iter, &NodeState::mock()).unwrap();
+            let (block, actual_ns_table) = Payload::from_transactions(
+                all_txs_iter,
+                &ValidatedState::default(),
+                &NodeState::mock(),
+            )
+            .await
+            .unwrap();
             let disperse_data = vid.disperse(&block.raw_payload).unwrap();
 
             // TEST ACTUAL STUFF AGAINST DERIVED STUFF

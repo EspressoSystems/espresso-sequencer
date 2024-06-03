@@ -814,10 +814,10 @@ mod test {
 
         // Hook the builder up to the event stream from the first node
         if let Some(builder_task) = builder_task {
-            builder_task.start(Box::new(handle_0.event_stream()));
+            builder_task.start(Box::new(handle_0.event_stream().await));
         }
 
-        let mut events = handle_0.event_stream();
+        let mut events = handle_0.event_stream().await;
 
         for handle in handles.iter() {
             handle.start_consensus().await;
@@ -853,11 +853,11 @@ mod test {
 
         let handle_0 = &handles[0];
 
-        let mut events = handle_0.event_stream();
+        let mut events = handle_0.event_stream().await;
 
         // Hook the builder up to the event stream from the first node
         if let Some(builder_task) = builder_task {
-            builder_task.start(Box::new(handle_0.event_stream()));
+            builder_task.start(Box::new(handle_0.event_stream().await));
         }
 
         for handle in handles.iter() {
@@ -867,7 +867,9 @@ mod test {
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], &NodeState::mock()).unwrap();
+                Payload::from_transactions([], &ValidatedState::default(), &NodeState::mock())
+                    .await
+                    .unwrap();
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload.encode();

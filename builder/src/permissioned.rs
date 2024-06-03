@@ -577,7 +577,7 @@ mod test {
 
         let node_id = total_nodes - 1;
         // non-staking node handle
-        let hotshot_context_handle = handles[node_id].0.clone();
+        let hotshot_context_handle = Arc::clone(&handles[node_id].0);
         let state_signer = handles[node_id].1.take().unwrap();
 
         // builder api url
