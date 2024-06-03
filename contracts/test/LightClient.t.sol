@@ -615,7 +615,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
     }
 }
 
-contract LightClient_L1UpdatesTest is LightClientCommonTest {
+contract LightClient_StateUpdatesTest is LightClientCommonTest {
     LC.LightClientState internal newState;
     V.PlonkProof internal newProof;
 
@@ -895,8 +895,12 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
         lc.newFinalizedState(newState, newProof);
 
-        // Test for a valid hotShotBlockHeight
+        // Test for a the same hotShotBlockHeight
         BN254.ScalarField blockComm = lc.getHotShotCommitment(newState.blockHeight);
+        assertEqBN254(blockComm, newState.blockCommRoot);
+
+        // Test for a smaller hotShotBlockHeight
+        blockComm = lc.getHotShotCommitment(newState.blockHeight - 1);
         assertEqBN254(blockComm, newState.blockCommRoot);
     }
 
