@@ -15,7 +15,7 @@ enum Options {
     /// Reset file system storage.
     Fs(persistence::fs::Options),
     /// Reset SQL storage.
-    Sql(persistence::sql::Options),
+    Sql(Box<persistence::sql::Options>),
 }
 
 #[async_std::main]
@@ -31,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Options::Sql(opt) => {
             tracing::warn!("resetting SQL storage {opt:?}");
-            reset_storage(opt).await
+            reset_storage(*opt).await
         }
     }
 }
