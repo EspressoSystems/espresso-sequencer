@@ -1,9 +1,6 @@
 use crate::{
-    api::data_source::CatchupDataSource,
-    catchup::SqlStateCatchup,
-    chain_config::{BlockSize, ResolvableChainConfig},
-    eth_signature_key::EthKeyPair,
-    ChainConfig, Header, Leaf, NodeState, SeqTypes,
+    api::data_source::CatchupDataSource, catchup::SqlStateCatchup, chain_config::BlockSize,
+    eth_signature_key::EthKeyPair, ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use ark_serialize::{
@@ -214,9 +211,10 @@ impl ValidatedState {
     }
 }
 
+/// Error type to cover possible proposal validation failures
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum ProposalValidationError {
-    #[error("Invalid ChainConfig: (expected={expected:?}, proposal={proposal:?})")]
+    #[error("Invalid ChainConfig: expected={expected:?}, proposal={proposal:?}")]
     InvalidChainConfig { expected: String, proposal: String },
 
     #[error(
@@ -328,6 +326,7 @@ fn charge_fee(
     Ok(())
 }
 
+/// Error type to cover possible builder validation failures
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum BuilderValidationError {
     #[error("Builder signature not found")]
