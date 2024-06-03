@@ -118,7 +118,7 @@ pub enum UpgradeType {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Upgrade {
-    pub block: u64,
+    pub view: u64,
     #[serde(flatten)]
     pub upgrade_type: UpgradeType,
 }
@@ -141,7 +141,7 @@ mod upgrade_serialization {
         for (version, upgrade) in map {
             seq.serialize_element(&(
                 version.to_string(),
-                upgrade.block,
+                upgrade.view,
                 upgrade.upgrade_type.clone(),
             ))?;
         }
@@ -170,7 +170,7 @@ mod upgrade_serialization {
                 #[derive(Deserialize)]
                 struct UpgradeFields {
                     version: String,
-                    block: u64,
+                    view: u64,
                     #[serde(flatten)]
                     upgrade_type: UpgradeType,
                 }
@@ -187,7 +187,7 @@ mod upgrade_serialization {
                     map.insert(
                         version,
                         Upgrade {
-                            block: fields.block,
+                            view: fields.view,
                             upgrade_type: fields.upgrade_type,
                         },
                     );
@@ -251,7 +251,7 @@ mod test {
 
             [[upgrade]]
             version = "1.0"
-            block = 1
+            view = 1
 
             [upgrade.chain_config]
             chain_id = 12345

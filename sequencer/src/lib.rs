@@ -384,12 +384,12 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     let version = Ver::version();
     if let Some(upgrade) = genesis.upgrades.get(&version) {
-        let block = upgrade.block;
+        let view = upgrade.view;
         // >>>> ?????
-        config.config.start_proposing_view = block;
-        config.config.stop_proposing_view = block + 20;
-        config.config.start_voting_view = block + 21;
-        config.config.stop_proposing_view = block + 40;
+        config.config.start_proposing_view = view;
+        config.config.stop_proposing_view = view + 20;
+        config.config.start_voting_view = view + 21;
+        config.config.stop_proposing_view = view + 40;
     }
     let node_index = config.node_index;
 
