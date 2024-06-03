@@ -214,7 +214,7 @@ impl ValidatedState {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Eq, PartialEq)]
 pub enum ProposalValidationError {
     #[error("Invalid ChainConfig: (expected={expected:?}, proposal={proposal:?})")]
     InvalidChainConfig { expected: String, proposal: String },
