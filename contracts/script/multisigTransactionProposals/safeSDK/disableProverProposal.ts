@@ -42,8 +42,8 @@ async function main() {
 
 /**
  * Function to propose the transaction data for disabling permissioned prover mode
- * @param {string} safeSDK - An instance of the Safe SDK
- * @param {string} safeService - An instance of the Safe Service
+ * @param {Safe} safeSDK - An instance of the Safe SDK
+ * @param {SafeApiKit} safeService - An instance of the Safe Service
  * @param {string} signerAddress - The address of the address signing the transaction
  * @param {string} safeAddress - The address of the Safe multisig wallet
  */
