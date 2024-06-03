@@ -277,6 +277,9 @@ where
         {
             let mut storage = self.fetcher.storage.write().await;
             if let Err(err) = store_block(&mut *storage, block).await {
+                // Rollback the transaction if insert fails
+                // This prevents subsequent queries from failing, as they would be part of the same transaction block.
+                storage.revert().await;
                 // It is unfortunate if this fails, but we can still proceed by returning
                 // the block that we fetched, keeping it in memory. Simply log the error and
                 // move on.

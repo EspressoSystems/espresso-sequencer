@@ -216,6 +216,9 @@ where
                 tracing::info!("fetched leaf {height}");
                 let mut storage = fetcher.storage.write().await;
                 if let Err(err) = store_leaf(&mut *storage, leaf).await {
+                    // Rollback the transaction if insert fails
+                    // This prevents subsequent queries from failing, as they would be part of the same transaction block.
+                    storage.revert().await;
                     // It is unfortunate if this fails, but we can still proceed by
                     // returning the leaf that we fetched, keeping it in memory.
                     // Simply log the error and move on.
