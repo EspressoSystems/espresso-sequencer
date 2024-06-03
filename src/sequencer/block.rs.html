@@ -101,7 +101,11 @@
 <a href="#99" id="99">99</a>
 <a href="#100" id="100">100</a>
 <a href="#101" id="101">101</a>
-</pre></div><pre class="rust"><code><span class="kw">use crate</span>::{BlockBuildingSnafu, NodeState, Transaction};
+<a href="#102" id="102">102</a>
+<a href="#103" id="103">103</a>
+<a href="#104" id="104">104</a>
+</pre></div><pre class="rust"><code><span class="kw">use crate</span>::{BlockBuildingSnafu, ChainConfig, NodeState, SeqTypes, Transaction, ValidatedState};
+<span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>hotshot_query_service::availability::QueryablePayload;
 <span class="kw">use </span>hotshot_types::traits::{BlockPayload, EncodeBytes};
@@ -127,11 +131,13 @@
         Arc::from(<span class="self">self</span>.raw_payload.clone())
     }
 }
-<span class="kw">impl </span>BlockPayload <span class="kw">for </span>Payload&lt;TxTableEntryWord&gt; {
+<span class="attr">#[async_trait]
+</span><span class="kw">impl </span>BlockPayload&lt;SeqTypes&gt; <span class="kw">for </span>Payload&lt;TxTableEntryWord&gt; {
     <span class="kw">type </span>Error = <span class="kw">crate</span>::Error;
     <span class="kw">type </span>Transaction = Transaction;
     <span class="kw">type </span>Instance = NodeState;
     <span class="kw">type </span>Metadata = NsTable;
+    <span class="kw">type </span>ValidatedState = ValidatedState;
 
     <span class="doccomment">/// Returns (Self, metadata).
     ///
@@ -153,8 +159,12 @@
     /// https://github.com/EspressoSystems/espresso-sequencer/issues/757
     ///
     /// TODO(746) refactor and make pretty "table" code for tx, namespace tables?
-    </span><span class="kw">fn </span>from_transactions(
-        txs: <span class="kw">impl </span>IntoIterator&lt;Item = <span class="self">Self</span>::Transaction&gt;,
+    ///
+    /// This function also performs catchup from peers
+    /// when the ValidatedState's chain config commitment differs from the NodeState's chain config, and the ValidatedState does not have full chain config.
+    </span><span class="kw">async fn </span>from_transactions(
+        txs: <span class="kw">impl </span>IntoIterator&lt;Item = <span class="self">Self</span>::Transaction&gt; + Send,
+        _validated_state: <span class="kw-2">&amp;</span><span class="self">Self</span>::ValidatedState,
         instance_state: <span class="kw-2">&amp;</span><span class="self">Self</span>::Instance,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>, <span class="self">Self</span>::Metadata), <span class="self">Self</span>::Error&gt; {
         <span class="kw">let </span>payload = Payload::from_txs(txs, <span class="kw-2">&amp;</span>instance_state.chain_config)<span class="question-mark">?</span>;
@@ -167,16 +177,6 @@
             raw_payload: encoded_transactions.to_vec(),
             ns_table: metadata.clone(), <span class="comment">// TODO don't clone ns_table
         </span>}
-    }
-
-    <span class="comment">// TODO remove
-    </span><span class="kw">fn </span>genesis() -&gt; (<span class="self">Self</span>, <span class="self">Self</span>::Metadata) {
-        <span class="comment">// this is only called from `Leaf::genesis`. Since we are
-        // passing empty list, max_block_size is irrelevant so we can
-        // use the mock NodeState. A future update to HotShot should
-        // make a change there to remove the need for this workaround.
-
-        </span><span class="self">Self</span>::from_transactions([], <span class="kw-2">&amp;</span>NodeState::mock()).unwrap()
     }
 
     <span class="kw">fn </span>transaction_commitments(<span class="kw-2">&amp;</span><span class="self">self</span>, meta: <span class="kw-2">&amp;</span><span class="self">Self</span>::Metadata) -&gt; Vec&lt;Commitment&lt;<span class="self">Self</span>::Transaction&gt;&gt; {
@@ -200,6 +200,12 @@
         metadata: <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">Self</span>::Metadata,
     ) -&gt; <span class="kw">impl </span><span class="lifetime">'a </span>+ Iterator&lt;Item = <span class="self">Self</span>::Transaction&gt; {
         <span class="self">self</span>.enumerate(metadata).map(|(<span class="kw">_</span>, t)| t)
+    }
+
+    <span class="kw">fn </span>empty() -&gt; (<span class="self">Self</span>, <span class="self">Self</span>::Metadata) {
+        <span class="kw">let </span>payload = Payload::from_txs(<span class="macro">vec!</span>[], <span class="kw-2">&amp;</span>ChainConfig::default()).unwrap();
+        <span class="kw">let </span>ns_table = payload.get_ns_table().clone();
+        (payload, ns_table)
     }
 }
 </code></pre></div></section></main></body></html>

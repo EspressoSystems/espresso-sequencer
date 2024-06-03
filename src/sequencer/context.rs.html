@@ -350,6 +350,19 @@
 <a href="#348" id="348">348</a>
 <a href="#349" id="349">349</a>
 <a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
+<a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
+<a href="#354" id="354">354</a>
+<a href="#355" id="355">355</a>
+<a href="#356" id="356">356</a>
+<a href="#357" id="357">357</a>
+<a href="#358" id="358">358</a>
+<a href="#359" id="359">359</a>
+<a href="#360" id="360">360</a>
+<a href="#361" id="361">361</a>
+<a href="#362" id="362">362</a>
+<a href="#363" id="363">363</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_std::{
     sync::{Arc, RwLock},
@@ -366,8 +379,10 @@
     Memberships, Networks, SystemContext,
 };
 <span class="kw">use </span>hotshot_orchestrator::client::OrchestratorClient;
+<span class="kw">use </span>hotshot_query_service::Leaf;
 <span class="kw">use </span>hotshot_types::{
     consensus::ConsensusMetricsValue,
+    data::ViewNumber,
     traits::{election::Membership, metrics::Metrics},
     HotShotConfig,
 };
@@ -377,7 +392,7 @@
 
 <span class="kw">use crate</span>::{
     network, persistence::SequencerPersistence, state_signature::StateSigner,
-    static_stake_table_commitment, Node, NodeState, PubKey, SeqTypes, Transaction,
+    static_stake_table_commitment, Node, NodeState, PubKey, SeqTypes, Transaction, ValidatedState,
 };
 <span class="kw">use </span>hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 <span class="doccomment">/// The consensus handle
@@ -393,7 +408,7 @@
 &gt; {
     <span class="doccomment">/// The consensus handle
     </span><span class="attr">#[derivative(Debug = <span class="string">"ignore"</span>)]
-    </span>handle: Consensus&lt;N, P&gt;,
+    </span>handle: Arc&lt;RwLock&lt;Consensus&lt;N, P&gt;&gt;&gt;,
 
     <span class="doccomment">/// Context for generating state signatures.
     </span>state_signer: Arc&lt;StateSigner&lt;Ver&gt;&gt;,
@@ -514,7 +529,7 @@
         <span class="kw">let </span>events = handle.event_stream();
 
         <span class="kw">let </span><span class="kw-2">mut </span>ctx = <span class="self">Self </span>{
-            handle,
+            handle: Arc::new(RwLock::new(handle)),
             state_signer: Arc::new(state_signer),
             tasks: Default::default(),
             detached: <span class="bool-val">false</span>,
@@ -553,12 +568,12 @@
     }
 
     <span class="doccomment">/// Stream consensus events.
-    </span><span class="kw">pub fn </span>event_stream(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Stream&lt;Item = Event&lt;SeqTypes&gt;&gt; {
-        <span class="self">self</span>.handle.event_stream()
+    </span><span class="kw">pub async fn </span>event_stream(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Stream&lt;Item = Event&lt;SeqTypes&gt;&gt; {
+        <span class="self">self</span>.handle.read().<span class="kw">await</span>.event_stream()
     }
 
     <span class="kw">pub async fn </span>submit_transaction(<span class="kw-2">&amp;</span><span class="self">self</span>, tx: Transaction) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="self">self</span>.handle.submit_transaction(tx).<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="self">self</span>.handle.read().<span class="kw">await</span>.submit_transaction(tx).<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
@@ -568,17 +583,28 @@
     }
 
     <span class="doccomment">/// Return a reference to the underlying consensus handle.
-    </span><span class="kw">pub fn </span>consensus(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>Consensus&lt;N, P&gt; {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.handle
+    </span><span class="kw">pub fn </span>consensus(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Arc&lt;RwLock&lt;Consensus&lt;N, P&gt;&gt;&gt; {
+        Arc::clone(<span class="kw-2">&amp;</span><span class="self">self</span>.handle)
     }
+
+    <span class="kw">pub async fn </span>shutdown_consensus(<span class="kw-2">&amp;</span><span class="self">self</span>) {
+        <span class="self">self</span>.handle.write().<span class="kw">await</span>.shut_down().<span class="kw">await
+    </span>}
+
+    <span class="kw">pub async fn </span>decided_leaf(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Leaf&lt;SeqTypes&gt; {
+        <span class="self">self</span>.handle.read().<span class="kw">await</span>.decided_leaf().<span class="kw">await
+    </span>}
+
+    <span class="kw">pub async fn </span>state(<span class="kw-2">&amp;</span><span class="self">self</span>, view: ViewNumber) -&gt; <span class="prelude-ty">Option</span>&lt;Arc&lt;ValidatedState&gt;&gt; {
+        <span class="self">self</span>.handle.read().<span class="kw">await</span>.state(view).<span class="kw">await
+    </span>}
+
+    <span class="kw">pub async fn </span>decided_state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Arc&lt;ValidatedState&gt; {
+        <span class="self">self</span>.handle.read().<span class="kw">await</span>.decided_state().<span class="kw">await
+    </span>}
 
     <span class="kw">pub fn </span>node_state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; NodeState {
         <span class="self">self</span>.node_state.clone()
-    }
-
-    <span class="doccomment">/// Return a mutable reference to the underlying consensus handle.
-    </span><span class="kw">pub fn </span>consensus_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>Consensus&lt;N, P&gt; {
-        <span class="kw-2">&amp;mut </span><span class="self">self</span>.handle
     }
 
     <span class="doccomment">/// Start participating in consensus.
@@ -590,7 +616,7 @@
                 .<span class="kw">await</span>;
         }
         <span class="macro">tracing::warn!</span>(<span class="string">"starting consensus"</span>);
-        <span class="self">self</span>.handle.hotshot.start_consensus().<span class="kw">await</span>;
+        <span class="self">self</span>.handle.read().<span class="kw">await</span>.hotshot.start_consensus().<span class="kw">await</span>;
     }
 
     <span class="doccomment">/// Spawn a background task attached to this context.
@@ -604,7 +630,7 @@
     <span class="doccomment">/// Stop participating in consensus.
     </span><span class="kw">pub async fn </span>shut_down(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
         <span class="macro">tracing::info!</span>(<span class="string">"shutting down SequencerContext"</span>);
-        <span class="self">self</span>.handle.shut_down().<span class="kw">await</span>;
+        <span class="self">self</span>.handle.write().<span class="kw">await</span>.shut_down().<span class="kw">await</span>;
         <span class="self">self</span>.tasks.shut_down().<span class="kw">await</span>;
     }
 

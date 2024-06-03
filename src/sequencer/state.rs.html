@@ -1533,7 +1533,7 @@
     </span><span class="kw">pub </span>fee_merkle_tree: FeeMerkleTree,
 }
 
-<span class="attr">#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+<span class="attr">#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 </span><span class="kw">pub struct </span>Delta {
     <span class="kw">pub </span>fees_delta: HashSet&lt;FeeAccount&gt;,
 }
@@ -2791,8 +2791,8 @@
         FeeAccountProof::prove(<span class="kw-2">&amp;</span>tree, account2).unwrap();
     }
 
-    <span class="attr">#[test]
-    </span><span class="kw">fn </span>test_validation_max_block_size() {
+    <span class="attr">#[async_std::test]
+    </span><span class="kw">async fn </span>test_validation_max_block_size() {
         setup_logging();
         setup_backtrace();
 
@@ -2806,7 +2806,7 @@
             base_fee: <span class="number">0</span>.into(),
             ..Default::default()
         });
-        <span class="kw">let </span>parent = Leaf::genesis(<span class="kw-2">&amp;</span>instance);
+        <span class="kw">let </span>parent = Leaf::genesis(<span class="kw-2">&amp;</span>instance.genesis_state, <span class="kw-2">&amp;</span>instance).<span class="kw">await</span>;
         <span class="kw">let </span>header = parent.block_header();
 
         <span class="comment">// Validation fails because the proposed block exceeds the maximum block size.
@@ -2815,8 +2815,8 @@
         <span class="macro">tracing::info!</span>(%err, <span class="string">"task failed successfully"</span>);
     }
 
-    <span class="attr">#[test]
-    </span><span class="kw">fn </span>test_validation_base_fee() {
+    <span class="attr">#[async_std::test]
+    </span><span class="kw">async fn </span>test_validation_base_fee() {
         setup_logging();
         setup_backtrace();
 
@@ -2830,7 +2830,7 @@
             </span>max_block_size: max_block_size.into(),
             ..Default::default()
         });
-        <span class="kw">let </span>parent = Leaf::genesis(<span class="kw-2">&amp;</span>instance);
+        <span class="kw">let </span>parent = Leaf::genesis(<span class="kw-2">&amp;</span>instance.genesis_state, <span class="kw-2">&amp;</span>instance).<span class="kw">await</span>;
         <span class="kw">let </span>header = parent.block_header();
 
         <span class="comment">// Validation fails because the genesis fee (0) is too low.

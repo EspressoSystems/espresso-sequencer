@@ -1203,6 +1203,31 @@
 <a href="#1201" id="1201">1201</a>
 <a href="#1202" id="1202">1202</a>
 <a href="#1203" id="1203">1203</a>
+<a href="#1204" id="1204">1204</a>
+<a href="#1205" id="1205">1205</a>
+<a href="#1206" id="1206">1206</a>
+<a href="#1207" id="1207">1207</a>
+<a href="#1208" id="1208">1208</a>
+<a href="#1209" id="1209">1209</a>
+<a href="#1210" id="1210">1210</a>
+<a href="#1211" id="1211">1211</a>
+<a href="#1212" id="1212">1212</a>
+<a href="#1213" id="1213">1213</a>
+<a href="#1214" id="1214">1214</a>
+<a href="#1215" id="1215">1215</a>
+<a href="#1216" id="1216">1216</a>
+<a href="#1217" id="1217">1217</a>
+<a href="#1218" id="1218">1218</a>
+<a href="#1219" id="1219">1219</a>
+<a href="#1220" id="1220">1220</a>
+<a href="#1221" id="1221">1221</a>
+<a href="#1222" id="1222">1222</a>
+<a href="#1223" id="1223">1223</a>
+<a href="#1224" id="1224">1224</a>
+<a href="#1225" id="1225">1225</a>
+<a href="#1226" id="1226">1226</a>
+<a href="#1227" id="1227">1227</a>
+<a href="#1228" id="1228">1228</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="self">self</span>::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
 <span class="kw">use crate</span>::{
     network,
@@ -1265,7 +1290,7 @@
     node_state: NodeState,
 
     <span class="attr">#[derivative(Debug = <span class="string">"ignore"</span>)]
-    </span>handle: SystemContextHandle&lt;SeqTypes, Node&lt;N, P&gt;&gt;,
+    </span>handle: Arc&lt;RwLock&lt;SystemContextHandle&lt;SeqTypes, Node&lt;N, P&gt;&gt;&gt;&gt;,
 }
 
 <span class="kw">impl</span>&lt;N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;
@@ -1276,7 +1301,7 @@
             state_signer: ctx.state_signer(),
             event_streamer: ctx.event_streamer(),
             node_state: ctx.node_state(),
-            handle: ctx.consensus().clone(),
+            handle: ctx.consensus(),
         }
     }
 }
@@ -1303,7 +1328,7 @@
 
     <span class="kw">fn </span>event_stream(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Stream&lt;Item = Event&lt;SeqTypes&gt;&gt; + Unpin {
         <span class="kw">let </span>state = <span class="self">self</span>.clone();
-        <span class="kw">async move </span>{ state.consensus().<span class="kw">await</span>.event_stream() }
+        <span class="kw">async move </span>{ state.consensus().<span class="kw">await</span>.read().<span class="kw">await</span>.event_stream() }
             .boxed()
             .flatten_stream()
     }
@@ -1316,8 +1341,8 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>.consensus.as_ref().get().<span class="kw">await</span>.get_ref().event_streamer
     }
 
-    <span class="kw">async fn </span>consensus(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>SystemContextHandle&lt;SeqTypes, Node&lt;N, P&gt;&gt; {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.consensus.as_ref().get().<span class="kw">await</span>.get_ref().handle
+    <span class="kw">async fn </span>consensus(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Arc&lt;RwLock&lt;SystemContextHandle&lt;SeqTypes, Node&lt;N, P&gt;&gt;&gt;&gt; {
+        Arc::clone(<span class="kw-2">&amp;</span><span class="self">self</span>.consensus.as_ref().get().<span class="kw">await</span>.get_ref().handle)
     }
 
     <span class="kw">async fn </span>node_state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>NodeState {
@@ -1331,7 +1356,9 @@
             .<span class="kw">await
             </span>.get_ref()
             .handle
-            .hotshot
+            .read()
+            .<span class="kw">await
+            </span>.hotshot
             .config
             .clone()
     }
@@ -1371,7 +1398,12 @@
     SubmitDataSource&lt;N, P&gt; <span class="kw">for </span>ApiState&lt;N, P, Ver&gt;
 {
     <span class="kw">async fn </span>submit(<span class="kw-2">&amp;</span><span class="self">self</span>, tx: Transaction) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="self">self</span>.consensus().<span class="kw">await</span>.submit_transaction(tx).<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="self">self</span>.consensus()
+            .<span class="kw">await
+            </span>.read()
+            .<span class="kw">await
+            </span>.submit_transaction(tx)
+            .<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 }
@@ -1427,9 +1459,16 @@
         view: ViewNumber,
         account: Address,
     ) -&gt; anyhow::Result&lt;AccountQueryData&gt; {
-        <span class="kw">let </span>state = <span class="self">self</span>.consensus().<span class="kw">await</span>.state(view).<span class="kw">await</span>.context(<span class="macro">format!</span>(
-            <span class="string">"state not available for height {height}, view {view:?}"
-        </span>))<span class="question-mark">?</span>;
+        <span class="kw">let </span>state = <span class="self">self
+            </span>.consensus()
+            .<span class="kw">await
+            </span>.read()
+            .<span class="kw">await
+            </span>.state(view)
+            .<span class="kw">await
+            </span>.context(<span class="macro">format!</span>(
+                <span class="string">"state not available for height {height}, view {view:?}"
+            </span>))<span class="question-mark">?</span>;
         <span class="kw">let </span>(proof, balance) = FeeAccountProof::prove(<span class="kw-2">&amp;</span>state.fee_merkle_tree, account).context(
             <span class="macro">format!</span>(<span class="string">"account {account} not available for height {height}, view {view:?}"</span>),
         )<span class="question-mark">?</span>;
@@ -1438,9 +1477,16 @@
 
     <span class="attr">#[tracing::instrument(skip(<span class="self">self</span>))]
     </span><span class="kw">async fn </span>get_frontier(<span class="kw-2">&amp;</span><span class="self">self</span>, height: u64, view: ViewNumber) -&gt; anyhow::Result&lt;BlocksFrontier&gt; {
-        <span class="kw">let </span>state = <span class="self">self</span>.consensus().<span class="kw">await</span>.state(view).<span class="kw">await</span>.context(<span class="macro">format!</span>(
-            <span class="string">"state not available for height {height}, view {view:?}"
-        </span>))<span class="question-mark">?</span>;
+        <span class="kw">let </span>state = <span class="self">self
+            </span>.consensus()
+            .<span class="kw">await
+            </span>.read()
+            .<span class="kw">await
+            </span>.state(view)
+            .<span class="kw">await
+            </span>.context(<span class="macro">format!</span>(
+                <span class="string">"state not available for height {height}, view {view:?}"
+            </span>))<span class="question-mark">?</span>;
         <span class="kw">let </span>tree = <span class="kw-2">&amp;</span>state.block_merkle_tree;
         <span class="kw">let </span>frontier = tree.lookup(tree.num_leaves() - <span class="number">1</span>).expect_ok()<span class="question-mark">?</span>.<span class="number">1</span>;
         <span class="prelude-val">Ok</span>(frontier)
@@ -1584,7 +1630,7 @@
 
             <span class="comment">// Hook the builder up to the event stream from the first node
             </span><span class="kw">if let </span><span class="prelude-val">Some</span>(builder_task) = builder_task {
-                builder_task.start(Box::new(handle_0.event_stream()));
+                builder_task.start(Box::new(handle_0.event_stream().<span class="kw">await</span>));
             }
 
             <span class="kw">for </span>ctx <span class="kw">in </span><span class="kw-2">&amp;</span>nodes {
@@ -1618,9 +1664,10 @@
         }
 
         <span class="kw">pub async fn </span>stop_consensus(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-            <span class="self">self</span>.server.consensus_mut().shut_down().<span class="kw">await</span>;
+            <span class="self">self</span>.server.shutdown_consensus().<span class="kw">await</span>;
+
             <span class="kw">for </span>ctx <span class="kw">in </span><span class="kw-2">&amp;mut </span><span class="self">self</span>.peers {
-                ctx.consensus_mut().shut_down().<span class="kw">await</span>;
+                ctx.shutdown_consensus().<span class="kw">await</span>;
             }
         }
     }
@@ -1694,7 +1741,7 @@
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span>network =
             TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).<span class="kw">await</span>;
-        <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream();
+        <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream().<span class="kw">await</span>;
 
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
@@ -1731,7 +1778,7 @@
         <span class="comment">// Wait for block &gt;=2 appears
         // It's waiting for an extra second to make sure that the signature is generated
         </span><span class="kw">loop </span>{
-            height = network.server.consensus().decided_leaf().<span class="kw">await</span>.height();
+            height = network.server.decided_leaf().<span class="kw">await</span>.height();
             sleep(std::time::Duration::from_secs(<span class="number">1</span>)).<span class="kw">await</span>;
             <span class="kw">if </span>height &gt;= <span class="number">2 </span>{
                 <span class="kw">break</span>;
@@ -1763,12 +1810,12 @@
         <span class="kw">let </span>options = opt(Options::from(options::Http { port }).catchup(Default::default()));
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
-        <span class="kw">let </span><span class="kw-2">mut </span>network =
+        <span class="kw">let </span>network =
             TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).<span class="kw">await</span>;
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         <span class="comment">// Wait for a few blocks to be decided.
-        </span><span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream();
+        </span><span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream().<span class="kw">await</span>;
         <span class="kw">loop </span>{
             <span class="kw">if let </span>Event {
                 event: EventType::Decide { leaf_chain, .. },
@@ -1785,10 +1832,13 @@
         }
 
         <span class="comment">// Stop consensus running on the node so we freeze the decided and undecided states.
-        </span>network.server.consensus_mut().shut_down().<span class="kw">await</span>;
+        // We'll let it go out of scope here since it's a write lock.
+        </span>{
+            network.server.shutdown_consensus().<span class="kw">await</span>;
+        }
 
         <span class="comment">// Undecided fee state: absent account.
-        </span><span class="kw">let </span>leaf = network.server.consensus().decided_leaf().<span class="kw">await</span>;
+        </span><span class="kw">let </span>leaf = network.server.decided_leaf().<span class="kw">await</span>;
         <span class="kw">let </span>height = leaf.height() + <span class="number">1</span>;
         <span class="kw">let </span>view = leaf.view_number() + <span class="number">1</span>;
         <span class="kw">let </span>res = client
@@ -1806,7 +1856,6 @@
                 .verify(
                     <span class="kw-2">&amp;</span>network
                         .server
-                        .consensus()
                         .state(view)
                         .<span class="kw">await
                         </span>.unwrap()
@@ -1825,7 +1874,6 @@
             </span>.unwrap();
         <span class="kw">let </span>root = <span class="kw-2">&amp;</span>network
             .server
-            .consensus()
             .state(view)
             .<span class="kw">await
             </span>.unwrap()
@@ -1902,7 +1950,7 @@
             l1,
         )
         .<span class="kw">await</span>;
-        <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream();
+        <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream().<span class="kw">await</span>;
 
         <span class="comment">// Connect client.
         </span><span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; =
@@ -2199,7 +2247,7 @@
         .<span class="kw">await</span>;
 
         <span class="comment">// Wait for replica 0 to reach a (non-genesis) decide, before disconnecting it.
-        </span><span class="kw">let </span><span class="kw-2">mut </span>events = network.peers[<span class="number">0</span>].event_stream();
+        </span><span class="kw">let </span><span class="kw-2">mut </span>events = network.peers[<span class="number">0</span>].event_stream().<span class="kw">await</span>;
         <span class="kw">loop </span>{
             <span class="kw">let </span>event = events.next().<span class="kw">await</span>.unwrap();
             <span class="kw">let </span>EventType::Decide { leaf_chain, .. } = event.event <span class="kw">else </span>{
@@ -2221,7 +2269,8 @@
         </span>network
             .server
             .event_stream()
-            .filter(|event| future::ready(<span class="macro">matches!</span>(event.event, EventType::Decide { .. })))
+            .<span class="kw">await
+            </span>.filter(|event| future::ready(<span class="macro">matches!</span>(event.event, EventType::Decide { .. })))
             .take(<span class="number">3</span>)
             .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
             .<span class="kw">await</span>;
@@ -2241,7 +2290,7 @@
                 SEQUENCER_VERSION,
             )
             .<span class="kw">await</span>;
-        <span class="kw">let </span><span class="kw-2">mut </span>events = node.event_stream();
+        <span class="kw">let </span><span class="kw-2">mut </span>events = node.event_stream().<span class="kw">await</span>;
 
         <span class="comment">// Wait for a (non-genesis) block proposed by each node, to prove that the lagging node has
         // caught up and all nodes are in sync.
@@ -2339,7 +2388,8 @@
         <span class="kw">let </span>decided_view = chain.last().unwrap().leaf().view_number();
 
         <span class="comment">// Get the most recent state, for catchup.
-        </span><span class="kw">let </span>state = network.server.consensus().decided_state().<span class="kw">await</span>;
+
+        </span><span class="kw">let </span>state = network.server.decided_state().<span class="kw">await</span>;
         <span class="macro">tracing::info!</span>(<span class="question-mark">?</span>decided_view, <span class="question-mark">?</span>state, <span class="string">"consensus state"</span>);
 
         <span class="comment">// Fully shut down the API servers.

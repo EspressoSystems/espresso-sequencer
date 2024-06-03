@@ -424,6 +424,9 @@
 <a href="#422" id="422">422</a>
 <a href="#423" id="423">423</a>
 <a href="#424" id="424">424</a>
+<a href="#425" id="425">425</a>
+<a href="#426" id="426">426</a>
+<a href="#427" id="427">427</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_broadcast::{
     broadcast, Receiver <span class="kw">as </span>BroadcastReceiver, RecvError, Sender <span class="kw">as </span>BroadcastSender, TryRecvError,
@@ -462,7 +465,7 @@
 };
 <span class="kw">use </span>sequencer::{
     catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, ChainConfig, L1Params,
-    NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes,
+    NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes, ValidatedState,
 };
 
 <span class="kw">use </span>hotshot_events_service::{
@@ -513,6 +516,7 @@
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
+        validated_state: ValidatedState,
     ) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
         <span class="macro">tracing::info!</span>(
             address = %builder_key_pair.fee_account(),
@@ -540,8 +544,10 @@
         <span class="comment">// builder api request channel
         </span><span class="kw">let </span>(req_sender, req_receiver) = broadcast::&lt;MessageType&lt;SeqTypes&gt;&gt;(channel_capacity.get());
 
-        <span class="kw">let </span>(genesis_payload, genesis_ns_table) = Payload::from_transactions([], <span class="kw-2">&amp;</span>instance_state)
-            .expect(<span class="string">"genesis payload construction failed"</span>);
+        <span class="kw">let </span>(genesis_payload, genesis_ns_table) =
+            Payload::from_transactions([], <span class="kw-2">&amp;</span>validated_state, <span class="kw-2">&amp;</span>instance_state)
+                .<span class="kw">await
+                </span>.expect(<span class="string">"genesis payload construction failed"</span>);
 
         <span class="kw">let </span>builder_commitment = genesis_payload.builder_commitment(<span class="kw-2">&amp;</span>genesis_ns_table);
 
@@ -585,6 +591,8 @@
                 .as_u64()
                 .context(<span class="string">"the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)"</span>)<span class="question-mark">?</span>,
             Arc::new(instance_state),
+            Duration::from_secs(<span class="number">60</span>),
+            Arc::new(validated_state),
         );
 
         <span class="comment">// spawn the builder event loop
@@ -700,10 +708,8 @@
         </span><span class="kw">let </span>num_non_staking_nodes = hotshot_config.config.num_nodes_without_stake;
 
         <span class="comment">// non-staking node handle
-        </span><span class="kw">let </span>hotshot_context_handle = handles
-            [NonPermissionedBuilderTestConfig::SUBSCRIBED_DA_NODE_ID]
-            .<span class="number">0
-            </span>.clone();
+        </span><span class="kw">let </span>hotshot_context_handle =
+            <span class="kw-2">&amp;</span>handles[NonPermissionedBuilderTestConfig::SUBSCRIBED_DA_NODE_ID].<span class="number">0</span>;
 
         <span class="comment">// hotshot event streaming api url
         </span><span class="kw">let </span>hotshot_events_streaming_api_url = HotShotTestConfig::hotshot_event_streaming_api_url();
@@ -713,7 +719,7 @@
             hotshot_events_streaming_api_url.clone(),
             known_nodes_with_stake,
             num_non_staking_nodes,
-            hotshot_context_handle,
+            Arc::clone(hotshot_context_handle),
         );
 
         <span class="comment">// builder api url

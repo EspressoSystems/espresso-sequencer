@@ -334,9 +334,9 @@
 <a href="#332" id="332">332</a>
 <a href="#333" id="333">333</a>
 <a href="#334" id="334">334</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::block::entry::TxTableEntryWord;
-<span class="kw">use </span><span class="kw">crate</span>::block::payload::Payload;
+</pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::block::payload::Payload;
 <span class="kw">use </span><span class="kw">crate</span>::block::tables::TxTable;
+<span class="kw">use crate</span>::{block::entry::TxTableEntryWord, SeqTypes};
 <span class="kw">use </span>hotshot_query_service::availability::QueryablePayload;
 <span class="kw">use </span>hotshot_types::vid::{vid_scheme, SmallRangeProofType};
 <span class="kw">use </span>jf_vid::payload_prover::{PayloadProver, Statement};
@@ -351,7 +351,7 @@
 };
 
 <span class="comment">// TODO don't hard-code TxTableEntryWord generic param
-</span><span class="kw">impl </span>QueryablePayload <span class="kw">for </span>Payload&lt;TxTableEntryWord&gt; {
+</span><span class="kw">impl </span>QueryablePayload&lt;SeqTypes&gt; <span class="kw">for </span>Payload&lt;TxTableEntryWord&gt; {
     <span class="kw">type </span>TransactionIndex = TxIndex;
     <span class="kw">type </span>Iter&lt;<span class="lifetime">'a</span>&gt; = TxIterator&lt;<span class="lifetime">'a</span>, TxTableEntryWord&gt;;
     <span class="kw">type </span>InclusionProof = TxInclusionProof;

@@ -751,6 +751,9 @@
 <a href="#749" id="749">749</a>
 <a href="#750" id="750">750</a>
 <a href="#751" id="751">751</a>
+<a href="#752" id="752">752</a>
+<a href="#753" id="753">753</a>
+<a href="#754" id="754">754</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
 </span><span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -1075,7 +1078,7 @@
             bind_version: Ver,
             options: <span class="kw">impl </span>PersistenceOptions&lt;Persistence = P&gt;,
         ) -&gt; Vec&lt;(
-            SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;&gt;,
+            Arc&lt;SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;&gt;&gt;,
             <span class="prelude-ty">Option</span>&lt;StateSigner&lt;Ver&gt;&gt;,
         )&gt; {
             <span class="kw">let </span>num_staked_nodes = <span class="self">self</span>.num_staked_nodes();
@@ -1101,7 +1104,7 @@
                         )
                         .<span class="kw">await</span>;
                     <span class="comment">// wrapped in some because need to take later
-                    </span>(hotshot_handle, <span class="prelude-val">Some</span>(state_signer))
+                    </span>(Arc::new(hotshot_handle), <span class="prelude-val">Some</span>(state_signer))
                 }
             }))
             .<span class="kw">await
@@ -1205,7 +1208,7 @@
             hotshot_events_api_url: Url,
             known_nodes_with_stake: Vec&lt;PeerConfig&lt;VerKey&gt;&gt;,
             num_non_staking_nodes: usize,
-            hotshot_context_handle: SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;&gt;,
+            hotshot_context_handle: Arc&lt;SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;&gt;&gt;,
         ) {
             <span class="comment">// create a event streamer
             </span><span class="kw">let </span>events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
@@ -1313,6 +1316,7 @@
                 Duration::from_millis(<span class="number">2000</span>),
                 <span class="number">15</span>,
                 Duration::from_millis(<span class="number">500</span>),
+                ValidatedState::default(),
             )
             .<span class="kw">await
             </span>.unwrap();
@@ -1337,7 +1341,7 @@
     {
         <span class="kw">pub async fn </span>init_permissioned_builder(
             hotshot_test_config: HotShotTestConfig,
-            hotshot_handle: SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;&gt;,
+            hotshot_handle: Arc&lt;SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;&gt;&gt;,
             node_id: u64,
             state_signer: StateSigner&lt;Ver&gt;,
             hotshot_builder_api_url: Url,
@@ -1365,7 +1369,7 @@
             </span><span class="kw">let </span>bootstrapped_view = ViewNumber::new(<span class="number">0</span>);
 
             <span class="kw">let </span>builder_context = BuilderContext::init(
-                hotshot_handle,
+                Arc::clone(<span class="kw-2">&amp;</span>hotshot_handle),
                 state_signer,
                 node_id,
                 key_pair,
@@ -1376,6 +1380,7 @@
                 Duration::from_millis(<span class="number">2000</span>),
                 <span class="number">15</span>,
                 Duration::from_millis(<span class="number">500</span>),
+                ValidatedState::default(),
             )
             .<span class="kw">await
             </span>.unwrap();
@@ -1457,8 +1462,9 @@
         <span class="kw">let </span><span class="kw-2">mut </span>parent = {
             <span class="comment">// TODO refactor repeated code from other tests
             </span><span class="kw">let </span>(genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], <span class="kw-2">&amp;</span>genesis_state)
-                    .expect(<span class="string">"unable to create genesis payload"</span>);
+                Payload::from_transactions([], <span class="kw-2">&amp;</span>ValidatedState::default(), <span class="kw-2">&amp;</span>genesis_state)
+                    .<span class="kw">await
+                    </span>.expect(<span class="string">"unable to create genesis payload"</span>);
             <span class="kw">let </span>builder_commitment = genesis_payload.builder_commitment(<span class="kw-2">&amp;</span>genesis_ns_table);
             <span class="kw">let </span>genesis_commitment = {
                 <span class="comment">// TODO we should not need to collect payload bytes just to compute vid_commitment

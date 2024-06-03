@@ -535,6 +535,7 @@
 <a href="#533" id="533">533</a>
 <a href="#534" id="534">534</a>
 <a href="#535" id="535">535</a>
+<a href="#536" id="536">536</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::anyhow;
 <span class="kw">use </span>async_std::{sync::Arc, task::sleep};
 <span class="kw">use </span>async_trait::async_trait;
@@ -812,7 +813,7 @@
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use crate</span>::{l1_client::L1Client, Leaf, NodeState};
+    <span class="kw">use crate</span>::{l1_client::L1Client, Leaf, NodeState, ValidatedState};
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>async_std::task::spawn;
     <span class="kw">use </span>committable::Committable;
@@ -864,9 +865,9 @@
         }
     }
 
-    <span class="kw">fn </span>mock_leaf(height: u64, node_state: <span class="kw-2">&amp;</span>NodeState) -&gt; LeafQueryData&lt;SeqTypes&gt; {
-        <span class="kw">let </span><span class="kw-2">mut </span>leaf = Leaf::genesis(node_state);
-        <span class="kw">let </span><span class="kw-2">mut </span>qc = QuorumCertificate::genesis(node_state);
+    <span class="kw">async fn </span>mock_leaf(height: u64, node_state: <span class="kw-2">&amp;</span>NodeState) -&gt; LeafQueryData&lt;SeqTypes&gt; {
+        <span class="kw">let </span><span class="kw-2">mut </span>leaf = Leaf::genesis(<span class="kw-2">&amp;</span>ValidatedState::default(), node_state).<span class="kw">await</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>qc = QuorumCertificate::genesis(<span class="kw-2">&amp;</span>ValidatedState::default(), node_state).<span class="kw">await</span>;
         leaf.block_header_mut().height = height;
         qc.data.leaf_commit = leaf.commit();
         LeafQueryData::new(leaf, qc).unwrap()
@@ -916,7 +917,8 @@
             NodeState::mock().with_l1(L1Client::new(anvil.provider().url().clone(), <span class="number">1</span>));
 
         <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..num_batches {
-            data.leaves.push(<span class="prelude-val">Some</span>(mock_leaf(i <span class="kw">as </span>u64, <span class="kw-2">&amp;</span>node_state)));
+            data.leaves
+                .push(<span class="prelude-val">Some</span>(mock_leaf(i <span class="kw">as </span>u64, <span class="kw-2">&amp;</span>node_state).<span class="kw">await</span>));
         }
         <span class="macro">tracing::info!</span>(<span class="string">"sequencing batches: {:?}"</span>, data.leaves);
 
@@ -984,7 +986,7 @@
 
         <span class="kw">let </span>node_state =
             NodeState::mock().with_l1(L1Client::new(anvil.provider().url().clone(), <span class="number">1</span>));
-        data.leaves.push(<span class="prelude-val">Some</span>(mock_leaf(<span class="number">0</span>, <span class="kw-2">&amp;</span>node_state)));
+        data.leaves.push(<span class="prelude-val">Some</span>(mock_leaf(<span class="number">0</span>, <span class="kw-2">&amp;</span>node_state).<span class="kw">await</span>));
 
         <span class="comment">// Connect to the HotShot contract with the expected L1 client.
         </span><span class="kw">let </span>hotshot = HotShot::new(l1.hotshot.address(), adaptor_l1_signer);
@@ -1009,7 +1011,7 @@
         <span class="macro">assert_eq!</span>(l1.hotshot.block_height().call().<span class="kw">await</span>.unwrap().as_u64(), <span class="number">1</span>);
 
         <span class="comment">// Once a new batch is available, we can sequence it.
-        </span>data.leaves.push(<span class="prelude-val">Some</span>(mock_leaf(<span class="number">1</span>, <span class="kw-2">&amp;</span>node_state)));
+        </span>data.leaves.push(<span class="prelude-val">Some</span>(mock_leaf(<span class="number">1</span>, <span class="kw-2">&amp;</span>node_state).<span class="kw">await</span>));
         sync_with_l1(<span class="number">1</span>, <span class="kw-2">&amp;</span>data, <span class="kw-2">&amp;</span>hotshot).<span class="kw">await</span>.unwrap();
         <span class="kw">let </span>(event, <span class="kw">_</span>) = wait_for_new_batches(<span class="kw-2">&amp;</span>l1, from_block.as_u64()).<span class="kw">await</span>;
         <span class="macro">assert_eq!</span>(event.first_block_number.as_u64(), <span class="number">1</span>);
@@ -1050,7 +1052,7 @@
         <span class="comment">// Create a sequence of leaves, some of which are missing.
         </span><span class="kw">let </span><span class="kw-2">mut </span>data = MockDataSource::default();
         data.leaves
-            .extend([<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(mock_leaf(<span class="number">1</span>, <span class="kw-2">&amp;</span>node_state)), <span class="prelude-val">None</span>]);
+            .extend([<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(mock_leaf(<span class="number">1</span>, <span class="kw-2">&amp;</span>node_state).<span class="kw">await</span>), <span class="prelude-val">None</span>]);
 
         <span class="comment">// Connect to the HotShot contract with the expected L1 client.
         </span><span class="kw">let </span>hotshot = HotShot::new(l1.hotshot.address(), adaptor_l1_signer);
@@ -1061,7 +1063,7 @@
         <span class="comment">// If the first leaf is present but subsequent leaves are missing, we should sequence the
         // leaves that are available.
 
-        </span>data.leaves[<span class="number">0</span>] = <span class="prelude-val">Some</span>(mock_leaf(<span class="number">0</span>, <span class="kw-2">&amp;</span>node_state));
+        </span>data.leaves[<span class="number">0</span>] = <span class="prelude-val">Some</span>(mock_leaf(<span class="number">0</span>, <span class="kw-2">&amp;</span>node_state).<span class="kw">await</span>);
         sync_with_l1(<span class="number">3</span>, <span class="kw-2">&amp;</span>data, <span class="kw-2">&amp;</span>hotshot).<span class="kw">await</span>.unwrap();
 
         <span class="comment">// Check the NewBatches event.

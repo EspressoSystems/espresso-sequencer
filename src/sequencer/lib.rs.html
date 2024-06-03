@@ -913,6 +913,8 @@
 <a href="#911" id="911">911</a>
 <a href="#912" id="912">912</a>
 <a href="#913" id="913">913</a>
+<a href="#914" id="914">914</a>
+<a href="#915" id="915">915</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>block;
 <span class="kw">pub mod </span>catchup;
@@ -1291,7 +1293,7 @@
     </span><span class="kw">let </span>topics = {
         <span class="kw">let </span><span class="kw-2">mut </span>topics = <span class="macro">vec!</span>[Topic::Global];
         <span class="kw">if </span>is_da {
-            topics.push(Topic::DA);
+            topics.push(Topic::Da);
         }
         topics
     };
@@ -1428,7 +1430,7 @@
     <span class="kw">use </span>hotshot::types::{EventType::Decide, Message};
     <span class="kw">use </span>hotshot_stake_table::vec_based::StakeTable;
     <span class="kw">use </span>hotshot_testing::block_builder::{
-        BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
+        BuilderTask, SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
     };
     <span class="kw">use </span>hotshot_types::{
         event::LeafInfo,
@@ -1444,7 +1446,7 @@
     <span class="kw">pub async fn </span>run_test_builder() -&gt; (<span class="prelude-ty">Option</span>&lt;Box&lt;<span class="kw">dyn </span>BuilderTask&lt;SeqTypes&gt;&gt;&gt;, Url) {
         &lt;SimpleBuilderImplementation <span class="kw">as </span>TestBuilderImplementation&lt;SeqTypes&gt;&gt;::start(
             TestConfig::NUM_NODES,
-            (),
+            SimpleBuilderConfig::default(),
         )
         .<span class="kw">await
     </span>}
@@ -1729,10 +1731,10 @@
 
         <span class="comment">// Hook the builder up to the event stream from the first node
         </span><span class="kw">if let </span><span class="prelude-val">Some</span>(builder_task) = builder_task {
-            builder_task.start(Box::new(handle_0.event_stream()));
+            builder_task.start(Box::new(handle_0.event_stream().<span class="kw">await</span>));
         }
 
-        <span class="kw">let </span><span class="kw-2">mut </span>events = handle_0.event_stream();
+        <span class="kw">let </span><span class="kw-2">mut </span>events = handle_0.event_stream().<span class="kw">await</span>;
 
         <span class="kw">for </span>handle <span class="kw">in </span>handles.iter() {
             handle.start_consensus().<span class="kw">await</span>;
@@ -1768,11 +1770,11 @@
 
         <span class="kw">let </span>handle_0 = <span class="kw-2">&amp;</span>handles[<span class="number">0</span>];
 
-        <span class="kw">let </span><span class="kw-2">mut </span>events = handle_0.event_stream();
+        <span class="kw">let </span><span class="kw-2">mut </span>events = handle_0.event_stream().<span class="kw">await</span>;
 
         <span class="comment">// Hook the builder up to the event stream from the first node
         </span><span class="kw">if let </span><span class="prelude-val">Some</span>(builder_task) = builder_task {
-            builder_task.start(Box::new(handle_0.event_stream()));
+            builder_task.start(Box::new(handle_0.event_stream().<span class="kw">await</span>));
         }
 
         <span class="kw">for </span>handle <span class="kw">in </span>handles.iter() {
@@ -1782,7 +1784,9 @@
         <span class="kw">let </span><span class="kw-2">mut </span>parent = {
             <span class="comment">// TODO refactor repeated code from other tests
             </span><span class="kw">let </span>(genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], <span class="kw-2">&amp;</span>NodeState::mock()).unwrap();
+                Payload::from_transactions([], <span class="kw-2">&amp;</span>ValidatedState::default(), <span class="kw-2">&amp;</span>NodeState::mock())
+                    .<span class="kw">await
+                    </span>.unwrap();
             <span class="kw">let </span>genesis_commitment = {
                 <span class="comment">// TODO we should not need to collect payload bytes just to compute vid_commitment
                 </span><span class="kw">let </span>payload_bytes = genesis_payload.encode();

@@ -708,6 +708,14 @@
 <a href="#706" id="706">706</a>
 <a href="#707" id="707">707</a>
 <a href="#708" id="708">708</a>
+<a href="#709" id="709">709</a>
+<a href="#710" id="710">710</a>
+<a href="#711" id="711">711</a>
+<a href="#712" id="712">712</a>
+<a href="#713" id="713">713</a>
+<a href="#714" id="714">714</a>
+<a href="#715" id="715">715</a>
+<a href="#716" id="716">716</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -818,7 +826,7 @@
     Ver: StaticVersionType + <span class="lifetime">'static</span>,
 &gt; {
     <span class="doccomment">/// The consensus handle
-    </span><span class="kw">pub </span>hotshot_handle: Consensus&lt;N, P&gt;,
+    </span><span class="kw">pub </span>hotshot_handle: Arc&lt;Consensus&lt;N, P&gt;&gt;,
 
     <span class="doccomment">/// Index of this sequencer node
     </span><span class="kw">pub </span>node_index: u64,
@@ -896,7 +904,7 @@
     <span class="comment">// Initialize the push CDN network (and perform the initial connection)
     </span><span class="kw">let </span>cdn_network = PushCdnNetwork::new(
         network_params.cdn_endpoint,
-        <span class="macro">vec!</span>[Topic::Global, Topic::DA],
+        <span class="macro">vec!</span>[Topic::Global, Topic::Da],
         KeyPair {
             public_key: WrappedSignatureKey(my_config.public_key),
             private_key: my_config.private_key.clone(),
@@ -969,7 +977,7 @@
         chain_config: genesis.chain_config,
         l1_client,
         genesis_header: genesis.header,
-        genesis_state,
+        genesis_state: genesis_state.clone(),
         l1_genesis,
         peers: Arc::new(StatePeers::&lt;Ver&gt;::from_urls(network_params.state_peers)),
         node_id: node_index,
@@ -993,7 +1001,7 @@
     .<span class="kw">await</span>;
 
     <span class="kw">let </span>ctx = BuilderContext::init(
-        hotshot_handle,
+        Arc::new(hotshot_handle),
         state_signer,
         node_index,
         eth_key_pair,
@@ -1004,6 +1012,7 @@
         max_api_timeout_duration,
         buffered_view_num_count,
         maximize_txns_count_timeout_duration,
+        genesis_state,
     )
     .<span class="kw">await</span><span class="question-mark">?</span>;
 
@@ -1064,7 +1073,9 @@
         config,
         memberships,
         networks,
-        HotShotInitializer::from_genesis(instance_state).unwrap(),
+        HotShotInitializer::from_genesis(instance_state)
+            .<span class="kw">await
+            </span>.unwrap(),
         ConsensusMetricsValue::new(metrics),
         da_storage,
     )
@@ -1088,7 +1099,7 @@
     <span class="doccomment">/// Constructor
     </span><span class="attr">#[allow(clippy::too_many_arguments)]
     </span><span class="kw">pub async fn </span>init(
-        hotshot_handle: Consensus&lt;N, P&gt;,
+        hotshot_handle: Arc&lt;Consensus&lt;N, P&gt;&gt;,
         state_signer: StateSigner&lt;Ver&gt;,
         node_index: u64,
         eth_key_pair: EthKeyPair,
@@ -1099,6 +1110,7 @@
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
+        validated_state: ValidatedState,
     ) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
         <span class="comment">// tx channel
         </span><span class="kw">let </span>(tx_sender, tx_receiver) = broadcast::&lt;MessageType&lt;SeqTypes&gt;&gt;(channel_capacity.get());
@@ -1116,8 +1128,10 @@
         <span class="comment">// builder api request channel
         </span><span class="kw">let </span>(req_sender, req_receiver) = broadcast::&lt;MessageType&lt;SeqTypes&gt;&gt;(channel_capacity.get());
 
-        <span class="kw">let </span>(genesis_payload, genesis_ns_table) = Payload::from_transactions([], <span class="kw-2">&amp;</span>instance_state)
-            .expect(<span class="string">"genesis payload construction failed"</span>);
+        <span class="kw">let </span>(genesis_payload, genesis_ns_table) =
+            Payload::from_transactions([], <span class="kw-2">&amp;</span>validated_state, <span class="kw-2">&amp;</span>instance_state)
+                .<span class="kw">await
+                </span>.expect(<span class="string">"genesis payload construction failed"</span>);
 
         <span class="kw">let </span>builder_commitment = genesis_payload.builder_commitment(<span class="kw-2">&amp;</span>genesis_ns_table);
 
@@ -1162,9 +1176,11 @@
                 .as_u64()
                 .context(<span class="string">"the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)"</span>)<span class="question-mark">?</span>,
             Arc::new(instance_state),
+            Duration::from_secs(<span class="number">60</span>),
+            Arc::new(validated_state),
         );
 
-        <span class="kw">let </span>hotshot_handle_clone = hotshot_handle.clone();
+        <span class="kw">let </span>hotshot_handle_clone = Arc::clone(<span class="kw-2">&amp;</span>hotshot_handle);
         <span class="comment">// spawn the builder service
         </span>async_spawn(<span class="kw">async move </span>{
             run_permissioned_standalone_builder_service(
@@ -1172,7 +1188,7 @@
                 da_sender,
                 qc_sender,
                 decide_sender,
-                hotshot_handle,
+                hotshot_handle_clone,
             )
             .<span class="kw">await</span>;
         });
@@ -1193,7 +1209,7 @@
         </span>run_builder_api_service(hotshot_builder_api_url.clone(), proxy_global_state);
 
         <span class="kw">let </span>ctx = <span class="self">Self </span>{
-            hotshot_handle: hotshot_handle_clone,
+            hotshot_handle: Arc::clone(<span class="kw-2">&amp;</span>hotshot_handle),
             node_index,
             state_signer: Arc::new(state_signer),
             wait_for_orchestrator: <span class="prelude-val">None</span>,
@@ -1279,7 +1295,7 @@
 
         <span class="kw">let </span>node_id = total_nodes - <span class="number">1</span>;
         <span class="comment">// non-staking node handle
-        </span><span class="kw">let </span>hotshot_context_handle = handles[node_id].<span class="number">0</span>.clone();
+        </span><span class="kw">let </span>hotshot_context_handle = Arc::clone(<span class="kw-2">&amp;</span>handles[node_id].<span class="number">0</span>);
         <span class="kw">let </span>state_signer = handles[node_id].<span class="number">1</span>.take().unwrap();
 
         <span class="comment">// builder api url

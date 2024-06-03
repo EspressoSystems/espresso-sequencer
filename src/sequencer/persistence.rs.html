@@ -482,6 +482,10 @@
 <a href="#480" id="480">480</a>
 <a href="#481" id="481">481</a>
 <a href="#482" id="482">482</a>
+<a href="#483" id="483">483</a>
+<a href="#484" id="484">484</a>
+<a href="#485" id="485">485</a>
+<a href="#486" id="486">486</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer node persistence.
 //!
 //! This module implements the persistence required for a sequencer node to rejoin the network and
@@ -588,6 +592,7 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         state: NodeState,
     ) -&gt; anyhow::Result&lt;HotShotInitializer&lt;SeqTypes&gt;&gt; {
+        <span class="kw">let </span>genesis_validated_state = ValidatedState::genesis(<span class="kw-2">&amp;</span>state).<span class="number">0</span>;
         <span class="kw">let </span>highest_voted_view = <span class="kw">match </span><span class="self">self
             </span>.load_latest_acted_view()
             .<span class="kw">await
@@ -621,12 +626,15 @@
             }
             <span class="prelude-val">None </span>=&gt; {
                 <span class="macro">tracing::info!</span>(<span class="string">"no saved leaf, starting from genesis leaf"</span>);
-                (Leaf::genesis(<span class="kw-2">&amp;</span>state), QuorumCertificate::genesis(<span class="kw-2">&amp;</span>state))
+                (
+                    Leaf::genesis(<span class="kw-2">&amp;</span>genesis_validated_state, <span class="kw-2">&amp;</span>state).<span class="kw">await</span>,
+                    QuorumCertificate::genesis(<span class="kw-2">&amp;</span>genesis_validated_state, <span class="kw-2">&amp;</span>state).<span class="kw">await</span>,
+                )
             }
         };
         <span class="kw">let </span>validated_state = <span class="kw">if </span>leaf.block_header().height == <span class="number">0 </span>{
             <span class="comment">// If we are starting from genesis, we can provide the full state.
-            </span><span class="prelude-val">Some</span>(Arc::new(ValidatedState::genesis(<span class="kw-2">&amp;</span>state).<span class="number">0</span>))
+            </span><span class="prelude-val">Some</span>(Arc::new(genesis_validated_state))
         } <span class="kw">else </span>{
             <span class="comment">// Otherwise, we will have to construct a sparse state and fetch missing data during
             // catchup.
@@ -757,8 +765,8 @@
         </span><span class="macro">assert_eq!</span>(storage.load_anchor_leaf().<span class="kw">await</span>.unwrap(), <span class="prelude-val">None</span>);
 
         <span class="comment">// Store a leaf.
-        </span><span class="kw">let </span>leaf1 = Leaf::genesis(<span class="kw-2">&amp;</span>NodeState::mock());
-        <span class="kw">let </span>qc1 = QuorumCertificate::genesis(<span class="kw-2">&amp;</span>NodeState::mock());
+        </span><span class="kw">let </span>leaf1 = Leaf::genesis(<span class="kw-2">&amp;</span>ValidatedState::default(), <span class="kw-2">&amp;</span>NodeState::mock()).<span class="kw">await</span>;
+        <span class="kw">let </span>qc1 = QuorumCertificate::genesis(<span class="kw-2">&amp;</span>ValidatedState::default(), <span class="kw-2">&amp;</span>NodeState::mock()).<span class="kw">await</span>;
         storage.save_anchor_leaf(<span class="kw-2">&amp;</span>leaf1, <span class="kw-2">&amp;</span>qc1).<span class="kw">await</span>.unwrap();
         <span class="macro">assert_eq!</span>(
             storage.load_anchor_leaf().<span class="kw">await</span>.unwrap().unwrap(),
@@ -843,7 +851,7 @@
             <span class="prelude-val">None
         </span>);
 
-        <span class="kw">let </span>leaf = Leaf::genesis(<span class="kw-2">&amp;</span>NodeState::mock());
+        <span class="kw">let </span>leaf = Leaf::genesis(<span class="kw-2">&amp;</span>ValidatedState::default(), <span class="kw-2">&amp;</span>NodeState::mock()).<span class="kw">await</span>;
         <span class="kw">let </span>payload = leaf.block_payload().unwrap();
         <span class="kw">let </span>bytes = payload.encode().to_vec();
         <span class="kw">let </span>disperse = vid_scheme(<span class="number">2</span>).disperse(bytes).unwrap();
