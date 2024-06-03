@@ -290,7 +290,7 @@ mod test {
             hotshot_events_streaming_api_url.clone(),
             known_nodes_with_stake,
             num_non_staking_nodes,
-            Arc::clone(&hotshot_context_handle),
+            Arc::clone(hotshot_context_handle),
         );
 
         // builder api url
