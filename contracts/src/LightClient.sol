@@ -147,7 +147,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice If the same mode or prover is sent to the function, then no change is required
     error NoChangeRequired();
     /// @notice Invalid L1 Block for checking Light Client Updates, premature or in the future
-    error InvalidL1BlockForStateUpdateCheck();
+    error InsufficientSnapshotHistory();
     /// @notice Invalid HotShot Block for checking HotShot commitments, premature or in the future
     error InvalidHotShotBlockForCommitmentCheck();
 
@@ -382,44 +382,47 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    /// @notice checks the stateUpdateBlockNumbers array and the delayThreshold to determine if
-    /// hotshot was
-    /// down at a specified L1 block number
-    /// @param l1BlockNumber This L1 block number used to reference a point in time when this light
-    /// client contract was expected to be updated in a given threshold
-    /// @param delayThreshold The delay threshold used to determined if this Light Client contract
-    /// was updated in the desired time (measured in blocks)
-    function wasL1Updated(uint256 l1BlockNumber, uint256 delayThreshold)
+    /// @notice check if more than threshold blocks passed since the last state update before
+    /// L1 Block Number
+    /// @param blockNumber The L1 block number
+    /// @param threshold The number of blocks updates to this contract is allowed to lag behind
+    function lagOverEscapeHatchThreshold(uint256 blockNumber, uint256 threshold)
         public
         view
         returns (bool)
     {
-        uint256 prevBlock;
-        bool prevBlockFound;
-
         uint256 updatesCount = stateUpdateBlockNumbers.length;
 
         // Handling Edge Cases
         // Edgecase 1: The block is in the future or in the past before HotShot was live
-        if (l1BlockNumber > block.number || updatesCount < 3) {
-            revert InvalidL1BlockForStateUpdateCheck();
+        if (blockNumber > block.number || updatesCount < 3) {
+            revert InsufficientSnapshotHistory();
         }
 
-        for (uint256 i = stateUpdateBlockNumbers.length - 1; i > 1; i--) {
-            if (stateUpdateBlockNumbers[i] <= l1BlockNumber) {
-                prevBlockFound = true;
+        uint256 prevBlock;
+        bool prevUpdateFound;
+
+        uint256 i = updatesCount - 1;
+        while (!prevUpdateFound) {
+            if (stateUpdateBlockNumbers[i] <= blockNumber) {
+                prevUpdateFound = true;
                 prevBlock = stateUpdateBlockNumbers[i];
+            }
+
+            // We don't consider the lag time for the first two updates
+            if (i < 2) {
                 break;
             }
+            i--;
         }
 
         // If no snapshot is found, we don't have enough history stored to tell whether HotShot was
         // down.
-        if (!prevBlockFound) {
-            revert InvalidL1BlockForStateUpdateCheck();
+        if (!prevUpdateFound) {
+            revert InsufficientSnapshotHistory();
         }
 
-        return l1BlockNumber - prevBlock <= delayThreshold;
+        return blockNumber - prevBlock > threshold;
     }
 
     /// @notice get the number of L1 block updates

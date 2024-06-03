@@ -676,11 +676,11 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         // Reverts as it's within the first two updates which aren't valid times to check since it
         // was just getting initialized
-        vm.expectRevert(LC.InvalidL1BlockForStateUpdateCheck.selector);
-        lc.wasL1Updated(updates[1] - 1, DELAY_THRESHOLD);
+        vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
+        lc.lagOverEscapeHatchThreshold(updates[1] - 1, DELAY_THRESHOLD);
 
         // Hotshot should be live (l1BlockNumber = 7)
-        assertTrue(lc.wasL1Updated(updates[2], DELAY_THRESHOLD));
+        assertFalse(lc.lagOverEscapeHatchThreshold(updates[2], DELAY_THRESHOLD));
     }
 
     function test_hotshotIsDownWhenADelayExists() public {
@@ -698,7 +698,9 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         // Hotshot should be down (l1BlockNumber = 15)
         // for a block that should have been recorded but wasn't due to a delay
-        assertFalse(lc.wasL1Updated(updates[2] + DELAY_THRESHOLD + 2, DELAY_THRESHOLD));
+        assertTrue(
+            lc.lagOverEscapeHatchThreshold(updates[2] + DELAY_THRESHOLD + 2, DELAY_THRESHOLD)
+        );
     }
 
     function test_revertWhenThereAreOnlyTwoUpdates() public {
@@ -711,8 +713,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         assertEq(lc.getStateUpdateBlockNumbersCount(), 2);
 
-        vm.expectRevert(LC.InvalidL1BlockForStateUpdateCheck.selector);
-        lc.wasL1Updated(updates[0] + 2, DELAY_THRESHOLD); //3
+        vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
+        lc.lagOverEscapeHatchThreshold(updates[0] + 2, DELAY_THRESHOLD); //3
     }
 
     function test_revertWhenThereIsOnlyOneUpdate() public {
@@ -724,8 +726,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         assertEq(lc.getStateUpdateBlockNumbersCount(), 1);
 
-        vm.expectRevert(LC.InvalidL1BlockForStateUpdateCheck.selector);
-        lc.wasL1Updated(updates[0] + 2, DELAY_THRESHOLD); //3
+        vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
+        lc.lagOverEscapeHatchThreshold(updates[0] + 2, DELAY_THRESHOLD); //3
     }
 
     function test_revertWhenBlockRequestedWithinFirstTwoUpdates() public {
@@ -740,8 +742,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         assertEq(lc.getStateUpdateBlockNumbersCount(), 3);
 
-        vm.expectRevert(LC.InvalidL1BlockForStateUpdateCheck.selector);
-        lc.wasL1Updated(updates[0] + 2, DELAY_THRESHOLD); //3
+        vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
+        lc.lagOverEscapeHatchThreshold(updates[0] + 2, DELAY_THRESHOLD); //3
     }
 
     function test_hotShotIsDownWhenBlockIsHigherThanLastRecordedAndTheDelayThresholdHasPassed()
@@ -759,7 +761,9 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         // Hotshot should be down (l1BlockNumber = 29)
         // in a block that's higher than the last recorded and past the delay threshold
-        assertFalse(lc.wasL1Updated(updates[2] + DELAY_THRESHOLD + 3, DELAY_THRESHOLD));
+        assertTrue(
+            lc.lagOverEscapeHatchThreshold(updates[2] + DELAY_THRESHOLD + 3, DELAY_THRESHOLD)
+        );
     }
 
     function test_hotShotIsLiveWhenBlockIsHigherThanLastRecordedAndTheDelayThresholdHasNotPassed()
@@ -776,7 +780,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         vm.roll(updates[2] + (DELAY_THRESHOLD * 5));
 
         // Hotshot should be live (l1BlockNumber = 24)
-        assertTrue(lc.wasL1Updated(updates[2] + 3, DELAY_THRESHOLD));
+        assertFalse(lc.lagOverEscapeHatchThreshold(updates[2] + 3, DELAY_THRESHOLD));
     }
 
     function test_revertWhenBlockInFuture() public {
@@ -790,9 +794,9 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         uint256 currBlock = 20;
         vm.roll(currBlock);
 
-        vm.expectRevert(LC.InvalidL1BlockForStateUpdateCheck.selector);
+        vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
 
-        lc.wasL1Updated(currBlock + 5, DELAY_THRESHOLD);
+        lc.lagOverEscapeHatchThreshold(currBlock + 5, DELAY_THRESHOLD);
     }
 
     function test_revertWhenRequestedBlockIsBeforeHotShotFirstBlock() public {
@@ -806,9 +810,9 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         uint256 currBlock = 20;
         vm.roll(currBlock);
 
-        vm.expectRevert(LC.InvalidL1BlockForStateUpdateCheck.selector);
+        vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
 
-        lc.wasL1Updated(updates[0] - 1, DELAY_THRESHOLD);
+        lc.lagOverEscapeHatchThreshold(updates[0] - 1, DELAY_THRESHOLD);
     }
 }
 
