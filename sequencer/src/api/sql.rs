@@ -28,6 +28,8 @@ impl SequencerDataSource for DataSource {
 
     async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self> {
         let fetch_limit = opt.fetch_rate_limit;
+        let active_fetch_delay = opt.active_fetch_delay;
+        let chunk_fetch_delay = opt.chunk_fetch_delay;
         let mut cfg = Config::try_from(opt)?;
 
         if reset {
@@ -38,6 +40,12 @@ impl SequencerDataSource for DataSource {
 
         if let Some(limit) = fetch_limit {
             builder = builder.with_rate_limit(limit);
+        }
+        if let Some(delay) = active_fetch_delay {
+            builder = builder.with_active_fetch_delay(delay);
+        }
+        if let Some(delay) = chunk_fetch_delay {
+            builder = builder.with_chunk_fetch_delay(delay);
         }
 
         builder.build().await
