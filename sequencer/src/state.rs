@@ -277,7 +277,7 @@ pub fn validate_proposal(
 
     if proposal.fee_info.amount() < expected_chain_config.base_fee * block_size {
         return Err(ProposalValidationError::InsufficientFee {
-            max_block_size: block_size.into(),
+            max_block_size: expected_chain_config.max_block_size,
             base_fee: expected_chain_config.base_fee,
             proposed_fee: proposal.fee_info.amount(),
         });
@@ -1390,7 +1390,7 @@ mod test {
         assert_eq!(
             err,
             ProposalValidationError::MaxBlockSizeExceeded {
-                max_block_size: BlockSize::from_integer(MAX_BLOCK_SIZE as u64).unwrap(),
+                max_block_size: instance.chain_config.max_block_size,
                 block_size: BlockSize::from_integer(
                     VidSchemeType::get_payload_byte_len(&vid_common).into()
                 )
