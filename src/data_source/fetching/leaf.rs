@@ -51,7 +51,7 @@ where
 impl<Types> Fetchable<Types> for LeafQueryData<Types>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
 {
     type Request = LeafId<Types>;
 
@@ -102,7 +102,7 @@ pub(super) fn fetch_leaf_with_callbacks<Types, S, P, I>(
     callbacks: I,
 ) where
     Types: NodeType,
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
     I: IntoIterator<Item = LeafCallback<Types, S, P>> + Send + 'static,
@@ -143,7 +143,7 @@ where
 impl<Types> RangedFetchable<Types> for LeafQueryData<Types>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
 {
     type RangedRequest = LeafId<Types>;
 
@@ -205,7 +205,7 @@ impl<Types: NodeType, S, P> PartialOrd for LeafCallback<Types, S, P> {
 
 impl<Types: NodeType, S, P> Callback<LeafQueryData<Types>> for LeafCallback<Types, S, P>
 where
-    Payload<Types>: QueryablePayload,
+    Payload<Types>: QueryablePayload<Types>,
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {

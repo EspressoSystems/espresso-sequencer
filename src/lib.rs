@@ -444,9 +444,9 @@ pub use hotshot_types::{
 
 pub type Payload<Types> = <Types as NodeType>::BlockPayload;
 pub type Header<Types> = <Types as NodeType>::BlockHeader;
-pub type Metadata<Types> = <Payload<Types> as BlockPayload>::Metadata;
+pub type Metadata<Types> = <Payload<Types> as BlockPayload<Types>>::Metadata;
 /// Item within a [`Payload`].
-pub type Transaction<Types> = <Payload<Types> as BlockPayload>::Transaction;
+pub type Transaction<Types> = <Payload<Types> as BlockPayload<Types>>::Transaction;
 pub type SignatureKey<Types> = <Types as NodeType>::SignatureKey;
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
@@ -491,7 +491,7 @@ pub async fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types
     bind_version: Ver,
 ) -> Result<(), Error>
 where
-    Payload<Types>: availability::QueryablePayload,
+    Payload<Types>: availability::QueryablePayload<Types>,
     Header<Types>: availability::QueryableHeader<Types>,
     D: availability::AvailabilityDataSource<Types>
         + node::NodeDataSource<Types>
@@ -562,7 +562,7 @@ mod test {
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::FutureExt;
-    use hotshot_example_types::state_types::TestInstanceState;
+    use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use portpicker::pick_unused_port;
     use std::ops::RangeBounds;
@@ -711,7 +711,8 @@ mod test {
             .unwrap();
 
         // Mock up some data and add a block to the store.
-        let leaf = Leaf::<MockTypes>::genesis(&TestInstanceState {});
+        let leaf =
+            Leaf::<MockTypes>::genesis(&TestValidatedState::default(), &TestInstanceState {}).await;
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
         hotshot_qs.insert_block(block.clone()).await.unwrap();
 
