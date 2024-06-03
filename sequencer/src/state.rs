@@ -1,7 +1,9 @@
 use crate::{
-    api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
-    chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair, ChainConfig, Header, Leaf,
-    NodeState, SeqTypes,
+    api::data_source::CatchupDataSource,
+    catchup::SqlStateCatchup,
+    chain_config::{BlockSize, ResolvableChainConfig},
+    eth_signature_key::EthKeyPair,
+    ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use ark_serialize::{
@@ -215,15 +217,15 @@ impl ValidatedState {
 #[derive(Error, Debug)]
 pub enum ProposalValidationError {
     #[error("Invalid ChainConfig: (expected={expected:?}, proposal={proposal:?})")]
-    InvalidChainConfig {
-        expected: ChainConfig,
-        proposal: ResolvableChainConfig,
-    },
+    InvalidChainConfig { expected: String, proposal: String },
 
-    #[error("Invalid Payload Size: (expected={expected:?}, proposal={proposal:?})")]
+    #[error(
+        "Inval
+id Payload Size: (max_block_size={max_block_size:?}, proposed_block_size={block_size:?})"
+    )]
     MaxBlockSizeExceeded {
-        expected: ChainConfig,
-        proposal: ResolvableChainConfig,
+        max_block_size: BlockSize,
+        block_size: BlockSize,
     },
     #[error("Insufficient Fee: (block_size={block_size}, base_fee={base_fee:?}, proposed_fee={proposed_fee:?})")]
     InsufficientFee {
@@ -262,8 +264,8 @@ pub fn validate_proposal(
     // validate `ChainConfig`
     if proposal.chain_config.commit() != expected_chain_config.commit() {
         return Err(ProposalValidationError::InvalidChainConfig {
-            expected: expected_chain_config,
-            proposal: proposal.chain_config,
+            expected: format!("{:?}", expected_chain_config),
+            proposal: format!("{:?}", proposal.chain_config),
         });
     }
 
@@ -271,8 +273,8 @@ pub fn validate_proposal(
     let block_size = VidSchemeType::get_payload_byte_len(vid_common) as u64;
     if block_size >= *expected_chain_config.max_block_size {
         return Err(ProposalValidationError::MaxBlockSizeExceeded {
-            expected: expected_chain_config,
-            proposal: proposal.chain_config,
+            max_block_size: expected_chain_config.max_block_size,
+            block_size: block_size.into(),
         });
     }
 
