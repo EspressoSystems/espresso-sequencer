@@ -14,8 +14,10 @@ use hotshot::{
     Memberships, Networks, SystemContext,
 };
 use hotshot_orchestrator::client::OrchestratorClient;
+use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
+    data::ViewNumber,
     traits::{election::Membership, metrics::Metrics},
     HotShotConfig,
 };
@@ -25,7 +27,7 @@ use vbs::version::StaticVersionType;
 
 use crate::{
     network, persistence::SequencerPersistence, state_signature::StateSigner,
-    static_stake_table_commitment, Node, NodeState, PubKey, SeqTypes, Transaction,
+    static_stake_table_commitment, Node, NodeState, PubKey, SeqTypes, Transaction, ValidatedState,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 /// The consensus handle
@@ -218,6 +220,22 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     /// Return a reference to the underlying consensus handle.
     pub fn consensus(&self) -> Arc<RwLock<Consensus<N, P>>> {
         Arc::clone(&self.handle)
+    }
+
+    pub async fn shutdown_consensus(&self) {
+        self.handle.write().await.shut_down().await
+    }
+
+    pub async fn decided_leaf(&self) -> Leaf<SeqTypes> {
+        self.handle.read().await.decided_leaf().await
+    }
+
+    pub async fn state(&self, view: ViewNumber) -> Option<Arc<ValidatedState>> {
+        self.handle.read().await.state(view).await
+    }
+
+    pub async fn decided_state(&self) -> Arc<ValidatedState> {
+        self.handle.read().await.decided_state().await
     }
 
     pub fn node_state(&self) -> NodeState {
