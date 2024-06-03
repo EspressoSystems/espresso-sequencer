@@ -328,26 +328,35 @@ fn charge_fee(
     Ok(())
 }
 
+#[derive(Error, Debug, Eq, PartialEq)]
+pub enum BuilderValidationError {
+    #[error("Builder signature not found")]
+    SignatureNotFound,
+    #[error("Fee amount out of range: {0}")]
+    FeeAmountOutOfRange(FeeAmount),
+    #[error("Invalid Builder Signature")]
+    InvalidBuilderSignature,
+}
+
 /// Validate builder account by verifying signature
-fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
+fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidationError> {
     // Beware of Malice!
     let signature = proposed_header
         .builder_signature
-        .ok_or_else(|| anyhow::anyhow!("Builder signature not found"))?;
-    let fee_amount = proposed_header.fee_info.amount().as_u64().context(format!(
-        "fee amount out of range: {:?}",
-        proposed_header.fee_info.amount()
-    ))?;
+        .ok_or(BuilderValidationError::SignatureNotFound)?;
+    let fee_amount = proposed_header.fee_info.amount().as_u64().ok_or(
+        BuilderValidationError::FeeAmountOutOfRange(proposed_header.fee_info.amount()),
+    )?;
+
     // verify signature
-    anyhow::ensure!(
-        proposed_header.fee_info.account.validate_fee_signature(
-            &signature,
-            fee_amount,
-            proposed_header.metadata(),
-            &proposed_header.payload_commitment()
-        ),
-        "Invalid Builder Signature"
-    );
+    if !proposed_header.fee_info.account.validate_fee_signature(
+        &signature,
+        fee_amount,
+        proposed_header.metadata(),
+        &proposed_header.payload_commitment(),
+    ) {
+        return Err(BuilderValidationError::InvalidBuilderSignature);
+    }
 
     Ok(())
 }
