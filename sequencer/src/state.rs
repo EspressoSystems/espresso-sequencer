@@ -220,8 +220,7 @@ pub enum ProposalValidationError {
     InvalidChainConfig { expected: String, proposal: String },
 
     #[error(
-        "Inval
-id Payload Size: (max_block_size={max_block_size:?}, proposed_block_size={block_size:?})"
+        "Invalid Payload Size: (max_block_size={max_block_size:?}, proposed_block_size={block_size:?})"
     )]
     MaxBlockSizeExceeded {
         max_block_size: BlockSize,
