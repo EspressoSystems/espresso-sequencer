@@ -44,7 +44,7 @@ impl Config {
     where
         Types: NodeType,
         Header<Types>: QueryableHeader<Types>,
-        Payload<Types>: QueryablePayload<Types>,
+        Payload<Types>: QueryablePayload,
     {
         self.builder(provider).await?.build().await
     }
@@ -58,7 +58,7 @@ impl Config {
     where
         Types: NodeType,
         Header<Types>: QueryableHeader<Types>,
-        Payload<Types>: QueryablePayload<Types>,
+        Payload<Types>: QueryablePayload,
     {
         SqlDataSource::connect(self, provider).await
     }
@@ -312,7 +312,7 @@ impl<Types, P: AvailabilityProvider<Types>> SqlDataSource<Types, P>
 where
     Types: NodeType,
     Header<Types>: QueryableHeader<Types>,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     /// Connect to a remote database.
     ///
@@ -424,7 +424,7 @@ mod test {
         node::NodeDataSource,
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes, setup_test},
     };
-    use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
+    use hotshot_example_types::state_types::TestInstanceState;
     use hotshot_types::vid::vid_scheme;
     use jf_vid::VidScheme;
 
@@ -443,11 +443,7 @@ mod test {
         let disperse = vid_scheme(2).disperse([]).unwrap();
 
         // Insert test data with VID common but no share.
-        let leaf = LeafQueryData::<MockTypes>::genesis(
-            &TestValidatedState::default(),
-            &TestInstanceState {},
-        )
-        .await;
+        let leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
         let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
         ds.insert_leaf(leaf).await.unwrap();
         ds.insert_vid(common.clone(), None).await.unwrap();

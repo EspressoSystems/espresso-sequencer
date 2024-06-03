@@ -32,9 +32,7 @@ use hotshot::{
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
 use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
-use hotshot_testing::block_builder::{
-    SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
-};
+use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
@@ -101,7 +99,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
         let (builder_task, builder_url) =
             <SimpleBuilderImplementation as TestBuilderImplementation<MockTypes>>::start(
                 NUM_NODES,
-                SimpleBuilderConfig::default(),
+                (),
             )
             .await;
 
@@ -175,9 +173,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             config,
                             memberships,
                             networks,
-                            HotShotInitializer::from_genesis(TestInstanceState {})
-                                .await
-                                .unwrap(),
+                            HotShotInitializer::from_genesis(TestInstanceState {}).unwrap(),
                             ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                             hs_storage,
                         )
@@ -212,8 +208,8 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
 }
 
 impl<D: DataSourceLifeCycle> MockNetwork<D> {
-    pub fn handle(&self) -> &SystemContextHandle<MockTypes, MockNodeImpl> {
-        &self.nodes[0].hotshot
+    pub fn handle(&self) -> SystemContextHandle<MockTypes, MockNodeImpl> {
+        self.nodes[0].hotshot.clone()
     }
 
     pub async fn submit_transaction(&self, tx: MockTransaction) {

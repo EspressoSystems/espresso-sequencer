@@ -33,7 +33,7 @@ impl<Types: NodeType> FetchRequest for TransactionRequest<Types> {}
 impl<Types> Fetchable<Types> for TransactionQueryData<Types>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     type Request = TransactionRequest<Types>;
 

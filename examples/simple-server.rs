@@ -37,9 +37,7 @@ use hotshot_query_service::{
     },
     Error,
 };
-use hotshot_testing::block_builder::{
-    SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
-};
+use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
 use hotshot_types::{
     consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
     traits::election::Membership, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
@@ -171,10 +169,8 @@ async fn init_consensus(
     };
 
     // Start the builder server
-    let (builder_task, builder_url) = <SimpleBuilderImplementation as TestBuilderImplementation<
-        MockTypes,
-    >>::start(1, SimpleBuilderConfig::default())
-    .await;
+    let (builder_task, builder_url) =
+        <SimpleBuilderImplementation as TestBuilderImplementation<MockTypes>>::start(1, ()).await;
 
     // Create the configuration
     let config = HotShotConfig {
@@ -245,9 +241,7 @@ async fn init_consensus(
                     config,
                     memberships,
                     networks,
-                    HotShotInitializer::from_genesis(TestInstanceState {})
-                        .await
-                        .unwrap(),
+                    HotShotInitializer::from_genesis(TestInstanceState {}).unwrap(),
                     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                     storage,
                 )

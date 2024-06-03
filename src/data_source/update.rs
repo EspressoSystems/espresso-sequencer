@@ -64,8 +64,7 @@ pub trait UpdateDataSource<Types: NodeType>:
 impl<Types: NodeType, T> UpdateDataSource<Types> for T
 where
     T: UpdateAvailabilityData<Types> + UpdateStatusData + Send,
-    Payload<Types>: QueryablePayload<Types>,
-    <Types as NodeType>::InstanceState: Default,
+    Payload<Types>: QueryablePayload,
 {
     async fn update(
         &mut self,
@@ -136,10 +135,8 @@ where
 async fn store_genesis_vid<Types: NodeType>(
     storage: &mut impl UpdateAvailabilityData<Types>,
     leaf: &Leaf<Types>,
-) where
-    <Types as NodeType>::InstanceState: Default,
-{
-    let payload = Payload::<Types>::empty().0;
+) {
+    let payload = Payload::<Types>::genesis().0;
     let bytes = payload.encode();
     match vid_scheme(GENESIS_VID_NUM_STORAGE_NODES).disperse(bytes) {
         Ok(disperse) if disperse.commit != leaf.block_header().payload_commitment() => {

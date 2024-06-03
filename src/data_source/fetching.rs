@@ -287,7 +287,7 @@ impl<Types, S, P> Builder<Types, S, P> {
 impl<Types, S, P> Builder<Types, S, P>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types>,
     S: NodeDataSource<Types> + AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
@@ -345,7 +345,7 @@ where
 impl<Types, S, P> Pruner<Types, S, P>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -398,7 +398,7 @@ where
 impl<Types, S, P> FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types>,
     S: NodeDataSource<Types> + AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
@@ -526,7 +526,7 @@ where
 impl<Types, S, P> AvailabilityDataSource<Types> for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -661,7 +661,7 @@ where
 impl<Types, S, P> MerklizedStateHeightPersistence for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     S: MerklizedStateHeightPersistence + Send + Sync,
     P: Send + Sync,
 {
@@ -688,7 +688,7 @@ where
 impl<Types, S, P> UpdateAvailabilityData<Types> for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     S: UpdateAvailabilityData<Types> + Send + Sync,
     P: Send + Sync,
 {
@@ -777,7 +777,7 @@ where
 impl<Types, S, P> ExplorerStorage<Types> for FetchingDataSource<Types, S, P>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
     Transaction<Types>: explorer::traits::ExplorerTransaction,
     S: ExplorerStorage<Types> + Send + Sync,
@@ -977,7 +977,7 @@ where
 impl<Types, S, P> Fetcher<Types, S, P>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -1367,7 +1367,7 @@ trait FetchRequest: Copy + Debug + Send + Sync + 'static {
 trait Fetchable<Types>: Clone + Send + Sync + 'static
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     /// A succinct specification of the object to be fetched.
     type Request: FetchRequest;
@@ -1421,7 +1421,7 @@ where
 trait RangedFetchable<Types>: Fetchable<Types, Request = Self::RangedRequest> + HeightIndexed
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     type RangedRequest: FetchRequest + From<usize> + Send;
 

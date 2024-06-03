@@ -490,7 +490,7 @@ impl SqlStorage {
     /// Load a header from storage.
     ///
     /// This function is similar to `AvailabilityStorage::get_header`, but
-    /// * does not require the `QueryablePayload<Types>` bound that that trait impl does
+    /// * does not require the `QueryablePayload` bound that that trait impl does
     /// * makes it easier to specify types since the type parameter is on the function and not on a
     ///   trait impl
     /// * allows type conversions for the `id` parameter
@@ -668,7 +668,7 @@ impl VersionedDataSource for SqlStorage {
 impl<Types> AvailabilityStorage<Types> for SqlStorage
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types>,
 {
     async fn get_leaf(&self, id: LeafId<Types>) -> QueryResult<LeafQueryData<Types>> {
@@ -840,7 +840,7 @@ where
 impl<Types> UpdateAvailabilityData<Types> for SqlStorage
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types>,
 {
     type Error = QueryError;
@@ -1876,7 +1876,7 @@ impl SqlStorage {
 impl<Types: NodeType> ExplorerStorage<Types> for SqlStorage
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     Header<Types>: QueryableHeader<Types> + explorer::traits::ExplorerHeader<Types>,
     crate::Transaction<Types>: explorer::traits::ExplorerTransaction,
     BalanceAmount<Types>: Into<explorer::monetary_value::MonetaryValue>,
@@ -2763,7 +2763,7 @@ const BLOCK_COLUMNS: &str =
 fn parse_block<Types>(row: Row) -> QueryResult<BlockQueryData<Types>>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     // First, check if we have the payload for this block yet.
     let size: Option<i32> = row
@@ -2815,7 +2815,7 @@ const PAYLOAD_COLUMNS: &str = BLOCK_COLUMNS;
 fn parse_payload<Types>(row: Row) -> QueryResult<PayloadQueryData<Types>>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     parse_block(row).map(PayloadQueryData::from)
 }
@@ -2825,7 +2825,7 @@ const VID_COMMON_COLUMNS: &str = "h.height AS height, h.hash AS block_hash, h.pa
 fn parse_vid_common<Types>(row: Row) -> QueryResult<VidCommonQueryData<Types>>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     let height = row
         .try_get::<_, i64>("height")
@@ -3212,7 +3212,7 @@ pub mod testing {
 #[cfg(all(test, not(target_os = "windows")))]
 mod test {
 
-    use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
+    use hotshot_example_types::state_types::TestInstanceState;
     use jf_merkle_tree::{
         universal_merkle_tree::UniversalMerkleTree, LookupResult, UniversalMerkleTreeScheme,
     };
@@ -3312,11 +3312,7 @@ mod test {
             .port(port);
 
         let mut storage = SqlStorage::connect(cfg).await.unwrap();
-        let mut leaf = LeafQueryData::<MockTypes>::genesis(
-            &TestValidatedState::default(),
-            &TestInstanceState {},
-        )
-        .await;
+        let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
         // insert some mock data
         for i in 0..20 {
             leaf.leaf.block_header_mut().block_number = i;
@@ -3386,11 +3382,7 @@ mod test {
         let db = TmpDb::init().await;
 
         let mut storage = SqlStorage::connect(db.config()).await.unwrap();
-        let mut leaf = LeafQueryData::<MockTypes>::genesis(
-            &TestValidatedState::default(),
-            &TestInstanceState {},
-        )
-        .await;
+        let mut leaf = LeafQueryData::<MockTypes>::genesis(&TestInstanceState {});
         // insert some mock data
         for i in 0..20 {
             leaf.leaf.block_header_mut().block_number = i;

@@ -12,7 +12,7 @@
 
 [package]
 name = "hotshot-query-service"
-version = "0.1.29"
+version = "0.1.28"
 authors = ["Espresso Systems <hello@espressosys.com>"]
 edition = "2021"
 license = "GPL-3.0-or-later"
@@ -73,11 +73,11 @@ committable = "0.2"
 custom_debug = "0.6"
 derivative = "2.2"
 derive_more = "0.99"
-either = "1.12"
+either = "1.11"
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.56" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.56" }
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.56" }
+hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.55" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.55" }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.55" }
 itertools = "0.12.1"
 jf-merkle-tree = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = ["std"] }
 jf-vid = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = ["std", "parallel"] }
@@ -85,9 +85,9 @@ prometheus = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 snafu = "0.8"
-surf-disco = "0.7"
+surf-disco = "0.6"
 tagged-base64 = "0.4"
-tide-disco = "0.7"
+tide-disco = "0.6"
 time = "0.3"
 toml = "0.8"
 tracing = "0.1"
@@ -112,7 +112,7 @@ tokio-postgres = { version = "0.7", optional = true, default-features = false, f
 
 # Dependencies enabled by feature "testing".
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0", optional = true }
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.56", optional = true }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.55", optional = true }
 portpicker = { version = "0.1", optional = true }
 rand = { version = "0.8", optional = true }
 spin_sleep = { version = "1.2", optional = true }
@@ -133,7 +133,7 @@ backtrace-on-stack-overflow = { version = "0.3", optional = true }
 clap = { version = "4.5", features = ["derive", "env"] }
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 generic-array = "0.14"
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.56" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.55" }
 portpicker = "0.1"
 rand = "0.8"
 reqwest = "0.12.3"

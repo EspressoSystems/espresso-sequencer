@@ -56,7 +56,7 @@ where
 impl<Types> Fetchable<Types> for BlockQueryData<Types>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     type Request = BlockId<Types>;
 
@@ -106,7 +106,7 @@ where
 impl<Types> RangedFetchable<Types> for BlockQueryData<Types>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     type RangedRequest = BlockId<Types>;
 
@@ -127,7 +127,7 @@ pub(super) fn fetch_block_with_header<Types, S, P>(
     header: Header<Types>,
 ) where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -164,7 +164,7 @@ where
 impl<Types> Fetchable<Types> for PayloadQueryData<Types>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     type Request = BlockId<Types>;
 
@@ -218,7 +218,7 @@ where
 impl<Types> RangedFetchable<Types> for PayloadQueryData<Types>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
 {
     type RangedRequest = BlockId<Types>;
 
@@ -264,7 +264,7 @@ impl<Types: NodeType, S, P> PartialOrd for PayloadCallback<Types, S, P> {
 
 impl<Types: NodeType, S, P> Callback<Payload<Types>> for PayloadCallback<Types, S, P>
 where
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     S: AvailabilityStorage<Types>,
     P: AvailabilityProvider<Types>,
 {

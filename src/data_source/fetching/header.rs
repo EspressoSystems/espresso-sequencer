@@ -73,7 +73,7 @@ impl<Types: NodeType, S, P> Ord for HeaderCallback<Types, S, P> {
 impl<Types, S, P> HeaderCallback<Types, S, P>
 where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
@@ -110,7 +110,7 @@ pub(super) async fn fetch_header_and_then<Types, S, P>(
     callback: HeaderCallback<Types, S, P>,
 ) where
     Types: NodeType,
-    Payload<Types>: QueryablePayload<Types>,
+    Payload<Types>: QueryablePayload,
     S: AvailabilityStorage<Types> + 'static,
     P: AvailabilityProvider<Types>,
 {
