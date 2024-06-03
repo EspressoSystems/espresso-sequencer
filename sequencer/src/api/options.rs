@@ -371,7 +371,7 @@ impl Options {
             let get_node_state = async move { state.node_state().await.clone() };
             tasks.spawn(
                 "merklized state storage update loop",
-                update_state_storage_loop(ds, get_node_state),
+                update_state_storage_loop(ds, get_node_state, Ver::version()),
             );
         }
 

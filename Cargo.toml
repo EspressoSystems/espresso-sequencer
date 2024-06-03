@@ -111,6 +111,7 @@ rand_distr = "0.4"
 reqwest = "0.12"
 serde = { version = "1.0.195", features = ["derive"] }
 toml = "0.8"
+toml_edit = { version = "0.22", features = ["serde"] }
 url = "2.3"
 vbs = "0.1"
 vergen = { version = "8.3", features = ["git", "gitcl"] }

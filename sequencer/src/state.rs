@@ -1,7 +1,7 @@
 use crate::{
     api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
-    chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair, ChainConfig, Header, Leaf,
-    NodeState, SeqTypes,
+    chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair, genesis::UpgradeType,
+    ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use ark_serialize::{
@@ -333,6 +333,7 @@ async fn compute_state_update(
     instance: &NodeState,
     parent_leaf: &LeafQueryData<SeqTypes>,
     proposed_leaf: &LeafQueryData<SeqTypes>,
+    version: Version,
 ) -> anyhow::Result<(ValidatedState, Delta)> {
     let proposed_leaf = proposed_leaf.leaf();
     let parent_leaf = parent_leaf.leaf();
@@ -353,7 +354,9 @@ async fn compute_state_update(
         parent_header.fee_merkle_tree_root
     );
 
-    state.apply_header(instance, parent_leaf, header).await
+    state
+        .apply_header(instance, parent_leaf, header, version)
+        .await
 }
 
 async fn store_state_update(
@@ -435,10 +438,12 @@ async fn update_state_storage(
     instance: &NodeState,
     parent_leaf: &LeafQueryData<SeqTypes>,
     proposed_leaf: &LeafQueryData<SeqTypes>,
+    version: Version,
 ) -> anyhow::Result<ValidatedState> {
-    let (state, delta) = compute_state_update(parent_state, instance, parent_leaf, proposed_leaf)
-        .await
-        .context("computing state update")?;
+    let (state, delta) =
+        compute_state_update(parent_state, instance, parent_leaf, proposed_leaf, version)
+            .await
+            .context("computing state update")?;
 
     let mut storage = storage.write().await;
     if let Err(err) = store_state_update(&mut *storage, proposed_leaf.height(), &state, delta).await
@@ -486,6 +491,7 @@ async fn store_genesis_state(
 pub(crate) async fn update_state_storage_loop(
     storage: Arc<RwLock<impl SequencerStateDataSource>>,
     instance: impl Future<Output = NodeState>,
+    version: Version,
 ) -> anyhow::Result<()> {
     let mut instance = instance.await;
     instance.peers = Arc::new(SqlStateCatchup::from(storage.clone()));
@@ -520,8 +526,15 @@ pub(crate) async fn update_state_storage_loop(
 
     while let Some(leaf) = leaves.next().await {
         loop {
-            match update_state_storage(&parent_state, &storage, &instance, &parent_leaf, &leaf)
-                .await
+            match update_state_storage(
+                &parent_state,
+                &storage,
+                &instance,
+                &parent_leaf,
+                &leaf,
+                version,
+            )
+            .await
             {
                 Ok(state) => {
                     parent_leaf = leaf;
@@ -572,36 +585,55 @@ impl ValidatedState {
     ///  If neither has the `ChainConfig`, it fetches the config from the peers.
     ///
     /// Returns an error if the proposed header's `ChainConfig` commitment does not match the `ValidatedState` `ChainConfig` commitment,
-    pub(crate) async fn get_chain_config(
-        &self,
+    pub(crate) async fn apply_chain_config(
+        &mut self,
         instance: &NodeState,
         header_cf: &ResolvableChainConfig,
+        version: Version,
     ) -> anyhow::Result<ChainConfig> {
         // TODO(abdul) : to be uncommented after we have upgrade mechanism
 
-        // if header_cf.commit() != self.chain_config.commit() {
-        //     bail!(
-        //         "Proposed header chain config commit={} expected={}",
-        //         header_cf.commit(),
-        //         self.chain_config.commit()
-        //     );
-        // }
-
-        if self.chain_config.commit() == instance.chain_config.commit() {
-            return Ok(instance.chain_config);
+        if header_cf.commit() != self.chain_config.commit() {
+            bail!(
+                "Proposed header chain config commit={} expected={}",
+                header_cf.commit(),
+                self.chain_config.commit()
+            );
         }
 
-        match (self.chain_config.resolve(), header_cf.resolve()) {
-            (Some(cf), _) => Ok(cf),
-            (_, Some(cf)) => Ok(cf),
-            (None, None) => {
-                instance
-                    .peers
-                    .as_ref()
-                    .fetch_chain_config(self.chain_config.commit())
-                    .await
+        let current_version = instance.sequencer_version;
+
+        if version > current_version {
+            let upgrades = &instance.upgrades;
+            if let Some(upgrade) = upgrades.get(&version) {
+                match upgrade.upgrade_type {
+                    UpgradeType::ChainConfig { chain_config } => {
+                        self.chain_config = chain_config.into();
+                        return Ok(chain_config);
+                    }
+                }
             }
         }
+
+        let cf = if self.chain_config.commit() == instance.chain_config.commit() {
+            instance.chain_config
+        } else {
+            match (self.chain_config.resolve(), header_cf.resolve()) {
+                (Some(cf), _) => cf,
+                (_, Some(cf)) => cf,
+                (None, None) => {
+                    instance
+                        .peers
+                        .as_ref()
+                        .fetch_chain_config(self.chain_config.commit())
+                        .await?
+                }
+            }
+        };
+
+        self.chain_config = cf.into();
+
+        Ok(cf)
     }
 
     pub(crate) async fn apply_header(
@@ -609,6 +641,7 @@ impl ValidatedState {
         instance: &NodeState,
         parent_leaf: &Leaf,
         proposed_header: &Header,
+        version: Version,
     ) -> anyhow::Result<(Self, Delta)> {
         // Clone state to avoid mutation. Consumer can take update
         // through returned value.
@@ -617,21 +650,16 @@ impl ValidatedState {
 
         let mut validated_state = self.clone();
         let chain_config = validated_state
-            .get_chain_config(instance, &proposed_header.chain_config)
+            .apply_chain_config(instance, &proposed_header.chain_config, version)
             .await?;
-
-        validated_state.chain_config = chain_config.into();
 
         // Find missing fee state entries. We will need to use the builder account which is paying a
         // fee and the recipient account which is receiving it, plus any counts receiving deposits
         // in this block.
         let missing_accounts = self.forgotten_accounts(
-            [
-                proposed_header.fee_info.account,
-                instance.chain_config.fee_recipient,
-            ]
-            .into_iter()
-            .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
+            [proposed_header.fee_info.account, chain_config.fee_recipient]
+                .into_iter()
+                .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
         );
 
         let parent_height = parent_leaf.height();
@@ -693,7 +721,7 @@ impl ValidatedState {
             &mut validated_state,
             &mut delta,
             proposed_header.fee_info,
-            instance.chain_config.fee_recipient,
+            chain_config.fee_recipient,
         )?;
 
         Ok((validated_state, delta))
@@ -775,7 +803,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         parent_leaf: &Leaf,
         proposed_header: &Header,
         vid_common: VidCommon,
-        _version: Version,
+        version: Version,
     ) -> Result<(Self, Self::Delta), Self::Error> {
         //validate builder fee
         if let Err(err) = validate_builder_fee(proposed_header) {
@@ -786,7 +814,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         // Unwrapping here is okay as we retry in a loop
         //so we should either get a validated state or until hotshot cancels the task
         let (validated_state, delta) = self
-            .apply_header(instance, parent_leaf, proposed_header)
+            .apply_header(instance, parent_leaf, proposed_header, version)
             .await
             .unwrap();
 

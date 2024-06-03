@@ -121,6 +121,7 @@ pub mod testing {
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     use portpicker::pick_unused_port;
+    use vbs::version::StaticVersion;
     //use sequencer::persistence::NoStorage;
     use async_broadcast::{
         broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender,
@@ -397,6 +398,7 @@ pub mod testing {
                 ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), 1),
                 MockStateCatchup::default(),
+                Ver::version(),
             )
             .with_genesis(ValidatedState::default());
 
@@ -538,6 +540,7 @@ pub mod testing {
                     1,
                 ),
                 MockStateCatchup::default(),
+                StaticVersion::<1, 0>::version(),
             )
             .with_genesis(ValidatedState::default());
 
@@ -603,6 +606,7 @@ pub mod testing {
                     1,
                 ),
                 MockStateCatchup::default(),
+                StaticVersion::<1, 0>::version(),
             )
             .with_genesis(ValidatedState::default());
 

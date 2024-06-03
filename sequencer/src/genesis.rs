@@ -102,12 +102,103 @@ pub struct Genesis {
     pub accounts: HashMap<FeeAccount, FeeAmount>,
     pub l1_finalized: Option<L1Finalized>,
     pub header: GenesisHeader,
+    #[serde(rename = "upgrade", with = "upgrade_serialization")]
+    #[serde(default)]
     pub upgrades: BTreeMap<Version, Upgrade>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum Upgrade {
-    ChainConfig(ChainConfig),
+#[serde(untagged)]
+#[serde(rename_all = "snake_case")]
+pub enum UpgradeType {
+    // Note: Wrapping this in a tuple variant causes deserialization to fail because
+    // the 'chain_config' name is also provided in the TOML input.
+    ChainConfig { chain_config: ChainConfig },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Upgrade {
+    pub block: u64,
+    #[serde(flatten)]
+    pub upgrade_type: UpgradeType,
+}
+
+mod upgrade_serialization {
+    use crate::genesis::{Upgrade, UpgradeType};
+    use serde::ser::SerializeSeq;
+    use serde::{
+        de::{SeqAccess, Visitor},
+        Deserialize, Deserializer, Serializer,
+    };
+    use std::{collections::BTreeMap, fmt};
+    use vbs::version::Version;
+
+    pub fn serialize<S>(map: &BTreeMap<Version, Upgrade>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(map.len()))?;
+        for (version, upgrade) in map {
+            seq.serialize_element(&(
+                version.to_string(),
+                upgrade.block,
+                upgrade.upgrade_type.clone(),
+            ))?;
+        }
+        seq.end()
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<BTreeMap<Version, Upgrade>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct VecToHashMap;
+
+        impl<'de> Visitor<'de> for VecToHashMap {
+            type Value = BTreeMap<Version, Upgrade>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a vector of tuples (key-value pairs)")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<BTreeMap<Version, Upgrade>, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut map = BTreeMap::new();
+
+                #[derive(Deserialize)]
+                struct UpgradeFields {
+                    version: String,
+                    block: u64,
+                    #[serde(flatten)]
+                    upgrade_type: UpgradeType,
+                }
+
+                while let Some(fields) = seq.next_element::<UpgradeFields>()? {
+                    // add try_from in Version
+                    let version: Vec<_> = fields.version.split(".").collect();
+
+                    let version = Version {
+                        major: version[0].parse().expect("invalid version"),
+                        minor: version[1].parse().expect("invalid version"),
+                    };
+
+                    map.insert(
+                        version,
+                        Upgrade {
+                            block: fields.block,
+                            upgrade_type: fields.upgrade_type,
+                        },
+                    );
+                }
+
+                Ok(map)
+            }
+        }
+
+        deserializer.deserialize_seq(VecToHashMap)
+    }
 }
 
 impl Genesis {
@@ -121,6 +212,7 @@ impl Genesis {
         let path = path.as_ref();
         let bytes = std::fs::read(path).context(format!("genesis file {}", path.display()))?;
         let text = std::str::from_utf8(&bytes).context("genesis file must be UTF-8")?;
+
         toml::from_str(text).context("malformed genesis file")
     }
 }
@@ -128,33 +220,9 @@ impl Genesis {
 #[cfg(test)]
 mod test {
     use super::*;
-    use es_version::SEQUENCER_VERSION;
+
     use ethers::prelude::{Address, H160, H256};
-
     use toml::toml;
-
-    #[test]
-    fn test_to_toml() {
-        let cf = ChainConfig {
-            chain_id: 777.into(),
-            max_block_size: 1054.into(),
-            ..Default::default()
-        };
-
-        let mut upgrades: BTreeMap<Version, Upgrade> = BTreeMap::new();
-        upgrades.insert(SEQUENCER_VERSION.version(), Upgrade::ChainConfig(cf));
-
-        let genesis = Genesis {
-            upgrades,
-            chain_config: Default::default(),
-            stake_table: StakeTableConfig { capacity: 10 },
-            accounts: Default::default(),
-            l1_finalized: Default::default(),
-            header: Default::default(),
-        };
-
-        genesis.to_file("../tmp/genesis");
-    }
 
     #[test]
     fn test_genesis_from_toml_with_optional_fields() {
@@ -180,6 +248,17 @@ mod test {
             number = 64
             timestamp = "0x123def"
             hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
+
+            [[upgrade]]
+            version = "1.0"
+            block = 1
+
+            [upgrade.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
         }
         .to_string();
 

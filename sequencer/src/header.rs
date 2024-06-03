@@ -288,11 +288,15 @@ impl BlockHeader<SeqTypes> for Header {
         _vid_common: VidCommon,
         _version: Version,
     ) -> Result<Self, Self::Error> {
-        let chain_config = instance_state.chain_config;
         let height = parent_leaf.height();
         let view = parent_leaf.view_number();
 
         let mut validated_state = parent_state.clone();
+
+        let chain_config = validated_state
+            .chain_config
+            .resolve()
+            .unwrap_or_else(|| instance_state.chain_config);
 
         // Fetch the latest L1 snapshot.
         let l1_snapshot = instance_state.l1_client.snapshot().await;
@@ -496,6 +500,7 @@ mod test_headers {
     };
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
     use jf_vid::VidScheme;
+    use vbs::version::{StaticVersion, StaticVersionType};
 
     #[derive(Debug, Default)]
     #[must_use]
@@ -793,9 +798,11 @@ mod test_headers {
         parent_header.block_merkle_tree_root = block_merkle_tree_root;
         let mut proposal = parent_header.clone();
 
+        let ver = StaticVersion::<1, 0>::version();
+
         // Pass a different chain config to trigger a chain config validation error.
         let state = validated_state
-            .apply_header(&genesis.instance_state, &parent_leaf, &proposal)
+            .apply_header(&genesis.instance_state, &parent_leaf, &proposal, ver)
             .await
             .unwrap()
             .0;
@@ -817,7 +824,7 @@ mod test_headers {
         // Advance `proposal.height` to trigger validation error.
 
         let validated_state = validated_state
-            .apply_header(&genesis.instance_state, &parent_leaf, &proposal)
+            .apply_header(&genesis.instance_state, &parent_leaf, &proposal, ver)
             .await
             .unwrap()
             .0;
@@ -838,7 +845,7 @@ mod test_headers {
         proposal.height += 1;
 
         let validated_state = validated_state
-            .apply_header(&genesis.instance_state, &parent_leaf, &proposal)
+            .apply_header(&genesis.instance_state, &parent_leaf, &proposal, ver)
             .await
             .unwrap()
             .0;
@@ -935,7 +942,12 @@ mod test_headers {
         block_merkle_tree.push(proposal.commit()).unwrap();
 
         let proposal_state = proposal_state
-            .apply_header(&genesis_state, &parent_leaf, &proposal)
+            .apply_header(
+                &genesis_state,
+                &parent_leaf,
+                &proposal,
+                StaticVersion::<1, 0>::version(),
+            )
             .await
             .unwrap()
             .0;

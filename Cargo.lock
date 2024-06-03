@@ -8651,6 +8651,7 @@ dependencies = [
  "time 0.3.36",
  "tokio-postgres",
  "toml",
+ "toml_edit 0.22.13",
  "tracing",
  "tracing-subscriber 0.3.18",
  "trait-set",

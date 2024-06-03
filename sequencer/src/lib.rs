@@ -20,7 +20,7 @@ use block::entry::TxTableEntryWord;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
 use ethers::types::U256;
-use genesis::{GenesisHeader, L1Finalized};
+use genesis::{GenesisHeader, L1Finalized, Upgrade};
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
@@ -73,7 +73,7 @@ use persistence::{PersistenceOptions, SequencerPersistence};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc};
-use vbs::version::StaticVersionType;
+use vbs::version::{StaticVersion, StaticVersionType, Version};
 
 #[cfg(feature = "libp2p")]
 use std::time::Duration;
@@ -171,6 +171,8 @@ pub struct NodeState {
     pub genesis_header: GenesisHeader,
     pub genesis_state: ValidatedState,
     pub l1_genesis: Option<L1BlockInfo>,
+    pub upgrades: BTreeMap<Version, Upgrade>,
+    pub sequencer_version: Version,
 }
 
 impl NodeState {
@@ -179,6 +181,7 @@ impl NodeState {
         chain_config: ChainConfig,
         l1_client: L1Client,
         catchup: impl StateCatchup + 'static,
+        sequencer_version: Version,
     ) -> Self {
         Self {
             node_id,
@@ -188,16 +191,21 @@ impl NodeState {
             genesis_header: Default::default(),
             genesis_state: Default::default(),
             l1_genesis: None,
+            upgrades: Default::default(),
+            sequencer_version,
         }
     }
 
     #[cfg(any(test, feature = "testing"))]
     pub fn mock() -> Self {
+        use vbs::version::StaticVersion;
+
         Self::new(
             0,
             ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
             catchup::mock::MockStateCatchup::default(),
+            StaticVersion::<1, 0>::version(),
         )
     }
 
@@ -227,6 +235,7 @@ impl Default for NodeState {
             ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
             catchup::mock::MockStateCatchup::default(),
+            StaticVersion::<1, 0>::version(),
         )
     }
 }
@@ -341,7 +350,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
     let mut persistence = persistence_opt.clone().create().await?;
-    let (config, wait_for_orchestrator) = match persistence.load_config().await? {
+    let (mut config, wait_for_orchestrator) = match persistence.load_config().await? {
         Some(config) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
             (config, false)
@@ -372,6 +381,16 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             (config, true)
         }
     };
+
+    let version = Ver::version();
+    if let Some(upgrade) = genesis.upgrades.get(&version) {
+        let block = upgrade.block;
+        // >>>> ?????
+        config.config.start_proposing_view = block;
+        config.config.stop_proposing_view = block + 20;
+        config.config.start_voting_view = block + 21;
+        config.config.stop_proposing_view = block + 40;
+    }
     let node_index = config.node_index;
 
     // If we are a DA node, we need to subscribe to the DA topic
@@ -472,6 +491,8 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         )
         .await,
         node_id: node_index,
+        upgrades: genesis.upgrades,
+        sequencer_version: Ver::version(),
     };
 
     let mut ctx = SequencerContext::init(
@@ -720,6 +741,7 @@ pub mod testing {
                 ChainConfig::default(),
                 L1Client::new(self.url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
+                Ver::version(),
             )
             .with_genesis(state);
 

@@ -70,6 +70,7 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
         chain_config,
         l1_client,
         Arc::new(StatePeers::<Ver>::from_urls(state_peers)),
+        Ver::version(),
     );
     Ok(instance_state)
 }
