@@ -1,38 +1,38 @@
 use anyhow::Result;
 use libp2p::{multiaddr::Protocol, Multiaddr, PeerId};
-use serde::Deserializer;
+use serde::{Deserialize, Serialize};
 
 /// A bootstrap node. Contains the multiaddress and peer ID
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(try_from = "Multiaddr", into = "Multiaddr")]
 pub struct BootstrapNode {
     pub address: Multiaddr,
     pub peer_id: PeerId,
 }
 
-/// Deserialize a `BootstrapNode` from a normal multiaddress in the `TOML` file
-impl<'de> serde::Deserialize<'de> for BootstrapNode {
-    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let mut address = Multiaddr::deserialize(d)?;
+impl From<BootstrapNode> for Multiaddr {
+    fn from(node: BootstrapNode) -> Self {
+        let mut address = node.address;
 
         // The standard is to have the peer ID as the last part of the address
-        let Some(Protocol::P2p(peer_id)) = address.pop() else {
-            return Err(serde::de::Error::custom(
-                "Failed to parse peer ID from address",
-            ));
-        };
+        address.push(Protocol::P2p(node.peer_id));
 
-        Ok(BootstrapNode { address, peer_id })
+        address
     }
 }
 
-/// Serialize a `BootstrapNode` to a normal multiaddress in the `TOML` file
-impl serde::Serialize for BootstrapNode {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        let mut address = self.address.clone();
+impl TryFrom<Multiaddr> for BootstrapNode {
+    type Error = anyhow::Error;
+
+    fn try_from(address: Multiaddr) -> Result<Self> {
+        // Clone the address so we can pop the peer ID off the end
+        let mut address = address.clone();
 
         // The standard is to have the peer ID as the last part of the address
-        address.push(Protocol::P2p(self.peer_id));
+        let Some(Protocol::P2p(peer_id)) = address.pop() else {
+            return Err(anyhow::anyhow!("Failed to parse peer ID from address"));
+        };
 
-        address.serialize(s)
+        Ok(BootstrapNode { address, peer_id })
     }
 }
