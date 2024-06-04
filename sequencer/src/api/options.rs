@@ -503,7 +503,7 @@ impl Options {
 pub struct Http {
     /// Port that the HTTP API will use.
     #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
-    pub(super) port: u16,
+    pub port: u16,
 
     /// Maximum number of concurrent HTTP connections the server will allow.
     ///
@@ -511,7 +511,7 @@ pub struct Http {
     ///
     /// Leave unset for no connection limit.
     #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_CONNECTIONS")]
-    pub(super) max_connections: Option<usize>,
+    pub max_connections: Option<usize>,
 }
 
 impl Http {
@@ -521,10 +521,6 @@ impl Http {
             port,
             max_connections: None,
         }
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
     }
 }
 
