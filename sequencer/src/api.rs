@@ -935,7 +935,7 @@ mod test {
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
-    use committable::Commitment;
+    use committable::{Commitment, Committable};
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
     use ethers::utils::Anvil;
     use futures::future::{self, join_all};
@@ -1161,6 +1161,130 @@ mod test {
                 break;
             }
         }
+    }
+
+    #[async_std::test]
+    async fn test_chain_config_from_instance() {
+        // This test uses a ValidatedState which only has the default chain config commitment.
+        // The NodeState has the full chain config.
+        // Both chain config commitments will match, so the ValidatedState should have the full chain config after a non-genesis block is decided.
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+
+        let chain_config: ChainConfig = ChainConfig::default();
+
+        let state = ValidatedState {
+            chain_config: chain_config.commit().into(),
+            ..Default::default()
+        };
+
+        let states = std::array::from_fn(|_| state.clone());
+
+        let mut network = TestNetwork::with_state(
+            Options::from(options::Http { port }).catchup(Default::default()),
+            states,
+            [no_storage::Options; TestConfig::NUM_NODES],
+            std::array::from_fn(|_| {
+                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
+                    .parse()
+                    .unwrap()])
+            }),
+            l1,
+        )
+        .await;
+
+        // Wait for few blocks to be decided.
+        network
+            .server
+            .event_stream()
+            .await
+            .filter(|event| future::ready(matches!(event.event, EventType::Decide { .. })))
+            .take(3)
+            .collect::<Vec<_>>()
+            .await;
+
+        for peer in &network.peers {
+            let state = peer.consensus().read().await.decided_state().await;
+
+            assert_eq!(state.chain_config.resolve().unwrap(), chain_config)
+        }
+
+        network.server.shut_down().await;
+        drop(network);
+    }
+
+    #[async_std::test]
+    async fn test_chain_config_catchup() {
+        // This test uses a ValidatedState with a non-default chain config
+        // so it will be different from the NodeState chain config used by the TestNetwork.
+        // However, for this test to work, at least one node should have a full chain config
+        // to allow other nodes to catch up.
+
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+
+        let cf = ChainConfig {
+            max_block_size: 300.into(),
+            base_fee: 1.into(),
+            ..Default::default()
+        };
+
+        // State1 contains only the chain config commitment
+        let state1 = ValidatedState {
+            chain_config: cf.commit().into(),
+            ..Default::default()
+        };
+
+        //state 2 contains the full chain config
+        let state2 = ValidatedState {
+            chain_config: cf.into(),
+            ..Default::default()
+        };
+
+        let mut states = std::array::from_fn(|_| state1.clone());
+        // only one node has the full chain config
+        // all the other nodes should do a catchup to get the full chain config from peer 0
+        states[0] = state2;
+
+        let mut network = TestNetwork::with_state(
+            Options::from(options::Http { port }).catchup(Default::default()),
+            states,
+            [no_storage::Options; TestConfig::NUM_NODES],
+            std::array::from_fn(|_| {
+                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
+                    .parse()
+                    .unwrap()])
+            }),
+            l1,
+        )
+        .await;
+
+        // Wait for a few blocks to be decided.
+        network
+            .server
+            .event_stream()
+            .await
+            .filter(|event| future::ready(matches!(event.event, EventType::Decide { .. })))
+            .take(3)
+            .collect::<Vec<_>>()
+            .await;
+
+        for peer in &network.peers {
+            let state = peer.consensus().read().await.decided_state().await;
+
+            assert_eq!(state.chain_config.resolve().unwrap(), cf)
+        }
+
+        network.server.shut_down().await;
+        drop(network);
     }
 
     #[async_std::test]

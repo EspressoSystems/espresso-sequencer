@@ -249,10 +249,6 @@ pub trait ChainConfigPersistence: Sized + Send + Sync + 'static {
 
 #[cfg(test)]
 mod testing {
-    use hotshot_query_service::data_source::{
-        sql::{testing::TmpDb, Config},
-        storage::SqlStorage,
-    };
 
     use super::*;
 

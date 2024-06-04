@@ -13,7 +13,7 @@ pub mod state_signature;
 mod message_compat_tests;
 mod reference_tests;
 
-use anyhow::{Chain, Context};
+use anyhow::Context;
 use async_std::sync::RwLock;
 use async_trait::async_trait;
 use block::entry::TxTableEntryWord;
