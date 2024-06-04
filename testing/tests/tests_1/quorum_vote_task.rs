@@ -2,10 +2,21 @@
 use futures::StreamExt;
 use hotshot::tasks::task_state::CreateTaskState;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
-use hotshot_testing::helpers::{build_fake_view_with_leaf, vid_share};
+use hotshot_macros::{run_test, test_scripts};
+use hotshot_testing::{
+    all_predicates,
+    helpers::{build_fake_view_with_leaf, vid_share},
+    predicates::event::all_predicates,
+    random,
+    script::{Expectations, InputOrder, TaskScript},
+    serial,
+};
 use hotshot_types::{
     data::ViewNumber, traits::node_implementation::ConsensusTime, vote::HasViewNumber,
 };
+use std::time::Duration;
+
+const TIMEOUT: Duration = Duration::from_millis(35);
 
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
@@ -15,7 +26,6 @@ async fn test_quorum_vote_task_success() {
     use hotshot_testing::{
         helpers::build_system_handle,
         predicates::event::{exact, quorum_vote_send, validated_state_updated},
-        script::{run_test_script, TestScriptStage},
         view_generator::TestViewGenerator,
     };
 
@@ -49,30 +59,33 @@ async fn test_quorum_vote_task_success() {
 
     // Send the quorum proposal, DAC, VID share data, and validated state, in which case a dummy
     // vote can be formed and the view number will be updated.
-    let view_success = TestScriptStage {
-        inputs: vec![
-            QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
-            DaCertificateRecv(dacs[1].clone()),
-            VidShareRecv(vids[1].0[0].clone()),
-            ValidatedStateUpdated(
-                proposals[1].data.view_number(),
-                build_fake_view_with_leaf(leaves[1].clone()),
-            ),
-        ],
-        outputs: vec![
-            exact(DaCertificateValidated(dacs[1].clone())),
-            exact(VidShareValidated(vids[1].0[0].clone())),
-            exact(QuorumVoteDependenciesValidated(ViewNumber::new(2))),
-            validated_state_updated(),
-            quorum_vote_send(),
-        ],
-        asserts: vec![],
-    };
+    let inputs = vec![random![
+        QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
+        DaCertificateRecv(dacs[1].clone()),
+        VidShareRecv(vids[1].0[0].clone()),
+        ValidatedStateUpdated(
+            proposals[1].data.view_number(),
+            build_fake_view_with_leaf(leaves[1].clone()),
+        ),
+    ]];
+
+    let expectations = vec![Expectations::from_outputs(all_predicates![
+        exact(DaCertificateValidated(dacs[1].clone())),
+        exact(VidShareValidated(vids[1].0[0].clone())),
+        exact(QuorumVoteDependenciesValidated(ViewNumber::new(2))),
+        validated_state_updated(),
+        quorum_vote_send(),
+    ])];
 
     let quorum_vote_state =
         QuorumVoteTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
 
-    run_test_script(vec![view_success], quorum_vote_state).await;
+    let mut script = TaskScript {
+        timeout: TIMEOUT,
+        state: quorum_vote_state,
+        expectations,
+    };
+    run_test![inputs, script].await;
 }
 
 #[cfg(test)]
@@ -83,7 +96,6 @@ async fn test_quorum_vote_task_vote_now() {
     use hotshot_testing::{
         helpers::build_system_handle,
         predicates::event::{exact, quorum_vote_send, validated_state_updated},
-        script::{run_test_script, TestScriptStage},
         view_generator::TestViewGenerator,
     };
     use hotshot_types::vote::VoteDependencyData;
@@ -108,20 +120,23 @@ async fn test_quorum_vote_task_vote_now() {
     };
 
     // Submit an event with just the `VoteNow` event which should successfully send a vote.
-    let view_vote_now = TestScriptStage {
-        inputs: vec![VoteNow(view.view_number, vote_dependency_data)],
-        outputs: vec![
-            exact(QuorumVoteDependenciesValidated(ViewNumber::new(1))),
-            validated_state_updated(),
-            quorum_vote_send(),
-        ],
-        asserts: vec![],
-    };
+    let inputs = vec![serial![VoteNow(view.view_number, vote_dependency_data),]];
+
+    let expectations = vec![Expectations::from_outputs(vec![
+        exact(QuorumVoteDependenciesValidated(ViewNumber::new(1))),
+        validated_state_updated(),
+        quorum_vote_send(),
+    ])];
 
     let quorum_vote_state =
         QuorumVoteTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
 
-    run_test_script(vec![view_vote_now], quorum_vote_state).await;
+    let mut script = TaskScript {
+        timeout: TIMEOUT,
+        state: quorum_vote_state,
+        expectations,
+    };
+    run_test![inputs, script].await;
 }
 
 #[cfg(test)]
@@ -130,10 +145,7 @@ async fn test_quorum_vote_task_vote_now() {
 async fn test_quorum_vote_task_miss_dependency() {
     use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState};
     use hotshot_testing::{
-        helpers::build_system_handle,
-        predicates::event::exact,
-        script::{run_test_script, TestScriptStage},
-        view_generator::TestViewGenerator,
+        helpers::build_system_handle, predicates::event::exact, view_generator::TestViewGenerator,
     };
 
     async_compatibility_layer::logging::setup_logging();
@@ -162,8 +174,8 @@ async fn test_quorum_vote_task_miss_dependency() {
 
     // Send three of quorum proposal, DAC, VID share data, and validated state, in which case
     // there's no vote.
-    let view_no_dac = TestScriptStage {
-        inputs: vec![
+    let inputs = vec![
+        random![
             QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
             VidShareRecv(vid_share(&vids[1].0, handle.public_key())),
             ValidatedStateUpdated(
@@ -171,11 +183,7 @@ async fn test_quorum_vote_task_miss_dependency() {
                 build_fake_view_with_leaf(leaves[1].clone()),
             ),
         ],
-        outputs: vec![exact(VidShareValidated(vids[1].0[0].clone()))],
-        asserts: vec![],
-    };
-    let view_no_vid = TestScriptStage {
-        inputs: vec![
+        random![
             QuorumProposalValidated(proposals[2].data.clone(), leaves[1].clone()),
             DaCertificateRecv(dacs[2].clone()),
             ValidatedStateUpdated(
@@ -183,11 +191,7 @@ async fn test_quorum_vote_task_miss_dependency() {
                 build_fake_view_with_leaf(leaves[2].clone()),
             ),
         ],
-        outputs: vec![exact(DaCertificateValidated(dacs[2].clone()))],
-        asserts: vec![],
-    };
-    let view_no_quorum_proposal = TestScriptStage {
-        inputs: vec![
+        random![
             DaCertificateRecv(dacs[3].clone()),
             VidShareRecv(vid_share(&vids[3].0, handle.public_key())),
             ValidatedStateUpdated(
@@ -195,38 +199,35 @@ async fn test_quorum_vote_task_miss_dependency() {
                 build_fake_view_with_leaf(leaves[3].clone()),
             ),
         ],
-        outputs: vec![
-            exact(DaCertificateValidated(dacs[3].clone())),
-            exact(VidShareValidated(vids[3].0[0].clone())),
-        ],
-        asserts: vec![],
-    };
-    let view_no_validated_state = TestScriptStage {
-        inputs: vec![
+        random![
             QuorumProposalValidated(proposals[4].data.clone(), leaves[3].clone()),
             DaCertificateRecv(dacs[4].clone()),
             VidShareRecv(vid_share(&vids[4].0, handle.public_key())),
         ],
-        outputs: vec![
+    ];
+
+    let expectations = vec![
+        Expectations::from_outputs(vec![exact(VidShareValidated(vids[1].0[0].clone()))]),
+        Expectations::from_outputs(vec![exact(DaCertificateValidated(dacs[2].clone()))]),
+        Expectations::from_outputs(all_predicates![
+            exact(DaCertificateValidated(dacs[3].clone())),
+            exact(VidShareValidated(vids[3].0[0].clone())),
+        ]),
+        Expectations::from_outputs(all_predicates![
             exact(DaCertificateValidated(dacs[4].clone())),
             exact(VidShareValidated(vids[4].0[0].clone())),
-        ],
-        asserts: vec![],
-    };
+        ]),
+    ];
 
     let quorum_vote_state =
         QuorumVoteTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
 
-    run_test_script(
-        vec![
-            view_no_dac,
-            view_no_vid,
-            view_no_quorum_proposal,
-            view_no_validated_state,
-        ],
-        quorum_vote_state,
-    )
-    .await;
+    let mut script = TaskScript {
+        timeout: TIMEOUT,
+        state: quorum_vote_state,
+        expectations,
+    };
+    run_test![inputs, script].await;
 }
 
 #[cfg(test)]
@@ -235,10 +236,7 @@ async fn test_quorum_vote_task_miss_dependency() {
 async fn test_quorum_vote_task_incorrect_dependency() {
     use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState};
     use hotshot_testing::{
-        helpers::build_system_handle,
-        predicates::event::exact,
-        script::{run_test_script, TestScriptStage},
-        view_generator::TestViewGenerator,
+        helpers::build_system_handle, predicates::event::exact, view_generator::TestViewGenerator,
     };
 
     async_compatibility_layer::logging::setup_logging();
@@ -262,26 +260,28 @@ async fn test_quorum_vote_task_incorrect_dependency() {
     }
 
     // Send the correct quorum proposal, DAC, and VID share data, and incorrect validated state.
-    let view_incorrect_dependency = TestScriptStage {
-        inputs: vec![
-            QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
-            DaCertificateRecv(dacs[1].clone()),
-            VidShareRecv(vids[1].0[0].clone()),
-            // The validated state is for an earlier view.
-            ValidatedStateUpdated(
-                proposals[0].data.view_number(),
-                build_fake_view_with_leaf(leaves[0].clone()),
-            ),
-        ],
-        outputs: vec![
-            exact(DaCertificateValidated(dacs[1].clone())),
-            exact(VidShareValidated(vids[1].0[0].clone())),
-        ],
-        asserts: vec![],
-    };
+    let inputs = vec![random![
+        QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
+        DaCertificateRecv(dacs[1].clone()),
+        VidShareRecv(vids[1].0[0].clone()),
+        ValidatedStateUpdated(
+            proposals[0].data.view_number(),
+            build_fake_view_with_leaf(leaves[0].clone()),
+        ),
+    ]];
+
+    let expectations = vec![Expectations::from_outputs(all_predicates![
+        exact(DaCertificateValidated(dacs[1].clone())),
+        exact(VidShareValidated(vids[1].0[0].clone())),
+    ])];
 
     let quorum_vote_state =
         QuorumVoteTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
 
-    run_test_script(vec![view_incorrect_dependency], quorum_vote_state).await;
+    let mut script = TaskScript {
+        timeout: TIMEOUT,
+        state: quorum_vote_state,
+        expectations,
+    };
+    run_test![inputs, script].await;
 }

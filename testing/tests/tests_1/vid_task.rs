@@ -6,11 +6,13 @@ use hotshot_example_types::{
     node_types::{MemoryImpl, TestTypes},
     state_types::{TestInstanceState, TestValidatedState},
 };
+use hotshot_macros::{run_test, test_scripts};
 use hotshot_task_impls::{events::HotShotEvent::*, vid::VidTaskState};
 use hotshot_testing::{
     helpers::{build_system_handle, vid_scheme_from_view_number},
     predicates::event::exact,
-    script::{run_test_script, TestScriptStage},
+    script::{Expectations, InputOrder, TaskScript},
+    serial,
 };
 use hotshot_types::{
     data::{null_block, DaProposal, VidDisperse, ViewNumber},
@@ -79,14 +81,9 @@ async fn test_vid_task() {
         signature: message.signature.clone(),
         _pd: PhantomData,
     };
-
-    let view_1 = TestScriptStage {
-        inputs: vec![ViewChange(ViewNumber::new(1))],
-        outputs: vec![],
-        asserts: vec![],
-    };
-    let view_2 = TestScriptStage {
-        inputs: vec![
+    let inputs = vec![
+        serial![ViewChange(ViewNumber::new(1))],
+        serial![
             ViewChange(ViewNumber::new(2)),
             BlockRecv(
                 encoded_transactions,
@@ -96,7 +93,11 @@ async fn test_vid_task() {
                 vid_precompute,
             ),
         ],
-        outputs: vec![
+    ];
+
+    let expectations = vec![
+        Expectations::from_outputs(vec![]),
+        Expectations::from_outputs(vec![
             exact(SendPayloadCommitmentAndMetadata(
                 payload_commitment,
                 builder_commitment,
@@ -106,12 +107,15 @@ async fn test_vid_task() {
             )),
             exact(BlockReady(vid_disperse, ViewNumber::new(2))),
             exact(VidDisperseSend(vid_proposal.clone(), pub_key)),
-        ],
-        asserts: vec![],
-    };
+        ]),
+    ];
 
     let vid_state = VidTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
-    let script = vec![view_1, view_2];
+    let mut script = TaskScript {
+        timeout: std::time::Duration::from_millis(35),
+        state: vid_state,
+        expectations,
+    };
 
-    run_test_script(script, vid_state).await;
+    run_test![inputs, script].await;
 }

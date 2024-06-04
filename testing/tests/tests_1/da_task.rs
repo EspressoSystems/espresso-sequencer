@@ -6,12 +6,13 @@ use hotshot_example_types::{
     block_types::{TestMetadata, TestTransaction},
     node_types::{MemoryImpl, TestTypes},
 };
-use hotshot_macros::test_scripts;
+use hotshot_macros::{run_test, test_scripts};
 use hotshot_task_impls::{da::DaTaskState, events::HotShotEvent::*};
 use hotshot_testing::{
     helpers::build_system_handle,
     predicates::event::{exact, validated_state_updated},
-    script::{Expectations, TaskScript},
+    script::{Expectations, InputOrder, TaskScript},
+    serial,
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
@@ -69,7 +70,7 @@ async fn test_da_task() {
     }
 
     let inputs = vec![
-        vec![
+        serial![
             ViewChange(ViewNumber::new(1)),
             ViewChange(ViewNumber::new(2)),
             BlockRecv(
@@ -80,7 +81,7 @@ async fn test_da_task() {
                 precompute,
             ),
         ],
-        vec![DaProposalRecv(proposals[1].clone(), leaders[1])],
+        serial![DaProposalRecv(proposals[1].clone(), leaders[1])],
     ];
 
     let da_state = DaTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
@@ -100,8 +101,7 @@ async fn test_da_task() {
         ],
     };
 
-    // run_test_script(stages, da_state).await;
-    test_scripts![inputs, da_script].await;
+    run_test![inputs, da_script].await;
 }
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
@@ -153,7 +153,7 @@ async fn test_da_task_storage_failure() {
     }
 
     let inputs = vec![
-        vec![
+        serial![
             ViewChange(ViewNumber::new(1)),
             ViewChange(ViewNumber::new(2)),
             BlockRecv(
@@ -164,8 +164,8 @@ async fn test_da_task_storage_failure() {
                 precompute,
             ),
         ],
-        vec![DaProposalRecv(proposals[1].clone(), leaders[1])],
-        vec![DaProposalValidated(proposals[1].clone(), leaders[1])],
+        serial![DaProposalRecv(proposals[1].clone(), leaders[1])],
+        serial![DaProposalValidated(proposals[1].clone(), leaders[1])],
     ];
     let expectations = vec![
         Expectations::from_outputs(vec![exact(DaProposalSend(
@@ -186,5 +186,5 @@ async fn test_da_task_storage_failure() {
         expectations,
     };
 
-    test_scripts![inputs, da_script].await;
+    run_test![inputs, da_script].await;
 }

@@ -4,13 +4,15 @@
 use futures::StreamExt;
 use hotshot::tasks::task_state::CreateTaskState;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
+use hotshot_macros::{run_test, test_scripts};
 use hotshot_task_impls::{
     events::HotShotEvent::*, quorum_proposal_recv::QuorumProposalRecvTaskState,
 };
 use hotshot_testing::{
     helpers::build_system_handle,
-    predicates::event::{exact, vote_now},
-    script::{run_test_script, TestScriptStage},
+    predicates::event::{all_predicates, exact, vote_now},
+    script::InputOrder,
+    serial,
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
@@ -20,7 +22,12 @@ use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_recv_task() {
-    use hotshot_testing::helpers::build_fake_view_with_leaf;
+    use std::time::Duration;
+
+    use hotshot_testing::{
+        helpers::build_fake_view_with_leaf,
+        script::{Expectations, TaskScript},
+    };
     use hotshot_types::data::Leaf;
 
     async_compatibility_layer::logging::setup_logging();
@@ -58,22 +65,27 @@ async fn test_quorum_proposal_recv_task() {
     }
     drop(consensus_writer);
 
-    // Run view 2 and propose.
-    let view_2 = TestScriptStage {
-        inputs: vec![QuorumProposalRecv(proposals[1].clone(), leaders[1])],
-        outputs: vec![
-            exact(ViewChange(ViewNumber::new(2))),
-            exact(UpdateHighQc(proposals[1].data.justify_qc.clone())),
-            exact(QuorumProposalValidated(
-                proposals[1].data.clone(),
-                leaves[0].clone(),
-            )),
-        ],
-        asserts: vec![],
-    };
+    let inputs = vec![serial![QuorumProposalRecv(
+        proposals[1].clone(),
+        leaders[1]
+    )]];
+
+    let expectations = vec![Expectations::from_outputs(vec![
+        exact(ViewChange(ViewNumber::new(2))),
+        exact(UpdateHighQc(proposals[1].data.justify_qc.clone())),
+        exact(QuorumProposalValidated(
+            proposals[1].data.clone(),
+            leaves[0].clone(),
+        )),
+    ])];
 
     let state = QuorumProposalRecvTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
-    run_test_script(vec![view_2], state).await;
+    let mut script = TaskScript {
+        timeout: Duration::from_millis(35),
+        state,
+        expectations,
+    };
+    run_test![inputs, script].await;
 }
 
 #[cfg(test)]
@@ -81,10 +93,14 @@ async fn test_quorum_proposal_recv_task() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_recv_task_liveness_check() {
+    use std::time::Duration;
+
     use hotshot::traits::ValidatedState;
     use hotshot_example_types::state_types::TestValidatedState;
-    use hotshot_testing::helpers::{
-        build_fake_view_with_leaf, build_fake_view_with_leaf_and_state,
+    use hotshot_testing::{
+        all_predicates,
+        helpers::{build_fake_view_with_leaf, build_fake_view_with_leaf_and_state},
+        script::{Expectations, TaskScript},
     };
     use hotshot_types::{
         data::Leaf,
@@ -147,27 +163,33 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
 
     drop(consensus_writer);
 
-    // Run view 2 and propose.
-    let view_2 = TestScriptStage {
-        inputs: vec![QuorumProposalRecv(proposals[2].clone(), leaders[2])],
-        outputs: vec![
-            exact(ViewChange(ViewNumber::new(3))),
-            exact(ValidatedStateUpdated(
-                ViewNumber::new(3),
-                build_fake_view_with_leaf_and_state(
-                    leaves[2].clone(),
-                    <TestValidatedState as ValidatedState<TestTypes>>::from_header(
-                        &proposals[2].data.block_header,
-                    ),
+    let inputs = vec![serial![QuorumProposalRecv(
+        proposals[2].clone(),
+        leaders[2]
+    )]];
+
+    let expectations = vec![Expectations::from_outputs(all_predicates![
+        exact(ViewChange(ViewNumber::new(3))),
+        exact(ValidatedStateUpdated(
+            ViewNumber::new(3),
+            build_fake_view_with_leaf_and_state(
+                leaves[2].clone(),
+                <TestValidatedState as ValidatedState<TestTypes>>::from_header(
+                    &proposals[2].data.block_header,
                 ),
-            )),
-            exact(NewUndecidedView(leaves[2].clone())),
-            exact(QuorumProposalLivenessValidated(proposals[2].data.clone())),
-            vote_now(),
-        ],
-        asserts: vec![],
-    };
+            ),
+        )),
+        exact(UpdateHighQc(proposals[2].data.justify_qc.clone())),
+        exact(NewUndecidedView(leaves[2].clone())),
+        exact(QuorumProposalLivenessValidated(proposals[2].data.clone())),
+        vote_now(),
+    ])];
 
     let state = QuorumProposalRecvTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
-    run_test_script(vec![view_2], state).await;
+    let mut script = TaskScript {
+        timeout: Duration::from_millis(35),
+        state,
+        expectations,
+    };
+    run_test![inputs, script].await;
 }

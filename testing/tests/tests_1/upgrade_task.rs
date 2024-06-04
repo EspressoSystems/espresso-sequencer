@@ -32,10 +32,7 @@ use vbs::version::Version;
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 /// Tests that we correctly update our internal consensus state when reaching a decided upgrade certificate.
 async fn test_consensus_task_upgrade() {
-    use hotshot_testing::{
-        helpers::build_system_handle,
-        script::{run_test_script, TestScriptStage},
-    };
+    use hotshot_testing::helpers::build_system_handle;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
