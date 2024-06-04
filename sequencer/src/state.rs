@@ -59,6 +59,15 @@ use vbs::version::Version;
 const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
 const FEE_MERKLE_TREE_HEIGHT: usize = 20;
 
+/// This enum is not used in code but functions as an index of
+/// possible validation errors.
+#[allow(dead_code)]
+enum StateValidationError {
+    ProposalValidation(ProposalValidationError),
+    BuilderValidation(BuilderValidationError),
+    Fee(FeeError),
+}
+
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ValidatedState {
     /// Frontier of Block Merkle Tree
@@ -157,11 +166,7 @@ impl ValidatedState {
     }
 
     /// Charge a fee to an account, transferring the funds to the fee recipient account.
-    pub fn charge_fee(
-        &mut self,
-        fee_info: FeeInfo,
-        recipient: FeeAccount,
-    ) -> Result<(), ChargeFeeError> {
+    pub fn charge_fee(&mut self, fee_info: FeeInfo, recipient: FeeAccount) -> Result<(), FeeError> {
         let fee_state = self.fee_merkle_tree.clone();
 
         // Deduct the fee from the paying account.
@@ -171,7 +176,7 @@ impl ValidatedState {
             let balance = balance.copied();
             let Some(updated) = balance.unwrap_or_default().checked_sub(&amount) else {
                 // Return an error without updating the account.
-                err = Some(ChargeFeeError::InsufficientFunds { balance, amount });
+                err = Some(FeeError::InsufficientFunds { balance, amount });
                 return balance;
             };
             if updated == FeeAmount::default() {
@@ -319,7 +324,7 @@ pub fn validate_proposal(
 
 /// Error type to cover possible charge fee errors
 #[derive(Error, Debug, Eq, PartialEq)]
-pub enum ChargeFeeError {
+pub enum FeeError {
     #[error("Insuficcient Funds: have {balance:?}, required {amount:?}")]
     InsufficientFunds {
         balance: Option<FeeAmount>,
@@ -329,7 +334,7 @@ pub enum ChargeFeeError {
     MerkleTreeError(MerkleTreeError),
 }
 
-impl From<MerkleTreeError> for ChargeFeeError {
+impl From<MerkleTreeError> for FeeError {
     fn from(item: MerkleTreeError) -> Self {
         Self::MerkleTreeError(item)
     }
@@ -340,7 +345,7 @@ fn charge_fee(
     delta: &mut Delta,
     fee_info: FeeInfo,
     recipient: FeeAccount,
-) -> Result<(), ChargeFeeError> {
+) -> Result<(), FeeError> {
     state.charge_fee(fee_info, recipient)?;
     delta.fees_delta.extend([fee_info.account, recipient]);
     Ok(())
@@ -1480,7 +1485,7 @@ mod test {
         assert_eq!(state.balance(src), Some(0.into()));
         assert_eq!(state.balance(dst), Some(amt));
         assert_eq!(
-            ChargeFeeError::InsufficientFunds {
+            FeeError::InsufficientFunds {
                 balance: None,
                 amount: amt
             },
@@ -1492,7 +1497,7 @@ mod test {
         state.fee_merkle_tree.forget(src).expect_ok().unwrap();
         let err = state.charge_fee(fee_info, dst).unwrap_err();
         assert_eq!(
-            ChargeFeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
+            FeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
             err
         );
 
@@ -1502,7 +1507,7 @@ mod test {
         state.fee_merkle_tree.forget(dst).expect_ok().unwrap();
         let err = state.charge_fee(fee_info, dst).unwrap_err();
         assert_eq!(
-            ChargeFeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
+            FeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
             err
         );
     }
