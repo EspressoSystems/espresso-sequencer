@@ -312,7 +312,7 @@ pub fn validate_proposal(
     }
 
     let fee_merkle_tree_root = fee_merkle_tree.commitment();
-    if proposal.fee_merkle_tree_root == fee_merkle_tree_root {
+    if proposal.fee_merkle_tree_root != fee_merkle_tree_root {
         return Err(ProposalValidationError::InvalidFeeRoot {
             expected_root: fee_merkle_tree_root,
             proposal_root: proposal.fee_merkle_tree_root,
