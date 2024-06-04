@@ -2,7 +2,7 @@
 
 use serde::de::Error as _;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap},
     env,
 };
 
@@ -177,6 +177,17 @@ where
             let tx = req
                 .body_auto::<Transaction, Ver>(Ver::instance())
                 .map_err(Error::from_request_error)?;
+
+            // Transactions with namespaces that do not fit in the u32
+            // cannot be included in the block.
+            // TODO: This issue will be addressed in the next release.
+            if tx.namespace() > NamespaceId::from(u32::MAX as u64) {
+                return Err(Error::Custom {
+                    message: "Transaction namespace > u32::MAX".to_string(),
+                    status: StatusCode::BadRequest,
+                });
+            }
+
             let hash = tx.commit();
             state
                 .submit(tx)
@@ -330,7 +341,7 @@ fn get_public_env_vars() -> Result<Vec<String>> {
         .clone()
         .into_iter()
         .map(|v| v.try_into())
-        .collect::<Result<HashSet<String>, toml::de::Error>>()?;
+        .collect::<Result<BTreeSet<String>, toml::de::Error>>()?;
 
     let hashmap: HashMap<String, String> = env::vars().collect();
     let mut public_env_vars: Vec<String> = Vec::new();

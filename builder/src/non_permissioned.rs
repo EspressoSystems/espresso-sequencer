@@ -35,8 +35,8 @@ use hotshot_types::{
     utils::BuilderCommitment,
 };
 use sequencer::{
-    catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, BuilderParams,
-    ChainConfig, L1Params, NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes,
+    catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, ChainConfig, L1Params,
+    NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes, ValidatedState,
 };
 
 use hotshot_events_service::{
@@ -59,9 +59,9 @@ pub struct BuilderConfig {
 }
 
 pub fn build_instance_state<Ver: StaticVersionType + 'static>(
+    chain_config: ChainConfig,
     l1_params: L1Params,
     state_peers: Vec<Url>,
-    chain_config: ChainConfig,
     _: Ver,
 ) -> anyhow::Result<NodeState> {
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
@@ -87,6 +87,7 @@ impl BuilderConfig {
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
+        validated_state: ValidatedState,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
@@ -114,8 +115,10 @@ impl BuilderConfig {
         // builder api request channel
         let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
 
-        let (genesis_payload, genesis_ns_table) = Payload::from_transactions([], &instance_state)
-            .expect("genesis payload construction failed");
+        let (genesis_payload, genesis_ns_table) =
+            Payload::from_transactions([], &validated_state, &instance_state)
+                .await
+                .expect("genesis payload construction failed");
 
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
 
@@ -152,15 +155,15 @@ impl BuilderConfig {
             req_receiver,
             global_state_clone,
             node_count,
-            bootstrapped_view,
-            buffered_view_num_count as u64,
             maximize_txns_count_timeout_duration,
             instance_state
-                .chain_config()
+                .chain_config
                 .base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
+            Duration::from_secs(60),
+            Arc::new(validated_state),
         );
 
         // spawn the builder event loop
@@ -276,10 +279,8 @@ mod test {
         let num_non_staking_nodes = hotshot_config.config.num_nodes_without_stake;
 
         // non-staking node handle
-        let hotshot_context_handle = handles
-            [NonPermissionedBuilderTestConfig::SUBSCRIBED_DA_NODE_ID]
-            .0
-            .clone();
+        let hotshot_context_handle =
+            &handles[NonPermissionedBuilderTestConfig::SUBSCRIBED_DA_NODE_ID].0;
 
         // hotshot event streaming api url
         let hotshot_events_streaming_api_url = HotShotTestConfig::hotshot_event_streaming_api_url();
@@ -289,7 +290,7 @@ mod test {
             hotshot_events_streaming_api_url.clone(),
             known_nodes_with_stake,
             num_non_staking_nodes,
-            hotshot_context_handle,
+            Arc::clone(hotshot_context_handle),
         );
 
         // builder api url

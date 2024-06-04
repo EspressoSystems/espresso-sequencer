@@ -70,13 +70,14 @@ use sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, 
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
+    genesis::L1Finalized,
     l1_client::L1Client,
     network,
     persistence::SequencerPersistence,
     state::FeeAccount,
     state::ValidatedState,
     state_signature::{static_stake_table_commitment, StateSigner},
-    BuilderParams, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey, SeqTypes,
+    Genesis, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey, SeqTypes,
 };
 use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
@@ -107,7 +108,7 @@ pub struct BuilderContext<
     Ver: StaticVersionType + 'static,
 > {
     /// The consensus handle
-    pub hotshot_handle: Consensus<N, P>,
+    pub hotshot_handle: Arc<Consensus<N, P>>,
 
     /// Index of this sequencer node
     pub node_index: u64,
@@ -127,9 +128,9 @@ pub struct BuilderContext<
 
 #[allow(clippy::too_many_arguments)]
 pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
+    genesis: Genesis,
     network_params: NetworkParams,
     metrics: &dyn Metrics,
-    builder_params: BuilderParams,
     l1_params: L1Params,
     hotshot_builder_api_url: Url,
     eth_key_pair: EthKeyPair,
@@ -141,8 +142,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     buffered_view_num_count: usize,
     is_da: bool,
     maximize_txns_count_timeout_duration: Duration,
-    base_fee: u64,
-    max_block_size: u64,
 ) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -187,7 +186,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Initialize the push CDN network (and perform the initial connection)
     let cdn_network = PushCdnNetwork::new(
         network_params.cdn_endpoint,
-        vec![Topic::Global, Topic::DA],
+        vec![Topic::Global, Topic::Da],
         KeyPair {
             public_key: WrappedSignatureKey(my_config.public_key),
             private_key: my_config.private_key.clone(),
@@ -242,22 +241,29 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let _ = NetworkingMetricsValue::new(metrics);
 
     let mut genesis_state = ValidatedState::default();
-    for address in builder_params.prefunded_accounts {
-        tracing::warn!("Prefunding account {:?} for demo", address);
-        genesis_state.prefund_account(address.into(), U256::max_value().into());
+    for (address, amount) in genesis.accounts {
+        tracing::warn!(%address, %amount, "Prefunding account for demo");
+        genesis_state.prefund_account(address, amount);
     }
 
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
-    let instance_state = NodeState::new(
-        node_index,
-        ChainConfig {
-            max_block_size,
-            base_fee: base_fee.into(),
-            ..Default::default()
-        },
+    let l1_genesis = match genesis.l1_finalized {
+        Some(L1Finalized::Block(b)) => Some(b),
+        Some(L1Finalized::Number { number }) => {
+            Some(l1_client.wait_for_finalized_block(number).await)
+        }
+        None => None,
+    };
+
+    let instance_state = NodeState {
+        chain_config: genesis.chain_config,
         l1_client,
-        Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
-    );
+        genesis_header: genesis.header,
+        genesis_state: genesis_state.clone(),
+        l1_genesis,
+        peers: Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
+        node_id: node_index,
+    };
 
     let stake_table_commit =
         static_stake_table_commitment(&config.config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
@@ -277,7 +283,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     .await;
 
     let ctx = BuilderContext::init(
-        hotshot_handle,
+        Arc::new(hotshot_handle),
         state_signer,
         node_index,
         eth_key_pair,
@@ -288,6 +294,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         max_api_timeout_duration,
         buffered_view_num_count,
         maximize_txns_count_timeout_duration,
+        genesis_state,
     )
     .await?;
 
@@ -348,7 +355,9 @@ pub async fn init_hotshot<
         config,
         memberships,
         networks,
-        HotShotInitializer::from_genesis(instance_state).unwrap(),
+        HotShotInitializer::from_genesis(instance_state)
+            .await
+            .unwrap(),
         ConsensusMetricsValue::new(metrics),
         da_storage,
     )
@@ -372,7 +381,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     /// Constructor
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
-        hotshot_handle: Consensus<N, P>,
+        hotshot_handle: Arc<Consensus<N, P>>,
         state_signer: StateSigner<Ver>,
         node_index: u64,
         eth_key_pair: EthKeyPair,
@@ -383,6 +392,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
+        validated_state: ValidatedState,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
@@ -400,8 +410,10 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         // builder api request channel
         let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
 
-        let (genesis_payload, genesis_ns_table) = Payload::from_transactions([], &instance_state)
-            .expect("genesis payload construction failed");
+        let (genesis_payload, genesis_ns_table) =
+            Payload::from_transactions([], &validated_state, &instance_state)
+                .await
+                .expect("genesis payload construction failed");
 
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
 
@@ -439,18 +451,18 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             req_receiver,
             global_state_clone,
             NonZeroUsize::new(1).unwrap(),
-            bootstrapped_view,
-            buffered_view_num_count as u64,
             maximize_txns_count_timeout_duration,
             instance_state
-                .chain_config()
+                .chain_config
                 .base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
+            Duration::from_secs(60),
+            Arc::new(validated_state),
         );
 
-        let hotshot_handle_clone = hotshot_handle.clone();
+        let hotshot_handle_clone = Arc::clone(&hotshot_handle);
         // spawn the builder service
         async_spawn(async move {
             run_permissioned_standalone_builder_service(
@@ -458,7 +470,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 da_sender,
                 qc_sender,
                 decide_sender,
-                hotshot_handle,
+                hotshot_handle_clone,
             )
             .await;
         });
@@ -479,7 +491,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         run_builder_api_service(hotshot_builder_api_url.clone(), proxy_global_state);
 
         let ctx = Self {
-            hotshot_handle: hotshot_handle_clone,
+            hotshot_handle: Arc::clone(&hotshot_handle),
             node_index,
             state_signer: Arc::new(state_signer),
             wait_for_orchestrator: None,
@@ -565,7 +577,7 @@ mod test {
 
         let node_id = total_nodes - 1;
         // non-staking node handle
-        let hotshot_context_handle = handles[node_id].0.clone();
+        let hotshot_context_handle = Arc::clone(&handles[node_id].0);
         let state_signer = handles[node_id].1.take().unwrap();
 
         // builder api url

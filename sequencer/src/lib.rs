@@ -4,10 +4,14 @@ pub mod catchup;
 mod chain_config;
 pub mod context;
 pub mod eth_signature_key;
+pub mod genesis;
 mod header;
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
+
+mod message_compat_tests;
+mod reference_tests;
 
 use anyhow::Context;
 use async_std::sync::RwLock;
@@ -15,7 +19,8 @@ use async_trait::async_trait;
 use block::entry::TxTableEntryWord;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
-use ethers::types::{Address, U256};
+use ethers::types::U256;
+use genesis::{GenesisHeader, L1Finalized};
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
@@ -57,6 +62,7 @@ use hotshot_types::{
         metrics::Metrics,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
+        signature_key::{BuilderSignatureKey, StakeTableEntryType},
         states::InstanceState,
         storage::Storage,
     },
@@ -77,6 +83,7 @@ use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
 
 pub use block::payload::Payload;
 pub use chain_config::ChainConfig;
+pub use genesis::Genesis;
 pub use header::Header;
 pub use l1_client::L1BlockInfo;
 pub use options::Options;
@@ -157,12 +164,13 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
 
 #[derive(Debug, Clone)]
 pub struct NodeState {
-    node_id: u64,
-    chain_config: ChainConfig,
-    l1_client: L1Client,
-    peers: Arc<dyn StateCatchup>,
-    genesis_state: ValidatedState,
-    l1_genesis: Option<L1BlockInfo>,
+    pub node_id: u64,
+    pub chain_config: ChainConfig,
+    pub l1_client: L1Client,
+    pub peers: Arc<dyn StateCatchup>,
+    pub genesis_header: GenesisHeader,
+    pub genesis_state: ValidatedState,
+    pub l1_genesis: Option<L1BlockInfo>,
 }
 
 impl NodeState {
@@ -177,6 +185,7 @@ impl NodeState {
             chain_config,
             l1_client,
             peers: Arc::new(catchup),
+            genesis_header: Default::default(),
             genesis_state: Default::default(),
             l1_genesis: None,
         }
@@ -192,10 +201,6 @@ impl NodeState {
         )
     }
 
-    pub fn chain_config(&self) -> &ChainConfig {
-        &self.chain_config
-    }
-
     pub fn with_l1(mut self, l1_client: L1Client) -> Self {
         self.l1_client = l1_client;
         self
@@ -209,10 +214,6 @@ impl NodeState {
     pub fn with_chain_config(mut self, cfg: ChainConfig) -> Self {
         self.chain_config = cfg;
         self
-    }
-
-    fn l1_client(&self) -> &L1Client {
-        &self.l1_client
     }
 }
 
@@ -284,27 +285,18 @@ pub struct NetworkParams {
     pub libp2p_bind_address: SocketAddr,
 }
 
-#[derive(Clone, Debug)]
-pub struct BuilderParams {
-    pub prefunded_accounts: Vec<Address>,
-}
-
 pub struct L1Params {
     pub url: Url,
-    pub finalized_block: Option<u64>,
     pub events_max_block_range: u64,
 }
 
-#[allow(clippy::too_many_arguments)]
 pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
+    genesis: Genesis,
     network_params: NetworkParams,
     metrics: &dyn Metrics,
     persistence_opt: P,
-    builder_params: BuilderParams,
     l1_params: L1Params,
-    stake_table_capacity: usize,
     bind_version: Ver,
-    chain_config: ChainConfig,
     is_da: bool,
 ) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
     // Expose git information via status API.
@@ -384,7 +376,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     let topics = {
         let mut topics = vec![Topic::Global];
         if is_da {
-            topics.push(Topic::DA);
+            topics.push(Topic::Da);
         }
         topics
     };
@@ -453,20 +445,23 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     let _ = NetworkingMetricsValue::new(metrics);
 
     let mut genesis_state = ValidatedState::default();
-    for address in builder_params.prefunded_accounts {
-        tracing::info!("Prefunding account {:?} for demo", address);
-        genesis_state.prefund_account(address.into(), U256::max_value().into());
+    for (address, amount) in genesis.accounts {
+        tracing::info!(%address, %amount, "Prefunding account for demo");
+        genesis_state.prefund_account(address, amount);
     }
 
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
-    let l1_genesis = match l1_params.finalized_block {
-        Some(block) => Some(l1_client.wait_for_finalized_block(block).await),
+    let l1_genesis = match genesis.l1_finalized {
+        Some(L1Finalized::Block(b)) => Some(b),
+        Some(L1Finalized::Number { number }) => {
+            Some(l1_client.wait_for_finalized_block(number).await)
+        }
         None => None,
     };
-
     let instance_state = NodeState {
-        chain_config,
+        chain_config: genesis.chain_config,
         l1_client,
+        genesis_header: genesis.header,
         genesis_state,
         l1_genesis,
         peers: catchup::local_and_remote(
@@ -484,7 +479,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         networks,
         Some(network_params.state_relay_server_url),
         metrics,
-        stake_table_capacity,
+        genesis.stake_table.capacity,
         bind_version,
     )
     .await?;
@@ -507,7 +502,6 @@ pub mod testing {
         persistence::no_storage::{self, NoStorage},
     };
     use committable::Committable;
-    use ethers::utils::{Anvil, AnvilInstance};
     use futures::{
         future::join_all,
         stream::{Stream, StreamExt},
@@ -517,26 +511,25 @@ pub mod testing {
         BlockPayload,
     };
     use hotshot::types::{EventType::Decide, Message};
+    use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_testing::block_builder::{
-        BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
+        BuilderTask, SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
     };
     use hotshot_types::{
         event::LeafInfo,
-        light_client::StateKeyPair,
-        traits::{
-            block_contents::BlockHeader, metrics::NoMetrics, signature_key::BuilderSignatureKey,
-        },
-        ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
+        light_client::{CircuitField, StateKeyPair, StateVerKey},
+        traits::{block_contents::BlockHeader, metrics::NoMetrics, stake_table::StakeTableScheme},
+        ExecutionType, HotShotConfig, PeerConfig,
     };
     use portpicker::pick_unused_port;
     use std::time::Duration;
 
-    const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
+    const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
     pub async fn run_test_builder() -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
         <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
             TestConfig::NUM_NODES,
-            (),
+            SimpleBuilderConfig::default(),
         )
         .await
     }
@@ -547,7 +540,7 @@ pub mod testing {
         priv_keys: Vec<BLSPrivKey>,
         state_key_pairs: Vec<StateKeyPair>,
         master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
-        anvil: Arc<AnvilInstance>,
+        url: Url,
     }
 
     impl Default for TestConfig {
@@ -608,7 +601,7 @@ pub mod testing {
                 priv_keys,
                 state_key_pairs,
                 master_map,
-                anvil: Arc::new(Anvil::new().spawn()),
+                url: "http://localhost:8545".parse().unwrap(),
             }
         }
     }
@@ -626,6 +619,13 @@ pub mod testing {
 
         pub fn set_builder_url(&mut self, builder_url: Url) {
             self.config.builder_url = builder_url;
+        }
+
+        pub fn default_with_l1(l1: Url) -> Self {
+            TestConfig {
+                url: l1,
+                ..Default::default()
+            }
         }
 
         pub async fn init_nodes<Ver: StaticVersionType + 'static>(
@@ -647,6 +647,28 @@ pub mod testing {
             .await
         }
 
+        pub fn stake_table(
+            &self,
+            stake_table_capacity: usize,
+        ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
+            let mut st =
+                StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(stake_table_capacity);
+            self.config
+                .known_nodes_with_stake
+                .iter()
+                .for_each(|config| {
+                    st.register(
+                        *config.stake_table_entry.key(),
+                        config.stake_table_entry.stake(),
+                        config.state_ver_key.clone(),
+                    )
+                    .unwrap()
+                });
+            st.advance();
+            st.advance();
+            st
+        }
+
         #[allow(clippy::too_many_arguments)]
         pub async fn init_node<Ver: StaticVersionType + 'static, P: PersistenceOptions>(
             &self,
@@ -655,7 +677,7 @@ pub mod testing {
             persistence_opt: P,
             catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
-            stake_table_capacity: usize,
+            stake_table_capacity: u64,
             bind_version: Ver,
         ) -> SequencerContext<network::Memory, P::Persistence, Ver> {
             let mut config = self.config.clone();
@@ -687,7 +709,7 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 ChainConfig::default(),
-                L1Client::new(self.anvil.endpoint().parse().unwrap(), 10000),
+                L1Client::new(self.url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
             )
             .with_genesis(state);
@@ -769,6 +791,7 @@ mod test {
             vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
         },
     };
+    use sequencer_utils::AnvilOptions;
     use testing::{wait_for_decide_on_handle, TestConfig};
 
     #[async_std::test]
@@ -777,7 +800,9 @@ mod test {
         setup_backtrace();
         let ver = SequencerVersion::instance();
         // Assign `config` so it isn't dropped early.
-        let mut config = TestConfig::default();
+        let anvil = AnvilOptions::default().spawn().await;
+        let url = anvil.url();
+        let mut config = TestConfig::default_with_l1(url);
 
         let (builder_task, builder_url) = run_test_builder().await;
 
@@ -789,10 +814,10 @@ mod test {
 
         // Hook the builder up to the event stream from the first node
         if let Some(builder_task) = builder_task {
-            builder_task.start(Box::new(handle_0.event_stream()));
+            builder_task.start(Box::new(handle_0.event_stream().await));
         }
 
-        let mut events = handle_0.event_stream();
+        let mut events = handle_0.event_stream().await;
 
         for handle in handles.iter() {
             handle.start_consensus().await;
@@ -817,7 +842,9 @@ mod test {
         let success_height = 30;
         let ver = SequencerVersion::instance();
         // Assign `config` so it isn't dropped early.
-        let mut config = TestConfig::default();
+        let anvil = AnvilOptions::default().spawn().await;
+        let url = anvil.url();
+        let mut config = TestConfig::default_with_l1(url);
 
         let (builder_task, builder_url) = run_test_builder().await;
 
@@ -826,11 +853,11 @@ mod test {
 
         let handle_0 = &handles[0];
 
-        let mut events = handle_0.event_stream();
+        let mut events = handle_0.event_stream().await;
 
         // Hook the builder up to the event stream from the first node
         if let Some(builder_task) = builder_task {
-            builder_task.start(Box::new(handle_0.event_stream()));
+            builder_task.start(Box::new(handle_0.event_stream().await));
         }
 
         for handle in handles.iter() {
@@ -840,7 +867,9 @@ mod test {
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], &NodeState::mock()).unwrap();
+                Payload::from_transactions([], &ValidatedState::default(), &NodeState::mock())
+                    .await
+                    .unwrap();
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload.encode();
