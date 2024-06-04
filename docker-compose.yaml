@@ -50,7 +50,7 @@ services:
 
   fund-builder:
     image: ghcr.io/espressosystems/espresso-sequencer/bridge:main
-    command: bridge deposit
+    command: espresso-bridge deposit
     environment:
       - L1_PROVIDER=$ESPRESSO_SEQUENCER_L1_PROVIDER
       - ESPRESSO_PROVIDER=http://sequencer1:$ESPRESSO_SEQUENCER_API_PORT
