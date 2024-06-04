@@ -634,14 +634,14 @@ pub mod node_tests {
             .collect::<Vec<_>>();
 
         // At first, the node is fully synced.
-        assert!(ds.sync_status().await.unwrap().is_fully_synced());
+        assert!(ds.sync_status().await.await.unwrap().is_fully_synced());
 
         // Insert a leaf without the corresponding block or VID info, make sure we detect that the
         // block and VID info are missing.
         ds.insert_leaf(leaves[0].clone()).await.unwrap();
         ds.commit().await.unwrap();
         assert_eq!(
-            ds.sync_status().await.unwrap(),
+            ds.sync_status().await.await.unwrap(),
             SyncStatus {
                 missing_blocks: 1,
                 missing_vid_common: 1,
@@ -656,7 +656,7 @@ pub mod node_tests {
         ds.insert_leaf(leaves[2].clone()).await.unwrap();
         ds.commit().await.unwrap();
         assert_eq!(
-            ds.sync_status().await.unwrap(),
+            ds.sync_status().await.await.unwrap(),
             SyncStatus {
                 missing_blocks: 3,
                 missing_vid_common: 3,
@@ -670,7 +670,7 @@ pub mod node_tests {
         ds.insert_vid(vid[0].0.clone(), None).await.unwrap();
         ds.commit().await.unwrap();
         assert_eq!(
-            ds.sync_status().await.unwrap(),
+            ds.sync_status().await.await.unwrap(),
             SyncStatus {
                 missing_blocks: 3,
                 missing_vid_common: 2,
@@ -715,12 +715,12 @@ pub mod node_tests {
             missing_vid_shares: expected_missing,
             pruned_height: None,
         };
-        assert_eq!(ds.sync_status().await.unwrap(), expected_sync_status);
+        assert_eq!(ds.sync_status().await.await.unwrap(), expected_sync_status);
 
         // If we re-insert one of the VID entries without a share, it should not overwrite the share
         // that we already have; that is, `insert_vid` should be monotonic.
         ds.insert_vid(vid[0].0.clone(), None).await.unwrap();
-        assert_eq!(ds.sync_status().await.unwrap(), expected_sync_status);
+        assert_eq!(ds.sync_status().await.await.unwrap(), expected_sync_status);
     }
 
     #[async_std::test]

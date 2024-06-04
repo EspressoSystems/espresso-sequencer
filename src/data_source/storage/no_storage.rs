@@ -26,6 +26,7 @@ use crate::{
     Header, Payload, QueryError, QueryResult, VidShare,
 };
 use async_trait::async_trait;
+use futures::future::{self, BoxFuture, FutureExt};
 use hotshot_types::traits::node_implementation::NodeType;
 use std::{convert::Infallible, ops::RangeBounds};
 
@@ -174,8 +175,8 @@ where
         Err(QueryError::Missing)
     }
 
-    async fn sync_status(&self) -> QueryResult<SyncStatus> {
-        Err(QueryError::Missing)
+    async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
+        future::ready(Err(QueryError::Missing)).boxed()
     }
 
     async fn get_header_window(
@@ -533,7 +534,7 @@ pub mod testing {
             }
         }
 
-        async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
             match self {
                 Self::Sql(data_source) => data_source.sync_status().await,
                 Self::NoStorage(data_source) => data_source.sync_status().await,

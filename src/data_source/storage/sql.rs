@@ -52,6 +52,7 @@ use bit_vec::BitVec;
 use chrono::Utc;
 use committable::Committable;
 use futures::{
+    future::{BoxFuture, FutureExt},
     stream::{self, BoxStream, StreamExt, TryStreamExt},
     task::{Context, Poll},
     AsyncRead, AsyncWrite,
@@ -1059,73 +1060,78 @@ where
         })
     }
 
-    async fn sync_status(&self) -> QueryResult<SyncStatus> {
-        // A leaf can only be missing if there is no row for it in the database (all its columns are
-        // non-nullable). A block can be missing if its corresponding leaf is missing or if the
-        // block's `data` field is `NULL`. We can find the number of missing leaves and blocks by
-        // getting the number of fully missing leaf rows and the number of present but null-payload
-        // block rows.
-        //
-        // Note that it should not be possible for a block's row to be missing (as opposed to
-        // present but having a `NULL` payload) if the corresponding leaf is present. The schema
-        // enforces this, since the payload table `REFERENCES` the corresponding leaf row. Thus,
-        // missing block rows should be a subset of missing leaf rows and do not need to be counted
-        // separately. This is very important: if we had to count the number of block rows that were
-        // missing whose corresponding leaf row was present, this would require an expensive join
-        // and table traversal.
-        //
-        // We can get the number of missing leaf rows very efficiently, by subtracting the total
-        // number of leaf rows from the block height (since the block height by definition is the
-        // height of the highest leaf we do have). We can also get the number of null payloads
-        // directly using an `IS NULL` filter.
-        //
-        // For VID, common data can only be missing if the entire row is missing. Shares can be
-        // missing in that case _or_ if the row is present but share data is NULL. Thus, we also
-        // need to select the total number of VID rows and the number of present VID rows with a
-        // NULL share.
-        let row = self
-            .query_one_static(
-                "SELECT max_height, total_leaves, null_payloads, total_vid, null_vid, pruned_height FROM
-                    (SELECT max(leaf.height) AS max_height, count(*) AS total_leaves FROM leaf),
-                    (SELECT count(*) AS null_payloads FROM payload WHERE data IS NULL),
-                    (SELECT count(*) AS total_vid FROM vid),
-                    (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL),
+    async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
+        let client = self.client.clone();
+
+        async move {
+            // A leaf can only be missing if there is no row for it in the database (all its columns
+            // are non-nullable). A block can be missing if its corresponding leaf is missing or if
+            // the block's `data` field is `NULL`. We can find the number of missing leaves and
+            // blocks by getting the number of fully missing leaf rows and the number of present but
+            // null-payload block rows.
+            //
+            // Note that it should not be possible for a block's row to be missing (as opposed to
+            // present but having a `NULL` payload) if the corresponding leaf is present. The schema
+            // enforces this, since the payload table `REFERENCES` the corresponding leaf row. Thus,
+            // missing block rows should be a subset of missing leaf rows and do not need to be
+            // counted separately. This is very important: if we had to count the number of block
+            // rows that were missing whose corresponding leaf row was present, this would require
+            // an expensive join and table traversal.
+            //
+            // We can get the number of missing leaf rows very efficiently, by subtracting the total
+            // number of leaf rows from the block height (since the block height by definition is
+            // the height of the highest leaf we do have). We can also get the number of null
+            // payloads directly using an `IS NULL` filter.
+            //
+            // For VID, common data can only be missing if the entire row is missing. Shares can be
+            // missing in that case _or_ if the row is present but share data is NULL. Thus, we also
+            // need to select the total number of VID rows and the number of present VID rows with a
+            // NULL share.
+            let query = "SELECT l.max_height, l.total_leaves, p.null_payloads, v.total_vid, vn.null_vid, pruned_height FROM
+                    (SELECT max(leaf.height) AS max_height, count(*) AS total_leaves FROM leaf) AS l,
+                    (SELECT count(*) AS null_payloads FROM payload WHERE data IS NULL) AS p,
+                    (SELECT count(*) AS total_vid FROM vid) AS v,
+                    (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL) AS vn,
                     coalesce((SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1)) as pruned_height
-                ",
-            )
-            .await?;
+                ";
+            let row = client
+                .query_opt(query, &[])
+                .await
+                .map_err(postgres_err)?
+                .context(NotFoundSnafu)?;
 
-        let block_height = match row.get::<_, Option<i64>>("max_height") {
-            Some(height) => {
-                // The height of the block is the number of blocks below it, so the total number of
-                // blocks is one more than the height of the highest block.
-                height as usize + 1
-            }
-            None => {
-                // If there are no blocks yet, the height is 0.
-                0
-            }
-        };
-        let total_leaves = row.get::<_, i64>("total_leaves") as usize;
-        let null_payloads = row.get::<_, i64>("null_payloads") as usize;
-        let total_vid = row.get::<_, i64>("total_vid") as usize;
-        let null_vid = row.get::<_, i64>("null_vid") as usize;
-        let pruned_height = row
-            .get::<_, Option<i64>>("pruned_height")
-            .map(|h| h as usize);
+            let block_height = match row.get::<_, Option<i64>>("max_height") {
+                Some(height) => {
+                    // The height of the block is the number of blocks below it, so the total number of
+                    // blocks is one more than the height of the highest block.
+                    height as usize + 1
+                }
+                None => {
+                    // If there are no blocks yet, the height is 0.
+                    0
+                }
+            };
+            let total_leaves = row.get::<_, i64>("total_leaves") as usize;
+            let null_payloads = row.get::<_, i64>("null_payloads") as usize;
+            let total_vid = row.get::<_, i64>("total_vid") as usize;
+            let null_vid = row.get::<_, i64>("null_vid") as usize;
+            let pruned_height = row
+                .get::<_, Option<i64>>("pruned_height")
+                .map(|h| h as usize);
 
-        let missing_leaves = block_height.saturating_sub(total_leaves);
-        let missing_blocks = missing_leaves + null_payloads;
-        let missing_vid_common = block_height.saturating_sub(total_vid);
-        let missing_vid_shares = missing_vid_common + null_vid;
+            let missing_leaves = block_height.saturating_sub(total_leaves);
+            let missing_blocks = missing_leaves + null_payloads;
+            let missing_vid_common = block_height.saturating_sub(total_vid);
+            let missing_vid_shares = missing_vid_common + null_vid;
 
-        Ok(SyncStatus {
-            missing_leaves,
-            missing_blocks,
-            missing_vid_common,
-            missing_vid_shares,
-            pruned_height,
-        })
+            Ok(SyncStatus {
+                missing_leaves,
+                missing_blocks,
+                missing_vid_common,
+                missing_vid_shares,
+                pruned_height,
+            })
+        }.boxed()
     }
 
     async fn get_header_window(
