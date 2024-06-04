@@ -750,7 +750,13 @@ mod test {
         setup_test();
 
         // Create the consensus network.
-        let mut network = MockNetwork::<D>::init().await;
+        let mut network = MockNetwork::<D>::init_with_config(|cfg| {
+            // Make the rate of empty block production slower than the API fetching timeout.
+            // Otherwise, we will produce new blocks faster than we can fetch them (particularly in
+            // the no-storage case, where fetching is quite slow) and the test will never finish.
+            cfg.builder_timeout = fetch_timeout + Duration::from_millis(500);
+        })
+        .await;
         network.start().await;
 
         // Start the web server.
