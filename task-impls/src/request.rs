@@ -115,6 +115,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
                 }
                 Ok(())
             }
+            HotShotEvent::QuorumProposalMissing(view) => {
+                self.run_delay(
+                    RequestKind::Proposal(*view),
+                    sender.clone(),
+                    *view,
+                    Ver::instance(),
+                );
+                Ok(())
+            }
             _ => Ok(()),
         }
     }
@@ -181,6 +190,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
             .whole_committee(view)
             .into_iter()
             .collect();
+        let leader = self.da_membership.leader(view);
         // Randomize the recipients so all replicas don't overload the same 1 recipients
         // and so we don't implicitly rely on the same replica all the time.
         recipients.shuffle(&mut thread_rng());
@@ -190,6 +200,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
             sender,
             delay: self.delay,
             recipients,
+            leader,
             shutdown_flag: Arc::clone(&self.shutdown_flag),
         };
         let Ok(data) = Serializer::<Ver>::serialize(&request) else {
@@ -202,7 +213,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType + 'st
             return;
         };
         debug!("Requesting data: {:?}", request);
-        let handle = async_spawn(requester.run::<Ver>(request, signature));
+        let handle = async_spawn(requester.run::<Ver>(request, signature, self.public_key.clone()));
 
         self.spawned_tasks.entry(view).or_default().push(handle);
     }
@@ -227,12 +238,17 @@ struct DelayedRequester<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     delay: Duration,
     /// The peers we will request in a random order
     recipients: Vec<TYPES::SignatureKey>,
+    /// Leader for the view of the request
+    leader: TYPES::SignatureKey,
     /// A flag indicating that `HotShotEvent::Shutdown` has been received
     shutdown_flag: Arc<AtomicBool>,
 }
 
 /// Wrapper for the info in a VID request
 struct VidRequest<TYPES: NodeType>(TYPES::Time, TYPES::SignatureKey);
+
+/// Wrapper for the info in a Proposal fetch request
+struct ProposalRequest<TYPES: NodeType>(TYPES::Time, TYPES::SignatureKey);
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DelayedRequester<TYPES, I> {
     /// Wait the delay, then try to complete the request.  Iterates over peers
@@ -241,19 +257,39 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DelayedRequester<TYPES, I> {
         self,
         request: RequestKind<TYPES>,
         signature: Signature<TYPES>,
+        pub_key: TYPES::SignatureKey,
     ) {
-        // Do the delay only if primary is up and then start sending
-        if !self.network.is_primary_down() {
-            async_sleep(self.delay).await;
-        }
         match request {
             RequestKind::Vid(view, key) => {
+                // Do the delay only if primary is up and then start sending
+                if !self.network.is_primary_down() {
+                    async_sleep(self.delay).await;
+                }
                 self.do_vid::<Ver>(VidRequest(view, key), signature).await;
+            }
+            RequestKind::Proposal(view) => {
+                self.do_proposal::<Ver>(ProposalRequest(view, pub_key), signature)
+                    .await;
             }
             RequestKind::DaProposal(..) => {}
         }
     }
-
+    /// Handle sending a request for proposal for a view, does
+    /// not delay
+    async fn do_proposal<Ver: StaticVersionType + 'static>(
+        &self,
+        req: ProposalRequest<TYPES>,
+        signature: Signature<TYPES>,
+    ) {
+        let _ = self
+            .network
+            .request_data::<TYPES, Ver>(
+                make_proposal_req(&req, signature),
+                &self.leader,
+                Ver::instance(),
+            )
+            .await;
+    }
     /// Handle sending a VID Share request, runs the loop until the data exists
     async fn do_vid<Ver: StaticVersionType + 'static>(
         &self,
@@ -326,6 +362,23 @@ fn make_vid<TYPES: NodeType>(
     signature: Signature<TYPES>,
 ) -> Message<TYPES> {
     let kind = RequestKind::Vid(req.0, req.1.clone());
+    let data_request = DataRequest {
+        view: req.0,
+        request: kind,
+        signature,
+    };
+    Message {
+        sender: req.1.clone(),
+        kind: MessageKind::Data(DataMessage::RequestData(data_request)),
+    }
+}
+
+/// Build a request for a Proposal
+fn make_proposal_req<TYPES: NodeType>(
+    req: &ProposalRequest<TYPES>,
+    signature: Signature<TYPES>,
+) -> Message<TYPES> {
+    let kind = RequestKind::Proposal(req.0);
     let data_request = DataRequest {
         view: req.0,
         request: kind,

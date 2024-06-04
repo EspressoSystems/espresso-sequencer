@@ -210,6 +210,8 @@ pub enum RequestKind<TYPES: NodeType> {
     Vid(TYPES::Time, TYPES::SignatureKey),
     /// Request a DA proposal for a certain view
     DaProposal(TYPES::Time),
+    /// Request for quorum proposal for a view
+    Proposal(TYPES::Time),
 }
 
 /// A response for a request.  `SequencingMessage` is the same as other network messages

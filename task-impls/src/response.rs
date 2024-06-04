@@ -182,6 +182,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
             }
             // TODO impl for DA Proposal: https://github.com/EspressoSystems/HotShot/issues/2651
             RequestKind::DaProposal(_view) => self.make_msg(ResponseMessage::NotFound),
+            RequestKind::Proposal(view) => self.make_msg(self.respond_with_proposal(view).await),
         }
     }
 
@@ -196,6 +197,13 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
     /// Makes sure the sender is allowed to send a request.
     fn valid_sender(&self, sender: &TYPES::SignatureKey) -> bool {
         self.quorum.has_stake(sender)
+    }
+    /// Lookup the proposal for the view and respond if it's found/not found
+    async fn respond_with_proposal(&self, _view: TYPES::Time) -> ResponseMessage<TYPES> {
+        // Complete after we are storing our last proposed view:
+        // https://github.com/EspressoSystems/HotShot/issues/3240
+        async {}.await;
+        todo!();
     }
 }
 
