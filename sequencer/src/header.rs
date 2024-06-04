@@ -815,11 +815,11 @@ mod test_headers {
             .unwrap_err();
 
         assert_eq!(
-            err,
             ProposalValidationError::InvalidChainConfig {
                 expected: format!("{:?}", chain_config),
                 proposal: format!("{:?}", proposal.chain_config)
-            }
+            },
+            err
         );
 
         // Advance `proposal.height` to trigger validation error.
@@ -838,11 +838,11 @@ mod test_headers {
         )
         .unwrap_err();
         assert_eq!(
-            err,
             ProposalValidationError::InvalidHeight {
                 parent_height: 0,
                 proposal_height: 0
-            }
+            },
+            err
         );
 
         // proposed `Header` root should include parent + parent.commit
@@ -864,11 +864,11 @@ mod test_headers {
         .unwrap_err();
         // Fails b/c `proposal` has not advanced from `parent`
         assert_eq!(
-            err,
             ProposalValidationError::InvalidBlockRoot {
                 expected_root: validated_state.block_merkle_tree.commitment(),
                 proposal_root: proposal.block_merkle_tree_root
-            }
+            },
+            err
         );
     }
 
