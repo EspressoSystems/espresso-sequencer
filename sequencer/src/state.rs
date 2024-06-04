@@ -1413,14 +1413,14 @@ mod test {
 
         tracing::info!(%err, "task failed successfully");
         assert_eq!(
-            err,
             ProposalValidationError::MaxBlockSizeExceeded {
                 max_block_size: instance.chain_config.max_block_size,
                 block_size: BlockSize::from_integer(
                     VidSchemeType::get_payload_byte_len(&vid_common).into()
                 )
                 .unwrap()
-            }
+            },
+            err
         );
     }
 
@@ -1448,12 +1448,12 @@ mod test {
 
         tracing::info!(%err, "task failed successfully");
         assert_eq!(
-            err,
             ProposalValidationError::InsufficientFee {
                 max_block_size: instance.chain_config.max_block_size,
                 base_fee: instance.chain_config.base_fee,
                 proposed_fee: header.fee_info.amount()
-            }
+            },
+            err
         );
     }
 
@@ -1495,20 +1495,18 @@ mod test {
         tracing::info!("test src not in memory");
         let mut state = new_state();
         state.fee_merkle_tree.forget(src).expect_ok().unwrap();
-        let err = state.charge_fee(fee_info, dst).unwrap_err();
         assert_eq!(
             FeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
-            err
+            state.charge_fee(fee_info, dst).unwrap_err()
         );
 
         tracing::info!("test dst not in memory");
         let mut state = new_state();
         state.prefund_account(dst, amt);
         state.fee_merkle_tree.forget(dst).expect_ok().unwrap();
-        let err = state.charge_fee(fee_info, dst).unwrap_err();
         assert_eq!(
             FeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
-            err
+            state.charge_fee(fee_info, dst).unwrap_err()
         );
     }
 
