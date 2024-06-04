@@ -41,8 +41,8 @@ use jf_merkle_tree::{
     prelude::{LightWeightSHA3MerkleTree, MerkleProof, Sha3Digest, Sha3Node},
     universal_merkle_tree::UniversalMerkleTree,
     AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
-    LookupResult, MerkleCommitment, MerkleTreeScheme, PersistentUniversalMerkleTreeScheme,
-    ToTraversalPath, UniversalMerkleTreeScheme,
+    LookupResult, MerkleCommitment, MerkleTreeError, MerkleTreeScheme,
+    PersistentUniversalMerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
 };
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
@@ -157,7 +157,11 @@ impl ValidatedState {
     }
 
     /// Charge a fee to an account, transferring the funds to the fee recipient account.
-    pub fn charge_fee(&mut self, fee_info: FeeInfo, recipient: FeeAccount) -> anyhow::Result<()> {
+    pub fn charge_fee(
+        &mut self,
+        fee_info: FeeInfo,
+        recipient: FeeAccount,
+    ) -> Result<(), ChargeFeeError> {
         let fee_state = self.fee_merkle_tree.clone();
 
         // Deduct the fee from the paying account.
@@ -167,9 +171,7 @@ impl ValidatedState {
             let balance = balance.copied();
             let Some(updated) = balance.unwrap_or_default().checked_sub(&amount) else {
                 // Return an error without updating the account.
-                err = Some(anyhow!(
-                    "insufficient funds (have {balance:?}, required {amount:?})"
-                ));
+                err = Some(ChargeFeeError::InsufficientFunds { balance, amount });
                 return balance;
             };
             if updated == FeeAmount::default() {
@@ -315,12 +317,30 @@ pub fn validate_proposal(
     Ok(())
 }
 
+/// Error type to cover possible charge fee errors
+#[derive(Error, Debug, Eq, PartialEq)]
+pub enum ChargeFeeError {
+    #[error("Insuficcient Funds: have {balance:?}, required {amount:?}")]
+    InsufficientFunds {
+        balance: Option<FeeAmount>,
+        amount: FeeAmount,
+    },
+    #[error("Merkle Tree Error: {0}")]
+    MerkleTreeError(MerkleTreeError),
+}
+
+impl From<MerkleTreeError> for ChargeFeeError {
+    fn from(item: MerkleTreeError) -> Self {
+        Self::MerkleTreeError(item)
+    }
+}
+
 fn charge_fee(
     state: &mut ValidatedState,
     delta: &mut Delta,
     fee_info: FeeInfo,
     recipient: FeeAccount,
-) -> anyhow::Result<()> {
+) -> Result<(), ChargeFeeError> {
     state.charge_fee(fee_info, recipient)?;
     delta.fees_delta.extend([fee_info.account, recipient]);
     Ok(())
@@ -1456,20 +1476,35 @@ mod test {
         assert_eq!(state.balance(dst), Some(amt));
 
         tracing::info!("test insufficient balance");
-        state.charge_fee(fee_info, dst).unwrap_err();
+        let err = state.charge_fee(fee_info, dst).unwrap_err();
         assert_eq!(state.balance(src), Some(0.into()));
         assert_eq!(state.balance(dst), Some(amt));
+        assert_eq!(
+            ChargeFeeError::InsufficientFunds {
+                balance: None,
+                amount: amt
+            },
+            err
+        );
 
         tracing::info!("test src not in memory");
         let mut state = new_state();
         state.fee_merkle_tree.forget(src).expect_ok().unwrap();
-        state.charge_fee(fee_info, dst).unwrap_err();
+        let err = state.charge_fee(fee_info, dst).unwrap_err();
+        assert_eq!(
+            ChargeFeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
+            err
+        );
 
         tracing::info!("test dst not in memory");
         let mut state = new_state();
         state.prefund_account(dst, amt);
         state.fee_merkle_tree.forget(dst).expect_ok().unwrap();
-        state.charge_fee(fee_info, dst).unwrap_err();
+        let err = state.charge_fee(fee_info, dst).unwrap_err();
+        assert_eq!(
+            ChargeFeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
+            err
+        );
     }
 
     #[test]
