@@ -264,6 +264,7 @@
 //!
 //! ```
 //! # use async_trait::async_trait;
+//! # use futures::future::BoxFuture;
 //! # use hotshot_query_service::{Header, QueryResult, VidShare};
 //! # use hotshot_query_service::availability::{
 //! #   AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
@@ -356,7 +357,7 @@
 //!         self.hotshot_qs.vid_share(id).await
 //!     }
 //!
-//!     async fn sync_status(&self) -> QueryResult<SyncStatus> {
+//!     async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
 //!         self.hotshot_qs.sync_status().await
 //!     }
 //!
