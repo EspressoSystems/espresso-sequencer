@@ -52,6 +52,11 @@ jobs:
         run: |
           cargo build --locked --release --workspace
 
+      - name: Build Espresso Dev Node
+        # Espresso Dev Node currently requires testing feature, so it is built separately.
+        run: |
+          cargo build --locked --release --features testing --bin espresso-dev-node
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -72,8 +77,9 @@ jobs:
             target/release/keygen
             target/release/permissionless-builder
             target/release/nasty-client
+            target/release/espresso-dev-node
             target/release/pub-key
-            target/release/bridge
+            target/release/espresso-bridge
 
   build-arm:
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
@@ -97,6 +103,11 @@ jobs:
         run: |
           cargo build --locked --release --workspace
 
+      - name: Build Espresso Dev Node
+        # Espresso Dev Node currently requires testing feature, so it is built separately.
+        run: |
+          cargo build --locked --release --features testing --bin espresso-dev-node
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -117,8 +128,9 @@ jobs:
             target/release/keygen
             target/release/permissionless-builder
             target/release/nasty-client
+            target/release/espresso-dev-node
             target/release/pub-key
-            target/release/bridge
+            target/release/espresso-bridge
 
   build-dockers:
     runs-on: ubuntu-latest
@@ -136,6 +148,7 @@ jobs:
       deploy-tag: ${{ steps.deploy.outputs.tags }}
       builder-tag: ${{ steps.builder.outputs.tags }}
       nasty-client-tag: ${{ steps.nasty-client.outputs.tags }}
+      espresso-dev-node-tag: ${{ steps.espresso-dev-node.outputs.tags }}
       bridge-tag: ${{ steps.bridge.outputs.tags }}
     steps:
       - name: Checkout Repository
@@ -238,6 +251,11 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/nasty-client
 
+      - name: Generate espresso-dev-node metadata
+        uses: docker/metadata-action@v5
+        id: espresso-dev-node
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node
       - name: Generate bridge metadata
         uses: docker/metadata-action@v5
         id: bridge
@@ -364,6 +382,15 @@ jobs:
           tags: ${{ steps.nasty-client.outputs.tags }}
           labels: ${{ steps.nasty-client.outputs.labels }}
 
+      - name: Build and push espresso-dev-node docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/nasty-client.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.espresso-dev-node.outputs.tags }}
+          labels: ${{ steps.espresso-dev-node.outputs.labels }}
       - name: Build and push bridge docker
         uses: docker/build-push-action@v5
         with:
@@ -421,4 +448,4 @@ jobs:
       - name: Test docker demo
         run: |
           just demo &
-          timeout 600 scripts/smoke-test-demo
+          timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
