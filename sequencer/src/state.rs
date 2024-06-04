@@ -221,17 +221,17 @@ impl ValidatedState {
 /// Error type to cover possible proposal validation failures
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum ProposalValidationError {
-    #[error("Invalid ChainConfig: expected={expected:?}, proposal={proposal:?}")]
+    #[error("Invalid ChainConfig: expected={expected}, proposal={proposal}")]
     InvalidChainConfig { expected: String, proposal: String },
 
     #[error(
-        "Invalid Payload Size: (max_block_size={max_block_size:?}, proposed_block_size={block_size:?})"
+        "Invalid Payload Size: (max_block_size={max_block_size}, proposed_block_size={block_size})"
     )]
     MaxBlockSizeExceeded {
         max_block_size: BlockSize,
         block_size: BlockSize,
     },
-    #[error("Insufficient Fee: block_size={max_block_size}, base_fee={base_fee:?}, proposed_fee={proposed_fee:?}")]
+    #[error("Insufficient Fee: block_size={max_block_size}, base_fee={base_fee}, proposed_fee={proposed_fee}")]
     InsufficientFee {
         max_block_size: BlockSize,
         base_fee: FeeAmount,
@@ -252,8 +252,6 @@ pub enum ProposalValidationError {
         expected_root: FeeMerkleCommitment,
         proposal_root: FeeMerkleCommitment,
     },
-    #[error("Unknown validation error")]
-    Unknown,
 }
 
 pub fn validate_proposal(
