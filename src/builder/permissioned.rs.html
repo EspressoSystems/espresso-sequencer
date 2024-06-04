@@ -716,6 +716,14 @@
 <a href="#714" id="714">714</a>
 <a href="#715" id="715">715</a>
 <a href="#716" id="716">716</a>
+<a href="#717" id="717">717</a>
+<a href="#718" id="718">718</a>
+<a href="#719" id="719">719</a>
+<a href="#720" id="720">720</a>
+<a href="#721" id="721">721</a>
+<a href="#722" id="722">722</a>
+<a href="#723" id="723">723</a>
+<a href="#724" id="724">724</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -784,7 +792,10 @@
 <span class="kw">use </span>jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 <span class="kw">use </span>jf_signature::bls_over_bn254::VerKey;
 <span class="kw">use </span>sequencer::state_signature::StakeTableCommitmentType;
-<span class="kw">use </span>sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, ChainConfig};
+<span class="kw">use </span>sequencer::{
+    catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, network::libp2p::BootstrapNode,
+    ChainConfig,
+};
 <span class="kw">use </span>sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -882,7 +893,7 @@
         derive_libp2p_peer_id::&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey&gt;(<span class="kw-2">&amp;</span>my_config.private_key)
             .with_context(|| <span class="string">"Failed to derive Libp2p peer ID"</span>)<span class="question-mark">?</span>;
 
-    <span class="kw">let </span>config = NetworkConfig::get_complete_config(
+    <span class="kw">let </span><span class="kw-2">mut </span>config = NetworkConfig::get_complete_config(
         <span class="kw-2">&amp;</span>orchestrator_client,
         my_config.clone(),
         <span class="comment">// Register in our Libp2p advertise address and public key so other nodes
@@ -892,6 +903,11 @@
     )
     .<span class="kw">await</span><span class="question-mark">?
     </span>.<span class="number">0</span>;
+
+    <span class="comment">// If the network is configured manually, override what we got from the orchestrator
+    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(genesis_network_config) = genesis.network {
+        genesis_network_config.populate_config(<span class="kw-2">&amp;mut </span>config)<span class="question-mark">?</span>;
+    }
 
     <span class="macro">tracing::info!</span>(
     node_id = config.node_index,
