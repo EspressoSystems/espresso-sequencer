@@ -46,9 +46,7 @@ struct Args {
         default_value = "0"
     )]
     account_index: u32,
-    /// Port that the HTTP API will use.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
-    sequencer_api_port: u16,
+
     /// If provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
@@ -60,6 +58,9 @@ struct Args {
     builder_port: Option<u16>,
 
     #[clap(flatten)]
+    http: options::Http,
+
+    #[clap(flatten)]
     sql: persistence::sql::Options,
 }
 
@@ -69,13 +70,11 @@ async fn main() -> anyhow::Result<()> {
     setup_backtrace();
 
     let cli_params = Args::parse();
-    let api_options = options::Options::from(options::Http {
-        port: cli_params.sequencer_api_port,
-    })
-    .status(Default::default())
-    .state(Default::default())
-    .submit(Default::default())
-    .query_sql(Default::default(), cli_params.sql);
+    let api_options = options::Options::from(cli_params.http)
+        .status(Default::default())
+        .state(Default::default())
+        .submit(Default::default())
+        .query_sql(Default::default(), cli_params.sql);
 
     let (url, _anvil) = if let Some(url) = cli_params.rpc_url {
         (url, None)
@@ -129,7 +128,7 @@ async fn main() -> anyhow::Result<()> {
     .unwrap();
 
     let sequencer_url =
-        Url::parse(format!("http://localhost:{}", cli_params.sequencer_api_port).as_str()).unwrap();
+        Url::parse(format!("http://localhost:{}", cli_params.http.port()).as_str()).unwrap();
     let commitment_task_options = CommitmentTaskOptions {
         l1_provider: url,
         l1_chain_id: None,

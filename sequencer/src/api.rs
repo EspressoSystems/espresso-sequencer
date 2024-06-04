@@ -460,7 +460,7 @@ pub mod test_helpers {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
-        let options = opt(Options::from(options::Http { port }).status(Default::default()));
+        let options = opt(Options::with_port(port).status(Default::default()));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let _network = TestNetwork::new(
@@ -514,7 +514,7 @@ pub mod test_helpers {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
-        let options = opt(Options::from(options::Http { port }).submit(Default::default()));
+        let options = opt(Options::with_port(port).submit(Default::default()));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let network = TestNetwork::new(
@@ -551,7 +551,7 @@ pub mod test_helpers {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
-        let options = opt(Options::from(options::Http { port }));
+        let options = opt(Options::with_port(port));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let network = TestNetwork::new(
@@ -595,7 +595,7 @@ pub mod test_helpers {
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
-        let options = opt(Options::from(options::Http { port }).catchup(Default::default()));
+        let options = opt(Options::with_port(port).catchup(Default::default()));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let network = TestNetwork::new(
@@ -738,7 +738,7 @@ mod api_tests {
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let network = TestNetwork::new(
-            D::options(&storage, options::Http { port }.into()).submit(Default::default()),
+            D::options(&storage, Options::with_port(port)).submit(Default::default()),
             [no_storage::Options; TestConfig::NUM_NODES],
             l1,
             None,
@@ -834,10 +834,7 @@ mod api_tests {
 
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
-        let options = Options::from(options::Http {
-            port: query_service_port,
-        })
-        .hotshot_events(hotshot_events);
+        let options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
 
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
@@ -922,7 +919,7 @@ mod test {
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
-        let options = Options::from(options::Http { port });
+        let options = Options::with_port(port);
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let _network = TestNetwork::new(
@@ -968,7 +965,7 @@ mod test {
         let storage = SqlDataSource::create_storage().await;
         let options = SqlDataSource::options(
             &storage,
-            Options::from(options::Http { port })
+            Options::with_port(port)
                 .state(Default::default())
                 .status(Default::default()),
         );
@@ -1043,7 +1040,7 @@ mod test {
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let mut network = TestNetwork::with_state(
-            Options::from(options::Http { port }).catchup(Default::default()),
+            Options::with_port(port).catchup(Default::default()),
             Default::default(),
             [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|_| {
@@ -1147,7 +1144,7 @@ mod test {
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let mut network = TestNetwork::with_state(
-            SqlDataSource::options(&storage[0], options::Http { port }.into())
+            SqlDataSource::options(&storage[0], Options::with_port(port))
                 .state(Default::default())
                 .status(Default::default()),
             Default::default(),
@@ -1217,7 +1214,7 @@ mod test {
             .try_into()
             .unwrap();
         let _network = TestNetwork::with_state(
-            SqlDataSource::options(&storage[0], options::Http { port }.into())
+            SqlDataSource::options(&storage[0], Options::with_port(port))
                 .catchup(Default::default()),
             Default::default(),
             persistence,

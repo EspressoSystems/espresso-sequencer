@@ -20,7 +20,7 @@ use async_std::sync::{Arc, RwLock};
 use clap::Parser;
 use futures::{
     channel::oneshot,
-    future::{BoxFuture, FutureExt},
+    future::{BoxFuture, Future, FutureExt},
 };
 use hotshot_query_service::{
     data_source::{ExtensibleDataSource, MetricsDataSource},
@@ -29,6 +29,7 @@ use hotshot_query_service::{
 };
 use hotshot_types::traits::metrics::{Metrics, NoMetrics};
 use tide_disco::{
+    listener::RateLimitListener,
     method::{ReadState, WriteState},
     App, Url,
 };
@@ -70,6 +71,11 @@ impl From<Http> for Options {
 }
 
 impl Options {
+    /// Default options for running a web server on the given port.
+    pub fn with_port(port: u16) -> Self {
+        Http::with_port(port).into()
+    }
+
     /// Add a query API module backed by a Postgres database.
     pub fn query_sql(mut self, query: Query, storage: persistence::sql::Options) -> Self {
         self.query = Some(query);
@@ -215,10 +221,7 @@ impl Options {
                 )?;
             }
 
-            tasks.spawn(
-                "API server",
-                app.serve(format!("0.0.0.0:{}", self.http.port), bind_version),
-            );
+            tasks.spawn("API server", self.listen(self.http.port, app, bind_version));
 
             metrics
         } else {
@@ -240,10 +243,7 @@ impl Options {
                 )?;
             }
 
-            tasks.spawn(
-                "API server",
-                app.serve(format!("0.0.0.0:{}", self.http.port), bind_version),
-            );
+            tasks.spawn("API server", self.listen(self.http.port, app, bind_version));
 
             Box::new(NoMetrics)
         };
@@ -324,7 +324,7 @@ impl Options {
 
         tasks.spawn(
             "API server",
-            app.serve(format!("0.0.0.0:{}", self.http.port), Ver::instance()),
+            self.listen(self.http.port, app, Ver::instance()),
         );
         Ok(metrics)
     }
@@ -381,7 +381,7 @@ impl Options {
 
         tasks.spawn(
             "API server",
-            app.serve(format!("0.0.0.0:{}", self.http.port), Ver::instance()),
+            self.listen(self.http.port, app, Ver::instance()),
         );
         Ok(metrics)
     }
@@ -460,16 +460,38 @@ impl Options {
 
         tasks.spawn(
             "Hotshot Events Streaming API server",
-            app.serve(
-                format!(
-                    "0.0.0.0:{}",
-                    self.hotshot_events.unwrap().events_service_port
-                ),
+            self.listen(
+                self.hotshot_events.unwrap().events_service_port,
+                app,
                 bind_version,
             ),
         );
 
         Ok(())
+    }
+
+    fn listen<S, E, Ver>(
+        &self,
+        port: u16,
+        app: App<S, E>,
+        bind_version: Ver,
+    ) -> impl Future<Output = anyhow::Result<()>>
+    where
+        S: Send + Sync + 'static,
+        E: Send + Sync + tide_disco::Error,
+        Ver: StaticVersionType + 'static,
+    {
+        let max_connections = self.http.max_connections;
+
+        async move {
+            if let Some(limit) = max_connections {
+                app.serve(RateLimitListener::with_port(port, limit), bind_version)
+                    .await?;
+            } else {
+                app.serve(format!("0.0.0.0:{}", port), bind_version).await?;
+            }
+            Ok(())
+        }
     }
 }
 
@@ -477,11 +499,33 @@ impl Options {
 ///
 /// The API automatically includes health and version endpoints. Additional API modules can be
 /// added by including the query-api or submit-api modules.
-#[derive(Parser, Clone, Debug)]
+#[derive(Parser, Clone, Copy, Debug)]
 pub struct Http {
     /// Port that the HTTP API will use.
     #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
-    pub port: u16,
+    pub(super) port: u16,
+
+    /// Maximum number of concurrent HTTP connections the server will allow.
+    ///
+    /// Connections exceeding this will receive and immediate 429 response and be closed.
+    ///
+    /// Leave unset for no connection limit.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_CONNECTIONS")]
+    pub(super) max_connections: Option<usize>,
+}
+
+impl Http {
+    /// Default options for running a web server on the given port.
+    pub fn with_port(port: u16) -> Self {
+        Self {
+            port,
+            max_connections: None,
+        }
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
 }
 
 /// Options for the submission API module.
