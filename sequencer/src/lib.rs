@@ -387,9 +387,9 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         let view = upgrade.view;
         // >>>> ?????
         config.config.start_proposing_view = view;
-        config.config.stop_proposing_view = view + 20;
-        config.config.start_voting_view = view + 21;
-        config.config.stop_proposing_view = view + 40;
+        config.config.stop_proposing_view = u64::MAX;
+        config.config.start_voting_view = 1;
+        config.config.stop_proposing_view = view + 1;
     }
     let node_index = config.node_index;
 

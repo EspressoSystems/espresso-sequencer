@@ -3,19 +3,25 @@ use super::{
     AccountQueryData, BlocksFrontier,
 };
 use crate::{
-    persistence::sql::Options,
+    persistence::{
+        sql::{sql_param, Options},
+        ChainConfigPersistence,
+    },
     state::{BlockMerkleTree, FeeAccountProof, FeeMerkleTree},
-    SeqTypes,
+    ChainConfig, SeqTypes,
 };
 use anyhow::{bail, Context};
 use async_trait::async_trait;
+use committable::Commitment;
 use ethers::prelude::Address;
 use hotshot_query_service::{
     data_source::{
-        sql::{Config, SqlDataSource},
+        sql::{Config, Query, SqlDataSource},
         storage::SqlStorage,
+        VersionedDataSource,
     },
     merklized_state::{MerklizedStateDataSource, Snapshot},
+    Resolvable,
 };
 use hotshot_types::data::ViewNumber;
 use jf_merkle_tree::{prelude::MerkleNode, MerkleTreeScheme};
@@ -85,6 +91,13 @@ impl CatchupDataSource for SqlStorage {
         .await
         .context(format!("fetching frontier at height {height}"))
     }
+
+    async fn get_chain_config(
+        &self,
+        commitment: committable::Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        self.load_chain_config(commitment).await
+    }
 }
 
 impl CatchupDataSource for DataSource {
@@ -101,6 +114,61 @@ impl CatchupDataSource for DataSource {
 
     async fn get_frontier(&self, height: u64, view: ViewNumber) -> anyhow::Result<BlocksFrontier> {
         self.storage().await.get_frontier(height, view).await
+    }
+}
+
+#[async_trait]
+impl ChainConfigPersistence for SqlStorage {
+    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
+        let commitment = chain_config.commitment();
+        let data = bincode::serialize(&chain_config)?;
+
+        let mut transaction = self.transaction().await?;
+
+        transaction
+            .upsert(
+                "chain_config",
+                ["commitment", "data"],
+                ["commitment"],
+                [[sql_param(&(commitment.to_string())), sql_param(&data)]],
+            )
+            .await?;
+
+        self.commit().await?;
+
+        Ok(())
+    }
+
+    async fn load_chain_config(
+        &self,
+        commitment: committable::Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        let query = self
+            .query_one(
+                "SELECT * from chain_config where commitment = $1",
+                [&commitment.to_string()],
+            )
+            .await?;
+
+        let data: Vec<u8> = query.try_get("data")?;
+
+        bincode::deserialize(&data[..]).context("failed to deserialize")
+    }
+}
+
+#[async_trait]
+impl ChainConfigPersistence for DataSource {
+    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
+        (*self.storage_mut().await)
+            .insert_chain_config(chain_config)
+            .await
+    }
+
+    async fn load_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        self.storage().await.load_chain_config(commitment).await
     }
 }
 

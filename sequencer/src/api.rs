@@ -1,15 +1,16 @@
 use self::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
 use crate::{
     network,
-    persistence::SequencerPersistence,
+    persistence::{ChainConfigPersistence, SequencerPersistence},
     state::{BlockMerkleTree, FeeAccountProof},
     state_signature::StateSigner,
-    Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
+    ChainConfig, Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
 };
-use anyhow::Context;
+use anyhow::{bail, Context};
 use async_once_cell::Lazy;
 use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
+use committable::Commitment;
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use ethers::prelude::{Address, U256};
@@ -217,6 +218,41 @@ impl<
         // Try storage.
         self.inner().get_frontier(height, view).await
     }
+
+    async fn get_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        // Check if we have the desired state in memory.
+        match self.as_ref().get_chain_config(commitment).await {
+            Ok(cf) => return Ok(cf),
+            Err(err) => {
+                tracing::info!("chain config is not in memory, trying storage: {err:#}");
+            }
+        }
+
+        // Try storage.
+        self.inner().get_chain_config(commitment).await
+    }
+}
+
+#[async_trait]
+impl<
+        N: network::Type,
+        Ver: StaticVersionType + 'static,
+        P: SequencerPersistence,
+        D: ChainConfigPersistence + Send + Sync,
+    > ChainConfigPersistence for StorageState<N, P, D, Ver>
+{
+    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
+        self.inner_mut().insert_chain_config(chain_config).await
+    }
+    async fn load_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        self.inner().load_chain_config(commitment).await
+    }
 }
 
 impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence> CatchupDataSource
@@ -260,6 +296,20 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
         let tree = &state.block_merkle_tree;
         let frontier = tree.lookup(tree.num_leaves() - 1).expect_ok()?.1;
         Ok(frontier)
+    }
+
+    async fn get_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        let state = self.consensus().await.read().await.decided_state().await;
+        let chain_config = state.chain_config;
+
+        if chain_config.commit() == commitment {
+            chain_config.resolve().context("chain config found")
+        } else {
+            bail!("chain config not found")
+        }
     }
 }
 

@@ -8,11 +8,13 @@
 //! an extension that node operators can opt into. This module defines the minimum level of
 //! persistence which is _required_ to run a node.
 
-use crate::{Leaf, NodeState, PubKey, SeqTypes, StateCatchup, ValidatedState, ViewNumber};
+use crate::{
+    ChainConfig, Leaf, NodeState, PubKey, SeqTypes, StateCatchup, ValidatedState, ViewNumber,
+};
 use anyhow::{bail, ensure, Context};
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use committable::Committable;
+use committable::{Commitment, Committable};
 use hotshot::{
     traits::ValidatedState as _,
     types::{Event, EventType},
@@ -234,6 +236,15 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()>;
+}
+
+#[async_trait]
+pub trait ChainConfigPersistence: Sized + Send + Sync + 'static {
+    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()>;
+    async fn load_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig>;
 }
 
 #[cfg(test)]

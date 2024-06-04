@@ -1,7 +1,7 @@
 use crate::{
     api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
     chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair, genesis::UpgradeType,
-    ChainConfig, Header, Leaf, NodeState, SeqTypes,
+    persistence::ChainConfigPersistence, ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use ark_serialize::{
@@ -26,6 +26,7 @@ use hotshot_query_service::{
     explorer::MonetaryValue,
     merklized_state::{MerklizedState, MerklizedStateHeightPersistence, UpdateStateData},
     types::HeightIndexed,
+    Resolvable,
 };
 use hotshot_types::{
     data::{BlockError, ViewNumber},
@@ -231,8 +232,8 @@ pub fn validate_proposal(
         proposal.chain_config.commit() == expected_chain_config.commit(),
         anyhow::anyhow!(
             "Invalid Chain Config: local={:?}, proposal={:?}",
-            expected_chain_config,
-            proposal.chain_config
+            expected_chain_config.commitment(),
+            proposal.chain_config.commit(),
         )
     );
 
@@ -440,6 +441,8 @@ async fn update_state_storage(
     proposed_leaf: &LeafQueryData<SeqTypes>,
     version: Version,
 ) -> anyhow::Result<ValidatedState> {
+    let parent_chain_config = parent_state.chain_config;
+
     let (state, delta) =
         compute_state_update(parent_state, instance, parent_leaf, proposed_leaf, version)
             .await
@@ -450,6 +453,16 @@ async fn update_state_storage(
     {
         storage.revert().await;
         return Err(err);
+    }
+
+    if parent_chain_config != state.chain_config {
+        if let Err(err) = storage
+            .insert_chain_config(state.chain_config.resolve().unwrap())
+            .await
+        {
+            storage.revert().await;
+            return Err(err);
+        }
     }
 
     Ok(state)
@@ -562,6 +575,7 @@ pub(crate) trait SequencerStateDataSource:
     + UpdateStateData<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
     + UpdateStateData<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
     + MerklizedStateHeightPersistence
+    + ChainConfigPersistence
 {
 }
 
@@ -574,6 +588,7 @@ impl<T> SequencerStateDataSource for T where
         + UpdateStateData<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
         + UpdateStateData<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
         + MerklizedStateHeightPersistence
+        + ChainConfigPersistence
 {
 }
 
@@ -591,8 +606,6 @@ impl ValidatedState {
         header_cf: &ResolvableChainConfig,
         version: Version,
     ) -> anyhow::Result<ChainConfig> {
-        // TODO(abdul) : to be uncommented after we have upgrade mechanism
-
         if header_cf.commit() != self.chain_config.commit() {
             bail!(
                 "Proposed header chain config commit={} expected={}",
@@ -822,10 +835,15 @@ impl HotShotState<SeqTypes> for ValidatedState {
             .await
             .unwrap();
 
+        let chain_config = validated_state
+            .chain_config
+            .resolve()
+            .expect("Chain Config not found in validated state");
+
         // validate the proposal
         if let Err(err) = validate_proposal(
             &validated_state,
-            instance.chain_config,
+            chain_config,
             parent_leaf,
             proposed_header,
             &vid_common,

@@ -345,9 +345,9 @@ where
 
     async fn try_fetch_chain_config(
         &self,
-        _commitment: Commitment<ChainConfig>,
+        commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
-        bail!("chain config catchup is not supported for SQL data source");
+        self.db.read().await.get_chain_config(commitment).await
     }
 }
 

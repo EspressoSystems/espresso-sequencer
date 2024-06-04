@@ -2,6 +2,7 @@ use crate::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
     chain_config::ResolvableChainConfig,
     eth_signature_key::BuilderSignature,
+    genesis::UpgradeType,
     l1_client::L1Snapshot,
     state::{BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment},
     ChainConfig, L1BlockInfo, Leaf, NamespaceId, NodeState, SeqTypes, ValidatedState,
@@ -9,7 +10,7 @@ use crate::{
 use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
-use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
+use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader, Resolvable};
 use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BlockPayload, BuilderFee},
@@ -246,6 +247,26 @@ impl Header {
             builder_signature,
         })
     }
+
+    async fn get_chain_config(
+        validated_state: &ValidatedState,
+        instance_state: &NodeState,
+    ) -> anyhow::Result<ChainConfig> {
+        if validated_state.chain_config.commit() == instance_state.chain_config.commitment() {
+            Ok(instance_state.chain_config)
+        } else {
+            match validated_state.chain_config.resolve() {
+                Some(cf) => Ok(cf),
+                None => {
+                    instance_state
+                        .peers
+                        .as_ref()
+                        .fetch_chain_config(validated_state.chain_config.commit())
+                        .await
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -286,17 +307,28 @@ impl BlockHeader<SeqTypes> for Header {
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: BuilderFee<SeqTypes>,
         _vid_common: VidCommon,
-        _version: Version,
+        version: Version,
     ) -> Result<Self, Self::Error> {
         let height = parent_leaf.height();
         let view = parent_leaf.view_number();
 
         let mut validated_state = parent_state.clone();
 
-        let chain_config = validated_state
-            .chain_config
-            .resolve()
-            .unwrap_or(instance_state.chain_config);
+        let chain_config = if version > instance_state.sequencer_version {
+            match instance_state
+                .upgrades
+                .get(&version)
+                .map(|upgrade| match upgrade.upgrade_type {
+                    UpgradeType::ChainConfig { chain_config } => chain_config,
+                }) {
+                Some(cf) => cf,
+                None => Header::get_chain_config(&validated_state, instance_state).await?,
+            }
+        } else {
+            Header::get_chain_config(&validated_state, instance_state).await?
+        };
+
+        validated_state.chain_config = chain_config.into();
 
         // Fetch the latest L1 snapshot.
         let l1_snapshot = instance_state.l1_client.snapshot().await;
