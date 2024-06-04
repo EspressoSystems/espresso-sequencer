@@ -73,7 +73,7 @@ use persistence::{PersistenceOptions, SequencerPersistence};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc};
-use vbs::version::{StaticVersion, StaticVersionType, Version};
+use vbs::version::{StaticVersionType, Version};
 
 #[cfg(feature = "libp2p")]
 use std::time::Duration;
@@ -172,7 +172,6 @@ pub struct NodeState {
     pub genesis_state: ValidatedState,
     pub l1_genesis: Option<L1BlockInfo>,
     pub upgrades: BTreeMap<Version, Upgrade>,
-    pub sequencer_version: Version,
 }
 
 impl NodeState {
@@ -181,7 +180,6 @@ impl NodeState {
         chain_config: ChainConfig,
         l1_client: L1Client,
         catchup: impl StateCatchup + 'static,
-        sequencer_version: Version,
     ) -> Self {
         Self {
             node_id,
@@ -195,20 +193,16 @@ impl NodeState {
             },
             l1_genesis: None,
             upgrades: Default::default(),
-            sequencer_version,
         }
     }
 
     #[cfg(any(test, feature = "testing"))]
     pub fn mock() -> Self {
-        use vbs::version::StaticVersion;
-
         Self::new(
             0,
             ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
             catchup::mock::MockStateCatchup::default(),
-            StaticVersion::<1, 0>::version(),
         )
     }
 
@@ -238,7 +232,6 @@ impl Default for NodeState {
             ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
             catchup::mock::MockStateCatchup::default(),
-            StaticVersion::<1, 0>::version(),
         )
     }
 }
@@ -498,7 +491,6 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         .await,
         node_id: node_index,
         upgrades: genesis.upgrades,
-        sequencer_version: Ver::version(),
     };
 
     let mut ctx = SequencerContext::init(
@@ -747,7 +739,6 @@ pub mod testing {
                 ChainConfig::default(),
                 L1Client::new(self.url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
-                Ver::version(),
             )
             .with_genesis(state);
 

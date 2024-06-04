@@ -623,16 +623,12 @@ impl ValidatedState {
             );
         }
 
-        let current_version = instance.sequencer_version;
-
-        if version > current_version {
-            let upgrades = &instance.upgrades;
-            if let Some(upgrade) = upgrades.get(&version) {
-                match upgrade.upgrade_type {
-                    UpgradeType::ChainConfig { chain_config } => {
-                        self.chain_config = chain_config.into();
-                        return Ok(chain_config);
-                    }
+        let upgrades = &instance.upgrades;
+        if let Some(upgrade) = upgrades.get(&version) {
+            match upgrade.upgrade_type {
+                UpgradeType::ChainConfig { chain_config } => {
+                    self.chain_config = chain_config.into();
+                    return Ok(chain_config);
                 }
             }
         }

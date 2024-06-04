@@ -319,18 +319,14 @@ impl BlockHeader<SeqTypes> for Header {
 
         let mut validated_state = parent_state.clone();
 
-        let chain_config = if version > instance_state.sequencer_version {
-            match instance_state
-                .upgrades
-                .get(&version)
-                .map(|upgrade| match upgrade.upgrade_type {
-                    UpgradeType::ChainConfig { chain_config } => chain_config,
-                }) {
-                Some(cf) => cf,
-                None => Header::get_chain_config(&validated_state, instance_state).await?,
-            }
-        } else {
-            Header::get_chain_config(&validated_state, instance_state).await?
+        let chain_config = match instance_state
+            .upgrades
+            .get(&version)
+            .map(|upgrade| match upgrade.upgrade_type {
+                UpgradeType::ChainConfig { chain_config } => chain_config,
+            }) {
+            Some(cf) => cf,
+            None => Header::get_chain_config(&validated_state, instance_state).await?,
         };
 
         validated_state.chain_config = chain_config.into();

@@ -1288,6 +1288,71 @@ mod test {
     }
 
     #[async_std::test]
+    async fn test_chain_config_upgrade() {
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+
+        let cf = ChainConfig {
+            max_block_size: 300.into(),
+            base_fee: 1.into(),
+            ..Default::default()
+        };
+
+        // State1 contains only the chain config commitment
+        let state1 = ValidatedState {
+            chain_config: cf.commit().into(),
+            ..Default::default()
+        };
+
+        //state 2 contains the full chain config
+        let state2 = ValidatedState {
+            chain_config: cf.into(),
+            ..Default::default()
+        };
+
+        let mut states = std::array::from_fn(|_| state1.clone());
+        // only one node has the full chain config
+        // all the other nodes should do a catchup to get the full chain config from peer 0
+        states[0] = state2;
+
+        let mut network = TestNetwork::with_state(
+            Options::from(options::Http { port }).catchup(Default::default()),
+            states,
+            [no_storage::Options; TestConfig::NUM_NODES],
+            std::array::from_fn(|_| {
+                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
+                    .parse()
+                    .unwrap()])
+            }),
+            l1,
+        )
+        .await;
+
+        // Wait for a few blocks to be decided.
+        network
+            .server
+            .event_stream()
+            .await
+            .filter(|event| future::ready(matches!(event.event, EventType::Decide { .. })))
+            .take(3)
+            .collect::<Vec<_>>()
+            .await;
+
+        for peer in &network.peers {
+            let state = peer.consensus().read().await.decided_state().await;
+
+            assert_eq!(state.chain_config.resolve().unwrap(), cf)
+        }
+
+        network.server.shut_down().await;
+        drop(network);
+    }
+
+    #[async_std::test]
     pub(crate) async fn test_restart() {
         setup_logging();
         setup_backtrace();

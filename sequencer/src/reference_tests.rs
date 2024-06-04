@@ -29,8 +29,9 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
 use es_version::SequencerVersion;
 use hotshot_types::traits::{
-    block_contents::vid_commitment, block_contents::TestableBlock,
-    signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
+    block_contents::{vid_commitment, TestableBlock},
+    signature_key::BuilderSignatureKey,
+    BlockPayload, EncodeBytes,
 };
 use jf_merkle_tree::MerkleTreeScheme;
 use pretty_assertions::assert_eq;
