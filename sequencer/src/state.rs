@@ -470,6 +470,7 @@ async fn update_state_storage(
 
 async fn store_genesis_state(
     storage: &mut impl SequencerStateDataSource,
+    chain_config: ChainConfig,
     state: &ValidatedState,
 ) -> anyhow::Result<()> {
     ensure!(
@@ -498,6 +499,8 @@ async fn store_genesis_state(
     }
 
     storage.commit().await?;
+
+    storage.insert_chain_config(chain_config).await?;
     Ok(())
 }
 
@@ -530,7 +533,13 @@ pub(crate) async fn update_state_storage_loop(
         // never the result of a state update and thus is not inserted in the loop below.
         tracing::info!("storing genesis merklized state");
         let mut storage = storage.write().await;
-        if let Err(err) = store_genesis_state(&mut *storage, &instance.genesis_state).await {
+        if let Err(err) = store_genesis_state(
+            &mut *storage,
+            instance.chain_config,
+            &instance.genesis_state,
+        )
+        .await
+        {
             tracing::error!("failed to store genesis state: {err:#}");
             storage.revert().await;
             return Err(err);

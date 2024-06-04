@@ -174,8 +174,10 @@ impl ChainConfigPersistence for DataSource {
 
 #[cfg(test)]
 mod impl_testable_data_source {
+
     use super::*;
     use crate::api::{self, data_source::testing::TestableSequencerDataSource};
+
     use hotshot_query_service::data_source::storage::sql::testing::TmpDb;
 
     fn tmp_options(db: &TmpDb) -> Options {

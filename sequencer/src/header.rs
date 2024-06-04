@@ -258,6 +258,11 @@ impl Header {
             match validated_state.chain_config.resolve() {
                 Some(cf) => Ok(cf),
                 None => {
+                    tracing::info!(
+                        "fetching chain config {} from peers",
+                        validated_state.chain_config.commit()
+                    );
+
                     instance_state
                         .peers
                         .as_ref()

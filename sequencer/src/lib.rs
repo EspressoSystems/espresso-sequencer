@@ -13,7 +13,7 @@ pub mod state_signature;
 mod message_compat_tests;
 mod reference_tests;
 
-use anyhow::Context;
+use anyhow::{Chain, Context};
 use async_std::sync::RwLock;
 use async_trait::async_trait;
 use block::entry::TxTableEntryWord;
@@ -189,7 +189,10 @@ impl NodeState {
             l1_client,
             peers: Arc::new(catchup),
             genesis_header: Default::default(),
-            genesis_state: Default::default(),
+            genesis_state: ValidatedState {
+                chain_config: chain_config.into(),
+                ..Default::default()
+            },
             l1_genesis: None,
             upgrades: Default::default(),
             sequencer_version,
@@ -465,7 +468,10 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    let mut genesis_state = ValidatedState::default();
+    let mut genesis_state = ValidatedState {
+        chain_config: genesis.chain_config.into(),
+        ..Default::default()
+    };
     for (address, amount) in genesis.accounts {
         tracing::info!(%address, %amount, "Prefunding account for demo");
         genesis_state.prefund_account(address, amount);
