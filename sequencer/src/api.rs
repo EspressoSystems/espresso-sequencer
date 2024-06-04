@@ -741,6 +741,7 @@ mod api_tests {
             D::options(&storage, options::Http { port }.into()).submit(Default::default()),
             [no_storage::Options; TestConfig::NUM_NODES],
             l1,
+            None,
         )
         .await;
         let mut events = network.server.event_stream().await;
@@ -840,8 +841,13 @@ mod api_tests {
 
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let _network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
+        let _network = TestNetwork::new(
+            options,
+            [no_storage::Options; TestConfig::NUM_NODES],
+            l1,
+            None,
+        )
+        .await;
 
         let mut subscribed_events = client
             .socket("hotshot-events/events")
@@ -919,8 +925,13 @@ mod test {
         let options = Options::from(options::Http { port });
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let _network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
+        let _network = TestNetwork::new(
+            options,
+            [no_storage::Options; TestConfig::NUM_NODES],
+            l1,
+            None,
+        )
+        .await;
 
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
@@ -1041,6 +1052,7 @@ mod test {
                     .unwrap()])
             }),
             l1,
+            None,
         )
         .await;
 
@@ -1142,6 +1154,7 @@ mod test {
             persistence,
             std::array::from_fn(|_| MockStateCatchup::default()),
             l1,
+            None,
         )
         .await;
 
@@ -1217,6 +1230,7 @@ mod test {
                     .unwrap()])
             }),
             l1,
+            None,
         )
         .await;
         let client: Client<ServerError, SequencerVersion> =

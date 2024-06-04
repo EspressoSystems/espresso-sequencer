@@ -811,7 +811,7 @@ mod test {
         let url = anvil.url();
         let mut config = TestConfig::default_with_l1(url);
 
-        let (builder_task, builder_url) = run_test_builder().await;
+        let (builder_task, builder_url) = run_test_builder(None).await;
 
         config.set_builder_url(builder_url);
 
@@ -853,7 +853,7 @@ mod test {
         let url = anvil.url();
         let mut config = TestConfig::default_with_l1(url);
 
-        let (builder_task, builder_url) = run_test_builder().await;
+        let (builder_task, builder_url) = run_test_builder(None).await;
 
         config.set_builder_url(builder_url);
         let handles = config.init_nodes(ver).await;
