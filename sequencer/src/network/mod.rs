@@ -1,9 +1,61 @@
+use std::fs::read_to_string;
+
+use anyhow::Result;
 use hotshot_types::message::Message;
+use libp2p::BootstrapNode;
+use persistence::NetworkConfig;
 
 use super::*;
 
 pub mod cdn;
 pub mod libp2p;
+
+/// The genesis network configuration. Overrides what is received from the orchestrator
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GenesisNetworkConfig {
+    /// An optional list of bootstrap nodes (multiaddress and peer ID) to connect to
+    pub bootstrap_nodes: Option<Vec<BootstrapNode>>,
+}
+
+impl GenesisNetworkConfig {
+    /// Load the genesis network config from a file
+    pub fn load_from_file(path: String) -> Result<GenesisNetworkConfig> {
+        // Read the genesis network config from the file
+        let genesis_network_config =
+            read_to_string(&path).with_context(|| "Failed to load bootstrap nodes from file")?;
+
+        // Parse as TOML
+        let genesis_network_config: GenesisNetworkConfig = toml::from_str(&genesis_network_config)
+            .with_context(|| format!("Failed to parse bootstrap nodes from file: {}", path))?;
+
+        Ok(genesis_network_config)
+    }
+
+    /// Update the HotShot config with the genesis network config
+    pub fn populate_config(&self, config: &mut NetworkConfig) -> Result<()> {
+        // Attempt to populate the bootstrap nodes if present
+        if let Some(bootstrap_nodes) = &self.bootstrap_nodes {
+            // Make sure Libp2p is configured if we have supplied bootstrap nodes
+            let Some(ref mut libp2p_config) = config.libp2p_config else {
+                return Err(anyhow::anyhow!(
+                    "Bootstrap nodes supplied but no libp2p configuration found"
+                ));
+            };
+
+            // Replace the bootstrap nodes with the ones from the file
+            libp2p_config.bootstrap_nodes = bootstrap_nodes
+                .iter()
+                .cloned()
+                .map(|node| {
+                    let BootstrapNode { address, peer_id } = node;
+                    (peer_id, address)
+                })
+                .collect();
+        }
+
+        Ok(())
+    }
+}
 
 pub trait Type: 'static {
     type DAChannel: ConnectedNetwork<Message<SeqTypes>, PubKey>;

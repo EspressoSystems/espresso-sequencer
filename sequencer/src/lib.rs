@@ -28,7 +28,6 @@ use genesis::{GenesisHeader, L1Finalized};
 
 use l1_client::L1Client;
 
-use network::libp2p::BootstrapInfo;
 use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
@@ -287,12 +286,6 @@ pub struct NetworkParams {
     pub libp2p_advertise_address: SocketAddr,
     /// The address to bind to for Libp2p
     pub libp2p_bind_address: SocketAddr,
-
-    /// The (optional) bootstrap info for Libp2p.
-    ///
-    /// If supplied, these values will override the values
-    /// supplied by the orchestrator and the loaded config
-    pub libp2p_bootstrap_info: Option<BootstrapInfo>,
 }
 
 pub struct L1Params {
@@ -381,9 +374,9 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         }
     };
 
-    // If configured, override the supplied bootstrap nodes with the ones from the file
-    if let Some(nodes) = network_params.libp2p_bootstrap_info {
-        nodes.populate_config(&mut config)?;
+    // If the network is configured manually, override what we got from the orchestrator
+    if let Some(genesis_network_config) = genesis.network {
+        genesis_network_config.populate_config(&mut config)?;
     }
 
     let node_index = config.node_index;

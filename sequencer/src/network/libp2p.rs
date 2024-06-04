@@ -1,15 +1,6 @@
-use std::fs::read_to_string;
-
-use anyhow::{Context, Result};
+use anyhow::Result;
 use libp2p::{multiaddr::Protocol, Multiaddr, PeerId};
-use serde::{Deserialize, Deserializer};
-
-use crate::persistence::NetworkConfig;
-
-#[derive(Deserialize, Clone, Debug)]
-pub struct BootstrapInfo {
-    pub bootstrap_nodes: Vec<BootstrapNode>,
-}
+use serde::Deserializer;
 
 /// A bootstrap node. Contains the multiaddress and peer ID
 #[derive(Clone, Debug)]
@@ -34,38 +25,14 @@ impl<'de> serde::Deserialize<'de> for BootstrapNode {
     }
 }
 
-impl BootstrapInfo {
-    /// Load the bootstrap info from a file
-    pub fn load_from_file(path: String) -> Result<BootstrapInfo> {
-        // Read the bootstrap nodes from the file
-        let bootstrap_info =
-            read_to_string(&path).with_context(|| "Failed to load bootstrap nodes from file")?;
+/// Serialize a `BootstrapNode` to a normal multiaddress in the `TOML` file
+impl serde::Serialize for BootstrapNode {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut address = self.address.clone();
 
-        // Parse as TOML
-        let bootstrap_info: BootstrapInfo = toml::from_str(&bootstrap_info)
-            .with_context(|| format!("Failed to parse bootstrap nodes from file: {}", path))?;
+        // The standard is to have the peer ID as the last part of the address
+        address.push(Protocol::P2p(self.peer_id));
 
-        Ok(bootstrap_info)
-    }
-
-    /// Update the HotShot config with the bootstrap information
-    pub fn populate_config(&self, config: &mut NetworkConfig) -> Result<()> {
-        // Make sure Libp2p is configured
-        let Some(ref mut libp2p_config) = config.libp2p_config else {
-            return Err(anyhow::anyhow!("No libp2p configuration found"));
-        };
-
-        // Replace the bootstrap nodes with the ones from the file
-        libp2p_config.bootstrap_nodes = self
-            .bootstrap_nodes
-            .iter()
-            .cloned()
-            .map(|node| {
-                let BootstrapNode { address, peer_id } = node;
-                (peer_id, address)
-            })
-            .collect();
-
-        Ok(())
+        address.serialize(s)
     }
 }

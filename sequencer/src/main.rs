@@ -1,6 +1,5 @@
 use std::net::ToSocketAddrs;
 
-use anyhow::Context;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use es_version::SEQUENCER_VERSION;
@@ -74,21 +73,10 @@ where
         .find(|x| x.is_ipv4())
         .ok_or(anyhow::anyhow!("Failed to resolve Libp2p bind address"))?;
 
-    // If supplied, parse the Libp2p bootstrap info from the file
-    let libp2p_bootstrap_info = if let Some(libp2p_bootstrap_file) = opt.libp2p_bootstrap_file {
-        Some(
-            sequencer::network::libp2p::BootstrapInfo::load_from_file(libp2p_bootstrap_file)
-                .with_context(|| "Failed to load Libp2p bootstrap file")?,
-        )
-    } else {
-        None
-    };
-
     let network_params = NetworkParams {
         cdn_endpoint: opt.cdn_endpoint,
         libp2p_advertise_address,
         libp2p_bind_address,
-        libp2p_bootstrap_info,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
         private_staking_key,
@@ -206,6 +194,7 @@ mod test {
             accounts: Default::default(),
             l1_finalized: Default::default(),
             header: Default::default(),
+            network: Default::default(),
         };
         genesis.to_file(&genesis_file).unwrap();
 
