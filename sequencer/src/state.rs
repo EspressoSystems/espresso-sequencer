@@ -2,7 +2,7 @@ use crate::{
     api::data_source::CatchupDataSource, catchup::SqlStateCatchup, chain_config::BlockSize,
     eth_signature_key::EthKeyPair, ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
-use anyhow::{anyhow, bail, ensure, Context};
+use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
