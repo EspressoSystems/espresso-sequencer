@@ -81,6 +81,7 @@ jf-rescue = { workspace = true }
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
+libp2p = { version = "0.53", default-features = false } 
 num-traits = "0.2.18"
 portpicker = { workspace = true }
 rand = "0.8.5"
