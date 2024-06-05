@@ -618,7 +618,7 @@ impl ValidatedState {
         let header_cf_commit = header_cf.commit();
 
         if version > instance.current_version {
-            if let Some(upgrade) = &instance.upgrades.get(&version) {
+            if let Some(upgrade) = &instance.upgrades.get(&instance.current_version) {
                 match upgrade.upgrade_type {
                     UpgradeType::ChainConfig { chain_config } => {
                         if header_cf_commit == chain_config.commit() {

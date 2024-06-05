@@ -322,7 +322,7 @@ impl BlockHeader<SeqTypes> for Header {
         let chain_config = if version > instance_state.current_version {
             match instance_state
                 .upgrades
-                .get(&version)
+                .get(&instance_state.current_version)
                 .map(|upgrade| match upgrade.upgrade_type {
                     UpgradeType::ChainConfig { chain_config } => chain_config,
                 }) {
