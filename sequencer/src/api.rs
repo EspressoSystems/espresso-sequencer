@@ -932,6 +932,7 @@ mod test {
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StatePeers},
+        genesis::{Upgrade, UpgradeType},
         persistence::no_storage,
         state::{FeeAccount, FeeAmount, ValidatedState},
         testing::TestConfig,
@@ -959,9 +960,10 @@ mod test {
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork,
+        TestNetwork, TestNetworkUpgrades,
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
+    use vbs::version::Version;
 
     #[async_std::test]
     async fn test_healthcheck() {
@@ -1289,6 +1291,97 @@ mod test {
             let state = peer.consensus().read().await.decided_state().await;
 
             assert_eq!(state.chain_config.resolve().unwrap(), cf)
+        }
+
+        network.server.shut_down().await;
+        drop(network);
+    }
+
+    #[async_std::test]
+    async fn test_chain_config_upgrade() {
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+
+        let chain_config_upgrade = ChainConfig {
+            max_block_size: 300.into(),
+            base_fee: 1.into(),
+            ..Default::default()
+        };
+        let mut map = std::collections::BTreeMap::new();
+        map.insert(
+            Version { major: 0, minor: 1 },
+            Upgrade {
+                view: 5,
+                upgrade_type: UpgradeType::ChainConfig {
+                    chain_config: chain_config_upgrade,
+                },
+            },
+        );
+
+        let upgrades = TestNetworkUpgrades {
+            upgrades: map,
+            start_proposing_view: 5,
+            stop_proposing_view: 6,
+            start_voting_view: 1,
+            stop_voting_view: 100,
+        };
+
+        let mut network = TestNetwork::with_state(
+            Options::from(options::Http { port }).catchup(Default::default()),
+            Default::default(),
+            [no_storage::Options; TestConfig::NUM_NODES],
+            std::array::from_fn(|_| {
+                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
+                    .parse()
+                    .unwrap()])
+            }),
+            l1,
+            Some(upgrades),
+        )
+        .await;
+
+        let mut events = network.server.event_stream().await;
+        loop {
+            let event = events.next().await.unwrap();
+
+            match event.event {
+                EventType::UpgradeProposal { proposal, .. } => {
+                    let upgrade = proposal.data.upgrade_proposal;
+                    let new_version = upgrade.new_version;
+                    assert_eq!(new_version, Version { major: 0, minor: 2 });
+                    break;
+                }
+                _ => continue,
+            }
+        }
+
+        let mut upgrades = [false; TestConfig::NUM_NODES];
+        loop {
+            let event = events.next().await.unwrap();
+            let EventType::Decide { leaf_chain, .. } = event.event else {
+                continue;
+            };
+            for LeafInfo { leaf, state, .. } in leaf_chain.iter().rev() {
+                let height = leaf.height();
+                let leaf_builder = (leaf.view_number().u64() as usize) % TestConfig::NUM_NODES;
+                if height == 0 {
+                    continue;
+                }
+
+                if let Some(cf) = state.chain_config.resolve() {
+                    if cf == chain_config_upgrade {
+                        upgrades[leaf_builder] = true;
+                    }
+                }
+            }
+
+            if upgrades.iter().all(|upgrade_completed| *upgrade_completed) {
+                break;
+            }
         }
 
         network.server.shut_down().await;
