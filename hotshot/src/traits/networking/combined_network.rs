@@ -12,23 +12,24 @@ use std::{
     time::Duration,
 };
 
+use async_broadcast::{broadcast, InactiveReceiver, Sender};
 use async_compatibility_layer::{
     art::{async_sleep, async_spawn},
     channel::UnboundedSendError,
 };
 use async_lock::RwLock;
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 use async_trait::async_trait;
-use futures::{channel::mpsc, future::join_all, join, select, FutureExt};
-use hotshot_task_impls::helpers::cancel_task;
+use futures::{channel::mpsc, join, select, FutureExt};
 #[cfg(feature = "hotshot-testing")]
 use hotshot_types::traits::network::{
     AsyncGenerator, NetworkReliability, TestableNetworkingImplementation,
 };
 use hotshot_types::{
     boxed_sync,
-    constants::{COMBINED_NETWORK_CACHE_SIZE, COMBINED_NETWORK_MIN_PRIMARY_FAILURES},
+    constants::{
+        COMBINED_NETWORK_CACHE_SIZE, COMBINED_NETWORK_MIN_PRIMARY_FAILURES,
+        COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
+    },
     data::ViewNumber,
     message::{GeneralConsensusMessage, Message, MessageKind, SequencingMessage},
     traits::{
@@ -38,9 +39,7 @@ use hotshot_types::{
     BoxSyncFuture,
 };
 use lru::LruCache;
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::JoinHandle;
-use tracing::{info, warn};
+use tracing::{debug, warn};
 use vbs::version::StaticVersionType;
 
 use super::{push_cdn_network::PushCdnNetwork, NetworkError};
@@ -53,8 +52,8 @@ pub fn calculate_hash_of<T: Hash>(t: &T) -> u64 {
     s.finish()
 }
 
-/// thread-safe ref counted lock to a map of delayed tasks
-type DelayedTasksLockedMap = Arc<RwLock<BTreeMap<u64, Vec<JoinHandle<Result<(), NetworkError>>>>>>;
+/// Thread-safe ref counted lock to a map of channels to the delayed tasks
+type DelayedTasksChannelsMap = Arc<RwLock<BTreeMap<u64, (Sender<()>, InactiveReceiver<()>)>>>;
 
 /// A communication channel with 2 networks, where we can fall back to the slower network if the
 /// primary fails
@@ -72,11 +71,14 @@ pub struct CombinedNetworks<TYPES: NodeType> {
     /// Whether primary is considered down
     primary_down: Arc<AtomicBool>,
 
-    /// delayed, cancelable tasks for secondary network
-    delayed_tasks: DelayedTasksLockedMap,
-
-    /// how long to delay
+    /// How long to delay
     delay_duration: Arc<RwLock<Duration>>,
+
+    /// Channels to the delayed tasks
+    delayed_tasks_channels: DelayedTasksChannelsMap,
+
+    /// How many times messages were sent on secondary without delay because primary is down
+    no_delay_counter: Arc<AtomicU64>,
 }
 
 impl<TYPES: NodeType> CombinedNetworks<TYPES> {
@@ -104,8 +106,9 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
             ))),
             primary_fail_counter: Arc::new(AtomicU64::new(0)),
             primary_down: Arc::new(AtomicBool::new(false)),
-            delayed_tasks: Arc::default(),
             delay_duration: Arc::new(RwLock::new(delay_duration)),
+            delayed_tasks_channels: Arc::default(),
+            no_delay_counter: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -141,13 +144,16 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
         primary_future: impl Future<Output = Result<(), NetworkError>> + Send + 'static,
         secondary_future: impl Future<Output = Result<(), NetworkError>> + Send + 'static,
     ) -> Result<(), NetworkError> {
-        // Check if primary is down
+        // A local variable used to decide whether to delay this message or not
         let mut primary_failed = false;
         if self.primary_down.load(Ordering::Relaxed) {
+            // If the primary is considered down, we don't want to delay
             primary_failed = true;
         } else if self.primary_fail_counter.load(Ordering::Relaxed)
             > COMBINED_NETWORK_MIN_PRIMARY_FAILURES
         {
+            // If the primary failed more than `COMBINED_NETWORK_MIN_PRIMARY_FAILURES` times,
+            // we don't want to delay this message, and from now on we consider the primary as down
             warn!(
                 "Primary failed more than {} times and is considered down now",
                 COMBINED_NETWORK_MIN_PRIMARY_FAILURES
@@ -156,29 +162,90 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
             primary_failed = true;
         }
 
-        // always send on the primary network
+        // Always send on the primary network
         if let Err(e) = primary_future.await {
+            // If the primary failed right away, we don't want to delay this message
             warn!("Error on primary network: {}", e);
             self.primary_fail_counter.fetch_add(1, Ordering::Relaxed);
             primary_failed = true;
         };
 
         if !primary_failed && Self::should_delay(&message) {
+            // We are delaying this message
             let duration = *self.delay_duration.read().await;
+            let primary_down = Arc::clone(&self.primary_down);
             let primary_fail_counter = Arc::clone(&self.primary_fail_counter);
-            self.delayed_tasks
+            // Each delayed task gets its own receiver clone to get a signal cancelling all tasks
+            // related to the given view.
+            let mut receiver = self
+                .delayed_tasks_channels
                 .write()
                 .await
                 .entry(message.kind.view_number().u64())
-                .or_default()
-                .push(async_spawn(async move {
-                    async_sleep(duration).await;
-                    info!("Sending on secondary after delay, message possibly has not reached recipient on primary");
-                    primary_fail_counter.fetch_add(1, Ordering::Relaxed);
-                    secondary_future.await
-                }));
+                .or_insert_with(|| {
+                    let (s, r) = broadcast(1);
+                    (s, r.deactivate())
+                })
+                .1
+                .activate_cloned();
+            // Spawn a task that sleeps for `duration` and then sends the message if it wasn't cancelled
+            async_spawn(async move {
+                async_sleep(duration).await;
+                if receiver.try_recv().is_ok() {
+                    // The task has been cancelled because the view progressed, it means the primary is working fine
+                    debug!(
+                        "Not sending on secondary after delay, task was canceled in view update"
+                    );
+                    match primary_fail_counter.load(Ordering::Relaxed) {
+                        0u64 => {
+                            // The primary fail counter reached 0, the primary is now considered up
+                            primary_down.store(false, Ordering::Relaxed);
+                            debug!("primary_fail_counter reached zero, primary_down set to false");
+                        }
+                        c => {
+                            // Decrement the primary fail counter
+                            primary_fail_counter.store(c - 1, Ordering::Relaxed);
+                            debug!("primary_fail_counter set to {:?}", c - 1);
+                        }
+                    }
+                    return Ok(());
+                }
+                // The task hasn't been cancelled, the primary probably failed.
+                // Increment the primary fail counter and send the message.
+                debug!("Sending on secondary after delay, message possibly has not reached recipient on primary");
+                primary_fail_counter.fetch_add(1, Ordering::Relaxed);
+                secondary_future.await
+            });
             Ok(())
         } else {
+            // We will send without delay
+            if self.primary_down.load(Ordering::Relaxed) {
+                // If the primary is considered down, we want to periodically delay sending
+                // on the secondary to check whether the primary is able to deliver.
+                // This message will be sent without delay but the next might be delayed.
+                match self.no_delay_counter.load(Ordering::Relaxed) {
+                    c if c < COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL => {
+                        // Just increment the 'no delay counter'
+                        self.no_delay_counter.store(c + 1, Ordering::Relaxed);
+                    }
+                    _ => {
+                        // The 'no delay counter' reached the threshold
+                        debug!(
+                            "Sent on secondary without delay more than {} times,\
+                            try delaying to check primary",
+                            COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL
+                        );
+                        // Reset the 'no delay counter'
+                        self.no_delay_counter.store(0u64, Ordering::Relaxed);
+                        // The primary is not considered down for the moment
+                        self.primary_down.store(false, Ordering::Relaxed);
+                        // The primary fail counter is set just below the threshold to delay the next message
+                        self.primary_fail_counter
+                            .store(COMBINED_NETWORK_MIN_PRIMARY_FAILURES, Ordering::Relaxed);
+                    }
+                }
+            }
+            // Send the message
             secondary_future.await
         }
     }
@@ -257,16 +324,18 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                     primary_fail_counter: Arc::new(AtomicU64::new(0)),
                     primary_down: Arc::new(AtomicBool::new(false)),
                     message_cache: Arc::clone(&message_cache),
-                    delayed_tasks: Arc::default(),
                     delay_duration: Arc::new(RwLock::new(secondary_network_delay)),
+                    delayed_tasks_channels: Arc::default(),
+                    no_delay_counter: Arc::new(AtomicU64::new(0)),
                 };
                 let da_net = Self {
                     networks: Arc::new(da_networks),
                     message_cache,
                     primary_fail_counter: Arc::new(AtomicU64::new(0)),
                     primary_down: Arc::new(AtomicBool::new(false)),
-                    delayed_tasks: Arc::default(),
                     delay_duration: Arc::new(RwLock::new(secondary_network_delay)),
+                    delayed_tasks_channels: Arc::default(),
+                    no_delay_counter: Arc::new(AtomicU64::new(0)),
                 };
                 (quorum_net.into(), da_net.into())
             })
@@ -473,31 +542,22 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
     where
         T: NodeType<SignatureKey = TYPES::SignatureKey> + 'a,
     {
-        let delayed_map = Arc::clone(&self.delayed_tasks);
+        let delayed_tasks_channels = Arc::clone(&self.delayed_tasks_channels);
         async_spawn(async move {
-            let mut cancel_tasks = Vec::new();
-            {
-                let mut map_lock = delayed_map.write().await;
-                while let Some((first_view, _tasks)) = map_lock.first_key_value() {
-                    if *first_view < view {
-                        if let Some((_view, tasks)) = map_lock.pop_first() {
-                            let mut ctasks = tasks.into_iter().map(cancel_task).collect();
-                            cancel_tasks.append(&mut ctasks);
-                        } else {
-                            break;
-                        }
+            let mut map_lock = delayed_tasks_channels.write().await;
+            while let Some((first_view, _)) = map_lock.first_key_value() {
+                // Broadcast a cancelling signal to all the tasks related to each view older than the new one
+                if *first_view < view {
+                    if let Some((_, (sender, _))) = map_lock.pop_first() {
+                        let _ = sender.try_broadcast(());
                     } else {
                         break;
                     }
+                } else {
+                    break;
                 }
             }
-            join_all(cancel_tasks).await;
         });
-
-        // View changed, let's start primary again
-        self.primary_down.store(false, Ordering::Relaxed);
-        self.primary_fail_counter.store(0, Ordering::Relaxed);
-
         // Run `update_view` logic for the libp2p network
         self.networks.1.update_view::<T>(view, membership).await;
     }
