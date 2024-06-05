@@ -1,5 +1,5 @@
 {
-    "number": 123,
-    "timestamp": "0x456",
-    "hash": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  "hash": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "number": "0x7b",
+  "timestamp": "0x456"
 }

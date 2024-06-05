@@ -15,6 +15,7 @@ use jf_merkle_tree::{
     MerkleTreeScheme,
 };
 use sequencer::{
+    eth::L1BlockNum,
     eth_signature_key::EthKeyPair,
     state::{FeeAccount, FeeAmount, FeeMerkleTree},
     Header,
@@ -175,15 +176,15 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
         .await
         .context("waiting for deposit transaction")?
         .context("deposit transaction not mined")?;
-    let l1_block = receipt
+    let l1_block: L1BlockNum = receipt
         .block_number
         .context("deposit transaction not mined")?
-        .as_u64();
+        .into();
     ensure!(
         receipt.status == Some(1.into()),
         "deposit transaction reverted"
     );
-    tracing::info!(l1_block, "deposit mined on L1");
+    tracing::info!(?l1_block, "deposit mined on L1");
 
     // Wait for Espresso to catch up to the L1.
     let espresso_height = espresso
@@ -213,7 +214,7 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
         } else {
             tracing::debug!(
                 block = header.height,
-                l1_block,
+                ?l1_block,
                 ?l1_finalized,
                 "waiting for deposit on Espresso"
             )

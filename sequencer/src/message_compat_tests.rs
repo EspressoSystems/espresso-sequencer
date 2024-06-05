@@ -237,13 +237,13 @@ async fn test_message_compat() {
     // Ensure the current serialization implementation generates the same JSON as the committed
     // reference.
     let actual = serde_json::to_value(&messages).unwrap();
+    let actual_path = data_dir.join("messages-actual.json");
     if actual != expected {
         let actual_pretty = serde_json::to_string_pretty(&actual).unwrap();
         let expected_pretty = serde_json::to_string_pretty(&expected).unwrap();
 
         // Write the actual output to a file to make it easier to compare with/replace the expected
         // file if the serialization change was actually intended.
-        let actual_path = data_dir.join("messages-actual.json");
         std::fs::write(&actual_path, actual_pretty.as_bytes()).unwrap();
 
         // Fail the test with an assertion that outputs a nice diff between the prettified JSON
@@ -261,6 +261,9 @@ async fn test_message_compat() {
         );
     }
 
+    // If the test passed, remove the -actual file if it exists.
+    std::fs::remove_file(&actual_path).ok();
+
     // Ensure the current `Message` type can be parsed from the committed reference JSON.
     let parsed: Vec<Message<SeqTypes>> = serde_json::from_value(expected).unwrap();
     assert_eq!(parsed, messages);
@@ -269,10 +272,11 @@ async fn test_message_compat() {
     // committed reference.
     let expected = std::fs::read(data_dir.join("messages.bin")).unwrap();
     let actual = Serializer::serialize(&messages).unwrap();
+    let actual_path = data_dir.join("messages-actual.bin");
+
     if actual != expected {
         // Write the actual output to a file to make it easier to compare with/replace the expected
         // file if the serialization change was actually intended.
-        let actual_path = data_dir.join("messages-actual.bin");
         std::fs::write(&actual_path, &actual).unwrap();
 
         // Fail the test with an assertion that outputs a diff.
@@ -288,6 +292,8 @@ async fn test_message_compat() {
             actual_path.display()
         );
     }
+    // If the test passed, remove the -actual file if it exists.
+    std::fs::remove_file(&actual_path).ok();
 
     // Ensure the current `Message` type can be parsed from the committed reference binary.
     let parsed: Vec<Message<SeqTypes>> = Serializer::deserialize(&expected).unwrap();

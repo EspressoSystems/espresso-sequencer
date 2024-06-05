@@ -3,6 +3,7 @@ pub mod block;
 pub mod catchup;
 mod chain_config;
 pub mod context;
+pub mod eth;
 pub mod eth_signature_key;
 pub mod genesis;
 mod header;

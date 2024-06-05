@@ -25,10 +25,10 @@
   "height": 42,
   "l1_finalized": {
     "hash": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-    "number": 123,
+    "number": "0x7b",
     "timestamp": "0x456"
   },
-  "l1_head": 124,
+  "l1_head": "0x7c",
   "ns_table": {
     "bytes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
   },

@@ -28,7 +28,7 @@
                 "fee_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUAAAAAAAAAAAAAAAAAAAAKA",
                 "height": 0,
                 "l1_finalized": null,
-                "l1_head": 0,
+                "l1_head": "0x0",
                 "ns_table": {
                   "bytes": "AAAAAA=="
                 },
