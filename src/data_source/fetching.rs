@@ -370,14 +370,10 @@ where
                         match storage.storage.prune().await {
                             Ok(Some(height)) => {
                                 storage.pruned_height = Some(height);
-
-                                if let Err(e) = storage.commit().await {
-                                    storage.revert().await;
-                                    tracing::error!("failed to commit: {e:?}")
-                                }
                             }
                             Ok(None) => (),
                             Err(e) => {
+                                storage.revert().await;
                                 tracing::error!("pruning failed: {e:?}");
                             }
                         }
