@@ -25,7 +25,6 @@ use hotshot_builder_core::{
 };
 
 use hotshot_types::{
-    constants::{Version01, STATIC_VER_0_1},
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
@@ -161,9 +160,8 @@ impl BuilderConfig {
                 .base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
-            Arc::new(instance_state),
-             //????
-            Arc::new(validated_state),  Duration::from_secs(60),
+            Arc::new(instance_state), Duration::from_secs(60),
+            Arc::new(validated_state),
         );
 
         // spawn the builder event loop
@@ -232,12 +230,10 @@ mod test {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
-    use hotshot_types::{
-        constants::{Version01, STATIC_VER_0_1},
-        traits::{
-            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
-            node_implementation::NodeType,
-        },
+    use hotshot_types::constants::Base;
+    use hotshot_types::traits::{
+        block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+        node_implementation::NodeType,
     };
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use sequencer::{
@@ -279,10 +275,9 @@ mod test {
         let num_non_staking_nodes = hotshot_config.config.num_nodes_without_stake;
 
         // non-staking node handle
-        let hotshot_context_handle = handles
-            [NonPermissionedBuilderTestConfig::SUBSCRIBED_DA_NODE_ID]
-            .0
-            .clone();
+        let hotshot_context_handle =
+            &handles[NonPermissionedBuilderTestConfig::SUBSCRIBED_DA_NODE_ID].0;
+
         // hotshot event streaming api url
         let hotshot_events_streaming_api_url = HotShotTestConfig::hotshot_event_streaming_api_url();
 
@@ -291,7 +286,7 @@ mod test {
             hotshot_events_streaming_api_url.clone(),
             known_nodes_with_stake,
             num_non_staking_nodes,
-            hotshot_context_handle,
+            Arc::clone(hotshot_context_handle),
         );
 
         // builder api url
@@ -307,7 +302,7 @@ mod test {
         let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
-        let builder_client = Client::<hotshot_builder_api::builder::Error, Version01>::new(
+        let builder_client = Client::<hotshot_builder_api::builder::Error, Base>::new(
             hotshot_builder_api_url.clone(),
         );
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);

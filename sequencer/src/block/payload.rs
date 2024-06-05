@@ -2,8 +2,7 @@ use crate::block::entry::{TxTableEntry, TxTableEntryWord};
 use crate::block::payload;
 use crate::block::tables::NameSpaceTable;
 use crate::block::tables::TxTable;
-use crate::SeqTypes;
-use crate::{BlockBuildingSnafu, ChainConfig, Error, NamespaceId, Transaction};
+use crate::{BlockBuildingSnafu, ChainConfig, Error, NamespaceId, SeqTypes, Transaction};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use derivative::Derivative;
 use hotshot::traits::BlockPayload;
@@ -347,7 +346,6 @@ mod test {
         transaction::NamespaceId,
         ChainConfig, NodeState, Transaction, ValidatedState,
     };
-    use async_compatibility_layer::art::async_test;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use helpers::*;
     use hotshot_query_service::availability::QueryablePayload;
@@ -398,7 +396,7 @@ mod test {
         assert_eq!(payload.txn_count(), txs.len() as u64);
     }
 
-    #[async_test]
+    #[async_std::test]
     async fn basic_correctness() {
         check_basic_correctness::<TxTableEntryWord>().await
     }

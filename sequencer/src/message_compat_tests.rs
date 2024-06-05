@@ -15,7 +15,6 @@
 //! code changed caused the serialization change and revert it.
 
 use crate::{Leaf, NodeState, Payload, PubKey, SeqTypes, Transaction, ValidatedState};
-use async_compatibility_layer::art::async_test;
 use committable::Committable;
 use es_version::SequencerVersion;
 use hotshot::traits::election::static_committee::GeneralStaticCommittee;
@@ -50,7 +49,7 @@ use vbs::{version::Version, BinarySerializer};
 
 type Serializer = vbs::Serializer<SequencerVersion>;
 
-#[async_test]
+#[async_std::test]
 async fn test_message_compat() {
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();

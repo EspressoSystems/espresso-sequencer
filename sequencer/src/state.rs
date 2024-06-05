@@ -1397,7 +1397,6 @@ impl FeeAccountProof {
 #[cfg(test)]
 mod test {
     use super::*;
-    use async_compatibility_layer::art::async_test;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use hotshot_types::vid::vid_scheme;
     use jf_vid::VidScheme;
@@ -1441,7 +1440,7 @@ mod test {
         FeeAccountProof::prove(&tree, account2).unwrap();
     }
 
-    #[async_test]
+    #[async_std::test]
     async fn test_validation_max_block_size() {
         setup_logging();
         setup_backtrace();
@@ -1456,9 +1455,7 @@ mod test {
             base_fee: 0.into(),
             ..Default::default()
         });
-
-        let validated_state = ValidatedState::genesis(&instance).0;
-        let parent = Leaf::genesis(&validated_state, &instance).await;
+        let parent = Leaf::genesis(&instance.genesis_state, &instance).await;
         let header = parent.block_header();
 
         // Validation fails because the proposed block exceeds the maximum block size.
@@ -1467,7 +1464,7 @@ mod test {
         tracing::info!(%err, "task failed successfully");
     }
 
-    #[async_test]
+    #[async_std::test]
     async fn test_validation_base_fee() {
         setup_logging();
         setup_backtrace();
@@ -1482,10 +1479,7 @@ mod test {
             max_block_size: max_block_size.into(),
             ..Default::default()
         });
-
-        let validated_state = ValidatedState::genesis(&instance).0;
-
-        let parent = Leaf::genesis(&validated_state, &instance).await;
+        let parent = Leaf::genesis(&instance.genesis_state, &instance).await;
         let header = parent.block_header();
 
         // Validation fails because the genesis fee (0) is too low.

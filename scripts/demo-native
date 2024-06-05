@@ -7,7 +7,7 @@ if [ -z "${IN_NIX_SHELL-}" ]; then
     REPO_ROOT="$(dirname "$(dirname "$(readlink -fm "$0")")")"
     # Default to CARGO_TARGET_DIR if set, otherwise use the default target directory.
     TARGET_DIR="${CARGO_TARGET_DIR:-${REPO_ROOT}/target}"
-    export "PATH=${TARGET_DIR}/release:$PATH"
+    export "PATH=${TARGET_DIR}/x86_64-unknown-linux-gnu/release:$PATH"
 fi
 
 ESPRESSO_BASE_STORAGE_PATH=$(mktemp -d -t espresso-XXXXXXXX)

@@ -25,7 +25,6 @@ impl EncodeBytes for Payload<TxTableEntryWord> {
         Arc::from(self.raw_payload.clone())
     }
 }
-
 #[async_trait]
 impl BlockPayload<SeqTypes> for Payload<TxTableEntryWord> {
     type Error = crate::Error;
@@ -91,17 +90,6 @@ impl BlockPayload<SeqTypes> for Payload<TxTableEntryWord> {
         }
     }
 
-    fn empty() -> (Self, Self::Metadata) {
-        // this is only called from `Leaf::genesis`. Since we are
-        // passing empty list, max_block_size is irrelevant so we can
-        // use the mock NodeState. A future update to HotShot should
-        // make a change there to remove the need for this workaround.
-
-        let payload = Payload::from_txs(vec![], &ChainConfig::default()).unwrap();
-        let ns_table = payload.get_ns_table().clone();
-        (payload, ns_table)
-    }
-
     fn transaction_commitments(&self, meta: &Self::Metadata) -> Vec<Commitment<Self::Transaction>> {
         self.enumerate(meta).map(|(_, tx)| tx.commit()).collect()
     }
@@ -123,5 +111,11 @@ impl BlockPayload<SeqTypes> for Payload<TxTableEntryWord> {
         metadata: &'a Self::Metadata,
     ) -> impl 'a + Iterator<Item = Self::Transaction> {
         self.enumerate(metadata).map(|(_, t)| t)
+    }
+
+    fn empty() -> (Self, Self::Metadata) {
+        let payload = Payload::from_txs(vec![], &ChainConfig::default()).unwrap();
+        let ns_table = payload.get_ns_table().clone();
+        (payload, ns_table)
     }
 }

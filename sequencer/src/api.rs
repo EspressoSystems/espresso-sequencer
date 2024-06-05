@@ -512,15 +512,10 @@ pub mod test_helpers {
         }
 
         pub async fn stop_consensus(&mut self) {
-            let consensus = self.server.consensus();
-            let mut consensus_writer = consensus.write().await;
-            consensus_writer.shut_down().await;
-            drop(consensus_writer);
+            self.server.shutdown_consensus().await;
 
             for ctx in &mut self.peers {
-                let consensus = ctx.consensus();
-                let mut consensus_writer = consensus.write().await;
-                consensus_writer.shut_down().await;
+                ctx.shutdown_consensus().await;
             }
         }
     }
@@ -631,14 +626,7 @@ pub mod test_helpers {
         // Wait for block >=2 appears
         // It's waiting for an extra second to make sure that the signature is generated
         loop {
-            height = network
-                .server
-                .consensus()
-                .read()
-                .await
-                .decided_leaf()
-                .await
-                .height();
+            height = network.server.decided_leaf().await.height();
             sleep(std::time::Duration::from_secs(1)).await;
             if height >= 2 {
                 break;
@@ -694,17 +682,11 @@ pub mod test_helpers {
         // Stop consensus running on the node so we freeze the decided and undecided states.
         // We'll let it go out of scope here since it's a write lock.
         {
-            let consensus = network.server.consensus();
-            let mut consensus_writer = consensus.write().await;
-            consensus_writer.shut_down().await;
+            network.server.shutdown_consensus().await;
         }
 
-        // Re-acquire a read lock to the consensus state.
-        let consensus = network.server.consensus();
-        let consensus_reader = consensus.read().await;
-
         // Undecided fee state: absent account.
-        let leaf = consensus_reader.decided_leaf().await;
+        let leaf = network.server.decided_leaf().await;
         let height = leaf.height() + 1;
         let view = leaf.view_number() + 1;
         let res = client
@@ -722,9 +704,6 @@ pub mod test_helpers {
                 .verify(
                     &network
                         .server
-                        .consensus()
-                        .read()
-                        .await
                         .state(view)
                         .await
                         .unwrap()
@@ -743,9 +722,6 @@ pub mod test_helpers {
             .unwrap();
         let root = &network
             .server
-            .consensus()
-            .read()
-            .await
             .state(view)
             .await
             .unwrap()
@@ -1389,13 +1365,8 @@ mod test {
         let decided_view = chain.last().unwrap().leaf().view_number();
 
         // Get the most recent state, for catchup.
-        let state = network
-            .server
-            .consensus()
-            .read()
-            .await
-            .decided_state()
-            .await;
+
+        let state = network.server.decided_state().await;
         tracing::info!(?decided_view, ?state, "consensus state");
 
         // Fully shut down the API servers.

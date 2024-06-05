@@ -66,7 +66,10 @@ use hotshot_state_prover;
 use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 use jf_signature::bls_over_bn254::VerKey;
 use sequencer::state_signature::StakeTableCommitmentType;
-use sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, ChainConfig};
+use sequencer::{
+    catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, network::libp2p::BootstrapNode,
+    ChainConfig,
+};
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -86,7 +89,6 @@ use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::StaticVersionType;
 
 use hotshot_types::{
-    constants::{Version01, STATIC_VER_0_1},
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
@@ -164,7 +166,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         derive_libp2p_peer_id::<<SeqTypes as NodeType>::SignatureKey>(&my_config.private_key)
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
-    let config = NetworkConfig::get_complete_config(
+    let mut config = NetworkConfig::get_complete_config(
         &orchestrator_client,
         my_config.clone(),
         // Register in our Libp2p advertise address and public key so other nodes
@@ -174,6 +176,11 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     )
     .await?
     .0;
+
+    // If the network is configured manually, override what we got from the orchestrator
+    if let Some(genesis_network_config) = genesis.network {
+        genesis_network_config.populate_config(&mut config)?;
+    }
 
     tracing::info!(
     node_id = config.node_index,
@@ -459,9 +466,9 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 .base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
-            Arc::new(instance_state),       //??
-            Arc::new(validated_state),
-            Duration::from_secs(60),
+            Arc::new(instance_state),       
+            
+            Duration::from_secs(60),Arc::new(validated_state),
         );
 
         let hotshot_handle_clone = Arc::clone(&hotshot_handle);
@@ -540,8 +547,8 @@ mod test {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
-    use hotshot_types::{
-        constants::{Version01, STATIC_VER_0_1},
+    use hotshot_types::constants::Base;
+    use hotshot_types::{ 
         signature_key::BLSPubKey,
         traits::{
             block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
@@ -579,7 +586,7 @@ mod test {
 
         let node_id = total_nodes - 1;
         // non-staking node handle
-        let hotshot_context_handle = handles[node_id].0.clone();
+        let hotshot_context_handle = Arc::clone(&handles[node_id].0);
         let state_signer = handles[node_id].1.take().unwrap();
 
         // builder api url
@@ -596,7 +603,7 @@ mod test {
         let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
-        let builder_client = Client::<hotshot_builder_api::builder::Error, Version01>::new(
+        let builder_client = Client::<hotshot_builder_api::builder::Error, Base>::new(
             hotshot_builder_api_url.clone(),
         );
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);

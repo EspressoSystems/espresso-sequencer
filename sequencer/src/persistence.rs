@@ -107,7 +107,6 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         state: NodeState,
     ) -> anyhow::Result<HotShotInitializer<SeqTypes>> {
         let genesis_validated_state = ValidatedState::genesis(&state).0;
-
         let highest_voted_view = match self
             .load_latest_acted_view()
             .await

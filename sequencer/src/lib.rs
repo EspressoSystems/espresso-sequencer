@@ -20,6 +20,8 @@ use block::entry::TxTableEntryWord;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
 use ethers::types::U256;
+#[cfg(feature = "libp2p")]
+use futures::FutureExt;
 use genesis::{GenesisHeader, L1Finalized, Upgrade};
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
@@ -51,24 +53,14 @@ use hotshot_orchestrator::{
     config::NetworkConfig,
 };
 use hotshot_types::{
-    consensus::CommitmentMap,
-    constants::Version01,
-    data::{DaProposal, VidDisperseShare, ViewNumber},
-    event::HotShotAction,
-    light_client::{StateKeyPair, StateSignKey},
-    message::Proposal,
-    signature_key::{BLSPrivKey, BLSPubKey},
-    simple_certificate::QuorumCertificate,
-    traits::{
+    consensus::CommitmentMap, constants::Base, data::{DaProposal, VidDisperseShare, ViewNumber}, event::HotShotAction, light_client::{StateKeyPair, StateSignKey}, message::Proposal, signature_key::{BLSPrivKey, BLSPubKey}, simple_certificate::QuorumCertificate, traits::{
         metrics::Metrics,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
         signature_key::{BuilderSignatureKey, StakeTableEntryType},
         states::InstanceState,
         storage::Storage,
-    },
-    utils::{BuilderCommitment, View},
-    ValidatorConfig,
+    }, utils::{BuilderCommitment, View}, ValidatorConfig
 };
 use persistence::{PersistenceOptions, SequencerPersistence};
 use serde::{Deserialize, Serialize};
@@ -195,7 +187,7 @@ impl NodeState {
             },
             l1_genesis: None,
             upgrades: Default::default(),
-            current_version: Version01::VERSION,
+            current_version: Base::VERSION,
         }
     }
 
@@ -294,6 +286,7 @@ pub struct NetworkParams {
     pub private_staking_key: BLSPrivKey,
     pub private_state_key: StateSignKey,
     pub state_peers: Vec<Url>,
+
     /// The address to send to other Libp2p nodes to contact us
     pub libp2p_advertise_address: SocketAddr,
     /// The address to bind to for Libp2p
@@ -394,6 +387,11 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         config.config.start_voting_view = 1;
         config.config.stop_voting_view = u64::MAX;
     }
+    // If the network is configured manually, override what we got from the orchestrator
+    if let Some(genesis_network_config) = genesis.network {
+        genesis_network_config.populate_config(&mut config)?;
+    }
+
     let node_index = config.node_index;
 
     // If we are a DA node, we need to subscribe to the DA topic
@@ -418,20 +416,29 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
-    let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
-        config.clone(),
-        network_params.libp2p_bind_address,
-        &my_config.public_key,
-        // We need the private key so we can derive our Libp2p keypair
-        // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
-        &my_config.private_key,
-    )
-    .await
-    .with_context(|| "Failed to create libp2p network")?;
-
-    // Combine the communication channels
-    #[cfg(feature = "libp2p")]
     let (da_network, quorum_network) = {
+        let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
+            config.clone(),
+            network_params.libp2p_bind_address,
+            &my_config.public_key,
+            // We need the private key so we can derive our Libp2p keypair
+            // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
+            &my_config.private_key,
+        )
+        .await
+        .with_context(|| "Failed to create libp2p network")?;
+
+        tracing::warn!("Waiting for at least one connection to be initialized");
+        futures::select! {
+            _ = cdn_network.wait_for_ready().fuse() => {
+                tracing::warn!("CDN connection initialized");
+            },
+            _ = p2p_network.wait_for_ready().fuse() => {
+                tracing::warn!("P2P connection initialized");
+            },
+        };
+
+        // Combine the CDN and P2P networks
         (
             Arc::from(CombinedNetworks::new(
                 cdn_network.clone(),
@@ -539,7 +546,7 @@ pub mod testing {
         implementations::{MasterMap, MemoryNetwork},
         BlockPayload,
     };
-    use hotshot::types::{EventType::Decide, Message};
+    use hotshot::types::EventType::Decide;
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_testing::block_builder::SimpleBuilderConfig;
     use hotshot_testing::block_builder::{
@@ -571,7 +578,7 @@ pub mod testing {
         config: HotShotConfig<PubKey>,
         priv_keys: Vec<BLSPrivKey>,
         state_key_pairs: Vec<StateKeyPair>,
-        master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
+        master_map: Arc<MasterMap<PubKey>>,
         url: Url,
     }
 
