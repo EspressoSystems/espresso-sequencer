@@ -625,9 +625,9 @@ impl PruneStorage for SqlStorage {
                             message: format!("failed to commit {e}"),
                         })?;
                         pruned_height = Some(height);
-                        usage = self.get_disk_usage().await?;
-
                         tracing::warn!("Pruned data up to height {height}");
+                        
+                        usage = self.get_disk_usage().await?;
                     }
                 }
             }

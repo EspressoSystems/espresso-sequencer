@@ -362,7 +362,7 @@ where
             BackgroundTask::spawn("pruner", async move {
                 for i in 1.. {
                     sleep(cfg.interval()).await;
-                    tracing::warn!("pruner woke up for the {i}th time",);
+                    tracing::warn!("pruner woke up for the {i}th time");
 
                     {
                         let mut storage = fetcher.storage.write().await;
@@ -370,11 +370,12 @@ where
                         match storage.storage.prune().await {
                             Ok(Some(height)) => {
                                 storage.pruned_height = Some(height);
+                                tracing::warn!("pruner run {i} succeeded. Pruned to height {height}");
                             }
                             Ok(None) => (),
                             Err(e) => {
+                                tracing::error!("pruner run {i} failed: {e:?}");
                                 storage.revert().await;
-                                tracing::error!("pruning failed: {e:?}");
                             }
                         }
                     }
