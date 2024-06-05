@@ -574,11 +574,16 @@ pub mod testing {
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
     pub async fn run_test_builder(
-        _port: Option<u16>,
+        port: Option<u16>,
     ) -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
+        let builder_config = if let Some(port) = port {
+            SimpleBuilderConfig { port }
+        } else {
+            SimpleBuilderConfig::default()
+        };
         <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
             TestConfig::NUM_NODES,
-            SimpleBuilderConfig::default(),
+            builder_config,
         )
         .await
     }

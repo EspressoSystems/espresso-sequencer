@@ -407,10 +407,11 @@ pub mod test_helpers {
             catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
             l1: Url,
             upgrades: Option<TestNetworkUpgrades>,
+            builder_port: Option<u16>,
         ) -> Self {
             let mut cfg = TestConfig::default_with_l1(l1);
 
-            let (builder_task, builder_url) = run_test_builder(None).await;
+            let (builder_task, builder_url) = run_test_builder(builder_port).await;
 
             cfg.set_builder_url(builder_url);
 
@@ -494,6 +495,7 @@ pub mod test_helpers {
             opt: Options,
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
             l1: Url,
+            builder_port: Option<u16>,
         ) -> Self {
             Self::with_state(
                 opt,
@@ -502,6 +504,7 @@ pub mod test_helpers {
                 std::array::from_fn(|_| MockStateCatchup::default()),
                 l1,
                 Default::default(),
+                builder_port,
             )
             .await
         }
@@ -538,8 +541,13 @@ pub mod test_helpers {
         let options = opt(Options::from(options::Http { port }).status(Default::default()));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let _network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
+        let _network = TestNetwork::new(
+            options,
+            [no_storage::Options; TestConfig::NUM_NODES],
+            l1,
+            None,
+        )
+        .await;
         client.connect(None).await;
 
         // The status API is well tested in the query service repo. Here we are just smoke testing
@@ -587,8 +595,13 @@ pub mod test_helpers {
         let options = opt(Options::from(options::Http { port }).submit(Default::default()));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
+        let network = TestNetwork::new(
+            options,
+            [no_storage::Options; TestConfig::NUM_NODES],
+            l1,
+            None,
+        )
+        .await;
         let mut events = network.server.event_stream().await;
 
         client.connect(None).await;
@@ -619,8 +632,13 @@ pub mod test_helpers {
         let options = opt(Options::from(options::Http { port }));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
+        let network = TestNetwork::new(
+            options,
+            [no_storage::Options; TestConfig::NUM_NODES],
+            l1,
+            None,
+        )
+        .await;
 
         let mut height: u64;
         // Wait for block >=2 appears
@@ -658,8 +676,13 @@ pub mod test_helpers {
         let options = opt(Options::from(options::Http { port }).catchup(Default::default()));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
+        let network = TestNetwork::new(
+            options,
+            [no_storage::Options; TestConfig::NUM_NODES],
+            l1,
+            None,
+        )
+        .await;
         client.connect(None).await;
 
         // Wait for a few blocks to be decided.
@@ -796,6 +819,7 @@ mod api_tests {
             D::options(&storage, options::Http { port }.into()).submit(Default::default()),
             [no_storage::Options; TestConfig::NUM_NODES],
             l1,
+            None,
         )
         .await;
         let mut events = network.server.event_stream().await;
@@ -895,8 +919,13 @@ mod api_tests {
 
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let _network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
+        let _network = TestNetwork::new(
+            options,
+            [no_storage::Options; TestConfig::NUM_NODES],
+            l1,
+            None,
+        )
+        .await;
 
         let mut subscribed_events = client
             .socket("hotshot-events/events")
@@ -976,8 +1005,13 @@ mod test {
         let options = Options::from(options::Http { port });
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let _network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
+        let _network = TestNetwork::new(
+            options,
+            [no_storage::Options; TestConfig::NUM_NODES],
+            l1,
+            None,
+        )
+        .await;
 
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
@@ -1021,8 +1055,13 @@ mod test {
 
         let anvil: ethers::utils::AnvilInstance = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let mut network =
-            TestNetwork::new(options, [no_storage::Options; TestConfig::NUM_NODES], l1).await;
+        let mut network = TestNetwork::new(
+            options,
+            [no_storage::Options; TestConfig::NUM_NODES],
+            l1,
+            None,
+        )
+        .await;
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
@@ -1094,6 +1133,7 @@ mod test {
             }),
             l1,
             Default::default(),
+            None,
         )
         .await;
 
