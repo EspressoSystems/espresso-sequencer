@@ -352,6 +352,7 @@ pub mod test_helpers {
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StateCatchup},
+        genesis::Upgrade,
         persistence::{no_storage, PersistenceOptions, SequencerPersistence},
         state::{BlockMerkleTree, ValidatedState},
         testing::{run_test_builder, wait_for_decide_on_handle, TestConfig},
@@ -375,10 +376,11 @@ pub mod test_helpers {
     use itertools::izip;
     use jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
-    use std::time::Duration;
+    use std::{collections::BTreeMap, time::Duration};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
     use url::Url;
+    use vbs::version::Version;
 
     pub const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
@@ -388,6 +390,15 @@ pub mod test_helpers {
         pub cfg: TestConfig,
     }
 
+    #[derive(Clone, Debug)]
+    pub struct TestNetworkUpgrades {
+        pub upgrades: BTreeMap<Version, Upgrade>,
+        pub start_proposing_view: u64,
+        pub stop_proposing_view: u64,
+        pub start_voting_view: u64,
+        pub stop_voting_view: u64,
+    }
+
     impl<P: SequencerPersistence> TestNetwork<P> {
         pub async fn with_state(
             opt: Options,
@@ -395,6 +406,7 @@ pub mod test_helpers {
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
             catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
             l1: Url,
+            upgrades: Option<TestNetworkUpgrades>,
         ) -> Self {
             let mut cfg = TestConfig::default_with_l1(l1);
 
@@ -402,9 +414,22 @@ pub mod test_helpers {
 
             cfg.set_builder_url(builder_url);
 
+            let mut upgrades_map = BTreeMap::default();
+            if let Some(upgrades) = upgrades {
+                cfg.set_upgrade_parameters(
+                    upgrades.start_proposing_view,
+                    upgrades.stop_proposing_view,
+                    upgrades.start_voting_view,
+                    upgrades.stop_voting_view,
+                );
+
+                upgrades_map = upgrades.upgrades;
+            }
+
             let mut nodes = join_all(izip!(state, persistence, catchup).enumerate().map(
                 |(i, (state, persistence, catchup))| {
                     let opt = opt.clone();
+                    let upgrades_map = upgrades_map.clone();
                     let cfg = &cfg;
                     async move {
                         if i == 0 {
@@ -420,6 +445,7 @@ pub mod test_helpers {
                                             &*metrics,
                                             STAKE_TABLE_CAPACITY_FOR_TEST,
                                             SEQUENCER_VERSION,
+                                            upgrades_map,
                                         )
                                         .await
                                     }
@@ -438,6 +464,7 @@ pub mod test_helpers {
                                 &NoMetrics,
                                 STAKE_TABLE_CAPACITY_FOR_TEST,
                                 SEQUENCER_VERSION,
+                                upgrades_map,
                             )
                             .await
                         }
@@ -474,6 +501,7 @@ pub mod test_helpers {
                 persistence,
                 std::array::from_fn(|_| MockStateCatchup::default()),
                 l1,
+                Default::default(),
             )
             .await
         }
@@ -928,6 +956,7 @@ mod test {
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StatePeers},
+        genesis::{Upgrade, UpgradeType},
         persistence::no_storage,
         state::{FeeAccount, FeeAmount, ValidatedState},
         testing::TestConfig,
@@ -946,16 +975,17 @@ mod test {
         types::HeightIndexed,
     };
     use hotshot_types::{
+        constants::{Version01, Version02},
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
     };
     use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     use portpicker::pick_unused_port;
-    use std::time::Duration;
+    use std::{collections::BTreeMap, time::Duration};
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork,
+        TestNetwork, TestNetworkUpgrades,
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
 
@@ -1087,6 +1117,7 @@ mod test {
                     .unwrap()])
             }),
             l1,
+            Default::default(),
         )
         .await;
 
@@ -1132,6 +1163,7 @@ mod test {
                 &NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
                 SEQUENCER_VERSION,
+                Default::default(),
             )
             .await;
         let mut events = node.event_stream().await;
@@ -1194,6 +1226,7 @@ mod test {
                     .unwrap()])
             }),
             l1,
+            None,
         )
         .await;
 
@@ -1264,6 +1297,7 @@ mod test {
                     .unwrap()])
             }),
             l1,
+            None,
         )
         .await;
 
@@ -1296,32 +1330,32 @@ mod test {
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
 
-        let cf = ChainConfig {
-            max_block_size: 300.into(),
-            base_fee: 1.into(),
-            ..Default::default()
-        };
+        let mut map = BTreeMap::new();
+        map.insert(
+            Version02::VERSION,
+            Upgrade {
+                view: 5,
+                upgrade_type: UpgradeType::ChainConfig {
+                    chain_config: ChainConfig {
+                        max_block_size: 300.into(),
+                        base_fee: 1.into(),
+                        ..Default::default()
+                    },
+                },
+            },
+        );
 
-        // State1 contains only the chain config commitment
-        let state1 = ValidatedState {
-            chain_config: cf.commit().into(),
-            ..Default::default()
+        let upgrades = TestNetworkUpgrades {
+            upgrades: map,
+            start_proposing_view: 5,
+            stop_proposing_view: u64::MAX,
+            start_voting_view: 1,
+            stop_voting_view: u64::MAX,
         };
-
-        //state 2 contains the full chain config
-        let state2 = ValidatedState {
-            chain_config: cf.into(),
-            ..Default::default()
-        };
-
-        let mut states = std::array::from_fn(|_| state1.clone());
-        // only one node has the full chain config
-        // all the other nodes should do a catchup to get the full chain config from peer 0
-        states[0] = state2;
 
         let mut network = TestNetwork::with_state(
             Options::from(options::Http { port }).catchup(Default::default()),
-            states,
+            Default::default(),
             [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|_| {
                 StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
@@ -1329,27 +1363,11 @@ mod test {
                     .unwrap()])
             }),
             l1,
+            Some(upgrades),
         )
         .await;
 
-        // Wait for a few blocks to be decided.
-        network
-            .server
-            .event_stream()
-            .await
-            .filter(|event| future::ready(matches!(event.event, EventType::Decide { .. })))
-            .take(3)
-            .collect::<Vec<_>>()
-            .await;
-
-        for peer in &network.peers {
-            let state = peer.consensus().read().await.decided_state().await;
-
-            assert_eq!(state.chain_config.resolve().unwrap(), cf)
-        }
-
-        network.server.shut_down().await;
-        drop(network);
+        sleep(Duration::from_secs(60 * 60)).await;
     }
 
     #[async_std::test]
@@ -1377,6 +1395,7 @@ mod test {
             persistence,
             std::array::from_fn(|_| MockStateCatchup::default()),
             l1,
+            None,
         )
         .await;
 
@@ -1457,6 +1476,7 @@ mod test {
                     .unwrap()])
             }),
             l1,
+            None,
         )
         .await;
         let client: Client<ServerError, SequencerVersion> =

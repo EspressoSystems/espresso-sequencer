@@ -232,8 +232,8 @@ pub fn validate_proposal(
         proposal.chain_config.commit() == expected_chain_config.commit(),
         anyhow::anyhow!(
             "Invalid Chain Config: local={:?}, proposal={:?}",
-            expected_chain_config.commitment(),
-            proposal.chain_config.commit(),
+            expected_chain_config.commitment().to_string(),
+            proposal.chain_config.commit().to_string(),
         )
     );
 
@@ -615,22 +615,26 @@ impl ValidatedState {
         header_cf: &ResolvableChainConfig,
         version: Version,
     ) -> anyhow::Result<ChainConfig> {
-        if header_cf.commit() != self.chain_config.commit() {
-            bail!(
-                "Proposed header chain config commit={} expected={}",
-                header_cf.commit(),
-                self.chain_config.commit()
-            );
-        }
+        let header_cf_commit = header_cf.commit();
 
         let upgrades = &instance.upgrades;
         if let Some(upgrade) = upgrades.get(&version) {
             match upgrade.upgrade_type {
                 UpgradeType::ChainConfig { chain_config } => {
-                    self.chain_config = chain_config.into();
-                    return Ok(chain_config);
+                    if header_cf_commit == chain_config.commit() {
+                        self.chain_config = chain_config.into();
+                        return Ok(chain_config);
+                    }
                 }
             }
+        }
+
+        if header_cf_commit != self.chain_config.commit() {
+            bail!(
+                "Proposed header chain config commit={} expected={}",
+                header_cf.commit(),
+                self.chain_config.commit()
+            );
         }
 
         let cf = if self.chain_config.commit() == instance.chain_config.commit() {
@@ -827,6 +831,8 @@ impl HotShotState<SeqTypes> for ValidatedState {
         vid_common: VidCommon,
         version: Version,
     ) -> Result<(Self, Self::Delta), Self::Error> {
+        tracing::info!("{version:?}");
+
         //validate builder fee
         if let Err(err) = validate_builder_fee(proposed_header) {
             tracing::error!("invalid builder fee: {err:#}");

@@ -220,6 +220,11 @@ impl NodeState {
         self.chain_config = cfg;
         self
     }
+
+    pub fn with_upgrades(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
+        self.upgrades = upgrades;
+        self
+    }
 }
 
 // This allows us to turn on `Default` on InstanceState trait
@@ -379,13 +384,13 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     };
 
     let version = Ver::version();
-    if let Some(upgrade) = genesis.upgrades.get(&version) {
+    if let Some(upgrade) = genesis.upgrades.get(&Version { major: 0, minor: 2 }) {
         let view = upgrade.view;
         // >>>> ?????
         config.config.start_proposing_view = view;
         config.config.stop_proposing_view = u64::MAX;
         config.config.start_voting_view = 1;
-        config.config.stop_proposing_view = view + 1;
+        config.config.stop_proposing_view = u64::MAX;
     }
     let node_index = config.node_index;
 
@@ -656,6 +661,19 @@ pub mod testing {
             }
         }
 
+        pub fn set_upgrade_parameters(
+            &mut self,
+            start_proposing_view: u64,
+            stop_proposing_view: u64,
+            start_voting_view: u64,
+            stop_voting_view: u64,
+        ) {
+            self.config.start_proposing_view = start_proposing_view;
+            self.config.stop_proposing_view = stop_proposing_view;
+            self.config.start_voting_view = start_voting_view;
+            self.config.stop_voting_view = stop_voting_view;
+        }
+
         pub async fn init_nodes<Ver: StaticVersionType + 'static>(
             &self,
             bind_version: Ver,
@@ -669,6 +687,7 @@ pub mod testing {
                     &NoMetrics,
                     STAKE_TABLE_CAPACITY_FOR_TEST,
                     bind_version,
+                    Default::default(),
                 )
                 .await
             }))
@@ -707,6 +726,7 @@ pub mod testing {
             metrics: &dyn Metrics,
             stake_table_capacity: u64,
             bind_version: Ver,
+            upgrades: BTreeMap<Version, Upgrade>,
         ) -> SequencerContext<network::Memory, P::Persistence, Ver> {
             let mut config = self.config.clone();
             let my_peer_config = &config.known_nodes_with_stake[i];
@@ -740,7 +760,8 @@ pub mod testing {
                 L1Client::new(self.url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
             )
-            .with_genesis(state);
+            .with_genesis(state)
+            .with_upgrades(upgrades);
 
             tracing::info!(
                 i,

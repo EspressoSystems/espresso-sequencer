@@ -46,7 +46,7 @@ processes:
         condition: process_completed
 
   fund-builder:
-    command: bridge deposit
+    command: espresso-bridge deposit
     environment:
       - L1_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER_L1_PORT
       - ESPRESSO_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
