@@ -52,6 +52,7 @@ use hotshot_orchestrator::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
+    constants::Version01,
     data::{DaProposal, VidDisperseShare, ViewNumber},
     event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
@@ -172,6 +173,7 @@ pub struct NodeState {
     pub genesis_state: ValidatedState,
     pub l1_genesis: Option<L1BlockInfo>,
     pub upgrades: BTreeMap<Version, Upgrade>,
+    pub current_version: Version,
 }
 
 impl NodeState {
@@ -193,6 +195,7 @@ impl NodeState {
             },
             l1_genesis: None,
             upgrades: Default::default(),
+            current_version: Version01::VERSION,
         }
     }
 
@@ -384,13 +387,12 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     };
 
     let version = Ver::version();
-    if let Some(upgrade) = genesis.upgrades.get(&Version { major: 0, minor: 2 }) {
+    if let Some(upgrade) = genesis.upgrades.get(&version) {
         let view = upgrade.view;
-        // >>>> ?????
         config.config.start_proposing_view = view;
-        config.config.stop_proposing_view = u64::MAX;
+        config.config.stop_proposing_view = view + 1;
         config.config.start_voting_view = 1;
-        config.config.stop_proposing_view = u64::MAX;
+        config.config.stop_voting_view = u64::MAX;
     }
     let node_index = config.node_index;
 
@@ -496,6 +498,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         .await,
         node_id: node_index,
         upgrades: genesis.upgrades,
+        current_version: Ver::VERSION,
     };
 
     let mut ctx = SequencerContext::init(

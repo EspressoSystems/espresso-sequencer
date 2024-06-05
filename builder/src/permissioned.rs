@@ -264,6 +264,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         peers: Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
         node_id: node_index,
         upgrades: Default::default(),
+        current_version: Ver::VERSION,
     };
 
     let stake_table_commit =

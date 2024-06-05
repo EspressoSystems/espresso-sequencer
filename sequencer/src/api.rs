@@ -956,7 +956,6 @@ mod test {
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StatePeers},
-        genesis::{Upgrade, UpgradeType},
         persistence::no_storage,
         state::{FeeAccount, FeeAmount, ValidatedState},
         testing::TestConfig,
@@ -975,17 +974,16 @@ mod test {
         types::HeightIndexed,
     };
     use hotshot_types::{
-        constants::{Version01, Version02},
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
     };
     use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     use portpicker::pick_unused_port;
-    use std::{collections::BTreeMap, time::Duration};
+    use std::time::Duration;
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork, TestNetworkUpgrades,
+        TestNetwork,
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
 
@@ -1319,55 +1317,6 @@ mod test {
 
         network.server.shut_down().await;
         drop(network);
-    }
-
-    #[async_std::test]
-    async fn test_chain_config_upgrade() {
-        setup_logging();
-        setup_backtrace();
-
-        let port = pick_unused_port().expect("No ports free");
-        let anvil = Anvil::new().spawn();
-        let l1 = anvil.endpoint().parse().unwrap();
-
-        let mut map = BTreeMap::new();
-        map.insert(
-            Version02::VERSION,
-            Upgrade {
-                view: 5,
-                upgrade_type: UpgradeType::ChainConfig {
-                    chain_config: ChainConfig {
-                        max_block_size: 300.into(),
-                        base_fee: 1.into(),
-                        ..Default::default()
-                    },
-                },
-            },
-        );
-
-        let upgrades = TestNetworkUpgrades {
-            upgrades: map,
-            start_proposing_view: 5,
-            stop_proposing_view: u64::MAX,
-            start_voting_view: 1,
-            stop_voting_view: u64::MAX,
-        };
-
-        let mut network = TestNetwork::with_state(
-            Options::from(options::Http { port }).catchup(Default::default()),
-            Default::default(),
-            [no_storage::Options; TestConfig::NUM_NODES],
-            std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
-            }),
-            l1,
-            Some(upgrades),
-        )
-        .await;
-
-        sleep(Duration::from_secs(60 * 60)).await;
     }
 
     #[async_std::test]

@@ -617,13 +617,14 @@ impl ValidatedState {
     ) -> anyhow::Result<ChainConfig> {
         let header_cf_commit = header_cf.commit();
 
-        let upgrades = &instance.upgrades;
-        if let Some(upgrade) = upgrades.get(&version) {
-            match upgrade.upgrade_type {
-                UpgradeType::ChainConfig { chain_config } => {
-                    if header_cf_commit == chain_config.commit() {
-                        self.chain_config = chain_config.into();
-                        return Ok(chain_config);
+        if version > instance.current_version {
+            if let Some(upgrade) = &instance.upgrades.get(&version) {
+                match upgrade.upgrade_type {
+                    UpgradeType::ChainConfig { chain_config } => {
+                        if header_cf_commit == chain_config.commit() {
+                            self.chain_config = chain_config.into();
+                            return Ok(chain_config);
+                        }
                     }
                 }
             }
