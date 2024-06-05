@@ -17,6 +17,7 @@ required-features = ["testing"]
 escargot = "0.5.10"
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 hotshot-query-service = { workspace = true, features = ["testing"] }
+hotshot-testing = { workspace = true }
 pretty_assertions = { workspace = true }
 rand = "0.8.5"
 reqwest = { workspace = true }
