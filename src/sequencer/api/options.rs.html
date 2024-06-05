@@ -525,6 +525,46 @@
 <a href="#523" id="523">523</a>
 <a href="#524" id="524">524</a>
 <a href="#525" id="525">525</a>
+<a href="#526" id="526">526</a>
+<a href="#527" id="527">527</a>
+<a href="#528" id="528">528</a>
+<a href="#529" id="529">529</a>
+<a href="#530" id="530">530</a>
+<a href="#531" id="531">531</a>
+<a href="#532" id="532">532</a>
+<a href="#533" id="533">533</a>
+<a href="#534" id="534">534</a>
+<a href="#535" id="535">535</a>
+<a href="#536" id="536">536</a>
+<a href="#537" id="537">537</a>
+<a href="#538" id="538">538</a>
+<a href="#539" id="539">539</a>
+<a href="#540" id="540">540</a>
+<a href="#541" id="541">541</a>
+<a href="#542" id="542">542</a>
+<a href="#543" id="543">543</a>
+<a href="#544" id="544">544</a>
+<a href="#545" id="545">545</a>
+<a href="#546" id="546">546</a>
+<a href="#547" id="547">547</a>
+<a href="#548" id="548">548</a>
+<a href="#549" id="549">549</a>
+<a href="#550" id="550">550</a>
+<a href="#551" id="551">551</a>
+<a href="#552" id="552">552</a>
+<a href="#553" id="553">553</a>
+<a href="#554" id="554">554</a>
+<a href="#555" id="555">555</a>
+<a href="#556" id="556">556</a>
+<a href="#557" id="557">557</a>
+<a href="#558" id="558">558</a>
+<a href="#559" id="559">559</a>
+<a href="#560" id="560">560</a>
+<a href="#561" id="561">561</a>
+<a href="#562" id="562">562</a>
+<a href="#563" id="563">563</a>
+<a href="#564" id="564">564</a>
+<a href="#565" id="565">565</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer-specific API options and initialization.
 
 </span><span class="kw">use super</span>::{
@@ -547,7 +587,7 @@
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>futures::{
     channel::oneshot,
-    future::{BoxFuture, FutureExt},
+    future::{BoxFuture, Future, FutureExt},
 };
 <span class="kw">use </span>hotshot_query_service::{
     data_source::{ExtensibleDataSource, MetricsDataSource},
@@ -556,6 +596,7 @@
 };
 <span class="kw">use </span>hotshot_types::traits::metrics::{Metrics, NoMetrics};
 <span class="kw">use </span>tide_disco::{
+    listener::RateLimitListener,
     method::{ReadState, WriteState},
     App, Url,
 };
@@ -597,6 +638,11 @@
 }
 
 <span class="kw">impl </span>Options {
+    <span class="doccomment">/// Default options for running a web server on the given port.
+    </span><span class="kw">pub fn </span>with_port(port: u16) -&gt; <span class="self">Self </span>{
+        Http::with_port(port).into()
+    }
+
     <span class="doccomment">/// Add a query API module backed by a Postgres database.
     </span><span class="kw">pub fn </span>query_sql(<span class="kw-2">mut </span><span class="self">self</span>, query: Query, storage: persistence::sql::Options) -&gt; <span class="self">Self </span>{
         <span class="self">self</span>.query = <span class="prelude-val">Some</span>(query);
@@ -742,10 +788,7 @@
                 )<span class="question-mark">?</span>;
             }
 
-            tasks.spawn(
-                <span class="string">"API server"</span>,
-                app.serve(<span class="macro">format!</span>(<span class="string">"0.0.0.0:{}"</span>, <span class="self">self</span>.http.port), bind_version),
-            );
+            tasks.spawn(<span class="string">"API server"</span>, <span class="self">self</span>.listen(<span class="self">self</span>.http.port, app, bind_version));
 
             metrics
         } <span class="kw">else </span>{
@@ -767,10 +810,7 @@
                 )<span class="question-mark">?</span>;
             }
 
-            tasks.spawn(
-                <span class="string">"API server"</span>,
-                app.serve(<span class="macro">format!</span>(<span class="string">"0.0.0.0:{}"</span>, <span class="self">self</span>.http.port), bind_version),
-            );
+            tasks.spawn(<span class="string">"API server"</span>, <span class="self">self</span>.listen(<span class="self">self</span>.http.port, app, bind_version));
 
             Box::new(NoMetrics)
         };
@@ -851,7 +891,7 @@
 
         tasks.spawn(
             <span class="string">"API server"</span>,
-            app.serve(<span class="macro">format!</span>(<span class="string">"0.0.0.0:{}"</span>, <span class="self">self</span>.http.port), Ver::instance()),
+            <span class="self">self</span>.listen(<span class="self">self</span>.http.port, app, Ver::instance()),
         );
         <span class="prelude-val">Ok</span>(metrics)
     }
@@ -908,7 +948,7 @@
 
         tasks.spawn(
             <span class="string">"API server"</span>,
-            app.serve(<span class="macro">format!</span>(<span class="string">"0.0.0.0:{}"</span>, <span class="self">self</span>.http.port), Ver::instance()),
+            <span class="self">self</span>.listen(<span class="self">self</span>.http.port, app, Ver::instance()),
         );
         <span class="prelude-val">Ok</span>(metrics)
     }
@@ -987,16 +1027,38 @@
 
         tasks.spawn(
             <span class="string">"Hotshot Events Streaming API server"</span>,
-            app.serve(
-                <span class="macro">format!</span>(
-                    <span class="string">"0.0.0.0:{}"</span>,
-                    <span class="self">self</span>.hotshot_events.unwrap().events_service_port
-                ),
+            <span class="self">self</span>.listen(
+                <span class="self">self</span>.hotshot_events.unwrap().events_service_port,
+                app,
                 bind_version,
             ),
         );
 
         <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="kw">fn </span>listen&lt;S, E, Ver&gt;(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        port: u16,
+        app: App&lt;S, E&gt;,
+        bind_version: Ver,
+    ) -&gt; <span class="kw">impl </span>Future&lt;Output = anyhow::Result&lt;()&gt;&gt;
+    <span class="kw">where
+        </span>S: Send + Sync + <span class="lifetime">'static</span>,
+        E: Send + Sync + tide_disco::Error,
+        Ver: StaticVersionType + <span class="lifetime">'static</span>,
+    {
+        <span class="kw">let </span>max_connections = <span class="self">self</span>.http.max_connections;
+
+        <span class="kw">async move </span>{
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(limit) = max_connections {
+                app.serve(RateLimitListener::with_port(port, limit), bind_version)
+                    .<span class="kw">await</span><span class="question-mark">?</span>;
+            } <span class="kw">else </span>{
+                app.serve(<span class="macro">format!</span>(<span class="string">"0.0.0.0:{}"</span>, port), bind_version).<span class="kw">await</span><span class="question-mark">?</span>;
+            }
+            <span class="prelude-val">Ok</span>(())
+        }
     }
 }
 
@@ -1004,11 +1066,29 @@
 ///
 /// The API automatically includes health and version endpoints. Additional API modules can be
 /// added by including the query-api or submit-api modules.
-</span><span class="attr">#[derive(Parser, Clone, Debug)]
+</span><span class="attr">#[derive(Parser, Clone, Copy, Debug)]
 </span><span class="kw">pub struct </span>Http {
     <span class="doccomment">/// Port that the HTTP API will use.
     </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_API_PORT"</span>)]
     </span><span class="kw">pub </span>port: u16,
+
+    <span class="doccomment">/// Maximum number of concurrent HTTP connections the server will allow.
+    ///
+    /// Connections exceeding this will receive and immediate 429 response and be closed.
+    ///
+    /// Leave unset for no connection limit.
+    </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_MAX_CONNECTIONS"</span>)]
+    </span><span class="kw">pub </span>max_connections: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+}
+
+<span class="kw">impl </span>Http {
+    <span class="doccomment">/// Default options for running a web server on the given port.
+    </span><span class="kw">pub fn </span>with_port(port: u16) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            port,
+            max_connections: <span class="prelude-val">None</span>,
+        }
+    }
 }
 
 <span class="doccomment">/// Options for the submission API module.

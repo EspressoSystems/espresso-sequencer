@@ -1267,9 +1267,6 @@
 <a href="#1265" id="1265">1265</a>
 <a href="#1266" id="1266">1266</a>
 <a href="#1267" id="1267">1267</a>
-<a href="#1268" id="1268">1268</a>
-<a href="#1269" id="1269">1269</a>
-<a href="#1270" id="1270">1270</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="self">self</span>::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
 <span class="kw">use crate</span>::{
     network,
@@ -1732,7 +1729,7 @@
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(url);
 
-        <span class="kw">let </span>options = opt(Options::from(options::Http { port }).status(Default::default()));
+        <span class="kw">let </span>options = opt(Options::with_port(port).status(Default::default()));
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span>_network = TestNetwork::new(
@@ -1786,7 +1783,7 @@
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(url);
 
-        <span class="kw">let </span>options = opt(Options::from(options::Http { port }).submit(Default::default()));
+        <span class="kw">let </span>options = opt(Options::with_port(port).submit(Default::default()));
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span>network = TestNetwork::new(
@@ -1823,7 +1820,7 @@
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(url);
 
-        <span class="kw">let </span>options = opt(Options::from(options::Http { port }));
+        <span class="kw">let </span>options = opt(Options::with_port(port));
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span>network = TestNetwork::new(
@@ -1867,7 +1864,7 @@
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(url);
 
-        <span class="kw">let </span>options = opt(Options::from(options::Http { port }).catchup(Default::default()));
+        <span class="kw">let </span>options = opt(Options::with_port(port).catchup(Default::default()));
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span>network = TestNetwork::new(
@@ -2010,7 +2007,7 @@
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span>network = TestNetwork::new(
-            D::options(<span class="kw-2">&amp;</span>storage, options::Http { port }.into()).submit(Default::default()),
+            D::options(<span class="kw-2">&amp;</span>storage, Options::with_port(port)).submit(Default::default()),
             [no_storage::Options; TestConfig::NUM_NODES],
             l1,
             <span class="prelude-val">None</span>,
@@ -2106,10 +2103,7 @@
 
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(url);
 
-        <span class="kw">let </span>options = Options::from(options::Http {
-            port: query_service_port,
-        })
-        .hotshot_events(hotshot_events);
+        <span class="kw">let </span>options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
 
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
@@ -2194,7 +2188,7 @@
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(url);
-        <span class="kw">let </span>options = Options::from(options::Http { port });
+        <span class="kw">let </span>options = Options::with_port(port);
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span>_network = TestNetwork::new(
@@ -2240,7 +2234,7 @@
         <span class="kw">let </span>storage = SqlDataSource::create_storage().<span class="kw">await</span>;
         <span class="kw">let </span>options = SqlDataSource::options(
             <span class="kw-2">&amp;</span>storage,
-            Options::from(options::Http { port })
+            Options::with_port(port)
                 .state(Default::default())
                 .status(Default::default()),
         );
@@ -2315,7 +2309,7 @@
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::with_state(
-            Options::from(options::Http { port }).catchup(Default::default()),
+            Options::with_port(port).catchup(Default::default()),
             Default::default(),
             [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|<span class="kw">_</span>| {
@@ -2419,7 +2413,7 @@
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
         <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::with_state(
-            SqlDataSource::options(<span class="kw-2">&amp;</span>storage[<span class="number">0</span>], options::Http { port }.into())
+            SqlDataSource::options(<span class="kw-2">&amp;</span>storage[<span class="number">0</span>], Options::with_port(port))
                 .state(Default::default())
                 .status(Default::default()),
             Default::default(),
@@ -2489,7 +2483,7 @@
             .try_into()
             .unwrap();
         <span class="kw">let </span>_network = TestNetwork::with_state(
-            SqlDataSource::options(<span class="kw-2">&amp;</span>storage[<span class="number">0</span>], options::Http { port }.into())
+            SqlDataSource::options(<span class="kw-2">&amp;</span>storage[<span class="number">0</span>], Options::with_port(port))
                 .catchup(Default::default()),
             Default::default(),
             persistence,

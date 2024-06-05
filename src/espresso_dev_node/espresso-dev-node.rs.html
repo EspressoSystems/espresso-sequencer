@@ -336,6 +336,13 @@
 <a href="#334" id="334">334</a>
 <a href="#335" id="335">335</a>
 <a href="#336" id="336">336</a>
+<a href="#337" id="337">337</a>
+<a href="#338" id="338">338</a>
+<a href="#339" id="339">339</a>
+<a href="#340" id="340">340</a>
+<a href="#341" id="341">341</a>
+<a href="#342" id="342">342</a>
+<a href="#343" id="343">343</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{io, time::Duration};
 
 <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -384,9 +391,15 @@
         default_value = <span class="string">"0"
     </span>)]
     </span>account_index: u32,
+
     <span class="doccomment">/// Port that the HTTP API will use.
     </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_API_PORT"</span>)]
     </span>sequencer_api_port: u16,
+
+    <span class="doccomment">/// Maximum concurrent connections allowed by the HTTP API server.
+    </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_MAX_CONNECTIONS"</span>)]
+    </span>sequencer_api_max_connections: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+
     <span class="doccomment">/// If provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
@@ -409,6 +422,7 @@
     <span class="kw">let </span>cli_params = Args::parse();
     <span class="kw">let </span>api_options = options::Options::from(options::Http {
         port: cli_params.sequencer_api_port,
+        max_connections: cli_params.sequencer_api_max_connections,
     })
     .status(Default::default())
     .state(Default::default())
