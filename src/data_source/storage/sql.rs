@@ -581,7 +581,7 @@ impl PruneStorage for SqlStorage {
                 self.save_pruned_height(height).await?;
                 pruned_height = Some(height);
 
-                tracing::info!("Pruned data up to height {height}");
+                tracing::warn!("Pruned data up to height {height}");
             }
         }
 
@@ -617,7 +617,7 @@ impl PruneStorage for SqlStorage {
 
                         self.save_pruned_height(height).await?;
                         pruned_height = Some(height);
-                        tracing::info!("Pruned data up to height {height}");
+                        tracing::warn!("Pruned data up to height {height}");
                     }
                 }
             }
