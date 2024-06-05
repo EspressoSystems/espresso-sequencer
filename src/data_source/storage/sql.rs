@@ -475,9 +475,18 @@ impl SqlStorage {
     }
 
     async fn get_height_by_timestamp(&self, timestamp: i64) -> QueryResult<Option<u64>> {
+        // We order by timestamp and then height, even though logically this is no different than
+        // just ordering by height, since timestamps are monotonic. The reason is that this order
+        // allows the query planner to efficiently solve the where clause and presort the results
+        // based on the timestamp index. The remaining sort on height, which guarantees a unique
+        // block if multiple blocks have the same timestamp, is very efficient, because there are
+        // never more than a handful of blocks with the same timestamp.
         let row = self
             .query_opt(
-                "SELECT height FROM header WHERE timestamp <= $1 ORDER BY height DESC LIMIT 1",
+                "SELECT height FROM header
+                  WHERE timestamp <= $1
+                  ORDER BY timestamp DESC, height DESC
+                  LIMIT 1",
                 [&timestamp],
             )
             .await?;
@@ -1174,12 +1183,18 @@ where
             None
         };
 
-        // Find the block just after the window.
+        // Find the block just after the window. We order by timestamp _then_ height, because the
+        // timestamp order allows the query planner to use the index on timestamp to also
+        // efficiently solve the WHERE clause, but this process may turn up multiple results, due to
+        // the 1-second resolution of block timestamps. The final sort by height guarantees us a
+        // unique, deterministic result (the first block with a given timestamp). This sort may not
+        // be able to use an index, but it shouldn't be too expensive, since there will never be
+        // more than a handful of blocks with the same timestamp.
         let query = format!(
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1
-              ORDER BY h.height
+              ORDER BY h.timestamp, h.height
               LIMIT 1"
         );
         let next = self
@@ -1815,15 +1830,20 @@ impl SqlStorage {
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
         // Find all blocks whose timestamps fall within the window [start, end). Block timestamps
         // are monotonically increasing, so this query is guaranteed to return a contiguous range of
-        // blocks ordered by increasing height. Note that we order by height explicitly, rather than
-        // ordering by timestamp (which might be more efficient, since it could reuse the timestamp
-        // index that is used in the WHERE clause) because multiple blocks may have the same
-        // timestamp, due to the 1-second timestamp resolution.
+        // blocks ordered by increasing height.
+        //
+        // We order by timestamp _then_ height, because the timestamp order allows the query planner
+        // to use the index on timestamp to also efficiently solve the WHERE clause, but this
+        // process may turn up multiple results, due to the 1-second resolution of block timestamps.
+        // The final sort by height guarantees us a unique, deterministic result (the first block
+        // with a given timestamp). This sort may not be able to use an index, but it shouldn't be
+        // too expensive, since there will never be more than a handful of blocks with the same
+        // timestamp.
         let query = format!(
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1 AND h.timestamp < $2
-              ORDER BY h.height"
+              ORDER BY h.timestamp, h.height"
         );
         let rows = self.query(&query, [&(start as i64), &(end as i64)]).await?;
         let window: Vec<_> = rows
@@ -1840,7 +1860,7 @@ impl SqlStorage {
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1
-              ORDER BY h.height
+              ORDER BY h.timestamp, h.height
               LIMIT 1"
         );
         let next = self
@@ -1865,7 +1885,7 @@ impl SqlStorage {
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp < $1
-              ORDER BY h.height DESC
+              ORDER BY h.timestamp DESC, h.height DESC
               LIMIT 1"
         );
         let prev = self
