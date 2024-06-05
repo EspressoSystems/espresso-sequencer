@@ -464,6 +464,17 @@ impl PrunerConfig for SqlStorage {
 }
 
 impl SqlStorage {
+    async fn delete_batch(&mut self, height: u64) -> QueryResult<()> {
+        let mut tx = self.transaction().await?;
+
+        tx.execute("DELETE FROM header WHERE height <= $1", &[&(height as i64)])
+            .await?;
+
+        self.save_pruned_height(height).await?;
+
+        Ok(())
+    }
+
     async fn get_minimum_height(&self) -> QueryResult<Option<u64>> {
         let row = self
             .query_one_static("SELECT MIN(height) as height FROM header")
@@ -585,11 +596,13 @@ impl PruneStorage for SqlStorage {
         if let Some(target_height) = target_height {
             while height < target_height {
                 height = min(height + batch_size, target_height);
-                self.query_opt("DELETE FROM header WHERE height <= $1", &[&(height as i64)])
-                    .await?;
+                self.delete_batch(height).await?;
+                self.commit().await.map_err(|e| QueryError::Error {
+                    message: format!("failed to commit {e}"),
+                })?;
                 pruned_height = Some(height);
 
-                tracing::info!("Pruned data up to height {height}");
+                tracing::warn!("Pruned data up to height {height}");
             }
         }
 
@@ -616,14 +629,14 @@ impl PruneStorage for SqlStorage {
                         && height < min_retention_height
                     {
                         height = min(height + batch_size, min_retention_height);
-                        self.query_opt(
-                            "DELETE FROM header WHERE height <= $1",
-                            &[&(height as i64)],
-                        )
-                        .await?;
-                        usage = self.get_disk_usage().await?;
+                        self.delete_batch(height).await?;
+                        self.commit().await.map_err(|e| QueryError::Error {
+                            message: format!("failed to commit {e}"),
+                        })?;
                         pruned_height = Some(height);
-                        tracing::info!("Pruned data up to height {height}");
+                        tracing::warn!("Pruned data up to height {height}");
+
+                        usage = self.get_disk_usage().await?;
                     }
                 }
             }
