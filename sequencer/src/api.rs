@@ -1132,7 +1132,7 @@ mod test {
                     .unwrap()])
             }),
             l1,
-            Default::default(),
+            None,
             None,
         )
         .await;
@@ -1243,6 +1243,7 @@ mod test {
             }),
             l1,
             None,
+            None,
         )
         .await;
 
@@ -1314,6 +1315,7 @@ mod test {
             }),
             l1,
             None,
+            None,
         )
         .await;
 
@@ -1381,6 +1383,7 @@ mod test {
             }),
             l1,
             Some(upgrades),
+            None,
         )
         .await;
 
@@ -1453,6 +1456,7 @@ mod test {
             persistence,
             std::array::from_fn(|_| MockStateCatchup::default()),
             l1,
+            None,
             None,
         )
         .await;
@@ -1529,6 +1533,7 @@ mod test {
                     .unwrap()])
             }),
             l1,
+            None,
             None,
         )
         .await;
