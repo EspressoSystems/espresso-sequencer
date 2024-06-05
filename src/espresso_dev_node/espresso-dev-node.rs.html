@@ -326,6 +326,16 @@
 <a href="#324" id="324">324</a>
 <a href="#325" id="325">325</a>
 <a href="#326" id="326">326</a>
+<a href="#327" id="327">327</a>
+<a href="#328" id="328">328</a>
+<a href="#329" id="329">329</a>
+<a href="#330" id="330">330</a>
+<a href="#331" id="331">331</a>
+<a href="#332" id="332">332</a>
+<a href="#333" id="333">333</a>
+<a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{io, time::Duration};
 
 <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -383,6 +393,10 @@
     </span><span class="attr">#[clap(short, long, env = <span class="string">"ESPRESSO_COMMITMENT_TASK_PORT"</span>)]
     </span>commitment_task_port: u16,
 
+    <span class="doccomment">/// Port for connecting to the builder.
+    </span><span class="attr">#[clap(short, long, env = <span class="string">"ESPRESSO_BUILDER_PORT"</span>)]
+    </span>builder_port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
+
     <span class="attr">#[clap(flatten)]
     </span>sql: persistence::sql::Options,
 }
@@ -392,16 +406,16 @@
     setup_logging();
     setup_backtrace();
 
-    <span class="kw">let </span>opt = Args::parse();
-    <span class="kw">let </span>options = options::Options::from(options::Http {
-        port: opt.sequencer_api_port,
+    <span class="kw">let </span>cli_params = Args::parse();
+    <span class="kw">let </span>api_options = options::Options::from(options::Http {
+        port: cli_params.sequencer_api_port,
     })
     .status(Default::default())
     .state(Default::default())
     .submit(Default::default())
-    .query_sql(Default::default(), opt.sql);
+    .query_sql(Default::default(), cli_params.sql);
 
-    <span class="kw">let </span>(url, _anvil) = <span class="kw">if let </span><span class="prelude-val">Some</span>(url) = opt.rpc_url {
+    <span class="kw">let </span>(url, _anvil) = <span class="kw">if let </span><span class="prelude-val">Some</span>(url) = cli_params.rpc_url {
         (url, <span class="prelude-val">None</span>)
     } <span class="kw">else </span>{
         <span class="macro">tracing::warn!</span>(<span class="string">"L1 url is not provided. running an anvil node"</span>);
@@ -412,9 +426,10 @@
     };
 
     <span class="kw">let </span>network = TestNetwork::new(
-        options,
+        api_options,
         [persistence::no_storage::Options; TestConfig::NUM_NODES],
         url.clone(),
+        cli_params.builder_port,
     )
     .<span class="kw">await</span>;
 
@@ -429,8 +444,8 @@
 
     <span class="kw">let </span>contracts = deploy(
         url.clone(),
-        opt.mnemonic.clone(),
-        opt.account_index,
+        cli_params.mnemonic.clone(),
+        cli_params.account_index,
         <span class="bool-val">true</span>,
         <span class="prelude-val">None</span>,
         <span class="kw">async </span>{ <span class="prelude-val">Ok</span>(light_client_genesis) }.boxed(),
@@ -444,16 +459,21 @@
     <span class="macro">tracing::info!</span>(<span class="string">"hotshot address: {}"</span>, hotshot_address);
 
     <span class="macro">tracing::info!</span>(<span class="string">"starting the commitment server"</span>);
-    start_commitment_server(opt.commitment_task_port, hotshot_address, SEQUENCER_VERSION).unwrap();
+    start_commitment_server(
+        cli_params.commitment_task_port,
+        hotshot_address,
+        SEQUENCER_VERSION,
+    )
+    .unwrap();
 
     <span class="kw">let </span>sequencer_url =
-        Url::parse(<span class="macro">format!</span>(<span class="string">"http://localhost:{}"</span>, opt.sequencer_api_port).as_str()).unwrap();
+        Url::parse(<span class="macro">format!</span>(<span class="string">"http://localhost:{}"</span>, cli_params.sequencer_api_port).as_str()).unwrap();
     <span class="kw">let </span>commitment_task_options = CommitmentTaskOptions {
         l1_provider: url,
         l1_chain_id: <span class="prelude-val">None</span>,
         hotshot_address,
-        sequencer_mnemonic: opt.mnemonic,
-        sequencer_account_index: opt.account_index,
+        sequencer_mnemonic: cli_params.mnemonic,
+        sequencer_account_index: cli_params.account_index,
         query_service_url: <span class="prelude-val">Some</span>(sequencer_url),
         request_timeout: Duration::from_secs(<span class="number">5</span>),
         delay: <span class="prelude-val">None</span>,
