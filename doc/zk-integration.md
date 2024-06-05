@@ -72,7 +72,6 @@ contract RollupContract1 {
     function updateRollupState(
         newVMState,
         commTxsRollup,
-        commTxsEspresso,
         snarkProof){
 
         // Escape hatch is activated, switch to default sequencing mode
