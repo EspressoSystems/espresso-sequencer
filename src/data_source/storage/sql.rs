@@ -392,12 +392,6 @@ impl SqlStorage {
             .batch_execute(&format!("SET search_path TO {}", config.schema))
             .await?;
 
-        // Enable ltree extension
-        // this is used for state storage
-        client
-            .batch_execute("CREATE EXTENSION IF NOT EXISTS ltree")
-            .await?;
-
         // Get migrations and interleave with custom migrations, sorting by version number.
         validate_migrations(&mut config.migrations)?;
         let migrations =
