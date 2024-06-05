@@ -361,9 +361,7 @@ where
         let task = {
             BackgroundTask::spawn("pruner", async move {
                 for i in 1.. {
-                    sleep(cfg.interval()).await;
-                    tracing::warn!("pruner woke up for the {i}th time");
-
+                    tracing::warn!("starting pruner run {i} ");
                     {
                         let mut storage = fetcher.storage.write().await;
 
@@ -381,6 +379,8 @@ where
                             }
                         }
                     }
+
+                    sleep(cfg.interval()).await;
                 }
             })
         };
