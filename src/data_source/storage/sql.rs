@@ -574,10 +574,10 @@ impl PruneStorage for SqlStorage {
         Ok(size as u64)
     }
 
-/// Note: The prune operation may not immediately free up space even after rows are deleted.
-/// This is because a vacuum operation may be necessary to reclaim more space.
-/// PostgreSQL already performs auto vacuuming, so we are not including it here
-/// as running a vacuum operation can be resource-intensive.
+    /// Note: The prune operation may not immediately free up space even after rows are deleted.
+    /// This is because a vacuum operation may be necessary to reclaim more space.
+    /// PostgreSQL already performs auto vacuuming, so we are not including it here
+    /// as running a vacuum operation can be resource-intensive.
 
     async fn prune(&mut self) -> Result<Option<u64>, QueryError> {
         let cfg = self.get_pruning_config().ok_or(QueryError::Error {
