@@ -46,9 +46,15 @@ struct Args {
         default_value = "0"
     )]
     account_index: u32,
+
     /// Port that the HTTP API will use.
     #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
     sequencer_api_port: u16,
+
+    /// Maximum concurrent connections allowed by the HTTP API server.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_CONNECTIONS")]
+    sequencer_api_max_connections: Option<usize>,
+
     /// If provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
@@ -71,6 +77,7 @@ async fn main() -> anyhow::Result<()> {
     let cli_params = Args::parse();
     let api_options = options::Options::from(options::Http {
         port: cli_params.sequencer_api_port,
+        max_connections: cli_params.sequencer_api_max_connections,
     })
     .status(Default::default())
     .state(Default::default())

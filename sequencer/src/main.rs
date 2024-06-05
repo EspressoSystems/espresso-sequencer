@@ -199,7 +199,7 @@ mod test {
         genesis.to_file(&genesis_file).unwrap();
 
         let modules = Modules {
-            http: Some(Http { port }),
+            http: Some(Http::with_port(port)),
             status: Some(Status),
             ..Default::default()
         };
