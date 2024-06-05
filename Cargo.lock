@@ -4070,8 +4070,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-builder-core"
-version = "0.1.21"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=abdul/update-hotshot#d1c4b3c783d008cd8a46465aad91c9e772ebe059"
+version = "0.1.25"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=abdul/update-hotshot#7c2c6e4eef52ee25ebd99e7d07d2ea2dc8e4cdbd"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4123,8 +4123,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-events-service"
-version = "0.1.22"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=abdul/update-hotshot#b89e29d44881fec8f1fb21db853dfee26aeaa79d"
+version = "0.1.25"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=abdul/update-hotshot#241c8b3227bc6a12feb083a5509a08130a9cb22f"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4219,8 +4219,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-query-service"
-version = "0.1.27"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=abdul/update-hotshot#e9f909f679a0613ce2a917d76ee7a6bf2853c402"
+version = "0.1.30"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=abdul/update-hotshot#dc3401ebcf0404fc47f55e73f9f1ee88c1ae7bcd"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -8633,7 +8633,6 @@ dependencies = [
  "time 0.3.36",
  "tokio-postgres",
  "toml",
- "toml_edit 0.22.14",
  "tracing",
  "tracing-subscriber 0.3.18",
  "trait-set",

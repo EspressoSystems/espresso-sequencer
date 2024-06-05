@@ -101,7 +101,6 @@ tokio-postgres = { version = "0.7", default-features = false, features = [ # dis
     "with-serde_json-1",
 ] }
 toml = { workspace = true }
-toml_edit = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = "0.3.18"
 trait-set = "0.3.0"

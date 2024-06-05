@@ -53,14 +53,24 @@ use hotshot_orchestrator::{
     config::NetworkConfig,
 };
 use hotshot_types::{
-    consensus::CommitmentMap, constants::Base, data::{DaProposal, VidDisperseShare, ViewNumber}, event::HotShotAction, light_client::{StateKeyPair, StateSignKey}, message::Proposal, signature_key::{BLSPrivKey, BLSPubKey}, simple_certificate::QuorumCertificate, traits::{
+    consensus::CommitmentMap,
+    constants::Base,
+    data::{DaProposal, VidDisperseShare, ViewNumber},
+    event::HotShotAction,
+    light_client::{StateKeyPair, StateSignKey},
+    message::Proposal,
+    signature_key::{BLSPrivKey, BLSPubKey},
+    simple_certificate::QuorumCertificate,
+    traits::{
         metrics::Metrics,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
         signature_key::{BuilderSignatureKey, StakeTableEntryType},
         states::InstanceState,
         storage::Storage,
-    }, utils::{BuilderCommitment, View}, ValidatorConfig
+    },
+    utils::{BuilderCommitment, View},
+    ValidatorConfig,
 };
 use persistence::{PersistenceOptions, SequencerPersistence};
 use serde::{Deserialize, Serialize};

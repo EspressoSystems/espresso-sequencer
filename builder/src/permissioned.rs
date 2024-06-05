@@ -466,8 +466,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 .base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
-            Arc::new(instance_state),       
-            
+            Arc::new(instance_state),
             Duration::from_secs(60),Arc::new(validated_state),
         );
 
@@ -548,7 +547,7 @@ mod test {
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
     use hotshot_types::constants::Base;
-    use hotshot_types::{ 
+    use hotshot_types::{
         signature_key::BLSPubKey,
         traits::{
             block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
