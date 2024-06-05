@@ -218,7 +218,7 @@ impl ValidatedState {
     }
 }
 
-/// Error type to cover possible proposal validation failures
+/// Possible proposal validation failures
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum ProposalValidationError {
     #[error("Invalid ChainConfig: expected={expected}, proposal={proposal}")]
@@ -320,7 +320,7 @@ pub fn validate_proposal(
     Ok(())
 }
 
-/// Error type to cover possible charge fee errors
+/// Possible charge fee failures
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum FeeError {
     #[error("Insuficcient Funds: have {balance:?}, required {amount:?}")]
@@ -349,7 +349,7 @@ fn charge_fee(
     Ok(())
 }
 
-/// Error type to cover possible builder validation failures
+/// Possible builder validation failures
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum BuilderValidationError {
     #[error("Builder signature not found")]
