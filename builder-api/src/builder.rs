@@ -94,17 +94,17 @@ impl tide_disco::error::Error for Error {
 
     fn status(&self) -> StatusCode {
         match self {
-            Error::Request { .. } => StatusCode::BadRequest,
+            Error::Request { .. } => StatusCode::BAD_REQUEST,
             Error::BlockAvailable { source, .. } | Error::BlockClaim { source, .. } => match source
             {
-                BuildError::NotFound => StatusCode::NotFound,
-                BuildError::Missing => StatusCode::NotFound,
-                BuildError::Error { .. } => StatusCode::InternalServerError,
+                BuildError::NotFound => StatusCode::NOT_FOUND,
+                BuildError::Missing => StatusCode::NOT_FOUND,
+                BuildError::Error { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             },
-            Error::TxnUnpack { .. } => StatusCode::BadRequest,
-            Error::TxnSubmit { .. } => StatusCode::InternalServerError,
-            Error::Custom { .. } => StatusCode::InternalServerError,
-            Error::BuilderAddress { .. } => StatusCode::InternalServerError,
+            Error::TxnUnpack { .. } => StatusCode::BAD_REQUEST,
+            Error::TxnSubmit { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Custom { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::BuilderAddress { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
@@ -119,7 +119,7 @@ fn try_extract_param<T: for<'a> TryFrom<&'a TaggedBase64>>(
         .try_into()
         .map_err(|_| Error::Custom {
             message: format!("Invalid {param_name}"),
-            status: StatusCode::UnprocessableEntity,
+            status: StatusCode::UNPROCESSABLE_ENTITY,
         })
 }
 
