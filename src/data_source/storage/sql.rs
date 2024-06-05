@@ -1620,12 +1620,18 @@ impl SqlStorage {
 
         let (created, commit) = match snapshot {
             Snapshot::Commit(commit) => {
-                // Get the block height using the merkle commitment.
+                // Get the block height using the merkle commitment. It is possible that multiple
+                // headers will have the same state commitment. In this case we don't care which
+                // height we get, since any query against equivalent states will yield equivalent
+                // results, regardless of which block the state is from. Thus, we can make this
+                // query fast with `LIMIT 1` and no `ORDER BY`.
                 let query = self
                     .query_one(
                         &format!(
-                            "SELECT height FROM Header  where
-                             {header_state_commitment_field} = $1"
+                            "SELECT height
+                               FROM header
+                              WHERE {header_state_commitment_field} = $1
+                              LIMIT 1"
                         ),
                         &[&commit.to_string()],
                     )
