@@ -7,8 +7,11 @@
 
 [zkVM] as ZK
 
-BLOCK_COMM_ESP --> CF
+BLOCK_COMM_ESP_OLD --> CF
+BLOCK_COMM_ESP_NEW --> CF
+"<b>PROOF_TXS_HISTORY_ESP</b>" --> CF
 "<b>ROLLUP_TXS</b>" --> CE
+"<b>ROLLUP_TXS</b>" --> ZK
 
 COMM_TXS_ROLLUP --> CE
 "<b>COMM_TXS_HISTORY_ESP</b>" --> CE
