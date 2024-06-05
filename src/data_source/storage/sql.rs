@@ -578,6 +578,7 @@ impl PruneStorage for SqlStorage {
                 height = min(height + batch_size, target_height);
                 self.query_opt("DELETE FROM header WHERE height <= $1", &[&(height as i64)])
                     .await?;
+                self.save_pruned_height(height).await?;
                 pruned_height = Some(height);
 
                 tracing::info!("Pruned data up to height {height}");
@@ -613,6 +614,8 @@ impl PruneStorage for SqlStorage {
                         )
                         .await?;
                         usage = self.get_disk_usage().await?;
+
+                        self.save_pruned_height(height).await?;
                         pruned_height = Some(height);
                         tracing::info!("Pruned data up to height {height}");
                     }

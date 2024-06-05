@@ -158,8 +158,8 @@ impl Default for PrunerCfg {
             batch_size: 1000,
             // 80%
             max_usage: 8000,
-            // 1 hour
-            interval: Duration::from_secs(3600),
+            // 1.5 hour
+            interval: Duration::from_secs(5400),
         }
     }
 }
