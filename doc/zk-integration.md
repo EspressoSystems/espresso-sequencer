@@ -60,7 +60,6 @@ The circuit depicted in Figure 2 operates as follows:
 contract RollupContract1 {
 
     VMState previousVMState;
-    VMState currentVMState;
     EspressoState previousEspressoState;
     uint256 lastEspressoBlockNumber;
     LightClient lcContract;
@@ -118,8 +117,7 @@ contract RollupContract1 {
 
         }
 
-        previousVMState = currentVMState;
-        currentVMState = newVMState;
+        previousVMState = newVMState;
 
     }
 }
@@ -155,7 +153,6 @@ The circuit depicted in Figure 3 operates as follows:
 contract RollupContract2 {
 
     VMState previousVMState;
-    VMState currentVMState;
     EspressoState previousEspressoState;
     uint256 lastEspressoBlockNumber;
     LightClient lcContract;
@@ -171,8 +168,6 @@ contract RollupContract2 {
             newEspressoState,
             blockNumberEspresso,
             snarkProof){
-
-        previousState = currentState;
 
         if lcContract.escapeHatch(lastEspressoBlockNumber,...){
             bytes[] publicInputs = [
@@ -213,8 +208,7 @@ contract RollupContract2 {
 
         }
 
-        previousVMState = currentVMState;
-        currentVMState = newVMState;
+        previousVMState = newVMState;
     }
 
 }
