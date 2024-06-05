@@ -739,7 +739,7 @@ where
         self.storage().await.vid_share(id).await
     }
 
-    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+    async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
         self.storage().await.sync_status().await
     }
 

@@ -135,8 +135,12 @@ where
             }
             .boxed()
         })?
-        .get("sync_status", |_req, state| {
-            async move { Ok(state.sync_status().await?) }.boxed()
+        .at("sync_status", |_req, state| {
+            async move {
+                let fut = state.read(|state| state.sync_status()).await;
+                Ok(fut.await?)
+            }
+            .boxed()
         })?
         .get("get_header_window", |req, state| {
             async move {

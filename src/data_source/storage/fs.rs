@@ -34,8 +34,8 @@ use crate::{
 use async_trait::async_trait;
 use atomic_store::{AtomicStore, AtomicStoreLoader, PersistenceError};
 use committable::Committable;
+use futures::future::{self, BoxFuture, FutureExt};
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::NodeType};
-
 use serde::{de::DeserializeOwned, Serialize};
 use snafu::OptionExt;
 use std::collections::{
@@ -507,8 +507,8 @@ where
             .context(MissingSnafu)
     }
 
-    async fn sync_status(&self) -> QueryResult<SyncStatus> {
-        let height = self.block_height().await?;
+    async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
+        let height = self.leaf_storage.iter().len();
 
         // The number of missing VID common is just the number of completely missing VID entries,
         // since every entry we have is guaranteed to have the common data.
@@ -520,13 +520,14 @@ where
             .iter()
             .map(|res| if matches!(res, Some((_, None))) { 1 } else { 0 })
             .sum();
-        Ok(SyncStatus {
+        future::ready(Ok(SyncStatus {
             missing_blocks: self.block_storage.missing(height),
             missing_leaves: self.leaf_storage.missing(height),
             missing_vid_common: missing_vid,
             missing_vid_shares: missing_vid + null_vid_shares,
             pruned_height: None,
-        })
+        }))
+        .boxed()
     }
 
     async fn get_header_window(

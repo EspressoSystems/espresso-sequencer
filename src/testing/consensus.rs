@@ -68,6 +68,12 @@ pub const NUM_NODES: usize = 2;
 
 impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
     pub async fn init() -> Self {
+        Self::init_with_config(|_| {}).await
+    }
+
+    pub async fn init_with_config(
+        update_config: impl FnOnce(&mut HotShotConfig<BLSPubKey>),
+    ) -> Self {
         let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..NUM_NODES)
             .map(|i| BLSPubKey::generated_from_seed_indexed([0; 32], i as u64))
             .unzip();
@@ -105,47 +111,49 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             )
             .await;
 
+        let mut config = HotShotConfig {
+            builder_url: builder_url.clone(),
+            fixed_leader_for_gpuvid: 0,
+            num_nodes_with_stake: num_staked_nodes,
+            num_nodes_without_stake: 0,
+            known_nodes_with_stake: known_nodes_with_stake.clone(),
+            known_nodes_without_stake: vec![],
+            my_own_validator_config: Default::default(),
+            start_delay: 0,
+            round_start_delay: 0,
+            next_view_timeout: 10000,
+            timeout_ratio: (11, 10),
+            num_bootstrap: 0,
+            execution_type: ExecutionType::Continuous,
+            da_staked_committee_size: pub_keys.len(),
+            known_da_nodes: known_nodes_with_stake.clone(),
+            da_non_staked_committee_size: 0,
+            data_request_delay: Duration::from_millis(200),
+            view_sync_timeout: Duration::from_millis(250),
+            start_threshold: (
+                known_nodes_with_stake.len() as u64,
+                known_nodes_with_stake.len() as u64,
+            ),
+            builder_timeout: Duration::from_secs(1),
+        };
+        update_config(&mut config);
+
         let nodes = join_all(
             priv_keys
                 .into_iter()
                 .enumerate()
                 .map(|(node_id, priv_key)| {
                     let memberships = memberships.clone();
-                    let my_own_validator_config = ValidatorConfig {
+                    let mut config = config.clone();
+                    config.my_own_validator_config = ValidatorConfig {
                         public_key: pub_keys[node_id],
                         private_key: priv_key.clone(),
                         stake_value: stake,
                         state_key_pair: state_key_pairs[node_id].clone(),
                         is_da: true,
                     };
-                    let config = HotShotConfig {
-                        builder_url: builder_url.clone(),
-                        fixed_leader_for_gpuvid: 0,
-                        num_nodes_with_stake: num_staked_nodes,
-                        num_nodes_without_stake: 0,
-                        known_nodes_with_stake: known_nodes_with_stake.clone(),
-                        known_nodes_without_stake: vec![],
-                        my_own_validator_config,
-                        start_delay: 0,
-                        round_start_delay: 0,
-                        next_view_timeout: 10000,
-                        timeout_ratio: (11, 10),
-                        num_bootstrap: 0,
-                        execution_type: ExecutionType::Continuous,
-                        da_staked_committee_size: pub_keys.len(),
-                        known_da_nodes: known_nodes_with_stake.clone(),
-                        da_non_staked_committee_size: 0,
-                        data_request_delay: Duration::from_millis(200),
-                        view_sync_timeout: Duration::from_millis(250),
-                        start_threshold: (
-                            known_nodes_with_stake.len() as u64,
-                            known_nodes_with_stake.len() as u64,
-                        ),
-                        builder_timeout: Duration::from_secs(1),
-                    };
 
                     let pub_keys = pub_keys.clone();
-                    let config = config.clone();
                     let master_map = master_map.clone();
 
                     let span = info_span!("initialize node", node_id);
