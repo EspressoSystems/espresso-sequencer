@@ -35,12 +35,6 @@ jobs:
         run: |
           cargo build --workspace --release
 
-      - name: Test
-        run: |
-          cargo test --workspace --release --all-features --no-run
-          cargo test --workspace --release --all-features --verbose -- --test-threads 2
-        timeout-minutes: 60
-
       - name: Format Check
         run: cargo fmt -- --check
 
@@ -48,7 +42,13 @@ jobs:
       # don't compile with all combinations of features.
       - name: Clippy
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
-
+      
+      - name: Test
+        run: |
+          cargo test --workspace --release --all-features --no-run
+          cargo test --workspace --release --all-features --verbose -- --test-threads 2
+        timeout-minutes: 60
+        
       - name: Generate Documentation
         run: |
           cargo doc --no-deps --lib --release --all-features
