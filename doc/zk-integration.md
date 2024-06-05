@@ -196,7 +196,7 @@ contract RollupContract2 {
             bytes[] publicInputs = [
                         previousVMState,
                         newVMState,
-                        commTxsEspresso,
+                        commTxsRollup,
                         previousEspressoState,
                         newEspressoState,
                         blockNumberEspresso,
