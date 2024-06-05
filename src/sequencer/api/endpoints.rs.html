@@ -528,7 +528,7 @@
     <span class="kw">let </span>toml = toml::from_str::&lt;toml::Value&gt;(<span class="macro">include_str!</span>(<span class="string">"../../api/submit.toml"</span>))<span class="question-mark">?</span>;
     <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;S, Error, Ver&gt;::new(toml)<span class="question-mark">?</span>;
 
-    api.post(<span class="string">"submit"</span>, |req, state| {
+    api.at(<span class="string">"submit"</span>, |req, state| {
         <span class="kw">async move </span>{
             <span class="kw">let </span>tx = req
                 .body_auto::&lt;Transaction, Ver&gt;(Ver::instance())
@@ -546,7 +546,7 @@
 
             <span class="kw">let </span>hash = tx.commit();
             state
-                .submit(tx)
+                .read(|state| state.submit(tx).boxed())
                 .<span class="kw">await
                 </span>.map_err(|err| Error::internal(err.to_string()))<span class="question-mark">?</span>;
             <span class="prelude-val">Ok</span>(hash)
