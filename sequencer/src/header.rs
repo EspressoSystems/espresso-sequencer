@@ -810,10 +810,7 @@ mod test_headers {
         async fn default() -> Self {
             let instance_state = NodeState::mock();
             let validated_state = ValidatedState::genesis(&instance_state).0;
-
-            //TODO(abdul): Change this
-            let leaf = async_std::task::block_on(Leaf::genesis(&validated_state, &instance_state));
-
+            let leaf = Leaf::genesis(&validated_state, &instance_state).await;
             let header = leaf.block_header().clone();
             let ns_table = leaf.block_payload().unwrap().get_ns_table().clone();
             Self {
