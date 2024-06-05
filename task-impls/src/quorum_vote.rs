@@ -503,7 +503,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
             );
 
             // Cancel the old dependency tasks.
-            for view in (*self.latest_voted_view + 1)..=(*new_view) {
+            for view in (*self.latest_voted_view + 1)..(*new_view) {
                 if let Some(dependency) = self.vote_dependencies.remove(&TYPES::Time::new(view)) {
                     cancel_task(dependency).await;
                     debug!("Vote dependency removed for view {:?}", view);
