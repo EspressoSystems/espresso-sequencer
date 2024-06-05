@@ -104,6 +104,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         &self,
         state: NodeState,
     ) -> anyhow::Result<HotShotInitializer<SeqTypes>> {
+        let genesis_validated_state = ValidatedState::genesis(&state).0;
         let highest_voted_view = match self
             .load_latest_acted_view()
             .await
@@ -137,12 +138,15 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             }
             None => {
                 tracing::info!("no saved leaf, starting from genesis leaf");
-                (Leaf::genesis(&state), QuorumCertificate::genesis(&state))
+                (
+                    Leaf::genesis(&genesis_validated_state, &state).await,
+                    QuorumCertificate::genesis(&genesis_validated_state, &state).await,
+                )
             }
         };
         let validated_state = if leaf.block_header().height == 0 {
             // If we are starting from genesis, we can provide the full state.
-            Some(Arc::new(ValidatedState::genesis(&state).0))
+            Some(Arc::new(genesis_validated_state))
         } else {
             // Otherwise, we will have to construct a sparse state and fetch missing data during
             // catchup.
@@ -273,8 +277,8 @@ mod persistence_tests {
         assert_eq!(storage.load_anchor_leaf().await.unwrap(), None);
 
         // Store a leaf.
-        let leaf1 = Leaf::genesis(&NodeState::mock());
-        let qc1 = QuorumCertificate::genesis(&NodeState::mock());
+        let leaf1 = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
+        let qc1 = QuorumCertificate::genesis(&ValidatedState::default(), &NodeState::mock()).await;
         storage.save_anchor_leaf(&leaf1, &qc1).await.unwrap();
         assert_eq!(
             storage.load_anchor_leaf().await.unwrap().unwrap(),
@@ -359,7 +363,7 @@ mod persistence_tests {
             None
         );
 
-        let leaf = Leaf::genesis(&NodeState::mock());
+        let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
         let payload = leaf.block_payload().unwrap();
         let bytes = payload.encode().to_vec();
         let disperse = vid_scheme(2).disperse(bytes).unwrap();

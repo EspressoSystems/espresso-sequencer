@@ -20,6 +20,8 @@ use block::entry::TxTableEntryWord;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
 use ethers::types::U256;
+#[cfg(feature = "libp2p")]
+use futures::FutureExt;
 use genesis::{GenesisHeader, L1Finalized};
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
@@ -279,6 +281,7 @@ pub struct NetworkParams {
     pub private_staking_key: BLSPrivKey,
     pub private_state_key: StateSignKey,
     pub state_peers: Vec<Url>,
+
     /// The address to send to other Libp2p nodes to contact us
     pub libp2p_advertise_address: SocketAddr,
     /// The address to bind to for Libp2p
@@ -339,7 +342,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
     let mut persistence = persistence_opt.clone().create().await?;
-    let (config, wait_for_orchestrator) = match persistence.load_config().await? {
+    let (mut config, wait_for_orchestrator) = match persistence.load_config().await? {
         Some(config) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
             (config, false)
@@ -370,13 +373,19 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             (config, true)
         }
     };
+
+    // If the network is configured manually, override what we got from the orchestrator
+    if let Some(genesis_network_config) = genesis.network {
+        genesis_network_config.populate_config(&mut config)?;
+    }
+
     let node_index = config.node_index;
 
     // If we are a DA node, we need to subscribe to the DA topic
     let topics = {
         let mut topics = vec![Topic::Global];
         if is_da {
-            topics.push(Topic::DA);
+            topics.push(Topic::Da);
         }
         topics
     };
@@ -394,20 +403,29 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
-    let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
-        config.clone(),
-        network_params.libp2p_bind_address,
-        &my_config.public_key,
-        // We need the private key so we can derive our Libp2p keypair
-        // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
-        &my_config.private_key,
-    )
-    .await
-    .with_context(|| "Failed to create libp2p network")?;
-
-    // Combine the communication channels
-    #[cfg(feature = "libp2p")]
     let (da_network, quorum_network) = {
+        let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
+            config.clone(),
+            network_params.libp2p_bind_address,
+            &my_config.public_key,
+            // We need the private key so we can derive our Libp2p keypair
+            // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
+            &my_config.private_key,
+        )
+        .await
+        .with_context(|| "Failed to create libp2p network")?;
+
+        tracing::warn!("Waiting for at least one connection to be initialized");
+        futures::select! {
+            _ = cdn_network.wait_for_ready().fuse() => {
+                tracing::warn!("CDN connection initialized");
+            },
+            _ = p2p_network.wait_for_ready().fuse() => {
+                tracing::warn!("P2P connection initialized");
+            },
+        };
+
+        // Combine the CDN and P2P networks
         (
             Arc::from(CombinedNetworks::new(
                 cdn_network.clone(),
@@ -513,7 +531,7 @@ pub mod testing {
     use hotshot::types::{EventType::Decide, Message};
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_testing::block_builder::{
-        BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
+        BuilderTask, SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
     };
     use hotshot_types::{
         event::LeafInfo,
@@ -529,7 +547,7 @@ pub mod testing {
     pub async fn run_test_builder() -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
         <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
             TestConfig::NUM_NODES,
-            (),
+            SimpleBuilderConfig::default(),
         )
         .await
     }
@@ -814,10 +832,10 @@ mod test {
 
         // Hook the builder up to the event stream from the first node
         if let Some(builder_task) = builder_task {
-            builder_task.start(Box::new(handle_0.event_stream()));
+            builder_task.start(Box::new(handle_0.event_stream().await));
         }
 
-        let mut events = handle_0.event_stream();
+        let mut events = handle_0.event_stream().await;
 
         for handle in handles.iter() {
             handle.start_consensus().await;
@@ -853,11 +871,11 @@ mod test {
 
         let handle_0 = &handles[0];
 
-        let mut events = handle_0.event_stream();
+        let mut events = handle_0.event_stream().await;
 
         // Hook the builder up to the event stream from the first node
         if let Some(builder_task) = builder_task {
-            builder_task.start(Box::new(handle_0.event_stream()));
+            builder_task.start(Box::new(handle_0.event_stream().await));
         }
 
         for handle in handles.iter() {
@@ -867,7 +885,9 @@ mod test {
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], &NodeState::mock()).unwrap();
+                Payload::from_transactions([], &ValidatedState::default(), &NodeState::mock())
+                    .await
+                    .unwrap();
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
                 let payload_bytes = genesis_payload.encode();
