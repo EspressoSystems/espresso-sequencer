@@ -370,7 +370,9 @@ where
                         match storage.storage.prune().await {
                             Ok(Some(height)) => {
                                 storage.pruned_height = Some(height);
-                                tracing::warn!("pruner run {i} succeeded. Pruned to height {height}");
+                                tracing::warn!(
+                                    "pruner run {i} succeeded. Pruned to height {height}"
+                                );
                             }
                             Ok(None) => (),
                             Err(e) => {

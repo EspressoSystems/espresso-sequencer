@@ -626,7 +626,7 @@ impl PruneStorage for SqlStorage {
                         })?;
                         pruned_height = Some(height);
                         tracing::warn!("Pruned data up to height {height}");
-                        
+
                         usage = self.get_disk_usage().await?;
                     }
                 }
