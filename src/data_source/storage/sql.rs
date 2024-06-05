@@ -574,6 +574,11 @@ impl PruneStorage for SqlStorage {
         Ok(size as u64)
     }
 
+/// Note: The prune operation may not immediately free up space even after rows are deleted.
+/// This is because a vacuum operation may be necessary to reclaim more space.
+/// PostgreSQL already performs auto vacuuming, so we are not including it here
+/// as running a vacuum operation can be resource-intensive.
+
     async fn prune(&mut self) -> Result<Option<u64>, QueryError> {
         let cfg = self.get_pruning_config().ok_or(QueryError::Error {
             message: "Pruning config not found".to_string(),
@@ -642,13 +647,6 @@ impl PruneStorage for SqlStorage {
                 }
             }
         }
-        // Vacuum the database to reclaim space.
-        // Note: VACUUM FULL is not used as it requires an exclusive lock on the tables, which can
-        // cause downtime for the query service.
-        self.client
-            .batch_execute("VACUUM")
-            .await
-            .map_err(postgres_err)?;
 
         Ok(pruned_height)
     }
@@ -3376,6 +3374,11 @@ mod test {
         storage.set_pruning_config(PrunerCfg::new());
         // No data will be pruned
         let pruned_height = storage.prune().await.unwrap();
+
+        // Vacuum the database to reclaim space.
+        // This is necessary to ensure the test passes.
+        // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
+        storage.client.batch_execute("VACUUM").await.unwrap();
         // Pruned height should be none
         assert!(pruned_height.is_none());
 
@@ -3393,6 +3396,10 @@ mod test {
         // All of the data is now older than 1s.
         // This would prune all the data as the target retention is set to 1s
         let pruned_height = storage.prune().await.unwrap();
+        // Vacuum the database to reclaim space.
+        // This is necessary to ensure the test passes.
+        // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
+        storage.client.batch_execute("VACUUM").await.unwrap();
 
         // Pruned height should be some
         assert!(pruned_height.is_some());
@@ -3455,6 +3462,10 @@ mod test {
         // Pruning would not delete any data
         // All the data is younger than minimum retention period even though the usage > threshold
         let pruned_height = storage.prune().await.unwrap();
+        // Vacuum the database to reclaim space.
+        // This is necessary to ensure the test passes.
+        // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
+        storage.client.batch_execute("VACUUM").await.unwrap();
 
         // Pruned height should be none
         assert!(pruned_height.is_none());
@@ -3475,6 +3486,10 @@ mod test {
         sleep(Duration::from_secs(2)).await;
         // This would prune all the data
         let pruned_height = storage.prune().await.unwrap();
+        // Vacuum the database to reclaim space.
+        // This is necessary to ensure the test passes.
+        // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
+        storage.client.batch_execute("VACUUM").await.unwrap();
 
         // Pruned height should be some
         assert!(pruned_height.is_some());
