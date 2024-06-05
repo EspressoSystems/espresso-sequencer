@@ -62,7 +62,6 @@ contract RollupContract1 {
     VMState previousVMState;
     VMState currentVMState;
     EspressoState previousEspressoState;
-    EspressoState currentEspressoState;
     uint256 lastEspressoBlockNumber;
     LightClient lcContract;
 
@@ -104,8 +103,7 @@ contract RollupContract1 {
                 previousVMState,
                 newVMState,
                 commTxsRollup,
-                commTxsEspresso,
-                currentEspressoState,
+                previousEspressoState,
                 newEspressoState
             ];
 
@@ -115,8 +113,7 @@ contract RollupContract1 {
                 vkEspresso // This verification key corresponds to the circuit depicted in Figure 2.
             );
 
-            previousEspressoState = currentEspressoState;
-            currentEspressoState = newEspressoState;
+            previousEspressoState = newEspressoState;
             lastBlockNumberEspresso =  blockNumberEspresso;
 
         }
@@ -160,7 +157,6 @@ contract RollupContract2 {
     VMState previousVMState;
     VMState currentVMState;
     EspressoState previousEspressoState;
-    EspressoState currentEspressoState;
     uint256 lastEspressoBlockNumber;
     LightClient lcContract;
 
@@ -172,7 +168,6 @@ contract RollupContract2 {
     function updateRollupState(
             newVMState,
             commTxsRollup,
-            commTxsEspresso,
             newEspressoState,
             blockNumberEspresso,
             snarkProof){
@@ -201,8 +196,8 @@ contract RollupContract2 {
             bytes[] publicInputs = [
                         previousVMState,
                         newVMState,
-                        commTxsRollup,
                         commTxsEspresso,
+                        previousEspressoState,
                         newEspressoState,
                         blockNumberEspresso,
                     ];
@@ -213,8 +208,7 @@ contract RollupContract2 {
                 vkEspresso // This verification key corresponds to the circuit depicted in Figure 3.
             );
 
-            previousEspressoState = currentEspressoState;
-            currentEspressoState = newEspressoState;
+            previousEspressoState = newEspressoState;
             lastBlockNumberEspresso =  blockNumberEspresso;
 
         }
