@@ -544,10 +544,17 @@ pub mod testing {
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
-    pub async fn run_test_builder() -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
+    pub async fn run_test_builder(
+        port: Option<u16>,
+    ) -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
+        let builder_config = if let Some(port) = port {
+            SimpleBuilderConfig { port }
+        } else {
+            SimpleBuilderConfig::default()
+        };
         <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
             TestConfig::NUM_NODES,
-            SimpleBuilderConfig::default(),
+            builder_config,
         )
         .await
     }
@@ -822,7 +829,7 @@ mod test {
         let url = anvil.url();
         let mut config = TestConfig::default_with_l1(url);
 
-        let (builder_task, builder_url) = run_test_builder().await;
+        let (builder_task, builder_url) = run_test_builder(None).await;
 
         config.set_builder_url(builder_url);
 
@@ -864,7 +871,7 @@ mod test {
         let url = anvil.url();
         let mut config = TestConfig::default_with_l1(url);
 
-        let (builder_task, builder_url) = run_test_builder().await;
+        let (builder_task, builder_url) = run_test_builder(None).await;
 
         config.set_builder_url(builder_url);
         let handles = config.init_nodes(ver).await;

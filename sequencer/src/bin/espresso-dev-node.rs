@@ -55,6 +55,10 @@ struct Args {
     #[clap(short, long, env = "ESPRESSO_COMMITMENT_TASK_PORT")]
     commitment_task_port: u16,
 
+    /// Port for connecting to the builder.
+    #[clap(short, long, env = "ESPRESSO_BUILDER_PORT")]
+    builder_port: Option<u16>,
+
     #[clap(flatten)]
     sql: persistence::sql::Options,
 }
@@ -64,16 +68,16 @@ async fn main() -> anyhow::Result<()> {
     setup_logging();
     setup_backtrace();
 
-    let opt = Args::parse();
-    let options = options::Options::from(options::Http {
-        port: opt.sequencer_api_port,
+    let cli_params = Args::parse();
+    let api_options = options::Options::from(options::Http {
+        port: cli_params.sequencer_api_port,
     })
     .status(Default::default())
     .state(Default::default())
     .submit(Default::default())
-    .query_sql(Default::default(), opt.sql);
+    .query_sql(Default::default(), cli_params.sql);
 
-    let (url, _anvil) = if let Some(url) = opt.rpc_url {
+    let (url, _anvil) = if let Some(url) = cli_params.rpc_url {
         (url, None)
     } else {
         tracing::warn!("L1 url is not provided. running an anvil node");
@@ -84,9 +88,10 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let network = TestNetwork::new(
-        options,
+        api_options,
         [persistence::no_storage::Options; TestConfig::NUM_NODES],
         url.clone(),
+        cli_params.builder_port,
     )
     .await;
 
@@ -101,8 +106,8 @@ async fn main() -> anyhow::Result<()> {
 
     let contracts = deploy(
         url.clone(),
-        opt.mnemonic.clone(),
-        opt.account_index,
+        cli_params.mnemonic.clone(),
+        cli_params.account_index,
         true,
         None,
         async { Ok(light_client_genesis) }.boxed(),
@@ -116,16 +121,21 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("hotshot address: {}", hotshot_address);
 
     tracing::info!("starting the commitment server");
-    start_commitment_server(opt.commitment_task_port, hotshot_address, SEQUENCER_VERSION).unwrap();
+    start_commitment_server(
+        cli_params.commitment_task_port,
+        hotshot_address,
+        SEQUENCER_VERSION,
+    )
+    .unwrap();
 
     let sequencer_url =
-        Url::parse(format!("http://localhost:{}", opt.sequencer_api_port).as_str()).unwrap();
+        Url::parse(format!("http://localhost:{}", cli_params.sequencer_api_port).as_str()).unwrap();
     let commitment_task_options = CommitmentTaskOptions {
         l1_provider: url,
         l1_chain_id: None,
         hotshot_address,
-        sequencer_mnemonic: opt.mnemonic,
-        sequencer_account_index: opt.account_index,
+        sequencer_mnemonic: cli_params.mnemonic,
+        sequencer_account_index: cli_params.account_index,
         query_service_url: Some(sequencer_url),
         request_timeout: Duration::from_secs(5),
         delay: None,
