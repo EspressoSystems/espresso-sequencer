@@ -23,14 +23,13 @@
 
 use crate::{
     block::tables::NameSpaceTable, state::FeeInfo, ChainConfig, FeeAccount, Header, L1BlockInfo,
-    Payload, SeqTypes, Transaction, TxTableEntryWord, ValidatedState,
+    Payload, Transaction, TxTableEntryWord, ValidatedState,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
 use es_version::SequencerVersion;
 use hotshot_types::traits::{
-    block_contents::vid_commitment, block_contents::TestableBlock,
-    signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
+    block_contents::vid_commitment, signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
 };
 use jf_merkle_tree::MerkleTreeScheme;
 use pretty_assertions::assert_eq;
@@ -42,11 +41,22 @@ use vbs::BinarySerializer;
 
 type Serializer = vbs::Serializer<SequencerVersion>;
 
-fn reference_ns_table() -> NameSpaceTable<TxTableEntryWord> {
-    NameSpaceTable::from_bytes([0; 48])
+async fn reference_payload() -> Payload<TxTableEntryWord> {
+    Payload::from_transactions(
+        vec![reference_transaction()],
+        &Default::default(),
+        &Default::default(),
+    )
+    .await
+    .unwrap()
+    .0
 }
 
-const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~GL-lEBAwNZDldxDpySRZQChNnmn9vNzdIAL8W9ENOuh_";
+async fn reference_ns_table() -> NameSpaceTable<TxTableEntryWord> {
+    reference_payload().await.get_ns_table().clone()
+}
+
+const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~jqBfNUW1lSijWpKpPNc9yxQs28YckB80gFJWnHIwOQMC";
 
 fn reference_l1_block() -> L1BlockInfo {
     L1BlockInfo {
@@ -82,17 +92,17 @@ fn reference_fee_info() -> FeeInfo {
 
 const REFERENCE_FEE_INFO_COMMITMENT: &str = "FEE_INFO~xCCeTjJClBtwtOUrnAmT65LNTQGceuyjSJHUFfX6VRXR";
 
-fn reference_header() -> Header {
+async fn reference_header() -> Header {
     let builder_key = FeeAccount::generated_from_seed_indexed(Default::default(), 0).1;
     let fee_info = reference_fee_info();
-    let ns_table = reference_ns_table();
-    let payload = <Payload<_> as TestableBlock<SeqTypes>>::genesis();
+    let payload = reference_payload().await;
+    let ns_table = payload.get_ns_table();
     let payload_commitment = vid_commitment(&payload.encode(), 1);
-    let builder_commitment = payload.builder_commitment(&ns_table);
+    let builder_commitment = payload.builder_commitment(ns_table);
     let builder_signature = FeeAccount::sign_fee(
         &builder_key,
         fee_info.amount().as_u64().unwrap(),
-        &ns_table,
+        ns_table,
         &payload_commitment,
     )
     .unwrap();
@@ -106,7 +116,7 @@ fn reference_header() -> Header {
         l1_finalized: Some(reference_l1_block()),
         payload_commitment,
         builder_commitment,
-        ns_table,
+        ns_table: ns_table.clone(),
         block_merkle_tree_root: state.block_merkle_tree.commitment(),
         fee_merkle_tree_root: state.fee_merkle_tree.commitment(),
         fee_info,
@@ -115,7 +125,7 @@ fn reference_header() -> Header {
     }
 }
 
-const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~6Ol30XYkdKaNFXw0QAkcif18Lk8V8qkC4M81qTlwL707";
+const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~mHlaknD1qKCz0UBtV2GpnqfO6gFqF5yN-9qkmLMRG3rp";
 
 fn reference_transaction() -> Transaction {
     let payload: [u8; 1024] = std::array::from_fn(|i| (i % (u8::MAX as usize)) as u8);
@@ -230,11 +240,11 @@ Actual: {actual}
     );
 }
 
-#[test]
-fn test_reference_ns_table() {
+#[async_std::test]
+async fn test_reference_ns_table() {
     reference_test(
         "ns_table",
-        reference_ns_table(),
+        reference_ns_table().await,
         REFERENCE_NS_TABLE_COMMITMENT,
     );
 }
@@ -266,9 +276,13 @@ fn test_reference_fee_info() {
     );
 }
 
-#[test]
-fn test_reference_header() {
-    reference_test("header", reference_header(), REFERENCE_HEADER_COMMITMENT);
+#[async_std::test]
+async fn test_reference_header() {
+    reference_test(
+        "header",
+        reference_header().await,
+        REFERENCE_HEADER_COMMITMENT,
+    );
 }
 
 #[test]
