@@ -2,12 +2,12 @@
 
 Similarly to their optimistic alternatives, ZK rollups need to instantiate their derivation pipeline in order to
 integrate with Espresso. There are a number of alternatives for such integration, depending on specific constraints the
-rollup may have such as using a particular Data Availability layer in addition to Tiramisu, or the need to update their
+rollup may have such as using a particular data availability layer in addition to Tiramisu, or the need to update their
 state at a faster pace than the Espresso light client contract does.
 
 In the following, we assume that the rollup relies on Tiramisu for data availability and explore two different
 integrations flavors. With integration 1, the rollup relies on the Espresso light client contract to fetch the latest
-HotShot state updates. while with integration 2 the rollup checks Espresso consensus directly inside its circuit.
+Espresso state updates. while with integration 2 the rollup checks Espresso consensus directly inside its circuit.
 
 For both integrations:
 
@@ -21,10 +21,10 @@ When the escape hatch is activated, both integrations use the same circuit
 
 **Figure 1:** Circuit used when the rollup falls back to using its default (centralized) sequencer. The public inputs
 are the current state of the rollup _COMM_STATE_VM i_, the new rollup state after update _COMM_STATE_VM i+1_ and a
-commitment to the transactions applied to the state _COMM_TXS_ROLLUP_. The private input (in bold) corresponds the list
+commitment to the transactions applied to the state, _COMM_TXS_ROLLUP_. The private input (in bold) corresponds the list
 of transactions.
 
-## Integration 1: Rollup contract fetches Espresso block commitment from the Espresso Light Client contract
+## Integration 1: Rollup contract fetches Espresso block commitment from the Espresso light client contract
 
 For this integration, Espresso consensus verification is delegated to the Espresso light client contract. In practice
 the rollup contract will fetch the last Espresso block commitment and feed it to the circuit. Still additional gadgets
@@ -49,14 +49,14 @@ The circuit depicted in Figure 2 operates as follows:
 - The _COMMs Equivalence_ gadget checks that using the same rollup inputs _ROLLUP_TXS_, we obtain _COMM_TXS_HISTORY_ESP_
   using the Espresso commitment scheme for representing a set of transactions and the commitment _COMM_TXS_ROLLUPS_ that
   is used the by _zkVM_ gadget.
-- The zkVM gadget is the original gadget of the rollup circuit that proves a correct transition from state
+- The _zkVM_ gadget is the original gadget of the rollup circuit that proves a correct transition from state
   _COMM_STATE_VM i_ to the next state _COMM_STATE_VM i+1_ when applying the transactions represented by the commitment
   value _COMM_TXS_ROLLUP_.
 - These three gadgets above return a boolean: true if the verification succeeds and false otherwise.
 - For the circuit to accept, all these gadget outputs must be true, and thus we add an _AND_ gate.
 
 ```solidity
-/// Connects to the Espresso light client contract to fetch the last state.
+/// Uses the Espresso light client contract to fetch the last state.
 contract RollupContract1 {
 
     VMState previousVMState;
@@ -106,8 +106,7 @@ contract RollupContract1 {
                 commTxsRollup,
                 commTxsEspresso,
                 currentEspressoState,
-                newEspressoState,
-                blockNumberEspresso
+                newEspressoState
             ];
 
             SnarkVerify(
