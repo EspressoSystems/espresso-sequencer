@@ -305,6 +305,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     pub async fn start_consensus(&self) {
         #[cfg(feature = "dependncy-tasks")]
         error!("HotShot is running with the dependency tasks feature enabled!!");
+
+        #[cfg(all(feature = "rewind", not(debug_assertions)))]
+        compile_error!("Cannot run rewind in production builds!");
+
         debug!("Starting Consensus");
         let consensus = self.consensus.read().await;
 

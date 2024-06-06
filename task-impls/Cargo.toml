@@ -9,6 +9,7 @@ version = { workspace = true }
 example-upgrade = []
 gpu-vid = ["hotshot-types/gpu-vid"]
 dependency-tasks = []
+rewind = []
 
 [dependencies]
 anyhow = { workspace = true }

@@ -7,6 +7,8 @@ use std::{
 use crate::types::SystemContextHandle;
 use async_trait::async_trait;
 use chrono::Utc;
+#[cfg(feature = "rewind")]
+use hotshot_task_impls::rewind::RewindTaskState;
 use hotshot_task_impls::{
     builder::BuilderClient, consensus::ConsensusTaskState, consensus2::Consensus2TaskState,
     da::DaTaskState, quorum_proposal::QuorumProposalTaskState,
@@ -329,6 +331,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             timeout: handle.hotshot.config.next_view_timeout,
             consensus,
             last_decided_view: handle.cur_view().await,
+            id: handle.hotshot.id,
+        }
+    }
+}
+
+#[cfg(feature = "rewind")]
+#[async_trait]
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
+    for RewindTaskState<TYPES>
+{
+    async fn create_from(handle: &SystemContextHandle<TYPES, I>) -> RewindTaskState<TYPES> {
+        RewindTaskState {
+            events: Vec::new(),
             id: handle.hotshot.id,
         }
     }

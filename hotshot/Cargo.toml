@@ -12,6 +12,7 @@ default = ["docs", "doc-images"]
 example-upgrade = ["hotshot-task-impls/example-upgrade"]
 gpu-vid = ["hotshot-task-impls/gpu-vid"]
 dependency-tasks = ["hotshot-task-impls/dependency-tasks"]
+rewind = ["hotshot-task-impls/rewind"]
 
 # Features required for binaries
 bin-orchestrator = ["clap"]
@@ -73,7 +74,10 @@ cdn-broker = { workspace = true, features = [
   "runtime-async-std",
   "global-permits",
 ] }
-cdn-marshal = { workspace = true, features = ["runtime-async-std", "global-permits"] }
+cdn-marshal = { workspace = true, features = [
+  "runtime-async-std",
+  "global-permits",
+] }
 
 
 [dev-dependencies]

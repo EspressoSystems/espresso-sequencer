@@ -7,6 +7,8 @@ use std::{sync::Arc, time::Duration};
 
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use hotshot_task::task::Task;
+#[cfg(feature = "rewind")]
+use hotshot_task_impls::rewind::RewindTaskState;
 use hotshot_task_impls::{
     consensus::ConsensusTaskState,
     da::DaTaskState,
@@ -168,4 +170,7 @@ pub async fn add_consensus_tasks<
         handle.add_task(QuorumProposalRecvTaskState::<TYPES, I>::create_from(handle).await);
         handle.add_task(Consensus2TaskState::<TYPES, I>::create_from(handle).await);
     }
+
+    #[cfg(feature = "rewind")]
+    handle.add_task(RewindTaskState::<TYPES>::create_from(&handle).await);
 }

@@ -264,16 +264,16 @@ where
             completion_handle.abort();
         }
 
-        assert!(
-            error_list.is_empty(),
-            "TEST FAILED! Results: {error_list:?}"
-        );
-
         let mut nodes = handles.write().await;
 
         for node in &mut *nodes {
             node.handle.shut_down().await;
         }
+
+        assert!(
+            error_list.is_empty(),
+            "TEST FAILED! Results: {error_list:?}"
+        );
     }
 
     /// Add nodes.
