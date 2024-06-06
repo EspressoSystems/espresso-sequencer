@@ -475,7 +475,7 @@ async fn test_quorum_proposal_task_view_sync() {
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-async fn test_quorum_proposal_livness_check_proposal() {
+async fn test_quorum_proposal_liveness_check_proposal() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -603,14 +603,14 @@ async fn test_quorum_proposal_livness_check_proposal() {
         Expectations::from_outputs(vec![exact(UpdateHighQc(
             proposals[1].data.justify_qc.clone(),
         ))]),
-        Expectations::from_outputs(vec![
+        Expectations::from_outputs(all_predicates![
             exact(UpdateHighQc(proposals[2].data.justify_qc.clone())),
             quorum_proposal_send(),
         ]),
         Expectations::from_outputs(vec![exact(UpdateHighQc(
             proposals[3].data.justify_qc.clone(),
         ))]),
-        Expectations::from_outputs(vec![
+        Expectations::from_outputs(all_predicates![
             exact(LockedViewUpdated(ViewNumber::new(3))),
             exact(LastDecidedViewUpdated(ViewNumber::new(2))),
             leaf_decided(),
