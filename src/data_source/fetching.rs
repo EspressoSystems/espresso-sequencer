@@ -358,7 +358,7 @@ where
             };
         };
 
-        let fut = async move {
+        let future = async move {
             for i in 1.. {
                 tracing::warn!("starting pruner run {i} ");
                 // We loop until the whole run pruner run is complete
@@ -389,7 +389,7 @@ where
             }
         };
 
-        let task = BackgroundTask::spawn("pruner", fut);
+        let task = BackgroundTask::spawn("pruner", future);
 
         Self {
             handle: Some(task),

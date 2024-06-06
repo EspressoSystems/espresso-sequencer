@@ -638,8 +638,8 @@ impl PruneStorage for SqlStorage {
                     message: format!("failed to commit {e}"),
                 })?;
 
-                self.pruner.run_in_progress = true;
                 self.pruner.pruned_height = height;
+                self.pruner.run_in_progress = true;
                 return Ok(Some(height));
             }
         }
@@ -672,8 +672,9 @@ impl PruneStorage for SqlStorage {
                             message: format!("failed to commit {e}"),
                         })?;
 
-                        self.pruner.run_in_progress = true;
                         self.pruner.pruned_height = height;
+                        self.pruner.run_in_progress = true;
+
                         return Ok(Some(height));
                     }
                 }
