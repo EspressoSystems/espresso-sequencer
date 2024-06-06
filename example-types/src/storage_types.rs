@@ -8,7 +8,7 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, Leaf, VidDisperseShare},
+    data::{DaProposal, Leaf, QuorumProposal, VidDisperseShare},
     message::Proposal,
     traits::{node_implementation::NodeType, storage::Storage},
     utils::View,
@@ -23,6 +23,7 @@ type VidShares<TYPES> = HashMap<
 pub struct TestStorageState<TYPES: NodeType> {
     vids: VidShares<TYPES>,
     das: HashMap<TYPES::Time, Proposal<TYPES, DaProposal<TYPES>>>,
+    proposals: HashMap<TYPES::Time, Proposal<TYPES, QuorumProposal<TYPES>>>,
 }
 
 impl<TYPES: NodeType> Default for TestStorageState<TYPES> {
@@ -30,6 +31,7 @@ impl<TYPES: NodeType> Default for TestStorageState<TYPES> {
         Self {
             vids: HashMap::new(),
             das: HashMap::new(),
+            proposals: HashMap::new(),
         }
     }
 }
@@ -72,6 +74,19 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
         let mut inner = self.inner.write().await;
         inner
             .das
+            .insert(proposal.data.view_number, proposal.clone());
+        Ok(())
+    }
+    async fn append_proposal(
+        &self,
+        proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
+    ) -> Result<()> {
+        if self.should_return_err {
+            bail!("Failed to append VID proposal to storage");
+        }
+        let mut inner = self.inner.write().await;
+        inner
+            .proposals
             .insert(proposal.data.view_number, proposal.clone());
         Ok(())
     }

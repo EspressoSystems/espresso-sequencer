@@ -231,7 +231,11 @@ pub async fn create_and_send_proposal<TYPES: NodeType>(
         "Sending null proposal for view {:?}",
         proposed_leaf.view_number(),
     );
-    if let Err(e) = consensus.write().await.update_last_proposed_view(view) {
+    if let Err(e) = consensus
+        .write()
+        .await
+        .update_last_proposed_view(message.clone())
+    {
         tracing::trace!("{e:?}");
         return;
     }

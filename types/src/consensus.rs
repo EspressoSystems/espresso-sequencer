@@ -12,19 +12,20 @@ use tracing::{debug, error};
 
 pub use crate::utils::{View, ViewInner};
 use crate::{
-    data::{Leaf, VidDisperse, VidDisperseShare},
+    data::{Leaf, QuorumProposal, VidDisperse, VidDisperseShare},
     error::HotShotError,
     message::Proposal,
     simple_certificate::{DaCertificate, QuorumCertificate, UpgradeCertificate},
     traits::{
         block_contents::BuilderFee,
         metrics::{Counter, Gauge, Histogram, Metrics, NoMetrics},
-        node_implementation::NodeType,
+        node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
         BlockPayload, ValidatedState,
     },
     utils::{BuilderCommitment, StateAndDelta, Terminator},
     vid::VidCommitment,
+    vote::HasViewNumber,
 };
 
 /// A type alias for `HashMap<Commitment<T>, T>`
@@ -57,8 +58,9 @@ pub struct Consensus<TYPES: NodeType> {
     /// View number that is currently on.
     cur_view: TYPES::Time,
 
-    /// View we proposed in last.  To prevent duplicate proposals
-    last_proposed_view: TYPES::Time,
+    /// Last proposals we sent out, None if we haven't proposed yet.
+    /// Prevents duplicate proposals, and can be served to those trying to catchup
+    last_proposals: BTreeMap<TYPES::Time, Proposal<TYPES, QuorumProposal<TYPES>>>,
 
     /// last view had a successful decide event
     last_decided_view: TYPES::Time,
@@ -169,6 +171,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         cur_view: TYPES::Time,
         locked_view: TYPES::Time,
         last_decided_view: TYPES::Time,
+        last_proposals: BTreeMap<TYPES::Time, Proposal<TYPES, QuorumProposal<TYPES>>>,
         saved_leaves: CommitmentMap<Leaf<TYPES>>,
         saved_payloads: BTreeMap<TYPES::Time, Arc<[u8]>>,
         high_qc: QuorumCertificate<TYPES>,
@@ -180,7 +183,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             saved_da_certs: HashMap::new(),
             cur_view,
             last_decided_view,
-            last_proposed_view: last_decided_view,
+            last_proposals,
             locked_view,
             saved_leaves,
             saved_payloads,
@@ -248,16 +251,24 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         Ok(())
     }
 
-    /// Update the last proposed view.
+    /// Update the last proposal.
     ///
     /// # Errors
     /// Can return an error when the new view_number is not higher than the existing proposed view number.
-    pub fn update_last_proposed_view(&mut self, view_number: TYPES::Time) -> Result<()> {
+    pub fn update_last_proposed_view(
+        &mut self,
+        proposal: Proposal<TYPES, QuorumProposal<TYPES>>,
+    ) -> Result<()> {
         ensure!(
-            view_number > self.last_proposed_view,
+            proposal.data.view_number()
+                > self
+                    .last_proposals
+                    .last_key_value()
+                    .map_or(TYPES::Time::genesis(), |(k, _)| { *k }),
             "New view isn't newer than the previously proposed view."
         );
-        self.last_proposed_view = view_number;
+        self.last_proposals
+            .insert(proposal.data.view_number(), proposal);
         Ok(())
     }
 
@@ -440,6 +451,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         self.validated_state_map = self.validated_state_map.split_off(&new_anchor_view);
         self.saved_payloads = self.saved_payloads.split_off(&new_anchor_view);
         self.vid_shares = self.vid_shares.split_off(&new_anchor_view);
+        self.last_proposals = self.last_proposals.split_off(&new_anchor_view);
     }
 
     /// Gets the last decided leaf.
