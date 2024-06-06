@@ -171,8 +171,8 @@ impl Default for PrunerCfg {
             max_usage: 8000,
             // 1.5 hour
             interval: Duration::from_secs(5400),
-            // 60 secs
-            batch_delay: Duration::from_secs(60),
+            // 5 secs
+            batch_delay: Duration::from_secs(5),
         }
     }
 }

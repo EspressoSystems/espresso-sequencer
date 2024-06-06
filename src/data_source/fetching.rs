@@ -361,33 +361,31 @@ where
         let fut = async move {
             for i in 1.. {
                 tracing::warn!("starting pruner run {i} ");
-                {
-                    // We loop until the whole run pruner run is complete
-                    // This allows write lock to be released after each batch delete
-                    loop {
-                        let mut storage = fetcher.storage.write().await;
+                // We loop until the whole run pruner run is complete
+                // This allows write lock to be released after each batch delete
+                loop {
+                    let mut storage = fetcher.storage.write().await;
 
-                        match storage.storage.prune().await {
-                            Ok(Some(height)) => {
-                                storage.pruned_height = Some(height);
-                                tracing::warn!("Pruned to height {height}");
-                            }
-                            Ok(None) => {
-                                tracing::warn!("pruner run {i} complete.");
-                                break;
-                            }
-                            Err(e) => {
-                                tracing::error!("pruner run {i} failed: {e:?}");
-                                storage.revert().await;
-                            }
+                    match storage.storage.prune().await {
+                        Ok(Some(height)) => {
+                            storage.pruned_height = Some(height);
+                            tracing::warn!("Pruned to height {height}");
                         }
-
-                        drop(storage);
-                        sleep(cfg.batch_delay()).await;
+                        Ok(None) => {
+                            tracing::warn!("pruner run {i} complete.");
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::error!("pruner run {i} failed: {e:?}");
+                            storage.revert().await;
+                        }
                     }
 
-                    sleep(cfg.interval()).await;
+                    drop(storage);
+                    sleep(cfg.batch_delay()).await;
                 }
+
+                sleep(cfg.interval()).await;
             }
         };
 
