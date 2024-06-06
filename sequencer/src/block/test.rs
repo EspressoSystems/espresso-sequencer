@@ -111,7 +111,7 @@ async fn enforce_max_block_size() {
     setup_backtrace();
     let test_case = vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]];
     let payload_byte_len_expected: usize = 119;
-    let ns_table_byte_len_expected: usize = 40;
+    let ns_table_byte_len_expected: usize = 28;
 
     let mut rng = jf_utils::test_rng();
     let test = ValidTest::from_tx_lengths(test_case, &mut rng);
@@ -162,7 +162,7 @@ impl ValidTest {
     {
         let mut nss = HashMap::new();
         for tx_lens in tx_lengths.into_iter() {
-            let ns_id = NamespaceId::from(rng.next_u64());
+            let ns_id = NamespaceId::random(rng);
             for len in tx_lens {
                 let ns: &mut Vec<_> = nss.entry(ns_id).or_default();
                 ns.push(Transaction::new(ns_id, random_bytes(len, rng)));
