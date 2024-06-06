@@ -900,11 +900,11 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         lc.newFinalizedState(newState, newProof);
 
         // Test for a the same hotShotBlockHeight
-        BN254.ScalarField blockComm = lc.getHotShotCommitment(newState.blockHeight);
+        BN254.ScalarField blockComm = lc.getHotShotCommitment(newState.blockHeight).blockCommRoot;
         assertEqBN254(blockComm, newState.blockCommRoot);
 
         // Test for a smaller hotShotBlockHeight
-        blockComm = lc.getHotShotCommitment(newState.blockHeight - 1);
+        blockComm = lc.getHotShotCommitment(newState.blockHeight - 1).blockCommRoot;
         assertEqBN254(blockComm, newState.blockCommRoot);
     }
 

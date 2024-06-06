@@ -426,7 +426,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function getHotShotCommitment(uint256 hotShotBlockHeight)
         public
         view
-        returns (BN254.ScalarField hotShotCommitment)
+        returns (HotShotCommitment memory)
     {
         uint256 commitmentsHeight = hotShotCommitments.length;
         if (hotShotBlockHeight > hotShotCommitments[commitmentsHeight - 1].blockHeight) {
@@ -434,11 +434,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
         for (uint256 i = 0; i < commitmentsHeight; i++) {
             if (hotShotCommitments[i].blockHeight >= hotShotBlockHeight) {
-                return hotShotCommitments[i].blockCommRoot;
+                return hotShotCommitments[i];
             }
         }
 
-        return hotShotCommitments[commitmentsHeight - 1].blockCommRoot;
+        return hotShotCommitments[commitmentsHeight - 1];
     }
 
     /// @notice get the number of HotShot block commitments
