@@ -156,7 +156,7 @@
               enable = true;
               description = "Enforce markdown formatting";
               entry = "prettier -w";
-              types_or = [ "markdown" ];
+              types_or = [ "markdown" "ts" ];
               pass_filenames = true;
             };
             spell-checking = {

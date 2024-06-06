@@ -19,9 +19,18 @@ settings.
 1. Create a multisig wallet using [Safe](https://app.safe.global/welcome/accounts) on the network you'd like to deploy
    to.
 2. In [OpenZeppelin Defender](https://www.openzeppelin.com/defender), create an Approval Process that requires the
-   multisig wallet you created above. `Manage > Approval Processes`
-3. In OpenZeppelin Defender, create a deployment environment and use the approval process created in Step 2. Be sure to
-   copy the Defender secret and key, that is shown at the end of this step, into the .env file.
+   multisig wallet you created above. `Manage > Approval Processes`.
+   1. Enter a name for your approval process
+   1. Enter the multisig address from shown in te Safe UI
+   1. Enter one of multisig owner address addresses
+   1. Save the changes
+3. In OpenZeppelin Defender, create a deployment environment by clicking on "Setup" in the
+   [deploy](https://defender.openzeppelin.com/v2/#/deploy) tab. Use "Test Environment" for deploying to testnets (e. g.
+   Sepolia) and "Production Environment" for mainnet.
+   1. Choose a network
+   1. Select the approval process created in Step 2
+   1. Be sure to save DEFENDER_SECRET ("Team Secret key") and DEFENDER_KEY ("Team API Key"), that is shown at the end of
+      this step, into the .env file. The keys won't be available later at a later point.
 
 ## Deployments
 
@@ -29,15 +38,23 @@ settings.
 
 Steps:
 
-1. Run the Deployment Command This command requires you to go to OpenZeppelin Defender's UI to see the transaction.
-   Click that transaction which opens up the Safe UI where your signers for that Safe multi-sig wallet can confirm the
-   transaction. The two transactions to be confirmed are: (i) deployment of implementation contract (ii) deployment of
-   proxy contract
+1. Run the Deployment command.
 
-```bash
-forge clean && \
-forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
-```
+   ```bash
+   forge clean && forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
+   ```
+
+   1. Go to the [deploy](https://defender.openzeppelin.com/v2/#/deploy) tab OpenZeppelin Defender's UI and click on the
+      current environment to see the transaction. The transaction should be visible with status "SUBMITTED". The page
+      may need to be refreshed a few times. It occasionally may take minutes for transactions to appear.
+   2. Click that transaction, then "Open in Safe App" which opens up the Safe UI where your signers for that Safe
+      multi-sig wallet can confirm the transaction. The two transactions to be confirmed are: (i) deployment of
+      implementation contract (ii) deployment of proxy contract
+   3. If the transaction looks correct click "confirm".
+   4. Click "Execute".
+   5. Confirm the transaction with your wallet (e. g. metamask).
+   6. Repeat steps 1 to 5 for the deployment of the proxy contract. You may need to refresh the OpenZeppelin Defender
+      "deploy" tab a few times until the second transaction appears.
 
 2. Verify the Implementation contract on Etherscan (Use another window as step would not have completed yet)
 
@@ -73,9 +90,10 @@ Read Deploying the Fee Contract for a more detailed version of this.
 1. Initiate the Deployment with OpenZeppelin Defender
 
 ```bash
-forge clean && \
-forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
+forge clean && forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
 ```
+
+Follow the same steps as for the deployment of the fee contract above.
 
 2. Verify the Contract
 

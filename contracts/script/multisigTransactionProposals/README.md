@@ -3,7 +3,7 @@
 The [Safe SDK](https://github.com/safe-global/safe-core-sdk/blob/main/guides/integrating-the-safe-core-sdk.md) is being
 used to propose transactions that only the Safe multisig admin wallet can perform. The proposer of these transactions is
 also part of the multisig wallet but is used to orchestrate the process. E.g. If you require 3 of 5 trusted signers to
-sign a transaction, then the multisig wallet should require 4 of 5 signers where there 4th signer is the orchestrator
+sign a transaction, then the multisig wallet should require 4 of 5 signers where the 4th signer is the orchestrator
 wallet.
 
 ## Set Permissioned Prover
@@ -23,12 +23,13 @@ Assuming you're in the root folder, run the following command:
 ts-node contracts/script/multisigTransactionProposals/safeSDK/setProverProposal.ts
 ```
 
+Open the the URL shown in the console to sign the transaction in the Safe UI.
+
 Once successful, all signers will see a transaction request on the SAFE UI e.g.
 `https://app.safe.global/transactions/queue?safe=$SAFE_MULTISIG_ADDRESS`
 
 Once the transaction has been signed by all signers and executed by one, you should be able to go to the light client
-proxy and read the permissioned prover address.
-`ts-node contracts/script/multisigTransactionProposals/setPermissionedProverProposal.ts <network_name> <lightClientContract> <proverAddress> <multisigWalletAddress>`
+proxy and read the permissioned prover address on etherscan.
 
 ## Disable Permissioned Prover
 
