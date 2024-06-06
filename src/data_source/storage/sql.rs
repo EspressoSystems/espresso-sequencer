@@ -361,8 +361,27 @@ impl Config {
 pub struct SqlStorage {
     client: Arc<Client>,
     tx_in_progress: bool,
-    pruner_cfg: Option<PrunerCfg>,
+    pruner: Pruner,
     _connection: BackgroundTask,
+}
+
+#[derive(Debug, Default)]
+pub struct Pruner {
+    enabled: bool,
+    config: PrunerCfg,
+    pruned_height: u64,
+    run_in_progress: bool,
+}
+
+impl Pruner {
+    fn new(config: PrunerCfg) -> Self {
+        Pruner {
+            enabled: true,
+            config,
+            pruned_height: 0,
+            run_in_progress: false,
+        }
+    }
 }
 
 impl SqlStorage {
@@ -430,10 +449,12 @@ impl SqlStorage {
             }
         }
 
+        let pruner = config.pruner_cfg.map(Pruner::new).unwrap_or_default();
+
         Ok(Self {
             client: Arc::new(client),
             tx_in_progress: false,
-            pruner_cfg: config.pruner_cfg,
+            pruner,
             _connection: connection,
         })
     }
@@ -456,11 +477,16 @@ impl SqlStorage {
 
 impl PrunerConfig for SqlStorage {
     fn set_pruning_config(&mut self, cfg: PrunerCfg) {
-        self.pruner_cfg = Some(cfg);
+        self.pruner.enabled = true;
+        self.pruner.config = cfg;
     }
 
     fn get_pruning_config(&self) -> Option<PrunerCfg> {
-        self.pruner_cfg.clone()
+        if !self.pruner.enabled {
+            return None;
+        }
+
+        Some(self.pruner.config.clone())
     }
 }
 
@@ -584,14 +610,19 @@ impl PruneStorage for SqlStorage {
             message: "Pruning config not found".to_string(),
         })?;
 
-        let Some(mut height) = self.get_minimum_height().await? else {
-            tracing::info!("database is empty, nothing to prune");
-            return Ok(None);
+        let mut height = if self.pruner.run_in_progress {
+            self.pruner.pruned_height
+        } else {
+            let Some(height) = self.get_minimum_height().await? else {
+                tracing::info!("database is empty, nothing to prune");
+                return Ok(None);
+            };
+
+            height
         };
 
         let batch_size = cfg.batch_size();
         let max_usage = cfg.max_usage();
-        let mut pruned_height = None;
         // Prune data exceeding target retention in batches
         let target_height = self
             .get_height_by_timestamp(
@@ -600,22 +631,23 @@ impl PruneStorage for SqlStorage {
             .await?;
 
         if let Some(target_height) = target_height {
-            while height < target_height {
+            if height < target_height {
                 height = min(height + batch_size, target_height);
                 self.delete_batch(height).await?;
                 self.commit().await.map_err(|e| QueryError::Error {
                     message: format!("failed to commit {e}"),
                 })?;
-                pruned_height = Some(height);
 
-                tracing::warn!("Pruned data up to height {height}");
+                self.pruner.run_in_progress = true;
+                self.pruner.pruned_height = height;
+                return Ok(Some(height));
             }
         }
 
         // If threshold is set, prune data exceeding minimum retention in batches
         // This parameter is needed for SQL storage as there is no direct way to get free space.
         if let Some(threshold) = cfg.pruning_threshold() {
-            let mut usage = self.get_disk_usage().await?;
+            let usage = self.get_disk_usage().await?;
 
             // Prune data exceeding minimum retention in batches starting from minimum height
             // until usage is below threshold
@@ -631,7 +663,7 @@ impl PruneStorage for SqlStorage {
                     .await?;
 
                 if let Some(min_retention_height) = minimum_retention_height {
-                    while (usage as f64 / threshold as f64) > (f64::from(max_usage) / 10000.0)
+                    if (usage as f64 / threshold as f64) > (f64::from(max_usage) / 10000.0)
                         && height < min_retention_height
                     {
                         height = min(height + batch_size, min_retention_height);
@@ -639,16 +671,18 @@ impl PruneStorage for SqlStorage {
                         self.commit().await.map_err(|e| QueryError::Error {
                             message: format!("failed to commit {e}"),
                         })?;
-                        pruned_height = Some(height);
-                        tracing::warn!("Pruned data up to height {height}");
 
-                        usage = self.get_disk_usage().await?;
+                        self.pruner.run_in_progress = true;
+                        self.pruner.pruned_height = height;
+                        return Ok(Some(height));
                     }
                 }
             }
         }
 
-        Ok(pruned_height)
+        self.pruner.run_in_progress = false;
+
+        Ok(None)
     }
 }
 
