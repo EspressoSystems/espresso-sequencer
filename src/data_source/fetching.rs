@@ -378,11 +378,9 @@ where
                         Err(e) => {
                             tracing::error!("pruner run {i} failed: {e:?}");
                             storage.revert().await;
+                            break;
                         }
                     }
-
-                    drop(storage);
-                    sleep(cfg.batch_delay()).await;
                 }
 
                 sleep(cfg.interval()).await;

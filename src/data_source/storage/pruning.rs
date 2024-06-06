@@ -22,7 +22,6 @@ pub struct PrunerCfg {
     batch_size: u64,
     max_usage: u16,
     interval: Duration,
-    batch_delay: Duration,
 }
 
 #[async_trait]
@@ -103,11 +102,6 @@ impl PrunerCfg {
         self
     }
 
-    pub fn with_batch_delay(mut self, delay: Duration) -> Self {
-        self.batch_delay = delay;
-        self
-    }
-
     /// Disk space threshold (in bytes).
     ///
     /// If the disk usage exceeds this threshold, pruning of data starts from
@@ -150,11 +144,6 @@ impl PrunerCfg {
     pub fn interval(&self) -> Duration {
         self.interval
     }
-
-    /// Delay after each batch delete
-    pub fn batch_delay(&self) -> Duration {
-        self.batch_delay
-    }
 }
 
 impl Default for PrunerCfg {
@@ -171,8 +160,6 @@ impl Default for PrunerCfg {
             max_usage: 8000,
             // 1.5 hour
             interval: Duration::from_secs(5400),
-            // 5 secs
-            batch_delay: Duration::from_secs(5),
         }
     }
 }
