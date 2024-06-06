@@ -41,17 +41,22 @@ use vbs::BinarySerializer;
 
 type Serializer = vbs::Serializer<SequencerVersion>;
 
-fn reference_payload() -> Payload {
-    Payload::from_transactions(vec![reference_transaction()], &Default::default())
-        .unwrap()
-        .0
+async fn reference_payload() -> Payload {
+    Payload::from_transactions(
+        vec![reference_transaction()],
+        &Default::default(),
+        &Default::default(),
+    )
+    .await
+    .unwrap()
+    .0
 }
 
-fn reference_ns_table() -> NsTable {
-    reference_payload().ns_table().clone()
+async fn reference_ns_table() -> NsTable {
+    reference_payload().await.ns_table().clone()
 }
 
-const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~OwNTwTqGy4ZTcZdKCvTlgZ8KhNE12gykd6HkT12QZgtF";
+const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~jqBfNUW1lSijWpKpPNc9yxQs28YckB80gFJWnHIwOQMC";
 
 fn reference_l1_block() -> L1BlockInfo {
     L1BlockInfo {
@@ -87,11 +92,11 @@ fn reference_fee_info() -> FeeInfo {
 
 const REFERENCE_FEE_INFO_COMMITMENT: &str = "FEE_INFO~xCCeTjJClBtwtOUrnAmT65LNTQGceuyjSJHUFfX6VRXR";
 
-fn reference_header() -> Header {
+async fn reference_header() -> Header {
     let builder_key = FeeAccount::generated_from_seed_indexed(Default::default(), 0).1;
     let fee_info = reference_fee_info();
-    let ns_table = reference_ns_table();
-    let payload = reference_payload();
+    let payload = reference_payload().await;
+    let ns_table = payload.ns_table().clone();
     let payload_commitment = vid_commitment(&payload.encode(), 1);
     let builder_commitment = payload.builder_commitment(&ns_table);
     let builder_signature = FeeAccount::sign_fee(
@@ -120,7 +125,7 @@ fn reference_header() -> Header {
     }
 }
 
-const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~OruBHYAJrsLaswrdNY9F1mDx4SN6kCcSOn6hQCaKXeAj";
+const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~mHlaknD1qKCz0UBtV2GpnqfO6gFqF5yN-9qkmLMRG3rp";
 
 fn reference_transaction() -> Transaction {
     let payload: [u8; 1024] = std::array::from_fn(|i| (i % (u8::MAX as usize)) as u8);
@@ -235,11 +240,11 @@ Actual: {actual}
     );
 }
 
-#[test]
-fn test_reference_ns_table() {
+#[async_std::test]
+async fn test_reference_ns_table() {
     reference_test(
         "ns_table",
-        reference_ns_table(),
+        reference_ns_table().await,
         REFERENCE_NS_TABLE_COMMITMENT,
     );
 }
@@ -271,9 +276,13 @@ fn test_reference_fee_info() {
     );
 }
 
-#[test]
-fn test_reference_header() {
-    reference_test("header", reference_header(), REFERENCE_HEADER_COMMITMENT);
+#[async_std::test]
+async fn test_reference_header() {
+    reference_test(
+        "header",
+        reference_header().await,
+        REFERENCE_HEADER_COMMITMENT,
+    );
 }
 
 #[test]

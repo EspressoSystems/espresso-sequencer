@@ -66,7 +66,7 @@ pub struct ValidatedState {
     pub fee_merkle_tree: FeeMerkleTree,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Delta {
     pub fees_delta: HashSet<FeeAccount>,
 }
@@ -1324,8 +1324,8 @@ mod test {
         FeeAccountProof::prove(&tree, account2).unwrap();
     }
 
-    #[test]
-    fn test_validation_max_block_size() {
+    #[async_std::test]
+    async fn test_validation_max_block_size() {
         setup_logging();
         setup_backtrace();
 
@@ -1339,7 +1339,7 @@ mod test {
             base_fee: 0.into(),
             ..Default::default()
         });
-        let parent = Leaf::genesis(&instance);
+        let parent = Leaf::genesis(&instance.genesis_state, &instance).await;
         let header = parent.block_header();
 
         // Validation fails because the proposed block exceeds the maximum block size.
@@ -1348,8 +1348,8 @@ mod test {
         tracing::info!(%err, "task failed successfully");
     }
 
-    #[test]
-    fn test_validation_base_fee() {
+    #[async_std::test]
+    async fn test_validation_base_fee() {
         setup_logging();
         setup_backtrace();
 
@@ -1363,7 +1363,7 @@ mod test {
             max_block_size: max_block_size.into(),
             ..Default::default()
         });
-        let parent = Leaf::genesis(&instance);
+        let parent = Leaf::genesis(&instance.genesis_state, &instance).await;
         let header = parent.block_header();
 
         // Validation fails because the genesis fee (0) is too low.

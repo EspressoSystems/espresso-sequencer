@@ -3,8 +3,9 @@ use crate::{
         full_payload::ns_table::{NsIndex, NsTable, NsTableBuilder},
         namespace_payload::{Index, Iter, NsPayload, NsPayloadBuilder, NsPayloadRange, TxProof},
     },
-    NamespaceId, NodeState, Transaction,
+    NamespaceId, NodeState, SeqTypes, Transaction, ValidatedState,
 };
+use async_trait::async_trait;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{
     traits::{BlockPayload, EncodeBytes},
@@ -77,23 +78,22 @@ impl Payload {
     pub(in crate::block) fn byte_len(&self) -> PayloadByteLen {
         PayloadByteLen(self.ns_payloads.len())
     }
-}
 
-impl BlockPayload for Payload {
-    type Error = crate::Error;
-    type Transaction = Transaction;
-    type Instance = NodeState;
-    type Metadata = NsTable;
+    // PRIVATE HELPERS START HERE
 
-    // TODO(BlockPayload): return type should not include `Self::Metadata`
-    fn from_transactions(
-        transactions: impl IntoIterator<Item = Self::Transaction>,
-        instance_state: &Self::Instance,
-    ) -> Result<(Self, Self::Metadata), Self::Error> {
+    /// Need a sync version of [`BlockPayload::from_transactions`] in order to impl [`BlockPayload::empty`].
+    fn from_transactions_sync(
+        transactions: impl IntoIterator<Item = <Self as BlockPayload<SeqTypes>>::Transaction> + Send,
+        _validated_state: &<Self as BlockPayload<SeqTypes>>::ValidatedState,
+        instance_state: &<Self as BlockPayload<SeqTypes>>::Instance,
+    ) -> Result<
+        (Self, <Self as BlockPayload<SeqTypes>>::Metadata),
+        <Self as BlockPayload<SeqTypes>>::Error,
+    > {
         // accounting for block byte length limit
         let max_block_byte_len: usize = u64::from(instance_state.chain_config.max_block_size)
             .try_into()
-            .map_err(|_| Self::Error::BlockBuilding)?;
+            .map_err(|_| <Self as BlockPayload<SeqTypes>>::Error::BlockBuilding)?;
         let mut block_byte_len = NsTableBuilder::fixed_overhead_byte_len();
 
         // add each tx to its namespace
@@ -132,6 +132,24 @@ impl BlockPayload for Payload {
             metadata,
         ))
     }
+}
+
+#[async_trait]
+impl BlockPayload<SeqTypes> for Payload {
+    type Error = crate::Error;
+    type Transaction = Transaction;
+    type Instance = NodeState;
+    type Metadata = NsTable;
+    type ValidatedState = ValidatedState;
+
+    // TODO(BlockPayload): return type should not include `Self::Metadata`
+    async fn from_transactions(
+        transactions: impl IntoIterator<Item = Self::Transaction> + Send,
+        validated_state: &Self::ValidatedState,
+        instance_state: &Self::Instance,
+    ) -> Result<(Self, Self::Metadata), Self::Error> {
+        Self::from_transactions_sync(transactions, validated_state, instance_state)
+    }
 
     // TODO avoid cloning the entire payload here?
     fn from_bytes(block_payload_bytes: &[u8], ns_table: &Self::Metadata) -> Self {
@@ -141,14 +159,13 @@ impl BlockPayload for Payload {
         }
     }
 
-    // TODO remove
-    fn genesis() -> (Self, Self::Metadata) {
-        // this is only called from `Leaf::genesis`. Since we are
-        // passing empty list, max_block_size is irrelevant so we can
-        // use the mock NodeState. A future update to HotShot should
-        // make a change there to remove the need for this workaround.
-
-        Self::from_transactions([], &NodeState::mock()).unwrap()
+    fn empty() -> (Self, Self::Metadata) {
+        let payload =
+            Self::from_transactions_sync(vec![], &Default::default(), &Default::default())
+                .unwrap()
+                .0;
+        let ns_table = payload.ns_table().clone();
+        (payload, ns_table)
     }
 
     // TODO(BlockPayload): remove arg `Self::Metadata`
@@ -170,7 +187,7 @@ impl BlockPayload for Payload {
     }
 }
 
-impl QueryablePayload for Payload {
+impl QueryablePayload<SeqTypes> for Payload {
     // TODO(QueryablePayload): remove `Ord` bound from `TransactionIndex`
     type TransactionIndex = Index;
     type Iter<'a> = Iter<'a>;
@@ -248,11 +265,9 @@ impl PayloadByteLen {
 }
 
 #[cfg(any(test, feature = "testing"))]
-impl hotshot_types::traits::block_contents::TestableBlock for Payload {
+impl hotshot_types::traits::block_contents::TestableBlock<SeqTypes> for Payload {
     fn genesis() -> Self {
-        BlockPayload::from_transactions([], &Default::default())
-            .unwrap()
-            .0
+        BlockPayload::empty().0
     }
 
     fn txn_count(&self) -> u64 {

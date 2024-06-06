@@ -9,7 +9,12 @@ edition = "2021"
 testing = ["hotshot-testing"]
 libp2p = []
 
+[[bin]]
+name = "espresso-dev-node"
+required-features = ["testing"]
+
 [dev-dependencies]
+escargot = "0.5.10"
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 fluent-asserter = "0.1.9"
 hotshot-query-service = { workspace = true, features = ["testing"] }
@@ -59,6 +64,7 @@ futures = { workspace = true }
 paste = "1.0"
 
 hotshot = { workspace = true }
+hotshot-contract-adapter = { workspace = true }
 hotshot-events-service = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
@@ -78,6 +84,7 @@ jf-rescue = { workspace = true }
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
+libp2p = { version = "0.53", default-features = false } 
 num-traits = "0.2.18"
 portpicker = { workspace = true }
 rand = "0.8.5"

@@ -14,7 +14,7 @@
 //! If this test is failing and you did not intend to change the consensus API, figure out what
 //! code changed caused the serialization change and revert it.
 
-use crate::{Leaf, NodeState, Payload, PubKey, SeqTypes, Transaction};
+use crate::{Leaf, NodeState, Payload, PubKey, SeqTypes, Transaction, ValidatedState};
 use committable::Committable;
 use es_version::SequencerVersion;
 use hotshot::traits::election::static_committee::GeneralStaticCommittee;
@@ -49,8 +49,8 @@ use vbs::{version::Version, BinarySerializer};
 
 type Serializer = vbs::Serializer<SequencerVersion>;
 
-#[test]
-fn test_message_compat() {
+#[async_std::test]
+async fn test_message_compat() {
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();
     let membership = GeneralStaticCommittee::new(&[], vec![sender.stake_table_entry(1)], vec![], 0);
@@ -62,11 +62,16 @@ fn test_message_compat() {
         old_version_last_view: ViewNumber::genesis(),
         new_version_first_view: ViewNumber::genesis(),
     };
-    let leaf = Leaf::genesis(&NodeState::mock());
+    let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
     let block_header = leaf.block_header().clone();
     let transaction = Transaction::new(1.into(), vec![1, 2, 3]);
-    let (payload, metadata) =
-        Payload::from_transactions([transaction.clone()], &NodeState::mock()).unwrap();
+    let (payload, metadata) = Payload::from_transactions(
+        [transaction.clone()],
+        &ValidatedState::default(),
+        &NodeState::mock(),
+    )
+    .await
+    .unwrap();
     let view_sync_pre_commit_data = ViewSyncPreCommitData {
         relay: 0,
         round: ViewNumber::genesis(),
@@ -91,7 +96,11 @@ fn test_message_compat() {
             data: QuorumProposal {
                 block_header,
                 view_number: ViewNumber::genesis(),
-                justify_qc: QuorumCertificate::genesis(&NodeState::mock()),
+                justify_qc: QuorumCertificate::genesis(
+                    &ValidatedState::default(),
+                    &NodeState::mock(),
+                )
+                .await,
                 upgrade_certificate: Some(UpgradeCertificate {
                     data: upgrade_data.clone(),
                     vote_commitment: upgrade_data.commit(),

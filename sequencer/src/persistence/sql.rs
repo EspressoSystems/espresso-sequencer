@@ -90,6 +90,18 @@ pub struct Options {
 
     #[clap(long, env = "ESPRESSO_SEQUENCER_STORE_UNDECIDED_STATE", hide = true)]
     pub(crate) store_undecided_state: bool,
+
+    /// Specifies the maximum number of concurrent fetch requests allowed from peers.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_FETCH_RATE_LIMIT")]
+    pub(crate) fetch_rate_limit: Option<usize>,
+
+    /// The minimum delay between active fetches in a stream.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_ACTIVE_FETCH_DELAY", value_parser = parse_duration)]
+    pub(crate) active_fetch_delay: Option<Duration>,
+
+    /// The minimum delay between loading chunks in a stream.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_CHUNK_FETCH_DELAY", value_parser = parse_duration)]
+    pub(crate) chunk_fetch_delay: Option<Duration>,
 }
 
 impl TryFrom<Options> for Config {

@@ -14,8 +14,8 @@ use jf_vid::VidScheme;
 use rand::RngCore;
 use std::collections::HashMap;
 
-#[test]
-fn basic_correctness() {
+#[async_std::test]
+async fn basic_correctness() {
     // play with this
     let test_cases = vec![
         vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]], // 3 non-empty namespaces
@@ -32,9 +32,11 @@ fn basic_correctness() {
         let mut all_txs = test.all_txs();
         tracing::info!("test case {} nss {} txs", test.nss.len(), all_txs.len());
 
-        let block = Payload::from_transactions(test.all_txs(), &Default::default())
-            .unwrap()
-            .0;
+        let block =
+            Payload::from_transactions(test.all_txs(), &Default::default(), &Default::default())
+                .await
+                .unwrap()
+                .0;
         tracing::info!(
             "ns_table {:?}, payload {:?}",
             block.ns_table().encode(),
@@ -103,8 +105,8 @@ fn basic_correctness() {
     }
 }
 
-#[test]
-fn enforce_max_block_size() {
+#[async_std::test]
+async fn enforce_max_block_size() {
     setup_logging();
     setup_backtrace();
     let test_case = vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]];
@@ -123,7 +125,8 @@ fn enforce_max_block_size() {
         ..Default::default()
     });
 
-    let block = Payload::from_transactions(test.all_txs(), &instance_state)
+    let block = Payload::from_transactions(test.all_txs(), &Default::default(), &instance_state)
+        .await
         .unwrap()
         .0;
     assert_eq!(block.encode().len(), payload_byte_len_expected);
@@ -138,7 +141,8 @@ fn enforce_max_block_size() {
         ),
         ..Default::default()
     });
-    let block = Payload::from_transactions(test.all_txs(), &instance_state)
+    let block = Payload::from_transactions(test.all_txs(), &Default::default(), &instance_state)
+        .await
         .unwrap()
         .0;
     assert!(block.encode().len() < payload_byte_len_expected);
