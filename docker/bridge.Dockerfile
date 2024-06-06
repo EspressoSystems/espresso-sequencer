@@ -7,7 +7,7 @@ RUN apt-get update \
     &&  rm -rf /var/lib/apt/lists/*
 ENTRYPOINT ["tini", "--"]
 
-COPY target/$TARGETARCH/release/bridge /bin/bridge
+COPY target/$TARGETARCH/release/espresso-bridge /bin/bridge
 RUN chmod +x /bin/bridge
 
 CMD [ "/bin/bridge"]

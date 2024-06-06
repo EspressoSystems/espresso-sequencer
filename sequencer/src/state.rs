@@ -12,7 +12,11 @@ use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::DepositFilter;
 use core::fmt::Debug;
 use derive_more::{Add, Display, From, Into, Mul, Sub};
-use ethers::{abi::Address, types::U256};
+use ethers::{
+    abi::Address,
+    types::U256,
+    utils::{parse_units, ParseUnits},
+};
 use futures::future::Future;
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
@@ -42,11 +46,14 @@ use jf_merkle_tree::{
 };
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
-use sequencer_utils::impl_to_fixed_bytes;
+use sequencer_utils::{
+    impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashSet, ops::Add, str::FromStr};
+use vbs::version::Version;
 
 const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
 const FEE_MERKLE_TREE_HEIGHT: usize = 20;
@@ -59,7 +66,7 @@ pub struct ValidatedState {
     pub fee_merkle_tree: FeeMerkleTree,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Delta {
     pub fees_delta: HashSet<FeeAccount>,
 }
@@ -210,7 +217,7 @@ pub fn validate_proposal(
     proposal: &Header,
     vid_common: &VidCommon,
 ) -> anyhow::Result<()> {
-    let parent_header = parent_leaf.get_block_header();
+    let parent_header = parent_leaf.block_header();
 
     // validate `ChainConfig`
     anyhow::ensure!(
@@ -225,7 +232,7 @@ pub fn validate_proposal(
     // validate block size and fee
     let block_size = VidSchemeType::get_payload_byte_len(vid_common) as u64;
     anyhow::ensure!(
-        block_size < expected_chain_config.max_block_size,
+        block_size < *expected_chain_config.max_block_size,
         anyhow::anyhow!(
             "Invalid Payload Size: local={:?}, proposal={:?}",
             expected_chain_config,
@@ -321,10 +328,10 @@ async fn compute_state_update(
 ) -> anyhow::Result<(ValidatedState, Delta)> {
     let proposed_leaf = proposed_leaf.leaf();
     let parent_leaf = parent_leaf.leaf();
-    let header = proposed_leaf.get_block_header();
+    let header = proposed_leaf.block_header();
 
     // Check internal consistency.
-    let parent_header = parent_leaf.get_block_header();
+    let parent_header = parent_leaf.block_header();
     ensure!(
         state.block_merkle_tree.commitment() == parent_header.block_merkle_tree_root,
         "internal error! in-memory block tree {:?} does not match parent header {:?}",
@@ -409,7 +416,7 @@ async fn store_state_update(
     skip_all,
     fields(
         node_id = instance.node_id,
-        view = ?parent_leaf.leaf().get_view_number(),
+        view = ?parent_leaf.leaf().view_number(),
         height = parent_leaf.height(),
     ),
 )]
@@ -568,14 +575,14 @@ impl ValidatedState {
         let missing_accounts = self.forgotten_accounts(
             [
                 proposed_header.fee_info.account,
-                instance.chain_config().fee_recipient,
+                instance.chain_config.fee_recipient,
             ]
             .into_iter()
             .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
         );
 
-        let parent_height = parent_leaf.get_height();
-        let parent_view = parent_leaf.get_view_number();
+        let parent_height = parent_leaf.height();
+        let parent_view = parent_leaf.view_number();
 
         // Ensure merkle tree has frontier
         if self.need_to_fetch_blocks_mt_frontier() {
@@ -633,7 +640,7 @@ impl ValidatedState {
             &mut validated_state,
             &mut delta,
             proposed_header.fee_info,
-            instance.chain_config().fee_recipient,
+            instance.chain_config.fee_recipient,
         )?;
 
         Ok((validated_state, delta))
@@ -653,7 +660,7 @@ pub async fn get_l1_deposits(
             .get_finalized_deposits(
                 addr,
                 parent_leaf
-                    .get_block_header()
+                    .block_header()
                     .l1_finalized
                     .map(|block_info| block_info.number),
                 block_info.number,
@@ -675,7 +682,7 @@ fn apply_proposal(
     // pushing a block into merkle tree shouldn't fail
     validated_state
         .block_merkle_tree
-        .push(parent_leaf.get_block_header().commit())
+        .push(parent_leaf.block_header().commit())
         .unwrap();
 
     for FeeInfo { account, amount } in l1_deposits.iter() {
@@ -705,8 +712,8 @@ impl HotShotState<SeqTypes> for ValidatedState {
         skip_all,
         fields(
             node_id = instance.node_id,
-            view = ?parent_leaf.get_view_number(),
-            height = parent_leaf.get_height(),
+            view = ?parent_leaf.view_number(),
+            height = parent_leaf.height(),
         ),
     )]
     async fn validate_and_apply_header(
@@ -715,6 +722,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         parent_leaf: &Leaf,
         proposed_header: &Header,
         vid_common: VidCommon,
+        _version: Version,
     ) -> Result<(Self, Self::Delta), Self::Error> {
         //validate builder fee
         if let Err(err) = validate_builder_fee(proposed_header) {
@@ -743,7 +751,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
 
         // log successful progress about once in 10 - 20 seconds,
         // TODO: we may want to make this configurable
-        if parent_leaf.get_view_number().get_u64() % 10 == 0 {
+        if parent_leaf.view_number().u64() % 10 == 0 {
             tracing::info!("validated and applied new header");
         }
         Ok((validated_state, delta))
@@ -921,8 +929,6 @@ impl Committable for FeeInfo {
     Clone,
     Debug,
     Display,
-    Deserialize,
-    Serialize,
     PartialEq,
     Eq,
     PartialOrd,
@@ -936,6 +942,7 @@ impl Committable for FeeInfo {
 #[display(fmt = "{_0}")]
 pub struct FeeAmount(U256);
 
+impl_serde_from_string_or_integer!(FeeAmount);
 impl_to_fixed_bytes!(FeeAmount, U256);
 
 impl From<u64> for FeeAmount {
@@ -961,6 +968,44 @@ impl FromStr for FeeAmount {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self(s.parse()?))
+    }
+}
+
+impl FromStringOrInteger for FeeAmount {
+    type Binary = U256;
+    type Integer = u64;
+
+    fn from_binary(b: Self::Binary) -> anyhow::Result<Self> {
+        Ok(Self(b))
+    }
+
+    fn from_integer(i: Self::Integer) -> anyhow::Result<Self> {
+        Ok(i.into())
+    }
+
+    fn from_string(s: String) -> anyhow::Result<Self> {
+        // For backwards compatibility, we have an ad hoc parser for WEI amounts represented as hex
+        // strings.
+        if let Some(s) = s.strip_prefix("0x") {
+            return Ok(Self(s.parse()?));
+        }
+
+        // Strip an optional non-numeric suffix, which will be interpreted as a unit.
+        let (base, unit) = s
+            .split_once(char::is_whitespace)
+            .unwrap_or((s.as_str(), "wei"));
+        match parse_units(base, unit)? {
+            ParseUnits::U256(n) => Ok(Self(n)),
+            ParseUnits::I256(_) => bail!("amount cannot be negative"),
+        }
+    }
+
+    fn to_binary(&self) -> anyhow::Result<Self::Binary> {
+        Ok(self.0)
+    }
+
+    fn to_string(&self) -> anyhow::Result<String> {
+        Ok(format!("{self}"))
     }
 }
 
@@ -1279,8 +1324,8 @@ mod test {
         FeeAccountProof::prove(&tree, account2).unwrap();
     }
 
-    #[test]
-    fn test_validation_max_block_size() {
+    #[async_std::test]
+    async fn test_validation_max_block_size() {
         setup_logging();
         setup_backtrace();
 
@@ -1290,12 +1335,12 @@ mod test {
 
         let state = ValidatedState::default();
         let instance = NodeState::mock().with_chain_config(ChainConfig {
-            max_block_size: MAX_BLOCK_SIZE as u64,
+            max_block_size: (MAX_BLOCK_SIZE as u64).into(),
             base_fee: 0.into(),
             ..Default::default()
         });
-        let parent = Leaf::genesis(&instance);
-        let header = parent.get_block_header();
+        let parent = Leaf::genesis(&instance.genesis_state, &instance).await;
+        let header = parent.block_header();
 
         // Validation fails because the proposed block exceeds the maximum block size.
         let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
@@ -1303,8 +1348,8 @@ mod test {
         tracing::info!(%err, "task failed successfully");
     }
 
-    #[test]
-    fn test_validation_base_fee() {
+    #[async_std::test]
+    async fn test_validation_base_fee() {
         setup_logging();
         setup_backtrace();
 
@@ -1315,11 +1360,11 @@ mod test {
         let state = ValidatedState::default();
         let instance = NodeState::mock().with_chain_config(ChainConfig {
             base_fee: 1000.into(), // High base fee
-            max_block_size,
+            max_block_size: max_block_size.into(),
             ..Default::default()
         });
-        let parent = Leaf::genesis(&instance);
-        let header = parent.get_block_header();
+        let parent = Leaf::genesis(&instance.genesis_state, &instance).await;
+        let header = parent.block_header();
 
         // Validation fails because the genesis fee (0) is too low.
         let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
@@ -1365,5 +1410,56 @@ mod test {
         state.prefund_account(dst, amt);
         state.fee_merkle_tree.forget(dst).expect_ok().unwrap();
         state.charge_fee(fee_info, dst).unwrap_err();
+    }
+
+    #[test]
+    fn test_fee_amount_serde_json_as_decimal() {
+        let amt = FeeAmount::from(123);
+        let serialized = serde_json::to_string(&amt).unwrap();
+
+        // The value is serialized as a decimal string.
+        assert_eq!(serialized, "\"123\"");
+
+        // Deserialization produces the original value
+        let deserialized: FeeAmount = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, amt);
+    }
+
+    #[test]
+    fn test_fee_amount_from_units() {
+        for (unit, multiplier) in [
+            ("wei", 1),
+            ("gwei", 1_000_000_000),
+            ("eth", 1_000_000_000_000_000_000),
+        ] {
+            let amt: FeeAmount = serde_json::from_str(&format!("\"1 {unit}\"")).unwrap();
+            assert_eq!(amt, multiplier.into());
+        }
+    }
+
+    #[test]
+    fn test_fee_amount_serde_json_from_hex() {
+        // For backwards compatibility, fee amounts can also be deserialized from a 0x-prefixed hex
+        // string.
+        let amt: FeeAmount = serde_json::from_str("\"0x123\"").unwrap();
+        assert_eq!(amt, FeeAmount::from(0x123));
+    }
+
+    #[test]
+    fn test_fee_amount_serde_json_from_number() {
+        // For convenience, fee amounts can also be deserialized from a JSON number.
+        let amt: FeeAmount = serde_json::from_str("123").unwrap();
+        assert_eq!(amt, FeeAmount::from(123));
+    }
+
+    #[test]
+    fn test_fee_amount_serde_bincode_unchanged() {
+        // For non-human-readable formats, FeeAmount just serializes as the underlying U256.
+        let n = U256::from(123);
+        let amt = FeeAmount(n);
+        assert_eq!(
+            bincode::serialize(&n).unwrap(),
+            bincode::serialize(&amt).unwrap(),
+        );
     }
 }

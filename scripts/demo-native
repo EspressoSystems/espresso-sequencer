@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export PATH=$PATH:./target/release
+# If we aren't in a nix shell (where this handled in flake.nix) add the target
+# directory to the path so that the binaries are found by process-compose.
+if [ -z "${IN_NIX_SHELL-}" ]; then
+    REPO_ROOT="$(dirname "$(dirname "$(readlink -fm "$0")")")"
+    # Default to CARGO_TARGET_DIR if set, otherwise use the default target directory.
+    TARGET_DIR="${CARGO_TARGET_DIR:-${REPO_ROOT}/target}"
+    export "PATH=${TARGET_DIR}/release:$PATH"
+fi
 
 ESPRESSO_BASE_STORAGE_PATH=$(mktemp -d -t espresso-XXXXXXXX)
 export ESPRESSO_BASE_STORAGE_PATH

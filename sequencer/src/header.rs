@@ -24,6 +24,7 @@ use jf_merkle_tree::prelude::*;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use time::OffsetDateTime;
+use vbs::version::Version;
 
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
@@ -157,7 +158,7 @@ impl Header {
         chain_config: ChainConfig,
     ) -> anyhow::Result<Self> {
         // Increment height.
-        let parent_header = parent_leaf.get_block_header();
+        let parent_header = parent_leaf.block_header();
         let height = parent_header.height + 1;
 
         // Ensure the timestamp does not decrease. We can trust `parent.timestamp` because `parent`
@@ -271,8 +272,8 @@ impl BlockHeader<SeqTypes> for Header {
         skip_all,
         fields(
             node_id = instance_state.node_id,
-            view = ?parent_leaf.get_view_number(),
-            height = parent_leaf.get_block_header().height,
+            view = ?parent_leaf.view_number(),
+            height = parent_leaf.block_header().height,
         ),
     )]
 
@@ -282,18 +283,19 @@ impl BlockHeader<SeqTypes> for Header {
         parent_leaf: &Leaf,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+        metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: BuilderFee<SeqTypes>,
         _vid_common: VidCommon,
+        _version: Version,
     ) -> Result<Self, Self::Error> {
         let chain_config = instance_state.chain_config;
-        let height = parent_leaf.get_height();
-        let view = parent_leaf.get_view_number();
+        let height = parent_leaf.height();
+        let view = parent_leaf.view_number();
 
         let mut validated_state = parent_state.clone();
 
         // Fetch the latest L1 snapshot.
-        let l1_snapshot = instance_state.l1_client().snapshot().await;
+        let l1_snapshot = instance_state.l1_client.snapshot().await;
         // Fetch the new L1 deposits between parent and current finalized L1 block.
         let l1_deposits = if let (Some(addr), Some(block_info)) =
             (chain_config.fee_contract, l1_snapshot.finalized)
@@ -303,7 +305,7 @@ impl BlockHeader<SeqTypes> for Header {
                 .get_finalized_deposits(
                     addr,
                     parent_leaf
-                        .get_block_header()
+                        .block_header()
                         .l1_finalized
                         .map(|block_info| block_info.number),
                     block_info.number,
@@ -378,7 +380,7 @@ impl BlockHeader<SeqTypes> for Header {
         instance_state: &NodeState,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+        ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
     ) -> Self {
         let ValidatedState {
             fee_merkle_tree,
@@ -392,9 +394,13 @@ impl BlockHeader<SeqTypes> for Header {
             // timestamps or L1 values.
             chain_config: instance_state.chain_config.into(),
             height: 0,
-            timestamp: 0,
-            l1_head: 0,
+            timestamp: instance_state.genesis_header.timestamp.unix_timestamp(),
             l1_finalized: instance_state.l1_genesis,
+            // Make sure the L1 head is not behind the finalized block.
+            l1_head: instance_state
+                .l1_genesis
+                .map(|block| block.number)
+                .unwrap_or_default(),
             payload_commitment,
             builder_commitment,
             ns_table,
@@ -413,7 +419,9 @@ impl BlockHeader<SeqTypes> for Header {
         self.payload_commitment
     }
 
-    fn metadata(&self) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata {
+    fn metadata(
+        &self,
+    ) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata {
         &self.ns_table
     }
 
@@ -509,7 +517,7 @@ mod test_headers {
     }
 
     impl TestCase {
-        fn run(self) {
+        async fn run(self) {
             setup_logging();
             setup_backtrace();
 
@@ -518,14 +526,14 @@ mod test_headers {
             assert!(self.expected_l1_head >= self.parent_l1_head);
             assert!(self.expected_l1_finalized >= self.parent_l1_finalized);
 
-            let genesis = GenesisForTest::default();
+            let genesis = GenesisForTest::default().await;
             let mut parent = genesis.header.clone();
             parent.timestamp = self.parent_timestamp;
             parent.l1_head = self.parent_l1_head;
             parent.l1_finalized = self.parent_l1_finalized;
 
             let mut parent_leaf = genesis.leaf.clone();
-            *parent_leaf.get_block_header_mut() = parent.clone();
+            *parent_leaf.block_header_mut() = parent.clone();
 
             let block_merkle_tree =
                 BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap();
@@ -599,24 +607,25 @@ mod test_headers {
         }
     }
 
-    #[test]
-    fn test_new_header() {
+    #[async_std::test]
+    async fn test_new_header() {
         // Simplest case: building on genesis, L1 info and timestamp unchanged.
-        TestCase::default().run()
+        TestCase::default().run().await
     }
 
-    #[test]
-    fn test_new_header_advance_timestamp() {
+    #[async_std::test]
+    async fn test_new_header_advance_timestamp() {
         TestCase {
             timestamp: 1,
             expected_timestamp: 1,
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_advance_l1_block() {
+    #[async_std::test]
+    async fn test_new_header_advance_l1_block() {
         TestCase {
             parent_l1_head: 0,
             parent_l1_finalized: Some(l1_block(0)),
@@ -630,20 +639,22 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_advance_l1_finalized_from_none() {
+    #[async_std::test]
+    async fn test_new_header_advance_l1_finalized_from_none() {
         TestCase {
             l1_finalized: Some(l1_block(1)),
             expected_l1_finalized: Some(l1_block(1)),
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_timestamp_behind_finalized_l1_block() {
+    #[async_std::test]
+    async fn test_new_header_timestamp_behind_finalized_l1_block() {
         let l1_finalized = Some(L1BlockInfo {
             number: 1,
             timestamp: 1.into(),
@@ -661,10 +672,11 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_timestamp_behind() {
+    #[async_std::test]
+    async fn test_new_header_timestamp_behind() {
         TestCase {
             parent_timestamp: 1,
             timestamp: 0,
@@ -673,10 +685,11 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_l1_head_behind() {
+    #[async_std::test]
+    async fn test_new_header_l1_head_behind() {
         TestCase {
             parent_l1_head: 1,
             l1_head: 0,
@@ -685,10 +698,11 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_l1_finalized_behind_some() {
+    #[async_std::test]
+    async fn test_new_header_l1_finalized_behind_some() {
         TestCase {
             parent_l1_finalized: Some(l1_block(1)),
             l1_finalized: Some(l1_block(0)),
@@ -697,10 +711,11 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_l1_finalized_behind_none() {
+    #[async_std::test]
+    async fn test_new_header_l1_finalized_behind_none() {
         TestCase {
             parent_l1_finalized: Some(l1_block(0)),
             l1_finalized: None,
@@ -709,19 +724,21 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_deposits_one() {
+    #[async_std::test]
+    async fn test_new_header_deposits_one() {
         TestCase {
             l1_deposits: vec![FeeInfo::new(Address::default(), 1)],
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_deposits_many() {
+    #[async_std::test]
+    async fn test_new_header_deposits_many() {
         TestCase {
             l1_deposits: [
                 (Address::default(), 1),
@@ -734,6 +751,7 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
     struct GenesisForTest {
@@ -744,13 +762,13 @@ mod test_headers {
         pub ns_table: NameSpaceTable<TxTableEntryWord>,
     }
 
-    impl Default for GenesisForTest {
-        fn default() -> Self {
+    impl GenesisForTest {
+        async fn default() -> Self {
             let instance_state = NodeState::mock();
             let validated_state = ValidatedState::genesis(&instance_state).0;
-            let leaf = Leaf::genesis(&instance_state);
-            let header = leaf.get_block_header().clone();
-            let ns_table = leaf.get_block_payload().unwrap().get_ns_table().clone();
+            let leaf = Leaf::genesis(&validated_state, &instance_state).await;
+            let header = leaf.block_header().clone();
+            let ns_table = leaf.block_payload().unwrap().get_ns_table().clone();
             Self {
                 instance_state,
                 validated_state,
@@ -763,7 +781,7 @@ mod test_headers {
 
     #[async_std::test]
     async fn test_validate_proposal_error_cases() {
-        let genesis = GenesisForTest::default();
+        let genesis = GenesisForTest::default().await;
         let vid_common = vid_scheme(1).disperse([]).unwrap().common;
 
         let mut validated_state = ValidatedState::default();
@@ -771,7 +789,7 @@ mod test_headers {
 
         let mut parent_header = genesis.header.clone();
         let mut parent_leaf = genesis.leaf.clone();
-        *parent_leaf.get_block_header_mut() = parent_header.clone();
+        *parent_leaf.block_header_mut() = parent_header.clone();
 
         // Populate the tree with an initial `push`.
         block_merkle_tree.push(genesis.header.commit()).unwrap();
@@ -851,7 +869,7 @@ mod test_headers {
         let mut genesis_state =
             NodeState::mock().with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1));
 
-        let genesis = GenesisForTest::default();
+        let genesis = GenesisForTest::default().await;
         let vid_common = vid_scheme(1).disperse([]).unwrap().common;
 
         let mut parent_state = genesis.validated_state.clone();
@@ -871,12 +889,12 @@ mod test_headers {
         parent_header.fee_merkle_tree_root = fee_merkle_tree_root;
 
         let mut parent_leaf = genesis.leaf.clone();
-        *parent_leaf.get_block_header_mut() = parent_header.clone();
+        *parent_leaf.block_header_mut() = parent_header.clone();
 
         // Forget the state to trigger lookups in Header::new
         let forgotten_state = parent_state.forget();
         genesis_state.peers = Arc::new(MockStateCatchup::from_iter([(
-            parent_leaf.get_view_number(),
+            parent_leaf.view_number(),
             Arc::new(parent_state.clone()),
         )]));
         // Get a proposal from a parent
@@ -904,6 +922,7 @@ mod test_headers {
             ns_table,
             builder_fee,
             vid_common.clone(),
+            hotshot_types::constants::BASE_VERSION,
         )
         .await
         .unwrap();

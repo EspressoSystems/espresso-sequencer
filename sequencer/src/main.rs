@@ -9,7 +9,7 @@ use sequencer::{
     api::{self, data_source::DataSourceOptions},
     init_node,
     options::{Modules, Options},
-    persistence, BuilderParams, L1Params, NetworkParams,
+    persistence, Genesis, L1Params, NetworkParams,
 };
 use vbs::version::StaticVersionType;
 
@@ -48,15 +48,13 @@ async fn init_with_storage<S, Ver: StaticVersionType + 'static>(
 where
     S: DataSourceOptions,
 {
+    let genesis = Genesis::from_file(&opt.genesis_file)?;
+    tracing::info!(?genesis, "genesis");
+
     let (private_staking_key, private_state_key) = opt.private_keys()?;
-    let stake_table_capacity = opt.stake_table_capacity;
     let l1_params = L1Params {
         url: opt.l1_provider_url,
-        finalized_block: opt.l1_genesis,
         events_max_block_range: opt.l1_events_max_block_range,
-    };
-    let builder_params = BuilderParams {
-        prefunded_accounts: opt.prefunded_builder_accounts,
     };
 
     // Parse supplied Libp2p addresses to their socket form
@@ -108,26 +106,27 @@ where
             if let Some(catchup) = modules.catchup {
                 http_opt = http_opt.catchup(catchup);
             }
+
             if let Some(hotshot_events) = modules.hotshot_events {
                 http_opt = http_opt.hotshot_events(hotshot_events);
             }
             if let Some(explorer) = modules.explorer {
                 http_opt = http_opt.explorer(explorer);
             }
-
+            if let Some(config) = modules.config {
+                http_opt = http_opt.config(config);
+            }
             http_opt
                 .serve(
                     move |metrics| {
                         async move {
                             init_node(
+                                genesis,
                                 network_params,
                                 &*metrics,
                                 storage_opt,
-                                builder_params,
                                 l1_params,
-                                stake_table_capacity,
                                 bind_version,
-                                opt.chain_config,
                                 opt.is_da,
                             )
                             .await
@@ -141,14 +140,12 @@ where
         }
         None => {
             init_node(
+                genesis,
                 network_params,
                 &NoMetrics,
                 storage_opt,
-                builder_params,
                 l1_params,
-                stake_table_capacity,
                 bind_version,
-                opt.chain_config,
                 opt.is_da,
             )
             .await?
@@ -171,6 +168,7 @@ mod test {
     use portpicker::pick_unused_port;
     use sequencer::{
         api::options::{Http, Status},
+        genesis::StakeTableConfig,
         persistence::fs,
         PubKey,
     };
@@ -188,8 +186,20 @@ mod test {
 
         let port = pick_unused_port().unwrap();
         let tmp = TempDir::new().unwrap();
+
+        let genesis_file = tmp.path().join("genesis.toml");
+        let genesis = Genesis {
+            chain_config: Default::default(),
+            stake_table: StakeTableConfig { capacity: 10 },
+            accounts: Default::default(),
+            l1_finalized: Default::default(),
+            header: Default::default(),
+            network: Default::default(),
+        };
+        genesis.to_file(&genesis_file).unwrap();
+
         let modules = Modules {
-            http: Some(Http { port }),
+            http: Some(Http::with_port(port)),
             status: Some(Status),
             ..Default::default()
         };
@@ -199,6 +209,8 @@ mod test {
             &priv_key.to_string(),
             "--private-state-key",
             &state_key.sign_key_ref().to_string(),
+            "--genesis-file",
+            &genesis_file.display().to_string(),
         ]);
 
         // Start the sequencer in a background task. This process will not complete, because it will
@@ -209,9 +221,7 @@ mod test {
             if let Err(err) = init_with_storage(
                 modules,
                 opt,
-                fs::Options {
-                    path: tmp.path().into(),
-                },
+                fs::Options::new(tmp.path().into()),
                 SEQUENCER_VERSION,
             )
             .await

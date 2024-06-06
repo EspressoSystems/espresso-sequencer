@@ -107,7 +107,7 @@ async fn init_stake_table_from_orchestrator(
     orchestrator_url: &Url,
     stake_table_capacity: usize,
 ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
-    tracing::info!("Initializing stake table from HotShot orchestrator.");
+    tracing::info!("Initializing stake table from HotShot orchestrator {orchestrator_url}");
     let client = Client::<ServerError, OrchestratorVersion>::new(orchestrator_url.clone());
     loop {
         match client.get::<bool>("api/peer_pub_ready").send().await {
@@ -128,8 +128,8 @@ async fn init_stake_table_from_orchestrator(
                             .into_iter()
                             .for_each(|config| {
                                 st.register(
-                                    *config.stake_table_entry.get_key(),
-                                    config.stake_table_entry.get_stake(),
+                                    *config.stake_table_entry.key(),
+                                    config.stake_table_entry.stake(),
                                     config.state_ver_key,
                                 )
                                 .expect("Key registration shouldn't fail.");
@@ -159,11 +159,17 @@ pub async fn light_client_genesis(
     stake_table_capacity: usize,
 ) -> anyhow::Result<ParsedLightClientState> {
     let st = init_stake_table_from_orchestrator(orchestrator_url, stake_table_capacity).await;
+    light_client_genesis_from_stake_table(st)
+}
+
+#[inline]
+pub fn light_client_genesis_from_stake_table(
+    st: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
+) -> anyhow::Result<ParsedLightClientState> {
     let (bls_comm, schnorr_comm, stake_comm) = st
         .commitment(SnapshotVersion::LastEpochStart)
         .expect("Commitment computation shouldn't fail.");
     let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
-
     let pi = vec![
         u256_to_field(threshold),
         F::from(0_u64), // Arbitrary value for view number
@@ -384,6 +390,7 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
     config: StateProverConfig,
     bind_version: Ver,
 ) {
+    tracing::info!("Stake table capacity: {}", config.stake_table_capacity);
     // TODO(#1022): maintain the following stake table
     let st = Arc::new(
         init_stake_table_from_orchestrator(&config.orchestrator_url, config.stake_table_capacity)
@@ -496,6 +503,7 @@ mod test {
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
     const BLOCKS_PER_EPOCH: u32 = 10;
+
     const NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / 2) as u32;
 
     /// Init a meaningful ledger state that prover can generate future valid proof.
@@ -645,7 +653,6 @@ mod test {
     async fn test_read_contract_state() -> Result<()> {
         setup_logging();
         setup_backtrace();
-
         let anvil = Anvil::new().spawn();
         let dummy_genesis = ParsedLightClientState::dummy_genesis();
         let (_wallet, contract) = deploy_contract_for_test(&anvil, dummy_genesis.clone()).await?;

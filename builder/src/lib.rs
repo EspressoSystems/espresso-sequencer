@@ -54,7 +54,7 @@ use sequencer::{
     state::FeeAccount,
     state::ValidatedState,
     state_signature::{static_stake_table_commitment, StateSigner},
-    BuilderParams, L1Params, NetworkParams, Node, NodeState, PrivKey, PubKey, SeqTypes,
+    L1Params, NetworkParams, Node, NodeState, PrivKey, PubKey, SeqTypes,
 };
 use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
@@ -195,7 +195,7 @@ pub mod testing {
             // Only pass the pub keys to the hotshot config
             let known_nodes_without_stake_pub_keys = known_nodes_without_stake
                 .iter()
-                .map(|x| <BLSPubKey as SignatureKey>::get_public_key(&x.stake_table_entry))
+                .map(|x| <BLSPubKey as SignatureKey>::public_key(&x.stake_table_entry))
                 .collect::<Vec<_>>();
 
             let master_map = MasterMap::new();
@@ -261,7 +261,7 @@ pub mod testing {
             .iter()
             .zip(&state_key_pairs)
             .map(|(pub_key, state_key_pair)| PeerConfig::<PubKey> {
-                stake_table_entry: pub_key.get_stake_table_entry(stake_value),
+                stake_table_entry: pub_key.stake_table_entry(stake_value),
                 state_ver_key: state_key_pair.ver_key(),
             })
             .collect::<Vec<_>>();
@@ -322,7 +322,7 @@ pub mod testing {
             bind_version: Ver,
             options: impl PersistenceOptions<Persistence = P>,
         ) -> Vec<(
-            SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
+            Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
             Option<StateSigner<Ver>>,
         )> {
             let num_staked_nodes = self.num_staked_nodes();
@@ -348,7 +348,7 @@ pub mod testing {
                         )
                         .await;
                     // wrapped in some because need to take later
-                    (hotshot_handle, Some(state_signer))
+                    (Arc::new(hotshot_handle), Some(state_signer))
                 }
             }))
             .await
@@ -452,7 +452,7 @@ pub mod testing {
             hotshot_events_api_url: Url,
             known_nodes_with_stake: Vec<PeerConfig<VerKey>>,
             num_non_staking_nodes: usize,
-            hotshot_context_handle: SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
+            hotshot_context_handle: Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
         ) {
             // create a event streamer
             let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
@@ -466,7 +466,7 @@ pub mod testing {
             // send the events to the event streaming state
             async_spawn({
                 async move {
-                    let mut hotshot_event_stream = hotshot_context_handle.get_event_stream();
+                    let mut hotshot_event_stream = hotshot_context_handle.event_stream();
                     loop {
                         let event = hotshot_event_stream.next().await.unwrap();
                         tracing::debug!("Before writing in event streamer: {event:?}");
@@ -494,12 +494,12 @@ pub mod testing {
             if let Decide { leaf_chain, .. } = event.event {
                 if let Some(height) = leaf_chain.iter().find_map(|LeafInfo { leaf, .. }| {
                     if leaf
-                        .get_block_payload()
+                        .block_payload()
                         .as_ref()?
-                        .transaction_commitments(leaf.get_block_header().metadata())
+                        .transaction_commitments(leaf.block_header().metadata())
                         .contains(&commitment)
                     {
-                        Some(leaf.get_block_header().block_number())
+                        Some(leaf.block_header().block_number())
                     } else {
                         None
                     }
@@ -560,6 +560,7 @@ pub mod testing {
                 Duration::from_millis(2000),
                 15,
                 Duration::from_millis(500),
+                ValidatedState::default(),
             )
             .await
             .unwrap();
@@ -584,7 +585,7 @@ pub mod testing {
     {
         pub async fn init_permissioned_builder(
             hotshot_test_config: HotShotTestConfig,
-            hotshot_handle: SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
+            hotshot_handle: Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
             node_id: u64,
             state_signer: StateSigner<Ver>,
             hotshot_builder_api_url: Url,
@@ -612,7 +613,7 @@ pub mod testing {
             let bootstrapped_view = ViewNumber::new(0);
 
             let builder_context = BuilderContext::init(
-                hotshot_handle,
+                Arc::clone(&hotshot_handle),
                 state_signer,
                 node_id,
                 key_pair,
@@ -623,6 +624,7 @@ pub mod testing {
                 Duration::from_millis(2000),
                 15,
                 Duration::from_millis(500),
+                ValidatedState::default(),
             )
             .await
             .unwrap();
@@ -664,7 +666,7 @@ mod test {
     use hotshot_builder_core::service::GlobalState;
     use hotshot_types::event::LeafInfo;
     use hotshot_types::traits::block_contents::{
-        vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
+        vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
     };
     use hotshot_types::utils::BuilderCommitment;
     use sequencer::block::payload::Payload;
@@ -695,7 +697,7 @@ mod test {
         let total_nodes = HotShotTestConfig::total_nodes();
 
         // try to listen on non-voting node handle as it is the last handle
-        let mut events = handles[total_nodes - 1].0.get_event_stream();
+        let mut events = handles[total_nodes - 1].0.event_stream();
         for (handle, ..) in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
@@ -704,14 +706,13 @@ mod test {
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], &genesis_state)
+                Payload::from_transactions([], &ValidatedState::default(), &genesis_state)
+                    .await
                     .expect("unable to create genesis payload");
             let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
-                let payload_bytes = genesis_payload
-                    .encode()
-                    .expect("unable to encode genesis payload");
+                let payload_bytes = genesis_payload.encode();
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
             Header::genesis(
@@ -733,7 +734,7 @@ mod test {
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-                let header = leaf.get_block_header().clone();
+                let header = leaf.block_header().clone();
                 if header.height == 0 {
                     parent = header;
                     continue;

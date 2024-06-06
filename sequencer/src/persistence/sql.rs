@@ -45,33 +45,33 @@ pub struct Options {
     /// addition, there are some parameters which cannot be set via the URI, such as TLS.
     // Hide from debug output since may contain sensitive data.
     #[derivative(Debug = "ignore")]
-    pub uri: Option<String>,
+    pub(crate) uri: Option<String>,
 
     /// Hostname for the remote Postgres database server.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_HOST")]
-    pub host: Option<String>,
+    pub(crate) host: Option<String>,
 
     /// Port for the remote Postgres database server.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_PORT")]
-    pub port: Option<u16>,
+    pub(crate) port: Option<u16>,
 
     /// Name of database to connect to.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_DATABASE")]
-    pub database: Option<String>,
+    pub(crate) database: Option<String>,
 
     /// Postgres user to connect as.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_USER")]
-    pub user: Option<String>,
+    pub(crate) user: Option<String>,
 
     /// Password for Postgres user.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_PASSWORD")]
     // Hide from debug output since may contain sensitive data.
     #[derivative(Debug = "ignore")]
-    pub password: Option<String>,
+    pub(crate) password: Option<String>,
 
     /// Use TLS for an encrypted connection to the database.
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_USE_TLS")]
-    pub use_tls: bool,
+    pub(crate) use_tls: bool,
 
     /// This will enable the pruner and set the default pruning parameters unless provided.
     /// Default parameters:
@@ -82,11 +82,26 @@ pub struct Options {
     /// - max_usage: 80%
     /// - interval: 1 hour
     #[clap(long, env = "ESPRESSO_SEQUENCER_POSTGRES_PRUNE")]
-    pub prune: bool,
+    pub(crate) prune: bool,
 
     /// Pruning parameters.
     #[clap(flatten)]
-    pub pruning: PruningOptions,
+    pub(crate) pruning: PruningOptions,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_STORE_UNDECIDED_STATE", hide = true)]
+    pub(crate) store_undecided_state: bool,
+
+    /// Specifies the maximum number of concurrent fetch requests allowed from peers.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_FETCH_RATE_LIMIT")]
+    pub(crate) fetch_rate_limit: Option<usize>,
+
+    /// The minimum delay between active fetches in a stream.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_ACTIVE_FETCH_DELAY", value_parser = parse_duration)]
+    pub(crate) active_fetch_delay: Option<Duration>,
+
+    /// The minimum delay between loading chunks in a stream.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_CHUNK_FETCH_DELAY", value_parser = parse_duration)]
+    pub(crate) chunk_fetch_delay: Option<Duration>,
 }
 
 impl TryFrom<Options> for Config {
@@ -205,7 +220,10 @@ impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
     async fn create(self) -> anyhow::Result<Persistence> {
-        SqlStorage::connect(self.try_into()?).await
+        Ok(Persistence {
+            store_undecided_state: self.store_undecided_state,
+            db: SqlStorage::connect(self.try_into()?).await?,
+        })
     }
 
     async fn reset(self) -> anyhow::Result<()> {
@@ -215,21 +233,24 @@ impl PersistenceOptions for Options {
 }
 
 /// Postgres-backed persistence.
-pub type Persistence = SqlStorage;
+pub struct Persistence {
+    db: SqlStorage,
+    store_undecided_state: bool,
+}
 
 async fn transaction(
-    db: &mut Persistence,
+    persistence: &mut Persistence,
     f: impl FnOnce(Transaction) -> BoxFuture<anyhow::Result<()>>,
 ) -> anyhow::Result<()> {
-    let tx = db.transaction().await?;
+    let tx = persistence.db.transaction().await?;
     match f(tx).await {
         Ok(_) => {
-            db.commit().await?;
+            persistence.db.commit().await?;
             Ok(())
         }
         Err(err) => {
             tracing::warn!("transaction failed, reverting: {err:#}");
-            db.revert().await;
+            persistence.db.revert().await;
             Err(err)
         }
     }
@@ -238,7 +259,9 @@ async fn transaction(
 #[async_trait]
 impl SequencerPersistence for Persistence {
     fn into_catchup_provider(self) -> anyhow::Result<Arc<dyn StateCatchup>> {
-        Ok(Arc::new(SqlStateCatchup::from(Arc::new(RwLock::new(self)))))
+        Ok(Arc::new(SqlStateCatchup::from(Arc::new(RwLock::new(
+            self.db,
+        )))))
     }
 
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {
@@ -246,6 +269,7 @@ impl SequencerPersistence for Persistence {
 
         // Select the most recent config (although there should only be one).
         let Some(row) = self
+            .db
             .query_opt_static("SELECT config FROM network_config ORDER BY id DESC LIMIT 1")
             .await?
         else {
@@ -278,10 +302,10 @@ impl SequencerPersistence for Persistence {
         transaction(self, |mut tx| {
             async move {
                 let stmt1 = "DELETE FROM vid_share where view <= $1";
-                tx.execute(stmt1, [&(view.get_u64() as i64)]).await?;
+                tx.execute(stmt1, [&(view.u64() as i64)]).await?;
 
                 let stmt2 = "DELETE FROM da_proposal where view <= $1";
-                tx.execute(stmt2, [&(view.get_u64() as i64)]).await?;
+                tx.execute(stmt2, [&(view.u64() as i64)]).await?;
                 Ok(())
             }
             .boxed()
@@ -313,8 +337,8 @@ impl SequencerPersistence for Persistence {
             )
         ";
 
-        let height = leaf.get_height() as i64;
-        let view = qc.view_number.get_u64() as i64;
+        let height = leaf.height() as i64;
+        let view = qc.view_number.u64() as i64;
         let leaf_bytes = bincode::serialize(leaf)?;
         let qc_bytes = bincode::serialize(qc)?;
 
@@ -339,6 +363,7 @@ impl SequencerPersistence for Persistence {
 
     async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
         Ok(self
+            .db
             .query_opt_static("SELECT view FROM highest_voted_view WHERE id = 0")
             .await?
             .map(|row| {
@@ -351,6 +376,7 @@ impl SequencerPersistence for Persistence {
         &self,
     ) -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>> {
         let Some(row) = self
+            .db
             .query_opt_static("SELECT leaf, qc FROM anchor_leaf WHERE id = 0")
             .await?
         else {
@@ -370,6 +396,7 @@ impl SequencerPersistence for Persistence {
         &self,
     ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
         let Some(row) = self
+            .db
             .query_opt_static("SELECT leaves, state FROM undecided_state WHERE id = 0")
             .await?
         else {
@@ -390,9 +417,10 @@ impl SequencerPersistence for Persistence {
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
         let result = self
+            .db
             .query_opt(
                 "SELECT data FROM da_proposal where view = $1",
-                [&(view.get_u64() as i64)],
+                [&(view.u64() as i64)],
             )
             .await?;
 
@@ -409,9 +437,10 @@ impl SequencerPersistence for Persistence {
         view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
         let result = self
+            .db
             .query_opt(
                 "SELECT data FROM vid_share where view = $1",
-                [&(view.get_u64() as i64)],
+                [&(view.u64() as i64)],
             )
             .await?;
 
@@ -428,7 +457,7 @@ impl SequencerPersistence for Persistence {
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
-        let view = data.get_view_number().get_u64();
+        let view = data.view_number().u64();
         let data_bytes = bincode::serialize(proposal).unwrap();
 
         transaction(self, |mut tx| {
@@ -451,7 +480,7 @@ impl SequencerPersistence for Persistence {
         proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let data = &proposal.data;
-        let view = data.get_view_number().get_u64();
+        let view = data.view_number().u64();
         let data_bytes = bincode::serialize(proposal).unwrap();
 
         transaction(self, |mut tx| {
@@ -480,7 +509,7 @@ impl SequencerPersistence for Persistence {
 
         transaction(self, |mut tx| {
             async move {
-                tx.execute_one_with_retries(stmt, [view.get_u64() as i64])
+                tx.execute_one_with_retries(stmt, [view.u64() as i64])
                     .await?;
                 Ok(())
             }
@@ -493,6 +522,10 @@ impl SequencerPersistence for Persistence {
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()> {
+        if !self.store_undecided_state {
+            return Ok(());
+        }
+
         let leaves_bytes = bincode::serialize(&leaves).context("serializing leaves")?;
         let state_bytes = bincode::serialize(&state).context("serializing state")?;
 
