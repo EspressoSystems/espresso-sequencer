@@ -10,7 +10,7 @@ use hotshot_macros::{run_test, test_scripts};
 use hotshot_task_impls::{da::DaTaskState, events::HotShotEvent::*};
 use hotshot_testing::{
     helpers::build_system_handle,
-    predicates::event::{exact, validated_state_updated},
+    predicates::event::exact,
     script::{Expectations, InputOrder, TaskScript},
     serial,
     view_generator::TestViewGenerator,
@@ -96,7 +96,6 @@ async fn test_da_task() {
             Expectations::from_outputs(vec![
                 exact(DaProposalValidated(proposals[1].clone(), leaders[1])),
                 exact(DaVoteSend(votes[1].clone())),
-                validated_state_updated(),
             ]),
         ],
     };

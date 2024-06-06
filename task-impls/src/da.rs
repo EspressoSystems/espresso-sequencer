@@ -207,11 +207,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
                         view_inner: ViewInner::Da { payload_commitment },
                     };
                     consensus.update_validated_state_map(view_number, view.clone());
-                    broadcast_event(
-                        HotShotEvent::ValidatedStateUpdated(view_number, view).into(),
-                        &event_stream,
-                    )
-                    .await;
                 }
 
                 // Record the payload we have promised to make available.
