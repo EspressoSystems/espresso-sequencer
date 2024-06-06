@@ -1207,6 +1207,7 @@
 
     <span class="kw">const </span>STAKE_TABLE_CAPACITY_FOR_TEST: usize = <span class="number">10</span>;
     <span class="kw">const </span>BLOCKS_PER_EPOCH: u32 = <span class="number">10</span>;
+
     <span class="kw">const </span>NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / <span class="number">2</span>) <span class="kw">as </span>u32;
 
     <span class="doccomment">/// Init a meaningful ledger state that prover can generate future valid proof.
@@ -1356,7 +1357,6 @@
     </span><span class="kw">async fn </span>test_read_contract_state() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         setup_logging();
         setup_backtrace();
-
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>dummy_genesis = ParsedLightClientState::dummy_genesis();
         <span class="kw">let </span>(_wallet, contract) = deploy_contract_for_test(<span class="kw-2">&amp;</span>anvil, dummy_genesis.clone()).<span class="kw">await</span><span class="question-mark">?</span>;
