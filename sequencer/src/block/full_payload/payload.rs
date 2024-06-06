@@ -169,13 +169,21 @@ impl BlockPayload<SeqTypes> for Payload {
     }
 
     // TODO(BlockPayload): remove arg `Self::Metadata`
-    fn builder_commitment(&self, _metadata: &Self::Metadata) -> BuilderCommitment {
+    fn builder_commitment(&self, metadata: &Self::Metadata) -> BuilderCommitment {
         let ns_table_bytes = self.ns_table.encode();
+
+        // TODO `metadata_bytes` equals `ns_table_bytes`, so we are
+        // double-hashing the ns_table. Why? To maintain serialization
+        // compatibility.
+        let metadata_bytes = metadata.encode();
+
         let mut digest = sha2::Sha256::new();
         digest.update((self.ns_payloads.len() as u64).to_le_bytes());
         digest.update((ns_table_bytes.len() as u64).to_le_bytes());
+        digest.update((metadata_bytes.len() as u64).to_le_bytes()); // redundant, see TODO above
         digest.update(&self.ns_payloads);
         digest.update(ns_table_bytes);
+        digest.update(metadata_bytes); // redundant, see TODO above
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
 
