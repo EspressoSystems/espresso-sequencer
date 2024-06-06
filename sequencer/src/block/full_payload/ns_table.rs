@@ -23,7 +23,10 @@ use std::{collections::HashSet, sync::Arc};
 /// Byte lengths for the different items that could appear in a namespace table.
 const NUM_NSS_BYTE_LEN: usize = 4;
 const NS_OFFSET_BYTE_LEN: usize = 4;
-const NS_ID_BYTE_LEN: usize = 8;
+
+// TODO prefer [`NS_ID_BYTE_LEN`] set to `8` because [`NamespaceId`] is a `u64`
+// but we need to maintain serialization compatibility.
+const NS_ID_BYTE_LEN: usize = 4;
 
 /// Raw binary data for a namespace table.
 ///
