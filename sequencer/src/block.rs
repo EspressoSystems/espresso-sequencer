@@ -69,12 +69,13 @@ impl BlockPayload<SeqTypes> for Payload<TxTableEntryWord> {
         } else {
             match validated_state_cf.resolve() {
                 Some(cf) => cf,
-                None => instance_state
-                    .peers
-                    .as_ref()
-                    .fetch_chain_config(validated_state_cf.commit())
-                    .await
-                    .unwrap(), // TODO:
+                None => {
+                    instance_state
+                        .peers
+                        .as_ref()
+                        .fetch_chain_config(validated_state_cf.commit())
+                        .await
+                }
             }
         };
 

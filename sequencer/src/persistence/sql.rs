@@ -550,7 +550,7 @@ impl SequencerPersistence for Persistence {
     }
 }
 
-pub fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
+pub(crate) fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
     param
 }
 

@@ -251,12 +251,12 @@ impl Header {
     async fn get_chain_config(
         validated_state: &ValidatedState,
         instance_state: &NodeState,
-    ) -> anyhow::Result<ChainConfig> {
+    ) -> ChainConfig {
         if validated_state.chain_config.commit() == instance_state.chain_config.commitment() {
-            Ok(instance_state.chain_config)
+            instance_state.chain_config
         } else {
             match validated_state.chain_config.resolve() {
-                Some(cf) => Ok(cf),
+                Some(cf) => cf,
                 None => {
                     tracing::info!(
                         "fetching chain config {} from peers",
@@ -322,15 +322,15 @@ impl BlockHeader<SeqTypes> for Header {
         let chain_config = if version > instance_state.current_version {
             match instance_state
                 .upgrades
-                .get(&instance_state.current_version)
+                .get(&version)
                 .map(|upgrade| match upgrade.upgrade_type {
                     UpgradeType::ChainConfig { chain_config } => chain_config,
                 }) {
                 Some(cf) => cf,
-                None => Header::get_chain_config(&validated_state, instance_state).await?,
+                None => Header::get_chain_config(&validated_state, instance_state).await,
             }
         } else {
-            Header::get_chain_config(&validated_state, instance_state).await?
+            Header::get_chain_config(&validated_state, instance_state).await
         };
 
         validated_state.chain_config = chain_config.into();

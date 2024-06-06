@@ -1355,7 +1355,7 @@ mod test {
         };
         let mut map = std::collections::BTreeMap::new();
         map.insert(
-            Version { major: 0, minor: 1 },
+            Version { major: 0, minor: 2 },
             Upgrade {
                 view: 5,
                 upgrade_type: UpgradeType::ChainConfig {

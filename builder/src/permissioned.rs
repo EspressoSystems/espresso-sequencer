@@ -247,7 +247,10 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // crash horribly just because we're not using the P2P network yet.
     let _ = NetworkingMetricsValue::new(metrics);
 
-    let mut genesis_state = ValidatedState::default();
+    let mut genesis_state = ValidatedState {
+        chain_config: genesis.chain_config.into(),
+        ..Default::default()
+    };
     for (address, amount) in genesis.accounts {
         tracing::warn!(%address, %amount, "Prefunding account for demo");
         genesis_state.prefund_account(address, amount);

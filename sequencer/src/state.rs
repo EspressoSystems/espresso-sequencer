@@ -231,9 +231,9 @@ pub fn validate_proposal(
     anyhow::ensure!(
         proposal.chain_config.commit() == expected_chain_config.commit(),
         anyhow::anyhow!(
-            "Invalid Chain Config: local={:?}, proposal={:?}",
-            expected_chain_config.commitment().to_string(),
-            proposal.chain_config.commit().to_string(),
+            "Invalid Chain Config: local={}, proposal={}",
+            expected_chain_config.commitment(),
+            proposal.chain_config.commit(),
         )
     );
 
@@ -456,10 +456,12 @@ async fn update_state_storage(
     }
 
     if parent_chain_config != state.chain_config {
-        if let Err(err) = storage
-            .insert_chain_config(state.chain_config.resolve().unwrap())
-            .await
-        {
+        let cf = state
+            .chain_config
+            .resolve()
+            .context("failed to resolve to chain config")?;
+
+        if let Err(err) = storage.insert_chain_config(cf).await {
             storage.revert().await;
             return Err(err);
         }
@@ -498,9 +500,9 @@ async fn store_genesis_state(
         .context("failed to store fee merkle nodes")?;
     }
 
-    storage.commit().await?;
-
     storage.insert_chain_config(chain_config).await?;
+
+    storage.commit().await?;
     Ok(())
 }
 
@@ -618,7 +620,7 @@ impl ValidatedState {
         let header_cf_commit = header_cf.commit();
 
         if version > instance.current_version {
-            if let Some(upgrade) = &instance.upgrades.get(&instance.current_version) {
+            if let Some(upgrade) = &instance.upgrades.get(&version) {
                 match upgrade.upgrade_type {
                     UpgradeType::ChainConfig { chain_config } => {
                         if header_cf_commit == chain_config.commit() {
@@ -649,7 +651,7 @@ impl ValidatedState {
                         .peers
                         .as_ref()
                         .fetch_chain_config(self.chain_config.commit())
-                        .await?
+                        .await
                 }
             }
         };

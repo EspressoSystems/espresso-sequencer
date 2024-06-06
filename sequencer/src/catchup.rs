@@ -149,16 +149,13 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig>;
 
-    async fn fetch_chain_config(
-        &self,
-        commitment: Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig> {
+    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
         // Retry until we succeed.
         let mut delay = MIN_RETRY_DELAY;
 
         loop {
             match self.try_fetch_chain_config(commitment).await {
-                Ok(cf) => return Ok(cf),
+                Ok(cf) => return cf,
                 Err(err) => {
                     tracing::warn!(
                         ?delay,
@@ -404,10 +401,7 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
         (**self).try_fetch_chain_config(commitment).await
     }
 
-    async fn fetch_chain_config(
-        &self,
-        commitment: Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig> {
+    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
         (**self).fetch_chain_config(commitment).await
     }
 }
@@ -465,10 +459,7 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
         (**self).try_fetch_chain_config(commitment).await
     }
 
-    async fn fetch_chain_config(
-        &self,
-        commitment: Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig> {
+    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
         (**self).fetch_chain_config(commitment).await
     }
 }
