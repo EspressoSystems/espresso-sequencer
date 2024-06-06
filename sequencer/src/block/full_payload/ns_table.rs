@@ -108,10 +108,20 @@ const NS_ID_BYTE_LEN: usize = 8;
 /// It is possible that a namespace table could indicate two distinct namespaces
 /// whose byte ranges overlap, though no "honestly-prepared" namespace table
 /// would do this.
-#[repr(transparent)]
+///
+/// TODO prefer [`NsTable`] to be a newtype like this
+/// ```ignore
+/// #[repr(transparent)]
+/// #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+/// #[serde(transparent)]
+/// pub struct NsTable(#[serde(with = "base64_bytes")] Vec<u8>);
+/// ```
+/// but we need to maintain serialization compatibility.
 #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[serde(transparent)]
-pub struct NsTable(#[serde(with = "base64_bytes")] Vec<u8>);
+pub struct NsTable {
+    #[serde(with = "base64_bytes")]
+    bytes: Vec<u8>,
+}
 
 impl NsTable {
     /// Search the namespace table for the ns_index belonging to `ns_id`.
@@ -135,7 +145,7 @@ impl NsTable {
 
         // TODO hack to deserialize `NamespaceId` from `NS_ID_BYTE_LEN` bytes
         NamespaceId::from(u64_from_bytes::<NS_ID_BYTE_LEN>(
-            &self.0[start..start + NS_ID_BYTE_LEN],
+            &self.bytes[start..start + NS_ID_BYTE_LEN],
         ))
     }
 
@@ -147,7 +157,7 @@ impl NsTable {
             // Number of namespaces declared in the ns table
             self.read_num_nss(),
             // Max number of entries that could fit in the namespace table
-            self.0.len().saturating_sub(NUM_NSS_BYTE_LEN)
+            self.bytes.len().saturating_sub(NUM_NSS_BYTE_LEN)
                 / NS_ID_BYTE_LEN.saturating_add(NS_OFFSET_BYTE_LEN),
         );
 
@@ -182,28 +192,28 @@ impl NsTable {
     /// For a correct count of the number of unique namespaces in this
     /// namespace table use `iter().count()`.
     fn read_num_nss(&self) -> usize {
-        let num_nss_byte_len = NUM_NSS_BYTE_LEN.min(self.0.len());
-        usize_from_bytes::<NUM_NSS_BYTE_LEN>(&self.0[..num_nss_byte_len])
+        let num_nss_byte_len = NUM_NSS_BYTE_LEN.min(self.bytes.len());
+        usize_from_bytes::<NUM_NSS_BYTE_LEN>(&self.bytes[..num_nss_byte_len])
     }
 
     /// Read the namespace offset from the `index`th entry from the namespace table.
     fn read_ns_offset(&self, index: &NsIndex) -> usize {
         let start =
             index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
-        usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.0[start..start + NS_OFFSET_BYTE_LEN])
+        usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.bytes[start..start + NS_OFFSET_BYTE_LEN])
     }
 }
 
 impl EncodeBytes for NsTable {
     fn encode(&self) -> Arc<[u8]> {
-        Arc::from(self.0.as_ref())
+        Arc::from(self.bytes.as_ref())
     }
 }
 
 impl Committable for NsTable {
     fn commit(&self) -> Commitment<Self> {
         RawCommitmentBuilder::new(&Self::tag())
-            .var_size_bytes(&self.0)
+            .var_size_bytes(&self.bytes)
             .finalize()
     }
 
@@ -242,7 +252,7 @@ impl NsTableBuilder {
         // write the number of entries to the ns table header
         bytes[..NUM_NSS_BYTE_LEN]
             .copy_from_slice(&usize_to_bytes::<NUM_NSS_BYTE_LEN>(self.num_entries));
-        NsTable(bytes)
+        NsTable { bytes }
     }
 
     /// Byte length of a namespace table with zero entries.
