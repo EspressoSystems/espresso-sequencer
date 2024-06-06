@@ -51,7 +51,6 @@ impl NsProof {
                 .ok()?, // error: failure to convert u32 to usize
         );
 
-        // TODO FIX: vid.payload_proof fails if ns_payload_range is empty!
         let ns_proof = if ns_payload_range.as_block_range().is_empty() {
             None
         } else {
