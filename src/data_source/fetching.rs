@@ -358,32 +358,36 @@ where
             };
         };
 
-        let task = {
-            BackgroundTask::spawn("pruner", async move {
-                for i in 1.. {
-                    tracing::warn!("starting pruner run {i} ");
-                    {
-                        let mut storage = fetcher.storage.write().await;
+        let future = async move {
+            for i in 1.. {
+                tracing::warn!("starting pruner run {i} ");
+                // We loop until the whole run pruner run is complete
+                // This allows write lock to be released after each batch delete
+                loop {
+                    let mut storage = fetcher.storage.write().await;
 
-                        match storage.storage.prune().await {
-                            Ok(Some(height)) => {
-                                storage.pruned_height = Some(height);
-                                tracing::warn!(
-                                    "pruner run {i} succeeded. Pruned to height {height}"
-                                );
-                            }
-                            Ok(None) => (),
-                            Err(e) => {
-                                tracing::error!("pruner run {i} failed: {e:?}");
-                                storage.revert().await;
-                            }
+                    match storage.storage.prune().await {
+                        Ok(Some(height)) => {
+                            storage.pruned_height = Some(height);
+                            tracing::warn!("Pruned to height {height}");
+                        }
+                        Ok(None) => {
+                            tracing::warn!("pruner run {i} complete.");
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::error!("pruner run {i} failed: {e:?}");
+                            storage.revert().await;
+                            break;
                         }
                     }
-
-                    sleep(cfg.interval()).await;
                 }
-            })
+
+                sleep(cfg.interval()).await;
+            }
         };
+
+        let task = BackgroundTask::spawn("pruner", future);
 
         Self {
             handle: Some(task),
