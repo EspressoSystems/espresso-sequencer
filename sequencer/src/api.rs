@@ -1364,16 +1364,19 @@ mod test {
             },
         );
 
+        let stop_voting_view = 100;
         let upgrades = TestNetworkUpgrades {
             upgrades: map,
             start_proposing_view: 5,
             stop_proposing_view: 6,
             start_voting_view: 1,
-            stop_voting_view: 100,
+            stop_voting_view,
         };
 
         let mut network = TestNetwork::with_state(
-            Options::from(options::Http { port }).catchup(Default::default()),
+            Options::from(options::Http { port })
+                .catchup(Default::default())
+                .status(Default::default()),
             Default::default(),
             [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|_| {
@@ -1402,29 +1405,32 @@ mod test {
             }
         }
 
-        let mut upgrades = [false; TestConfig::NUM_NODES];
-        loop {
-            let event = events.next().await.unwrap();
-            let EventType::Decide { leaf_chain, .. } = event.event else {
-                continue;
-            };
-            for LeafInfo { leaf, state, .. } in leaf_chain.iter().rev() {
-                let height = leaf.height();
-                let leaf_builder = (leaf.view_number().u64() as usize) % TestConfig::NUM_NODES;
-                if height == 0 {
-                    continue;
-                }
+        let client: Client<ServerError, SequencerVersion> =
+            Client::new(format!("http://localhost:{port}").parse().unwrap());
+        client.connect(None).await;
+        tracing::info!(port, "server running");
 
-                if let Some(cf) = state.chain_config.resolve() {
-                    if cf == chain_config_upgrade {
-                        upgrades[leaf_builder] = true;
+        'outer: loop {
+            let height = client
+                .get::<usize>("status/block-height")
+                .send()
+                .await
+                .unwrap();
+
+            for peer in &network.peers {
+                let state = peer.consensus().read().await.decided_state().await;
+
+                match state.chain_config.resolve() {
+                    Some(cf) => {
+                        if cf != chain_config_upgrade && height as u64 > stop_voting_view {
+                            panic!("failed to upgrade chain config");
+                        }
                     }
+                    None => continue 'outer,
                 }
             }
 
-            if upgrades.iter().all(|upgrade_completed| *upgrade_completed) {
-                break;
-            }
+            break;
         }
 
         network.server.shut_down().await;
