@@ -714,9 +714,6 @@ impl ValidatedState {
         header: &Header,
         version: Version,
     ) {
-        // NOTE: This function currently only supports ChainConfig upgrade.
-        // You might need to add additional logic in the future to handle other upgrade types.
-
         // Check for protocol upgrade based on sequencer version
         if version <= instance.current_version {
             return;

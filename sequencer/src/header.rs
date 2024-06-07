@@ -252,23 +252,23 @@ impl Header {
         validated_state: &ValidatedState,
         instance_state: &NodeState,
     ) -> ChainConfig {
-        if validated_state.chain_config.commit() == instance_state.chain_config.commitment() {
-            instance_state.chain_config
-        } else {
-            match validated_state.chain_config.resolve() {
-                Some(cf) => cf,
-                None => {
-                    tracing::info!(
-                        "fetching chain config {} from peers",
-                        validated_state.chain_config.commit()
-                    );
+        let validated_cf = validated_state.chain_config;
+        let instance_cf = instance_state.chain_config;
 
-                    instance_state
-                        .peers
-                        .as_ref()
-                        .fetch_chain_config(validated_state.chain_config.commit())
-                        .await
-                }
+        if validated_cf.commit() == instance_cf.commitment() {
+            return instance_cf;
+        }
+
+        match validated_cf.resolve() {
+            Some(cf) => cf,
+            None => {
+                tracing::info!("fetching chain config {} from peers", validated_cf.commit());
+
+                instance_state
+                    .peers
+                    .as_ref()
+                    .fetch_chain_config(validated_cf.commit())
+                    .await
             }
         }
     }
