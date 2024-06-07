@@ -858,7 +858,7 @@
                 .flatten()
                 .ok_or_else(|| {
                     <span class="self">Self</span>::Error::catch_all(
-                        StatusCode::NotFound,
+                        StatusCode::NOT_FOUND,
                         <span class="macro">format!</span>(<span class="string">"no leaf for height {height}"</span>),
                     )
                 })

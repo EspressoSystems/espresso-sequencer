@@ -464,7 +464,7 @@
                 )
                 .context(CustomSnafu {
                     message: <span class="macro">format!</span>(<span class="string">"failed to make proof for namespace {ns_id}"</span>),
-                    status: StatusCode::NotFound,
+                    status: StatusCode::NOT_FOUND,
                 })<span class="question-mark">?</span>;
 
             <span class="kw">let </span>transactions = <span class="kw">if let </span>NamespaceProof::Existence {
@@ -540,7 +540,7 @@
             </span><span class="kw">if </span>tx.namespace() &gt; NamespaceId::from(u32::MAX <span class="kw">as </span>u64) {
                 <span class="kw">return </span><span class="prelude-val">Err</span>(Error::Custom {
                     message: <span class="string">"Transaction namespace &gt; u32::MAX"</span>.to_string(),
-                    status: StatusCode::BadRequest,
+                    status: StatusCode::BAD_REQUEST,
                 });
             }
 
@@ -577,7 +577,7 @@
                 .get_state_signature(height)
                 .<span class="kw">await
                 </span>.ok_or(tide_disco::Error::catch_all(
-                    StatusCode::NotFound,
+                    StatusCode::NOT_FOUND,
                     <span class="string">"Signature not found."</span>.to_owned(),
                 ))
         }
@@ -608,7 +608,7 @@
                 .map_err(Error::from_request_error)<span class="question-mark">?</span>;
             <span class="kw">let </span>account = account.parse().map_err(|err| {
                 Error::catch_all(
-                    StatusCode::BadRequest,
+                    StatusCode::BAD_REQUEST,
                     <span class="macro">format!</span>(<span class="string">"malformed account {account}: {err}"</span>),
                 )
             })<span class="question-mark">?</span>;
@@ -616,7 +616,7 @@
             state
                 .get_account(height, ViewNumber::new(view), account)
                 .<span class="kw">await
-                </span>.map_err(|err| Error::catch_all(StatusCode::NotFound, <span class="macro">format!</span>(<span class="string">"{err:#}"</span>)))
+                </span>.map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, <span class="macro">format!</span>(<span class="string">"{err:#}"</span>)))
         }
         .boxed()
     })<span class="question-mark">?
@@ -632,7 +632,7 @@
             state
                 .get_frontier(height, ViewNumber::new(view))
                 .<span class="kw">await
-                </span>.map_err(|err| Error::catch_all(StatusCode::NotFound, <span class="macro">format!</span>(<span class="string">"{err:#}"</span>)))
+                </span>.map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, <span class="macro">format!</span>(<span class="string">"{err:#}"</span>)))
         }
         .boxed()
     })<span class="question-mark">?</span>;
@@ -670,7 +670,7 @@
     <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;S, Error, Ver&gt;::new(toml)<span class="question-mark">?</span>;
 
     <span class="kw">let </span>env_variables = get_public_env_vars()
-        .map_err(|err| Error::catch_all(StatusCode::InternalServerError, <span class="macro">format!</span>(<span class="string">"{err:#}"</span>)))<span class="question-mark">?</span>;
+        .map_err(|err| Error::catch_all(StatusCode::INTERNAL_SERVER_ERROR, <span class="macro">format!</span>(<span class="string">"{err:#}"</span>)))<span class="question-mark">?</span>;
 
     api.get(<span class="string">"hotshot"</span>, |<span class="kw">_</span>, state| {
         <span class="kw">async move </span>{ <span class="prelude-val">Ok</span>(state.get_config().<span class="kw">await</span>) }.boxed()

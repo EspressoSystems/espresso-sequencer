@@ -114,6 +114,19 @@
 <a href="#112" id="112">112</a>
 <a href="#113" id="113">113</a>
 <a href="#114" id="114">114</a>
+<a href="#115" id="115">115</a>
+<a href="#116" id="116">116</a>
+<a href="#117" id="117">117</a>
+<a href="#118" id="118">118</a>
+<a href="#119" id="119">119</a>
+<a href="#120" id="120">120</a>
+<a href="#121" id="121">121</a>
+<a href="#122" id="122">122</a>
+<a href="#123" id="123">123</a>
+<a href="#124" id="124">124</a>
+<a href="#125" id="125">125</a>
+<a href="#126" id="126">126</a>
+<a href="#127" id="127">127</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Mock implementation of persistence, for testing.
 </span><span class="attr">#![cfg(any(test, feature = <span class="string">"testing"</span>))]
 
@@ -122,7 +135,7 @@
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -201,6 +214,13 @@
         <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
     }
 
+    <span class="kw">async fn </span>load_quorum_proposals(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+    ) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;BTreeMap&lt;ViewNumber, Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;&gt;&gt;&gt;
+    {
+        <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
+    }
+
     <span class="kw">async fn </span>append_vid(
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         _proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, VidDisperseShare&lt;SeqTypes&gt;&gt;,
@@ -224,6 +244,12 @@
         <span class="kw-2">&amp;mut </span><span class="self">self</span>,
         _leaves: CommitmentMap&lt;Leaf&gt;,
         _state: BTreeMap&lt;ViewNumber, View&lt;SeqTypes&gt;&gt;,
+    ) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="prelude-val">Ok</span>(())
+    }
+    <span class="kw">async fn </span>append_quorum_proposal(
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+        _proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;,
     ) -&gt; anyhow::Result&lt;()&gt; {
         <span class="prelude-val">Ok</span>(())
     }

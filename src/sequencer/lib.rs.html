@@ -940,6 +940,13 @@
 <a href="#938" id="938">938</a>
 <a href="#939" id="939">939</a>
 <a href="#940" id="940">940</a>
+<a href="#941" id="941">941</a>
+<a href="#942" id="942">942</a>
+<a href="#943" id="943">943</a>
+<a href="#944" id="944">944</a>
+<a href="#945" id="945">945</a>
+<a href="#946" id="946">946</a>
+<a href="#947" id="947">947</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>block;
 <span class="kw">pub mod </span>catchup;
@@ -996,7 +1003,7 @@
 };
 <span class="kw">use </span>hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, VidDisperseShare, ViewNumber},
+    data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
     event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
     message::Proposal,
@@ -1103,6 +1110,13 @@
             .<span class="kw">await
             </span>.update_undecided_state(leaves, state)
             .<span class="kw">await
+    </span>}
+
+    <span class="kw">async fn </span>append_proposal(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        proposal: <span class="kw-2">&amp;</span>Proposal&lt;SeqTypes, QuorumProposal&lt;SeqTypes&gt;&gt;,
+    ) -&gt; anyhow::Result&lt;()&gt; {
+        <span class="self">self</span>.write().<span class="kw">await</span>.append_quorum_proposal(proposal).<span class="kw">await
     </span>}
 }
 

@@ -336,7 +336,7 @@
         <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.latest_available_bundle {
             <span class="prelude-val">Some</span>(bundle) =&gt; <span class="prelude-val">Ok</span>(bundle.clone()),
             <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Err</span>(tide_disco::error::ServerError::catch_all(
-                StatusCode::NotFound,
+                StatusCode::NOT_FOUND,
                 <span class="string">"The light client state signatures are not ready."</span>.to_owned(),
             )),
         }
@@ -363,7 +363,7 @@
         </span><span class="kw">let </span>state_msg: [FieldType; <span class="number">7</span>] = (<span class="kw-2">&amp;</span>state).into();
         <span class="kw">if </span>StateSignatureScheme::verify(<span class="kw-2">&amp;</span>(), <span class="kw-2">&amp;</span>key, state_msg, <span class="kw-2">&amp;</span>signature).is_err() {
             <span class="kw">return </span><span class="prelude-val">Err</span>(tide_disco::error::ServerError::catch_all(
-                StatusCode::BadRequest,
+                StatusCode::BAD_REQUEST,
                 <span class="string">"The posted signature is not valid."</span>.to_owned(),
             ));
         }
@@ -389,7 +389,7 @@
             std::collections::hash_map::Entry::Occupied(<span class="kw">_</span>) =&gt; {
                 <span class="comment">// A signature is already posted for this key with this state
                 </span><span class="kw">return </span><span class="prelude-val">Err</span>(tide_disco::error::ServerError::catch_all(
-                    StatusCode::BadRequest,
+                    StatusCode::BAD_REQUEST,
                     <span class="string">"A signature of this light client state is already posted at this block height for this key."</span>.to_owned(),
                 ));
             }
