@@ -162,10 +162,14 @@ mod test {
         },
         data_source::{
             sql::{self, SqlDataSource},
-            storage::sql::testing::TmpDb,
+            storage::{
+                pruning::{PrunedHeightStorage, PrunerCfg},
+                sql::testing::TmpDb,
+            },
             AvailabilityProvider, VersionedDataSource,
         },
         fetching::provider::{NoFetching, Provider as ProviderTrait, TestProvider},
+        node::{data_source::NodeDataSource, SyncStatus},
         task::BackgroundTask,
         testing::{
             consensus::{MockDataSource, MockNetwork},
@@ -899,5 +903,158 @@ mod test {
             ProviderTrait::<MockTypes, _>::fetch(&provider, VidCommonRequest(random_vid_commit()))
                 .await;
         assert_eq!(res, None);
+    }
+
+    #[async_std::test]
+    async fn test_archive_recovery() {
+        setup_test();
+
+        // Create the consensus network.
+        let mut network = MockNetwork::<MockDataSource>::init().await;
+
+        // Start a web server that the non-consensus node can use to fetch blocks.
+        let port = pick_unused_port().unwrap();
+        let mut app = App::<_, Error>::with_state(network.data_source());
+        app.register_module(
+            "availability",
+            define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+        )
+        .unwrap();
+        network.spawn(
+            "server",
+            app.serve(format!("0.0.0.0:{port}"), STATIC_VER_0_1),
+        );
+
+        // Start a data source which is not receiving events from consensus, only from a peer. The
+        // data source is at first configured to aggressively prune data.
+        let db = TmpDb::init().await;
+        let provider = Provider::new(QueryServiceProvider::new(
+            format!("http://localhost:{port}").parse().unwrap(),
+            STATIC_VER_0_1,
+        ));
+        let mut data_source = db
+            .config()
+            .pruner_cfg(
+                PrunerCfg::new()
+                    .with_target_retention(Duration::from_secs(0))
+                    .with_interval(Duration::from_secs(1)),
+            )
+            .unwrap()
+            .connect(provider.clone())
+            .await
+            .unwrap();
+
+        // Start consensus.
+        network.start().await;
+
+        // Wait until a few blocks are produced.
+        let leaves = { network.data_source().read().await.subscribe_leaves(1).await };
+        let leaves = leaves.take(5).collect::<Vec<_>>().await;
+
+        // The disconnected data source has no data yet, so it hasn't done any pruning.
+        let pruned_height = {
+            data_source
+                .storage()
+                .await
+                .load_pruned_height()
+                .await
+                .unwrap()
+        };
+        // Either None or 0 is acceptable, depending on whether or not the prover has run yet.
+        assert!(matches!(pruned_height, None | Some(0)), "{pruned_height:?}");
+
+        // Send the last leaf to the disconnected data source so it learns about the height and
+        // fetches the missing data.
+        let last_leaf = leaves.last().unwrap();
+        data_source.insert_leaf(last_leaf.clone()).await.unwrap();
+        data_source.commit().await.unwrap();
+
+        // Trigger a fetch of each leaf so the database gets populated.
+        for i in 1..=last_leaf.height() {
+            tracing::info!(i, "fetching leaf");
+            assert_eq!(
+                data_source.get_leaf(i as usize).await.await,
+                leaves[i as usize - 1]
+            );
+        }
+
+        // After a bit of time, the pruner has run and deleted all the missing data we just fetched.
+        loop {
+            let pruned_height = data_source
+                .storage()
+                .await
+                .load_pruned_height()
+                .await
+                .unwrap();
+            if pruned_height == Some(last_leaf.height()) {
+                break;
+            }
+            tracing::info!(
+                ?pruned_height,
+                target_height = last_leaf.height(),
+                "waiting for pruner to run"
+            );
+            sleep(Duration::from_secs(1)).await;
+        }
+
+        // Now close the data source and restart it with archive recovery.
+        data_source = db
+            .config()
+            .archive()
+            .builder(provider.clone())
+            .await
+            .unwrap()
+            .with_minor_scan_interval(Duration::from_secs(1))
+            .with_major_scan_interval(1)
+            .build()
+            .await
+            .unwrap();
+
+        // Pruned height should be reset.
+        let pruned_height = {
+            data_source
+                .storage()
+                .await
+                .load_pruned_height()
+                .await
+                .unwrap()
+        };
+        assert_eq!(pruned_height, None);
+
+        // The node has pruned all of it's data including the latest block, so it's forgotten the
+        // block height. We need to give it another leaf with some height so it will be willing to
+        // fetch.
+        data_source.insert_leaf(last_leaf.clone()).await.unwrap();
+        data_source.commit().await.unwrap();
+
+        // Wait for the data to be restored. It should be restored by the next major scan.
+        loop {
+            let sync_status = data_source.sync_status().await.await.unwrap();
+
+            // VID shares are unique to a node and will never be fetched from a peer; this is
+            // acceptable since there is redundancy built into the VID scheme. Ignore missing VID
+            // shares in the `is_fully_synced` check.
+            if (SyncStatus {
+                missing_vid_shares: 0,
+                ..sync_status
+            })
+            .is_fully_synced()
+            {
+                break;
+            }
+            tracing::info!(?sync_status, "waiting for node to sync");
+        }
+
+        // The node remains fully synced even after some time; no pruning.
+        sleep(Duration::from_secs(3)).await;
+        let sync_status = data_source.sync_status().await.await.unwrap();
+        assert!(
+            (SyncStatus {
+                missing_vid_shares: 0,
+                ..sync_status
+            })
+            .is_fully_synced(),
+            "{sync_status:?}"
+        );
     }
 }

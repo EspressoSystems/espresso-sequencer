@@ -229,6 +229,7 @@ pub struct Config {
     no_migrations: bool,
     tls: bool,
     pruner_cfg: Option<PrunerCfg>,
+    archive: bool,
 }
 
 impl Default for Config {
@@ -243,6 +244,7 @@ impl Default for Config {
             no_migrations: false,
             tls: false,
             pruner_cfg: None,
+            archive: false,
         }
     }
 }
@@ -349,10 +351,28 @@ impl Config {
         self
     }
 
+    /// Enable pruning with a given configuration.
+    ///
+    /// If [`archive`](Self::archive) was previously specified, this will override it.
     pub fn pruner_cfg(mut self, cfg: PrunerCfg) -> Result<Self, Error> {
         cfg.validate()?;
         self.pruner_cfg = Some(cfg);
+        self.archive = false;
         Ok(self)
+    }
+
+    /// Disable pruning and reconstruct previously pruned data.
+    ///
+    /// While running without pruning is the default behavior, the default will not try to
+    /// reconstruct data that was pruned in a previous run where pruning was enabled. This option
+    /// instructs the service to run without pruning _and_ reconstruct all previously pruned data by
+    /// fetching from peers.
+    ///
+    /// If [`pruner_cfg`](Self::pruner_cfg) was previously specified, this will override it.
+    pub fn archive(mut self) -> Self {
+        self.pruner_cfg = None;
+        self.archive = true;
+        self
     }
 }
 
@@ -452,6 +472,14 @@ impl SqlStorage {
         }
 
         let pruner = config.pruner_cfg.map(Pruner::new).unwrap_or_default();
+
+        if config.archive {
+            // If running in archive mode, ensure the pruned height is set to 0, so the fetcher will
+            // reconstruct previously pruned data.
+            client
+                .batch_execute("DELETE FROM pruned_height WHERE id = 1")
+                .await?;
+        }
 
         Ok(Self {
             client: Arc::new(client),
