@@ -472,7 +472,7 @@ impl SequencerPersistence for Persistence {
                 let row = row?;
                 let view: i64 = row.get("view");
                 let view_number: ViewNumber = ViewNumber::new(view.try_into()?);
-                let bytes: Vec<u8> = row.get("proposal");
+                let bytes: Vec<u8> = row.get("data");
                 let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
                     bincode::deserialize(&bytes)?;
                 Ok((view_number, proposal))
