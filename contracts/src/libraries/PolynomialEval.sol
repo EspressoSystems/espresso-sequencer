@@ -141,92 +141,166 @@ library PolynomialEval {
         }
     }
 
+    /// @dev Compute prefix and suffix product arrays for the given local domain elements.
+    function _computePrefixAndSuffixProduct(
+        uint256[] memory localDomainElements,
+        uint256 zeta,
+        uint256 p
+    ) internal pure returns (uint256[] memory prefix, uint256[] memory suffix) {
+        // Assume we have [a, b, c, d] where a = zeta - g^0, b = zeta - g^1, ...
+
+        // prefix[i] = prefix[i - 1] * (zeta - g^(i - 1)) and prefix[0] = 1
+        // prefix = [1, a, ab, abc]
+
+        // suffix[length - i - 1] = suffix[length - i] * (zeta - g^(length - i)) and
+        // suffix[length - 1] = 1
+        // suffix = [dcb, dc, d, 1]
+
+        // fullProduct = abcd can be computed by suffix[0] * prefix[1]
+
+        uint256 length = localDomainElements.length;
+
+        prefix = new uint256[](length);
+        suffix = new uint256[](length);
+
+        assembly {
+            let prefixPtr := add(prefix, 0x20)
+            let suffixPtr := add(suffix, mul(length, 0x20))
+            let localDomainElementsPrefixPtr := add(localDomainElements, 0x20)
+            let localDomainElementsSuffixPtr := add(localDomainElements, mul(length, 0x20))
+
+            let currentElementPrefix := 1
+            let currentElementSuffix := 1
+
+            // First element of prefix is set to 1
+            mstore(prefixPtr, currentElementPrefix)
+            // Last element of suffix is set to 1
+            mstore(suffixPtr, currentElementSuffix)
+
+            // Calculate prefix and suffix products
+            for { let i := 1 } lt(i, length) { i := add(i, 1) } {
+                // move prefix pointer
+                prefixPtr := add(prefixPtr, 0x20)
+                // move suffix pointer
+                suffixPtr := sub(suffixPtr, 0x20)
+
+                // prefix[i] = prefix[i - 1] * (zeta - g^(i - 1))
+                currentElementPrefix :=
+                    mulmod(
+                        currentElementPrefix,
+                        addmod(sub(p, mload(localDomainElementsPrefixPtr)), zeta, p),
+                        p
+                    )
+                mstore(prefixPtr, currentElementPrefix)
+
+                // suffix[length - i - 1] = suffix[length - i] * (zeta - g^(length - i))
+                currentElementSuffix :=
+                    mulmod(
+                        currentElementSuffix,
+                        addmod(sub(p, mload(localDomainElementsSuffixPtr)), zeta, p),
+                        p
+                    )
+                mstore(suffixPtr, currentElementSuffix)
+
+                // move localDomainElements pointers
+                localDomainElementsPrefixPtr := add(localDomainElementsPrefixPtr, 0x20)
+                localDomainElementsSuffixPtr := sub(localDomainElementsSuffixPtr, 0x20)
+            }
+        }
+    }
+
     /// @dev Evaluate public input polynomial at point `zeta`.
     function evaluatePiPoly(
         EvalDomain memory self,
         uint256[] memory pi,
         uint256 zeta,
-        uint256 vanishEval
+        uint256 vanishingPolyEval
     ) internal view returns (uint256 res) {
-        if (vanishEval == 0) {
+        if (vanishingPolyEval == 0) {
             return 0;
         }
 
-        uint256 p = BN254.R_MOD;
+        uint256[] memory localDomainElements = domainElements(self, pi.length);
+
         uint256 length = pi.length;
-        uint256 ithLagrange;
-        uint256 ithDivisor;
-        uint256 tmp;
-        uint256 vanishEvalDivN = self.sizeInv;
-        uint256 divisorProd;
-        uint256[] memory localDomainElements = domainElements(self, length);
-        uint256[] memory divisors = new uint256[](length);
+        uint256 p = BN254.R_MOD;
 
-        assembly {
-            // vanish_eval_div_n = (zeta^n-1)/n
-            vanishEvalDivN := mulmod(vanishEvalDivN, vanishEval, p)
+        // In order to compute PiPoly(zeta) in an efficient way, we can do the following derivation:
 
-            // Now we need to compute
-            //  \sum_{i=0..l} L_{i,H}(zeta) * pub_input[i]
-            // where
-            // - L_{i,H}(zeta)
-            //      = Z_H(zeta) * v_i / (zeta - g^i)
-            //      = vanish_eval_div_n * g^i / (zeta - g^i)
-            // - v_i = g^i / n
-            //
-            // we want to use batch inversion method where we compute
-            //
-            //      divisorProd = 1 / \prod (zeta - g^i)
-            //
-            // and then each 1 / (zeta - g^i) can be computed via (length - 1)
-            // multiplications:
-            //
-            //      1 / (zeta - g^i) = divisorProd * \prod_{j!=i} (zeta - g^j)
-            //
-            // In total this takes n(n-1) multiplications and 1 inversion,
-            // instead of doing n inversions.
-            divisorProd := 1
+        // PiPoly(zeta) = \sum_{i=0}^{length} pi[i] * L_i(zeta) where
+        // L_i(zeta) = (Z_H(zeta) * g^i) / (n * (zeta - g^i))
+        // PiPoly(zeta) = (Z_H(zeta) / n) * \sum_{i=0}^{length} pi[i] * g^i * (\prod_{i neq j}
+        // (zeta - g^j)) / (\prod_{j=0}^{length} (zeta - g^j))
 
-            for { let i := 0 } lt(i, length) { i := add(i, 1) } {
-                // tmp points to g^i
-                // first 32 bytes of reference is the length of an array
-                tmp := mload(add(add(localDomainElements, 0x20), mul(i, 0x20)))
-                // compute (zeta - g^i)
-                ithDivisor := addmod(sub(p, tmp), zeta, p)
-                // accumulate (zeta - g^i) to the divisorProd
-                divisorProd := mulmod(divisorProd, ithDivisor, p)
-                // store ithDivisor in the array
-                mstore(add(add(divisors, 0x20), mul(i, 0x20)), ithDivisor)
+        // Since the denominator (\prod_{j=0}^{length} (zeta - g^j)) is the total product and
+        // doesn't depend on i, we can take it out of the sum and compute it once.
+
+        // PiPoly(zeta) = vanishingPolyEval / (n * fullProduct) * \sum_{i=0}^{length} pi[i] * g^i *
+        // (\prod_{i != j} (zeta - g^j))
+
+        // where fullProduct = \prod_{j=0}^{length} (zeta - g^j) or suffix[0] * prefix[1]
+
+        // Another optimization we can do is instead of computing the product where i != j, we can
+        // precompute the prefix and suffix products and just compute prefix[i] * suffix[i] to get
+        // the product (\prod_{i != j} (zeta - g^j)).
+
+        // compute prefix and suffix product arrays as described in the function
+        // _computePrefixAndSuffixProduct
+        // this helps optimize the PiPoly computation by using the following formula:
+        // PiPoly(zeta) = vanishingPolyEval / (n * fullProduct) * \sum_{i=0}^{length}
+        // (prefix[i] * suffix[i] * pi[i] * g^i)
+
+        // Compute prefix and suffix products
+        // This optimization keeps the 1 inversion but reduces the number of multiplications from
+        // n(n - 1) to 3n
+        (uint256[] memory prefix, uint256[] memory suffix) =
+            _computePrefixAndSuffixProduct(localDomainElements, zeta, p);
+
+        // 1 / n
+        uint256 nInverted = self.sizeInv;
+
+        // if length is 1, then fullProduct = zeta - 1
+        uint256 fullProduct = zeta == 0 ? p - 1 : zeta - 1;
+
+        if (length > 1) {
+            assembly {
+                // multiply suffix[0] and prefix[1] to obtain the fullProduct
+                fullProduct := mulmod(mload(add(suffix, 0x20)), mload(add(prefix, 0x40)), p)
             }
         }
 
-        // compute 1 / \prod_{i=0}^length (zeta - g^i)
-        divisorProd = BN254.ScalarField.unwrap(BN254.invert(BN254.ScalarField.wrap(divisorProd)));
+        uint256 invertedProduct =
+            BN254.ScalarField.unwrap(BN254.invert(BN254.ScalarField.wrap(fullProduct)));
 
         assembly {
+            let sum := 0
+            let prefixPtr := add(prefix, 0x20)
+            let suffixPtr := add(suffix, 0x20)
+            let piPtr := add(pi, 0x20)
+            let localDomainElementsPtr := add(localDomainElements, 0x20)
+            // Compute the sum term \sum_{i=0}^{length} prefix[i] * suffix[i] * pi[i] * g^i
             for { let i := 0 } lt(i, length) { i := add(i, 1) } {
-                // tmp points to g^i
-                // first 32 bytes of reference is the length of an array
-                tmp := mload(add(add(localDomainElements, 0x20), mul(i, 0x20)))
-                // vanish_eval_div_n * g^i
-                ithLagrange := mulmod(vanishEvalDivN, tmp, p)
+                // sum += prefix[i] * suffix[i] * pi[i] * g^i
+                let currentTerm :=
+                    mulmod(
+                        mulmod(mulmod(mload(prefixPtr), mload(suffixPtr), p), mload(piPtr), p),
+                        mload(localDomainElementsPtr),
+                        p
+                    )
+                sum := addmod(sum, currentTerm, p)
 
-                // now we compute vanish_eval_div_n * g^i / (zeta - g^i) via
-                // vanish_eval_div_n * g^i * divisorProd * \prod_{j!=i} (zeta - g^j)
-                ithLagrange := mulmod(ithLagrange, divisorProd, p)
-                for { let j := 0 } lt(j, length) { j := add(j, 1) } {
-                    if iszero(eq(i, j)) {
-                        ithDivisor := mload(add(add(divisors, 0x20), mul(j, 0x20)))
-                        ithLagrange := mulmod(ithLagrange, ithDivisor, p)
-                    }
-                }
-
-                // multiply by pub_input[i] and update res
-                // tmp points to public input
-                tmp := mload(add(add(pi, 0x20), mul(i, 0x20)))
-                ithLagrange := mulmod(ithLagrange, tmp, p)
-                res := addmod(res, ithLagrange, p)
+                // move the pointers
+                prefixPtr := add(prefixPtr, 0x20)
+                suffixPtr := add(suffixPtr, 0x20)
+                piPtr := add(piPtr, 0x20)
+                localDomainElementsPtr := add(localDomainElementsPtr, 0x20)
             }
+
+            // Final computation
+            // vanishingPolyEval / ( n * fullProduct ) * sum
+            res := mulmod(vanishingPolyEval, nInverted, p)
+            res := mulmod(res, invertedProduct, p)
+            res := mulmod(res, sum, p)
         }
     }
 
