@@ -3154,8 +3154,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3191,7 +3191,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "snafu 0.8.3",
- "surf-disco",
+ "surf-disco 0.8.0",
  "time 0.3.36",
  "tokio",
  "tracing",
@@ -3201,7 +3201,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "async-trait",
  "clap",
@@ -3212,15 +3212,15 @@ dependencies = [
  "serde",
  "snafu 0.8.3",
  "tagged-base64",
- "tide-disco",
+ "tide-disco 0.8.0",
  "toml",
  "vbs",
 ]
 
 [[package]]
 name = "hotshot-example-types"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3250,8 +3250,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-macros"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -3261,8 +3261,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-orchestrator"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -3279,9 +3279,9 @@ dependencies = [
  "serde",
  "serde-inline-default",
  "serde_json",
- "surf-disco",
+ "surf-disco 0.8.0",
  "thiserror",
- "tide-disco",
+ "tide-disco 0.8.0",
  "tokio",
  "toml",
  "tracing",
@@ -3331,10 +3331,10 @@ dependencies = [
  "serde_json",
  "snafu 0.8.3",
  "spin_sleep",
- "surf-disco",
+ "surf-disco 0.7.0",
  "tagged-base64",
  "tempfile",
- "tide-disco",
+ "tide-disco 0.7.0",
  "time 0.3.36",
  "tokio",
  "tokio-postgres",
@@ -3347,8 +3347,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3362,8 +3362,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task-impls"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3387,7 +3387,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "snafu 0.8.3",
- "surf-disco",
+ "surf-disco 0.8.0",
  "tagged-base64",
  "time 0.3.36",
  "tokio",
@@ -3397,8 +3397,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-testing"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3430,7 +3430,7 @@ dependencies = [
  "sha3",
  "snafu 0.8.3",
  "tagged-base64",
- "tide-disco",
+ "tide-disco 0.8.0",
  "tokio",
  "tracing",
  "vbs",
@@ -3439,7 +3439,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -4545,8 +4545,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-networking"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -7849,7 +7849,26 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "tide-disco",
+ "tide-disco 0.7.0",
+ "tracing",
+ "vbs",
+]
+
+[[package]]
+name = "surf-disco"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55c871338479a1c27b5e2ae15e5ae0fe70769306d2ef5a0c2d30896a09ac8a3c"
+dependencies = [
+ "async-std",
+ "async-tungstenite",
+ "derivative",
+ "futures",
+ "hex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tide-disco 0.8.0",
  "tracing",
  "vbs",
 ]
@@ -8136,6 +8155,59 @@ dependencies = [
  "maud",
  "num-derive",
  "num-traits",
+ "parking_lot",
+ "prometheus",
+ "reqwest",
+ "routefinder",
+ "semver 1.0.23",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "shellexpand",
+ "signal-hook",
+ "signal-hook-async-std",
+ "snafu 0.8.3",
+ "strum",
+ "strum_macros",
+ "tagged-base64",
+ "tide",
+ "tide-websockets",
+ "toml",
+ "tracing",
+ "tracing-distributed",
+ "tracing-futures",
+ "tracing-log",
+ "tracing-subscriber 0.3.18",
+ "url",
+ "vbs",
+]
+
+[[package]]
+name = "tide-disco"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "715558234f09576333f92ee769bd160e6c4bb1d156d25613cf62be9a592f291a"
+dependencies = [
+ "anyhow",
+ "async-h1",
+ "async-lock 3.4.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "config",
+ "derivative",
+ "derive_more",
+ "dirs",
+ "edit-distance",
+ "futures",
+ "futures-util",
+ "http 1.1.0",
+ "include_dir",
+ "itertools 0.12.1",
+ "lazy_static",
+ "libc",
+ "markdown",
+ "maud",
  "parking_lot",
  "prometheus",
  "reqwest",
