@@ -24,9 +24,8 @@ pub struct NsProof {
 }
 
 impl NsProof {
-    /// Returns the payload bytes for namespace `ns_id`, along with a proof of
-    /// correctness for those bytes. Returns `None` if `ns_id` is not in the
-    /// namespace table, or on error.
+    /// Returns the payload bytes for the `index`th namespace, along with a
+    /// proof of correctness for those bytes. Returns `None` on error.
     ///
     /// The namespace payload [`NsPayloadOwned`] is included as a hidden field
     /// in the returned [`NsProof`]. A conventional API would instead return
