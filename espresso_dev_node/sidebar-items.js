@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main","start_commitment_server"],"struct":["Args"]};
+window.SIDEBAR_ITEMS = {"fn":["main"],"struct":["Args"]};

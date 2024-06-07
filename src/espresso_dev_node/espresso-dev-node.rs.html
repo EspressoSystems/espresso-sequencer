@@ -268,103 +268,18 @@
 <a href="#266" id="266">266</a>
 <a href="#267" id="267">267</a>
 <a href="#268" id="268">268</a>
-<a href="#269" id="269">269</a>
-<a href="#270" id="270">270</a>
-<a href="#271" id="271">271</a>
-<a href="#272" id="272">272</a>
-<a href="#273" id="273">273</a>
-<a href="#274" id="274">274</a>
-<a href="#275" id="275">275</a>
-<a href="#276" id="276">276</a>
-<a href="#277" id="277">277</a>
-<a href="#278" id="278">278</a>
-<a href="#279" id="279">279</a>
-<a href="#280" id="280">280</a>
-<a href="#281" id="281">281</a>
-<a href="#282" id="282">282</a>
-<a href="#283" id="283">283</a>
-<a href="#284" id="284">284</a>
-<a href="#285" id="285">285</a>
-<a href="#286" id="286">286</a>
-<a href="#287" id="287">287</a>
-<a href="#288" id="288">288</a>
-<a href="#289" id="289">289</a>
-<a href="#290" id="290">290</a>
-<a href="#291" id="291">291</a>
-<a href="#292" id="292">292</a>
-<a href="#293" id="293">293</a>
-<a href="#294" id="294">294</a>
-<a href="#295" id="295">295</a>
-<a href="#296" id="296">296</a>
-<a href="#297" id="297">297</a>
-<a href="#298" id="298">298</a>
-<a href="#299" id="299">299</a>
-<a href="#300" id="300">300</a>
-<a href="#301" id="301">301</a>
-<a href="#302" id="302">302</a>
-<a href="#303" id="303">303</a>
-<a href="#304" id="304">304</a>
-<a href="#305" id="305">305</a>
-<a href="#306" id="306">306</a>
-<a href="#307" id="307">307</a>
-<a href="#308" id="308">308</a>
-<a href="#309" id="309">309</a>
-<a href="#310" id="310">310</a>
-<a href="#311" id="311">311</a>
-<a href="#312" id="312">312</a>
-<a href="#313" id="313">313</a>
-<a href="#314" id="314">314</a>
-<a href="#315" id="315">315</a>
-<a href="#316" id="316">316</a>
-<a href="#317" id="317">317</a>
-<a href="#318" id="318">318</a>
-<a href="#319" id="319">319</a>
-<a href="#320" id="320">320</a>
-<a href="#321" id="321">321</a>
-<a href="#322" id="322">322</a>
-<a href="#323" id="323">323</a>
-<a href="#324" id="324">324</a>
-<a href="#325" id="325">325</a>
-<a href="#326" id="326">326</a>
-<a href="#327" id="327">327</a>
-<a href="#328" id="328">328</a>
-<a href="#329" id="329">329</a>
-<a href="#330" id="330">330</a>
-<a href="#331" id="331">331</a>
-<a href="#332" id="332">332</a>
-<a href="#333" id="333">333</a>
-<a href="#334" id="334">334</a>
-<a href="#335" id="335">335</a>
-<a href="#336" id="336">336</a>
-<a href="#337" id="337">337</a>
-<a href="#338" id="338">338</a>
-<a href="#339" id="339">339</a>
-<a href="#340" id="340">340</a>
-<a href="#341" id="341">341</a>
-<a href="#342" id="342">342</a>
-<a href="#343" id="343">343</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::{io, time::Duration};
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::time::Duration;
 
 <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-<span class="kw">use </span>async_std::task::spawn;
+<span class="kw">use </span>async_std::task::sleep;
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>es_version::SEQUENCER_VERSION;
-<span class="kw">use </span>ethers::types::Address;
 <span class="kw">use </span>futures::FutureExt;
-<span class="kw">use </span>sequencer::{
-    api::options,
-    api::test_helpers::TestNetwork,
-    hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
-    persistence,
-    testing::TestConfig,
-};
+<span class="kw">use </span>sequencer::{api::options, api::test_helpers::TestNetwork, persistence, testing::TestConfig};
 <span class="kw">use </span>sequencer_utils::{
-    deployer::{deploy, Contract, Contracts},
+    deployer::{deploy, Contracts},
     AnvilOptions,
 };
-<span class="kw">use </span>tide_disco::{error::ServerError, Api};
 <span class="kw">use </span>url::Url;
-<span class="kw">use </span>vbs::version::StaticVersionType;
 
 <span class="attr">#[derive(Clone, Debug, Parser)]
 </span><span class="kw">struct </span>Args {
@@ -399,12 +314,6 @@
     <span class="doccomment">/// Maximum concurrent connections allowed by the HTTP API server.
     </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_MAX_CONNECTIONS"</span>)]
     </span>sequencer_api_max_connections: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-
-    <span class="doccomment">/// If provided, the service will run a basic HTTP server on the given port.
-    ///
-    /// The server provides healthcheck and version endpoints.
-    </span><span class="attr">#[clap(short, long, env = <span class="string">"ESPRESSO_COMMITMENT_TASK_PORT"</span>)]
-    </span>commitment_task_port: u16,
 
     <span class="doccomment">/// Port for connecting to the builder.
     </span><span class="attr">#[clap(short, long, env = <span class="string">"ESPRESSO_BUILDER_PORT"</span>)]
@@ -456,7 +365,7 @@
 
     <span class="kw">let </span>light_client_genesis = network.light_client_genesis();
 
-    <span class="kw">let </span>contracts = deploy(
+    <span class="kw">let </span>_contracts = deploy(
         url.clone(),
         cli_params.mnemonic.clone(),
         cli_params.account_index,
@@ -467,62 +376,9 @@
     )
     .<span class="kw">await</span><span class="question-mark">?</span>;
 
-    <span class="kw">let </span>hotshot_address = contracts
-        .get_contract_address(Contract::HotShot)
-        .expect(<span class="string">"Cannot get the hotshot contract address"</span>);
-    <span class="macro">tracing::info!</span>(<span class="string">"hotshot address: {}"</span>, hotshot_address);
-
-    <span class="macro">tracing::info!</span>(<span class="string">"starting the commitment server"</span>);
-    start_commitment_server(
-        cli_params.commitment_task_port,
-        hotshot_address,
-        SEQUENCER_VERSION,
-    )
-    .unwrap();
-
-    <span class="kw">let </span>sequencer_url =
-        Url::parse(<span class="macro">format!</span>(<span class="string">"http://localhost:{}"</span>, cli_params.sequencer_api_port).as_str()).unwrap();
-    <span class="kw">let </span>commitment_task_options = CommitmentTaskOptions {
-        l1_provider: url,
-        l1_chain_id: <span class="prelude-val">None</span>,
-        hotshot_address,
-        sequencer_mnemonic: cli_params.mnemonic,
-        sequencer_account_index: cli_params.account_index,
-        query_service_url: <span class="prelude-val">Some</span>(sequencer_url),
-        request_timeout: Duration::from_secs(<span class="number">5</span>),
-        delay: <span class="prelude-val">None</span>,
-    };
-
-    <span class="macro">tracing::info!</span>(<span class="string">"starting hotshot commitment task"</span>);
-    run_hotshot_commitment_task::&lt;es_version::SequencerVersion&gt;(<span class="kw-2">&amp;</span>commitment_task_options).<span class="kw">await</span>;
-
-    <span class="prelude-val">Ok</span>(())
-}
-
-<span class="comment">// Copied from `commitment_task::start_http_server`.
-// TODO: Remove these redundant code
-</span><span class="kw">fn </span>start_commitment_server&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
-    port: u16,
-    hotshot_address: Address,
-    bind_version: Ver,
-) -&gt; io::Result&lt;()&gt; {
-    <span class="kw">let </span><span class="kw-2">mut </span>app = tide_disco::App::&lt;(), ServerError&gt;::with_state(());
-    <span class="kw">let </span>toml = toml::from_str::&lt;toml::value::Value&gt;(<span class="macro">include_str!</span>(<span class="string">"../../api/commitment_task.toml"</span>))
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
-
-    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;(), ServerError, Ver&gt;::new(toml)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
-
-    api.get(<span class="string">"gethotshotcontract"</span>, <span class="kw">move </span>|<span class="kw">_</span>, <span class="kw">_</span>| {
-        <span class="kw">async move </span>{ <span class="prelude-val">Ok</span>(hotshot_address) }.boxed()
-    })
-    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
-
-    app.register_module(<span class="string">"api"</span>, api)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
-
-    spawn(app.serve(<span class="macro">format!</span>(<span class="string">"localhost:{port}"</span>), bind_version));
-    <span class="prelude-val">Ok</span>(())
+    <span class="kw">loop </span>{
+        sleep(Duration::from_secs(<span class="number">3600</span>)).<span class="kw">await
+    </span>}
 }
 
 <span class="attr">#[cfg(test)]
@@ -566,7 +422,7 @@
         setup_logging();
         setup_backtrace();
 
-        <span class="kw">let </span>commitment_task_port = pick_unused_port().unwrap();
+        <span class="kw">let </span>builder_port = pick_unused_port().unwrap();
 
         <span class="kw">let </span>api_port = pick_unused_port().unwrap();
 
@@ -580,10 +436,7 @@
             .run()
             .unwrap()
             .command()
-            .env(
-                <span class="string">"ESPRESSO_COMMITMENT_TASK_PORT"</span>,
-                commitment_task_port.to_string(),
-            )
+            .env(<span class="string">"ESPRESSO_BUILDER_PORT"</span>, builder_port.to_string())
             .env(<span class="string">"ESPRESSO_SEQUENCER_API_PORT"</span>, api_port.to_string())
             .env(<span class="string">"ESPRESSO_SEQUENCER_POSTGRES_HOST"</span>, <span class="string">"localhost"</span>)
             .env(
@@ -612,20 +465,17 @@
             .<span class="kw">await
             </span>.unwrap();
 
-        <span class="kw">let </span>commitment_api_client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(
-            <span class="macro">format!</span>(<span class="string">"http://localhost:{commitment_task_port}/api"</span>)
-                .parse()
-                .unwrap(),
-        );
-        commitment_api_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
+        <span class="kw">let </span>builder_api_client: Client&lt;ServerError, SequencerVersion&gt; =
+            Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{builder_port}"</span>).parse().unwrap());
+        builder_api_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
-        <span class="kw">let </span>hotshot_contract = commitment_api_client
-            .get::&lt;String&gt;(<span class="string">"hotshot_contract"</span>)
+        <span class="kw">let </span>builder_address = builder_api_client
+            .get::&lt;String&gt;(<span class="string">"block_info/builderaddress"</span>)
             .send()
             .<span class="kw">await
             </span>.unwrap();
 
-        <span class="macro">assert!</span>(!hotshot_contract.is_empty());
+        <span class="macro">assert!</span>(!builder_address.is_empty());
 
         <span class="kw">let </span>tx = Transaction::new(<span class="number">100</span>.into(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]);
 
