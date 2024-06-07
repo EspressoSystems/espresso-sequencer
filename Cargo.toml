@@ -101,6 +101,7 @@ snafu = "0.8"
 strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.7"
 tagged-base64 = "0.4"
+thiserror = "1.0.61"
 tide-disco = "0.7"
 time = "0.3"
 tracing = "0.1"

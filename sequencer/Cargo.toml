@@ -96,6 +96,7 @@ snafu = { workspace = true }
 strum = { workspace = true }
 surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
+thiserror = { workspace = true }
 tide-disco = { workspace = true }
 time = { workspace = true }
 tokio-postgres = { version = "0.7", default-features = false, features = [ # disabling the default features removes dependence on the tokio runtime
