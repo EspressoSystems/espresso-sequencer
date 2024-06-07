@@ -541,7 +541,7 @@ mod persistence_tests {
         // This one should stick around after GC runs.
         let quorum_proposal4 = quorum_proposal.clone();
         storage
-            .append_quorum_proposal(&quorum_proposal3)
+            .append_quorum_proposal(&quorum_proposal4)
             .await
             .unwrap();
 
