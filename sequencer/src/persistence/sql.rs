@@ -19,7 +19,7 @@ use hotshot_query_service::data_source::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -452,6 +452,27 @@ impl SequencerPersistence for Persistence {
             .transpose()
     }
 
+    async fn load_quorum_proposals(
+        &self,
+    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
+    {
+        let result = self
+            .db
+            .query_static("SELECT * FROM quorum_proposals")
+            .await?;
+
+        let entry_pairs = result
+            .map(|row| {
+                let view_number = row.get("view") as u64;
+                let bytes: Vec<u8> = row.get("proposal");
+                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                    bincode::deserialize(&bytes)?;
+                Ok((ViewNumber::new(view_number), proposal))
+            })
+            .transpose()
+            .collect::<Vec<(ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>)>>();
+    }
+
     async fn append_vid(
         &mut self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
@@ -540,6 +561,27 @@ impl SequencerPersistence for Persistence {
                         sql_param(&leaves_bytes),
                         sql_param(&state_bytes),
                     ]],
+                )
+                .await?;
+                Ok(())
+            }
+            .boxed()
+        })
+        .await
+    }
+    async fn append_quorum_proposal(
+        &mut self,
+        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let view_number = proposal.data.view_number().u64();
+        let proposal_bytes = bincode::serialize(&proposal).context("serializing proposal")?;
+        transaction(self, |mut tx| {
+            async move {
+                tx.upsert(
+                    "quorum_proposals",
+                    ["view", "proposal"],
+                    ["view"],
+                    [[sql_param(&(view_number as i64)), sql_param(&proposal_bytes)]],
                 )
                 .await?;
                 Ok(())

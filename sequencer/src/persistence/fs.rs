@@ -99,8 +99,8 @@ impl Persistence {
         self.path.join("undecided_state")
     }
 
-    fn proposal_dir_path(&self) -> PathBuf {
-        self.path.join("proposal")
+    fn proposals_dir_path(&self) -> PathBuf {
+        self.path.join("proposals")
     }
 
     /// Overwrite a file if a condition is met.
@@ -417,7 +417,7 @@ impl SequencerPersistence for Persistence {
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let view_number = proposal.data.view_number().u64();
-        let dir_path = self.proposal_dir_path();
+        let dir_path = self.proposals_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create proposals dir")?;
 
@@ -442,11 +442,11 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
     {
         // First, get the proposal directory.
-        let dir_path = self.proposal_dir_path();
+        let dir_path = self.proposals_dir_path();
 
         // Then, we want to get the entries in this directory since they'll be the
         // key/value pairs for our map.
-        let files: Vec<fs::DirEntry> = fs::read_dir(dir_path)?
+        let files: Vec<fs::DirEntry> = fs::read_dir(dir_path.clone())?
             .filter_map(|entry| {
                 entry
                     .ok()
@@ -465,18 +465,32 @@ impl SequencerPersistence for Persistence {
             .into_iter()
             .map(|entry| dir_path.join(entry.file_name()).with_extension("txt"));
 
+        let mut map = BTreeMap::new();
         for file in proposal_files.into_iter() {
-            if let Some(file_name) = file.file_name() {
+            // This operation shouldn't fail, but we don't want to panic here if the filesystem
+            // somehow gets corrupted. We get the stem to remove the ".txt" from the end.
+            if let Some(file_name) = file.file_stem() {
+                // We need to convert the filename (which corresponds to the view)
                 let view_number = ViewNumber::new(
                     file_name
                         .to_string_lossy()
                         .parse::<u64>()
                         .context("convert file name to u64")?,
                 );
+
+                // Now, we'll try and load the proposal associated with this function.
+                let proposal_bytes = fs::read(file)?;
+
+                // Then, deserialize.
+                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                    bincode::deserialize(&proposal_bytes)?;
+
+                // Push to the map and we're done.
+                map.insert(view_number, proposal);
             }
         }
 
-        Ok(None)
+        Ok(Some(map))
     }
 }
 
