@@ -58,8 +58,8 @@ pub enum Error {
 impl Error {
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::Request { .. } => StatusCode::BadRequest,
-            Self::Internal { .. } => StatusCode::InternalServerError,
+            Self::Request { .. } => StatusCode::BAD_REQUEST,
+            Self::Internal { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }

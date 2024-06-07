@@ -40,7 +40,7 @@ impl Error {
     pub fn internal<M: Display>(message: M) -> Self {
         Self::Custom {
             message: message.to_string(),
-            status: StatusCode::InternalServerError,
+            status: StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }

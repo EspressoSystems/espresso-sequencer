@@ -51,7 +51,7 @@ pub struct Unimplemented {}
 
 impl Unimplemented {
     pub fn status(&self) -> StatusCode {
-        StatusCode::NotImplemented
+        StatusCode::NOT_IMPLEMENTED
     }
 }
 
@@ -90,7 +90,7 @@ pub struct InvalidLimit {}
 
 impl InvalidLimit {
     pub fn status(&self) -> StatusCode {
-        StatusCode::BadRequest
+        StatusCode::BAD_REQUEST
     }
 }
 
@@ -133,7 +133,7 @@ pub struct NotFound {
 
 impl NotFound {
     pub fn status(&self) -> StatusCode {
-        StatusCode::NotFound
+        StatusCode::NOT_FOUND
     }
 
     pub fn key(&self) -> &str {
@@ -235,7 +235,7 @@ pub struct BadQuery {}
 
 impl BadQuery {
     pub fn status(&self) -> StatusCode {
-        StatusCode::BadRequest
+        StatusCode::BAD_REQUEST
     }
 }
 

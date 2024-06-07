@@ -207,7 +207,7 @@
 //!             .await
 //!             .ok_or_else(|| availability::Error::Custom {
 //!                 message: format!("no such UTXO {}", utxo_index),
-//!                 status: StatusCode::NotFound,
+//!                 status: StatusCode::NOT_FOUND,
 //!             })?;
 //!         let block = state
 //!             .get_block(block_index)
@@ -468,8 +468,8 @@ pub enum QueryError {
 impl QueryError {
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::NotFound | Self::Missing => StatusCode::NotFound,
-            Self::Error { .. } => StatusCode::InternalServerError,
+            Self::NotFound | Self::Missing => StatusCode::NOT_FOUND,
+            Self::Error { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }

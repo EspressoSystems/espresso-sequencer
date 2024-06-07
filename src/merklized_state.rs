@@ -61,7 +61,7 @@ pub enum Error {
 impl Error {
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::Request { .. } => StatusCode::BadRequest,
+            Self::Request { .. } => StatusCode::BAD_REQUEST,
             Self::Query { source, .. } => source.status(),
             Self::Custom { status, .. } => *status,
         }
@@ -102,7 +102,7 @@ where
                 let key = req.string_param("key")?;
                 let key = key.parse::<M::Key>().map_err(|_| Error::Custom {
                     message: "failed to parse Key param".to_string(),
-                    status: StatusCode::InternalServerError,
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
                 })?;
 
                 state.get_path(snapshot, key).await.context(QuerySnafu)
