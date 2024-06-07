@@ -18,6 +18,7 @@ use hotshot_query_service::{
     data_source::{
         sql::{Config, Query, SqlDataSource},
         storage::SqlStorage,
+        VersionedDataSource,
     },
     merklized_state::{MerklizedStateDataSource, Snapshot},
     Resolvable,
@@ -140,6 +141,8 @@ impl ChainConfigPersistence for SqlStorage {
                 [[sql_param(&(commitment.to_string())), sql_param(&data)]],
             )
             .await?;
+
+        self.commit().await?;
 
         Ok(())
     }

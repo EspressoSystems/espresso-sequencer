@@ -604,63 +604,6 @@ impl<T> SequencerStateDataSource for T where
 }
 
 impl ValidatedState {
-    /// Retrieves the `ChainConfig`.
-    ///
-    ///  Returns the `NodeState` `ChainConfig` if the `ValidatedState` `ChainConfig` commitment matches the `NodeState` `ChainConfig`` commitment.
-    ///  If the commitments do not match, it returns the `ChainConfig` available in either `ValidatedState` or proposed header.
-    ///  If neither has the `ChainConfig`, it fetches the config from the peers.
-    ///
-    /// Returns an error if the proposed header's `ChainConfig` commitment does not match the `ValidatedState` `ChainConfig` commitment,
-    pub(crate) async fn apply_chain_config(
-        &mut self,
-        instance: &NodeState,
-        header_cf: &ResolvableChainConfig,
-        version: Version,
-    ) -> anyhow::Result<ChainConfig> {
-        let header_cf_commit = header_cf.commit();
-
-        if version > instance.current_version {
-            if let Some(upgrade) = &instance.upgrades.get(&version) {
-                match upgrade.upgrade_type {
-                    UpgradeType::ChainConfig { chain_config } => {
-                        if header_cf_commit == chain_config.commit() {
-                            self.chain_config = chain_config.into();
-                            return Ok(chain_config);
-                        }
-                    }
-                }
-            }
-        }
-
-        if header_cf_commit != self.chain_config.commit() {
-            bail!(
-                "Proposed header chain config commit={} expected={}",
-                header_cf.commit(),
-                self.chain_config.commit()
-            );
-        }
-
-        let cf = if self.chain_config.commit() == instance.chain_config.commit() {
-            instance.chain_config
-        } else {
-            match (self.chain_config.resolve(), header_cf.resolve()) {
-                (Some(cf), _) => cf,
-                (_, Some(cf)) => cf,
-                (None, None) => {
-                    instance
-                        .peers
-                        .as_ref()
-                        .fetch_chain_config(self.chain_config.commit())
-                        .await
-                }
-            }
-        };
-
-        self.chain_config = cf.into();
-
-        Ok(cf)
-    }
-
     pub(crate) async fn apply_header(
         &self,
         instance: &NodeState,
@@ -672,9 +615,13 @@ impl ValidatedState {
         // through returned value.
 
         let mut validated_state = self.clone();
+        validated_state.apply_upgrade(instance, proposed_header, version);
+
         let chain_config = validated_state
-            .apply_chain_config(instance, &proposed_header.chain_config, version)
+            .get_chain_config(instance, &proposed_header.chain_config)
             .await?;
+        validated_state.chain_config = chain_config.into();
+
         let l1_deposits = get_l1_deposits(
             instance,
             proposed_header,
@@ -755,6 +702,67 @@ impl ValidatedState {
         )?;
 
         Ok((validated_state, delta))
+    }
+
+    /// Updates the `ValidatedState` if a protocol upgrade has occurred.
+    pub(crate) fn apply_upgrade(
+        &mut self,
+        instance: &NodeState,
+        header: &Header,
+        version: Version,
+    ) {
+        // NOTE: This function currently only supports ChainConfig upgrade.
+        // You might need to add additional logic in the future to handle other upgrade types.
+
+        // Check for protocol upgrade based on sequencer version
+        if version <= instance.current_version {
+            return;
+        }
+
+        let Some(upgrade) = instance.upgrades.get(&version) else {
+            return;
+        };
+
+        match upgrade.upgrade_type {
+            UpgradeType::ChainConfig { chain_config } => {
+                if header.chain_config.commit() == chain_config.commit() {
+                    self.chain_config = chain_config.into();
+                }
+            }
+        }
+    }
+
+    /// Retrieves the `ChainConfig`.
+    ///
+    ///  Returns the `NodeState` `ChainConfig` if the `ValidatedState` `ChainConfig` commitment matches the `NodeState` `ChainConfig`` commitment.
+    ///  If the commitments do not match, it returns the `ChainConfig` available in either `ValidatedState` or proposed header.
+    ///  If neither has the `ChainConfig`, it fetches the config from the peers.
+    ///
+    /// Returns an error if it fails to fetch the `ChainConfig` from the peers.
+    pub(crate) async fn get_chain_config(
+        &self,
+        instance: &NodeState,
+        header_cf: &ResolvableChainConfig,
+    ) -> anyhow::Result<ChainConfig> {
+        let state_cf = self.chain_config;
+
+        if state_cf.commit() == instance.chain_config.commit() {
+            return Ok(instance.chain_config);
+        }
+
+        let cf = match (state_cf.resolve(), header_cf.resolve()) {
+            (Some(cf), _) => cf,
+            (_, Some(cf)) if cf.commit() == state_cf.commit() => cf,
+            (_, Some(_)) | (None, None) => {
+                instance
+                    .peers
+                    .as_ref()
+                    .fetch_chain_config(state_cf.commit())
+                    .await
+            }
+        };
+
+        Ok(cf)
     }
 }
 
