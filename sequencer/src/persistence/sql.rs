@@ -5,7 +5,10 @@ use crate::{
     Leaf, SeqTypes, ViewNumber,
 };
 use anyhow::Context;
-use async_std::sync::{Arc, RwLock};
+use async_std::{
+    stream::StreamExt,
+    sync::{Arc, RwLock},
+};
 use async_trait::async_trait;
 use clap::Parser;
 use derivative::Derivative;
@@ -19,7 +22,7 @@ use hotshot_query_service::data_source::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -306,6 +309,9 @@ impl SequencerPersistence for Persistence {
 
                 let stmt2 = "DELETE FROM da_proposal where view <= $1";
                 tx.execute(stmt2, [&(view.u64() as i64)]).await?;
+
+                let stmt3 = "DELETE FROM quorum_proposals where view <= $1";
+                tx.execute(stmt3, [&(view.u64() as i64)]).await?;
                 Ok(())
             }
             .boxed()
@@ -452,6 +458,30 @@ impl SequencerPersistence for Persistence {
             .transpose()
     }
 
+    async fn load_quorum_proposals(
+        &self,
+    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
+    {
+        let rows = self
+            .db
+            .query_static("SELECT * FROM quorum_proposals")
+            .await?;
+
+        Ok(Some(BTreeMap::from_iter(
+            rows.map(|row| {
+                let row = row?;
+                let view: i64 = row.get("view");
+                let view_number: ViewNumber = ViewNumber::new(view.try_into()?);
+                let bytes: Vec<u8> = row.get("data");
+                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                    bincode::deserialize(&bytes)?;
+                Ok((view_number, proposal))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()
+            .await?,
+        )))
+    }
+
     async fn append_vid(
         &mut self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
@@ -540,6 +570,27 @@ impl SequencerPersistence for Persistence {
                         sql_param(&leaves_bytes),
                         sql_param(&state_bytes),
                     ]],
+                )
+                .await?;
+                Ok(())
+            }
+            .boxed()
+        })
+        .await
+    }
+    async fn append_quorum_proposal(
+        &mut self,
+        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let view_number = proposal.data.view_number().u64();
+        let proposal_bytes = bincode::serialize(&proposal).context("serializing proposal")?;
+        transaction(self, |mut tx| {
+            async move {
+                tx.upsert(
+                    "quorum_proposals",
+                    ["view", "data"],
+                    ["view"],
+                    [[sql_param(&(view_number as i64)), sql_param(&proposal_bytes)]],
                 )
                 .await?;
                 Ok(())

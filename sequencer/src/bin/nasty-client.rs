@@ -506,7 +506,7 @@ impl<T: Queryable> ResourceManager<T> {
         let elapsed = start.elapsed();
 
         let status = match &res {
-            Ok(_) => StatusCode::Ok,
+            Ok(_) => StatusCode::OK,
             Err(err) => err.status(),
         };
         tracing::debug!("<- GET {path} {} ({elapsed:?})", u16::from(status));

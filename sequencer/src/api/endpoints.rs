@@ -100,7 +100,7 @@ where
                 let proof = NsProof::new(block.payload(), &ns_index, common.common()).context(
                     CustomSnafu {
                         message: format!("failed to make proof for namespace {ns_id}"),
-                        status: StatusCode::InternalServerError,
+                        status: StatusCode::NOT_FOUND,
                     },
                 )?;
 
@@ -168,6 +168,16 @@ where
                 .body_auto::<Transaction, Ver>(Ver::instance())
                 .map_err(Error::from_request_error)?;
 
+            // Transactions with namespaces that do not fit in the u32
+            // cannot be included in the block.
+            // TODO: This issue will be addressed in the next release.
+            if tx.namespace() > NamespaceId::from(u32::MAX as u64) {
+                return Err(Error::Custom {
+                    message: "Transaction namespace > u32::MAX".to_string(),
+                    status: StatusCode::BAD_REQUEST,
+                });
+            }
+
             let hash = tx.commit();
             state
                 .read(|state| state.submit(tx).boxed())
@@ -201,7 +211,7 @@ where
                 .get_state_signature(height)
                 .await
                 .ok_or(tide_disco::Error::catch_all(
-                    StatusCode::NotFound,
+                    StatusCode::NOT_FOUND,
                     "Signature not found.".to_owned(),
                 ))
         }
@@ -232,7 +242,7 @@ where
                 .map_err(Error::from_request_error)?;
             let account = account.parse().map_err(|err| {
                 Error::catch_all(
-                    StatusCode::BadRequest,
+                    StatusCode::BAD_REQUEST,
                     format!("malformed account {account}: {err}"),
                 )
             })?;
@@ -240,7 +250,7 @@ where
             state
                 .get_account(height, ViewNumber::new(view), account)
                 .await
-                .map_err(|err| Error::catch_all(StatusCode::NotFound, format!("{err:#}")))
+                .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
         }
         .boxed()
     })?
@@ -256,7 +266,7 @@ where
             state
                 .get_frontier(height, ViewNumber::new(view))
                 .await
-                .map_err(|err| Error::catch_all(StatusCode::NotFound, format!("{err:#}")))
+                .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
         }
         .boxed()
     })?;
@@ -294,7 +304,7 @@ where
     let mut api = Api::<S, Error, Ver>::new(toml)?;
 
     let env_variables = get_public_env_vars()
-        .map_err(|err| Error::catch_all(StatusCode::InternalServerError, format!("{err:#}")))?;
+        .map_err(|err| Error::catch_all(StatusCode::INTERNAL_SERVER_ERROR, format!("{err:#}")))?;
 
     api.get("hotshot", |_, state| {
         async move { Ok(state.get_config().await) }.boxed()

@@ -53,7 +53,7 @@ use hotshot_orchestrator::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, VidDisperseShare, ViewNumber},
+    data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
     event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
     message::Proposal,
@@ -160,6 +160,13 @@ impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
             .await
             .update_undecided_state(leaves, state)
             .await
+    }
+
+    async fn append_proposal(
+        &self,
+        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        self.write().await.append_quorum_proposal(proposal).await
     }
 }
 
