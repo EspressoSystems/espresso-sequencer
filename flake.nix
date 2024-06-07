@@ -46,11 +46,20 @@
     }:
     flake-utils.lib.eachDefaultSystem (system:
     let
+      # Mold linker is faster, but is not supported on MacOS.
+      moldLinker = !pkgs.stdenv.isDarwin;
+
       # node=error: disable noisy anvil output
       RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
       RUST_BACKTRACE = 1;
       ASYNC_FLAGS = " --cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\" ";
-      RUSTFLAGS = "${ASYNC_FLAGS} --cfg hotshot_example -C link-arg=-fuse-ld=/usr/local/bin/mold";
+      LINKER_FLAGS =
+        if moldLinker then
+          "-C link-arg=-fuse-ld=${pkgs.mold}/bin/mold"
+        else
+          ""
+      ;
+      RUSTFLAGS = "${ASYNC_FLAGS} --cfg hotshot_example ${LINKER_FLAGS}";
       RUSTDOCFLAGS = ASYNC_FLAGS;
       # Use a distinct target dir for builds from within nix shells.
       CARGO_TARGET_DIR = "target/nix";
@@ -182,17 +191,23 @@
             exec ${pkgs.nixFlakes}/bin/nix --experimental-features "nix-command flakes" "$@"
           '';
           solc = pkgs.solc-bin.latest;
-          stdenv = pkgs.stdenvAdapters.useMoldLinker pkgs.clangStdenv;
-        in
-        mkShell (rustEnvVars // {
-          buildInputs = [
-            # Rust dependencies
+          stdenv =
+            if moldLinker then
+              pkgs.stdenvAdapters.useMoldLinker pkgs.clangStdenv
+            else
+              pkgs.stdenv
+          ;
+          rustDeps = [
             pkg-config
             openssl
             curl
             protobuf # to compile libp2p-autonat
-            stableToolchain
             jq
+          ] ++ lib.optionals moldLinker [ mold ];
+        in
+        mkShell (rustEnvVars // {
+          buildInputs = [
+            stableToolchain
 
             # Rust tools
             cargo-audit
@@ -223,7 +238,9 @@
             solhint
             (python3.withPackages (ps: with ps; [ black ]))
             yarn
-          ] ++ lib.optionals stdenv.isDarwin
+          ]
+          ++ rustDeps
+          ++ lib.optionals stdenv.isDarwin
             [ darwin.apple_sdk.frameworks.SystemConfiguration ]
           ++ lib.optionals (!stdenv.isDarwin) [ cargo-watch ] # broken on OSX
           ;
@@ -249,29 +266,14 @@
           };
         in
         mkShell (rustEnvVars // {
-          buildInputs = [
-            # Rust dependencies
-            pkg-config
-            openssl
-            curl
-            protobuf # to compile libp2p-autonat
-            toolchain
-          ];
+          buildInputs = [ toolchain ] ++ rustDeps;
         });
       devShells.coverage =
         let
           toolchain = pkgs.rust-bin.nightly.latest.minimal;
         in
         mkShell (rustEnvVars // {
-          buildInputs = [
-            # Rust dependencies
-            pkg-config
-            openssl
-            curl
-            protobuf # to compile libp2p-autonat
-            toolchain
-            grcov
-          ];
+          buildInputs = [ toolchain grcov ] ++ rustDeps;
           CARGO_INCREMENTAL = "0";
           shellHook = ''
             RUSTFLAGS="$RUSTFLAGS -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests -Cdebuginfo=2"
@@ -286,14 +288,7 @@
           };
         in
         mkShell (rustEnvVars // {
-          buildInputs = [
-            # Rust dependencies
-            pkg-config
-            openssl
-            curl
-            protobuf # to compile libp2p-autonat
-            stableToolchain
-          ];
+          buildInputs = [ stableToolchain ] ++ rustDeps;
         });
     });
 }
