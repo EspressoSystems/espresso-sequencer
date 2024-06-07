@@ -620,7 +620,10 @@ impl ValidatedState {
         let chain_config = validated_state
             .get_chain_config(instance, &proposed_header.chain_config)
             .await?;
-        validated_state.chain_config = chain_config.into();
+
+        if Some(chain_config) != validated_state.chain_config.resolve() {
+            validated_state.chain_config = chain_config.into();
+        }
 
         let l1_deposits = get_l1_deposits(
             instance,
