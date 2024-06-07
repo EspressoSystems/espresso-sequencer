@@ -107,17 +107,17 @@ impl Error {
     pub fn internal<M: Display>(message: M) -> Self {
         Self::Custom {
             message: message.to_string(),
-            status: StatusCode::InternalServerError,
+            status: StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::Request { .. } => StatusCode::BadRequest,
+            Self::Request { .. } => StatusCode::BAD_REQUEST,
             Self::FetchLeaf { .. } | Self::FetchBlock { .. } | Self::FetchTransaction { .. } => {
-                StatusCode::NotFound
+                StatusCode::NOT_FOUND
             }
-            Self::InvalidTransactionIndex { .. } => StatusCode::NotFound,
+            Self::InvalidTransactionIndex { .. } => StatusCode::NOT_FOUND,
             Self::Custom { status, .. } => *status,
         }
     }

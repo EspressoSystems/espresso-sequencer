@@ -58,8 +58,8 @@ pub enum Error {
 impl Error {
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::Request { .. } => StatusCode::BadRequest,
-            Self::Internal { .. } => StatusCode::InternalServerError,
+            Self::Request { .. } => StatusCode::BAD_REQUEST,
+            Self::Internal { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
@@ -172,7 +172,7 @@ mod test {
             .unwrap();
 
         // Make sure it has the correct response code
-        assert_eq!(res.status(), StatusCode::Ok);
+        assert_eq!(res.status(), StatusCode::OK);
         let prometheus = res.text().await.unwrap();
         let lines = prometheus.lines().collect::<Vec<_>>();
         assert!(
