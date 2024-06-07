@@ -1465,11 +1465,107 @@
 <a href="#1463" id="1463">1463</a>
 <a href="#1464" id="1464">1464</a>
 <a href="#1465" id="1465">1465</a>
+<a href="#1466" id="1466">1466</a>
+<a href="#1467" id="1467">1467</a>
+<a href="#1468" id="1468">1468</a>
+<a href="#1469" id="1469">1469</a>
+<a href="#1470" id="1470">1470</a>
+<a href="#1471" id="1471">1471</a>
+<a href="#1472" id="1472">1472</a>
+<a href="#1473" id="1473">1473</a>
+<a href="#1474" id="1474">1474</a>
+<a href="#1475" id="1475">1475</a>
+<a href="#1476" id="1476">1476</a>
+<a href="#1477" id="1477">1477</a>
+<a href="#1478" id="1478">1478</a>
+<a href="#1479" id="1479">1479</a>
+<a href="#1480" id="1480">1480</a>
+<a href="#1481" id="1481">1481</a>
+<a href="#1482" id="1482">1482</a>
+<a href="#1483" id="1483">1483</a>
+<a href="#1484" id="1484">1484</a>
+<a href="#1485" id="1485">1485</a>
+<a href="#1486" id="1486">1486</a>
+<a href="#1487" id="1487">1487</a>
+<a href="#1488" id="1488">1488</a>
+<a href="#1489" id="1489">1489</a>
+<a href="#1490" id="1490">1490</a>
+<a href="#1491" id="1491">1491</a>
+<a href="#1492" id="1492">1492</a>
+<a href="#1493" id="1493">1493</a>
+<a href="#1494" id="1494">1494</a>
+<a href="#1495" id="1495">1495</a>
+<a href="#1496" id="1496">1496</a>
+<a href="#1497" id="1497">1497</a>
+<a href="#1498" id="1498">1498</a>
+<a href="#1499" id="1499">1499</a>
+<a href="#1500" id="1500">1500</a>
+<a href="#1501" id="1501">1501</a>
+<a href="#1502" id="1502">1502</a>
+<a href="#1503" id="1503">1503</a>
+<a href="#1504" id="1504">1504</a>
+<a href="#1505" id="1505">1505</a>
+<a href="#1506" id="1506">1506</a>
+<a href="#1507" id="1507">1507</a>
+<a href="#1508" id="1508">1508</a>
+<a href="#1509" id="1509">1509</a>
+<a href="#1510" id="1510">1510</a>
+<a href="#1511" id="1511">1511</a>
+<a href="#1512" id="1512">1512</a>
+<a href="#1513" id="1513">1513</a>
+<a href="#1514" id="1514">1514</a>
+<a href="#1515" id="1515">1515</a>
+<a href="#1516" id="1516">1516</a>
+<a href="#1517" id="1517">1517</a>
+<a href="#1518" id="1518">1518</a>
+<a href="#1519" id="1519">1519</a>
+<a href="#1520" id="1520">1520</a>
+<a href="#1521" id="1521">1521</a>
+<a href="#1522" id="1522">1522</a>
+<a href="#1523" id="1523">1523</a>
+<a href="#1524" id="1524">1524</a>
+<a href="#1525" id="1525">1525</a>
+<a href="#1526" id="1526">1526</a>
+<a href="#1527" id="1527">1527</a>
+<a href="#1528" id="1528">1528</a>
+<a href="#1529" id="1529">1529</a>
+<a href="#1530" id="1530">1530</a>
+<a href="#1531" id="1531">1531</a>
+<a href="#1532" id="1532">1532</a>
+<a href="#1533" id="1533">1533</a>
+<a href="#1534" id="1534">1534</a>
+<a href="#1535" id="1535">1535</a>
+<a href="#1536" id="1536">1536</a>
+<a href="#1537" id="1537">1537</a>
+<a href="#1538" id="1538">1538</a>
+<a href="#1539" id="1539">1539</a>
+<a href="#1540" id="1540">1540</a>
+<a href="#1541" id="1541">1541</a>
+<a href="#1542" id="1542">1542</a>
+<a href="#1543" id="1543">1543</a>
+<a href="#1544" id="1544">1544</a>
+<a href="#1545" id="1545">1545</a>
+<a href="#1546" id="1546">1546</a>
+<a href="#1547" id="1547">1547</a>
+<a href="#1548" id="1548">1548</a>
+<a href="#1549" id="1549">1549</a>
+<a href="#1550" id="1550">1550</a>
+<a href="#1551" id="1551">1551</a>
+<a href="#1552" id="1552">1552</a>
+<a href="#1553" id="1553">1553</a>
+<a href="#1554" id="1554">1554</a>
+<a href="#1555" id="1555">1555</a>
+<a href="#1556" id="1556">1556</a>
+<a href="#1557" id="1557">1557</a>
+<a href="#1558" id="1558">1558</a>
+<a href="#1559" id="1559">1559</a>
+<a href="#1560" id="1560">1560</a>
+<a href="#1561" id="1561">1561</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
-    api::data_source::CatchupDataSource, catchup::SqlStateCatchup, eth_signature_key::EthKeyPair,
-    ChainConfig, Header, Leaf, NodeState, SeqTypes,
+    api::data_source::CatchupDataSource, catchup::SqlStateCatchup, chain_config::BlockSize,
+    eth_signature_key::EthKeyPair, ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
-<span class="kw">use </span>anyhow::{anyhow, bail, ensure, Context};
+<span class="kw">use </span>anyhow::{bail, ensure, Context};
 <span class="kw">use </span>ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
@@ -1508,8 +1604,8 @@
     prelude::{LightWeightSHA3MerkleTree, MerkleProof, Sha3Digest, Sha3Node},
     universal_merkle_tree::UniversalMerkleTree,
     AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
-    LookupResult, MerkleCommitment, MerkleTreeScheme, PersistentUniversalMerkleTreeScheme,
-    ToTraversalPath, UniversalMerkleTreeScheme,
+    LookupResult, MerkleCommitment, MerkleTreeError, MerkleTreeScheme,
+    PersistentUniversalMerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
 };
 <span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>num_traits::CheckedSub;
@@ -1520,10 +1616,20 @@
 <span class="kw">use </span>std::sync::Arc;
 <span class="kw">use </span>std::time::Duration;
 <span class="kw">use </span>std::{collections::HashSet, ops::Add, str::FromStr};
+<span class="kw">use </span>thiserror::Error;
 <span class="kw">use </span>vbs::version::Version;
 
 <span class="kw">const </span>BLOCK_MERKLE_TREE_HEIGHT: usize = <span class="number">32</span>;
 <span class="kw">const </span>FEE_MERKLE_TREE_HEIGHT: usize = <span class="number">20</span>;
+
+<span class="doccomment">/// This enum is not used in code but functions as an index of
+/// possible validation errors.
+</span><span class="attr">#[allow(dead_code)]
+</span><span class="kw">enum </span>StateValidationError {
+    ProposalValidation(ProposalValidationError),
+    BuilderValidation(BuilderValidationError),
+    Fee(FeeError),
+}
 
 <span class="attr">#[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 </span><span class="kw">pub struct </span>ValidatedState {
@@ -1623,7 +1729,7 @@
     }
 
     <span class="doccomment">/// Charge a fee to an account, transferring the funds to the fee recipient account.
-    </span><span class="kw">pub fn </span>charge_fee(<span class="kw-2">&amp;mut </span><span class="self">self</span>, fee_info: FeeInfo, recipient: FeeAccount) -&gt; anyhow::Result&lt;()&gt; {
+    </span><span class="kw">pub fn </span>charge_fee(<span class="kw-2">&amp;mut </span><span class="self">self</span>, fee_info: FeeInfo, recipient: FeeAccount) -&gt; <span class="prelude-ty">Result</span>&lt;(), FeeError&gt; {
         <span class="kw">let </span>fee_state = <span class="self">self</span>.fee_merkle_tree.clone();
 
         <span class="comment">// Deduct the fee from the paying account.
@@ -1633,9 +1739,7 @@
             <span class="kw">let </span>balance = balance.copied();
             <span class="kw">let </span><span class="prelude-val">Some</span>(updated) = balance.unwrap_or_default().checked_sub(<span class="kw-2">&amp;</span>amount) <span class="kw">else </span>{
                 <span class="comment">// Return an error without updating the account.
-                </span>err = <span class="prelude-val">Some</span>(<span class="macro">anyhow!</span>(
-                    <span class="string">"insufficient funds (have {balance:?}, required {amount:?})"
-                </span>));
+                </span>err = <span class="prelude-val">Some</span>(FeeError::InsufficientFunds { balance, amount });
                 <span class="kw">return </span>balance;
             };
             <span class="kw">if </span>updated == FeeAmount::default() {
@@ -1677,53 +1781,83 @@
     }
 }
 
+<span class="doccomment">/// Possible proposal validation failures
+</span><span class="attr">#[derive(Error, Debug, Eq, PartialEq)]
+</span><span class="kw">pub enum </span>ProposalValidationError {
+    <span class="attr">#[error(<span class="string">"Invalid ChainConfig: expected={expected}, proposal={proposal}"</span>)]
+    </span>InvalidChainConfig { expected: String, proposal: String },
+
+    <span class="attr">#[error(
+        <span class="string">"Invalid Payload Size: (max_block_size={max_block_size}, proposed_block_size={block_size})"
+    </span>)]
+    </span>MaxBlockSizeExceeded {
+        max_block_size: BlockSize,
+        block_size: BlockSize,
+    },
+    <span class="attr">#[error(<span class="string">"Insufficient Fee: block_size={max_block_size}, base_fee={base_fee}, proposed_fee={proposed_fee}"</span>)]
+    </span>InsufficientFee {
+        max_block_size: BlockSize,
+        base_fee: FeeAmount,
+        proposed_fee: FeeAmount,
+    },
+    <span class="attr">#[error(<span class="string">"Invalid Height: parent_height={parent_height}, proposal_height={proposal_height}"</span>)]
+    </span>InvalidHeight {
+        parent_height: u64,
+        proposal_height: u64,
+    },
+    <span class="attr">#[error(<span class="string">"Invalid Block Root Error: expected={expected_root}, proposal={proposal_root}"</span>)]
+    </span>InvalidBlockRoot {
+        expected_root: BlockMerkleCommitment,
+        proposal_root: BlockMerkleCommitment,
+    },
+    <span class="attr">#[error(<span class="string">"Invalid Fee Root Error: expected={expected_root}, proposal={proposal_root}"</span>)]
+    </span>InvalidFeeRoot {
+        expected_root: FeeMerkleCommitment,
+        proposal_root: FeeMerkleCommitment,
+    },
+}
+
 <span class="kw">pub fn </span>validate_proposal(
     state: <span class="kw-2">&amp;</span>ValidatedState,
     expected_chain_config: ChainConfig,
     parent_leaf: <span class="kw-2">&amp;</span>Leaf,
     proposal: <span class="kw-2">&amp;</span>Header,
     vid_common: <span class="kw-2">&amp;</span>VidCommon,
-) -&gt; anyhow::Result&lt;()&gt; {
+) -&gt; <span class="prelude-ty">Result</span>&lt;(), ProposalValidationError&gt; {
     <span class="kw">let </span>parent_header = parent_leaf.block_header();
 
     <span class="comment">// validate `ChainConfig`
-    </span><span class="macro">anyhow::ensure!</span>(
-        proposal.chain_config.commit() == expected_chain_config.commit(),
-        <span class="macro">anyhow::anyhow!</span>(
-            <span class="string">"Invalid Chain Config: local={:?}, proposal={:?}"</span>,
-            expected_chain_config,
-            proposal.chain_config
-        )
-    );
+    </span><span class="kw">if </span>proposal.chain_config.commit() != expected_chain_config.commit() {
+        <span class="kw">return </span><span class="prelude-val">Err</span>(ProposalValidationError::InvalidChainConfig {
+            expected: <span class="macro">format!</span>(<span class="string">"{:?}"</span>, expected_chain_config),
+            proposal: <span class="macro">format!</span>(<span class="string">"{:?}"</span>, proposal.chain_config),
+        });
+    }
 
     <span class="comment">// validate block size and fee
     </span><span class="kw">let </span>block_size = VidSchemeType::get_payload_byte_len(vid_common) <span class="kw">as </span>u64;
-    <span class="macro">anyhow::ensure!</span>(
-        block_size &lt; <span class="kw-2">*</span>expected_chain_config.max_block_size,
-        <span class="macro">anyhow::anyhow!</span>(
-            <span class="string">"Invalid Payload Size: local={:?}, proposal={:?}"</span>,
-            expected_chain_config,
-            proposal.chain_config
-        )
-    );
-    <span class="macro">anyhow::ensure!</span>(
-        proposal.fee_info.amount() &gt;= expected_chain_config.base_fee * block_size,
-        <span class="macro">format!</span>(
-            <span class="string">"insufficient fee: block_size={block_size}, base_fee={:?}, proposed_fee={:?}"</span>,
-            expected_chain_config.base_fee,
-            proposal.fee_info.amount()
-        )
-    );
+    <span class="kw">if </span>block_size &gt;= <span class="kw-2">*</span>expected_chain_config.max_block_size {
+        <span class="kw">return </span><span class="prelude-val">Err</span>(ProposalValidationError::MaxBlockSizeExceeded {
+            max_block_size: expected_chain_config.max_block_size,
+            block_size: block_size.into(),
+        });
+    }
+
+    <span class="kw">if </span>proposal.fee_info.amount() &lt; expected_chain_config.base_fee * block_size {
+        <span class="kw">return </span><span class="prelude-val">Err</span>(ProposalValidationError::InsufficientFee {
+            max_block_size: expected_chain_config.max_block_size,
+            base_fee: expected_chain_config.base_fee,
+            proposed_fee: proposal.fee_info.amount(),
+        });
+    }
 
     <span class="comment">// validate height
-    </span><span class="macro">anyhow::ensure!</span>(
-        proposal.height == parent_header.height + <span class="number">1</span>,
-        <span class="macro">anyhow::anyhow!</span>(
-            <span class="string">"Invalid Height Error: {}, {}"</span>,
-            parent_header.height,
-            proposal.height
-        )
-    );
+    </span><span class="kw">if </span>proposal.height != parent_header.height + <span class="number">1 </span>{
+        <span class="kw">return </span><span class="prelude-val">Err</span>(ProposalValidationError::InvalidHeight {
+            parent_height: parent_header.height,
+            proposal_height: proposal.height,
+        });
+    }
 
     <span class="kw">let </span>ValidatedState {
         block_merkle_tree,
@@ -1731,25 +1865,40 @@
     } = state;
 
     <span class="kw">let </span>block_merkle_tree_root = block_merkle_tree.commitment();
-    <span class="macro">anyhow::ensure!</span>(
-        proposal.block_merkle_tree_root == block_merkle_tree_root,
-        <span class="macro">anyhow::anyhow!</span>(
-            <span class="string">"Invalid Block Root Error: local={}, proposal={}"</span>,
-            block_merkle_tree_root,
-            proposal.block_merkle_tree_root
-        )
-    );
+    <span class="kw">if </span>proposal.block_merkle_tree_root != block_merkle_tree_root {
+        <span class="kw">return </span><span class="prelude-val">Err</span>(ProposalValidationError::InvalidBlockRoot {
+            expected_root: block_merkle_tree_root,
+            proposal_root: proposal.block_merkle_tree_root,
+        });
+    }
 
     <span class="kw">let </span>fee_merkle_tree_root = fee_merkle_tree.commitment();
-    <span class="macro">anyhow::ensure!</span>(
-        proposal.fee_merkle_tree_root == fee_merkle_tree_root,
-        <span class="macro">anyhow::anyhow!</span>(
-            <span class="string">"Invalid Fee Root Error: local={}, proposal={}"</span>,
-            fee_merkle_tree_root,
-            proposal.fee_merkle_tree_root
-        )
-    );
+    <span class="kw">if </span>proposal.fee_merkle_tree_root != fee_merkle_tree_root {
+        <span class="kw">return </span><span class="prelude-val">Err</span>(ProposalValidationError::InvalidFeeRoot {
+            expected_root: fee_merkle_tree_root,
+            proposal_root: proposal.fee_merkle_tree_root,
+        });
+    }
+
     <span class="prelude-val">Ok</span>(())
+}
+
+<span class="doccomment">/// Possible charge fee failures
+</span><span class="attr">#[derive(Error, Debug, Eq, PartialEq)]
+</span><span class="kw">pub enum </span>FeeError {
+    <span class="attr">#[error(<span class="string">"Insuficcient Funds: have {balance:?}, required {amount:?}"</span>)]
+    </span>InsufficientFunds {
+        balance: <span class="prelude-ty">Option</span>&lt;FeeAmount&gt;,
+        amount: FeeAmount,
+    },
+    <span class="attr">#[error(<span class="string">"Merkle Tree Error: {0}"</span>)]
+    </span>MerkleTreeError(MerkleTreeError),
+}
+
+<span class="kw">impl </span>From&lt;MerkleTreeError&gt; <span class="kw">for </span>FeeError {
+    <span class="kw">fn </span>from(item: MerkleTreeError) -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::MerkleTreeError(item)
+    }
 }
 
 <span class="kw">fn </span>charge_fee(
@@ -1757,32 +1906,42 @@
     delta: <span class="kw-2">&amp;mut </span>Delta,
     fee_info: FeeInfo,
     recipient: FeeAccount,
-) -&gt; anyhow::Result&lt;()&gt; {
+) -&gt; <span class="prelude-ty">Result</span>&lt;(), FeeError&gt; {
     state.charge_fee(fee_info, recipient)<span class="question-mark">?</span>;
     delta.fees_delta.extend([fee_info.account, recipient]);
     <span class="prelude-val">Ok</span>(())
 }
 
+<span class="doccomment">/// Possible builder validation failures
+</span><span class="attr">#[derive(Error, Debug, Eq, PartialEq)]
+</span><span class="kw">pub enum </span>BuilderValidationError {
+    <span class="attr">#[error(<span class="string">"Builder signature not found"</span>)]
+    </span>SignatureNotFound,
+    <span class="attr">#[error(<span class="string">"Fee amount out of range: {0}"</span>)]
+    </span>FeeAmountOutOfRange(FeeAmount),
+    <span class="attr">#[error(<span class="string">"Invalid Builder Signature"</span>)]
+    </span>InvalidBuilderSignature,
+}
+
 <span class="doccomment">/// Validate builder account by verifying signature
-</span><span class="kw">fn </span>validate_builder_fee(proposed_header: <span class="kw-2">&amp;</span>Header) -&gt; anyhow::Result&lt;()&gt; {
+</span><span class="kw">fn </span>validate_builder_fee(proposed_header: <span class="kw-2">&amp;</span>Header) -&gt; <span class="prelude-ty">Result</span>&lt;(), BuilderValidationError&gt; {
     <span class="comment">// Beware of Malice!
     </span><span class="kw">let </span>signature = proposed_header
         .builder_signature
-        .ok_or_else(|| <span class="macro">anyhow::anyhow!</span>(<span class="string">"Builder signature not found"</span>))<span class="question-mark">?</span>;
-    <span class="kw">let </span>fee_amount = proposed_header.fee_info.amount().as_u64().context(<span class="macro">format!</span>(
-        <span class="string">"fee amount out of range: {:?}"</span>,
-        proposed_header.fee_info.amount()
-    ))<span class="question-mark">?</span>;
+        .ok_or(BuilderValidationError::SignatureNotFound)<span class="question-mark">?</span>;
+    <span class="kw">let </span>fee_amount = proposed_header.fee_info.amount().as_u64().ok_or(
+        BuilderValidationError::FeeAmountOutOfRange(proposed_header.fee_info.amount()),
+    )<span class="question-mark">?</span>;
+
     <span class="comment">// verify signature
-    </span><span class="macro">anyhow::ensure!</span>(
-        proposed_header.fee_info.account.validate_fee_signature(
-            <span class="kw-2">&amp;</span>signature,
-            fee_amount,
-            proposed_header.metadata(),
-            <span class="kw-2">&amp;</span>proposed_header.payload_commitment()
-        ),
-        <span class="string">"Invalid Builder Signature"
-    </span>);
+    </span><span class="kw">if </span>!proposed_header.fee_info.account.validate_fee_signature(
+        <span class="kw-2">&amp;</span>signature,
+        fee_amount,
+        proposed_header.metadata(),
+        <span class="kw-2">&amp;</span>proposed_header.payload_commitment(),
+    ) {
+        <span class="kw">return </span><span class="prelude-val">Err</span>(BuilderValidationError::InvalidBuilderSignature);
+    }
 
     <span class="prelude-val">Ok</span>(())
 }
@@ -2812,7 +2971,18 @@
         <span class="comment">// Validation fails because the proposed block exceeds the maximum block size.
         </span><span class="kw">let </span>err = validate_proposal(<span class="kw-2">&amp;</span>state, instance.chain_config, <span class="kw-2">&amp;</span>parent, header, <span class="kw-2">&amp;</span>vid_common)
             .unwrap_err();
+
         <span class="macro">tracing::info!</span>(%err, <span class="string">"task failed successfully"</span>);
+        <span class="macro">assert_eq!</span>(
+            ProposalValidationError::MaxBlockSizeExceeded {
+                max_block_size: instance.chain_config.max_block_size,
+                block_size: BlockSize::from_integer(
+                    VidSchemeType::get_payload_byte_len(<span class="kw-2">&amp;</span>vid_common).into()
+                )
+                .unwrap()
+            },
+            err
+        );
     }
 
     <span class="attr">#[async_std::test]
@@ -2836,7 +3006,16 @@
         <span class="comment">// Validation fails because the genesis fee (0) is too low.
         </span><span class="kw">let </span>err = validate_proposal(<span class="kw-2">&amp;</span>state, instance.chain_config, <span class="kw-2">&amp;</span>parent, header, <span class="kw-2">&amp;</span>vid_common)
             .unwrap_err();
+
         <span class="macro">tracing::info!</span>(%err, <span class="string">"task failed successfully"</span>);
+        <span class="macro">assert_eq!</span>(
+            ProposalValidationError::InsufficientFee {
+                max_block_size: instance.chain_config.max_block_size,
+                base_fee: instance.chain_config.base_fee,
+                proposed_fee: header.fee_info.amount()
+            },
+            err
+        );
     }
 
     <span class="attr">#[test]
@@ -2863,20 +3042,33 @@
         <span class="macro">assert_eq!</span>(state.balance(dst), <span class="prelude-val">Some</span>(amt));
 
         <span class="macro">tracing::info!</span>(<span class="string">"test insufficient balance"</span>);
-        state.charge_fee(fee_info, dst).unwrap_err();
+        <span class="kw">let </span>err = state.charge_fee(fee_info, dst).unwrap_err();
         <span class="macro">assert_eq!</span>(state.balance(src), <span class="prelude-val">Some</span>(<span class="number">0</span>.into()));
         <span class="macro">assert_eq!</span>(state.balance(dst), <span class="prelude-val">Some</span>(amt));
+        <span class="macro">assert_eq!</span>(
+            FeeError::InsufficientFunds {
+                balance: <span class="prelude-val">None</span>,
+                amount: amt
+            },
+            err
+        );
 
         <span class="macro">tracing::info!</span>(<span class="string">"test src not in memory"</span>);
         <span class="kw">let </span><span class="kw-2">mut </span>state = new_state();
         state.fee_merkle_tree.forget(src).expect_ok().unwrap();
-        state.charge_fee(fee_info, dst).unwrap_err();
+        <span class="macro">assert_eq!</span>(
+            FeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
+            state.charge_fee(fee_info, dst).unwrap_err()
+        );
 
         <span class="macro">tracing::info!</span>(<span class="string">"test dst not in memory"</span>);
         <span class="kw">let </span><span class="kw-2">mut </span>state = new_state();
         state.prefund_account(dst, amt);
         state.fee_merkle_tree.forget(dst).expect_ok().unwrap();
-        state.charge_fee(fee_info, dst).unwrap_err();
+        <span class="macro">assert_eq!</span>(
+            FeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
+            state.charge_fee(fee_info, dst).unwrap_err()
+        );
     }
 
     <span class="attr">#[test]

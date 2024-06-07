@@ -975,6 +975,18 @@
 <a href="#973" id="973">973</a>
 <a href="#974" id="974">974</a>
 <a href="#975" id="975">975</a>
+<a href="#976" id="976">976</a>
+<a href="#977" id="977">977</a>
+<a href="#978" id="978">978</a>
+<a href="#979" id="979">979</a>
+<a href="#980" id="980">980</a>
+<a href="#981" id="981">981</a>
+<a href="#982" id="982">982</a>
+<a href="#983" id="983">983</a>
+<a href="#984" id="984">984</a>
+<a href="#985" id="985">985</a>
+<a href="#986" id="986">986</a>
+<a href="#987" id="987">987</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
     block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
     chain_config::ResolvableChainConfig,
@@ -1462,7 +1474,9 @@
         catchup::mock::MockStateCatchup,
         eth_signature_key::EthKeyPair,
         l1_client::L1Client,
-        state::{validate_proposal, BlockMerkleTree, FeeAccount, FeeMerkleTree},
+        state::{
+            validate_proposal, BlockMerkleTree, FeeAccount, FeeMerkleTree, ProposalValidationError,
+        },
         NodeState,
     };
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -1782,19 +1796,20 @@
             </span>.unwrap()
             .<span class="number">0</span>;
 
-        <span class="kw">let </span>result = validate_proposal(
-            <span class="kw-2">&amp;</span>state,
-            ChainConfig {
-                chain_id: U256::zero().into(),
-                ..Default::default()
-            },
-            <span class="kw-2">&amp;</span>parent_leaf,
-            <span class="kw-2">&amp;</span>proposal,
-            <span class="kw-2">&amp;</span>vid_common,
-        )
-        .unwrap_err();
+        <span class="kw">let </span>chain_config = ChainConfig {
+            chain_id: U256::zero().into(),
+            ..Default::default()
+        };
+        <span class="kw">let </span>err = validate_proposal(<span class="kw-2">&amp;</span>state, chain_config, <span class="kw-2">&amp;</span>parent_leaf, <span class="kw-2">&amp;</span>proposal, <span class="kw-2">&amp;</span>vid_common)
+            .unwrap_err();
 
-        <span class="macro">assert!</span>(<span class="macro">format!</span>(<span class="string">"{}"</span>, result.root_cause()).starts_with(<span class="string">"Invalid Chain Config:"</span>));
+        <span class="macro">assert_eq!</span>(
+            ProposalValidationError::InvalidChainConfig {
+                expected: <span class="macro">format!</span>(<span class="string">"{:?}"</span>, chain_config),
+                proposal: <span class="macro">format!</span>(<span class="string">"{:?}"</span>, proposal.chain_config)
+            },
+            err
+        );
 
         <span class="comment">// Advance `proposal.height` to trigger validation error.
 
@@ -1803,7 +1818,7 @@
             .<span class="kw">await
             </span>.unwrap()
             .<span class="number">0</span>;
-        <span class="kw">let </span>result = validate_proposal(
+        <span class="kw">let </span>err = validate_proposal(
             <span class="kw-2">&amp;</span>validated_state,
             genesis.instance_state.chain_config,
             <span class="kw-2">&amp;</span>parent_leaf,
@@ -1812,9 +1827,12 @@
         )
         .unwrap_err();
         <span class="macro">assert_eq!</span>(
-            <span class="macro">format!</span>(<span class="string">"{}"</span>, result.root_cause()),
-            <span class="string">"Invalid Height Error: 0, 0"
-        </span>);
+            ProposalValidationError::InvalidHeight {
+                parent_height: <span class="number">0</span>,
+                proposal_height: <span class="number">0
+            </span>},
+            err
+        );
 
         <span class="comment">// proposed `Header` root should include parent + parent.commit
         </span>proposal.height += <span class="number">1</span>;
@@ -1825,7 +1843,7 @@
             </span>.unwrap()
             .<span class="number">0</span>;
 
-        <span class="kw">let </span>result = validate_proposal(
+        <span class="kw">let </span>err = validate_proposal(
             <span class="kw-2">&amp;</span>validated_state,
             genesis.instance_state.chain_config,
             <span class="kw-2">&amp;</span>parent_leaf,
@@ -1834,7 +1852,13 @@
         )
         .unwrap_err();
         <span class="comment">// Fails b/c `proposal` has not advanced from `parent`
-        </span><span class="macro">assert!</span>(<span class="macro">format!</span>(<span class="string">"{}"</span>, result.root_cause()).contains(<span class="string">"Invalid Block Root Error"</span>));
+        </span><span class="macro">assert_eq!</span>(
+            ProposalValidationError::InvalidBlockRoot {
+                expected_root: validated_state.block_merkle_tree.commitment(),
+                proposal_root: proposal.block_merkle_tree_root
+            },
+            err
+        );
     }
 
     <span class="attr">#[async_std::test]
