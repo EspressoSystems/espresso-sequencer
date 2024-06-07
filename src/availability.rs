@@ -140,31 +140,28 @@ where
     let timeout = options.fetch_timeout;
 
     api.with_version("0.0.1".parse().unwrap())
-        .get("get_leaf", move |req, state| {
+        .at("get_leaf", move |req, state| {
             async move {
                 let id = match req.opt_integer_param("height")? {
                     Some(height) => LeafId::Number(height),
                     None => LeafId::Hash(req.blob_param("hash")?),
                 };
-                state
-                    .get_leaf(id)
-                    .await
-                    .with_timeout(timeout)
-                    .await
-                    .context(FetchLeafSnafu {
-                        resource: id.to_string(),
-                    })
+                let fetch = state.read(|state| state.get_leaf(id).boxed()).await;
+                fetch.with_timeout(timeout).await.context(FetchLeafSnafu {
+                    resource: id.to_string(),
+                })
             }
             .boxed()
         })?
-        .get("get_leaf_range", move |req, state| {
+        .at("get_leaf_range", move |req, state| {
             async move {
                 let from = req.integer_param::<_, usize>("from")?;
                 let until = req.integer_param("until")?;
 
-                state
-                    .get_leaf_range(from..until)
-                    .await
+                let leaves = state
+                    .read(|state| state.get_leaf_range(from..until).boxed())
+                    .await;
+                leaves
                     .enumerate()
                     .then(|(index, fetch)| async move {
                         fetch.with_timeout(timeout).await.context(FetchLeafSnafu {
@@ -188,7 +185,7 @@ where
             .try_flatten_stream()
             .boxed()
         })?
-        .get("get_header", move |req, state| {
+        .at("get_header", move |req, state| {
             async move {
                 let id = if let Some(height) = req.opt_integer_param("height")? {
                     BlockId::Number(height)
@@ -197,9 +194,8 @@ where
                 } else {
                     BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
-                Ok(state
-                    .get_block(id)
-                    .await
+                let fetch = state.read(|state| state.get_block(id).boxed()).await;
+                Ok(fetch
                     .with_timeout(timeout)
                     .await
                     .context(FetchBlockSnafu {
@@ -210,14 +206,15 @@ where
             }
             .boxed()
         })?
-        .get("get_header_range", move |req, state| {
+        .at("get_header_range", move |req, state| {
             async move {
                 let from = req.integer_param::<_, usize>("from")?;
                 let until = req.integer_param::<_, usize>("until")?;
 
-                state
-                    .get_block_range(from..until)
-                    .await
+                let headers = state
+                    .read(|state| state.get_block_range(from..until).boxed())
+                    .await;
+                headers
                     .enumerate()
                     .then(|(index, fetch)| async move {
                         fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
@@ -248,7 +245,7 @@ where
             .try_flatten_stream()
             .boxed()
         })?
-        .get("get_block", move |req, state| {
+        .at("get_block", move |req, state| {
             async move {
                 let id = if let Some(height) = req.opt_integer_param("height")? {
                     BlockId::Number(height)
@@ -257,25 +254,22 @@ where
                 } else {
                     BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
-                state
-                    .get_block(id)
-                    .await
-                    .with_timeout(timeout)
-                    .await
-                    .context(FetchBlockSnafu {
-                        resource: id.to_string(),
-                    })
+                let fetch = state.read(|state| state.get_block(id).boxed()).await;
+                fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                    resource: id.to_string(),
+                })
             }
             .boxed()
         })?
-        .get("get_block_range", move |req, state| {
+        .at("get_block_range", move |req, state| {
             async move {
                 let from = req.integer_param::<_, usize>("from")?;
                 let until = req.integer_param("until")?;
 
-                state
-                    .get_block_range(from..until)
-                    .await
+                let blocks = state
+                    .read(|state| state.get_block_range(from..until).boxed())
+                    .await;
+                blocks
                     .enumerate()
                     .then(|(index, fetch)| async move {
                         fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
@@ -299,7 +293,7 @@ where
             .try_flatten_stream()
             .boxed()
         })?
-        .get("get_payload", move |req, state| {
+        .at("get_payload", move |req, state| {
             async move {
                 let id = if let Some(height) = req.opt_integer_param("height")? {
                     BlockId::Number(height)
@@ -308,25 +302,22 @@ where
                 } else {
                     BlockId::Hash(req.blob_param("block-hash")?)
                 };
-                state
-                    .get_payload(id)
-                    .await
-                    .with_timeout(timeout)
-                    .await
-                    .context(FetchBlockSnafu {
-                        resource: id.to_string(),
-                    })
+                let fetch = state.read(|state| state.get_payload(id).boxed()).await;
+                fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                    resource: id.to_string(),
+                })
             }
             .boxed()
         })?
-        .get("get_payload_range", move |req, state| {
+        .at("get_payload_range", move |req, state| {
             async move {
                 let from = req.integer_param::<_, usize>("from")?;
                 let until = req.integer_param("until")?;
 
-                state
-                    .get_payload_range(from..until)
-                    .await
+                let payloads = state
+                    .read(|state| state.get_payload_range(from..until).boxed())
+                    .await;
+                payloads
                     .enumerate()
                     .then(|(index, fetch)| async move {
                         fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
@@ -350,7 +341,7 @@ where
             .try_flatten_stream()
             .boxed()
         })?
-        .get("get_vid_common", move |req, state| {
+        .at("get_vid_common", move |req, state| {
             async move {
                 let id = if let Some(height) = req.opt_integer_param("height")? {
                     BlockId::Number(height)
@@ -359,14 +350,10 @@ where
                 } else {
                     BlockId::PayloadHash(req.blob_param("payload-hash")?)
                 };
-                state
-                    .get_vid_common(id)
-                    .await
-                    .with_timeout(timeout)
-                    .await
-                    .context(FetchBlockSnafu {
-                        resource: id.to_string(),
-                    })
+                let fetch = state.read(|state| state.get_vid_common(id).boxed()).await;
+                fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                    resource: id.to_string(),
+                })
             }
             .boxed()
         })?
@@ -382,27 +369,28 @@ where
             .try_flatten_stream()
             .boxed()
         })?
-        .get("get_transaction", move |req, state| {
+        .at("get_transaction", move |req, state| {
             async move {
                 match req.opt_blob_param("hash")? {
-                    Some(hash) => state
-                        .get_transaction(hash)
-                        .await
-                        .with_timeout(timeout)
-                        .await
-                        .context(FetchTransactionSnafu {
-                            resource: hash.to_string(),
-                        }),
-                    None => {
-                        let height: u64 = req.integer_param("height")?;
-                        let block = state
-                            .get_block(height as usize)
-                            .await
+                    Some(hash) => {
+                        let fetch = state
+                            .read(|state| state.get_transaction(hash).boxed())
+                            .await;
+                        fetch
                             .with_timeout(timeout)
                             .await
-                            .context(FetchBlockSnafu {
-                                resource: height.to_string(),
-                            })?;
+                            .context(FetchTransactionSnafu {
+                                resource: hash.to_string(),
+                            })
+                    }
+                    None => {
+                        let height: u64 = req.integer_param("height")?;
+                        let fetch = state
+                            .read(|state| state.get_block(height as usize).boxed())
+                            .await;
+                        let block = fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
+                            resource: height.to_string(),
+                        })?;
                         let i: u64 = req.integer_param("index")?;
                         let index = block
                             .payload()
@@ -415,13 +403,12 @@ where
             }
             .boxed()
         })?
-        .get("get_block_summary", move |req, state| {
+        .at("get_block_summary", move |req, state| {
             async move {
                 let id: usize = req.integer_param("height")?;
 
-                state
-                    .get_block(id)
-                    .await
+                let fetch = state.read(|state| state.get_block(id).boxed()).await;
+                fetch
                     .with_timeout(timeout)
                     .await
                     .context(FetchBlockSnafu {
@@ -431,14 +418,15 @@ where
             }
             .boxed()
         })?
-        .get("get_block_summary_range", move |req, state| {
+        .at("get_block_summary_range", move |req, state| {
             async move {
                 let from: usize = req.integer_param("from")?;
                 let until: usize = req.integer_param("until")?;
 
-                let result: Vec<BlockSummaryQueryData<Types>> = state
-                    .get_block_range(from..until)
-                    .await
+                let blocks = state
+                    .read(|state| state.get_block_range(from..until).boxed())
+                    .await;
+                let result: Vec<BlockSummaryQueryData<Types>> = blocks
                     .enumerate()
                     .then(|(index, fetch)| async move {
                         fetch.with_timeout(timeout).await.context(FetchBlockSnafu {
@@ -762,7 +750,13 @@ mod test {
         setup_test();
 
         // Create the consensus network.
-        let mut network = MockNetwork::<D>::init().await;
+        let mut network = MockNetwork::<D>::init_with_config(|cfg| {
+            // Make the rate of empty block production slower than the API fetching timeout.
+            // Otherwise, we will produce new blocks faster than we can fetch them (particularly in
+            // the no-storage case, where fetching is quite slow) and the test will never finish.
+            cfg.builder_timeout = fetch_timeout + Duration::from_millis(500);
+        })
+        .await;
         network.start().await;
 
         // Start the web server.

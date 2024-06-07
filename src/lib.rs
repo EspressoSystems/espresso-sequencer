@@ -264,6 +264,7 @@
 //!
 //! ```
 //! # use async_trait::async_trait;
+//! # use futures::future::BoxFuture;
 //! # use hotshot_query_service::{Header, QueryResult, VidShare};
 //! # use hotshot_query_service::availability::{
 //! #   AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
@@ -356,7 +357,7 @@
 //!         self.hotshot_qs.vid_share(id).await
 //!     }
 //!
-//!     async fn sync_status(&self) -> QueryResult<SyncStatus> {
+//!     async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
 //!         self.hotshot_qs.sync_status().await
 //!     }
 //!
@@ -561,7 +562,7 @@ mod test {
     use async_std::sync::RwLock;
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
-    use futures::FutureExt;
+    use futures::future::{BoxFuture, FutureExt};
     use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
     use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use portpicker::pick_unused_port;
@@ -679,7 +680,7 @@ mod test {
         {
             self.hotshot_qs.vid_share(id).await
         }
-        async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
             self.hotshot_qs.sync_status().await
         }
         async fn get_header_window(

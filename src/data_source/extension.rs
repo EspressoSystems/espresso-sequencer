@@ -28,6 +28,7 @@ use crate::{
     Header, Payload, QueryResult, Transaction, VidShare,
 };
 use async_trait::async_trait;
+use futures::future::BoxFuture;
 use hotshot_types::traits::node_implementation::NodeType;
 use jf_merkle_tree::prelude::MerkleProof;
 use std::ops::RangeBounds;
@@ -255,7 +256,7 @@ where
     {
         self.data_source.vid_share(id).await
     }
-    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+    async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
         self.data_source.sync_status().await
     }
     async fn get_header_window(

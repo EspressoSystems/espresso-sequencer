@@ -358,35 +358,36 @@ where
             };
         };
 
-        let task = {
-            BackgroundTask::spawn("pruner", async move {
-                for i in 1.. {
-                    sleep(cfg.interval()).await;
-                    tracing::info!("pruner woke up for the {i}th time",);
+        let future = async move {
+            for i in 1.. {
+                tracing::warn!("starting pruner run {i} ");
+                // We loop until the whole run pruner run is complete
+                // This allows write lock to be released after each batch delete
+                loop {
+                    let mut storage = fetcher.storage.write().await;
 
-                    {
-                        let mut storage = fetcher.storage.write().await;
-
-                        match storage.storage.prune().await {
-                            Ok(Some(height)) => {
-                                storage.pruned_height = Some(height);
-                                if let Err(e) = storage.storage.save_pruned_height(height).await {
-                                    tracing::error!("failed to save pruned height: {e:?}");
-                                    continue;
-                                }
-                                if let Err(e) = storage.commit().await {
-                                    tracing::error!("failed to commit: {e:?}")
-                                }
-                            }
-                            Ok(None) => (),
-                            Err(e) => {
-                                tracing::error!("pruning failed: {e:?}");
-                            }
+                    match storage.storage.prune().await {
+                        Ok(Some(height)) => {
+                            storage.pruned_height = Some(height);
+                            tracing::warn!("Pruned to height {height}");
+                        }
+                        Ok(None) => {
+                            tracing::warn!("pruner run {i} complete.");
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::error!("pruner run {i} failed: {e:?}");
+                            storage.revert().await;
+                            break;
                         }
                     }
                 }
-            })
+
+                sleep(cfg.interval()).await;
+            }
         };
+
+        let task = BackgroundTask::spawn("pruner", future);
 
         Self {
             handle: Some(task),
@@ -742,7 +743,7 @@ where
         self.storage().await.vid_share(id).await
     }
 
-    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+    async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
         self.storage().await.sync_status().await
     }
 

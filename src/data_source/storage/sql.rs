@@ -52,6 +52,7 @@ use bit_vec::BitVec;
 use chrono::Utc;
 use committable::Committable;
 use futures::{
+    future::{BoxFuture, FutureExt},
     stream::{self, BoxStream, StreamExt, TryStreamExt},
     task::{Context, Poll},
     AsyncRead, AsyncWrite,
@@ -360,8 +361,35 @@ impl Config {
 pub struct SqlStorage {
     client: Arc<Client>,
     tx_in_progress: bool,
-    pruner_cfg: Option<PrunerCfg>,
+    pruner: Pruner,
     _connection: BackgroundTask,
+}
+
+#[derive(Debug, Default)]
+pub struct Pruner {
+    enabled: bool,
+    config: PrunerCfg,
+    pruned_height: Option<u64>,
+    target_height: Option<u64>,
+    minimum_retention_height: Option<u64>,
+}
+
+impl Pruner {
+    fn new(config: PrunerCfg) -> Self {
+        Pruner {
+            enabled: true,
+            config,
+            pruned_height: None,
+            target_height: None,
+            minimum_retention_height: None,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.pruned_height = None;
+        self.target_height = None;
+        self.minimum_retention_height = None;
+    }
 }
 
 impl SqlStorage {
@@ -389,12 +417,6 @@ impl SqlStorage {
             .await?;
         client
             .batch_execute(&format!("SET search_path TO {}", config.schema))
-            .await?;
-
-        // Enable ltree extension
-        // this is used for state storage
-        client
-            .batch_execute("CREATE EXTENSION IF NOT EXISTS ltree")
             .await?;
 
         // Get migrations and interleave with custom migrations, sorting by version number.
@@ -429,10 +451,12 @@ impl SqlStorage {
             }
         }
 
+        let pruner = config.pruner_cfg.map(Pruner::new).unwrap_or_default();
+
         Ok(Self {
             client: Arc::new(client),
             tx_in_progress: false,
-            pruner_cfg: config.pruner_cfg,
+            pruner,
             _connection: connection,
         })
     }
@@ -455,15 +479,31 @@ impl SqlStorage {
 
 impl PrunerConfig for SqlStorage {
     fn set_pruning_config(&mut self, cfg: PrunerCfg) {
-        self.pruner_cfg = Some(cfg);
+        self.pruner.enabled = true;
+        self.pruner.config = cfg;
     }
 
     fn get_pruning_config(&self) -> Option<PrunerCfg> {
-        self.pruner_cfg.clone()
+        if !self.pruner.enabled {
+            return None;
+        }
+
+        Some(self.pruner.config.clone())
     }
 }
 
 impl SqlStorage {
+    async fn delete_batch(&mut self, height: u64) -> QueryResult<()> {
+        let mut tx = self.transaction().await?;
+
+        tx.execute("DELETE FROM header WHERE height <= $1", &[&(height as i64)])
+            .await?;
+
+        self.save_pruned_height(height).await?;
+
+        Ok(())
+    }
+
     async fn get_minimum_height(&self) -> QueryResult<Option<u64>> {
         let row = self
             .query_one_static("SELECT MIN(height) as height FROM header")
@@ -475,9 +515,18 @@ impl SqlStorage {
     }
 
     async fn get_height_by_timestamp(&self, timestamp: i64) -> QueryResult<Option<u64>> {
+        // We order by timestamp and then height, even though logically this is no different than
+        // just ordering by height, since timestamps are monotonic. The reason is that this order
+        // allows the query planner to efficiently solve the where clause and presort the results
+        // based on the timestamp index. The remaining sort on height, which guarantees a unique
+        // block if multiple blocks have the same timestamp, is very efficient, because there are
+        // never more than a handful of blocks with the same timestamp.
         let row = self
             .query_opt(
-                "SELECT height FROM header WHERE timestamp <= $1 ORDER BY height DESC LIMIT 1",
+                "SELECT height FROM header
+                  WHERE timestamp <= $1
+                  ORDER BY timestamp DESC, height DESC
+                  LIMIT 1",
                 [&timestamp],
             )
             .await?;
@@ -553,41 +602,64 @@ impl PruneStorage for SqlStorage {
         Ok(size as u64)
     }
 
+    /// Note: The prune operation may not immediately free up space even after rows are deleted.
+    /// This is because a vacuum operation may be necessary to reclaim more space.
+    /// PostgreSQL already performs auto vacuuming, so we are not including it here
+    /// as running a vacuum operation can be resource-intensive.
+
     async fn prune(&mut self) -> Result<Option<u64>, QueryError> {
         let cfg = self.get_pruning_config().ok_or(QueryError::Error {
             message: "Pruning config not found".to_string(),
         })?;
-
-        let Some(mut height) = self.get_minimum_height().await? else {
-            tracing::info!("database is empty, nothing to prune");
-            return Ok(None);
-        };
-
         let batch_size = cfg.batch_size();
         let max_usage = cfg.max_usage();
-        let mut pruned_height = None;
+
+        // If a pruner run was already in progress, some variables may already be set,
+        // depending on whether a batch was deleted and which batch it was (target or minimum retention).
+        // This enables us to resume the pruner run from the exact heights.
+        // If any of these values are not set, they can be loaded from the database if necessary.
+        let mut minimum_retention_height = self.pruner.minimum_retention_height;
+        let mut target_height = self.pruner.target_height;
+        let mut height = match self.pruner.pruned_height {
+            Some(h) => h,
+            None => {
+                let Some(height) = self.get_minimum_height().await? else {
+                    tracing::info!("database is empty, nothing to prune");
+                    return Ok(None);
+                };
+
+                height
+            }
+        };
+
         // Prune data exceeding target retention in batches
-        let target_height = self
-            .get_height_by_timestamp(
-                Utc::now().timestamp() - (cfg.target_retention().as_secs()) as i64,
-            )
-            .await?;
+        if self.pruner.target_height.is_none() {
+            let th = self
+                .get_height_by_timestamp(
+                    Utc::now().timestamp() - (cfg.target_retention().as_secs()) as i64,
+                )
+                .await?;
+            target_height = th;
+            self.pruner.target_height = target_height;
+        };
 
         if let Some(target_height) = target_height {
-            while height < target_height {
+            if height < target_height {
                 height = min(height + batch_size, target_height);
-                self.query_opt("DELETE FROM header WHERE height <= $1", &[&(height as i64)])
-                    .await?;
-                pruned_height = Some(height);
+                self.delete_batch(height).await?;
+                self.commit().await.map_err(|e| QueryError::Error {
+                    message: format!("failed to commit {e}"),
+                })?;
 
-                tracing::info!("Pruned data up to height {height}");
+                self.pruner.pruned_height = Some(height);
+                return Ok(Some(height));
             }
         }
 
         // If threshold is set, prune data exceeding minimum retention in batches
         // This parameter is needed for SQL storage as there is no direct way to get free space.
         if let Some(threshold) = cfg.pruning_threshold() {
-            let mut usage = self.get_disk_usage().await?;
+            let usage = self.get_disk_usage().await?;
 
             // Prune data exceeding minimum retention in batches starting from minimum height
             // until usage is below threshold
@@ -596,38 +668,38 @@ impl PruneStorage for SqlStorage {
                     "Disk usage {usage} exceeds pruning threshold {:?}",
                     cfg.pruning_threshold()
                 );
-                let minimum_retention_height = self
-                    .get_height_by_timestamp(
-                        Utc::now().timestamp() - (cfg.minimum_retention().as_secs()) as i64,
-                    )
-                    .await?;
+
+                if minimum_retention_height.is_none() {
+                    minimum_retention_height = self
+                        .get_height_by_timestamp(
+                            Utc::now().timestamp() - (cfg.minimum_retention().as_secs()) as i64,
+                        )
+                        .await?;
+
+                    self.pruner.minimum_retention_height = minimum_retention_height;
+                }
 
                 if let Some(min_retention_height) = minimum_retention_height {
-                    while (usage as f64 / threshold as f64) > (f64::from(max_usage) / 10000.0)
+                    if (usage as f64 / threshold as f64) > (f64::from(max_usage) / 10000.0)
                         && height < min_retention_height
                     {
                         height = min(height + batch_size, min_retention_height);
-                        self.query_opt(
-                            "DELETE FROM header WHERE height <= $1",
-                            &[&(height as i64)],
-                        )
-                        .await?;
-                        usage = self.get_disk_usage().await?;
-                        pruned_height = Some(height);
-                        tracing::info!("Pruned data up to height {height}");
+                        self.delete_batch(height).await?;
+                        self.commit().await.map_err(|e| QueryError::Error {
+                            message: format!("failed to commit {e}"),
+                        })?;
+
+                        self.pruner.pruned_height = Some(height);
+
+                        return Ok(Some(height));
                     }
                 }
             }
         }
-        // Vacuum the database to reclaim space.
-        // Note: VACUUM FULL is not used as it requires an exclusive lock on the tables, which can
-        // cause downtime for the query service.
-        self.client
-            .batch_execute("VACUUM")
-            .await
-            .map_err(postgres_err)?;
 
-        Ok(pruned_height)
+        self.pruner.reset();
+
+        Ok(None)
     }
 }
 
@@ -1059,73 +1131,78 @@ where
         })
     }
 
-    async fn sync_status(&self) -> QueryResult<SyncStatus> {
-        // A leaf can only be missing if there is no row for it in the database (all its columns are
-        // non-nullable). A block can be missing if its corresponding leaf is missing or if the
-        // block's `data` field is `NULL`. We can find the number of missing leaves and blocks by
-        // getting the number of fully missing leaf rows and the number of present but null-payload
-        // block rows.
-        //
-        // Note that it should not be possible for a block's row to be missing (as opposed to
-        // present but having a `NULL` payload) if the corresponding leaf is present. The schema
-        // enforces this, since the payload table `REFERENCES` the corresponding leaf row. Thus,
-        // missing block rows should be a subset of missing leaf rows and do not need to be counted
-        // separately. This is very important: if we had to count the number of block rows that were
-        // missing whose corresponding leaf row was present, this would require an expensive join
-        // and table traversal.
-        //
-        // We can get the number of missing leaf rows very efficiently, by subtracting the total
-        // number of leaf rows from the block height (since the block height by definition is the
-        // height of the highest leaf we do have). We can also get the number of null payloads
-        // directly using an `IS NULL` filter.
-        //
-        // For VID, common data can only be missing if the entire row is missing. Shares can be
-        // missing in that case _or_ if the row is present but share data is NULL. Thus, we also
-        // need to select the total number of VID rows and the number of present VID rows with a
-        // NULL share.
-        let row = self
-            .query_one_static(
-                "SELECT max_height, total_leaves, null_payloads, total_vid, null_vid, pruned_height FROM
-                    (SELECT max(leaf.height) AS max_height, count(*) AS total_leaves FROM leaf),
-                    (SELECT count(*) AS null_payloads FROM payload WHERE data IS NULL),
-                    (SELECT count(*) AS total_vid FROM vid),
-                    (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL),
+    async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
+        let client = self.client.clone();
+
+        async move {
+            // A leaf can only be missing if there is no row for it in the database (all its columns
+            // are non-nullable). A block can be missing if its corresponding leaf is missing or if
+            // the block's `data` field is `NULL`. We can find the number of missing leaves and
+            // blocks by getting the number of fully missing leaf rows and the number of present but
+            // null-payload block rows.
+            //
+            // Note that it should not be possible for a block's row to be missing (as opposed to
+            // present but having a `NULL` payload) if the corresponding leaf is present. The schema
+            // enforces this, since the payload table `REFERENCES` the corresponding leaf row. Thus,
+            // missing block rows should be a subset of missing leaf rows and do not need to be
+            // counted separately. This is very important: if we had to count the number of block
+            // rows that were missing whose corresponding leaf row was present, this would require
+            // an expensive join and table traversal.
+            //
+            // We can get the number of missing leaf rows very efficiently, by subtracting the total
+            // number of leaf rows from the block height (since the block height by definition is
+            // the height of the highest leaf we do have). We can also get the number of null
+            // payloads directly using an `IS NULL` filter.
+            //
+            // For VID, common data can only be missing if the entire row is missing. Shares can be
+            // missing in that case _or_ if the row is present but share data is NULL. Thus, we also
+            // need to select the total number of VID rows and the number of present VID rows with a
+            // NULL share.
+            let query = "SELECT l.max_height, l.total_leaves, p.null_payloads, v.total_vid, vn.null_vid, pruned_height FROM
+                    (SELECT max(leaf.height) AS max_height, count(*) AS total_leaves FROM leaf) AS l,
+                    (SELECT count(*) AS null_payloads FROM payload WHERE data IS NULL) AS p,
+                    (SELECT count(*) AS total_vid FROM vid) AS v,
+                    (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL) AS vn,
                     coalesce((SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1)) as pruned_height
-                ",
-            )
-            .await?;
+                ";
+            let row = client
+                .query_opt(query, &[])
+                .await
+                .map_err(postgres_err)?
+                .context(NotFoundSnafu)?;
 
-        let block_height = match row.get::<_, Option<i64>>("max_height") {
-            Some(height) => {
-                // The height of the block is the number of blocks below it, so the total number of
-                // blocks is one more than the height of the highest block.
-                height as usize + 1
-            }
-            None => {
-                // If there are no blocks yet, the height is 0.
-                0
-            }
-        };
-        let total_leaves = row.get::<_, i64>("total_leaves") as usize;
-        let null_payloads = row.get::<_, i64>("null_payloads") as usize;
-        let total_vid = row.get::<_, i64>("total_vid") as usize;
-        let null_vid = row.get::<_, i64>("null_vid") as usize;
-        let pruned_height = row
-            .get::<_, Option<i64>>("pruned_height")
-            .map(|h| h as usize);
+            let block_height = match row.get::<_, Option<i64>>("max_height") {
+                Some(height) => {
+                    // The height of the block is the number of blocks below it, so the total number of
+                    // blocks is one more than the height of the highest block.
+                    height as usize + 1
+                }
+                None => {
+                    // If there are no blocks yet, the height is 0.
+                    0
+                }
+            };
+            let total_leaves = row.get::<_, i64>("total_leaves") as usize;
+            let null_payloads = row.get::<_, i64>("null_payloads") as usize;
+            let total_vid = row.get::<_, i64>("total_vid") as usize;
+            let null_vid = row.get::<_, i64>("null_vid") as usize;
+            let pruned_height = row
+                .get::<_, Option<i64>>("pruned_height")
+                .map(|h| h as usize);
 
-        let missing_leaves = block_height.saturating_sub(total_leaves);
-        let missing_blocks = missing_leaves + null_payloads;
-        let missing_vid_common = block_height.saturating_sub(total_vid);
-        let missing_vid_shares = missing_vid_common + null_vid;
+            let missing_leaves = block_height.saturating_sub(total_leaves);
+            let missing_blocks = missing_leaves + null_payloads;
+            let missing_vid_common = block_height.saturating_sub(total_vid);
+            let missing_vid_shares = missing_vid_common + null_vid;
 
-        Ok(SyncStatus {
-            missing_leaves,
-            missing_blocks,
-            missing_vid_common,
-            missing_vid_shares,
-            pruned_height,
-        })
+            Ok(SyncStatus {
+                missing_leaves,
+                missing_blocks,
+                missing_vid_common,
+                missing_vid_shares,
+                pruned_height,
+            })
+        }.boxed()
     }
 
     async fn get_header_window(
@@ -1174,12 +1251,18 @@ where
             None
         };
 
-        // Find the block just after the window.
+        // Find the block just after the window. We order by timestamp _then_ height, because the
+        // timestamp order allows the query planner to use the index on timestamp to also
+        // efficiently solve the WHERE clause, but this process may turn up multiple results, due to
+        // the 1-second resolution of block timestamps. The final sort by height guarantees us a
+        // unique, deterministic result (the first block with a given timestamp). This sort may not
+        // be able to use an index, but it shouldn't be too expensive, since there will never be
+        // more than a handful of blocks with the same timestamp.
         let query = format!(
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1
-              ORDER BY h.height
+              ORDER BY h.timestamp, h.height
               LIMIT 1"
         );
         let next = self
@@ -1620,12 +1703,18 @@ impl SqlStorage {
 
         let (created, commit) = match snapshot {
             Snapshot::Commit(commit) => {
-                // Get the block height using the merkle commitment.
+                // Get the block height using the merkle commitment. It is possible that multiple
+                // headers will have the same state commitment. In this case we don't care which
+                // height we get, since any query against equivalent states will yield equivalent
+                // results, regardless of which block the state is from. Thus, we can make this
+                // query fast with `LIMIT 1` and no `ORDER BY`.
                 let query = self
                     .query_one(
                         &format!(
-                            "SELECT height FROM Header  where
-                             {header_state_commitment_field} = $1"
+                            "SELECT height
+                               FROM header
+                              WHERE {header_state_commitment_field} = $1
+                              LIMIT 1"
                         ),
                         &[&commit.to_string()],
                     )
@@ -1809,15 +1898,20 @@ impl SqlStorage {
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>> {
         // Find all blocks whose timestamps fall within the window [start, end). Block timestamps
         // are monotonically increasing, so this query is guaranteed to return a contiguous range of
-        // blocks ordered by increasing height. Note that we order by height explicitly, rather than
-        // ordering by timestamp (which might be more efficient, since it could reuse the timestamp
-        // index that is used in the WHERE clause) because multiple blocks may have the same
-        // timestamp, due to the 1-second timestamp resolution.
+        // blocks ordered by increasing height.
+        //
+        // We order by timestamp _then_ height, because the timestamp order allows the query planner
+        // to use the index on timestamp to also efficiently solve the WHERE clause, but this
+        // process may turn up multiple results, due to the 1-second resolution of block timestamps.
+        // The final sort by height guarantees us a unique, deterministic result (the first block
+        // with a given timestamp). This sort may not be able to use an index, but it shouldn't be
+        // too expensive, since there will never be more than a handful of blocks with the same
+        // timestamp.
         let query = format!(
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1 AND h.timestamp < $2
-              ORDER BY h.height"
+              ORDER BY h.timestamp, h.height"
         );
         let rows = self.query(&query, [&(start as i64), &(end as i64)]).await?;
         let window: Vec<_> = rows
@@ -1834,7 +1928,7 @@ impl SqlStorage {
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp >= $1
-              ORDER BY h.height
+              ORDER BY h.timestamp, h.height
               LIMIT 1"
         );
         let next = self
@@ -1859,7 +1953,7 @@ impl SqlStorage {
             "SELECT {HEADER_COLUMNS}
                FROM header AS h
               WHERE h.timestamp < $1
-              ORDER BY h.height DESC
+              ORDER BY h.timestamp DESC, h.height DESC
               LIMIT 1"
         );
         let prev = self
@@ -3260,11 +3354,11 @@ mod test {
         // The SQL commands used here will fail if not run in order.
         let migrations = vec![
             Migration::unapplied(
-                "V23__create_test_table.sql",
+                "V33__create_test_table.sql",
                 "ALTER TABLE test ADD COLUMN data INTEGER;",
             )
             .unwrap(),
-            Migration::unapplied("V22__create_test_table.sql", "CREATE TABLE test ();").unwrap(),
+            Migration::unapplied("V32__create_test_table.sql", "CREATE TABLE test ();").unwrap(),
         ];
         connect(true, migrations.clone()).await.unwrap();
 
@@ -3331,6 +3425,11 @@ mod test {
         storage.set_pruning_config(PrunerCfg::new());
         // No data will be pruned
         let pruned_height = storage.prune().await.unwrap();
+
+        // Vacuum the database to reclaim space.
+        // This is necessary to ensure the test passes.
+        // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
+        storage.client.batch_execute("VACUUM").await.unwrap();
         // Pruned height should be none
         assert!(pruned_height.is_none());
 
@@ -3348,6 +3447,10 @@ mod test {
         // All of the data is now older than 1s.
         // This would prune all the data as the target retention is set to 1s
         let pruned_height = storage.prune().await.unwrap();
+        // Vacuum the database to reclaim space.
+        // This is necessary to ensure the test passes.
+        // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
+        storage.client.batch_execute("VACUUM").await.unwrap();
 
         // Pruned height should be some
         assert!(pruned_height.is_some());
@@ -3410,6 +3513,10 @@ mod test {
         // Pruning would not delete any data
         // All the data is younger than minimum retention period even though the usage > threshold
         let pruned_height = storage.prune().await.unwrap();
+        // Vacuum the database to reclaim space.
+        // This is necessary to ensure the test passes.
+        // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
+        storage.client.batch_execute("VACUUM").await.unwrap();
 
         // Pruned height should be none
         assert!(pruned_height.is_none());
@@ -3430,6 +3537,10 @@ mod test {
         sleep(Duration::from_secs(2)).await;
         // This would prune all the data
         let pruned_height = storage.prune().await.unwrap();
+        // Vacuum the database to reclaim space.
+        // This is necessary to ensure the test passes.
+        // Note: We don't perform a vacuum after each pruner run in production because the auto vacuum job handles it automatically.
+        storage.client.batch_execute("VACUUM").await.unwrap();
 
         // Pruned height should be some
         assert!(pruned_height.is_some());
