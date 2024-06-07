@@ -66,7 +66,10 @@ use hotshot_state_prover;
 use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 use jf_signature::bls_over_bn254::VerKey;
 use sequencer::state_signature::StakeTableCommitmentType;
-use sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, ChainConfig};
+use sequencer::{
+    catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, network::libp2p::BootstrapNode,
+    ChainConfig,
+};
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -164,7 +167,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         derive_libp2p_peer_id::<<SeqTypes as NodeType>::SignatureKey>(&my_config.private_key)
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
-    let config = NetworkConfig::get_complete_config(
+    let mut config = NetworkConfig::get_complete_config(
         &orchestrator_client,
         my_config.clone(),
         // Register in our Libp2p advertise address and public key so other nodes
@@ -174,6 +177,11 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     )
     .await?
     .0;
+
+    // If the network is configured manually, override what we got from the orchestrator
+    if let Some(genesis_network_config) = genesis.network {
+        genesis_network_config.populate_config(&mut config)?;
+    }
 
     tracing::info!(
     node_id = config.node_index,

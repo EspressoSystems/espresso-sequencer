@@ -503,6 +503,7 @@ mod test {
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
     const BLOCKS_PER_EPOCH: u32 = 10;
+
     const NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / 2) as u32;
 
     /// Init a meaningful ledger state that prover can generate future valid proof.
@@ -652,7 +653,6 @@ mod test {
     async fn test_read_contract_state() -> Result<()> {
         setup_logging();
         setup_backtrace();
-
         let anvil = Anvil::new().spawn();
         let dummy_genesis = ParsedLightClientState::dummy_genesis();
         let (_wallet, contract) = deploy_contract_for_test(&anvil, dummy_genesis.clone()).await?;

@@ -172,7 +172,7 @@ where
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/submit.toml"))?;
     let mut api = Api::<S, Error, Ver>::new(toml)?;
 
-    api.post("submit", |req, state| {
+    api.at("submit", |req, state| {
         async move {
             let tx = req
                 .body_auto::<Transaction, Ver>(Ver::instance())
@@ -190,7 +190,7 @@ where
 
             let hash = tx.commit();
             state
-                .submit(tx)
+                .read(|state| state.submit(tx).boxed())
                 .await
                 .map_err(|err| Error::internal(err.to_string()))?;
             Ok(hash)

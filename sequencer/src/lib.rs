@@ -20,6 +20,8 @@ use block::entry::TxTableEntryWord;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
 use ethers::types::U256;
+#[cfg(feature = "libp2p")]
+use futures::FutureExt;
 use genesis::{GenesisHeader, L1Finalized};
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
@@ -279,6 +281,7 @@ pub struct NetworkParams {
     pub private_staking_key: BLSPrivKey,
     pub private_state_key: StateSignKey,
     pub state_peers: Vec<Url>,
+
     /// The address to send to other Libp2p nodes to contact us
     pub libp2p_advertise_address: SocketAddr,
     /// The address to bind to for Libp2p
@@ -339,7 +342,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
     let mut persistence = persistence_opt.clone().create().await?;
-    let (config, wait_for_orchestrator) = match persistence.load_config().await? {
+    let (mut config, wait_for_orchestrator) = match persistence.load_config().await? {
         Some(config) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
             (config, false)
@@ -370,6 +373,12 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             (config, true)
         }
     };
+
+    // If the network is configured manually, override what we got from the orchestrator
+    if let Some(genesis_network_config) = genesis.network {
+        genesis_network_config.populate_config(&mut config)?;
+    }
+
     let node_index = config.node_index;
 
     // If we are a DA node, we need to subscribe to the DA topic
@@ -394,20 +403,29 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
-    let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
-        config.clone(),
-        network_params.libp2p_bind_address,
-        &my_config.public_key,
-        // We need the private key so we can derive our Libp2p keypair
-        // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
-        &my_config.private_key,
-    )
-    .await
-    .with_context(|| "Failed to create libp2p network")?;
-
-    // Combine the communication channels
-    #[cfg(feature = "libp2p")]
     let (da_network, quorum_network) = {
+        let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
+            config.clone(),
+            network_params.libp2p_bind_address,
+            &my_config.public_key,
+            // We need the private key so we can derive our Libp2p keypair
+            // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
+            &my_config.private_key,
+        )
+        .await
+        .with_context(|| "Failed to create libp2p network")?;
+
+        tracing::warn!("Waiting for at least one connection to be initialized");
+        futures::select! {
+            _ = cdn_network.wait_for_ready().fuse() => {
+                tracing::warn!("CDN connection initialized");
+            },
+            _ = p2p_network.wait_for_ready().fuse() => {
+                tracing::warn!("P2P connection initialized");
+            },
+        };
+
+        // Combine the CDN and P2P networks
         (
             Arc::from(CombinedNetworks::new(
                 cdn_network.clone(),
@@ -526,10 +544,17 @@ pub mod testing {
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
-    pub async fn run_test_builder() -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
+    pub async fn run_test_builder(
+        port: Option<u16>,
+    ) -> (Option<Box<dyn BuilderTask<SeqTypes>>>, Url) {
+        let builder_config = if let Some(port) = port {
+            SimpleBuilderConfig { port }
+        } else {
+            SimpleBuilderConfig::default()
+        };
         <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
             TestConfig::NUM_NODES,
-            SimpleBuilderConfig::default(),
+            builder_config,
         )
         .await
     }
@@ -804,7 +829,7 @@ mod test {
         let url = anvil.url();
         let mut config = TestConfig::default_with_l1(url);
 
-        let (builder_task, builder_url) = run_test_builder().await;
+        let (builder_task, builder_url) = run_test_builder(None).await;
 
         config.set_builder_url(builder_url);
 
@@ -846,7 +871,7 @@ mod test {
         let url = anvil.url();
         let mut config = TestConfig::default_with_l1(url);
 
-        let (builder_task, builder_url) = run_test_builder().await;
+        let (builder_task, builder_url) = run_test_builder(None).await;
 
         config.set_builder_url(builder_url);
         let handles = config.init_nodes(ver).await;
