@@ -5,14 +5,14 @@ use crate::{
     Leaf, SeqTypes, ViewNumber,
 };
 use anyhow::Context;
-use async_std::sync::{Arc, RwLock};
+use async_std::{
+    stream::StreamExt,
+    sync::{Arc, RwLock},
+};
 use async_trait::async_trait;
 use clap::Parser;
 use derivative::Derivative;
-use futures::{
-    future::{BoxFuture, FutureExt},
-    StreamExt,
-};
+use futures::future::{BoxFuture, FutureExt};
 use hotshot_query_service::data_source::{
     storage::{
         pruning::PrunerCfg,
@@ -464,8 +464,8 @@ impl SequencerPersistence for Persistence {
             .query_static("SELECT * FROM quorum_proposals")
             .await?;
 
-        let entry_pairs = rows
-            .map(|row| {
+        Ok(Some(BTreeMap::from_iter(
+            rows.map(|row| {
                 let row = row?;
                 let view: i64 = row.get("view");
                 let view_number: ViewNumber = ViewNumber::new(view.try_into()?);
@@ -474,8 +474,9 @@ impl SequencerPersistence for Persistence {
                     bincode::deserialize(&bytes)?;
                 Ok((view_number, proposal))
             })
-            .collect::<anyhow::Result<Vec<_>>>();
-        Ok(None)
+            .collect::<anyhow::Result<Vec<_>>>()
+            .await?,
+        )))
     }
 
     async fn append_vid(
