@@ -99,8 +99,8 @@ impl Persistence {
         self.path.join("undecided_state")
     }
 
-    fn proposals_dir_path(&self) -> PathBuf {
-        self.path.join("proposals")
+    fn quorum_proposals_dir_path(&self) -> PathBuf {
+        self.path.join("quorum_proposals")
     }
 
     /// Overwrite a file if a condition is met.
@@ -191,7 +191,8 @@ impl SequencerPersistence for Persistence {
         };
 
         delete_files(self.da_dir_path())?;
-        delete_files(self.vid_dir_path())
+        delete_files(self.vid_dir_path())?;
+        delete_files(self.quorum_proposals_dir_path())
     }
 
     async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
@@ -417,7 +418,7 @@ impl SequencerPersistence for Persistence {
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         let view_number = proposal.data.view_number().u64();
-        let dir_path = self.proposals_dir_path();
+        let dir_path = self.quorum_proposals_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create proposals dir")?;
 
@@ -425,9 +426,8 @@ impl SequencerPersistence for Persistence {
         self.replace(
             &file_path,
             |_| {
-                // Don't overwrite the file, we want to append since we can get multiple
-                // saved quorum proposals.
-                Ok(false)
+                // Always overwrite the previous file
+                Ok(true)
             },
             |mut file| {
                 let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
@@ -442,7 +442,7 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
     {
         // First, get the proposal directory.
-        let dir_path = self.proposals_dir_path();
+        let dir_path = self.quorum_proposals_dir_path();
 
         // Then, we want to get the entries in this directory since they'll be the
         // key/value pairs for our map.
