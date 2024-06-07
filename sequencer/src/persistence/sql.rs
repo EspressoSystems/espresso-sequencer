@@ -585,7 +585,7 @@ impl SequencerPersistence for Persistence {
             async move {
                 tx.upsert(
                     "quorum_proposals",
-                    ["view", "proposal"],
+                    ["view", "data"],
                     ["view"],
                     [[sql_param(&(view_number as i64)), sql_param(&proposal_bytes)]],
                 )
