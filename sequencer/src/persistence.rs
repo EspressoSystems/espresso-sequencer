@@ -20,7 +20,7 @@ use hotshot::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::{HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -86,6 +86,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     async fn load_undecided_state(
         &self,
     ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>>;
+
+    /// Load the proposals saved by consensus
+    async fn load_quorum_proposals(
+        &self,
+    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>;
 
     async fn load_vid_share(
         &self,
@@ -168,6 +173,13 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             .context("loading undecided state")?
             .unwrap_or_default();
 
+        let saved_proposals = self
+            .load_quorum_proposals()
+            .await
+            .context("loading saved proposals")
+            .unwrap_or_default()
+            .unwrap_or_default();
+
         tracing::info!(
             ?leaf,
             ?view,
@@ -175,6 +187,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             ?validated_state,
             ?undecided_leaves,
             ?undecided_state,
+            ?saved_proposals,
             "loaded consensus state"
         );
         Ok(HotShotInitializer::from_reload(
@@ -182,6 +195,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             state,
             validated_state,
             view,
+            saved_proposals,
             high_qc,
             undecided_leaves.into_values().collect(),
             undecided_state,
@@ -232,6 +246,10 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         &mut self,
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
+    ) -> anyhow::Result<()>;
+    async fn append_quorum_proposal(
+        &mut self,
+        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()>;
 }
 

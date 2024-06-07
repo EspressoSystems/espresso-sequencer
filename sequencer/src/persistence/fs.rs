@@ -6,7 +6,7 @@ use clap::Parser;
 
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -97,6 +97,10 @@ impl Persistence {
 
     fn undecided_state_path(&self) -> PathBuf {
         self.path.join("undecided_state")
+    }
+
+    fn proposal_dir_path(&self) -> PathBuf {
+        self.path.join("proposal")
     }
 
     /// Overwrite a file if a condition is met.
@@ -407,6 +411,72 @@ impl SequencerPersistence for Persistence {
                 Ok(())
             },
         )
+    }
+    async fn append_quorum_proposal(
+        &mut self,
+        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let view_number = proposal.data.view_number().u64();
+        let dir_path = self.proposal_dir_path();
+
+        fs::create_dir_all(dir_path.clone()).context("failed to create proposals dir")?;
+
+        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
+        self.replace(
+            &file_path,
+            |_| {
+                // Don't overwrite the file, we want to append since we can get multiple
+                // saved quorum proposals.
+                Ok(false)
+            },
+            |mut file| {
+                let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
+
+                file.write_all(&proposal_bytes)?;
+                Ok(())
+            },
+        )
+    }
+    async fn load_quorum_proposals(
+        &self,
+    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
+    {
+        // First, get the proposal directory.
+        let dir_path = self.proposal_dir_path();
+
+        // Then, we want to get the entries in this directory since they'll be the
+        // key/value pairs for our map.
+        let files: Vec<fs::DirEntry> = fs::read_dir(dir_path)?
+            .filter_map(|entry| {
+                entry
+                    .ok()
+                    .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
+            })
+            .collect();
+
+        // Do we have any entries?
+        if files.is_empty() {
+            // Don't both continuing if we don't have any data.
+            return Ok(None);
+        }
+
+        // Read all of the files
+        let proposal_files = files
+            .into_iter()
+            .map(|entry| dir_path.join(entry.file_name()).with_extension("txt"));
+
+        for file in proposal_files.into_iter() {
+            if let Some(file_name) = file.file_name() {
+                let view_number = ViewNumber::new(
+                    file_name
+                        .to_string_lossy()
+                        .parse::<u64>()
+                        .context("convert file name to u64")?,
+                );
+            }
+        }
+
+        Ok(None)
     }
 }
 
