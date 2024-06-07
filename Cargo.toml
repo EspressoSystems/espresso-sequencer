@@ -102,6 +102,7 @@ strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.8"
 tagged-base64 = "0.4"
 tide-disco = "0.8"
+thiserror = "1.0.61"
 time = "0.3"
 tracing = "0.1"
 bytesize = "1.3"
