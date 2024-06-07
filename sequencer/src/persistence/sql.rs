@@ -309,6 +309,9 @@ impl SequencerPersistence for Persistence {
 
                 let stmt2 = "DELETE FROM da_proposal where view <= $1";
                 tx.execute(stmt2, [&(view.u64() as i64)]).await?;
+
+                let stmt3 = "DELETE FROM quorum_proposals where view <= $1";
+                tx.execute(stmt3, [&(view.u64() as i64)]).await?;
                 Ok(())
             }
             .boxed()
