@@ -386,12 +386,28 @@ mod persistence_tests {
         let bytes = payload.encode().to_vec();
         let disperse = vid_scheme(2).disperse(bytes).unwrap();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
+        let signature = PubKey::sign(&privkey, &[]).unwrap();
         let mut vid = VidDisperseShare::<SeqTypes> {
             view_number: ViewNumber::new(1),
             payload_commitment: Default::default(),
             share: disperse.shares[0].clone(),
             common: disperse.common,
             recipient_key: pubkey,
+        };
+        let mut quorum_proposal = Proposal {
+            data: QuorumProposal::<SeqTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number: ViewNumber::genesis(),
+                justify_qc: QuorumCertificate::genesis(
+                    &ValidatedState::default(),
+                    &NodeState::mock(),
+                )
+                .await,
+                upgrade_certificate: None,
+                proposal_certificate: None,
+            },
+            signature,
+            _pd: Default::default(),
         };
 
         let vid_share1 = vid.clone().to_proposal(&privkey).unwrap().clone();
@@ -475,6 +491,70 @@ mod persistence_tests {
             Some(da_proposal3.clone())
         );
 
+        let quorum_proposal1 = quorum_proposal.clone();
+        storage
+            .append_quorum_proposal(&quorum_proposal1)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            storage.load_quorum_proposals().await.unwrap(),
+            Some(BTreeMap::from_iter([(
+                ViewNumber::genesis(),
+                quorum_proposal1.clone()
+            )]))
+        );
+
+        quorum_proposal.data.view_number = ViewNumber::new(1);
+        let quorum_proposal2 = quorum_proposal.clone();
+        storage
+            .append_quorum_proposal(&quorum_proposal2)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            storage.load_quorum_proposals().await.unwrap(),
+            Some(BTreeMap::from_iter([
+                (ViewNumber::genesis(), quorum_proposal1.clone()),
+                (ViewNumber::new(1), quorum_proposal2.clone())
+            ]))
+        );
+
+        quorum_proposal.data.view_number = ViewNumber::new(2);
+        let quorum_proposal3 = quorum_proposal.clone();
+        storage
+            .append_quorum_proposal(&quorum_proposal3)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            storage.load_quorum_proposals().await.unwrap(),
+            Some(BTreeMap::from_iter([
+                (ViewNumber::genesis(), quorum_proposal1.clone()),
+                (ViewNumber::new(1), quorum_proposal2.clone()),
+                (ViewNumber::new(2), quorum_proposal3.clone())
+            ]))
+        );
+
+        quorum_proposal.data.view_number = ViewNumber::new(10);
+
+        // This one should stick around after GC runs.
+        let quorum_proposal4 = quorum_proposal.clone();
+        storage
+            .append_quorum_proposal(&quorum_proposal3)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            storage.load_quorum_proposals().await.unwrap(),
+            Some(BTreeMap::from_iter([
+                (ViewNumber::genesis(), quorum_proposal1),
+                (ViewNumber::new(1), quorum_proposal2),
+                (ViewNumber::new(2), quorum_proposal3),
+                (ViewNumber::new(10), quorum_proposal4.clone())
+            ]))
+        );
+
         // Test garbage collection
         // Deleting da proposals and vid shares with view number <=2
         storage.collect_garbage(ViewNumber::new(2)).await.unwrap();
@@ -500,5 +580,14 @@ mod persistence_tests {
             storage.load_vid_share(ViewNumber::new(3)).await.unwrap(),
             Some(vid_share3)
         );
+
+        let proposals = storage.load_quorum_proposals().await.unwrap();
+        assert_eq!(
+            proposals,
+            Some(BTreeMap::from_iter([(
+                ViewNumber::new(10),
+                quorum_proposal4
+            )]))
+        )
     }
 }
