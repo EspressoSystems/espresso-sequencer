@@ -130,7 +130,7 @@ impl NsProof {
         }
 
         // verification succeeded, return some data
-        let ns_id = ns_table.read_ns_id(&self.ns_index);
+        let ns_id = ns_table.read_ns_id_unchecked(&self.ns_index);
         Some((self.ns_payload.export_all_txs(&ns_id), ns_id))
     }
 

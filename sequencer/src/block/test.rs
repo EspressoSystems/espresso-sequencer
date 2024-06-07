@@ -80,7 +80,7 @@ async fn basic_correctness() {
 
         // test iterate over all namespaces
         for ns_index in block.ns_table().iter() {
-            let ns_id = block.ns_table().read_ns_id(&ns_index);
+            let ns_id = block.ns_table().read_ns_id(&ns_index).unwrap();
             tracing::info!("test ns_id {ns_id}");
 
             let txs = test

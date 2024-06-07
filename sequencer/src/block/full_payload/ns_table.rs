@@ -129,7 +129,8 @@ pub struct NsTable {
 impl NsTable {
     /// Search the namespace table for the ns_index belonging to `ns_id`.
     pub fn find_ns_id(&self, ns_id: &NamespaceId) -> Option<NsIndex> {
-        self.iter().find(|index| self.read_ns_id(index) == *ns_id)
+        self.iter()
+            .find(|index| self.read_ns_id_unchecked(index) == *ns_id)
     }
 
     /// Iterator over all unique namespaces in the namespace table.
@@ -138,12 +139,20 @@ impl NsTable {
     }
 
     /// Read the namespace id from the `index`th entry from the namespace table.
-    ///
-    /// `index` is not checked. Use [`Self::in_bounds`] as needed.
+    /// Returns `None` if `index` is out of bounds.
     ///
     /// TODO I want to restrict visibility to `pub(crate)` or lower but this
     /// method is currently used in `nasty-client`.
-    pub fn read_ns_id(&self, index: &NsIndex) -> NamespaceId {
+    pub fn read_ns_id(&self, index: &NsIndex) -> Option<NamespaceId> {
+        if !self.in_bounds(index) {
+            None
+        } else {
+            Some(self.read_ns_id_unchecked(index))
+        }
+    }
+
+    /// Like [`Self::read_ns_id`] except `index` is not checked. Use [`Self::in_bounds`] as needed.
+    pub fn read_ns_id_unchecked(&self, index: &NsIndex) -> NamespaceId {
         let start = index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
 
         // TODO hack to deserialize `NamespaceId` from `NS_ID_BYTE_LEN` bytes
@@ -311,10 +320,7 @@ impl<'a> Iterator for NsIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let candidate_result = NsIndex(self.cur_index);
-            if !self.ns_table.in_bounds(&candidate_result) {
-                break None;
-            }
-            let ns_id = self.ns_table.read_ns_id(&candidate_result);
+            let ns_id = self.ns_table.read_ns_id(&candidate_result)?;
             self.cur_index += 1;
 
             // skip duplicate namespace IDs

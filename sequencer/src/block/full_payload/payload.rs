@@ -53,10 +53,7 @@ impl Payload {
     /// Like [`QueryablePayload::transaction_with_proof`] except without the
     /// proof.
     pub fn transaction(&self, index: &Index) -> Option<Transaction> {
-        if !self.ns_table.in_bounds(index.ns()) {
-            return None;
-        }
-        let ns_id = self.ns_table.read_ns_id(index.ns());
+        let ns_id = self.ns_table.read_ns_id(index.ns())?;
         let ns_payload = self.ns_payload(index.ns());
         ns_payload.export_tx(&ns_id, index.tx())
     }
