@@ -1,8 +1,8 @@
 use crate::{
-    api::data_source::CatchupDataSource, catchup::SqlStateCatchup, eth_signature_key::EthKeyPair,
-    ChainConfig, Header, Leaf, NodeState, SeqTypes,
+    api::data_source::CatchupDataSource, catchup::SqlStateCatchup, chain_config::BlockSize,
+    eth_signature_key::EthKeyPair, ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
-use anyhow::{anyhow, bail, ensure, Context};
+use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
@@ -41,8 +41,8 @@ use jf_merkle_tree::{
     prelude::{LightWeightSHA3MerkleTree, MerkleProof, Sha3Digest, Sha3Node},
     universal_merkle_tree::UniversalMerkleTree,
     AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
-    LookupResult, MerkleCommitment, MerkleTreeScheme, PersistentUniversalMerkleTreeScheme,
-    ToTraversalPath, UniversalMerkleTreeScheme,
+    LookupResult, MerkleCommitment, MerkleTreeError, MerkleTreeScheme,
+    PersistentUniversalMerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
 };
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
@@ -53,10 +53,20 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{collections::HashSet, ops::Add, str::FromStr};
+use thiserror::Error;
 use vbs::version::Version;
 
 const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
 const FEE_MERKLE_TREE_HEIGHT: usize = 20;
+
+/// This enum is not used in code but functions as an index of
+/// possible validation errors.
+#[allow(dead_code)]
+enum StateValidationError {
+    ProposalValidation(ProposalValidationError),
+    BuilderValidation(BuilderValidationError),
+    Fee(FeeError),
+}
 
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ValidatedState {
@@ -156,7 +166,7 @@ impl ValidatedState {
     }
 
     /// Charge a fee to an account, transferring the funds to the fee recipient account.
-    pub fn charge_fee(&mut self, fee_info: FeeInfo, recipient: FeeAccount) -> anyhow::Result<()> {
+    pub fn charge_fee(&mut self, fee_info: FeeInfo, recipient: FeeAccount) -> Result<(), FeeError> {
         let fee_state = self.fee_merkle_tree.clone();
 
         // Deduct the fee from the paying account.
@@ -166,9 +176,7 @@ impl ValidatedState {
             let balance = balance.copied();
             let Some(updated) = balance.unwrap_or_default().checked_sub(&amount) else {
                 // Return an error without updating the account.
-                err = Some(anyhow!(
-                    "insufficient funds (have {balance:?}, required {amount:?})"
-                ));
+                err = Some(FeeError::InsufficientFunds { balance, amount });
                 return balance;
             };
             if updated == FeeAmount::default() {
@@ -210,53 +218,83 @@ impl ValidatedState {
     }
 }
 
+/// Possible proposal validation failures
+#[derive(Error, Debug, Eq, PartialEq)]
+pub enum ProposalValidationError {
+    #[error("Invalid ChainConfig: expected={expected}, proposal={proposal}")]
+    InvalidChainConfig { expected: String, proposal: String },
+
+    #[error(
+        "Invalid Payload Size: (max_block_size={max_block_size}, proposed_block_size={block_size})"
+    )]
+    MaxBlockSizeExceeded {
+        max_block_size: BlockSize,
+        block_size: BlockSize,
+    },
+    #[error("Insufficient Fee: block_size={max_block_size}, base_fee={base_fee}, proposed_fee={proposed_fee}")]
+    InsufficientFee {
+        max_block_size: BlockSize,
+        base_fee: FeeAmount,
+        proposed_fee: FeeAmount,
+    },
+    #[error("Invalid Height: parent_height={parent_height}, proposal_height={proposal_height}")]
+    InvalidHeight {
+        parent_height: u64,
+        proposal_height: u64,
+    },
+    #[error("Invalid Block Root Error: expected={expected_root}, proposal={proposal_root}")]
+    InvalidBlockRoot {
+        expected_root: BlockMerkleCommitment,
+        proposal_root: BlockMerkleCommitment,
+    },
+    #[error("Invalid Fee Root Error: expected={expected_root}, proposal={proposal_root}")]
+    InvalidFeeRoot {
+        expected_root: FeeMerkleCommitment,
+        proposal_root: FeeMerkleCommitment,
+    },
+}
+
 pub fn validate_proposal(
     state: &ValidatedState,
     expected_chain_config: ChainConfig,
     parent_leaf: &Leaf,
     proposal: &Header,
     vid_common: &VidCommon,
-) -> anyhow::Result<()> {
+) -> Result<(), ProposalValidationError> {
     let parent_header = parent_leaf.block_header();
 
     // validate `ChainConfig`
-    anyhow::ensure!(
-        proposal.chain_config.commit() == expected_chain_config.commit(),
-        anyhow::anyhow!(
-            "Invalid Chain Config: local={:?}, proposal={:?}",
-            expected_chain_config,
-            proposal.chain_config
-        )
-    );
+    if proposal.chain_config.commit() != expected_chain_config.commit() {
+        return Err(ProposalValidationError::InvalidChainConfig {
+            expected: format!("{:?}", expected_chain_config),
+            proposal: format!("{:?}", proposal.chain_config),
+        });
+    }
 
     // validate block size and fee
     let block_size = VidSchemeType::get_payload_byte_len(vid_common) as u64;
-    anyhow::ensure!(
-        block_size < *expected_chain_config.max_block_size,
-        anyhow::anyhow!(
-            "Invalid Payload Size: local={:?}, proposal={:?}",
-            expected_chain_config,
-            proposal.chain_config
-        )
-    );
-    anyhow::ensure!(
-        proposal.fee_info.amount() >= expected_chain_config.base_fee * block_size,
-        format!(
-            "insufficient fee: block_size={block_size}, base_fee={:?}, proposed_fee={:?}",
-            expected_chain_config.base_fee,
-            proposal.fee_info.amount()
-        )
-    );
+    if block_size >= *expected_chain_config.max_block_size {
+        return Err(ProposalValidationError::MaxBlockSizeExceeded {
+            max_block_size: expected_chain_config.max_block_size,
+            block_size: block_size.into(),
+        });
+    }
+
+    if proposal.fee_info.amount() < expected_chain_config.base_fee * block_size {
+        return Err(ProposalValidationError::InsufficientFee {
+            max_block_size: expected_chain_config.max_block_size,
+            base_fee: expected_chain_config.base_fee,
+            proposed_fee: proposal.fee_info.amount(),
+        });
+    }
 
     // validate height
-    anyhow::ensure!(
-        proposal.height == parent_header.height + 1,
-        anyhow::anyhow!(
-            "Invalid Height Error: {}, {}",
-            parent_header.height,
-            proposal.height
-        )
-    );
+    if proposal.height != parent_header.height + 1 {
+        return Err(ProposalValidationError::InvalidHeight {
+            parent_height: parent_header.height,
+            proposal_height: proposal.height,
+        });
+    }
 
     let ValidatedState {
         block_merkle_tree,
@@ -264,25 +302,40 @@ pub fn validate_proposal(
     } = state;
 
     let block_merkle_tree_root = block_merkle_tree.commitment();
-    anyhow::ensure!(
-        proposal.block_merkle_tree_root == block_merkle_tree_root,
-        anyhow::anyhow!(
-            "Invalid Block Root Error: local={}, proposal={}",
-            block_merkle_tree_root,
-            proposal.block_merkle_tree_root
-        )
-    );
+    if proposal.block_merkle_tree_root != block_merkle_tree_root {
+        return Err(ProposalValidationError::InvalidBlockRoot {
+            expected_root: block_merkle_tree_root,
+            proposal_root: proposal.block_merkle_tree_root,
+        });
+    }
 
     let fee_merkle_tree_root = fee_merkle_tree.commitment();
-    anyhow::ensure!(
-        proposal.fee_merkle_tree_root == fee_merkle_tree_root,
-        anyhow::anyhow!(
-            "Invalid Fee Root Error: local={}, proposal={}",
-            fee_merkle_tree_root,
-            proposal.fee_merkle_tree_root
-        )
-    );
+    if proposal.fee_merkle_tree_root != fee_merkle_tree_root {
+        return Err(ProposalValidationError::InvalidFeeRoot {
+            expected_root: fee_merkle_tree_root,
+            proposal_root: proposal.fee_merkle_tree_root,
+        });
+    }
+
     Ok(())
+}
+
+/// Possible charge fee failures
+#[derive(Error, Debug, Eq, PartialEq)]
+pub enum FeeError {
+    #[error("Insuficcient Funds: have {balance:?}, required {amount:?}")]
+    InsufficientFunds {
+        balance: Option<FeeAmount>,
+        amount: FeeAmount,
+    },
+    #[error("Merkle Tree Error: {0}")]
+    MerkleTreeError(MerkleTreeError),
+}
+
+impl From<MerkleTreeError> for FeeError {
+    fn from(item: MerkleTreeError) -> Self {
+        Self::MerkleTreeError(item)
+    }
 }
 
 fn charge_fee(
@@ -290,32 +343,42 @@ fn charge_fee(
     delta: &mut Delta,
     fee_info: FeeInfo,
     recipient: FeeAccount,
-) -> anyhow::Result<()> {
+) -> Result<(), FeeError> {
     state.charge_fee(fee_info, recipient)?;
     delta.fees_delta.extend([fee_info.account, recipient]);
     Ok(())
 }
 
+/// Possible builder validation failures
+#[derive(Error, Debug, Eq, PartialEq)]
+pub enum BuilderValidationError {
+    #[error("Builder signature not found")]
+    SignatureNotFound,
+    #[error("Fee amount out of range: {0}")]
+    FeeAmountOutOfRange(FeeAmount),
+    #[error("Invalid Builder Signature")]
+    InvalidBuilderSignature,
+}
+
 /// Validate builder account by verifying signature
-fn validate_builder_fee(proposed_header: &Header) -> anyhow::Result<()> {
+fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidationError> {
     // Beware of Malice!
     let signature = proposed_header
         .builder_signature
-        .ok_or_else(|| anyhow::anyhow!("Builder signature not found"))?;
-    let fee_amount = proposed_header.fee_info.amount().as_u64().context(format!(
-        "fee amount out of range: {:?}",
-        proposed_header.fee_info.amount()
-    ))?;
+        .ok_or(BuilderValidationError::SignatureNotFound)?;
+    let fee_amount = proposed_header.fee_info.amount().as_u64().ok_or(
+        BuilderValidationError::FeeAmountOutOfRange(proposed_header.fee_info.amount()),
+    )?;
+
     // verify signature
-    anyhow::ensure!(
-        proposed_header.fee_info.account.validate_fee_signature(
-            &signature,
-            fee_amount,
-            proposed_header.metadata(),
-            &proposed_header.payload_commitment()
-        ),
-        "Invalid Builder Signature"
-    );
+    if !proposed_header.fee_info.account.validate_fee_signature(
+        &signature,
+        fee_amount,
+        proposed_header.metadata(),
+        &proposed_header.payload_commitment(),
+    ) {
+        return Err(BuilderValidationError::InvalidBuilderSignature);
+    }
 
     Ok(())
 }
@@ -1345,7 +1408,18 @@ mod test {
         // Validation fails because the proposed block exceeds the maximum block size.
         let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
             .unwrap_err();
+
         tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::MaxBlockSizeExceeded {
+                max_block_size: instance.chain_config.max_block_size,
+                block_size: BlockSize::from_integer(
+                    VidSchemeType::get_payload_byte_len(&vid_common).into()
+                )
+                .unwrap()
+            },
+            err
+        );
     }
 
     #[async_std::test]
@@ -1369,7 +1443,16 @@ mod test {
         // Validation fails because the genesis fee (0) is too low.
         let err = validate_proposal(&state, instance.chain_config, &parent, header, &vid_common)
             .unwrap_err();
+
         tracing::info!(%err, "task failed successfully");
+        assert_eq!(
+            ProposalValidationError::InsufficientFee {
+                max_block_size: instance.chain_config.max_block_size,
+                base_fee: instance.chain_config.base_fee,
+                proposed_fee: header.fee_info.amount()
+            },
+            err
+        );
     }
 
     #[test]
@@ -1396,20 +1479,33 @@ mod test {
         assert_eq!(state.balance(dst), Some(amt));
 
         tracing::info!("test insufficient balance");
-        state.charge_fee(fee_info, dst).unwrap_err();
+        let err = state.charge_fee(fee_info, dst).unwrap_err();
         assert_eq!(state.balance(src), Some(0.into()));
         assert_eq!(state.balance(dst), Some(amt));
+        assert_eq!(
+            FeeError::InsufficientFunds {
+                balance: None,
+                amount: amt
+            },
+            err
+        );
 
         tracing::info!("test src not in memory");
         let mut state = new_state();
         state.fee_merkle_tree.forget(src).expect_ok().unwrap();
-        state.charge_fee(fee_info, dst).unwrap_err();
+        assert_eq!(
+            FeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
+            state.charge_fee(fee_info, dst).unwrap_err()
+        );
 
         tracing::info!("test dst not in memory");
         let mut state = new_state();
         state.prefund_account(dst, amt);
         state.fee_merkle_tree.forget(dst).expect_ok().unwrap();
-        state.charge_fee(fee_info, dst).unwrap_err();
+        assert_eq!(
+            FeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
+            state.charge_fee(fee_info, dst).unwrap_err()
+        );
     }
 
     #[test]

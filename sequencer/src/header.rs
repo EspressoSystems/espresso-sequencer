@@ -469,7 +469,9 @@ mod test_headers {
         catchup::mock::MockStateCatchup,
         eth_signature_key::EthKeyPair,
         l1_client::L1Client,
-        state::{validate_proposal, BlockMerkleTree, FeeAccount, FeeMerkleTree},
+        state::{
+            validate_proposal, BlockMerkleTree, FeeAccount, FeeMerkleTree, ProposalValidationError,
+        },
         NodeState,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -789,19 +791,20 @@ mod test_headers {
             .unwrap()
             .0;
 
-        let result = validate_proposal(
-            &state,
-            ChainConfig {
-                chain_id: U256::zero().into(),
-                ..Default::default()
-            },
-            &parent_leaf,
-            &proposal,
-            &vid_common,
-        )
-        .unwrap_err();
+        let chain_config = ChainConfig {
+            chain_id: U256::zero().into(),
+            ..Default::default()
+        };
+        let err = validate_proposal(&state, chain_config, &parent_leaf, &proposal, &vid_common)
+            .unwrap_err();
 
-        assert!(format!("{}", result.root_cause()).starts_with("Invalid Chain Config:"));
+        assert_eq!(
+            ProposalValidationError::InvalidChainConfig {
+                expected: format!("{:?}", chain_config),
+                proposal: format!("{:?}", proposal.chain_config)
+            },
+            err
+        );
 
         // Advance `proposal.height` to trigger validation error.
 
@@ -810,7 +813,7 @@ mod test_headers {
             .await
             .unwrap()
             .0;
-        let result = validate_proposal(
+        let err = validate_proposal(
             &validated_state,
             genesis.instance_state.chain_config,
             &parent_leaf,
@@ -819,8 +822,11 @@ mod test_headers {
         )
         .unwrap_err();
         assert_eq!(
-            format!("{}", result.root_cause()),
-            "Invalid Height Error: 0, 0"
+            ProposalValidationError::InvalidHeight {
+                parent_height: 0,
+                proposal_height: 0
+            },
+            err
         );
 
         // proposed `Header` root should include parent + parent.commit
@@ -832,7 +838,7 @@ mod test_headers {
             .unwrap()
             .0;
 
-        let result = validate_proposal(
+        let err = validate_proposal(
             &validated_state,
             genesis.instance_state.chain_config,
             &parent_leaf,
@@ -841,7 +847,13 @@ mod test_headers {
         )
         .unwrap_err();
         // Fails b/c `proposal` has not advanced from `parent`
-        assert!(format!("{}", result.root_cause()).contains("Invalid Block Root Error"));
+        assert_eq!(
+            ProposalValidationError::InvalidBlockRoot {
+                expected_root: validated_state.block_merkle_tree.commitment(),
+                proposal_root: proposal.block_merkle_tree_root
+            },
+            err
+        );
     }
 
     #[async_std::test]
