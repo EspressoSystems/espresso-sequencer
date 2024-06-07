@@ -1213,6 +1213,26 @@
 <a href="#1211" id="1211">1211</a>
 <a href="#1212" id="1212">1212</a>
 <a href="#1213" id="1213">1213</a>
+<a href="#1214" id="1214">1214</a>
+<a href="#1215" id="1215">1215</a>
+<a href="#1216" id="1216">1216</a>
+<a href="#1217" id="1217">1217</a>
+<a href="#1218" id="1218">1218</a>
+<a href="#1219" id="1219">1219</a>
+<a href="#1220" id="1220">1220</a>
+<a href="#1221" id="1221">1221</a>
+<a href="#1222" id="1222">1222</a>
+<a href="#1223" id="1223">1223</a>
+<a href="#1224" id="1224">1224</a>
+<a href="#1225" id="1225">1225</a>
+<a href="#1226" id="1226">1226</a>
+<a href="#1227" id="1227">1227</a>
+<a href="#1228" id="1228">1228</a>
+<a href="#1229" id="1229">1229</a>
+<a href="#1230" id="1230">1230</a>
+<a href="#1231" id="1231">1231</a>
+<a href="#1232" id="1232">1232</a>
+<a href="#1233" id="1233">1233</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Adversarial Espresso client.
 //!
 //! This program runs a randomized client for the Espresso query service. It is designed to hit
@@ -1286,7 +1306,7 @@
     /// `failed_actions` metric.
     </span><span class="attr">#[clap(
         long,
-        env = <span class="string">"ESPRESS_NASTY_CLIENT_HTTP_TIMEOUT"</span>,
+        env = <span class="string">"ESPRESSO_NASTY_CLIENT_HTTP_TIMEOUT"</span>,
         default_value = <span class="string">"30s"</span>,
         value_parser = parse_duration,
     )]
@@ -1348,6 +1368,10 @@
     </span>min_retries: usize,
 
     <span class="doccomment">/// Time after which WebSockets connection failures are allowed.
+    ///
+    /// The server is allowed to close connections which are idle for a certain amount of time. We
+    /// don't want to treat this as an error in the nasty client, as it is expected, and we should
+    /// simply reopen the stream.
     ///
     /// If there is an error polling a WebSockets connection last used more recently than this
     /// duration, it is considered an error. If the connection is staler than this, it is only a
@@ -1769,7 +1793,8 @@
             <span class="kw">let </span>(id, stream) = <span class="self">self</span>.open_streams.iter_mut().nth(index).unwrap();
 
             <span class="comment">// Check if the next item is immediately available or if we're going to block.
-            </span><span class="kw">if </span>stream.stream.as_mut().peek().now_or_never().is_none() {
+            </span><span class="kw">let </span>will_block = stream.stream.as_mut().peek().now_or_never().is_none();
+            <span class="kw">if </span>will_block {
                 blocking += <span class="number">1</span>;
                 <span class="kw">if </span>blocking &gt; <span class="self">self</span>.cfg.max_blocking_polls {
                     <span class="macro">tracing::info!</span>(<span class="string">"aborting poll_stream action; exceeded maximum blocking polls"</span>);
@@ -1799,10 +1824,20 @@
                 };
                 <span class="kw">match </span>res {
                     <span class="prelude-val">Ok</span>(obj) =&gt; {
-                        <span class="comment">// Successfully polling a WebSockets connection should reset the connection
-                        // timeout, so we don't expect errors from this connection in the near
-                        // future.
-                        </span>stream.refreshed = Instant::now();
+                        <span class="kw">if </span>will_block {
+                            <span class="comment">// Successfully reading from a WebSockets stream should reset the idle
+                            // conenection timeout, so we don't expect errors from this connection
+                            // in the near future. Note that this applies only to reads which
+                            // actually block. Reads which don't block may come directly from the
+                            // local TCP buffer, and thus not generate any traffic on the idle TCP
+                            // connection.
+                            </span>stream.refreshed = Instant::now();
+                            <span class="macro">tracing::info!</span>(
+                                refreshed = <span class="question-mark">?</span>stream.refreshed,
+                                <span class="string">"{} stream refreshed due to blocking read"</span>,
+                                <span class="self">Self</span>::singular(),
+                            );
+                        }
                         <span class="kw">break </span>obj;
                     }
                     <span class="prelude-val">Err</span>(err) <span class="kw">if </span>refreshed.elapsed() &gt;= <span class="self">self</span>.cfg.web_socket_timeout =&gt; {
@@ -1817,6 +1852,11 @@
                             </span>.context(<span class="macro">format!</span>(<span class="string">"subscribing to {} from {pos}"</span>, <span class="self">Self</span>::plural()))<span class="question-mark">?</span>;
                         stream.stream = Box::pin(conn.peekable());
                         stream.refreshed = Instant::now();
+                        <span class="macro">tracing::info!</span>(
+                            refreshed = <span class="question-mark">?</span>stream.refreshed,
+                            <span class="string">"{} stream refreshed due to connection reset"</span>,
+                            <span class="self">Self</span>::singular(),
+                        );
                     }
                     <span class="prelude-val">Err</span>(err) =&gt; {
                         <span class="comment">// Errors on a relatively fresh connection are not allowed. Close the stream
