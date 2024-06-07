@@ -1,14 +1,34 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use async_std::task::sleep;
+use async_std::task::{sleep, spawn, spawn_blocking};
 use clap::Parser;
+use es_version::{SequencerVersion, SEQUENCER_VERSION};
+use ethers::{
+    providers::{Http, Middleware, Provider},
+    signers::{coins_bip39::English, MnemonicBuilder, Signer},
+};
 use futures::FutureExt;
-use sequencer::{api::options, api::test_helpers::TestNetwork, persistence, testing::TestConfig};
+use hotshot_state_prover::service::{
+    load_proving_key, one_honest_threshold, sync_state, StateProverConfig,
+};
+use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
+use portpicker::pick_unused_port;
+use sequencer::{
+    api::{
+        options,
+        test_helpers::{TestNetwork, STAKE_TABLE_CAPACITY_FOR_TEST},
+    },
+    persistence,
+    state_signature::relay_server::run_relay_server,
+    testing::TestConfig,
+};
 use sequencer_utils::{
-    deployer::{deploy, Contracts},
+    deployer::{deploy, Contract, Contracts},
     AnvilOptions,
 };
+use surf_disco::Client;
+use tide_disco::error::ServerError;
 use url::Url;
 
 #[derive(Clone, Debug, Parser)]
@@ -49,6 +69,10 @@ struct Args {
     #[clap(short, long, env = "ESPRESSO_BUILDER_PORT")]
     builder_port: Option<u16>,
 
+    /// Port for connecting to the prover.
+    #[clap(short, long, env = "ESPRESSO_STATE_RELAY_PORT")]
+    state_relay_port: Option<u16>,
+
     #[clap(flatten)]
     sql: persistence::sql::Options,
 }
@@ -78,11 +102,23 @@ async fn main() -> anyhow::Result<()> {
         (url, Some(instance))
     };
 
-    let network = TestNetwork::new(
+    let relay_server_port = if let Some(p) = cli_params.state_relay_port {
+        p
+    } else {
+        pick_unused_port().unwrap()
+    };
+    let relay_server_url: Url = format!("http://localhost:{}", relay_server_port)
+        .parse()
+        .unwrap();
+
+    let mut config = TestConfig::default_with_l1(url.clone());
+    config.builder_port = cli_params.builder_port;
+    config.state_relay_url = Some(relay_server_url.clone());
+
+    let network = TestNetwork::new_with_config(
         api_options,
         [persistence::no_storage::Options; TestConfig::NUM_NODES],
-        url.clone(),
-        cli_params.builder_port,
+        config,
     )
     .await;
 
@@ -95,7 +131,7 @@ async fn main() -> anyhow::Result<()> {
 
     let light_client_genesis = network.light_client_genesis();
 
-    let _contracts = deploy(
+    let contracts = deploy(
         url.clone(),
         cli_params.mnemonic.clone(),
         cli_params.account_index,
@@ -106,33 +142,90 @@ async fn main() -> anyhow::Result<()> {
     )
     .await?;
 
+    let st = network.cfg.stake_table();
+    let total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
+    spawn(run_relay_server(
+        None,
+        one_honest_threshold(total_stake),
+        format!("http://0.0.0.0:{relay_server_port}")
+            .parse()
+            .unwrap(),
+        SEQUENCER_VERSION,
+    ));
+
+    let proving_key =
+        spawn_blocking(move || Arc::new(load_proving_key(STAKE_TABLE_CAPACITY_FOR_TEST as usize)))
+            .await;
+    let relay_server_client =
+        Client::<ServerError, SequencerVersion>::new(relay_server_url.clone());
+
+    let provider = Provider::<Http>::try_from(url.to_string()).unwrap();
+    let chain_id = provider.get_chainid().await.unwrap().as_u64();
+
+    let update_interval = Duration::from_secs(20);
+    let retry_interval = Duration::from_secs(2);
+    let config = StateProverConfig {
+        relay_server: relay_server_url,
+        update_interval,
+        retry_interval,
+        l1_provider: url,
+        light_client_address: contracts
+            .get_contract_address(Contract::LightClientProxy)
+            .unwrap(),
+        eth_signing_key: MnemonicBuilder::<English>::default()
+            .phrase(cli_params.mnemonic.as_str())
+            .index(cli_params.account_index)
+            .expect("error building wallet")
+            .build()
+            .expect("error opening wallet")
+            .with_chain_id(chain_id)
+            .signer()
+            .clone(),
+        orchestrator_url: "http://localhost".parse().unwrap(), // This should not be used in dev-node
+        port: None,
+        stake_table_capacity: STAKE_TABLE_CAPACITY_FOR_TEST as usize,
+    };
+
     loop {
-        sleep(Duration::from_secs(3600)).await
+        if let Err(err) = sync_state(&st, proving_key.clone(), &relay_server_client, &config).await
+        {
+            tracing::error!("Cannot sync the light client state, will retry: {}", err);
+            sleep(retry_interval).await;
+        } else {
+            tracing::info!("Sleeping for {:?}", update_interval);
+            sleep(update_interval).await;
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{process::Child, thread::sleep, time::Duration};
+    use std::{process::Child, sync::Arc, time::Duration};
 
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use async_std::stream::StreamExt;
+    use async_std::{stream::StreamExt, task::sleep};
     use committable::{Commitment, Committable};
+    use contract_bindings::light_client::LightClient;
     use es_version::SequencerVersion;
     use escargot::CargoBuild;
+    use ethers::types::{Address, U256};
     use futures::TryStreamExt;
     use hotshot_query_service::{
         availability::{BlockQueryData, TransactionQueryData},
         data_source::sql::testing::TmpDb,
     };
+    use hotshot_types::light_client::StateSignaturesBundle;
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
     use sequencer::{
         api::endpoints::NamespaceProofQueryData, state::BlockMerkleTree, Header, SeqTypes,
         Transaction,
     };
+    use sequencer_utils::{init_signer, AnvilOptions};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
+
+    const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
     pub struct BackgroundProcess(Child);
 
@@ -156,6 +249,11 @@ mod tests {
 
         let api_port = pick_unused_port().unwrap();
 
+        let state_relay_port = pick_unused_port().unwrap();
+
+        let instance = AnvilOptions::default().spawn().await;
+        let l1_url = instance.url();
+
         let db = TmpDb::init().await;
         let postgres_port = db.port();
 
@@ -166,9 +264,13 @@ mod tests {
             .run()
             .unwrap()
             .command()
+            .env("ESPRESSO_SEQUENCER_L1_PROVIDER", l1_url.to_string())
             .env("ESPRESSO_BUILDER_PORT", builder_port.to_string())
             .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
+            .env("ESPRESSO_STATE_RELAY_PORT", state_relay_port.to_string())
             .env("ESPRESSO_SEQUENCER_POSTGRES_HOST", "localhost")
+            .env("ESPRESSO_SEQUENCER_ETH_MNEMONIC", TEST_MNEMONIC)
+            .env("ESPRESSO_DEPLOYER_ACCOUNT_INDEX", "0")
             .env(
                 "ESPRESSO_SEQUENCER_POSTGRES_PORT",
                 postgres_port.to_string(),
@@ -198,6 +300,21 @@ mod tests {
         let builder_api_client: Client<ServerError, SequencerVersion> =
             Client::new(format!("http://localhost:{builder_port}").parse().unwrap());
         builder_api_client.connect(None).await;
+
+        let relay_client: Client<ServerError, SequencerVersion> = Client::new(
+            format!("http://localhost:{state_relay_port}")
+                .parse()
+                .unwrap(),
+        );
+        relay_client.connect(None).await;
+        while relay_client
+            .get::<StateSignaturesBundle>("api/state")
+            .send()
+            .await
+            .is_err()
+        {
+            sleep(Duration::from_secs(3)).await;
+        }
 
         let builder_address = builder_api_client
             .get::<String>("block_info/builderaddress")
@@ -229,7 +346,25 @@ mod tests {
             .await
             .is_err()
         {
-            sleep(Duration::from_secs(3))
+            sleep(Duration::from_secs(3)).await;
+        }
+
+        let light_client_address = "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9";
+
+        let signer = init_signer(&l1_url, TEST_MNEMONIC, 0).await.unwrap();
+        let light_client = LightClient::new(
+            light_client_address.parse::<Address>().unwrap(),
+            Arc::new(signer),
+        );
+
+        while light_client
+            .get_hot_shot_commitment(U256::from(1))
+            .call()
+            .await
+            .is_err()
+        {
+            tracing::info!("waiting for commitment");
+            sleep(Duration::from_secs(3)).await;
         }
 
         // These endpoints are currently used in `espresso-sequencer-go`. These checks
@@ -259,7 +394,7 @@ mod tests {
                 .await
                 .is_err()
             {
-                sleep(Duration::from_secs(3))
+                sleep(Duration::from_secs(3)).await;
             }
         }
 

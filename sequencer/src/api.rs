@@ -348,10 +348,20 @@ pub mod test_helpers {
             builder_port: Option<u16>,
         ) -> Self {
             let mut cfg = TestConfig::default_with_l1(l1);
+            cfg.builder_port = builder_port;
 
-            let (builder_task, builder_url) = run_test_builder(builder_port).await;
+            Self::with_state_config(opt, state, persistence, catchup, cfg).await
+        }
 
-            cfg.set_builder_url(builder_url);
+        pub async fn with_state_config(
+            opt: Options,
+            state: [ValidatedState; TestConfig::NUM_NODES],
+            persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
+            catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
+            mut cfg: TestConfig,
+        ) -> Self {
+            let (builder_task, builder_url) = run_test_builder(cfg.builder_port).await;
+            cfg.set_hotshot_builder_url(builder_url);
 
             let mut nodes = join_all(izip!(state, persistence, catchup).enumerate().map(
                 |(i, (state, persistence, catchup))| {
@@ -414,6 +424,21 @@ pub mod test_helpers {
             Self { server, peers, cfg }
         }
 
+        pub async fn new_with_config(
+            opt: Options,
+            persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
+            config: TestConfig,
+        ) -> Self {
+            Self::with_state_config(
+                opt,
+                Default::default(),
+                persistence,
+                std::array::from_fn(|_| MockStateCatchup::default()),
+                config,
+            )
+            .await
+        }
+
         pub async fn new(
             opt: Options,
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
@@ -432,7 +457,7 @@ pub mod test_helpers {
         }
 
         pub fn light_client_genesis(&self) -> ParsedLightClientState {
-            let st = self.cfg.stake_table(STAKE_TABLE_CAPACITY_FOR_TEST as usize);
+            let st = self.cfg.stake_table();
             light_client_genesis_from_stake_table(st).unwrap()
         }
 

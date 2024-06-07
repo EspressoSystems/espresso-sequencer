@@ -101,10 +101,10 @@ async fn main() {
     let provider = Provider::<Http>::try_from(args.l1_provider.to_string()).unwrap();
     let chain_id = provider.get_chainid().await.unwrap().as_u64();
     let config = StateProverConfig {
-        relay_server: args.relay_server.clone(),
+        relay_server: args.relay_server,
         update_interval: args.update_interval,
         retry_interval: args.retry_interval,
-        l1_provider: args.l1_provider.clone(),
+        l1_provider: args.l1_provider,
         light_client_address: args.light_client_address,
         eth_signing_key: MnemonicBuilder::<English>::default()
             .phrase(args.eth_mnemonic.as_str())

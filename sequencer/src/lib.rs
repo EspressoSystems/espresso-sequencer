@@ -587,10 +587,12 @@ pub mod testing {
     #[derive(Clone)]
     pub struct TestConfig {
         config: HotShotConfig<PubKey>,
-        priv_keys: Vec<BLSPrivKey>,
-        state_key_pairs: Vec<StateKeyPair>,
-        master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
-        url: Url,
+        pub priv_keys: Vec<BLSPrivKey>,
+        pub state_key_pairs: Vec<StateKeyPair>,
+        pub master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
+        pub url: Url,
+        pub state_relay_url: Option<Url>,
+        pub builder_port: Option<u16>,
     }
 
     impl Default for TestConfig {
@@ -652,6 +654,8 @@ pub mod testing {
                 state_key_pairs,
                 master_map,
                 url: "http://localhost:8545".parse().unwrap(),
+                state_relay_url: None,
+                builder_port: None,
             }
         }
     }
@@ -667,8 +671,12 @@ pub mod testing {
             &self.config
         }
 
-        pub fn set_builder_url(&mut self, builder_url: Url) {
+        pub fn set_hotshot_builder_url(&mut self, builder_url: Url) {
             self.config.builder_url = builder_url;
+        }
+
+        pub fn set_state_relay_url(&mut self, url: Url) {
+            self.state_relay_url = Some(url);
         }
 
         pub fn default_with_l1(l1: Url) -> Self {
@@ -697,12 +705,10 @@ pub mod testing {
             .await
         }
 
-        pub fn stake_table(
-            &self,
-            stake_table_capacity: usize,
-        ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
-            let mut st =
-                StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(stake_table_capacity);
+        pub fn stake_table(&self) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
+            let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(
+                STAKE_TABLE_CAPACITY_FOR_TEST as usize,
+            );
             self.config
                 .known_nodes_with_stake
                 .iter()
@@ -775,7 +781,7 @@ pub mod testing {
                 node_state,
                 persistence_opt.create().await.unwrap(),
                 networks,
-                None,
+                self.state_relay_url.clone(),
                 metrics,
                 stake_table_capacity,
                 bind_version,
@@ -856,7 +862,7 @@ mod test {
 
         let (builder_task, builder_url) = run_test_builder(None).await;
 
-        config.set_builder_url(builder_url);
+        config.set_hotshot_builder_url(builder_url);
 
         let handles = config.init_nodes(ver).await;
 
@@ -898,7 +904,7 @@ mod test {
 
         let (builder_task, builder_url) = run_test_builder(None).await;
 
-        config.set_builder_url(builder_url);
+        config.set_hotshot_builder_url(builder_url);
         let handles = config.init_nodes(ver).await;
 
         let handle_0 = &handles[0];
