@@ -9,7 +9,10 @@ use async_std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use clap::Parser;
 use derivative::Derivative;
-use futures::future::{BoxFuture, FutureExt};
+use futures::{
+    future::{BoxFuture, FutureExt},
+    StreamExt,
+};
 use hotshot_query_service::data_source::{
     storage::{
         pruning::PrunerCfg,
@@ -456,21 +459,23 @@ impl SequencerPersistence for Persistence {
         &self,
     ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
     {
-        let result = self
+        let rows = self
             .db
             .query_static("SELECT * FROM quorum_proposals")
             .await?;
 
-        let entry_pairs = result
+        let entry_pairs = rows
             .map(|row| {
-                let view_number = row.get("view") as u64;
+                let row = row?;
+                let view: i64 = row.get("view");
+                let view_number: ViewNumber = ViewNumber::new(view.try_into()?);
                 let bytes: Vec<u8> = row.get("proposal");
                 let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
                     bincode::deserialize(&bytes)?;
-                Ok((ViewNumber::new(view_number), proposal))
+                Ok((view_number, proposal))
             })
-            .transpose()
-            .collect::<Vec<(ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>)>>();
+            .collect::<anyhow::Result<Vec<_>>>();
+        Ok(None)
     }
 
     async fn append_vid(
