@@ -21,7 +21,7 @@ hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = 
 serde = { version = "1.0", features = ["derive"] }
 snafu = "0.8"
 tagged-base64 = "0.4"
-tide-disco = "0.7"
+tide-disco = "0.8"
 toml = "0.8"
 tracing = "0.1"
 vbs = "0.1.4"
@@ -29,4 +29,4 @@ vbs = "0.1.4"
 [dev-dependencies]
 hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.57" }
 portpicker = "0.1.1"
-surf-disco = "0.7"
+surf-disco = "0.8"

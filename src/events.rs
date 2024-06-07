@@ -69,13 +69,13 @@ impl tide_disco::error::Error for Error {
     }
     fn status(&self) -> StatusCode {
         match self {
-            Error::Request { .. } => StatusCode::BadRequest,
+            Error::Request { .. } => StatusCode::BAD_REQUEST,
             Error::EventAvailable { source, .. } => match source {
-                EventError::NotFound => StatusCode::NotFound,
-                EventError::Missing => StatusCode::NotFound,
-                EventError::Error { .. } => StatusCode::InternalServerError,
+                EventError::NotFound => StatusCode::NOT_FOUND,
+                EventError::Missing => StatusCode::NOT_FOUND,
+                EventError::Error { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             },
-            Error::Custom { .. } => StatusCode::InternalServerError,
+            Error::Custom { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
