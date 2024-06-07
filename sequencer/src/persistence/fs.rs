@@ -456,7 +456,7 @@ impl SequencerPersistence for Persistence {
 
         // Do we have any entries?
         if files.is_empty() {
-            // Don't both continuing if we don't have any data.
+            // Don't bother continuing if we don't have any data.
             return Ok(None);
         }
 
