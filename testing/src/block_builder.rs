@@ -96,7 +96,7 @@ where
         num_storage_nodes: usize,
         config: Self::Config,
     ) -> (Option<Box<dyn BuilderTask<TYPES>>>, Url) {
-        let url = Url::parse(&format!("http://localhost:{0}", config.port)).expect("Valid URL");
+        let url = Url::parse(&format!("http://0.0.0.0:{0}", config.port)).expect("Valid URL");
         let (source, task) = make_simple_builder(num_storage_nodes).await;
 
         let builder_api = hotshot_builder_api::builder::define_api::<
