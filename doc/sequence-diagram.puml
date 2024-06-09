@@ -45,7 +45,7 @@ group 1. Fee deposit
     Builder -> fee: fee deposit
 end group
 
-group 2. Transaction submisssion
+group 2. Transaction submission
     User -> orrpc: rollup O transaction
     orrpc -> submit: transaction
     User -> zkrpc: rollup Z transaction
