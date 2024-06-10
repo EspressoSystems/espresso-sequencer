@@ -84,6 +84,7 @@ jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
 libp2p = { version = "0.53", default-features = false } 
 num-traits = "0.2.18"
+num_enum = "0.7"
 portpicker = { workspace = true }
 rand = "0.8.5"
 rand_chacha = { workspace = true }
@@ -93,6 +94,7 @@ serde = { workspace = true }
 serde_json = "^1.0.113"
 sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
 snafu = { workspace = true }
+static_assertions = "1"
 strum = { workspace = true }
 surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }

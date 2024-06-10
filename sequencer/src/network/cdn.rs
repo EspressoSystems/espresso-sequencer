@@ -3,16 +3,33 @@ use std::marker::PhantomData;
 
 use bincode::Options;
 use cdn_broker::reexports::{
-    connection::{
-        protocols::{Quic, Tcp},
-        NoMiddleware, TrustedMiddleware, UntrustedMiddleware,
-    },
+    connection::protocols::{Quic, Tcp},
     crypto::signature::{Serializable, SignatureScheme},
-    def::{ConnectionDef, RunDef},
+    def::{ConnectionDef, RunDef, Topic as TopicTrait},
     discovery::{Embedded, Redis},
 };
-use hotshot::{traits::implementations::Topic, types::SignatureKey};
+use hotshot::{traits::implementations::Topic as HotShotTopic, types::SignatureKey};
 use hotshot_types::{traits::node_implementation::NodeType, utils::bincode_opts};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+use static_assertions::const_assert_eq;
+
+/// The enum for the topics we can subscribe to in the Push CDN
+#[repr(u8)]
+#[derive(IntoPrimitive, TryFromPrimitive, Clone, PartialEq, Eq)]
+pub enum Topic {
+    /// The global topic
+    Global = 0,
+    /// The DA topic
+    Da = 1,
+}
+
+// Make sure the topics are the same as defined in `HotShot`.
+const_assert_eq!(Topic::Global as u8, HotShotTopic::Global as u8);
+const_assert_eq!(Topic::Da as u8, HotShotTopic::Da as u8);
+
+/// Implement the `TopicTrait` for our `Topic` enum. We need this to filter
+/// topics that are not implemented at the application level.
+impl TopicTrait for Topic {}
 
 /// A wrapped `SignatureKey`. We need to implement the Push CDN's `SignatureScheme`
 /// trait in order to sign and verify messages to/from the CDN.
@@ -70,7 +87,6 @@ pub struct UserDef<TYPES: NodeType>(PhantomData<TYPES>);
 impl<TYPES: NodeType> ConnectionDef for UserDef<TYPES> {
     type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
     type Protocol = Quic;
-    type Middleware = UntrustedMiddleware;
 }
 
 /// The broker definition for the Push CDN.
@@ -79,7 +95,6 @@ pub struct BrokerDef<TYPES: NodeType>(PhantomData<TYPES>);
 impl<TYPES: NodeType> ConnectionDef for BrokerDef<TYPES> {
     type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
     type Protocol = Tcp;
-    type Middleware = TrustedMiddleware;
 }
 
 /// The client definition for the Push CDN. Uses the Quic
@@ -90,7 +105,6 @@ pub struct ClientDef<TYPES: NodeType>(PhantomData<TYPES>);
 impl<TYPES: NodeType> ConnectionDef for ClientDef<TYPES> {
     type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
     type Protocol = Quic;
-    type Middleware = NoMiddleware;
 }
 
 /// The testing run definition for the Push CDN.
