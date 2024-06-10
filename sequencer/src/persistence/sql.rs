@@ -105,6 +105,15 @@ pub struct Options {
     /// The minimum delay between loading chunks in a stream.
     #[clap(long, env = "ESPRESSO_SEQUENCER_CHUNK_FETCH_DELAY", value_parser = parse_duration)]
     pub(crate) chunk_fetch_delay: Option<Duration>,
+
+    /// Disable pruning and reconstruct previously pruned data.
+    ///
+    /// While running without pruning is the default behavior, the default will not try to
+    /// reconstruct data that was pruned in a previous run where pruning was enabled. This option
+    /// instructs the service to run without pruning _and_ reconstruct all previously pruned data by
+    /// fetching from peers.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune")]
+    pub(crate) archive: bool,
 }
 
 impl TryFrom<Options> for Config {
@@ -138,6 +147,9 @@ impl TryFrom<Options> for Config {
 
         if opt.prune {
             cfg = cfg.pruner_cfg(PrunerCfg::from(opt.pruning))?;
+        }
+        if opt.archive {
+            cfg = cfg.archive();
         }
 
         Ok(cfg)
