@@ -4,7 +4,7 @@ use derive_more::{Display, From, Into};
 use hotshot_query_service::explorer::ExplorerTransaction;
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
 use jf_merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
-use serde::{Deserialize, Serialize};
+use serde::{de::Error, Deserialize, Deserializer, Serialize};
 
 /// TODO [`NamespaceId`] has historical debt to repay:
 /// - It must fit into 4 bytes in order to maintain serialization compatibility
@@ -30,7 +30,6 @@ use serde::{Deserialize, Serialize};
     Clone,
     Copy,
     Serialize,
-    Deserialize,
     Debug,
     Display,
     PartialEq,
@@ -46,6 +45,25 @@ use serde::{Deserialize, Serialize};
 )]
 #[display(fmt = "{_0}")]
 pub struct NamespaceId(u64);
+
+impl<'de> Deserialize<'de> for NamespaceId {
+    fn deserialize<D>(deserializer: D) -> Result<NamespaceId, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::Unexpected;
+
+        let ns_id = <u64 as Deserialize>::deserialize(deserializer)?;
+        if ns_id > u32::MAX as u64 {
+            Err(D::Error::invalid_value(
+                Unexpected::Unsigned(ns_id),
+                &"exceeds u32::MAX",
+            ))
+        } else {
+            Ok(NamespaceId(ns_id))
+        }
+    }
+}
 
 impl NamespaceId {
     #[cfg(any(test, feature = "testing"))]
