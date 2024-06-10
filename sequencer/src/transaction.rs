@@ -1,6 +1,6 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use committable::{Commitment, Committable};
-use derive_more::{Display, From, Into};
+use derive_more::Display;
 use hotshot_query_service::explorer::ExplorerTransaction;
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
 use jf_merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
@@ -8,19 +8,18 @@ use serde::{de::Error, Deserialize, Deserializer, Serialize};
 
 /// TODO [`NamespaceId`] has historical debt to repay:
 /// - It must fit into 4 bytes in order to maintain serialization compatibility
-///   for [`crate::block::NsTable`], yet it currently occupies a `u64`. Thus,
-///   any code that creates a [`NamespaceId`] must ensure that it fits into 4
-///   bytes, which is bug-prone. We should either (i) allow it to occupy 8
-///   bytes, breaking serialization compatibility, or (ii) define it as a 4-byte
-///   struct such as `u32`.
+///   for [`crate::block::NsTable`], yet it currently occupies 8 bytes in order
+///   to maintain [`serde`] serialization compatibility with [`Transaction`].
+/// - Thus, it's a newtype for `u64` that impls `From<u32>` and has a manual
+///   impl for [`serde::Deserialize`] that deserializes a `u64` but then returns
+///   an error if the value cannot fit into a `u32`. This is ugly. In the future
+///   we need to break serialization compatibility so that `NsTable` and
+///   `Transaction` can agree on the byte length for `NamespaceId` and all this
+///   cruft should be removed.
 /// - We should move [`NamespaceId`] to `crate::block::full_payload::ns_table`
 ///   module because that's where it's byte length is dictated, so that's where
 ///   it makes the most sense to put serialization. See
 ///   <https://github.com/EspressoSystems/espresso-sequencer/pull/1499#issuecomment-2134065090>
-/// - Don't expose a constructor that allows construction of an invalid
-///   [`NamespaceId`]. (Example: caller could use [`From`] to get a
-///   [`NamespaceId`] that occupies more than 4 bytes.) Instead I suggest we
-///   allow construction only via serialization.
 /// - It impls [`Namespace`] from [`jf_merkle_tree`], but this seems unneeded
 ///   now that we're not using jellyfish's namespace merkle tree.
 /// - We derive lots of things that perhaps we shouldn't: `Into`, `From`,
@@ -35,8 +34,6 @@ use serde::{de::Error, Deserialize, Deserializer, Serialize};
     PartialEq,
     Eq,
     Hash,
-    Into,
-    From,
     Default,
     CanonicalDeserialize,
     CanonicalSerialize,
@@ -45,6 +42,18 @@ use serde::{de::Error, Deserialize, Deserializer, Serialize};
 )]
 #[display(fmt = "{_0}")]
 pub struct NamespaceId(u64);
+
+impl From<u32> for NamespaceId {
+    fn from(value: u32) -> Self {
+        Self(value as u64)
+    }
+}
+
+impl From<NamespaceId> for u32 {
+    fn from(value: NamespaceId) -> Self {
+        value.0 as Self
+    }
+}
 
 impl<'de> Deserialize<'de> for NamespaceId {
     fn deserialize<D>(deserializer: D) -> Result<NamespaceId, D::Error>
@@ -148,7 +157,7 @@ impl Namespaced for Transaction {
 impl Committable for Transaction {
     fn commit(&self) -> Commitment<Self> {
         committable::RawCommitmentBuilder::new("Transaction")
-            .u64_field("namespace", self.namespace.into())
+            .u64_field("namespace", self.namespace.0)
             .var_size_bytes(&self.payload)
             .finalize()
     }

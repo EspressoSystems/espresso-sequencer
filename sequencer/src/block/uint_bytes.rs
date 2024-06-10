@@ -65,7 +65,7 @@ macro_rules! uint_bytes_impl {
     }
 
 uint_bytes_impl!(usize);
-uint_bytes_impl!(u64);
+uint_bytes_impl!(u32);
 
 /// Impl [`serde`] for type `$T` with methods named `$to_bytes`, `$from_bytes`
 /// of the form
@@ -227,5 +227,5 @@ mod test {
         }
 
     uint_bytes_test_impl!(usize);
-    uint_bytes_test_impl!(u64);
+    uint_bytes_test_impl!(u32);
 }

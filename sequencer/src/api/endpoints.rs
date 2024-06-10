@@ -71,8 +71,7 @@ where
     api.get("getnamespaceproof", move |req, state| {
         async move {
             let height: usize = req.integer_param("height")?;
-            let ns_id: u64 = req.integer_param("namespace")?;
-            let ns_id = NamespaceId::from(ns_id);
+            let ns_id = NamespaceId::from(req.integer_param::<_, u32>("namespace")?);
             let (block, common) = try_join!(
                 async move {
                     state
@@ -167,16 +166,6 @@ where
             let tx = req
                 .body_auto::<Transaction, Ver>(Ver::instance())
                 .map_err(Error::from_request_error)?;
-
-            // Transactions with namespaces that do not fit in the u32
-            // cannot be included in the block.
-            // TODO: This issue will be addressed in the next release.
-            if tx.namespace() > NamespaceId::from(u32::MAX as u64) {
-                return Err(Error::Custom {
-                    message: "Transaction namespace > u32::MAX".to_string(),
-                    status: StatusCode::BAD_REQUEST,
-                });
-            }
 
             let hash = tx.commit();
             state

@@ -10,7 +10,7 @@ use crate::{
         full_payload::payload::PayloadByteLen,
         namespace_payload::NsPayloadRange,
         uint_bytes::{
-            bytes_serde_impl, u64_from_bytes, u64_to_bytes, usize_from_bytes, usize_to_bytes,
+            bytes_serde_impl, u32_from_bytes, u32_to_bytes, usize_from_bytes, usize_to_bytes,
         },
     },
     NamespaceId,
@@ -156,7 +156,7 @@ impl NsTable {
         let start = index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
 
         // TODO hack to deserialize `NamespaceId` from `NS_ID_BYTE_LEN` bytes
-        NamespaceId::from(u64_from_bytes::<NS_ID_BYTE_LEN>(
+        NamespaceId::from(u32_from_bytes::<NS_ID_BYTE_LEN>(
             &self.bytes[start..start + NS_ID_BYTE_LEN],
         ))
     }
@@ -252,7 +252,7 @@ impl NsTableBuilder {
     pub fn append_entry(&mut self, ns_id: NamespaceId, offset: usize) {
         // hack to serialize `NamespaceId` to `NS_ID_BYTE_LEN` bytes
         self.bytes
-            .extend(u64_to_bytes::<NS_ID_BYTE_LEN>(u64::from(ns_id)));
+            .extend(u32_to_bytes::<NS_ID_BYTE_LEN>(u32::from(ns_id)));
         self.bytes
             .extend(usize_to_bytes::<NS_OFFSET_BYTE_LEN>(offset));
         self.num_entries += 1;
