@@ -645,6 +645,18 @@
 <a href="#643" id="643">643</a>
 <a href="#644" id="644">644</a>
 <a href="#645" id="645">645</a>
+<a href="#646" id="646">646</a>
+<a href="#647" id="647">647</a>
+<a href="#648" id="648">648</a>
+<a href="#649" id="649">649</a>
+<a href="#650" id="650">650</a>
+<a href="#651" id="651">651</a>
+<a href="#652" id="652">652</a>
+<a href="#653" id="653">653</a>
+<a href="#654" id="654">654</a>
+<a href="#655" id="655">655</a>
+<a href="#656" id="656">656</a>
+<a href="#657" id="657">657</a>
 </pre></div><pre class="rust"><code><span class="kw">use super</span>::{NetworkConfig, PersistenceOptions, SequencerPersistence};
 <span class="kw">use crate</span>::{
     catchup::{SqlStateCatchup, StateCatchup},
@@ -752,6 +764,15 @@
     <span class="doccomment">/// The minimum delay between loading chunks in a stream.
     </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_CHUNK_FETCH_DELAY"</span>, value_parser = parse_duration)]
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) chunk_fetch_delay: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
+
+    <span class="doccomment">/// Disable pruning and reconstruct previously pruned data.
+    ///
+    /// While running without pruning is the default behavior, the default will not try to
+    /// reconstruct data that was pruned in a previous run where pruning was enabled. This option
+    /// instructs the service to run without pruning _and_ reconstruct all previously pruned data by
+    /// fetching from peers.
+    </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_ARCHIVE"</span>, conflicts_with = <span class="string">"prune"</span>)]
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) archive: bool,
 }
 
 <span class="kw">impl </span>TryFrom&lt;Options&gt; <span class="kw">for </span>Config {
@@ -785,6 +806,9 @@
 
         <span class="kw">if </span>opt.prune {
             cfg = cfg.pruner_cfg(PrunerCfg::from(opt.pruning))<span class="question-mark">?</span>;
+        }
+        <span class="kw">if </span>opt.archive {
+            cfg = cfg.archive();
         }
 
         <span class="prelude-val">Ok</span>(cfg)
