@@ -27,8 +27,8 @@ pub enum Topic {
 const_assert_eq!(Topic::Global as u8, HotShotTopic::Global as u8);
 const_assert_eq!(Topic::Da as u8, HotShotTopic::Da as u8);
 
-/// Implement the `TopicTrait` for our `Topic` enum. We need this to filter
-/// topics that are not implemented at the application level.
+/// Implement the `TopicTrait` for our `Topic` enum. This lets us define
+/// compatible topics at the broker-level. Others will be rejected.
 impl TopicTrait for Topic {}
 
 /// A wrapped `SignatureKey`. We need to implement the Push CDN's `SignatureScheme`
