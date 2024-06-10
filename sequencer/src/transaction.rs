@@ -7,6 +7,7 @@ use jf_merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 
 /// TODO [`NamespaceId`] has historical debt to repay:
+/// - <https://github.com/EspressoSystems/espresso-sequencer/issues/1574>
 /// - It must fit into 4 bytes in order to maintain serialization compatibility
 ///   for [`crate::block::NsTable`], yet it currently occupies 8 bytes in order
 ///   to maintain [`serde`] serialization compatibility with [`Transaction`].

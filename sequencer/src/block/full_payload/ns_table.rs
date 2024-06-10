@@ -26,6 +26,7 @@ const NS_OFFSET_BYTE_LEN: usize = 4;
 
 // TODO prefer [`NS_ID_BYTE_LEN`] set to `8` because [`NamespaceId`] is a `u64`
 // but we need to maintain serialization compatibility.
+// https://github.com/EspressoSystems/espresso-sequencer/issues/1574
 const NS_ID_BYTE_LEN: usize = 4;
 
 /// Raw binary data for a namespace table.
@@ -120,6 +121,7 @@ const NS_ID_BYTE_LEN: usize = 4;
 /// pub struct NsTable(#[serde(with = "base64_bytes")] Vec<u8>);
 /// ```
 /// but we need to maintain serialization compatibility.
+/// <https://github.com/EspressoSystems/espresso-sequencer/issues/1575>
 #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct NsTable {
     #[serde(with = "base64_bytes")]
@@ -156,6 +158,7 @@ impl NsTable {
         let start = index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN;
 
         // TODO hack to deserialize `NamespaceId` from `NS_ID_BYTE_LEN` bytes
+        // https://github.com/EspressoSystems/espresso-sequencer/issues/1574
         NamespaceId::from(u32_from_bytes::<NS_ID_BYTE_LEN>(
             &self.bytes[start..start + NS_ID_BYTE_LEN],
         ))

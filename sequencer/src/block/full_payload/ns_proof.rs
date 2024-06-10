@@ -44,6 +44,7 @@ impl NsProof {
         let ns_payload_range = payload.ns_table().ns_range(index, &payload_byte_len);
 
         // TODO vid_scheme() arg should be u32 to match get_num_storage_nodes
+        // https://github.com/EspressoSystems/HotShot/issues/3298
         let vid = vid_scheme(
             VidSchemeType::get_num_storage_nodes(common)
                 .try_into()
@@ -97,6 +98,7 @@ impl NsProof {
         match (&self.ns_proof, range.is_empty()) {
             (Some(proof), false) => {
                 // TODO vid_scheme() arg should be u32 to match get_num_storage_nodes
+                // https://github.com/EspressoSystems/HotShot/issues/3298
                 let vid = vid_scheme(
                     VidSchemeType::get_num_storage_nodes(common)
                         .try_into()

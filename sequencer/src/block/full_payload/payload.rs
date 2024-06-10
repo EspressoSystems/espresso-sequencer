@@ -133,13 +133,14 @@ impl Payload {
 
 #[async_trait]
 impl BlockPayload<SeqTypes> for Payload {
+    // TODO BlockPayload trait eliminate unneeded args, return vals of type
+    // `Self::Metadata` https://github.com/EspressoSystems/HotShot/issues/3300
     type Error = crate::Error;
     type Transaction = Transaction;
     type Instance = NodeState;
     type Metadata = NsTable;
     type ValidatedState = ValidatedState;
 
-    // TODO(BlockPayload): return type should not include `Self::Metadata`
     async fn from_transactions(
         transactions: impl IntoIterator<Item = Self::Transaction> + Send,
         validated_state: &Self::ValidatedState,
@@ -165,22 +166,22 @@ impl BlockPayload<SeqTypes> for Payload {
         (payload, ns_table)
     }
 
-    // TODO(BlockPayload): remove arg `Self::Metadata`
     fn builder_commitment(&self, metadata: &Self::Metadata) -> BuilderCommitment {
         let ns_table_bytes = self.ns_table.encode();
 
         // TODO `metadata_bytes` equals `ns_table_bytes`, so we are
         // double-hashing the ns_table. Why? To maintain serialization
         // compatibility.
+        // https://github.com/EspressoSystems/espresso-sequencer/issues/1576
         let metadata_bytes = metadata.encode();
 
         let mut digest = sha2::Sha256::new();
         digest.update((self.ns_payloads.len() as u64).to_le_bytes());
         digest.update((ns_table_bytes.len() as u64).to_le_bytes());
-        digest.update((metadata_bytes.len() as u64).to_le_bytes()); // redundant, see TODO above
+        digest.update((metadata_bytes.len() as u64).to_le_bytes()); // https://github.com/EspressoSystems/espresso-sequencer/issues/1576
         digest.update(&self.ns_payloads);
         digest.update(ns_table_bytes);
-        digest.update(metadata_bytes); // redundant, see TODO above
+        digest.update(metadata_bytes); // https://github.com/EspressoSystems/espresso-sequencer/issues/1576
         BuilderCommitment::from_raw_digest(digest.finalize())
     }
 
@@ -193,12 +194,12 @@ impl BlockPayload<SeqTypes> for Payload {
 }
 
 impl QueryablePayload<SeqTypes> for Payload {
-    // TODO(QueryablePayload): remove `Ord` bound from `TransactionIndex`
+    // TODO changes to QueryablePayload trait:
+    // https://github.com/EspressoSystems/hotshot-query-service/issues/639
     type TransactionIndex = Index;
     type Iter<'a> = Iter<'a>;
     type InclusionProof = TxProof;
 
-    // TODO(QueryablePayload): remove arg `Self::Metadata`
     fn len(&self, _meta: &Self::Metadata) -> usize {
         // Counting txs is nontrivial. The easiest solution is to consume an
         // iterator. If performance is a concern then we could cache this count
@@ -206,19 +207,17 @@ impl QueryablePayload<SeqTypes> for Payload {
         self.iter(_meta).count()
     }
 
-    // TODO(QueryablePayload): remove arg `Self::Metadata`
     fn iter<'a>(&'a self, _meta: &'a Self::Metadata) -> Self::Iter<'a> {
         Iter::new(self)
     }
 
-    // TODO(QueryablePayload): add arg `VidCommon`
-    // TODO(QueryablePayload): remove arg `Self::Metadata`
     fn transaction_with_proof(
         &self,
         _meta: &Self::Metadata,
         index: &Self::TransactionIndex,
     ) -> Option<(Self::Transaction, Self::InclusionProof)> {
         // TODO HACK! THE RETURNED PROOF MIGHT FAIL VERIFICATION.
+        // https://github.com/EspressoSystems/hotshot-query-service/issues/639
         //
         // Need a `VidCommon` to proceed. Need to modify `QueryablePayload`
         // trait to add a `VidCommon` arg. In the meantime tests fail if I leave
