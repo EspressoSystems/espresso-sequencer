@@ -1,3 +1,3 @@
 (function() {var implementors = {
-"sequencer":[["impl TestableBlock&lt;<a class=\"struct\" href=\"sequencer/struct.SeqTypes.html\" title=\"struct sequencer::SeqTypes\">SeqTypes</a>&gt; for <a class=\"struct\" href=\"sequencer/block/payload/struct.Payload.html\" title=\"struct sequencer::block::payload::Payload\">Payload</a>&lt;<a class=\"type\" href=\"sequencer/block/entry/type.TxTableEntryWord.html\" title=\"type sequencer::block::entry::TxTableEntryWord\">TxTableEntryWord</a>&gt;"]]
+"sequencer":[["impl TestableBlock&lt;<a class=\"struct\" href=\"sequencer/struct.SeqTypes.html\" title=\"struct sequencer::SeqTypes\">SeqTypes</a>&gt; for <a class=\"struct\" href=\"sequencer/block/full_payload/payload/struct.Payload.html\" title=\"struct sequencer::block::full_payload::payload::Payload\">Payload</a>"]]
 };if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

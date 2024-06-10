@@ -4,8 +4,8 @@
     pub(crate) max_size: <a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.u64.html">u64</a>,
     pub(crate) min_batch_size: <a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.u64.html">u64</a>,
     pub(crate) max_batch_size: <a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.u64.html">u64</a>,
-    pub(crate) min_namespace: <a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.u64.html">u64</a>,
-    pub(crate) max_namespace: <a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.u64.html">u64</a>,
+    pub(crate) min_namespace: <a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.u32.html">u32</a>,
+    pub(crate) max_namespace: <a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.u32.html">u32</a>,
     pub(crate) delay: <a class="struct" href="https://doc.rust-lang.org/1.78.0/core/time/struct.Duration.html" title="struct core::time::Duration">Duration</a>,
     pub(crate) channel_bound: <a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.usize.html">usize</a>,
     pub(crate) seed: <a class="enum" href="https://doc.rust-lang.org/1.78.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.u64.html">u64</a>&gt;,
@@ -25,8 +25,8 @@
 This is by selecting a random size S on each iteration I since last batch, and collecting a batch whenever that S &lt;= I.</p>
 </div><span id="structfield.max_batch_size" class="structfield section-header"><a href="#structfield.max_batch_size" class="anchor field">§</a><code>max_batch_size: <a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.u64.html">u64</a></code></span><div class="docblock"><p>Maximum size of batch of transactions to submit.</p>
 <p>Batches will be a random count between MIN_BATCH_SIZE and MAX_BATCH_SIZE, with a falling distribution favoring smaller batches.</p>
-</div><span id="structfield.min_namespace" class="structfield section-header"><a href="#structfield.min_namespace" class="anchor field">§</a><code>min_namespace: <a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.u64.html">u64</a></code></span><div class="docblock"><p>Minimum namespace ID to submit to.</p>
-</div><span id="structfield.max_namespace" class="structfield section-header"><a href="#structfield.max_namespace" class="anchor field">§</a><code>max_namespace: <a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.u64.html">u64</a></code></span><div class="docblock"><p>Maximum namespace ID to submit to.</p>
+</div><span id="structfield.min_namespace" class="structfield section-header"><a href="#structfield.min_namespace" class="anchor field">§</a><code>min_namespace: <a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.u32.html">u32</a></code></span><div class="docblock"><p>Minimum namespace ID to submit to.</p>
+</div><span id="structfield.max_namespace" class="structfield section-header"><a href="#structfield.max_namespace" class="anchor field">§</a><code>max_namespace: <a class="primitive" href="https://doc.rust-lang.org/1.78.0/std/primitive.u32.html">u32</a></code></span><div class="docblock"><p>Maximum namespace ID to submit to.</p>
 </div><span id="structfield.delay" class="structfield section-header"><a href="#structfield.delay" class="anchor field">§</a><code>delay: <a class="struct" href="https://doc.rust-lang.org/1.78.0/core/time/struct.Duration.html" title="struct core::time::Duration">Duration</a></code></span><div class="docblock"><p>Mean delay between submitting transactions.</p>
 <p>The delay after each transaction will be sampled from an exponential distribution with mean
 DELAY.</p>

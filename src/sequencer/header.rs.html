@@ -971,24 +971,8 @@
 <a href="#969" id="969">969</a>
 <a href="#970" id="970">970</a>
 <a href="#971" id="971">971</a>
-<a href="#972" id="972">972</a>
-<a href="#973" id="973">973</a>
-<a href="#974" id="974">974</a>
-<a href="#975" id="975">975</a>
-<a href="#976" id="976">976</a>
-<a href="#977" id="977">977</a>
-<a href="#978" id="978">978</a>
-<a href="#979" id="979">979</a>
-<a href="#980" id="980">980</a>
-<a href="#981" id="981">981</a>
-<a href="#982" id="982">982</a>
-<a href="#983" id="983">983</a>
-<a href="#984" id="984">984</a>
-<a href="#985" id="985">985</a>
-<a href="#986" id="986">986</a>
-<a href="#987" id="987">987</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
-    block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
+    block::NsTable,
     chain_config::ResolvableChainConfig,
     eth_signature_key::BuilderSignature,
     l1_client::L1Snapshot,
@@ -1067,7 +1051,7 @@
 
     <span class="kw">pub </span>payload_commitment: VidCommitment,
     <span class="kw">pub </span>builder_commitment: BuilderCommitment,
-    <span class="kw">pub </span>ns_table: NameSpaceTable&lt;TxTableEntryWord&gt;,
+    <span class="kw">pub </span>ns_table: NsTable,
     <span class="doccomment">/// Root Commitment of Block Merkle Tree
     </span><span class="kw">pub </span>block_merkle_tree_root: BlockMerkleCommitment,
     <span class="doccomment">/// Root Commitment of `FeeMerkleTree`
@@ -1117,18 +1101,6 @@
         <span class="comment">// We use the tag "BLOCK" since blocks are identified by the hash of their header. This will
         // thus be more intuitive to users than "HEADER".
         </span><span class="string">"BLOCK"</span>.into()
-    }
-}
-
-<span class="kw">impl </span>Committable <span class="kw">for </span>NameSpaceTable&lt;TxTableEntryWord&gt; {
-    <span class="kw">fn </span>commit(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Commitment&lt;<span class="self">Self</span>&gt; {
-        RawCommitmentBuilder::new(<span class="kw-2">&amp;</span><span class="self">Self</span>::tag())
-            .var_size_bytes(<span class="self">self</span>.get_bytes())
-            .finalize()
-    }
-
-    <span class="kw">fn </span>tag() -&gt; String {
-        <span class="string">"NSTABLE"</span>.into()
     }
 }
 
@@ -1454,14 +1426,10 @@
     }
 
     <span class="kw">fn </span>namespace_ids(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;<span class="self">Self</span>::NamespaceId&gt; {
-        <span class="kw">let </span>l = <span class="self">self</span>.ns_table.len();
-        <span class="kw">let </span><span class="kw-2">mut </span>result: Vec&lt;<span class="self">Self</span>::NamespaceId&gt; = Vec::with_capacity(l);
-        <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..l {
-            <span class="kw">let </span>(ns_id, <span class="kw">_</span>) = <span class="self">self</span>.ns_table.get_table_entry(i);
-            result.push(ns_id);
-        }
-
-        result
+        <span class="self">self</span>.ns_table
+            .iter()
+            .map(|i| <span class="self">self</span>.ns_table.read_ns_id_unchecked(<span class="kw-2">&amp;</span>i))
+            .collect()
     }
 }
 
@@ -1750,7 +1718,7 @@
         <span class="kw">pub </span>validated_state: ValidatedState,
         <span class="kw">pub </span>leaf: Leaf,
         <span class="kw">pub </span>header: Header,
-        <span class="kw">pub </span>ns_table: NameSpaceTable&lt;TxTableEntryWord&gt;,
+        <span class="kw">pub </span>ns_table: NsTable,
     }
 
     <span class="kw">impl </span>GenesisForTest {
@@ -1759,7 +1727,7 @@
             <span class="kw">let </span>validated_state = ValidatedState::genesis(<span class="kw-2">&amp;</span>instance_state).<span class="number">0</span>;
             <span class="kw">let </span>leaf = Leaf::genesis(<span class="kw-2">&amp;</span>validated_state, <span class="kw-2">&amp;</span>instance_state).<span class="kw">await</span>;
             <span class="kw">let </span>header = leaf.block_header().clone();
-            <span class="kw">let </span>ns_table = leaf.block_payload().unwrap().get_ns_table().clone();
+            <span class="kw">let </span>ns_table = leaf.block_payload().unwrap().ns_table().clone();
             <span class="self">Self </span>{
                 instance_state,
                 validated_state,

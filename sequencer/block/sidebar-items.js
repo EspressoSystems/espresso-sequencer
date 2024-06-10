@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["entry","payload","queryable","tables","tx_iterator"],"type":["NsTable"]};
+window.SIDEBAR_ITEMS = {"mod":["full_payload","namespace_payload","uint_bytes"],"struct":["NsProof","NsTable","Payload"]};

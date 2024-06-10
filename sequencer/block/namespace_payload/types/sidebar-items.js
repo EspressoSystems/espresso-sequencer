@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["NUM_TXS_BYTE_LEN","TX_OFFSET_BYTE_LEN"],"struct":["NsPayloadBuilder","NsPayloadByteLen","NumTxs","NumTxsRange","NumTxsUnchecked","TxIndex","TxIter","TxPayload","TxPayloadRange","TxTableEntries","TxTableEntriesRange"],"trait":["FromNsPayloadBytes","NsPayloadBytesRange"]};

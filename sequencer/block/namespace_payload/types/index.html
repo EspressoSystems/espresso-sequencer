@@ -1,0 +1,82 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Types related to a namespace payload and its transaction table."><title>sequencer::block::namespace_payload::types - Rust</title><script> if (window.location.protocol !== "file:") document.write(`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceSerif4-Regular-46f98efaafac5295.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Regular-018c141bf0843ffd.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/FiraSans-Medium-8f9a781e4970d388.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Regular-562dcc5011b6de7d.ttf.woff2"><link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/SourceCodePro-Semibold-d899c5a5c4aeb14a.ttf.woff2">`)</script><link rel="stylesheet" href="../../../../static.files/normalize-76eba96aa4d2e634.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-e935ef01ae1c1829.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="sequencer" data-themes="" data-resource-suffix="" data-rustdoc-version="1.78.0 (9b00956e5 2024-04-29)" data-channel="1.78.0" data-search-js="search-42d8da7a6b9792c2.js" data-settings-js="settings-4313503d2e1961c2.js" ><script src="../../../../static.files/storage-4c98445ec4002617.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-12cf3b4f4f9dc36d.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-04d5337699b92874.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-16x16-8b506e7a72182f1c.png"><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-422f7d1d52889060.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-2c020d218678b618.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../sequencer/index.html">sequencer</a><span class="version">0.1.0</span></h2></div><h2 class="location"><a href="#">Module types</a></h2><div class="sidebar-elems"><section><ul class="block"><li><a href="#structs">Structs</a></li><li><a href="#constants">Constants</a></li><li><a href="#traits">Traits</a></li></ul></section><h2><a href="../index.html">In sequencer::block::namespace_payload</a></h2></div></nav><div class="sidebar-resizer"></div>
+    <main><div class="width-limiter"><nav class="sub"><form class="search-form"><span></span><div id="sidebar-button" tabindex="-1"><a href="../../../../sequencer/all.html" title="show sidebar"></a></div><input class="search-input" name="search" aria-label="Run search in the documentation" autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"><div id="help-button" tabindex="-1"><a href="../../../../help.html" title="help">?</a></div><div id="settings-menu" tabindex="-1"><a href="../../../../settings.html" title="settings"><img width="22" height="22" alt="Change settings" src="../../../../static.files/wheel-7b819b6101059cd0.svg"></a></div></form></nav><section id="main-content" class="content"><div class="main-heading"><h1>Module <a href="../../../index.html">sequencer</a>::<wbr><a href="../../index.html">block</a>::<wbr><a href="../index.html">namespace_payload</a>::<wbr><a class="mod" href="#">types</a><button id="copy-path" title="Copy item path to clipboard"><img src="../../../../static.files/clipboard-7571035ce49a181d.svg" width="19" height="18" alt="Copy item path"></button></h1><span class="out-of-band"><a class="src" href="../../../../src/sequencer/block/namespace_payload/types.rs.html#1-435">source</a> · <button id="toggle-all-docs" title="collapse all docs">[<span>&#x2212;</span>]</button></span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Types related to a namespace payload and its transaction table.</p>
+<p>All code that needs to know the binary format of a namespace payload and its
+transaction table is restricted to this file.</p>
+<p>There are many newtypes in this file to facilitate transaction proofs.</p>
+<h2 id="binary-format-of-a-namespace-payload"><a class="doc-anchor" href="#binary-format-of-a-namespace-payload">§</a>Binary format of a namespace payload</h2>
+<p>Any sequence of bytes is a valid [<code>NsPayload</code>].</p>
+<p>A namespace payload consists of two concatenated byte sequences:</p>
+<ul>
+<li><code>tx_table</code>: transaction table</li>
+<li><code>tx_payloads</code>: transaction payloads</li>
+</ul>
+<h2 id="transaction-table"><a class="doc-anchor" href="#transaction-table">§</a>Transaction table</h2>
+<p>Byte lengths for the different items that could appear in a <code>tx_table</code> are
+specified in local private constants <a href="constant.NUM_TXS_BYTE_LEN.html" title="constant sequencer::block::namespace_payload::types::NUM_TXS_BYTE_LEN"><code>NUM_TXS_BYTE_LEN</code></a>,
+<a href="constant.TX_OFFSET_BYTE_LEN.html" title="constant sequencer::block::namespace_payload::types::TX_OFFSET_BYTE_LEN"><code>TX_OFFSET_BYTE_LEN</code></a>.</p>
+<h3 id="number-of-entries-in-the-transaction-table"><a class="doc-anchor" href="#number-of-entries-in-the-transaction-table">§</a>Number of entries in the transaction table</h3>
+<p>The first <a href="constant.NUM_TXS_BYTE_LEN.html" title="constant sequencer::block::namespace_payload::types::NUM_TXS_BYTE_LEN"><code>NUM_TXS_BYTE_LEN</code></a> bytes of the <code>tx_table</code> indicate the number
+<code>n</code> of entries in the table as a little-endian unsigned integer. If the
+entire namespace payload byte length is smaller than <a href="constant.NUM_TXS_BYTE_LEN.html" title="constant sequencer::block::namespace_payload::types::NUM_TXS_BYTE_LEN"><code>NUM_TXS_BYTE_LEN</code></a>
+then the missing bytes are zero-padded.</p>
+<p>The bytes in the namespace payload beyond the first <a href="constant.NUM_TXS_BYTE_LEN.html" title="constant sequencer::block::namespace_payload::types::NUM_TXS_BYTE_LEN"><code>NUM_TXS_BYTE_LEN</code></a>
+bytes encode entries in the <code>tx_table</code>. Each entry consumes exactly
+<a href="constant.TX_OFFSET_BYTE_LEN.html" title="constant sequencer::block::namespace_payload::types::TX_OFFSET_BYTE_LEN"><code>TX_OFFSET_BYTE_LEN</code></a> bytes.</p>
+<p>The number <code>n</code> could be anything, including a number much larger than the
+number of entries that could fit in the namespace payload. As such, the
+actual number of entries in the <code>tx_table</code> is defined as the minimum of <code>n</code>
+and the maximum number of whole <code>tx_table</code> entries that could fit in the
+namespace payload.</p>
+<p>The <code>tx_payloads</code> consist of any bytes in the namespace payload beyond the
+<code>tx_table</code>.</p>
+<h3 id="transaction-table-entry"><a class="doc-anchor" href="#transaction-table-entry">§</a>Transaction table entry</h3>
+<p>Each entry in the <code>tx_table</code> is exactly <a href="constant.TX_OFFSET_BYTE_LEN.html" title="constant sequencer::block::namespace_payload::types::TX_OFFSET_BYTE_LEN"><code>TX_OFFSET_BYTE_LEN</code></a> bytes. These
+bytes indicate the end-index of a transaction in the namespace payload
+bytes. This end-index is a little-endian unsigned integer.</p>
+<p>This offset is relative to the end of the <code>tx_table</code> within the current
+namespace.</p>
+<h4 id="example"><a class="doc-anchor" href="#example">§</a>Example</h4>
+<p>Suppose a block payload has 3000 bytes and 3 namespaces of 1000 bytes each.
+Suppose the <code>tx_table</code> for final namespace in the block has byte length 100,
+and suppose an entry in that <code>tx_table</code> indicates an end-index of <code>10</code>. The
+actual end-index of that transaction relative to the current namespace is
+<code>110</code>: <code>10</code> bytes for the offset plus <code>100</code> bytes for the <code>tx_table</code>.
+Relative to the entire block payload, the end-index of that transaction is
+<code>2110</code>: <code>10</code> bytes for the offset plus <code>100</code> bytes for the <code>tx_table</code> plus
+<code>2000</code> bytes for this namespace.</p>
+<h2 id="how-to-deduce-a-transactions-byte-range"><a class="doc-anchor" href="#how-to-deduce-a-transactions-byte-range">§</a>How to deduce a transaction’s byte range</h2>
+<p>In order to extract the payload bytes of a single transaction <code>T</code> from the
+namespace payload one needs both the start- and end-indices for <code>T</code>.</p>
+<p>See <a href="struct.TxPayloadRange.html#method.new" title="associated function sequencer::block::namespace_payload::types::TxPayloadRange::new"><code>TxPayloadRange::new</code></a> for clarification. What follows is a description
+of what’s implemented in <a href="struct.TxPayloadRange.html#method.new" title="associated function sequencer::block::namespace_payload::types::TxPayloadRange::new"><code>TxPayloadRange::new</code></a>.</p>
+<p>If <code>T</code> occupies the <code>i</code>th entry in the <code>tx_table</code> for <code>i&gt;0</code> then the
+start-index for <code>T</code> is defined as the end-index of the <code>(i-1)</code>th entry in
+the table.</p>
+<p>Thus, both start- and end-indices for any transaction <code>T</code> can be read from a
+contiguous, constant-size byte range in the <code>tx_table</code>. This property
+facilitates transaction proofs.</p>
+<p>The start-index of the 0th entry in the table is implicitly defined to be
+<code>0</code>.</p>
+<p>The start- and end-indices <code>(declared_start, declared_end)</code> declared in the
+<code>tx_table</code> could be anything. As such, the actual start- and end-indices
+<code>(start, end)</code> are defined so as to ensure that the byte range is
+well-defined and in-bounds for the namespace payload:</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code>end = min(declared_end, namespace_payload_byte_length)
+start = min(declared_start, end)</code></pre></div>
+<p>To get the byte range for <code>T</code> relative to the current namespace, the above
+range is translated by the byte length of the <code>tx_table</code> <em>as declared in the
+<code>tx_table</code> itself</em>, suitably truncated to fit within the current namespace.</p>
+<p>In particular, if the <code>tx_table</code> declares a huge number <code>n</code> of entries that
+cannot fit into the namespace payload then all transactions in this
+namespace have a zero-length byte range whose start- and end-indices are
+both <code>namespace_payload_byte_length</code>.</p>
+<p>In a “honestly-prepared” <code>tx_table</code> the end-index of the final transaction
+equals the byte length of the namespace payload minus the byte length of the
+<code>tx_table</code>. (Otherwise the namespace payload might have bytes that are not
+included in any transaction.)</p>
+<p>It is possible that a <code>tx_table</code> table could indicate two distinct
+transactions whose byte ranges overlap, though no “honestly-prepared”
+<code>tx_table</code> would do this.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="struct" href="struct.NsPayloadBuilder.html" title="struct sequencer::block::namespace_payload::types::NsPayloadBuilder">NsPayloadBuilder</a><span title="Restricted Visibility">&nbsp;🔒</span> </div><div class="desc docblock-short">Build an individual namespace payload one transaction at a time.</div></li><li><div class="item-name"><a class="struct" href="struct.NsPayloadByteLen.html" title="struct sequencer::block::namespace_payload::types::NsPayloadByteLen">NsPayloadByteLen</a></div><div class="desc docblock-short">Byte length of a namespace payload.</div></li><li><div class="item-name"><a class="struct" href="struct.NumTxs.html" title="struct sequencer::block::namespace_payload::types::NumTxs">NumTxs</a></div><div class="desc docblock-short">Number of txs in a namespace.</div></li><li><div class="item-name"><a class="struct" href="struct.NumTxsRange.html" title="struct sequencer::block::namespace_payload::types::NumTxsRange">NumTxsRange</a></div><div class="desc docblock-short">Byte range for the part of a tx table that declares the number of txs in the
+payload.</div></li><li><div class="item-name"><a class="struct" href="struct.NumTxsUnchecked.html" title="struct sequencer::block::namespace_payload::types::NumTxsUnchecked">NumTxsUnchecked</a></div><div class="desc docblock-short">The part of a tx table that declares the number of txs in the payload.</div></li><li><div class="item-name"><a class="struct" href="struct.TxIndex.html" title="struct sequencer::block::namespace_payload::types::TxIndex">TxIndex</a><span title="Restricted Visibility">&nbsp;🔒</span> </div><div class="desc docblock-short">Index for an entry in a tx table.</div></li><li><div class="item-name"><a class="struct" href="struct.TxIter.html" title="struct sequencer::block::namespace_payload::types::TxIter">TxIter</a><span title="Restricted Visibility">&nbsp;🔒</span> </div></li><li><div class="item-name"><a class="struct" href="struct.TxPayload.html" title="struct sequencer::block::namespace_payload::types::TxPayload">TxPayload</a></div><div class="desc docblock-short">A transaction’s payload data.</div></li><li><div class="item-name"><a class="struct" href="struct.TxPayloadRange.html" title="struct sequencer::block::namespace_payload::types::TxPayloadRange">TxPayloadRange</a></div><div class="desc docblock-short">Byte range for a transaction’s payload data.</div></li><li><div class="item-name"><a class="struct" href="struct.TxTableEntries.html" title="struct sequencer::block::namespace_payload::types::TxTableEntries">TxTableEntries</a></div><div class="desc docblock-short">Entries from a tx table in a namespace for use in a transaction proof.</div></li><li><div class="item-name"><a class="struct" href="struct.TxTableEntriesRange.html" title="struct sequencer::block::namespace_payload::types::TxTableEntriesRange">TxTableEntriesRange</a></div><div class="desc docblock-short">Byte range for entries from a tx table for use in a transaction proof.</div></li></ul><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="constant" href="constant.NUM_TXS_BYTE_LEN.html" title="constant sequencer::block::namespace_payload::types::NUM_TXS_BYTE_LEN">NUM_TXS_BYTE_LEN</a><span title="Restricted Visibility">&nbsp;🔒</span> </div><div class="desc docblock-short">Byte lengths for the different items that could appear in a tx table.</div></li><li><div class="item-name"><a class="constant" href="constant.TX_OFFSET_BYTE_LEN.html" title="constant sequencer::block::namespace_payload::types::TX_OFFSET_BYTE_LEN">TX_OFFSET_BYTE_LEN</a><span title="Restricted Visibility">&nbsp;🔒</span> </div></li></ul><h2 id="traits" class="section-header">Traits<a href="#traits" class="anchor">§</a></h2><ul class="item-table"><li><div class="item-name"><a class="trait" href="trait.FromNsPayloadBytes.html" title="trait sequencer::block::namespace_payload::types::FromNsPayloadBytes">FromNsPayloadBytes</a></div><div class="desc docblock-short">Data that can be deserialized from a subslice of namespace payload bytes.</div></li><li><div class="item-name"><a class="trait" href="trait.NsPayloadBytesRange.html" title="trait sequencer::block::namespace_payload::types::NsPayloadBytesRange">NsPayloadBytesRange</a></div><div class="desc docblock-short">Specifies a subslice of namespace payload bytes to read.</div></li></ul></section></div></main></body></html>

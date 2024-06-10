@@ -1267,6 +1267,23 @@
 <a href="#1265" id="1265">1265</a>
 <a href="#1266" id="1266">1266</a>
 <a href="#1267" id="1267">1267</a>
+<a href="#1268" id="1268">1268</a>
+<a href="#1269" id="1269">1269</a>
+<a href="#1270" id="1270">1270</a>
+<a href="#1271" id="1271">1271</a>
+<a href="#1272" id="1272">1272</a>
+<a href="#1273" id="1273">1273</a>
+<a href="#1274" id="1274">1274</a>
+<a href="#1275" id="1275">1275</a>
+<a href="#1276" id="1276">1276</a>
+<a href="#1277" id="1277">1277</a>
+<a href="#1278" id="1278">1278</a>
+<a href="#1279" id="1279">1279</a>
+<a href="#1280" id="1280">1280</a>
+<a href="#1281" id="1281">1281</a>
+<a href="#1282" id="1282">1282</a>
+<a href="#1283" id="1283">1283</a>
+<a href="#1284" id="1284">1284</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="self">self</span>::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
 <span class="kw">use crate</span>::{
     network,
@@ -1956,7 +1973,7 @@
     <span class="kw">use crate</span>::{
         persistence::no_storage,
         testing::{wait_for_decide_on_handle, TestConfig},
-        Header,
+        Header, NamespaceId,
     };
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>committable::Committable;
@@ -1965,8 +1982,7 @@
     <span class="kw">use </span>es_version::SequencerVersion;
     <span class="kw">use </span>ethers::utils::Anvil;
     <span class="kw">use </span>futures::stream::StreamExt;
-    <span class="kw">use </span>hotshot_query_service::availability::LeafQueryData;
-    <span class="kw">use </span>hotshot_types::vid::vid_scheme;
+    <span class="kw">use </span>hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
     <span class="kw">use </span>portpicker::pick_unused_port;
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>test_helpers::{
@@ -1998,8 +2014,9 @@
         setup_logging();
         setup_backtrace();
 
-        <span class="kw">let </span>vid = vid_scheme(<span class="number">5</span>);
-        <span class="kw">let </span>txn = Transaction::new(Default::default(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]);
+        <span class="comment">// Arbitrary transaction, arbitrary namespace ID
+        </span><span class="kw">let </span>ns_id = NamespaceId::from(<span class="number">42</span>);
+        <span class="kw">let </span>txn = Transaction::new(ns_id, <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]);
 
         <span class="comment">// Start query service.
         </span><span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
@@ -2052,14 +2069,31 @@
                 .<span class="kw">await
                 </span>.unwrap();
             <span class="kw">let </span>ns_query_res: NamespaceProofQueryData = client
-                .get(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"availability/block/{block_num}/namespace/0"</span>))
+                .get(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"availability/block/{block_num}/namespace/{ns_id}"</span>))
                 .send()
                 .<span class="kw">await
                 </span>.unwrap();
-            ns_query_res
-                .proof
-                .verify(<span class="kw-2">&amp;</span>vid, <span class="kw-2">&amp;</span>header.payload_commitment, <span class="kw-2">&amp;</span>header.ns_table)
-                .unwrap();
+
+            <span class="comment">// Verify namespace proof if present
+            </span><span class="kw">if let </span><span class="prelude-val">Some</span>(ns_proof) = ns_query_res.proof {
+                <span class="kw">let </span>vid_common: VidCommonQueryData&lt;SeqTypes&gt; = client
+                    .get(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"availability/vid/common/{block_num}"</span>))
+                    .send()
+                    .<span class="kw">await
+                    </span>.unwrap();
+
+                ns_proof
+                    .verify(
+                        <span class="kw-2">&amp;</span>header.ns_table,
+                        <span class="kw-2">&amp;</span>header.payload_commitment,
+                        vid_common.common(),
+                    )
+                    .unwrap();
+            } <span class="kw">else </span>{
+                <span class="comment">// Namespace proof should be present if ns_id exists in ns_table
+                </span><span class="macro">assert!</span>(header.ns_table.find_ns_id(<span class="kw-2">&amp;</span>ns_id).is_none());
+                <span class="macro">assert!</span>(ns_query_res.transactions.is_empty());
+            }
 
             found_empty_block = found_empty_block || ns_query_res.transactions.is_empty();
 

@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"sequencer":[["impl !<a class=\"trait\" href=\"https://doc.rust-lang.org/1.78.0/core/marker/trait.Sized.html\" title=\"trait core::marker::Sized\">Sized</a> for <a class=\"struct\" href=\"sequencer/block/namespace_payload/ns_payload/struct.NsPayload.html\" title=\"struct sequencer::block::namespace_payload::ns_payload::NsPayload\">NsPayload</a>",1,["sequencer::block::namespace_payload::ns_payload::NsPayload"]]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

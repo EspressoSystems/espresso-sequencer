@@ -1285,6 +1285,12 @@
 <a href="#1283" id="1283">1283</a>
 <a href="#1284" id="1284">1284</a>
 <a href="#1285" id="1285">1285</a>
+<a href="#1286" id="1286">1286</a>
+<a href="#1287" id="1287">1287</a>
+<a href="#1288" id="1288">1288</a>
+<a href="#1289" id="1289">1289</a>
+<a href="#1290" id="1290">1290</a>
+<a href="#1291" id="1291">1291</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Adversarial Espresso client.
 //!
 //! This program runs a randomized client for the Espresso query service. It is designed to hit
@@ -1318,14 +1324,10 @@
     metrics::PrometheusMetrics,
     node::TimeWindowQueryData,
 };
-<span class="kw">use </span>hotshot_types::{
-    traits::metrics::{Counter, Gauge, Histogram, Metrics <span class="kw">as _</span>},
-    vid::{vid_scheme, VidSchemeType},
-};
+<span class="kw">use </span>hotshot_types::traits::metrics::{Counter, Gauge, Histogram, Metrics <span class="kw">as _</span>};
 <span class="kw">use </span>jf_merkle_tree::{
     ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
-<span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>rand::{seq::SliceRandom, RngCore};
 <span class="kw">use </span>sequencer::{
     api::endpoints::NamespaceProofQueryData,
@@ -2302,11 +2304,13 @@
                 <span class="self">self</span>.get(<span class="macro">format!</span>(<span class="string">"availability/header/{block}"</span>)).<span class="kw">await
             </span>})
             .<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="kw">if </span>header.ns_table.is_empty() {
+        <span class="kw">let </span>num_namespaces = header.ns_table.iter().count();
+        <span class="kw">if </span>num_namespaces == <span class="number">0 </span>{
             <span class="macro">tracing::info!</span>(<span class="string">"not fetching namespace because block {block} is empty"</span>);
             <span class="kw">return </span><span class="prelude-val">Ok</span>(());
         }
-        <span class="kw">let </span>ns = header.ns_table.get_table_entry(index).<span class="number">0</span>;
+        <span class="kw">let </span>ns_index = header.ns_table.iter().nth(index % num_namespaces).unwrap();
+        <span class="kw">let </span>ns = header.ns_table.read_ns_id(<span class="kw-2">&amp;</span>ns_index).unwrap();
 
         <span class="kw">let </span>ns_proof: NamespaceProofQueryData = <span class="self">self
             </span>.retry(<span class="macro">info_span!</span>(<span class="string">"fetch namespace"</span>, %ns), || <span class="kw">async </span>{
@@ -2321,13 +2325,21 @@
                 <span class="self">self</span>.get(<span class="macro">format!</span>(<span class="string">"availability/vid/common/{block}"</span>)).<span class="kw">await
             </span>})
             .<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="kw">let </span>vid = vid_scheme(VidSchemeType::get_num_storage_nodes(vid_common.common()) <span class="kw">as </span>usize);
+        <span class="macro">ensure!</span>(
+            ns_proof.proof.is_some(),
+            <span class="macro">format!</span>(<span class="string">"missing namespace proof for {block}:{ns}"</span>)
+        );
         <span class="macro">ensure!</span>(
             ns_proof
                 .proof
-                .verify(<span class="kw-2">&amp;</span>vid, <span class="kw-2">&amp;</span>header.payload_commitment, <span class="kw-2">&amp;</span>header.ns_table)
+                .unwrap()
+                .verify(
+                    <span class="kw-2">&amp;</span>header.ns_table,
+                    <span class="kw-2">&amp;</span>header.payload_commitment,
+                    vid_common.common()
+                )
                 .is_some(),
-            <span class="macro">format!</span>(<span class="string">"namespace proof for {block}:{ns} is invalid"</span>)
+            <span class="macro">format!</span>(<span class="string">"failure to verify namespace proof for {block}:{ns}"</span>)
         );
 
         <span class="self">self</span>.metrics.query_namespace_actions.add(<span class="number">1</span>);
