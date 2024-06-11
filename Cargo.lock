@@ -202,9 +202,9 @@ dependencies = [
 
 [[package]]
 name = "anstyle-query"
-version = "1.0.3"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a64c907d4e79225ac72e2a354c9ce84d50ebb4586dee56c82b3ee73004f537f5"
+checksum = "ad186efb764318d35165f1758e7dcef3b10628e26d41a44bc5550652e6804391"
 dependencies = [
  "windows-sys 0.52.0",
 ]
@@ -1117,7 +1117,7 @@ dependencies = [
  "futures-util",
  "http 0.2.12",
  "http-body 0.4.6",
- "hyper 0.14.28",
+ "hyper 0.14.29",
  "itoa",
  "matchit",
  "memchr",
@@ -2874,9 +2874,9 @@ dependencies = [
 
 [[package]]
 name = "escargot"
-version = "0.5.10"
+version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f474c6844cbd04e783d0f25757583db4f491770ca618bedf2fb01815fc79939"
+checksum = "650eb5f6eeda986377996e9ed570cbc20cc16d30440696f82f129c863e4e3e83"
 dependencies = [
  "log",
  "once_cell",
@@ -3348,6 +3348,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fluent-asserter"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62cd2a1243f15c8c9d37acc8ab4ba837e50823561cb124af8406a6f676d04341"
+dependencies = [
+ "lazy_static",
+ "num",
+]
+
+[[package]]
 name = "flume"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3433,9 +3443,9 @@ dependencies = [
 
 [[package]]
 name = "futures-bounded"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1e2774cc104e198ef3d3e1ff4ab40f86fa3245d6cb6a3a46174f21463cee173"
+checksum = "91f328e7fb845fc832912fb6a34f40cf6d1888c92f974d1893a54e97b5ff542e"
 dependencies = [
  "futures-timer",
  "futures-util",
@@ -4005,8 +4015,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4052,7 +4062,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "async-trait",
  "clap",
@@ -4070,8 +4080,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-builder-core"
-version = "0.1.25"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.25#0862a0a1335ca07e1b5bb3d619c1cd996a886382"
+version = "0.1.26"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.27#592ddf5f807a01835d40b3f1ea1f8484906ba7d1"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4123,8 +4133,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-events-service"
-version = "0.1.25"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.25#964c175d9145dcde354cbaf407f26f05976c5348"
+version = "0.1.26"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.27#e4703477c687be50dea4faa4235aafa67a068cd4"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4148,8 +4158,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-example-types"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4179,8 +4189,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-macros"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4190,8 +4200,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-orchestrator"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4219,8 +4229,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-query-service"
-version = "0.1.33"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.33#0b633b104606cfe5af5903d26f78db523e5180dc"
+version = "0.1.38"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.38#aa0eb378f4a01dfca2d13ad2d4d350290e4a337d"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4273,8 +4283,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-stake-table"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4344,8 +4354,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4359,8 +4369,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task-impls"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4394,8 +4404,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-testing"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4436,7 +4446,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -4598,9 +4608,9 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hyper"
-version = "0.14.28"
+version = "0.14.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf96e135eb83a2a8ddf766e426a841d8ddd7449d5f00d34ea02b41d2f19eef80"
+checksum = "f361cde2f109281a220d4307746cdfd5ee3f410da58a70377762396775634b33"
 dependencies = [
  "bytes 1.6.0",
  "futures-channel",
@@ -4648,7 +4658,7 @@ checksum = "ec3efd23720e2049821a693cbc7e65ea87c72f1c58ff2f9522ff332b1491e590"
 dependencies = [
  "futures-util",
  "http 0.2.12",
- "hyper 0.14.28",
+ "hyper 0.14.29",
  "rustls 0.21.12",
  "tokio",
  "tokio-rustls",
@@ -4660,7 +4670,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbb958482e8c7be4bc3cf272a766a2b0bf1a6755e7a6ae777f017a31d11b13b1"
 dependencies = [
- "hyper 0.14.28",
+ "hyper 0.14.29",
  "pin-project-lite 0.2.14",
  "tokio",
  "tokio-io-timeout",
@@ -4792,7 +4802,7 @@ dependencies = [
  "bytes 1.6.0",
  "futures",
  "http 0.2.12",
- "hyper 0.14.28",
+ "hyper 0.14.29",
  "log",
  "rand 0.8.5",
  "tokio",
@@ -5698,8 +5708,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-networking"
-version = "0.5.43"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.56#1138cfeafc061839494391eb52a46d0259008cf0"
+version = "0.5.56"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -5878,9 +5888,9 @@ dependencies = [
 
 [[package]]
 name = "libp2p-request-response"
-version = "0.26.2"
+version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6946e5456240b3173187cc37a17cb40c3cd1f7138c76e2c773e0d792a42a8de1"
+checksum = "c314fe28368da5e3a262553fb0ad575c1c8934c461e10de10265551478163836"
 dependencies = [
  "async-trait",
  "cbor4ii",
@@ -6562,6 +6572,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "num"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b05180d69e3da0e530ba2a1dae5110317e49e3b7f3d41be227dc5f92e49ee7af"
+dependencies = [
+ "num-bigint",
+ "num-complex",
+ "num-integer",
+ "num-iter",
+ "num-rational",
+ "num-traits",
+]
+
+[[package]]
 name = "num-bigint"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6589,21 +6613,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-complex"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23c6602fda94a57c990fe0df199a035d83576b496aa29f4e634a8ac6004e68a6"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51d515d32fb182ee37cda2ccdcb92950d6a3c2893aa280e540671c2cd0f3b1d9"
-
-[[package]]
-name = "num-derive"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed3955f1a9c7c0c15e092f9c887db08b1fc683305fdf6eb6684f22555355e202"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.66",
-]
 
 [[package]]
 name = "num-integer"
@@ -6621,6 +6643,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1429034a0490724d0075ebb2bc9e875d6503c3cf69e235a8941aa757d83ef5bf"
 dependencies = [
  "autocfg",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-rational"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0638a1c9d0a3c0914158145bc76cff373a75a627e6ecbfb71cbe6f453a5a19b0"
+dependencies = [
+ "autocfg",
+ "num-bigint",
  "num-integer",
  "num-traits",
 ]
@@ -7937,7 +7971,7 @@ dependencies = [
  "h2 0.3.26",
  "http 0.2.12",
  "http-body 0.4.6",
- "hyper 0.14.28",
+ "hyper 0.14.29",
  "hyper-rustls",
  "ipnet",
  "js-sys",
@@ -8592,6 +8626,7 @@ dependencies = [
  "espresso-macros",
  "ethers",
  "ethers-contract-derive",
+ "fluent-asserter",
  "futures",
  "hotshot",
  "hotshot-contract-adapter",
@@ -8613,6 +8648,7 @@ dependencies = [
  "jf-vid",
  "libp2p",
  "num-traits",
+ "paste",
  "portpicker",
  "pretty_assertions",
  "rand 0.8.5",
@@ -8628,6 +8664,7 @@ dependencies = [
  "surf-disco",
  "tagged-base64",
  "tempfile",
+ "thiserror",
  "tide-disco",
  "time 0.3.36",
  "tokio-postgres",
@@ -9479,9 +9516,9 @@ dependencies = [
 
 [[package]]
 name = "strum_macros"
-version = "0.26.3"
+version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7993a8e3a9e88a00351486baae9522c91b123a088f76469e5bd5cc17198ea87"
+checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -9521,9 +9558,9 @@ dependencies = [
 
 [[package]]
 name = "surf-disco"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e4318abbbbc4d640c6cb45d29cd3c70cf517c751fae9b68f2f76a6ff1950da7"
+checksum = "55c871338479a1c27b5e2ae15e5ae0fe70769306d2ef5a0c2d30896a09ac8a3c"
 dependencies = [
  "async-std",
  "async-tungstenite",
@@ -9825,9 +9862,9 @@ dependencies = [
 
 [[package]]
 name = "tide-disco"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44c9d803bc734a5cced767b36bb1caab87e9eb7eb144cffcab38160b084a8cef"
+checksum = "715558234f09576333f92ee769bd160e6c4bb1d156d25613cf62be9a592f291a"
 dependencies = [
  "anyhow",
  "async-h1",
@@ -9849,8 +9886,6 @@ dependencies = [
  "libc",
  "markdown",
  "maud",
- "num-derive",
- "num-traits",
  "parking_lot",
  "prometheus",
  "reqwest 0.12.4",
@@ -10130,14 +10165,14 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.8.13"
+version = "0.8.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4e43f8cc456c9704c851ae29c67e17ef65d2c30017c17a9765b89c382dc8bba"
+checksum = "6f49eb2ab21d2f26bd6db7bf383edc527a7ebaee412d17af4d40fdccd442f335"
 dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit 0.22.13",
+ "toml_edit 0.22.14",
 ]
 
 [[package]]
@@ -10162,15 +10197,15 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.22.13"
+version = "0.22.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c127785850e8c20836d49732ae6abfa47616e60bf9d9f57c43c250361a9db96c"
+checksum = "f21c7aaf97f1bd9ca9d4f9e73b0a6c74bd5afef56f2bc931943a6e1c37e04e38"
 dependencies = [
  "indexmap 2.2.6",
  "serde",
  "serde_spanned",
  "toml_datetime",
- "winnow 0.6.9",
+ "winnow 0.6.12",
 ]
 
 [[package]]
@@ -10187,7 +10222,7 @@ dependencies = [
  "h2 0.3.26",
  "http 0.2.12",
  "http-body 0.4.6",
- "hyper 0.14.28",
+ "hyper 0.14.29",
  "hyper-timeout",
  "percent-encoding",
  "pin-project",
@@ -10569,7 +10604,7 @@ dependencies = [
  "rustls-pki-types",
  "rustls-webpki 0.102.4",
  "url",
- "webpki-roots 0.26.1",
+ "webpki-roots 0.26.2",
 ]
 
 [[package]]
@@ -10662,9 +10697,9 @@ dependencies = [
 
 [[package]]
 name = "vbs"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1da07d9ca0c69892851ff70256392d1b0c6408a0007cc87409b1ca3064821e9b"
+checksum = "6a9d83afb293d109ae418271619046cd9d87d63ba83e473e25a5e36101edc453"
 dependencies = [
  "anyhow",
  "bincode",
@@ -10739,7 +10774,7 @@ dependencies = [
  "futures-util",
  "headers",
  "http 0.2.12",
- "hyper 0.14.28",
+ "hyper 0.14.29",
  "log",
  "mime",
  "mime_guess",
@@ -10888,9 +10923,9 @@ checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 
 [[package]]
 name = "webpki-roots"
-version = "0.26.1"
+version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3de34ae270483955a94f4b21bdaaeb83d508bb84a01435f393818edb0012009"
+checksum = "3c452ad30530b54a4d8e71952716a212b08efd0f3562baa66c29a618b07da7c3"
 dependencies = [
  "rustls-pki-types",
 ]
@@ -11121,9 +11156,9 @@ dependencies = [
 
 [[package]]
 name = "winnow"
-version = "0.6.9"
+version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86c949fede1d13936a99f14fafd3e76fd642b556dd2ce96287fbe2e0151bfac6"
+checksum = "41ff33f391015ecab21cd092389215eb265ef9496a9a07b6bee7d3529831deda"
 dependencies = [
  "memchr",
 ]

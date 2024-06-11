@@ -90,6 +90,7 @@ jobs:
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/keygen
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/pub-key
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/espresso-bridge
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/espresso-dev-node
 
   static-dockers:
     runs-on: ubuntu-latest
@@ -191,6 +192,13 @@ jobs:
         id: deploy
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/deploy
+          flavor: suffix=musl
+
+      - name: Generate espresso-dev-node metadata
+        uses: docker/metadata-action@v5
+        id: espresso-dev-node
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node
           flavor: suffix=musl
 
       - name: Generate bridge metadata
@@ -300,11 +308,21 @@ jobs:
           tags: ${{ steps.deploy.outputs.tags }}
           labels: ${{ steps.deploy.outputs.labels }}
 
+      - name: Build and push dev node docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/espresso-dev-node.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.espresso-dev-node.outputs.tags }}
+          labels: ${{ steps.espresso-dev-node.outputs.labels }}
+
       - name: Build and push bridge docker
         uses: docker/build-push-action@v5
         with:
           context: ./
-          file: ./docker/bridge.Dockerfile
+          file: ./docker/espresso-bridge.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.bridge.outputs.tags }}

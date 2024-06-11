@@ -6,7 +6,7 @@ use crate::{Leaf, SeqTypes, ViewNumber};
 use async_trait::async_trait;
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -85,6 +85,13 @@ impl SequencerPersistence for NoStorage {
         Ok(None)
     }
 
+    async fn load_quorum_proposals(
+        &self,
+    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
+    {
+        Ok(None)
+    }
+
     async fn append_vid(
         &mut self,
         _proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
@@ -108,6 +115,12 @@ impl SequencerPersistence for NoStorage {
         &mut self,
         _leaves: CommitmentMap<Leaf>,
         _state: BTreeMap<ViewNumber, View<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn append_quorum_proposal(
+        &mut self,
+        _proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }

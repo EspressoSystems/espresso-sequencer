@@ -22,8 +22,8 @@
 //! test.
 
 use crate::{
-    block::tables::NameSpaceTable, state::FeeInfo, ChainConfig, FeeAccount, Header, L1BlockInfo,
-    Payload, Transaction, TxTableEntryWord, ValidatedState,
+    block::NsTable, state::FeeInfo, ChainConfig, FeeAccount, Header, L1BlockInfo, Payload,
+    Transaction, ValidatedState,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
@@ -41,7 +41,7 @@ use vbs::BinarySerializer;
 
 type Serializer = vbs::Serializer<SequencerVersion>;
 
-async fn reference_payload() -> Payload<TxTableEntryWord> {
+async fn reference_payload() -> Payload {
     Payload::from_transactions(
         vec![reference_transaction()],
         &Default::default(),
@@ -52,8 +52,8 @@ async fn reference_payload() -> Payload<TxTableEntryWord> {
     .0
 }
 
-async fn reference_ns_table() -> NameSpaceTable<TxTableEntryWord> {
-    reference_payload().await.get_ns_table().clone()
+async fn reference_ns_table() -> NsTable {
+    reference_payload().await.ns_table().clone()
 }
 
 const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~jqBfNUW1lSijWpKpPNc9yxQs28YckB80gFJWnHIwOQMC";
@@ -96,13 +96,13 @@ async fn reference_header() -> Header {
     let builder_key = FeeAccount::generated_from_seed_indexed(Default::default(), 0).1;
     let fee_info = reference_fee_info();
     let payload = reference_payload().await;
-    let ns_table = payload.get_ns_table();
+    let ns_table = payload.ns_table().clone();
     let payload_commitment = vid_commitment(&payload.encode(), 1);
-    let builder_commitment = payload.builder_commitment(ns_table);
+    let builder_commitment = payload.builder_commitment(&ns_table);
     let builder_signature = FeeAccount::sign_fee(
         &builder_key,
         fee_info.amount().as_u64().unwrap(),
-        ns_table,
+        &ns_table,
         &payload_commitment,
     )
     .unwrap();
@@ -116,7 +116,7 @@ async fn reference_header() -> Header {
         l1_finalized: Some(reference_l1_block()),
         payload_commitment,
         builder_commitment,
-        ns_table: ns_table.clone(),
+        ns_table,
         block_merkle_tree_root: state.block_merkle_tree.commitment(),
         fee_merkle_tree_root: state.fee_merkle_tree.commitment(),
         fee_info,
