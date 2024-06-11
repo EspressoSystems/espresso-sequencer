@@ -281,20 +281,3 @@ impl hotshot_types::traits::block_contents::TestableBlock<SeqTypes> for Payload 
         self.len(&self.ns_table) as u64
     }
 }
-
-// `Committable` used only in `reference_tests.rs`
-#[cfg(any(test, feature = "testing"))]
-impl committable::Committable for Payload {
-    fn commit(&self) -> committable::Commitment<Self> {
-        // `Committable` implementation re-hashes the builder commitment. This
-        // is a dumb way to make a commitment, but it's the easiest way to
-        // facilitate test code that depends on `Committable`.
-        committable::RawCommitmentBuilder::new(&Self::tag())
-            .fixed_size_bytes(self.builder_commitment(&self.ns_table).as_ref())
-            .finalize()
-    }
-
-    fn tag() -> String {
-        "PAYLOAD".into()
-    }
-}
