@@ -332,6 +332,20 @@ impl hotshot_types::traits::block_contents::TestableBlock<SeqTypes>
     }
 }
 
+// `Committable` used only in `reference_tests.rs`
+#[cfg(any(test, feature = "testing"))]
+impl committable::Committable for Payload<crate::block::entry::TxTableEntryWord> {
+    fn commit(&self) -> committable::Commitment<Self> {
+        committable::RawCommitmentBuilder::new(&Self::tag())
+            .fixed_size_bytes(self.builder_commitment(&self.ns_table).as_ref())
+            .finalize()
+    }
+
+    fn tag() -> String {
+        "PAYLOAD".into()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::NamespaceProof;
