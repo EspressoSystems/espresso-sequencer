@@ -280,6 +280,9 @@
 <a href="#278" id="278">278</a>
 <a href="#279" id="279">279</a>
 <a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
     block::{
         full_payload::ns_table::{NsIndex, NsTable, NsTableBuilder},
@@ -321,8 +324,11 @@
 </span><span class="attr">#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 </span><span class="kw">pub struct </span>Payload {
     <span class="comment">// Concatenated payload bytes for each namespace
+    //
+    // TODO want to rename thisfield to `ns_payloads`, but can't due to
+    // serialization compatibility.
     </span><span class="attr">#[serde(with = <span class="string">"base64_bytes"</span>)]
-    </span>ns_payloads: Vec&lt;u8&gt;,
+    </span>raw_payload: Vec&lt;u8&gt;,
 
     ns_table: NsTable,
 }
@@ -343,7 +349,7 @@
     <span class="comment">// CRATE-VISIBLE HELPERS START HERE
 
     </span><span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::block) <span class="kw">fn </span>read_ns_payload(<span class="kw-2">&amp;</span><span class="self">self</span>, range: <span class="kw-2">&amp;</span>NsPayloadRange) -&gt; <span class="kw-2">&amp;</span>NsPayload {
-        NsPayload::from_bytes_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.ns_payloads[range.as_block_range()])
+        NsPayload::from_bytes_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.raw_payload[range.as_block_range()])
     }
 
     <span class="doccomment">/// Convenience wrapper for [`Self::read_ns_payload`].
@@ -355,7 +361,7 @@
     }
 
     <span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::block) <span class="kw">fn </span>byte_len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; PayloadByteLen {
-        PayloadByteLen(<span class="self">self</span>.ns_payloads.len())
+        PayloadByteLen(<span class="self">self</span>.raw_payload.len())
     }
 
     <span class="comment">// PRIVATE HELPERS START HERE
@@ -405,7 +411,7 @@
         <span class="kw">let </span>metadata = ns_table.clone();
         <span class="prelude-val">Ok</span>((
             <span class="self">Self </span>{
-                ns_payloads: payload,
+                raw_payload: payload,
                 ns_table,
             },
             metadata,
@@ -434,7 +440,7 @@
     <span class="comment">// TODO avoid cloning the entire payload here?
     </span><span class="kw">fn </span>from_bytes(block_payload_bytes: <span class="kw-2">&amp;</span>[u8], ns_table: <span class="kw-2">&amp;</span><span class="self">Self</span>::Metadata) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
-            ns_payloads: block_payload_bytes.to_vec(),
+            raw_payload: block_payload_bytes.to_vec(),
             ns_table: ns_table.clone(),
         }
     }
@@ -458,10 +464,10 @@
         </span><span class="kw">let </span>metadata_bytes = metadata.encode();
 
         <span class="kw">let </span><span class="kw-2">mut </span>digest = sha2::Sha256::new();
-        digest.update((<span class="self">self</span>.ns_payloads.len() <span class="kw">as </span>u64).to_le_bytes());
+        digest.update((<span class="self">self</span>.raw_payload.len() <span class="kw">as </span>u64).to_le_bytes());
         digest.update((ns_table_bytes.len() <span class="kw">as </span>u64).to_le_bytes());
         digest.update((metadata_bytes.len() <span class="kw">as </span>u64).to_le_bytes()); <span class="comment">// https://github.com/EspressoSystems/espresso-sequencer/issues/1576
-        </span>digest.update(<span class="kw-2">&amp;</span><span class="self">self</span>.ns_payloads);
+        </span>digest.update(<span class="kw-2">&amp;</span><span class="self">self</span>.raw_payload);
         digest.update(ns_table_bytes);
         digest.update(metadata_bytes); <span class="comment">// https://github.com/EspressoSystems/espresso-sequencer/issues/1576
         </span>BuilderCommitment::from_raw_digest(digest.finalize())
@@ -505,7 +511,7 @@
         // trait to add a `VidCommon` arg. In the meantime tests fail if I leave
         // it `todo!()`, so this hack allows tests to pass.
         </span><span class="kw">let </span>common = hotshot_types::vid::vid_scheme(<span class="number">10</span>)
-            .disperse(<span class="kw-2">&amp;</span><span class="self">self</span>.ns_payloads)
+            .disperse(<span class="kw-2">&amp;</span><span class="self">self</span>.raw_payload)
             .unwrap()
             .common;
 
@@ -521,7 +527,7 @@
 
 <span class="kw">impl </span>EncodeBytes <span class="kw">for </span>Payload {
     <span class="kw">fn </span>encode(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Arc&lt;[u8]&gt; {
-        Arc::from(<span class="self">self</span>.ns_payloads.as_ref())
+        Arc::from(<span class="self">self</span>.raw_payload.as_ref())
     }
 }
 
