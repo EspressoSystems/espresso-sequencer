@@ -4015,8 +4015,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot"
-version = "0.5.56"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
+version = "0.5.57"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#59244fccb80fb89adab02ddc0b3bcece0351ff31"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4062,7 +4062,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#59244fccb80fb89adab02ddc0b3bcece0351ff31"
 dependencies = [
  "async-trait",
  "clap",
@@ -4081,7 +4081,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.26"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.27#592ddf5f807a01835d40b3f1ea1f8484906ba7d1"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=daily-build#2bc499affaf4f4f6e90c5239977655116fa02743"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4133,8 +4133,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-events-service"
-version = "0.1.26"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.27#e4703477c687be50dea4faa4235aafa67a068cd4"
+version = "0.1.27"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=daily-build#358b5510531ed11492e98176910a15a4359ca54d"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4158,8 +4158,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-example-types"
-version = "0.5.56"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
+version = "0.5.57"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#59244fccb80fb89adab02ddc0b3bcece0351ff31"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4189,8 +4189,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-macros"
-version = "0.5.56"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
+version = "0.5.57"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#59244fccb80fb89adab02ddc0b3bcece0351ff31"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4200,8 +4200,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-orchestrator"
-version = "0.5.56"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
+version = "0.5.57"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#59244fccb80fb89adab02ddc0b3bcece0351ff31"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4230,7 +4230,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.39"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.39#b4fe8bfa9e2e3fd9cd98c5f91c614211bf60c530"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=daily-build#08d1574335f39d25f305d1b4467b497ce59e4425"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4283,8 +4283,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-stake-table"
-version = "0.5.56"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
+version = "0.5.57"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#59244fccb80fb89adab02ddc0b3bcece0351ff31"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4354,8 +4354,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task"
-version = "0.5.56"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
+version = "0.5.57"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#59244fccb80fb89adab02ddc0b3bcece0351ff31"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4369,8 +4369,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task-impls"
-version = "0.5.56"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
+version = "0.5.57"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#59244fccb80fb89adab02ddc0b3bcece0351ff31"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4404,8 +4404,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-testing"
-version = "0.5.56"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
+version = "0.5.57"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#59244fccb80fb89adab02ddc0b3bcece0351ff31"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4446,7 +4446,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#59244fccb80fb89adab02ddc0b3bcece0351ff31"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -5828,8 +5828,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-networking"
-version = "0.5.56"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.57#828f71864bec2600a2740e24c86468c5a485585b"
+version = "0.5.57"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#59244fccb80fb89adab02ddc0b3bcece0351ff31"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
