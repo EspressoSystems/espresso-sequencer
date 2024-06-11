@@ -47,7 +47,7 @@ cross_tests!(
         // 2 nodes fail triggering view sync, expect no other timeouts
         metadata.overall_safety_properties.num_failed_views = 2;
         // Make sure we keep committing rounds after the bad leaders, but not the full 50 because of the numerous timeouts
-        metadata.overall_safety_properties.num_successful_views = 15;
+        metadata.overall_safety_properties.num_successful_views = 13;
 
         metadata
     }

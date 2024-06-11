@@ -47,9 +47,9 @@ async fn test_consensus_task_upgrade() {
     let upgrade_data: UpgradeProposalData<TestTypes> = UpgradeProposalData {
         old_version,
         new_version,
-        decide_by: ViewNumber::new(5),
+        decide_by: ViewNumber::new(6),
         new_version_hash: [0u8; 12].to_vec(),
-        old_version_last_view: ViewNumber::new(5),
+        old_version_last_view: ViewNumber::new(6),
         new_version_first_view: ViewNumber::new(7),
     };
 
@@ -99,7 +99,12 @@ async fn test_consensus_task_upgrade() {
             DaCertificateRecv(dacs[3].clone()),
             VidShareRecv(vid_share(&vids[3].0, handle.public_key())),
         ],
-        vec![QuorumProposalRecv(proposals[4].clone(), leaders[4])],
+        vec![
+            QuorumProposalRecv(proposals[4].clone(), leaders[4]),
+            DaCertificateRecv(dacs[4].clone()),
+            VidShareRecv(vid_share(&vids[4].0, handle.public_key())),
+        ],
+        vec![QuorumProposalRecv(proposals[5].clone(), leaders[5])],
     ];
 
     let expectations = vec![
@@ -123,7 +128,6 @@ async fn test_consensus_task_upgrade() {
             output_asserts: vec![
                 exact(ViewChange(ViewNumber::new(3))),
                 quorum_proposal_validated(),
-                leaf_decided(),
                 exact(QuorumVoteSend(votes[2].clone())),
             ],
             task_state_asserts: vec![no_decided_upgrade_cert()],
@@ -140,6 +144,15 @@ async fn test_consensus_task_upgrade() {
         Expectations {
             output_asserts: vec![
                 exact(ViewChange(ViewNumber::new(5))),
+                quorum_proposal_validated(),
+                leaf_decided(),
+                exact(QuorumVoteSend(votes[4].clone())),
+            ],
+            task_state_asserts: vec![no_decided_upgrade_cert()],
+        },
+        Expectations {
+            output_asserts: vec![
+                exact(ViewChange(ViewNumber::new(6))),
                 quorum_proposal_validated(),
                 upgrade_decided(),
                 leaf_decided(),
@@ -341,9 +354,9 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
     let upgrade_data: UpgradeProposalData<TestTypes> = UpgradeProposalData {
         old_version,
         new_version,
-        decide_by: ViewNumber::new(4),
+        decide_by: ViewNumber::new(7),
         new_version_hash: [0u8; 12].to_vec(),
-        old_version_last_view: ViewNumber::new(4),
+        old_version_last_view: ViewNumber::new(7),
         new_version_first_view: ViewNumber::new(8),
     };
 
@@ -523,7 +536,6 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 output_asserts: vec![
                     exact(ViewChange(ViewNumber::new(3))),
                     quorum_proposal_validated(),
-                    leaf_decided(),
                     quorum_vote_send(),
                 ],
                 task_state_asserts: vec![],
@@ -532,7 +544,6 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 output_asserts: vec![
                     exact(ViewChange(ViewNumber::new(4))),
                     quorum_proposal_validated(),
-                    upgrade_decided(),
                     leaf_decided(),
                     quorum_vote_send(),
                 ],
@@ -542,6 +553,7 @@ async fn test_upgrade_and_consensus_task_blank_blocks() {
                 output_asserts: vec![
                     exact(ViewChange(ViewNumber::new(5))),
                     quorum_proposal_validated(),
+                    upgrade_decided(),
                     leaf_decided(),
                     // This is between versions, but we are receiving a null block and hence should vote affirmatively on it.
                     quorum_vote_send(),
