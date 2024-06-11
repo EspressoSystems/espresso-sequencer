@@ -4,11 +4,15 @@ import { EthersAdapter } from "@safe-global/protocol-kit";
 import SafeApiKit from "@safe-global/api-kit";
 import Safe from "@safe-global/protocol-kit";
 import { getEnvVar, createSafeTransactionData, isValidEthereumAddress } from "./utils";
+const SET_PROVER_CMD = "setProver";
+const DISABLE_PROVER_CMD = "disableProver";
 
 async function main() {
   dotenv.config();
 
   try {
+    const command = processCommandLineArguments();
+
     /**TODO
      * change from SEPOLIA_RPC_URL to production URL when deploying to production
      */
@@ -28,17 +32,24 @@ async function main() {
     const safeAddress = getEnvVar("SAFE_MULTISIG_ADDRESS");
     isValidEthereumAddress(safeAddress);
     const safeSdk = await Safe.create({ ethAdapter, safeAddress });
+    const orchestratorSignerAddress = await orchestratorSigner.getAddress();
 
-    const permissionedProverAddress = getEnvVar("APPROVED_PROVER_ADDRESS");
-    isValidEthereumAddress(permissionedProverAddress);
+    if (command == SET_PROVER_CMD) {
+      console.log(`${command}`);
+      const permissionedProverAddress = getEnvVar("APPROVED_PROVER_ADDRESS");
+      isValidEthereumAddress(permissionedProverAddress);
 
-    await proposeSetProverTransaction(
-      safeSdk,
-      safeService,
-      await orchestratorSigner.getAddress(),
-      safeAddress,
-      permissionedProverAddress,
-    );
+      await proposeSetProverTransaction(
+        safeSdk,
+        safeService,
+        orchestratorSignerAddress,
+        safeAddress,
+        permissionedProverAddress,
+      );
+    } else if (command == DISABLE_PROVER_CMD) {
+      console.log(`${command}`);
+      await proposeDisableProverTransaction(safeSdk, safeService, orchestratorSignerAddress, safeAddress);
+    }
 
     console.log(
       `The other owners of the Safe Multisig wallet need to sign the transaction via the Safe UI https://app.safe.global/transactions/queue?safe=sep:${safeAddress}`,
@@ -46,6 +57,21 @@ async function main() {
   } catch (error) {
     throw new Error("An error occurred: " + error);
   }
+}
+
+function processCommandLineArguments(): string {
+  const args = process.argv.slice(2); // Remove the first two args (node command and script name)
+  let command: string;
+  if (args.length === 0) {
+    console.log("No arguments provided.");
+    throw new Error(`No arguments provided, either ${SET_PROVER_CMD} or ${DISABLE_PROVER_CMD}`);
+  } else {
+    command = args[0];
+    if (command != SET_PROVER_CMD && command != DISABLE_PROVER_CMD) {
+      throw new Error(`Unrecognized argument ${command} provided, either ${SET_PROVER_CMD} or ${DISABLE_PROVER_CMD}`);
+    }
+  }
+  return command;
 }
 
 /**
@@ -99,6 +125,57 @@ function createPermissionedProverTxData(proverAddress: string): string {
 
   // Encode the function call with the provided prover address
   const data = new ethers.Interface(abi).encodeFunctionData("setPermissionedProver", [proverAddress]);
+  return data; // Return the encoded transaction data
+}
+
+/**
+ * Function to propose the transaction data for disabling permissioned prover mode
+ * @param {Safe} safeSDK - An instance of the Safe SDK
+ * @param {SafeApiKit} safeService - An instance of the Safe Service
+ * @param {string} signerAddress - The address of the address signing the transaction
+ * @param {string} safeAddress - The address of the Safe multisig wallet
+ */
+export async function proposeDisableProverTransaction(
+  safeSDK: Safe,
+  safeService: SafeApiKit,
+  signerAddress: string,
+  safeAddress: string,
+) {
+  // Prepare the transaction data to disable permissioned prover mode
+  let data = createDisablePermissionedProverTxData();
+
+  const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_ADDRESS");
+  isValidEthereumAddress(contractAddress);
+
+  // Create the Safe Transaction Object
+  const safeTransaction = await createSafeTransaction(safeSDK, contractAddress, data, "0");
+
+  // Get the transaction hash and sign the transaction
+  const safeTxHash = await safeSDK.getTransactionHash(safeTransaction);
+
+  // Sign the transaction with orchestrator signer that was specified when we created the safeSDK
+  const senderSignature = await safeSDK.signHash(safeTxHash);
+
+  // Propose the transaction which can be signed by other owners via the Safe UI
+  await safeService.proposeTransaction({
+    safeAddress: safeAddress,
+    safeTransactionData: safeTransaction.data,
+    safeTxHash: safeTxHash,
+    senderAddress: signerAddress,
+    senderSignature: senderSignature.data,
+  });
+}
+
+/**
+ * Function to create the transaction data for disabling permissioned prover mode
+ * @returns {string} - Encoded transaction data
+ */
+function createDisablePermissionedProverTxData(): string {
+  // Define the ABI of the function to be called
+  const abi = ["function disablePermissionedProverMode()"];
+
+  // Encode the function call with the provided prover address
+  const data = new ethers.Interface(abi).encodeFunctionData("disablePermissionedProverMode", []);
   return data; // Return the encoded transaction data
 }
 
