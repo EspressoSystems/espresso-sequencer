@@ -37,6 +37,7 @@ use sequencer_utils::commitment_to_u256;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use std::{path::Path, str::FromStr};
+use tagged_base64::TaggedBase64;
 use vbs::BinarySerializer;
 
 type Serializer = vbs::Serializer<SequencerVersion>;
@@ -51,6 +52,8 @@ async fn reference_payload() -> Payload {
     .unwrap()
     .0
 }
+
+const REFERENCE_PAYLOAD_COMMITMENT: &str = "PAYLOAD~GUkS4W_Eq57ZRegQ2Mmx9wO9egJR_duoON_H8_KbM2dG";
 
 async fn reference_ns_table() -> NsTable {
     reference_payload().await.ns_table().clone()
@@ -193,9 +196,10 @@ change in the serialization of this data structure.
         std::fs::write(&actual_path, &actual).unwrap();
 
         // Fail the test with an assertion that outputs a diff.
+        // Use TaggedBase64 for compact console output.
         assert_eq!(
-            expected,
-            actual,
+            TaggedBase64::encode_raw(&expected),
+            TaggedBase64::encode_raw(&actual),
             r#"
 Serialized {name} does not match expected binary file. The actual serialization has been written to
 {}. If you intended to make a breaking change to the API, you may replace the reference file in
@@ -237,6 +241,15 @@ have caused a change to the commitment scheme.
 Expected: {expected}
 Actual: {actual}
 "#
+    );
+}
+
+#[async_std::test]
+async fn test_reference_payload() {
+    reference_test(
+        "payload",
+        reference_payload().await,
+        REFERENCE_PAYLOAD_COMMITMENT,
     );
 }
 
