@@ -14,8 +14,11 @@ For both integrations:
 - We describe the high level structure of the circuit as well as the rollup L1 contract and how they are related.
 - We describe the use of an Espresso liveness escape hatch in the rollup L1 contract.
 
-When the escape hatch is activated, both integrations use the same circuit  
- which corresponds to a mode where the rollup falls back to using its own (centralized) sequencer as shown in Figure 1.
+When a rollup is not integrated with Espresso, i.e. it uses its own centralized sequencer, its circuit only needs to
+check the correct update of the zkVM as depicted in Figure 1. This is also the circuit used when the escape hatch is
+activated, as in this case the rollup falls back to using its own centralized sequencer. When the escape hatch is not
+activated the circuit depicted in Figure 1 needs to be extended with additional gadgets in order to prove the
+transactions applied to the state are the one sequenced by Espresso.
 
 ![image](zk-rollup-default-sequencer.svg)
 
