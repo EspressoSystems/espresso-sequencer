@@ -36,7 +36,8 @@ use pretty_assertions::assert_eq;
 use sequencer_utils::commitment_to_u256;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
-use std::{path::Path, str::FromStr};
+use std::{fmt::Debug, path::Path, str::FromStr};
+use tagged_base64::TaggedBase64;
 use vbs::BinarySerializer;
 
 type Serializer = vbs::Serializer<SequencerVersion>;
@@ -134,10 +135,9 @@ fn reference_transaction() -> Transaction {
 
 const REFERENCE_TRANSACTION_COMMITMENT: &str = "TX~jmYCutMVgguprgpZHywPwkehwXfibQx951gh4LSLmfwp";
 
-fn reference_test<T: Committable + Serialize + DeserializeOwned>(
+fn reference_test_without_committable<T: Serialize + DeserializeOwned + Eq + Debug>(
     name: &str,
-    reference: T,
-    commitment: &str,
+    reference: &T,
 ) {
     setup_logging();
     setup_backtrace();
@@ -148,7 +148,7 @@ fn reference_test<T: Committable + Serialize + DeserializeOwned>(
     let expected: Value = serde_json::from_slice(&expected_bytes).unwrap();
 
     // Check that the reference object matches the expected serialized form.
-    let actual = serde_json::to_value(&reference).unwrap();
+    let actual = serde_json::to_value(reference).unwrap();
 
     if actual != expected {
         let actual_pretty = serde_json::to_string_pretty(&actual).unwrap();
@@ -177,8 +177,8 @@ change in the serialization of this data structure.
     // Check that we can deserialize from the reference JSON object.
     let parsed: T = serde_json::from_value(expected).unwrap();
     assert_eq!(
-        reference.commit(),
-        parsed.commit(),
+        *reference,
+        parsed,
         "Reference object commitment does not match commitment of parsed JSON. This is indicative of
         inconsistency or non-determinism in the commitment scheme.",
     );
@@ -193,9 +193,10 @@ change in the serialization of this data structure.
         std::fs::write(&actual_path, &actual).unwrap();
 
         // Fail the test with an assertion that outputs a diff.
+        // Use TaggedBase64 for compact console output.
         assert_eq!(
-            expected,
-            actual,
+            TaggedBase64::encode_raw(&expected),
+            TaggedBase64::encode_raw(&actual),
             r#"
 Serialized {name} does not match expected binary file. The actual serialization has been written to
 {}. If you intended to make a breaking change to the API, you may replace the reference file in
@@ -209,11 +210,21 @@ change in the serialization of this data structure.
     // Check that we can deserialize from the reference binary object.
     let parsed: T = Serializer::deserialize(&expected).unwrap();
     assert_eq!(
-        reference.commit(),
-        parsed.commit(),
+        *reference, parsed,
         "Reference object commitment does not match commitment of parsed binary object. This is
         indicative of inconsistency or non-determinism in the commitment scheme.",
     );
+}
+
+fn reference_test<T: Committable + Serialize + DeserializeOwned + Eq + Debug>(
+    name: &str,
+    reference: T,
+    commitment: &str,
+) {
+    setup_logging();
+    setup_backtrace();
+
+    reference_test_without_committable(name, &reference);
 
     // Print information about the commitment that might be useful in generating tests for other
     // languages.
@@ -238,6 +249,11 @@ Expected: {expected}
 Actual: {actual}
 "#
     );
+}
+
+#[async_std::test]
+async fn test_reference_payload() {
+    reference_test_without_committable("payload", &reference_payload().await);
 }
 
 #[async_std::test]
