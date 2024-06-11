@@ -39,8 +39,11 @@ use std::{collections::HashMap, fmt::Display, sync::Arc};
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {
     // Concatenated payload bytes for each namespace
+    //
+    // TODO want to rename thisfield to `ns_payloads`, but can't due to
+    // serialization compatibility.
     #[serde(with = "base64_bytes")]
-    ns_payloads: Vec<u8>,
+    raw_payload: Vec<u8>,
 
     ns_table: NsTable,
 }
@@ -61,7 +64,7 @@ impl Payload {
     // CRATE-VISIBLE HELPERS START HERE
 
     pub(in crate::block) fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
-        NsPayload::from_bytes_slice(&self.ns_payloads[range.as_block_range()])
+        NsPayload::from_bytes_slice(&self.raw_payload[range.as_block_range()])
     }
 
     /// Convenience wrapper for [`Self::read_ns_payload`].
@@ -73,7 +76,7 @@ impl Payload {
     }
 
     pub(in crate::block) fn byte_len(&self) -> PayloadByteLen {
-        PayloadByteLen(self.ns_payloads.len())
+        PayloadByteLen(self.raw_payload.len())
     }
 
     // PRIVATE HELPERS START HERE
@@ -123,7 +126,7 @@ impl Payload {
         let metadata = ns_table.clone();
         Ok((
             Self {
-                ns_payloads: payload,
+                raw_payload: payload,
                 ns_table,
             },
             metadata,
@@ -152,7 +155,7 @@ impl BlockPayload<SeqTypes> for Payload {
     // TODO avoid cloning the entire payload here?
     fn from_bytes(block_payload_bytes: &[u8], ns_table: &Self::Metadata) -> Self {
         Self {
-            ns_payloads: block_payload_bytes.to_vec(),
+            raw_payload: block_payload_bytes.to_vec(),
             ns_table: ns_table.clone(),
         }
     }
@@ -176,10 +179,10 @@ impl BlockPayload<SeqTypes> for Payload {
         let metadata_bytes = metadata.encode();
 
         let mut digest = sha2::Sha256::new();
-        digest.update((self.ns_payloads.len() as u64).to_le_bytes());
+        digest.update((self.raw_payload.len() as u64).to_le_bytes());
         digest.update((ns_table_bytes.len() as u64).to_le_bytes());
         digest.update((metadata_bytes.len() as u64).to_le_bytes()); // https://github.com/EspressoSystems/espresso-sequencer/issues/1576
-        digest.update(&self.ns_payloads);
+        digest.update(&self.raw_payload);
         digest.update(ns_table_bytes);
         digest.update(metadata_bytes); // https://github.com/EspressoSystems/espresso-sequencer/issues/1576
         BuilderCommitment::from_raw_digest(digest.finalize())
@@ -223,7 +226,7 @@ impl QueryablePayload<SeqTypes> for Payload {
         // trait to add a `VidCommon` arg. In the meantime tests fail if I leave
         // it `todo!()`, so this hack allows tests to pass.
         let common = hotshot_types::vid::vid_scheme(10)
-            .disperse(&self.ns_payloads)
+            .disperse(&self.raw_payload)
             .unwrap()
             .common;
 
@@ -239,7 +242,7 @@ impl Display for Payload {
 
 impl EncodeBytes for Payload {
     fn encode(&self) -> Arc<[u8]> {
-        Arc::from(self.ns_payloads.as_ref())
+        Arc::from(self.raw_payload.as_ref())
     }
 }
 
