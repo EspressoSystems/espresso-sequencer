@@ -3,7 +3,7 @@
 Similarly to their optimistic alternatives, ZK rollups need to instantiate their derivation pipeline in order to
 integrate with Espresso. There are a number of alternatives for such integration, depending on specific constraints the
 rollup may have such as using a particular data availability layer in addition to Tiramisu, or the need to update their
-state at a faster pace than the Espresso light client contract does.
+state on the L1 at a faster pace than the Espresso light client contract does.
 
 In the following, we assume that the rollup relies on Tiramisu for data availability and explore two different
 integrations flavors. With integration 1, the rollup relies on the Espresso light client contract to fetch the latest
