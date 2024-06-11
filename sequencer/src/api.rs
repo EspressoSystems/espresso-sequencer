@@ -687,7 +687,7 @@ mod api_tests {
     use crate::{
         persistence::no_storage,
         testing::{wait_for_decide_on_handle, TestConfig},
-        Header,
+        Header, NamespaceId,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use committable::Committable;
@@ -696,8 +696,7 @@ mod api_tests {
     use es_version::SequencerVersion;
     use ethers::utils::Anvil;
     use futures::stream::StreamExt;
-    use hotshot_query_service::availability::LeafQueryData;
-    use hotshot_types::vid::vid_scheme;
+    use hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
     use portpicker::pick_unused_port;
     use surf_disco::Client;
     use test_helpers::{
@@ -729,8 +728,9 @@ mod api_tests {
         setup_logging();
         setup_backtrace();
 
-        let vid = vid_scheme(5);
-        let txn = Transaction::new(Default::default(), vec![1, 2, 3, 4]);
+        // Arbitrary transaction, arbitrary namespace ID
+        let ns_id = NamespaceId::from(42);
+        let txn = Transaction::new(ns_id, vec![1, 2, 3, 4]);
 
         // Start query service.
         let port = pick_unused_port().expect("No ports free");
@@ -783,14 +783,31 @@ mod api_tests {
                 .await
                 .unwrap();
             let ns_query_res: NamespaceProofQueryData = client
-                .get(&format!("availability/block/{block_num}/namespace/0"))
+                .get(&format!("availability/block/{block_num}/namespace/{ns_id}"))
                 .send()
                 .await
                 .unwrap();
-            ns_query_res
-                .proof
-                .verify(&vid, &header.payload_commitment, &header.ns_table)
-                .unwrap();
+
+            // Verify namespace proof if present
+            if let Some(ns_proof) = ns_query_res.proof {
+                let vid_common: VidCommonQueryData<SeqTypes> = client
+                    .get(&format!("availability/vid/common/{block_num}"))
+                    .send()
+                    .await
+                    .unwrap();
+
+                ns_proof
+                    .verify(
+                        &header.ns_table,
+                        &header.payload_commitment,
+                        vid_common.common(),
+                    )
+                    .unwrap();
+            } else {
+                // Namespace proof should be present if ns_id exists in ns_table
+                assert!(header.ns_table.find_ns_id(&ns_id).is_none());
+                assert!(ns_query_res.transactions.is_empty());
+            }
 
             found_empty_block = found_empty_block || ns_query_res.transactions.is_empty();
 

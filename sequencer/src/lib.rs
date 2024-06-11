@@ -16,7 +16,6 @@ mod reference_tests;
 use anyhow::Context;
 use async_std::sync::RwLock;
 use async_trait::async_trait;
-use block::entry::TxTableEntryWord;
 use catchup::{StateCatchup, StatePeers};
 use context::SequencerContext;
 use ethers::types::U256;
@@ -83,7 +82,7 @@ use std::time::Duration;
 #[cfg(feature = "libp2p")]
 use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
 
-pub use block::payload::Payload;
+pub use block::Payload;
 pub use chain_config::ChainConfig;
 pub use genesis::Genesis;
 pub use header::Header;
@@ -245,7 +244,7 @@ impl InstanceState for NodeState {}
 impl NodeType for SeqTypes {
     type Time = ViewNumber;
     type BlockHeader = Header;
-    type BlockPayload = Payload<TxTableEntryWord>;
+    type BlockPayload = Payload;
     type SignatureKey = PubKey;
     type Transaction = Transaction;
     type InstanceState = NodeState;

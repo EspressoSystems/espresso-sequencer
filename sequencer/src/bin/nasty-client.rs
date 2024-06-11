@@ -31,14 +31,10 @@ use hotshot_query_service::{
     metrics::PrometheusMetrics,
     node::TimeWindowQueryData,
 };
-use hotshot_types::{
-    traits::metrics::{Counter, Gauge, Histogram, Metrics as _},
-    vid::{vid_scheme, VidSchemeType},
-};
+use hotshot_types::traits::metrics::{Counter, Gauge, Histogram, Metrics as _};
 use jf_merkle_tree::{
     ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
-use jf_vid::VidScheme;
 use rand::{seq::SliceRandom, RngCore};
 use sequencer::{
     api::endpoints::NamespaceProofQueryData,
@@ -1015,11 +1011,13 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
                 self.get(format!("availability/header/{block}")).await
             })
             .await?;
-        if header.ns_table.is_empty() {
+        let num_namespaces = header.ns_table.iter().count();
+        if num_namespaces == 0 {
             tracing::info!("not fetching namespace because block {block} is empty");
             return Ok(());
         }
-        let ns = header.ns_table.get_table_entry(index).0;
+        let ns_index = header.ns_table.iter().nth(index % num_namespaces).unwrap();
+        let ns = header.ns_table.read_ns_id(&ns_index).unwrap();
 
         let ns_proof: NamespaceProofQueryData = self
             .retry(info_span!("fetch namespace", %ns), || async {
@@ -1034,13 +1032,21 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
                 self.get(format!("availability/vid/common/{block}")).await
             })
             .await?;
-        let vid = vid_scheme(VidSchemeType::get_num_storage_nodes(vid_common.common()) as usize);
+        ensure!(
+            ns_proof.proof.is_some(),
+            format!("missing namespace proof for {block}:{ns}")
+        );
         ensure!(
             ns_proof
                 .proof
-                .verify(&vid, &header.payload_commitment, &header.ns_table)
+                .unwrap()
+                .verify(
+                    &header.ns_table,
+                    &header.payload_commitment,
+                    vid_common.common()
+                )
                 .is_some(),
-            format!("namespace proof for {block}:{ns} is invalid")
+            format!("failure to verify namespace proof for {block}:{ns}")
         );
 
         self.metrics.query_namespace_actions.add(1);

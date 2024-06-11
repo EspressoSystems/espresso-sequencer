@@ -14,10 +14,7 @@ use super::{
     StorageState,
 };
 use crate::{
-    block::payload::{parse_ns_payload, NamespaceProof},
-    network,
-    persistence::SequencerPersistence,
-    NamespaceId, SeqTypes, Transaction,
+    block::NsProof, network, persistence::SequencerPersistence, NamespaceId, SeqTypes, Transaction,
 };
 use anyhow::Result;
 use async_std::sync::{Arc, RwLock};
@@ -45,7 +42,7 @@ use vbs::version::StaticVersionType;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
-    pub proof: NamespaceProof,
+    pub proof: Option<NsProof>,
     pub transactions: Vec<Transaction>,
 }
 
@@ -74,8 +71,7 @@ where
     api.get("getnamespaceproof", move |req, state| {
         async move {
             let height: usize = req.integer_param("height")?;
-            let ns_id: u64 = req.integer_param("namespace")?;
-            let ns_id = NamespaceId::from(ns_id);
+            let ns_id = NamespaceId::from(req.integer_param::<_, u32>("namespace")?);
             let (block, common) = try_join!(
                 async move {
                     state
@@ -99,32 +95,25 @@ where
                 }
             )?;
 
-            let proof = block
-                .payload()
-                .namespace_with_proof(
-                    block.payload().get_ns_table(),
-                    ns_id,
-                    common.common().clone(),
-                )
-                .context(CustomSnafu {
-                    message: format!("failed to make proof for namespace {ns_id}"),
-                    status: StatusCode::NOT_FOUND,
-                })?;
+            if let Some(ns_index) = block.payload().ns_table().find_ns_id(&ns_id) {
+                let proof = NsProof::new(block.payload(), &ns_index, common.common()).context(
+                    CustomSnafu {
+                        message: format!("failed to make proof for namespace {ns_id}"),
+                        status: StatusCode::NOT_FOUND,
+                    },
+                )?;
 
-            let transactions = if let NamespaceProof::Existence {
-                ref ns_payload_flat,
-                ..
-            } = proof
-            {
-                parse_ns_payload(ns_payload_flat, ns_id)
+                Ok(NamespaceProofQueryData {
+                    transactions: proof.export_all_txs(&ns_id),
+                    proof: Some(proof),
+                })
             } else {
-                Vec::new()
-            };
-
-            Ok(NamespaceProofQueryData {
-                transactions,
-                proof,
-            })
+                // ns_id not found in ns_table
+                Ok(NamespaceProofQueryData {
+                    proof: None,
+                    transactions: Vec::new(),
+                })
+            }
         }
         .boxed()
     })?;
@@ -177,16 +166,6 @@ where
             let tx = req
                 .body_auto::<Transaction, Ver>(Ver::instance())
                 .map_err(Error::from_request_error)?;
-
-            // Transactions with namespaces that do not fit in the u32
-            // cannot be included in the block.
-            // TODO: This issue will be addressed in the next release.
-            if tx.namespace() > NamespaceId::from(u32::MAX as u64) {
-                return Err(Error::Custom {
-                    message: "Transaction namespace > u32::MAX".to_string(),
-                    status: StatusCode::BAD_REQUEST,
-                });
-            }
 
             let hash = tx.commit();
             state
