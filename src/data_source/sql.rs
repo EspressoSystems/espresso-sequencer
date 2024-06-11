@@ -14,7 +14,7 @@
 
 use super::{
     fetching,
-    storage::sql::{self, SqlStorage},
+    storage::sql::{self, Client, SqlStorage},
     AvailabilityProvider, FetchingDataSource,
 };
 pub use crate::include_migrations;
@@ -29,7 +29,6 @@ use hotshot_types::traits::node_implementation::NodeType;
 pub use refinery::Migration;
 use std::borrow::Cow;
 pub use tokio_postgres as postgres;
-use tokio_postgres::Client;
 
 pub use sql::{Config, Query, Transaction};
 
@@ -433,7 +432,7 @@ mod test {
     // This function should be generic, but the file system data source does not currently support
     // storing VID common and later the corresponding share.
     #[async_std::test]
-    pub async fn test_vid_monotonicity() {
+    async fn test_vid_monotonicity() {
         setup_test();
 
         let storage = D::create(0).await;

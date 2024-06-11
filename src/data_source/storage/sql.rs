@@ -40,13 +40,12 @@ use crate::{
         UpdateStateData,
     },
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
-    task::BackgroundTask,
     types::HeightIndexed,
     ErrorSnafu, Header, Leaf, MissingSnafu, NotFoundSnafu, Payload, QueryError, QueryResult,
     VidShare,
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
-use async_std::{net::ToSocketAddrs, sync::Arc, task::sleep};
+use async_std::{sync::Arc, task::sleep};
 use async_trait::async_trait;
 use bit_vec::BitVec;
 use chrono::Utc;
@@ -54,8 +53,6 @@ use committable::Committable;
 use futures::{
     future::{BoxFuture, FutureExt},
     stream::{self, BoxStream, StreamExt, TryStreamExt},
-    task::{Context, Poll},
-    AsyncRead, AsyncWrite,
 };
 use hotshot_types::{
     simple_certificate::QuorumCertificate,
@@ -71,7 +68,6 @@ use jf_merkle_tree::{
     DigestAlgorithm, MerkleCommitment, ToTraversalPath,
 };
 use postgres::types::Json;
-use postgres_native_tls::TlsConnector;
 use snafu::OptionExt;
 use std::{
     borrow::Cow,
@@ -80,16 +76,15 @@ use std::{
     fmt::{Debug, Display},
     num::NonZeroUsize,
     ops::{Bound, RangeBounds},
-    pin::Pin,
     str::FromStr,
     time::Duration,
 };
 use tokio_postgres::{
-    config::Host,
-    tls::TlsConnect,
     types::{BorrowToSql, ToSql},
-    Client, NoTls, Row, ToStatement,
+    Row, ToStatement,
 };
+
+mod client;
 
 pub use anyhow::Error;
 // This needs to be reexported so that we can reference it by absolute path relative to this crate
@@ -99,6 +94,8 @@ pub use crate::include_migrations;
 pub use include_dir::include_dir;
 pub use refinery::Migration;
 pub use tokio_postgres as postgres;
+
+pub(crate) use client::Client;
 
 /// Embed migrations from the given directory into the current binary.
 ///
@@ -218,50 +215,20 @@ fn add_custom_migrations(
 }
 
 /// Postgres client config.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Config {
-    pgcfg: postgres::Config,
-    host: String,
-    port: u16,
-    schema: String,
+    client_config: client::Config,
     reset: bool,
     migrations: Vec<Migration>,
     no_migrations: bool,
-    tls: bool,
     pruner_cfg: Option<PrunerCfg>,
     archive: bool,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            pgcfg: Default::default(),
-            host: "localhost".into(),
-            port: 5432,
-            schema: "hotshot".into(),
-            reset: false,
-            migrations: vec![],
-            no_migrations: false,
-            tls: false,
-            pruner_cfg: None,
-            archive: false,
-        }
-    }
-}
-
 impl From<postgres::Config> for Config {
     fn from(pgcfg: postgres::Config) -> Self {
-        // We connect via TCP manually, without using the host and port from pgcfg. So we need to
-        // pull those out of pgcfg if they have been specified, to override the defaults.
-        let host = match pgcfg.get_hosts().first() {
-            Some(Host::Tcp(host)) => host.to_string(),
-            _ => "localhost".into(),
-        };
-        let port = *pgcfg.get_ports().first().unwrap_or(&5432);
         Self {
-            pgcfg,
-            host,
-            port,
+            client_config: pgcfg.into(),
             ..Default::default()
         }
     }
@@ -280,7 +247,7 @@ impl Config {
     ///
     /// The default is `localhost`.
     pub fn host(mut self, host: impl Into<String>) -> Self {
-        self.host = host.into();
+        self.client_config.host = host.into();
         self
     }
 
@@ -288,25 +255,25 @@ impl Config {
     ///
     /// The default is 5432, the default Postgres port.
     pub fn port(mut self, port: u16) -> Self {
-        self.port = port;
+        self.client_config.port = port;
         self
     }
 
     /// Set the DB user to connect as.
     pub fn user(mut self, user: &str) -> Self {
-        self.pgcfg.user(user);
+        self.client_config.pgcfg.user(user);
         self
     }
 
     /// Set a password for connecting to the database.
     pub fn password(mut self, password: &str) -> Self {
-        self.pgcfg.password(password);
+        self.client_config.pgcfg.password(password);
         self
     }
 
     /// Set the name of the database to connect to.
     pub fn database(mut self, database: &str) -> Self {
-        self.pgcfg.dbname(database);
+        self.client_config.pgcfg.dbname(database);
         self
     }
 
@@ -314,7 +281,7 @@ impl Config {
     ///
     /// The default schema is named `hotshot` and is created via the default migrations.
     pub fn schema(mut self, schema: impl Into<String>) -> Self {
-        self.schema = schema.into();
+        self.client_config.schema = schema.into();
         self
     }
 
@@ -347,7 +314,7 @@ impl Config {
 
     /// Use TLS for an encrypted connection to the database.
     pub fn tls(mut self) -> Self {
-        self.tls = true;
+        self.client_config.tls = true;
         self
     }
 
@@ -380,9 +347,7 @@ impl Config {
 #[derive(Debug)]
 pub struct SqlStorage {
     client: Arc<Client>,
-    tx_in_progress: bool,
     pruner: Pruner,
-    _connection: BackgroundTask,
 }
 
 #[derive(Debug, Default)]
@@ -415,29 +380,21 @@ impl Pruner {
 impl SqlStorage {
     /// Connect to a remote database.
     pub async fn connect(mut config: Config) -> Result<Self, Error> {
-        // Establish a TCP connection to the server.
-        let tcp = TcpStream::connect((config.host.as_str(), config.port)).await?;
-
-        // Convert the TCP connection into a postgres connection.
-        let (mut client, connection) = if config.tls {
-            let tls = TlsConnector::new(native_tls::TlsConnector::new()?, config.host.as_str());
-            connect(config.pgcfg, tcp, tls).await?
-        } else {
-            connect(config.pgcfg, tcp, NoTls).await?
-        };
+        let schema = config.client_config.schema.clone();
+        let client = Client::new(config.client_config).await?;
 
         // Create or connect to the schema for this query service.
         if config.reset {
             client
-                .batch_execute(&format!("DROP SCHEMA IF EXISTS {} CASCADE", config.schema))
+                .batch_execute(&format!("DROP SCHEMA IF EXISTS {schema} CASCADE"))
+                .await?;
+            client
+                .batch_execute(&format!("CREATE SCHEMA {schema}"))
+                .await?;
+            client
+                .batch_execute(&format!("SET search_path TO {schema}"))
                 .await?;
         }
-        client
-            .batch_execute(&format!("CREATE SCHEMA IF NOT EXISTS {}", config.schema))
-            .await?;
-        client
-            .batch_execute(&format!("SET search_path TO {}", config.schema))
-            .await?;
 
         // Get migrations and interleave with custom migrations, sorting by version number.
         validate_migrations(&mut config.migrations)?;
@@ -451,7 +408,7 @@ impl SqlStorage {
         if config.no_migrations {
             // We've been asked not to run any migrations. Abort if the DB is not already up to
             // date.
-            let last_applied = runner.get_last_applied_migration_async(&mut client).await?;
+            let last_applied = client.last_applied_migration(&runner).await?;
             let last_expected = migrations.last();
             if last_applied.as_ref() != last_expected {
                 return Err(Error::msg(format!(
@@ -460,7 +417,7 @@ impl SqlStorage {
             }
         } else {
             // Run migrations using `refinery`.
-            match runner.run_async(&mut client).await {
+            match client.run_migrations(&runner).await {
                 Ok(report) => {
                     tracing::info!("ran DB migrations: {report:?}");
                 }
@@ -483,22 +440,13 @@ impl SqlStorage {
 
         Ok(Self {
             client: Arc::new(client),
-            tx_in_progress: false,
             pruner,
-            _connection: connection,
         })
     }
 
     /// Access the transaction which is accumulating all uncommitted changes to the data source.
     pub async fn transaction(&mut self) -> QueryResult<Transaction<'_>> {
-        if !self.tx_in_progress {
-            // If there is no transaction in progress, open one.
-            self.client
-                .batch_execute("BEGIN")
-                .await
-                .map_err(postgres_err)?;
-            self.tx_in_progress = true;
-        }
+        self.client.begin().await?;
         Ok(Transaction {
             client: Cow::Borrowed(&self.client),
         })
@@ -740,27 +688,14 @@ impl Query for SqlStorage {
 
 #[async_trait]
 impl VersionedDataSource for SqlStorage {
-    type Error = postgres::error::Error;
+    type Error = QueryError;
 
     async fn commit(&mut self) -> Result<(), Self::Error> {
-        if self.tx_in_progress {
-            self.client.batch_execute("COMMIT").await?;
-            self.tx_in_progress = false;
-        }
-        Ok(())
+        self.client.commit().await
     }
 
     async fn revert(&mut self) {
-        if self.tx_in_progress {
-            // If we're trying to roll back a transaction, something has already gone wrong and
-            // we're trying to recover. If we're unable to revert the changes and recover, all we
-            // can do is panic.
-            self.client
-                .batch_execute("ROLLBACK")
-                .await
-                .expect("DB rollback succeeds");
-            self.tx_in_progress = false;
-        }
+        self.client.revert().await
     }
 }
 
@@ -1193,10 +1128,10 @@ where
                     (SELECT count(*) AS null_vid FROM vid WHERE share IS NULL) AS vn,
                     coalesce((SELECT last_height FROM pruned_height ORDER BY id DESC LIMIT 1)) as pruned_height
                 ";
+            let params: [i32; 0] = [];
             let row = client
-                .query_opt(query, &[])
-                .await
-                .map_err(postgres_err)?
+                .query_opt(query, &params)
+                .await?
                 .context(NotFoundSnafu)?;
 
             let block_height = match row.get::<_, Option<i64>>("max_height") {
@@ -1440,14 +1375,11 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
         // Batch insert all the hashes
         let nodes_hash_ids: HashMap<Vec<u8>, i32> = txn
             .client
-            .query(&batch_hash_insert_stmt, &params)
-            .await
-            .map_err(|e| QueryError::Error {
-                message: format!("failed to batch insert children hashes {e}"),
-            })?
-            .iter()
-            .map(|r| (r.get(1), r.get(0)))
-            .collect();
+            .query_raw(&batch_hash_insert_stmt, params)
+            .await?
+            .map_ok(|r| (r.get(1), r.get(0)))
+            .try_collect()
+            .await?;
 
         // Updates the node fields
         for (node, children, hash) in &mut nodes {
@@ -1472,15 +1404,9 @@ impl<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>
         let (params, batch_stmt) = Node::build_batch_insert(name, &nodes);
 
         // Batch insert all the child hashes
-        let rows_inserted =
-            txn.client
-                .query(&batch_stmt, &params)
-                .await
-                .map_err(|e| QueryError::Error {
-                    message: format!("failed to batch insert merkle nodes {e}"),
-                })?;
+        let rows_inserted = txn.client.query_raw(&batch_stmt, params).await?;
 
-        if rows_inserted.len() != path.len() {
+        if rows_inserted.count().await != path.len() {
             return Err(QueryError::Error {
                 message: "failed to insert all merkle nodes".to_string(),
             });
@@ -2783,14 +2709,7 @@ pub trait Query {
         P::IntoIter: ExactSizeIterator,
         P::Item: BorrowToSql,
     {
-        Ok(self
-            .client()
-            .await
-            .query_raw(query, params)
-            .await
-            .map_err(postgres_err)?
-            .map_err(postgres_err)
-            .boxed())
+        Ok(self.client().await.query_raw(query, params).await?.boxed())
     }
 
     /// Query the underlying SQL database with no parameters.
@@ -2838,12 +2757,6 @@ pub trait Query {
         T: ?Sized + ToStatement + Sync,
     {
         self.query_opt::<T, [i64; 0]>(query, []).await
-    }
-}
-
-fn postgres_err(err: tokio_postgres::Error) -> QueryError {
-    QueryError::Error {
-        message: err.to_string(),
     }
 }
 
@@ -3041,95 +2954,8 @@ where
     (where_clause, params)
 }
 
-/// Connect to a Postgres database with a TLS implementation.
-///
-/// Spawns a background task to run the connection. Returns a client and a handle to the spawned
-/// task.
-async fn connect<T>(
-    pgcfg: postgres::Config,
-    tcp: TcpStream,
-    tls: T,
-) -> anyhow::Result<(Client, BackgroundTask)>
-where
-    T: TlsConnect<TcpStream>,
-    T::Stream: Send + 'static,
-{
-    let (client, connection) = pgcfg.connect_raw(tcp, tls).await?;
-    Ok((
-        client,
-        BackgroundTask::spawn("postgres connection", connection),
-    ))
-}
-
 fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
     param
-}
-
-// tokio-postgres is written in terms of the tokio AsyncRead/AsyncWrite traits. However, these
-// traits do not require any specifics of the tokio runtime. Thus we can implement them using the
-// async_std TcpStream type, and have a stream which is compatible with tokio-postgres but will run
-// on the async_std executor.
-//
-// To avoid orphan impls, we wrap this tream in a new type.
-struct TcpStream(async_std::net::TcpStream);
-
-impl TcpStream {
-    async fn connect<A: ToSocketAddrs>(addrs: A) -> Result<Self, Error> {
-        Ok(Self(async_std::net::TcpStream::connect(addrs).await?))
-    }
-}
-
-impl tokio::io::AsyncRead for TcpStream {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        // tokio uses this hyper-optimized `ReadBuf` construct, where there is a filled portion, an
-        // unfilled portion where we append new data, and the unfilled portion of the buffer need
-        // not even be initialized. However the async_std implementation we're delegating to just
-        // expects a normal `&mut [u8]` buffer which is entirely unfilled. To simplify the
-        // conversion, we will abandon the uninitialized buffer optimization and force
-        // initialization of the entire buffer, resulting in a plain old `&mut [u8]` representing
-        // the unfilled portion. But first, we need to grab the length of the filled region so we
-        // can increment it after we read new data from async_std.
-        let filled = buf.filled().len();
-
-        // Initialize the buffer and get a slice of the unfilled region. This operation is free
-        // after the first time it is called, so we don't need to worry about maintaining state
-        // between subsequent calls to `poll_read`.
-        let unfilled = buf.initialize_unfilled();
-
-        // Read data into the unfilled portion of the buffer.
-        match Pin::new(&mut self.0).poll_read(cx, unfilled) {
-            Poll::Ready(Ok(bytes_read)) => {
-                // After the read completes, the first `bytes_read` of `unfilled` have now been
-                // filled. Increment the `filled` cursor within the `ReadBuf` to account for this.
-                buf.set_filled(filled + bytes_read);
-                Poll::Ready(Ok(()))
-            }
-            Poll::Ready(Err(err)) => Poll::Ready(Err(err)),
-            Poll::Pending => Poll::Pending,
-        }
-    }
-}
-
-impl tokio::io::AsyncWrite for TcpStream {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
-        Pin::new(&mut self.0).poll_write(cx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.0).poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.0).poll_close(cx)
-    }
 }
 
 fn build_get_path_query(
@@ -3185,9 +3011,18 @@ pub mod testing {
         host: String,
         port: u16,
         container_id: String,
+        persistent: bool,
     }
     impl TmpDb {
         pub async fn init() -> Self {
+            Self::init_inner(false).await
+        }
+
+        pub async fn persistent() -> Self {
+            Self::init_inner(true).await
+        }
+
+        async fn init_inner(persistent: bool) -> Self {
             let docker_hostname = env::var("DOCKER_HOSTNAME");
             // This picks an unused port on the current system.  If docker is
             // configured to run on a different host then this may not find a
@@ -3197,15 +3032,15 @@ pub mod testing {
             let port = pick_unused_port().unwrap();
             let host = docker_hostname.unwrap_or("localhost".to_string());
 
-            let output = Command::new("docker")
-                .arg("run")
-                .arg("--rm")
+            let mut cmd = Command::new("docker");
+            cmd.arg("run")
                 .arg("-d")
                 .args(["-p", &format!("{port}:5432")])
-                .args(["-e", "POSTGRES_PASSWORD=password"])
-                .arg("postgres")
-                .output()
-                .unwrap();
+                .args(["-e", "POSTGRES_PASSWORD=password"]);
+            if !persistent {
+                cmd.arg("--rm");
+            }
+            let output = cmd.arg("postgres").output().unwrap();
             let stdout = str::from_utf8(&output.stdout).unwrap();
             let stderr = str::from_utf8(&output.stderr).unwrap();
             if !output.status.success() {
@@ -3220,13 +3055,70 @@ pub mod testing {
                 host,
                 port,
                 container_id: container_id.clone(),
+                persistent,
             };
 
-            // Wait for the database to be ready.
+            db.wait_for_ready().await;
+            db
+        }
+
+        pub fn host(&self) -> String {
+            self.host.clone()
+        }
+
+        pub fn port(&self) -> u16 {
+            self.port
+        }
+
+        pub fn config(&self) -> Config {
+            Config::default()
+                .user("postgres")
+                .password("password")
+                .host(self.host())
+                .port(self.port())
+                .tls()
+                .migrations(vec![Migration::unapplied(
+                    "V11__create_test_merkle_tree_table.sql",
+                    &TestMerkleTreeMigration::create("test_tree"),
+                )
+                .unwrap()])
+        }
+
+        pub fn stop(&mut self) {
+            tracing::info!(container = self.container_id, "stopping postgres");
+            let output = Command::new("docker")
+                .args(["stop", self.container_id.as_str()])
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "error killing postgres docker {}: {}",
+                self.container_id,
+                str::from_utf8(&output.stderr).unwrap()
+            );
+        }
+
+        pub async fn start(&mut self) {
+            tracing::info!(container = self.container_id, "resuming postgres");
+            let output = Command::new("docker")
+                .args(["start", self.container_id.as_str()])
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "error starting postgres docker {}: {}",
+                self.container_id,
+                str::from_utf8(&output.stderr).unwrap()
+            );
+
+            self.wait_for_ready().await;
+        }
+
+        async fn wait_for_ready(&self) {
             while Command::new("docker")
                 .args([
                     "exec",
-                    &container_id,
+                    &self.container_id,
                     "pg_isready",
                     "-h",
                     "localhost",
@@ -3255,41 +3147,20 @@ pub mod testing {
                 tracing::warn!("database is not ready");
                 sleep(Duration::from_secs(1)).await;
             }
-            db
-        }
-
-        pub fn host(&self) -> String {
-            self.host.clone()
-        }
-
-        pub fn port(&self) -> u16 {
-            self.port
-        }
-
-        pub fn config(&self) -> Config {
-            Config::default()
-                .user("postgres")
-                .password("password")
-                .host(self.host())
-                .port(self.port())
-                .tls()
-                .migrations(vec![Migration::unapplied(
-                    "V11__create_test_merkle_tree_table.sql",
-                    &TestMerkleTreeMigration::create("test_tree"),
-                )
-                .unwrap()])
         }
     }
 
     impl Drop for TmpDb {
         fn drop(&mut self) {
-            let output = Command::new("docker")
-                .args(["stop", self.container_id.as_str()])
-                .output()
-                .unwrap();
-            if !output.status.success() {
-                tracing::error!(
-                    "error killing postgres docker {}: {}",
+            self.stop();
+            if self.persistent {
+                let output = Command::new("docker")
+                    .args(["container", "rm", self.container_id.as_str()])
+                    .output()
+                    .unwrap();
+                assert!(
+                    output.status.success(),
+                    "error removing postgres docker {}: {}",
                     self.container_id,
                     str::from_utf8(&output.stderr).unwrap()
                 );
@@ -3402,10 +3273,13 @@ mod test {
     #[test]
     fn test_config_from_str() {
         let cfg = Config::from_str("postgresql://user:password@host:8080").unwrap();
-        assert_eq!(cfg.pgcfg.get_user(), Some("user"));
-        assert_eq!(cfg.pgcfg.get_password(), Some("password".as_bytes()));
-        assert_eq!(cfg.host, "host");
-        assert_eq!(cfg.port, 8080);
+        assert_eq!(cfg.client_config.pgcfg.get_user(), Some("user"));
+        assert_eq!(
+            cfg.client_config.pgcfg.get_password(),
+            Some("password".as_bytes())
+        );
+        assert_eq!(cfg.client_config.host, "host");
+        assert_eq!(cfg.client_config.port, 8080);
     }
 
     #[test]
@@ -3413,10 +3287,10 @@ mod test {
         let mut pgcfg = postgres::Config::default();
         pgcfg.dbname("db");
         let cfg = Config::from(pgcfg.clone());
-        assert_eq!(cfg.pgcfg, pgcfg);
+        assert_eq!(cfg.client_config.pgcfg, pgcfg);
         // Default values.
-        assert_eq!(cfg.host, "localhost");
-        assert_eq!(cfg.port, 5432);
+        assert_eq!(cfg.client_config.host, "localhost");
+        assert_eq!(cfg.client_config.port, 5432);
     }
 
     #[async_std::test]

@@ -1105,18 +1105,13 @@ pub mod status_tests {
         // Start consensus and wait for the transaction to be finalized.
         network.start().await;
 
-        // Now wait for at least one block to be finalized.
-        let block_height = ds.read().await.block_height().await.unwrap();
+        // Now wait for at least one non-genesis block to be finalized.
         loop {
-            let current_height = ds.read().await.block_height().await.unwrap();
-            if current_height > block_height {
+            let height = ds.read().await.block_height().await.unwrap();
+            if height > 1 {
                 break;
             }
-            tracing::info!(
-                current_height,
-                block_height,
-                "waiting for a block to be finalized"
-            );
+            tracing::info!(height, "waiting for a block to be finalized");
             sleep(Duration::from_secs(1)).await;
         }
 
