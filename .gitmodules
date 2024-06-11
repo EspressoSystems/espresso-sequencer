@@ -19,7 +19,7 @@
 [submodule "contracts/lib/openzeppelin-foundry-upgrades"]
 	path = contracts/lib/openzeppelin-foundry-upgrades
 	url = https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades
-	branch = 0.1.0
+	branch = 0.2.3
 [submodule "contracts/lib/openzeppelin-contracts-upgradeable"]
 	path = contracts/lib/openzeppelin-contracts-upgradeable
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable
