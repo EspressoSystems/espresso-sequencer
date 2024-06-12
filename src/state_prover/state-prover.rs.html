@@ -130,6 +130,10 @@
 <a href="#128" id="128">128</a>
 <a href="#129" id="129">129</a>
 <a href="#130" id="130">130</a>
+<a href="#131" id="131">131</a>
+<a href="#132" id="132">132</a>
+<a href="#133" id="133">133</a>
+<a href="#134" id="134">134</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>cld::ClDuration;
@@ -189,14 +193,14 @@
     </span>)]
     </span>eth_account_index: u32,
 
-    <span class="doccomment">/// URL of the HotShot orchestrator.
+    <span class="doccomment">/// URL of a sequencer node that is currently providing the HotShot config.
+    /// This is used to initialize the stake table.
     </span><span class="attr">#[clap(
-        short,
         long,
-        env = <span class="string">"ESPRESSO_SEQUENCER_ORCHESTRATOR_URL"</span>,
-        default_value = <span class="string">"http://localhost:8080"
+        env = <span class="string">"ESPRESSO_SEQUENCER_URL"</span>,
+        default_value = <span class="string">"http://localhost:24000"
     </span>)]
-    </span><span class="kw">pub </span>orchestrator_url: Url,
+    </span><span class="kw">pub </span>sequencer_url: Url,
 
     <span class="doccomment">/// If daemon and provided, the service will run a basic HTTP server on the given port.
     ///
@@ -247,17 +251,21 @@
             .with_chain_id(chain_id)
             .signer()
             .clone(),
-        orchestrator_url: args.orchestrator_url,
+        sequencer_url: args.sequencer_url,
         port: args.port,
         stake_table_capacity: args.stake_table_capacity,
     };
 
     <span class="kw">if </span>args.daemon {
         <span class="comment">// Launching the prover service daemon
-        </span>run_prover_service(config, SEQUENCER_VERSION).<span class="kw">await</span>;
+        </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = run_prover_service(config, SEQUENCER_VERSION).<span class="kw">await </span>{
+            <span class="macro">tracing::error!</span>(<span class="string">"Error running prover service: {:?}"</span>, err);
+        };
     } <span class="kw">else </span>{
         <span class="comment">// Run light client state update once
-        </span>run_prover_once(config, SEQUENCER_VERSION).<span class="kw">await</span>;
+        </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = run_prover_once(config, SEQUENCER_VERSION).<span class="kw">await </span>{
+            <span class="macro">tracing::error!</span>(<span class="string">"Error running prover once: {:?}"</span>, err);
+        };
     }
 }
 </code></pre></div></section></main></body></html>

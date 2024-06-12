@@ -702,10 +702,23 @@
 <a href="#700" id="700">700</a>
 <a href="#701" id="701">701</a>
 <a href="#702" id="702">702</a>
+<a href="#703" id="703">703</a>
+<a href="#704" id="704">704</a>
+<a href="#705" id="705">705</a>
+<a href="#706" id="706">706</a>
+<a href="#707" id="707">707</a>
+<a href="#708" id="708">708</a>
+<a href="#709" id="709">709</a>
+<a href="#710" id="710">710</a>
+<a href="#711" id="711">711</a>
+<a href="#712" id="712">712</a>
+<a href="#713" id="713">713</a>
+<a href="#714" id="714">714</a>
+<a href="#715" id="715">715</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! A light client prover service
 
 </span><span class="kw">use </span><span class="kw">crate</span>::snark::{generate_state_update_proof, Proof, ProvingKey};
-<span class="kw">use </span>anyhow::anyhow;
+<span class="kw">use </span>anyhow::{anyhow, Context, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>async_std::{
     io,
     sync::Arc,
@@ -724,10 +737,8 @@
 <span class="kw">use </span>futures::FutureExt;
 <span class="kw">use </span>hotshot_contract_adapter::jellyfish::{u256_to_field, ParsedPlonkProof};
 <span class="kw">use </span>hotshot_contract_adapter::light_client::ParsedLightClientState;
-<span class="kw">use </span>hotshot_orchestrator::OrchestratorVersion;
 <span class="kw">use </span>hotshot_stake_table::vec_based::config::FieldType;
 <span class="kw">use </span>hotshot_stake_table::vec_based::StakeTable;
-<span class="kw">use </span>hotshot_types::signature_key::BLSPubKey;
 <span class="kw">use </span>hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme <span class="kw">as _</span>};
 <span class="kw">use </span>hotshot_types::{
     light_client::{
@@ -736,11 +747,13 @@
     },
     traits::signature_key::StakeTableEntryType,
 };
+<span class="kw">use </span>hotshot_types::{signature_key::BLSPubKey, PeerConfig};
 
 <span class="kw">use </span>jf_pcs::prelude::UnivariateUniversalParams;
 <span class="kw">use </span>jf_plonk::errors::PlonkError;
 <span class="kw">use </span>jf_relation::Circuit <span class="kw">as _</span>;
 <span class="kw">use </span>jf_signature::constants::CS_ID_SCHNORR;
+<span class="kw">use </span>serde::Deserialize;
 <span class="kw">use </span>std::{
     iter,
     time::{Duration, Instant},
@@ -755,8 +768,6 @@
 
 <span class="doccomment">/// A wallet with local signer and connected to network via http
 </span><span class="kw">pub type </span>L1Wallet = SignerMiddleware&lt;Provider&lt;Http&gt;, LocalWallet&gt;;
-
-<span class="kw">type </span>NetworkConfig = hotshot_orchestrator::config::NetworkConfig&lt;BLSPubKey&gt;;
 
 <span class="doccomment">/// Configuration/Parameters used for hotshot state prover
 </span><span class="attr">#[derive(Debug, Clone)]
@@ -773,8 +784,9 @@
     </span><span class="kw">pub </span>light_client_address: Address,
     <span class="doccomment">/// Transaction signing key for Ethereum
     </span><span class="kw">pub </span>eth_signing_key: SigningKey,
-    <span class="doccomment">/// Address off the hotshot orchestrator, used for stake table initialization.
-    </span><span class="kw">pub </span>orchestrator_url: Url,
+    <span class="doccomment">/// URL of a node that is currently providing the HotShot config.
+    /// This is used to initialize the stake table.
+    </span><span class="kw">pub </span>sequencer_url: Url,
     <span class="doccomment">/// If daemon and provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
@@ -807,62 +819,70 @@
     <span class="prelude-val">Ok</span>(st)
 }
 
-<span class="kw">async fn </span>init_stake_table_from_orchestrator(
-    orchestrator_url: <span class="kw-2">&amp;</span>Url,
+<span class="attr">#[derive(Debug, Deserialize)]
+</span><span class="kw">pub struct </span>PublicHotShotConfig {
+    <span class="kw">pub </span>known_nodes_with_stake: Vec&lt;PeerConfig&lt;BLSPubKey&gt;&gt;,
+}
+
+<span class="doccomment">/// Initialize the stake table from a sequencer node that
+/// is currently providing the HotShot config.
+///
+/// Does not error, runs until the stake table is provided.
+</span><span class="kw">async fn </span>init_stake_table_from_sequencer(
+    sequencer_url: <span class="kw-2">&amp;</span>Url,
     stake_table_capacity: usize,
-) -&gt; StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt; {
-    <span class="macro">tracing::info!</span>(<span class="string">"Initializing stake table from HotShot orchestrator {orchestrator_url}"</span>);
-    <span class="kw">let </span>client = Client::&lt;ServerError, OrchestratorVersion&gt;::new(orchestrator_url.clone());
-    <span class="kw">loop </span>{
-        <span class="kw">match </span>client.get::&lt;bool&gt;(<span class="string">"api/peer_pub_ready"</span>).send().<span class="kw">await </span>{
-            <span class="prelude-val">Ok</span>(<span class="bool-val">true</span>) =&gt; {
-                <span class="kw">match </span>client
-                    .post::&lt;NetworkConfig&gt;(<span class="string">"api/post_config_after_peer_collected"</span>)
-                    .send()
-                    .<span class="kw">await
-                </span>{
-                    <span class="prelude-val">Ok</span>(config) =&gt; {
-                        <span class="kw">let </span><span class="kw-2">mut </span>st = StakeTable::&lt;BLSPubKey, StateVerKey, CircuitField&gt;::new(
-                            stake_table_capacity,
-                        );
-                        <span class="macro">tracing::debug!</span>(<span class="string">"{}"</span>, config.config.known_nodes_with_stake.len());
-                        config
-                            .config
-                            .known_nodes_with_stake
-                            .into_iter()
-                            .for_each(|config| {
-                                st.register(
-                                    <span class="kw-2">*</span>config.stake_table_entry.key(),
-                                    config.stake_table_entry.stake(),
-                                    config.state_ver_key,
-                                )
-                                .expect(<span class="string">"Key registration shouldn't fail."</span>);
-                            });
-                        st.advance();
-                        st.advance();
-                        <span class="kw">return </span>st;
-                    }
-                    <span class="prelude-val">Err</span>(e) =&gt; {
-                        <span class="macro">tracing::warn!</span>(<span class="string">"Orchestrator error: {e}, retrying."</span>);
-                    }
+) -&gt; <span class="prelude-ty">Result</span>&lt;StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt;&gt; {
+    <span class="macro">tracing::info!</span>(<span class="string">"Initializing stake table from node at {sequencer_url}"</span>);
+
+    <span class="comment">// Construct the URL to fetch the network config
+    </span><span class="kw">let </span>config_url = sequencer_url
+        .join(<span class="string">"/v0/config/hotshot"</span>)
+        .with_context(|| <span class="string">"Invalid URL"</span>)<span class="question-mark">?</span>;
+
+    <span class="comment">// Request the configuration until it is successful
+    </span><span class="kw">let </span>network_config: PublicHotShotConfig = <span class="kw">loop </span>{
+        <span class="kw">match </span>reqwest::get(config_url.clone()).<span class="kw">await </span>{
+            <span class="prelude-val">Ok</span>(resp) =&gt; <span class="kw">match </span>resp.json::&lt;PublicHotShotConfig&gt;().<span class="kw">await </span>{
+                <span class="prelude-val">Ok</span>(config) =&gt; <span class="kw">break </span>config,
+                <span class="prelude-val">Err</span>(e) =&gt; {
+                    <span class="macro">tracing::error!</span>(<span class="string">"Failed to parse the network config: {e}"</span>);
+                    sleep(Duration::from_secs(<span class="number">5</span>)).<span class="kw">await</span>;
                 }
-            }
-            <span class="prelude-val">Ok</span>(<span class="bool-val">false</span>) =&gt; {
-                <span class="macro">tracing::info!</span>(<span class="string">"Peers' keys are not ready, retrying."</span>);
-            }
+            },
             <span class="prelude-val">Err</span>(e) =&gt; {
-                <span class="macro">tracing::warn!</span>(<span class="string">"Orchestrator error {e}, retrying."</span>);
+                <span class="macro">tracing::error!</span>(<span class="string">"Failed to fetch the network config: {e}"</span>);
+                sleep(Duration::from_secs(<span class="number">5</span>)).<span class="kw">await</span>;
             }
         }
-        sleep(Duration::from_secs(<span class="number">2</span>)).<span class="kw">await</span>;
+    };
+
+    <span class="comment">// Create empty stake table
+    </span><span class="kw">let </span><span class="kw-2">mut </span>st = StakeTable::&lt;BLSPubKey, StateVerKey, CircuitField&gt;::new(stake_table_capacity);
+
+    <span class="comment">// Populate the stake table
+    </span><span class="kw">for </span>node <span class="kw">in </span>network_config.known_nodes_with_stake.into_iter() {
+        st.register(
+            <span class="kw-2">*</span>node.stake_table_entry.key(),
+            node.stake_table_entry.stake(),
+            node.state_ver_key,
+        )
+        .expect(<span class="string">"Key registration shouldn't fail."</span>);
     }
+
+    <span class="comment">// Advance the stake table
+    </span>st.advance();
+    st.advance();
+
+    <span class="prelude-val">Ok</span>(st)
 }
 
 <span class="kw">pub async fn </span>light_client_genesis(
-    orchestrator_url: <span class="kw-2">&amp;</span>Url,
+    sequencer_url: <span class="kw-2">&amp;</span>Url,
     stake_table_capacity: usize,
 ) -&gt; anyhow::Result&lt;ParsedLightClientState&gt; {
-    <span class="kw">let </span>st = init_stake_table_from_orchestrator(orchestrator_url, stake_table_capacity).<span class="kw">await</span>;
+    <span class="kw">let </span>st = init_stake_table_from_sequencer(sequencer_url, stake_table_capacity)
+        .<span class="kw">await
+        </span>.with_context(|| <span class="string">"Failed to initialize stake table"</span>)<span class="question-mark">?</span>;
     light_client_genesis_from_stake_table(st)
 }
 
@@ -1093,12 +1113,13 @@
 <span class="kw">pub async fn </span>run_prover_service&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
     config: StateProverConfig,
     bind_version: Ver,
-) {
+) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     <span class="macro">tracing::info!</span>(<span class="string">"Stake table capacity: {}"</span>, config.stake_table_capacity);
     <span class="comment">// TODO(#1022): maintain the following stake table
     </span><span class="kw">let </span>st = Arc::new(
-        init_stake_table_from_orchestrator(<span class="kw-2">&amp;</span>config.orchestrator_url, config.stake_table_capacity)
-            .<span class="kw">await</span>,
+        init_stake_table_from_sequencer(<span class="kw-2">&amp;</span>config.sequencer_url, config.stake_table_capacity)
+            .<span class="kw">await
+            </span>.with_context(|| <span class="string">"Failed to initialize stake table"</span>)<span class="question-mark">?</span>,
     );
 
     <span class="macro">tracing::info!</span>(<span class="string">"Light client address: {:?}"</span>, config.light_client_address);
@@ -1131,10 +1152,13 @@
 }
 
 <span class="doccomment">/// Run light client state prover once
-</span><span class="kw">pub async fn </span>run_prover_once&lt;Ver: StaticVersionType&gt;(config: StateProverConfig, <span class="kw">_</span>: Ver) {
-    <span class="kw">let </span>st =
-        init_stake_table_from_orchestrator(<span class="kw-2">&amp;</span>config.orchestrator_url, config.stake_table_capacity)
-            .<span class="kw">await</span>;
+</span><span class="kw">pub async fn </span>run_prover_once&lt;Ver: StaticVersionType&gt;(
+    config: StateProverConfig,
+    <span class="kw">_</span>: Ver,
+) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    <span class="kw">let </span>st = init_stake_table_from_sequencer(<span class="kw-2">&amp;</span>config.sequencer_url, config.stake_table_capacity)
+        .<span class="kw">await
+        </span>.with_context(|| <span class="string">"Failed to initialize stake table"</span>)<span class="question-mark">?</span>;
     <span class="kw">let </span>stake_table_capacity = config.stake_table_capacity;
     <span class="kw">let </span>proving_key =
         spawn_blocking(<span class="kw">move </span>|| Arc::new(load_proving_key(stake_table_capacity))).<span class="kw">await</span>;
@@ -1143,6 +1167,8 @@
     sync_state(<span class="kw-2">&amp;</span>st, proving_key, <span class="kw-2">&amp;</span>relay_server_client, <span class="kw-2">&amp;</span>config)
         .<span class="kw">await
         </span>.expect(<span class="string">"Error syncing the light client state."</span>);
+
+    <span class="prelude-val">Ok</span>(())
 }
 
 <span class="attr">#[derive(Debug, Display)]
@@ -1346,7 +1372,7 @@
                 l1_provider: Url::parse(<span class="string">"http://localhost"</span>).unwrap(),
                 light_client_address: Address::default(),
                 eth_signing_key: SigningKey::random(<span class="kw-2">&amp;mut </span>test_rng()),
-                orchestrator_url: Url::parse(<span class="string">"http://localhost"</span>).unwrap(),
+                sequencer_url: Url::parse(<span class="string">"http://localhost"</span>).unwrap(),
                 port: <span class="prelude-val">None</span>,
                 stake_table_capacity: <span class="number">10</span>,
             }

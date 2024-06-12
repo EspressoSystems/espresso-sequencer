@@ -123,7 +123,6 @@
 <a href="#121" id="121">121</a>
 <a href="#122" id="122">122</a>
 <a href="#123" id="123">123</a>
-<a href="#124" id="124">124</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>futures::FutureExt;
@@ -160,15 +159,14 @@
     </span>)]
     </span>rpc_url: Url,
 
-    <span class="doccomment">/// URL of the HotShot orchestrator.
-    ///
-    /// This is used to get the stake table for initializing the light client contract.
+    <span class="doccomment">/// URL of a sequencer node that is currently providing the HotShot config.
+    /// This is used to initialize the stake table.
     </span><span class="attr">#[clap(
         long,
-        env = <span class="string">"ESPRESSO_SEQUENCER_ORCHESTRATOR_URL"</span>,
-        default_value = <span class="string">"http://localhost:40001"
+        env = <span class="string">"ESPRESSO_SEQUENCER_URL"</span>,
+        default_value = <span class="string">"http://localhost:24000"
     </span>)]
-    </span>orchestrator_url: Url,
+    </span><span class="kw">pub </span>sequencer_url: Url,
 
     <span class="doccomment">/// Mnemonic for an L1 wallet.
     ///
@@ -220,9 +218,9 @@
     <span class="kw">let </span>opt = Options::parse();
     <span class="kw">let </span>contracts = Contracts::from(opt.contracts);
 
-    <span class="kw">let </span>orchestrator_url = opt.orchestrator_url.clone();
+    <span class="kw">let </span>sequencer_url = opt.sequencer_url.clone();
 
-    <span class="kw">let </span>genesis = light_client_genesis(<span class="kw-2">&amp;</span>orchestrator_url, opt.stake_table_capacity).boxed();
+    <span class="kw">let </span>genesis = light_client_genesis(<span class="kw-2">&amp;</span>sequencer_url, opt.stake_table_capacity).boxed();
 
     <span class="kw">let </span>contracts = deploy(
         opt.rpc_url,
