@@ -288,6 +288,20 @@
 <a href="#286" id="286">286</a>
 <a href="#287" id="287">287</a>
 <a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>builder::permissioned::init_node;
@@ -300,6 +314,7 @@
 <span class="kw">use </span>hotshot_types::signature_key::BLSPrivKey;
 <span class="kw">use </span>hotshot_types::traits::metrics::NoMetrics;
 <span class="kw">use </span>hotshot_types::traits::node_implementation::ConsensusTime;
+<span class="kw">use </span>libp2p::Multiaddr;
 <span class="kw">use </span>sequencer::persistence::no_storage::NoStorage;
 <span class="kw">use </span>sequencer::{eth_signature_key::EthKeyPair, Genesis};
 <span class="kw">use </span>sequencer::{L1Params, NetworkParams};
@@ -346,6 +361,18 @@
         default_value = <span class="string">"localhost:1769"
     </span>)]
     </span><span class="kw">pub </span>libp2p_advertise_address: String,
+
+    <span class="doccomment">/// A comma-separated list of Libp2p multiaddresses to use as bootstrap
+    /// nodes.
+    ///
+    /// Overrides those loaded from the `HotShot` config.
+    </span><span class="attr">#[clap(
+        long,
+        env = <span class="string">"ESPRESSO_SEQUENCER_LIBP2P_BOOTSTRAP_NODES"</span>,
+        value_delimiter = <span class="string">','</span>,
+        num_args = <span class="number">1</span>..
+    )]
+    </span><span class="kw">pub </span>libp2p_bootstrap_nodes: <span class="prelude-ty">Option</span>&lt;Vec&lt;Multiaddr&gt;&gt;,
 
     <span class="doccomment">/// URL of the Light Client State Relay Server
     </span><span class="attr">#[clap(
@@ -533,6 +560,7 @@
         cdn_endpoint: opt.cdn_endpoint,
         libp2p_advertise_address,
         libp2p_bind_address,
+        libp2p_bootstrap_nodes: opt.libp2p_bootstrap_nodes,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
         private_staking_key: private_staking_key.clone(),

@@ -292,11 +292,8 @@
 <a href="#290" id="290">290</a>
 <a href="#291" id="291">291</a>
 <a href="#292" id="292">292</a>
-<a href="#293" id="293">293</a>
-<a href="#294" id="294">294</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
     l1_client::L1BlockInfo,
-    network::GenesisNetworkConfig,
     state::{FeeAccount, FeeAmount},
     ChainConfig,
 };
@@ -395,7 +392,6 @@
     </span><span class="kw">pub </span>accounts: HashMap&lt;FeeAccount, FeeAmount&gt;,
     <span class="kw">pub </span>l1_finalized: <span class="prelude-ty">Option</span>&lt;L1Finalized&gt;,
     <span class="kw">pub </span>header: GenesisHeader,
-    <span class="kw">pub </span>network: <span class="prelude-ty">Option</span>&lt;GenesisNetworkConfig&gt;,
 }
 
 <span class="kw">impl </span>Genesis {

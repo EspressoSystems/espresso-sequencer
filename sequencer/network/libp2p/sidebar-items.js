@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["BootstrapNode"]};
+window.SIDEBAR_ITEMS = {"fn":["split_off_peer_id"]};

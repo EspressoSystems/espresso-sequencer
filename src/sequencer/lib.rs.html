@@ -946,6 +946,25 @@
 <a href="#944" id="944">944</a>
 <a href="#945" id="945">945</a>
 <a href="#946" id="946">946</a>
+<a href="#947" id="947">947</a>
+<a href="#948" id="948">948</a>
+<a href="#949" id="949">949</a>
+<a href="#950" id="950">950</a>
+<a href="#951" id="951">951</a>
+<a href="#952" id="952">952</a>
+<a href="#953" id="953">953</a>
+<a href="#954" id="954">954</a>
+<a href="#955" id="955">955</a>
+<a href="#956" id="956">956</a>
+<a href="#957" id="957">957</a>
+<a href="#958" id="958">958</a>
+<a href="#959" id="959">959</a>
+<a href="#960" id="960">960</a>
+<a href="#961" id="961">961</a>
+<a href="#962" id="962">962</a>
+<a href="#963" id="963">963</a>
+<a href="#964" id="964">964</a>
+<a href="#965" id="965">965</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>block;
 <span class="kw">pub mod </span>catchup;
@@ -975,6 +994,8 @@
 
 </span><span class="kw">use </span>l1_client::L1Client;
 
+<span class="kw">use </span>libp2p::Multiaddr;
+<span class="kw">use </span>network::libp2p::split_off_peer_id;
 <span class="kw">use </span>state::FeeAccount;
 <span class="kw">use </span>state_signature::static_stake_table_commitment;
 <span class="kw">use </span>url::Url;
@@ -1240,6 +1261,9 @@
     </span><span class="kw">pub </span>libp2p_advertise_address: SocketAddr,
     <span class="doccomment">/// The address to bind to for Libp2p
     </span><span class="kw">pub </span>libp2p_bind_address: SocketAddr,
+    <span class="doccomment">/// The (optional) bootstrap node addresses for Libp2p. If supplied, these will
+    /// override the bootstrap nodes specified in the config file.
+    </span><span class="kw">pub </span>libp2p_bootstrap_nodes: <span class="prelude-ty">Option</span>&lt;Vec&lt;Multiaddr&gt;&gt;,
 }
 
 <span class="kw">pub struct </span>L1Params {
@@ -1328,9 +1352,23 @@
         }
     };
 
-    <span class="comment">// If the network is configured manually, override what we got from the orchestrator
-    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(genesis_network_config) = genesis.network {
-        genesis_network_config.populate_config(<span class="kw-2">&amp;mut </span>config)<span class="question-mark">?</span>;
+    <span class="comment">// If the `Libp2p` bootstrap nodes were supplied via the command line, override those
+    // present in the config file.
+    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(bootstrap_nodes) = network_params.libp2p_bootstrap_nodes {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(libp2p_config) = config.libp2p_config.as_mut() {
+            <span class="comment">// If the libp2p configuration is present, we can override the bootstrap nodes.
+
+            // Split off the peer ID from the addresses
+            </span>libp2p_config.bootstrap_nodes = bootstrap_nodes
+                .into_iter()
+                .map(split_off_peer_id)
+                .collect::&lt;<span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">_</span>&gt;, <span class="kw">_</span>&gt;&gt;()
+                .with_context(|| <span class="string">"Failed to parse peer ID from bootstrap node"</span>)<span class="question-mark">?</span>;
+        } <span class="kw">else </span>{
+            <span class="comment">// If not, don't try launching with them. Eventually we may want to
+            // provide a default configuration here instead.
+            </span><span class="macro">tracing::warn!</span>(<span class="string">"No libp2p configuration found, ignoring supplied bootstrap nodes"</span>);
+        }
     }
 
     <span class="kw">let </span>node_index = config.node_index;

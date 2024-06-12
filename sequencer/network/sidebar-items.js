@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["cdn","libp2p"],"struct":["GenesisNetworkConfig","Memory","Production"],"trait":["Type"]};
+window.SIDEBAR_ITEMS = {"mod":["cdn","libp2p"],"struct":["Memory","Production"],"trait":["Type"]};

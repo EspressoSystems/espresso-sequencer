@@ -724,6 +724,17 @@
 <a href="#722" id="722">722</a>
 <a href="#723" id="723">723</a>
 <a href="#724" id="724">724</a>
+<a href="#725" id="725">725</a>
+<a href="#726" id="726">726</a>
+<a href="#727" id="727">727</a>
+<a href="#728" id="728">728</a>
+<a href="#729" id="729">729</a>
+<a href="#730" id="730">730</a>
+<a href="#731" id="731">731</a>
+<a href="#732" id="732">732</a>
+<a href="#733" id="733">733</a>
+<a href="#734" id="734">734</a>
+<a href="#735" id="735">735</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -791,11 +802,7 @@
 <span class="kw">use </span>hotshot_state_prover;
 <span class="kw">use </span>jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 <span class="kw">use </span>jf_signature::bls_over_bn254::VerKey;
-<span class="kw">use </span>sequencer::state_signature::StakeTableCommitmentType;
-<span class="kw">use </span>sequencer::{
-    catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, network::libp2p::BootstrapNode,
-    ChainConfig,
-};
+<span class="kw">use </span>sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, ChainConfig};
 <span class="kw">use </span>sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -808,6 +815,7 @@
     state_signature::{static_stake_table_commitment, StateSigner},
     Genesis, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey, SeqTypes,
 };
+<span class="kw">use </span>sequencer::{network::libp2p::split_off_peer_id, state_signature::StakeTableCommitmentType};
 <span class="kw">use </span>std::{alloc::System, any, fmt::Debug, mem};
 <span class="kw">use </span>std::{marker::PhantomData, net::IpAddr};
 <span class="kw">use </span>std::{net::Ipv4Addr, thread::Builder};
@@ -904,9 +912,23 @@
     .<span class="kw">await</span><span class="question-mark">?
     </span>.<span class="number">0</span>;
 
-    <span class="comment">// If the network is configured manually, override what we got from the orchestrator
-    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(genesis_network_config) = genesis.network {
-        genesis_network_config.populate_config(<span class="kw-2">&amp;mut </span>config)<span class="question-mark">?</span>;
+    <span class="comment">// If the `Libp2p` bootstrap nodes were supplied via the command line, override those
+    // present in the config file.
+    </span><span class="kw">if let </span><span class="prelude-val">Some</span>(bootstrap_nodes) = network_params.libp2p_bootstrap_nodes {
+        <span class="kw">if let </span><span class="prelude-val">Some</span>(libp2p_config) = config.libp2p_config.as_mut() {
+            <span class="comment">// If the libp2p configuration is present, we can override the bootstrap nodes.
+
+            // Split off the peer ID from the addresses
+            </span>libp2p_config.bootstrap_nodes = bootstrap_nodes
+                .into_iter()
+                .map(split_off_peer_id)
+                .collect::&lt;<span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="kw">_</span>&gt;, <span class="kw">_</span>&gt;&gt;()
+                .with_context(|| <span class="string">"Failed to parse peer ID from bootstrap node"</span>)<span class="question-mark">?</span>;
+        } <span class="kw">else </span>{
+            <span class="comment">// If not, don't try launching with them. Eventually we may want to
+            // provide a default configuration here instead.
+            </span><span class="macro">tracing::warn!</span>(<span class="string">"No libp2p configuration found, ignoring bootstrap nodes"</span>);
+        }
     }
 
     <span class="macro">tracing::info!</span>(
