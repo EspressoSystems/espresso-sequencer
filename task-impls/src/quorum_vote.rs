@@ -1,7 +1,6 @@
-use anyhow::{bail, ensure, Context, Result};
 use std::{collections::HashMap, sync::Arc};
-use vbs::version::Version;
 
+use anyhow::{bail, ensure, Context, Result};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
@@ -35,6 +34,7 @@ use jf_vid::VidScheme;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, trace, warn};
+use vbs::version::Version;
 
 use crate::{
     events::HotShotEvent,

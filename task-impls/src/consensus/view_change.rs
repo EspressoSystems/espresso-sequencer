@@ -1,3 +1,4 @@
+use core::time::Duration;
 use std::sync::Arc;
 
 use anyhow::{ensure, Result};
@@ -7,7 +8,6 @@ use async_lock::{RwLock, RwLockUpgradableReadGuard};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use chrono::Utc;
-use core::time::Duration;
 use hotshot_types::{
     consensus::Consensus,
     event::{Event, EventType},

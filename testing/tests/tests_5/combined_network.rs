@@ -30,7 +30,7 @@ async fn test_combined_network() {
             ..Default::default()
         },
         overall_safety_properties: OverallSafetyPropertiesDescription {
-            num_failed_views: 33,
+            num_failed_views: 0,
             num_successful_views: 25,
             ..Default::default()
         },
@@ -63,7 +63,7 @@ async fn test_combined_network_cdn_crash() {
             ..Default::default()
         },
         overall_safety_properties: OverallSafetyPropertiesDescription {
-            num_failed_views: 33,
+            num_failed_views: 0,
             num_successful_views: 35,
             ..Default::default()
         },
@@ -112,7 +112,7 @@ async fn test_combined_network_reup() {
             ..Default::default()
         },
         overall_safety_properties: OverallSafetyPropertiesDescription {
-            num_failed_views: 33,
+            num_failed_views: 0,
             num_successful_views: 35,
             ..Default::default()
         },
@@ -165,7 +165,7 @@ async fn test_combined_network_half_dc() {
             ..Default::default()
         },
         overall_safety_properties: OverallSafetyPropertiesDescription {
-            num_failed_views: 33,
+            num_failed_views: 0,
             num_successful_views: 35,
             ..Default::default()
         },

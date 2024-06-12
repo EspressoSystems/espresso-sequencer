@@ -142,7 +142,6 @@ impl<M: NetworkMsg, K: SignatureKey> MemoryNetwork<M, K> {
                             warn!(?e, "Failed to decode incoming message, skipping");
                         }
                     }
-                    warn!("Stream shutdown");
                 }
             }
             .instrument(info_span!("MemoryNetwork Background task", map = ?master_map)),

@@ -65,6 +65,12 @@ pub enum OverallSafetyTaskErr<TYPES: NodeType> {
     InconsistentStates,
     /// mismatched blocks for a view
     InconsistentBlocks,
+    /// not enough failures. this likely means there is an issue in the test
+    NotEnoughFailures {
+        expected: usize,
+
+        failed_views: HashSet<TYPES::Time>,
+    },
 }
 
 /// Data availability task state
@@ -222,6 +228,13 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
 
         if self.ctx.failed_views.len() + num_incomplete_views > num_failed_rounds_total {
             return TestResult::Fail(Box::new(OverallSafetyTaskErr::<TYPES>::TooManyFailures {
+                failed_views: self.ctx.failed_views.clone(),
+            }));
+        }
+
+        if self.ctx.failed_views.len() < num_failed_rounds_total {
+            return TestResult::Fail(Box::new(OverallSafetyTaskErr::<TYPES>::NotEnoughFailures {
+                expected: num_failed_rounds_total,
                 failed_views: self.ctx.failed_views.clone(),
             }));
         }
