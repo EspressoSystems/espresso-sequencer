@@ -57,14 +57,14 @@ struct Args {
     )]
     eth_account_index: u32,
 
-    /// URL of the HotShot orchestrator.
+    /// URL of a sequencer node that is currently providing the HotShot config.
+    /// This is used to initialize the stake table.
     #[clap(
-        short,
         long,
-        env = "ESPRESSO_SEQUENCER_ORCHESTRATOR_URL",
-        default_value = "http://localhost:8080"
+        env = "ESPRESSO_SEQUENCER_URL",
+        default_value = "http://localhost:24000"
     )]
-    pub orchestrator_url: Url,
+    pub sequencer_url: Url,
 
     /// If daemon and provided, the service will run a basic HTTP server on the given port.
     ///
@@ -115,16 +115,20 @@ async fn main() {
             .with_chain_id(chain_id)
             .signer()
             .clone(),
-        orchestrator_url: args.orchestrator_url,
+        sequencer_url: args.sequencer_url,
         port: args.port,
         stake_table_capacity: args.stake_table_capacity,
     };
 
     if args.daemon {
         // Launching the prover service daemon
-        run_prover_service(config, SEQUENCER_VERSION).await;
+        if let Err(err) = run_prover_service(config, SEQUENCER_VERSION).await{
+            tracing::error!("Error running prover service: {:?}", err);
+        };
     } else {
         // Run light client state update once
-        run_prover_once(config, SEQUENCER_VERSION).await;
+        if let Err(err) = run_prover_once(config, SEQUENCER_VERSION).await{
+            tracing::error!("Error running prover once: {:?}", err);
+        };
     }
 }

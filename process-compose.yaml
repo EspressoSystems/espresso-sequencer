@@ -39,7 +39,7 @@ processes:
     depends_on:
       demo-l1-network:
         condition: process_healthy
-      orchestrator:
+      sequencer0:
         condition: process_healthy
       # Make sure this doesn't start until the other contracts have been deployed, since we use the same mnemonic.
       deploy-sequencer-contracts:
@@ -92,7 +92,7 @@ processes:
       - MNEMONIC=$ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - RAYON_NUM_THREADS=$PROVER_RAYON_NUM_THREADS
     depends_on:
-      orchestrator:
+      sequencer0:
         condition: process_healthy
       state-relay-server:
         condition: process_healthy

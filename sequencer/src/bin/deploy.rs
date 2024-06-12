@@ -34,15 +34,14 @@ struct Options {
     )]
     rpc_url: Url,
 
-    /// URL of the HotShot orchestrator.
-    ///
-    /// This is used to get the stake table for initializing the light client contract.
+    /// URL of a sequencer node that is currently providing the HotShot config.
+    /// This is used to initialize the stake table.
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_ORCHESTRATOR_URL",
-        default_value = "http://localhost:40001"
+        env = "ESPRESSO_SEQUENCER_URL",
+        default_value = "http://localhost:24000"
     )]
-    orchestrator_url: Url,
+    pub sequencer_url: Url,
 
     /// Mnemonic for an L1 wallet.
     ///
@@ -94,9 +93,9 @@ async fn main() -> anyhow::Result<()> {
     let opt = Options::parse();
     let contracts = Contracts::from(opt.contracts);
 
-    let orchestrator_url = opt.orchestrator_url.clone();
+    let sequencer_url = opt.sequencer_url.clone();
 
-    let genesis = light_client_genesis(&orchestrator_url, opt.stake_table_capacity).boxed();
+    let genesis = light_client_genesis(&sequencer_url, opt.stake_table_capacity).boxed();
 
     let contracts = deploy(
         opt.rpc_url,
