@@ -337,17 +337,25 @@ mod tests {
         let tx_hash = tx.commit();
         assert_eq!(hash, tx_hash);
 
-        while api_client
+        let mut tx_result = api_client
             .get::<TransactionQueryData<SeqTypes>>(&format!(
-                "availability/transaction/hash/{}",
-                tx_hash
+                "availability/transaction/hash/{tx_hash}",
             ))
             .send()
-            .await
-            .is_err()
-        {
+            .await;
+        while tx_result.is_err() {
             sleep(Duration::from_secs(3)).await;
+
+            tx_result = api_client
+                .get::<TransactionQueryData<SeqTypes>>(&format!(
+                    "availability/transaction/hash/{}",
+                    tx_hash
+                ))
+                .send()
+                .await;
         }
+
+        let tx_block_height = tx_result.unwrap().block_height();
 
         let light_client_address = "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9";
 
@@ -367,6 +375,16 @@ mod tests {
             sleep(Duration::from_secs(3)).await;
         }
 
+        // Check the namespace proof
+        let proof = api_client
+            .get::<NamespaceProofQueryData>(&format!(
+                "availability/block/{tx_block_height}/namespace/100"
+            ))
+            .send()
+            .await
+            .unwrap();
+        assert!(proof.proof.is_some());
+
         // These endpoints are currently used in `espresso-sequencer-go`. These checks
         // serve as reminders of syncing the API updates to go client repo when they change.
         {
@@ -378,12 +396,6 @@ mod tests {
 
             api_client
                 .get::<Header>("availability/header/3")
-                .send()
-                .await
-                .unwrap();
-
-            api_client
-                .get::<NamespaceProofQueryData>("availability/block/2/namespace/0")
                 .send()
                 .await
                 .unwrap();
