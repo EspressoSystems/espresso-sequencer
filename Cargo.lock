@@ -4339,6 +4339,7 @@ dependencies = [
  "jf-signature",
  "jf-utils",
  "rand_chacha 0.3.1",
+ "reqwest 0.12.4",
  "sequencer-utils",
  "serde",
  "snafu 0.8.3",
