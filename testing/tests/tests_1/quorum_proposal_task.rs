@@ -1,8 +1,7 @@
 #![cfg(feature = "dependency-tasks")]
 
-use std::sync::Arc;
 use std::time::Duration;
-
+#[cfg(not(feature = "dependency-tasks"))]
 use committable::Committable;
 use futures::StreamExt;
 use hotshot::tasks::task_state::CreateTaskState;
@@ -11,31 +10,39 @@ use hotshot_example_types::state_types::TestValidatedState;
 use hotshot_example_types::{
     block_types::TestMetadata,
     node_types::{MemoryImpl, TestTypes},
-    state_types::TestInstanceState,
+
 };
+#[cfg(not(feature = "dependency-tasks"))]
+use hotshot_example_types::{state_types::TestInstanceState,};
+#[cfg(not(feature = "dependency-tasks"))]
+use hotshot_testing::{
+    all_predicates,
+    helpers::{
+        build_cert, key_pair_for_id
+    }};
 use hotshot_macros::{run_test, test_scripts};
 use hotshot_task_impls::{
-    events::HotShotEvent::{self, *},
+    events::HotShotEvent::*,
     quorum_proposal::QuorumProposalTaskState,
 };
 use hotshot_testing::{
     all_predicates,
     helpers::{
-        build_cert, build_fake_view_with_leaf, build_system_handle, key_pair_for_id,
+        build_fake_view_with_leaf, build_system_handle,
         vid_scheme_from_view_number, vid_share,
     },
     predicates::{
-        event::{all_predicates, exact, leaf_decided, quorum_proposal_send},
-        Predicate,
+        event::{all_predicates, exact, quorum_proposal_send},
     },
     random,
     script::{Expectations, InputOrder, TaskScript},
     serial,
     view_generator::TestViewGenerator,
 };
+#[cfg(not(feature = "dependency-tasks"))]
+use hotshot_types::{simple_certificate::QuorumCertificate,};
 use hotshot_types::{
     data::{null_block, Leaf, ViewChangeEvidence, ViewNumber},
-    simple_certificate::QuorumCertificate,
     simple_vote::{TimeoutData, ViewSyncFinalizeData},
     traits::{
         election::Membership,
@@ -221,7 +228,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             ),
         ],
         random![
-            QuorumProposalValidated(proposals[0].data.clone(), genesis_leaf),
+            QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             QcFormed(either::Left(proposals[1].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 make_payload_commitment(&quorum_membership, ViewNumber::new(2)),
@@ -237,7 +244,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             ),
         ],
         random![
-            QuorumProposalValidated(proposals[1].data.clone(), leaves[0].clone()),
+            QuorumProposalRecv(proposals[1].clone(), leaders[1]),
             QcFormed(either::Left(proposals[2].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 make_payload_commitment(&quorum_membership, ViewNumber::new(3)),
@@ -253,7 +260,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             ),
         ],
         random![
-            QuorumProposalValidated(proposals[2].data.clone(), leaves[1].clone()),
+            QuorumProposalRecv(proposals[2].clone(), leaders[2]),
             QcFormed(either::Left(proposals[3].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 make_payload_commitment(&quorum_membership, ViewNumber::new(4)),
@@ -269,7 +276,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             ),
         ],
         random![
-            QuorumProposalValidated(proposals[3].data.clone(), leaves[2].clone()),
+            QuorumProposalRecv(proposals[3].clone(), leaders[3]),
             QcFormed(either::Left(proposals[4].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 make_payload_commitment(&quorum_membership, ViewNumber::new(5)),
@@ -299,9 +306,6 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             proposals[3].data.justify_qc.clone(),
         ))]),
         Expectations::from_outputs(all_predicates![
-            exact(LockedViewUpdated(ViewNumber::new(2))),
-            exact(LastDecidedViewUpdated(ViewNumber::new(1))),
-            leaf_decided(),
             exact(UpdateHighQc(proposals[4].data.justify_qc.clone())),
         ]),
     ];
@@ -474,7 +478,7 @@ async fn test_quorum_proposal_task_view_sync() {
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-async fn test_quorum_proposal_liveness_check_proposal() {
+async fn test_quorum_proposal_task_liveness_check() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -532,7 +536,7 @@ async fn test_quorum_proposal_liveness_check_proposal() {
             ),
         ],
         random![
-            QuorumProposalValidated(proposals[0].data.clone(), genesis_leaf.clone()),
+            QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             QcFormed(either::Left(proposals[1].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 make_payload_commitment(&quorum_membership, ViewNumber::new(2)),
@@ -548,7 +552,7 @@ async fn test_quorum_proposal_liveness_check_proposal() {
             ),
         ],
         random![
-            QuorumProposalLivenessValidated(proposals[1].data.clone()),
+            QuorumProposalRecv(proposals[1].clone(), leaders[1]),
             QcFormed(either::Left(proposals[2].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 make_payload_commitment(&quorum_membership, ViewNumber::new(3)),
@@ -563,8 +567,9 @@ async fn test_quorum_proposal_liveness_check_proposal() {
                 build_fake_view_with_leaf(leaves[1].clone()),
             ),
         ],
+
         random![
-            QuorumProposalValidated(proposals[2].data.clone(), leaves[1].clone()),
+            QuorumProposalRecv(proposals[2].clone(), leaders[2]),
             QcFormed(either::Left(proposals[3].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 make_payload_commitment(&quorum_membership, ViewNumber::new(4)),
@@ -580,7 +585,7 @@ async fn test_quorum_proposal_liveness_check_proposal() {
             ),
         ],
         random![
-            QuorumProposalValidated(proposals[3].data.clone(), leaves[2].clone()),
+            QuorumProposalRecv(proposals[3].clone(), leaders[3]),
             QcFormed(either::Left(proposals[4].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 make_payload_commitment(&quorum_membership, ViewNumber::new(5)),
@@ -609,10 +614,7 @@ async fn test_quorum_proposal_liveness_check_proposal() {
         Expectations::from_outputs(vec![exact(UpdateHighQc(
             proposals[3].data.justify_qc.clone(),
         ))]),
-        Expectations::from_outputs(all_predicates![
-            exact(LockedViewUpdated(ViewNumber::new(2))),
-            exact(LastDecidedViewUpdated(ViewNumber::new(1))),
-            leaf_decided(),
+        Expectations::from_outputs(vec![
             exact(UpdateHighQc(proposals[4].data.justify_qc.clone())),
         ]),
     ];
@@ -655,10 +657,8 @@ async fn test_quorum_proposal_task_with_incomplete_events() {
     // We run the task here at view 2, but this time we ignore the crucial piece of evidence: the
     // payload commitment and metadata. Instead we send only one of the three "OR" required fields.
     // This should result in the proposal failing to be sent.
-    let inputs = vec![serial![QuorumProposalValidated(
-        proposals[1].data.clone(),
-        leaves[0].clone(),
-    )]];
+    let inputs = vec![serial![            QuorumProposalRecv(proposals[1].clone(), leaders[1]),
+    ]];
 
     let expectations = vec![Expectations::from_outputs(vec![])];
 
@@ -671,27 +671,4 @@ async fn test_quorum_proposal_task_with_incomplete_events() {
         expectations,
     };
     run_test![inputs, script].await;
-}
-
-/// This function generates the outputs to the quorum proposal task (i.e. the emitted events).
-/// This happens depending on the view and chain length.
-fn generate_outputs(
-    chain_length: i32,
-    current_view_number: u64,
-) -> Vec<Box<dyn Predicate<Arc<HotShotEvent<TestTypes>>>>> {
-    match chain_length {
-        // This is not - 2 because we start from the parent
-        2 => vec![exact(LockedViewUpdated(ViewNumber::new(
-            current_view_number - 1,
-        )))],
-        // This is not - 3 because we start from the parent
-        3 => vec![
-            exact(LockedViewUpdated(ViewNumber::new(current_view_number - 1))),
-            exact(LastDecidedViewUpdated(ViewNumber::new(
-                current_view_number - 2,
-            ))),
-            leaf_decided(),
-        ],
-        _ => vec![],
-    }
 }

@@ -5,12 +5,19 @@ pub mod task_state;
 
 use std::{sync::Arc, time::Duration};
 
+use crate::{tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use hotshot_task::task::Task;
+#[cfg(not(feature = "dependency-tasks"))]
+use hotshot_task_impls::consensus::ConsensusTaskState;
 #[cfg(feature = "rewind")]
 use hotshot_task_impls::rewind::RewindTaskState;
+#[cfg(feature = "dependency-tasks")]
 use hotshot_task_impls::{
-    consensus::ConsensusTaskState,
+    consensus2::Consensus2TaskState, quorum_proposal::QuorumProposalTaskState,
+    quorum_proposal_recv::QuorumProposalRecvTaskState, quorum_vote::QuorumVoteTaskState,
+};
+use hotshot_task_impls::{
     da::DaTaskState,
     events::HotShotEvent,
     network::{NetworkEventTaskState, NetworkMessageTaskState},
@@ -21,13 +28,6 @@ use hotshot_task_impls::{
     vid::VidTaskState,
     view_sync::ViewSyncTaskState,
 };
-
-#[cfg(feature = "dependency-tasks")]
-use hotshot_task_impls::{
-    consensus2::Consensus2TaskState, quorum_proposal::QuorumProposalTaskState,
-    quorum_proposal_recv::QuorumProposalRecvTaskState, quorum_vote::QuorumVoteTaskState,
-};
-
 use hotshot_types::{
     constants::{Version01, VERSION_0_1},
     message::{Message, Messages},
@@ -37,8 +37,6 @@ use hotshot_types::{
     },
 };
 use vbs::version::StaticVersionType;
-
-use crate::{tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi};
 
 /// event for global event stream
 #[derive(Clone, Debug)]

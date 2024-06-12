@@ -288,6 +288,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
         event: Arc<HotShotEvent<TYPES>>,
         event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) {
+        #[cfg(not(feature = "dependency-tasks"))]
         let version = *self.version.read().await;
         match event.as_ref() {
             #[cfg(not(feature = "dependency-tasks"))]

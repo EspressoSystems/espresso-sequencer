@@ -7,10 +7,11 @@ use hotshot_types::{
     data::QuorumProposal,
     event::{Event, EventType},
     traits::node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+    vote::HasViewNumber,
 };
 use tracing::debug;
 
-use super::QuorumProposalTaskState;
+use super::QuorumVoteTaskState;
 use crate::{
     consensus::helpers::{decide_from_proposal, LeafChainTraversalOutcome},
     events::HotShotEvent,
@@ -24,7 +25,7 @@ pub(crate) async fn handle_quorum_proposal_validated<
 >(
     proposal: &QuorumProposal<TYPES>,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
-    task_state: &mut QuorumProposalTaskState<TYPES, I>,
+    task_state: &mut QuorumVoteTaskState<TYPES, I>,
 ) -> Result<()> {
     let LeafChainTraversalOutcome {
         new_locked_view_number,
@@ -87,7 +88,7 @@ pub(crate) async fn handle_quorum_proposal_validated<
             .last_decided_view
             .set(usize::try_from(consensus_writer.last_decided_view().u64()).unwrap());
         let cur_number_of_views_per_decide_event =
-            *task_state.latest_proposed_view - consensus_writer.last_decided_view().u64();
+            *proposal.view_number() - consensus_writer.last_decided_view().u64();
         consensus_writer
             .metrics
             .number_of_views_per_decide_event

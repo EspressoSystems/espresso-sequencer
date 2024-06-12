@@ -199,6 +199,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
         self.quorum.has_stake(sender)
     }
     /// Lookup the proposal for the view and respond if it's found/not found
+    #[allow(clippy::no_effect_underscore_binding)]
     async fn respond_with_proposal(&self, _view: TYPES::Time) -> ResponseMessage<TYPES> {
         // Complete after we are storing our last proposed view:
         // https://github.com/EspressoSystems/HotShot/issues/3240

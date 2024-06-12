@@ -160,12 +160,6 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// HotShot was upgraded, with a new network version.
     VersionUpgrade(Version),
 
-    /// Initiate a proposal for a proposal without a parent, but passing the liveness check.
-    /// This is distinct from `QuorumProposalValidated` due to the fact that it is in a
-    /// different state than what we'd typically see with a fully validated proposal and,
-    /// as a result, it need to be its own event.
-    QuorumProposalLivenessValidated(QuorumProposal<TYPES>),
-
     /// Initiate a vote right now for the designated view.
     VoteNow(TYPES::Time, VoteDependencyData<TYPES>),
 
@@ -398,13 +392,6 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                 cert.view_number()
             ),
             HotShotEvent::VersionUpgrade(_) => write!(f, "VersionUpgrade"),
-            HotShotEvent::QuorumProposalLivenessValidated(proposal) => {
-                write!(
-                    f,
-                    "QuorumProposalLivenessValidated(view_number={:?})",
-                    proposal.view_number()
-                )
-            }
             HotShotEvent::UpgradeDecided(cert) => {
                 write!(f, "UpgradeDecided(view_number{:?})", cert.view_number())
             }

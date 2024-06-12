@@ -1,3 +1,5 @@
+#![cfg(not(feature = "dependency-tasks"))]
+
 // TODO: Remove after integration of dependency-tasks
 #![allow(unused_imports)]
 
@@ -16,11 +18,11 @@ use hotshot_testing::{
     all_predicates,
     helpers::{
         build_system_handle, key_pair_for_id, permute_input_with_index_order,
-        vid_scheme_from_view_number, vid_share,
+        vid_scheme_from_view_number, vid_share, build_fake_view_with_leaf
     },
     predicates::event::{
         all_predicates, exact, quorum_proposal_send, quorum_proposal_validated, quorum_vote_send,
-        timeout_vote_send,
+        timeout_vote_send, validated_state_updated
     },
     random,
     script::{Expectations, InputOrder, TaskScript},
@@ -32,6 +34,7 @@ use hotshot_types::{
     simple_vote::{TimeoutData, TimeoutVote, ViewSyncFinalizeData},
     traits::{election::Membership, node_implementation::ConsensusTime},
     utils::BuilderCommitment,
+    vote::HasViewNumber,
 };
 use jf_vid::VidScheme;
 use sha2::Digest;
@@ -39,7 +42,6 @@ use sha2::Digest;
 const TIMEOUT: Duration = Duration::from_millis(35);
 
 #[cfg(test)]
-#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_task() {
@@ -62,12 +64,14 @@ async fn test_consensus_task() {
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
+    let mut leaves = Vec::new();
     let mut votes = Vec::new();
     let mut dacs = Vec::new();
     let mut vids = Vec::new();
     for view in (&mut generator).take(2).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
+        leaves.push(view.leaf.clone());
         votes.push(view.create_quorum_vote(&handle));
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
@@ -98,11 +102,13 @@ async fn test_consensus_task() {
 
     let expectations = vec![
         Expectations::from_outputs(all_predicates![
+            validated_state_updated(),
             exact(ViewChange(ViewNumber::new(1))),
             quorum_proposal_validated(),
             exact(QuorumVoteSend(votes[0].clone())),
         ]),
         Expectations::from_outputs(all_predicates![
+            validated_state_updated(),
             exact(ViewChange(ViewNumber::new(2))),
             quorum_proposal_validated(),
             quorum_proposal_send(),
@@ -120,7 +126,6 @@ async fn test_consensus_task() {
 }
 
 #[cfg(test)]
-#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_consensus_vote() {
@@ -136,12 +141,14 @@ async fn test_consensus_vote() {
 
     let mut proposals = Vec::new();
     let mut leaders = Vec::new();
+    let mut leaves = Vec::new();
     let mut votes = Vec::new();
     let mut dacs = Vec::new();
     let mut vids = Vec::new();
     for view in (&mut generator).take(2).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         leaders.push(view.leader_public_key);
+        leaves.push(view.leaf.clone());
         votes.push(view.create_quorum_vote(&handle));
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
@@ -156,6 +163,7 @@ async fn test_consensus_vote() {
     ]];
 
     let expectations = vec![Expectations::from_outputs(all_predicates![
+        validated_state_updated(),
         exact(ViewChange(ViewNumber::new(1))),
         quorum_proposal_validated(),
         exact(QuorumVoteSend(votes[0].clone())),
@@ -172,7 +180,6 @@ async fn test_consensus_vote() {
 }
 
 #[cfg(test)]
-#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_view_sync_finalize_propose() {
@@ -282,6 +289,7 @@ async fn test_view_sync_finalize_propose() {
     let expectations = vec![
         Expectations::from_outputs(vec![]),
         Expectations::from_outputs(all_predicates![
+            validated_state_updated(),
             exact(ViewChange(ViewNumber::new(1))),
             quorum_proposal_validated(),
             exact(QuorumVoteSend(votes[0].clone())),
@@ -289,6 +297,7 @@ async fn test_view_sync_finalize_propose() {
         Expectations::from_outputs(vec![timeout_vote_send(), timeout_vote_send()]),
         Expectations::from_outputs(vec![]),
         Expectations::from_outputs(all_predicates![
+            validated_state_updated(),
             exact(ViewChange(ViewNumber::new(4))),
             quorum_proposal_validated(),
             quorum_proposal_send(),
@@ -306,7 +315,6 @@ async fn test_view_sync_finalize_propose() {
 }
 
 #[cfg(test)]
-#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 /// Makes sure that, when a valid ViewSyncFinalize certificate is available, the consensus task
@@ -378,12 +386,14 @@ async fn test_view_sync_finalize_vote() {
     let expectations = vec![
         Expectations::from_outputs(vec![]),
         Expectations::from_outputs(all_predicates![
+            validated_state_updated(),
             exact(ViewChange(ViewNumber::new(1))),
             quorum_proposal_validated(),
             exact(QuorumVoteSend(votes[0].clone()))
         ]),
         Expectations::from_outputs(vec![timeout_vote_send(), timeout_vote_send()]),
         Expectations::from_outputs(all_predicates![
+            validated_state_updated(),
             quorum_proposal_validated(),
             quorum_vote_send()
         ]),
@@ -400,7 +410,6 @@ async fn test_view_sync_finalize_vote() {
 }
 
 #[cfg(test)]
-#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 /// Makes sure that, when a valid ViewSyncFinalize certificate is available, the consensus task
@@ -483,6 +492,7 @@ async fn test_view_sync_finalize_vote_fail_view_number() {
     let expectations = vec![
         Expectations::from_outputs(all_predicates![
             quorum_proposal_validated(),
+            validated_state_updated(),
             exact(ViewChange(ViewNumber::new(1))),
         ]),
         Expectations::from_outputs(vec![exact(QuorumVoteSend(votes[0].clone()))]),
@@ -502,7 +512,6 @@ async fn test_view_sync_finalize_vote_fail_view_number() {
 }
 
 #[cfg(test)]
-#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_vid_disperse_storage_failure() {
@@ -539,6 +548,7 @@ async fn test_vid_disperse_storage_failure() {
     ]];
 
     let expectations = vec![Expectations::from_outputs(all_predicates![
+        validated_state_updated(),
         exact(ViewChange(ViewNumber::new(1))),
         quorum_proposal_validated(),
     ])];

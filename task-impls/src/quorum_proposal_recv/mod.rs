@@ -31,6 +31,7 @@ use crate::{
     consensus::helpers::parent_leaf_and_state,
     events::HotShotEvent,
     helpers::{broadcast_event, cancel_task},
+    quorum_proposal_recv::handlers::QuorumProposalValidity,
 };
 
 /// Event handlers for this task.
@@ -130,7 +131,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
         #[cfg(feature = "dependency-tasks")]
         if let HotShotEvent::QuorumProposalRecv(proposal, sender) = event.as_ref() {
             match handle_quorum_proposal_recv(proposal, sender, &event_stream, self).await {
-                Ok(Some(current_proposal)) => {
+                Ok(QuorumProposalValidity::Fully) => {
+                    self.cancel_tasks(proposal.data.view_number()).await;
+                }
+                Ok(QuorumProposalValidity::Liveness) => {
                     // Build the parent leaf since we didn't find it during the proposal check.
                     let parent_leaf = match parent_leaf_and_state(
                         self.cur_view,
@@ -148,13 +152,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
                         }
                     };
 
-                    let view = current_proposal.view_number();
-                    self.cancel_tasks(proposal.data.view_number()).await;
+                    let view_number = proposal.data.view_number();
+                    self.cancel_tasks(view_number).await;
                     let consensus = self.consensus.read().await;
-                    let Some(vid_shares) = consensus.vid_shares().get(&view) else {
+                    let Some(vid_shares) = consensus.vid_shares().get(&view_number) else {
                         debug!(
                                 "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
-                                view
+                                view_number
                             );
                         return;
                     };
@@ -162,21 +166,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
                         error!("Did not get a VID share for our public key, aborting vote");
                         return;
                     };
-                    let Some(da_cert) = consensus
-                        .saved_da_certs()
-                        .get(&current_proposal.view_number())
-                    else {
+                    let Some(da_cert) = consensus.saved_da_certs().get(&view_number) else {
                         debug!(
                             "Received VID share, but couldn't find DAC cert for view {:?}",
-                            current_proposal.view_number()
+                            view_number
                         );
                         return;
                     };
                     broadcast_event(
                         Arc::new(HotShotEvent::VoteNow(
-                            view,
+                            view_number,
                             VoteDependencyData {
-                                quorum_proposal: current_proposal,
+                                quorum_proposal: proposal.data.clone(),
                                 parent_leaf,
                                 vid_share: vid_share.clone(),
                                 da_cert: da_cert.clone(),
@@ -185,9 +186,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
                         &event_stream,
                     )
                     .await;
-                }
-                Ok(None) => {
-                    self.cancel_tasks(proposal.data.view_number()).await;
                 }
                 Err(e) => debug!(?e, "Failed to propose"),
             }

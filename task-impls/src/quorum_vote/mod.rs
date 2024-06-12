@@ -2,6 +2,11 @@ use anyhow::{bail, ensure, Context, Result};
 use std::{collections::HashMap, sync::Arc};
 use vbs::version::Version;
 
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, cancel_task},
+    quorum_vote::handlers::handle_quorum_proposal_validated,
+};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
@@ -36,10 +41,8 @@ use jf_vid::VidScheme;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, trace, warn};
 
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
-};
+/// Event handlers for `QuorumProposalValidated`.
+mod handlers;
 
 /// Vote dependency types.
 #[derive(Debug, PartialEq)]
@@ -513,10 +516,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                 );
             }
             HotShotEvent::QuorumProposalValidated(proposal, _leaf) => {
-                // This task simultaneously does not rely on the state updates of the `handle_quorum_proposal_validated`
-                // function and that function does not return an `Error` unless the propose or vote fails, in which case
-                // the other would still have been attempted regardless. Therefore, we pass this through as a task and
-                // eschew validation in lieu of the `QuorumProposal` task doing it for us and updating the internal state.
+                // Handle the event before creating the dependency task.
+                if let Err(e) =
+                    handle_quorum_proposal_validated(proposal, &event_sender, self).await
+                {
+                    debug!("Failed to handle QuorumProposalValidated event; error = {e:#}");
+                }
+
                 self.create_dependency_task_if_new(
                     proposal.view_number,
                     event_receiver,
