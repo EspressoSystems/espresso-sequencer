@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use async_broadcast::Sender;
@@ -42,12 +42,6 @@ pub(crate) async fn handle_quorum_proposal_validated<
         &task_state.public_key,
     )
     .await;
-
-    let included_txns = if new_decided_view_number.is_some() {
-        included_txns
-    } else {
-        HashSet::new()
-    };
 
     let mut consensus_writer = task_state.consensus.write().await;
     if let Some(locked_view_number) = new_locked_view_number {
@@ -110,7 +104,7 @@ pub(crate) async fn handle_quorum_proposal_validated<
                     leaf_chain: Arc::new(leaf_views),
                     // This is never *not* none if we've reached a new decide, so this is safe to unwrap.
                     qc: Arc::new(new_decide_qc.unwrap()),
-                    block_size: Some(included_txns.len().try_into().unwrap()),
+                    block_size: included_txns.map(|txns| txns.len().try_into().unwrap()),
                 },
             },
             &task_state.output_event_stream,

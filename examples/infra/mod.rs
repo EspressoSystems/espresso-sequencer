@@ -1,5 +1,6 @@
 #![allow(clippy::panic)]
 use std::{
+    collections::HashMap,
     fmt::Debug,
     fs,
     marker::PhantomData,
@@ -320,6 +321,39 @@ fn calculate_num_tx_per_round(
             (total_num_nodes)
                 < (transactions_per_round % total_num_nodes) + 1 + (node_index as usize),
         )
+}
+
+/// Helper function to generate transactions a given node should send
+fn generate_transactions<TYPES: NodeType<Transaction = TestTransaction>>(
+    node_index: u64,
+    rounds: usize,
+    transactions_to_send_per_round: usize,
+    transaction_size: usize,
+) -> Vec<TestTransaction>
+where
+    <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
+    <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
+{
+    let mut txn_rng = StdRng::seed_from_u64(node_index);
+    let mut transactions = Vec::new();
+
+    for round in 0..rounds {
+        for _ in 0..transactions_to_send_per_round {
+            let txn = <TYPES::ValidatedState>::create_random_transaction(
+                None,
+                &mut txn_rng,
+                transaction_size as u64,
+            );
+
+            // prepend destined view number to transaction
+            let view_execute_number: u64 = round as u64 + 4;
+            let mut bytes = txn.into_bytes();
+            bytes[0..8].copy_from_slice(&view_execute_number.to_be_bytes());
+
+            transactions.push(TestTransaction::new(bytes));
+        }
+    }
+    transactions
 }
 
 /// Defines the behavior of a "run" of the network with a given configuration
@@ -923,24 +957,26 @@ pub async fn main_entry_point<
                 <RandomBuilderImplementation as TestBuilderImplementation<TYPES>>::start(
                     run_config.config.num_nodes_with_stake.into(),
                     run_config.random_builder.clone().unwrap_or_default(),
+                    HashMap::new(),
                 )
                 .await;
 
-            run_config.config.builder_url = builder_url;
+            run_config.config.builder_urls = vec1::vec1![builder_url];
 
-            builder_task
+            Some(builder_task)
         }
         BuilderType::Simple => {
             let (builder_task, builder_url) =
                 <SimpleBuilderImplementation as TestBuilderImplementation<TYPES>>::start(
                     run_config.config.num_nodes_with_stake.into(),
                     SimpleBuilderConfig::default(),
+                    HashMap::new(),
                 )
                 .await;
 
-            run_config.config.builder_url = builder_url;
+            run_config.config.builder_urls = vec1::vec1![builder_url];
 
-            builder_task
+            Some(builder_task)
         }
     };
 
@@ -965,30 +1001,18 @@ pub async fn main_entry_point<
         ..
     } = run_config;
 
-    let mut txn_rng = StdRng::seed_from_u64(node_index);
     let transactions_to_send_per_round = calculate_num_tx_per_round(
         node_index,
         num_nodes_with_stake.get(),
         transactions_per_round,
     );
-    let mut transactions = Vec::new();
+    let mut transactions: Vec<TestTransaction> = generate_transactions::<TYPES>(
+        node_index,
+        rounds,
+        transactions_to_send_per_round,
+        transaction_size,
+    );
 
-    for round in 0..rounds {
-        for _ in 0..transactions_to_send_per_round {
-            let txn = <TYPES::ValidatedState>::create_random_transaction(
-                None,
-                &mut txn_rng,
-                transaction_size as u64,
-            );
-
-            // prepend destined view number to transaction
-            let view_execute_number: u64 = round as u64 + 4;
-            let mut bytes = txn.into_bytes();
-            bytes[0..8].copy_from_slice(&view_execute_number.to_be_bytes());
-
-            transactions.push(TestTransaction::new(bytes));
-        }
-    }
     if let NetworkConfigSource::Orchestrator = source {
         info!("Waiting for the start command from orchestrator");
         orchestrator_client

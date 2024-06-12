@@ -18,6 +18,7 @@ use surf_disco::Url;
 use thiserror::Error;
 use toml;
 use tracing::{error, info};
+use vec1::Vec1;
 
 use crate::client::OrchestratorClient;
 
@@ -544,8 +545,8 @@ impl<K: SignatureKey> From<NetworkConfigFile<K>> for NetworkConfig<K> {
 }
 
 /// Default builder URL, used as placeholder
-fn default_builder_url() -> Url {
-    Url::parse("http://localhost:3311").unwrap()
+fn default_builder_urls() -> Vec1<Url> {
+    vec1::vec1![Url::parse("http://0.0.0.0:3311").unwrap()]
 }
 
 /// Holds configuration for a `HotShot`
@@ -594,8 +595,8 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     /// Time to wait until we request data associated with a proposal
     pub data_request_delay: Duration,
     /// Builder API base URL
-    #[serde(default = "default_builder_url")]
-    pub builder_url: Url,
+    #[serde(default = "default_builder_urls")]
+    pub builder_urls: Vec1<Url>,
     /// Upgrade config
     pub upgrade: UpgradeConfig,
 }
@@ -703,7 +704,7 @@ impl<KEY: SignatureKey> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY> {
             num_bootstrap: val.num_bootstrap,
             builder_timeout: val.builder_timeout,
             data_request_delay: val.data_request_delay,
-            builder_url: val.builder_url,
+            builder_urls: val.builder_urls,
             start_proposing_view: val.upgrade.start_proposing_view,
             stop_proposing_view: val.upgrade.stop_proposing_view,
             start_voting_view: val.upgrade.start_voting_view,
@@ -776,7 +777,7 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
             num_bootstrap: 5,
             builder_timeout: Duration::from_secs(10),
             data_request_delay: Duration::from_millis(200),
-            builder_url: default_builder_url(),
+            builder_urls: default_builder_urls(),
             upgrade: UpgradeConfig::default(),
         }
     }

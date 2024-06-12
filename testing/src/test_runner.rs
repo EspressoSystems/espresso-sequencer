@@ -288,8 +288,18 @@ where
         let config = self.launcher.resource_generator.config.clone();
         let known_nodes_with_stake = config.known_nodes_with_stake.clone();
 
-        let (mut builder_task, builder_url) =
-            B::start(config.num_nodes_with_stake.into(), B::Config::default()).await;
+        let mut builder_tasks = Vec::new();
+        let mut builder_urls = Vec::new();
+        for metadata in &self.launcher.metadata.builders {
+            let (builder_task, builder_url) = B::start(
+                config.num_nodes_with_stake.into(),
+                B::Config::default(),
+                metadata.changes.clone(),
+            )
+            .await;
+            builder_tasks.push(builder_task);
+            builder_urls.push(builder_url);
+        }
 
         // Collect uninitialized nodes because we need to wait for all networks to be ready before starting the tasks
         let mut uninitialized_nodes = Vec::new();
@@ -323,7 +333,10 @@ where
                     config.fixed_leader_for_gpuvid,
                 ),
             };
-            config.builder_url = builder_url.clone();
+            config.builder_urls = builder_urls
+                .clone()
+                .try_into()
+                .expect("Non-empty by construction");
 
             let networks = (self.launcher.resource_generator.channel_generator)(node_id).await;
             let storage = (self.launcher.resource_generator.storage)(node_id);
@@ -388,10 +401,20 @@ where
         // Then start the necessary tasks
         for (node_id, networks, hotshot) in uninitialized_nodes {
             let handle = hotshot.run_tasks().await;
-            if node_id == 1 {
-                if let Some(task) = builder_task.take() {
-                    task.start(Box::new(handle.event_stream()))
+
+            match node_id.cmp(&(config.da_staked_committee_size as u64 - 1)) {
+                std::cmp::Ordering::Less => {
+                    if let Some(task) = builder_tasks.pop() {
+                        task.start(Box::new(handle.event_stream()))
+                    }
                 }
+                std::cmp::Ordering::Equal => {
+                    // If we have more builder tasks than DA nodes, pin them all on the last node.
+                    while let Some(task) = builder_tasks.pop() {
+                        task.start(Box::new(handle.event_stream()))
+                    }
+                }
+                std::cmp::Ordering::Greater => {}
             }
 
             self.nodes.push(Node {

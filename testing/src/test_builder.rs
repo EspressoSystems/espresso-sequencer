@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, sync::Arc, time::Duration};
+use std::{collections::HashMap, num::NonZeroUsize, sync::Arc, time::Duration};
 
 use hotshot::traits::{NetworkReliability, TestableNodeImplementation};
 use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
@@ -6,6 +6,7 @@ use hotshot_types::{
     traits::node_implementation::NodeType, ExecutionType, HotShotConfig, ValidatorConfig,
 };
 use tide_disco::Url;
+use vec1::Vec1;
 
 use super::{
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
@@ -70,6 +71,27 @@ pub struct TestDescription {
     pub unreliable_network: Option<Box<dyn NetworkReliability>>,
     /// view sync check task
     pub view_sync_properties: ViewSyncTaskDescription,
+    /// description of builders to run
+    pub builders: Vec1<BuilderDescription>,
+}
+
+/// Describes a possible change to builder status during test
+#[derive(Clone, Debug)]
+pub enum BuilderChange {
+    // Builder should start up
+    Up,
+    // Builder should shut down completely
+    Down,
+    // Toggles whether builder should always respond
+    // to claim calls with errors
+    FailClaims(bool),
+}
+
+/// Metadata describing builder behaviour during a test
+#[derive(Clone, Debug)]
+pub struct BuilderDescription {
+    /// view number -> change to builder status
+    pub changes: HashMap<u64, BuilderChange>,
 }
 
 impl Default for TimingData {
@@ -97,8 +119,8 @@ impl TestDescription {
 
         TestDescription {
             num_bootstrap_nodes: num_nodes_with_stake,
-            num_nodes_with_stake: num_nodes_with_stake,
-            num_nodes_without_stake: num_nodes_without_stake,
+            num_nodes_with_stake,
+            num_nodes_without_stake,
             start_nodes: num_nodes_with_stake,
             overall_safety_properties: OverallSafetyPropertiesDescription {
                 num_successful_views: 50,
@@ -158,8 +180,8 @@ impl TestDescription {
         let num_nodes_with_stake = 20;
         let num_nodes_without_stake = 0;
         TestDescription {
-            num_nodes_with_stake: num_nodes_with_stake,
-            num_nodes_without_stake: num_nodes_without_stake,
+            num_nodes_with_stake,
+            num_nodes_without_stake,
             start_nodes: num_nodes_with_stake,
             num_bootstrap_nodes: num_nodes_with_stake,
             // The first 14 (i.e., 20 - f) nodes are in the DA committee and we may shutdown the
@@ -216,6 +238,14 @@ impl Default for TestDescription {
             ),
             unreliable_network: None,
             view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes_with_stake),
+            builders: vec1::vec1![
+                BuilderDescription {
+                    changes: HashMap::new()
+                },
+                BuilderDescription {
+                    changes: HashMap::new()
+                }
+            ],
         }
     }
 }
@@ -296,7 +326,7 @@ impl TestDescription {
             builder_timeout: Duration::from_millis(1000),
             data_request_delay: Duration::from_millis(200),
             // Placeholder until we spin up the builder
-            builder_url: Url::parse("http://localhost:9999").expect("Valid URL"),
+            builder_urls: vec1::vec1![Url::parse("http://localhost:9999").expect("Valid URL")],
             start_proposing_view: 0,
             stop_proposing_view: 0,
             start_voting_view: 0,

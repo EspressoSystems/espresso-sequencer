@@ -776,7 +776,7 @@ pub struct LeafChainTraversalOutcome<TYPES: NodeType> {
     pub leaves_decided: Vec<Leaf<TYPES>>,
 
     /// The transactions in the block payload for each leaf.
-    pub included_txns: HashSet<Commitment<<TYPES as NodeType>::Transaction>>,
+    pub included_txns: Option<HashSet<Commitment<<TYPES as NodeType>::Transaction>>>,
 
     /// The most recent upgrade certificate from one of the leaves.
     pub decided_upgrade_cert: Option<UpgradeCertificate<TYPES>>,
@@ -794,7 +794,7 @@ impl<TYPES: NodeType + Default> Default for LeafChainTraversalOutcome<TYPES> {
             new_decide_qc: None,
             leaf_views: Vec::new(),
             leaves_decided: Vec::new(),
-            included_txns: HashSet::new(),
+            included_txns: None,
             decided_upgrade_cert: None,
         }
     }
@@ -927,9 +927,12 @@ pub async fn decide_from_proposal<TYPES: NodeType>(
                 ));
                 res.leaves_decided.push(leaf.clone());
                 if let Some(ref payload) = leaf.block_payload() {
-                    for txn in payload.transaction_commitments(leaf.block_header().metadata()) {
-                        res.included_txns.insert(txn);
-                    }
+                    res.included_txns = Some(
+                        payload
+                            .transaction_commitments(leaf.block_header().metadata())
+                            .into_iter()
+                            .collect::<HashSet<_>>(),
+                    );
                 }
             }
             true
@@ -974,12 +977,6 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
             .await;
     }
 
-    let included_txns_set: HashSet<_> = if res.new_decided_view_number.is_some() {
-        res.included_txns
-    } else {
-        HashSet::new()
-    };
-
     let mut consensus = task_state.consensus.write().await;
     if let Some(new_locked_view) = res.new_locked_view_number {
         if let Err(e) = consensus.update_locked_view(new_locked_view) {
@@ -1019,13 +1016,14 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
 
     #[allow(clippy::cast_precision_loss)]
     if let Some(new_anchor_view) = res.new_decided_view_number {
+        let block_size = res.included_txns.map(|set| set.len().try_into().unwrap());
         let decide_sent = broadcast_event(
             Event {
                 view_number: new_anchor_view,
                 event: EventType::Decide {
                     leaf_chain: Arc::new(res.leaf_views),
                     qc: Arc::new(res.new_decide_qc.unwrap()),
-                    block_size: Some(included_txns_set.len().try_into().unwrap()),
+                    block_size,
                 },
             },
             &task_state.output_event_stream,
@@ -1058,7 +1056,7 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
             consensus.last_decided_view()
         );
         drop(consensus);
-        debug!("Decided txns len {:?}", included_txns_set.len());
+        debug!("Decided txns len {:?}", block_size);
         decide_sent.await;
         broadcast_event(
             Arc::new(HotShotEvent::LeafDecided(res.leaves_decided)),

@@ -180,7 +180,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType>
             private_key: handle.private_key().clone(),
             instance_state: handle.hotshot.instance_state(),
             id: handle.hotshot.id,
-            builder_client: BuilderClient::new(handle.hotshot.config.builder_url.clone()),
+            builder_clients: handle
+                .hotshot
+                .config
+                .builder_urls
+                .iter()
+                .cloned()
+                .map(BuilderClient::new)
+                .collect(),
             decided_upgrade_certificate: None,
         }
     }

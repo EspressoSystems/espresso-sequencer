@@ -3,11 +3,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::async_sleep;
 use async_lock::RwLock;
 use async_trait::async_trait;
+use futures::{stream::FuturesUnordered, StreamExt};
 use hotshot_builder_api::block_info::{
     AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo,
 };
@@ -35,6 +36,20 @@ use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
     helpers::broadcast_event,
 };
+
+// Parameters for builder querying algorithm
+
+/// Proportion of builders queried in first batch, dividend
+const BUILDER_MAIN_BATCH_THRESHOLD_DIVIDEND: usize = 2;
+/// Proportion of builders queried in the first batch, divisor
+const BUILDER_MAIN_BATCH_THRESHOLD_DIVISOR: usize = 3;
+/// Time the first batch of builders has to respond
+const BUILDER_MAIN_BATCH_CUTOFF: Duration = Duration::from_millis(700);
+/// Multiplier for extra time to give to the second batch of builders
+const BUILDER_ADDITIONAL_TIME_MULTIPLIER: f32 = 0.2;
+/// Minimum amount of time allotted to both batches, cannot be cut shorter if the first batch
+/// responds extremely fast.
+const BUILDER_MINIMUM_QUERY_TIME: Duration = Duration::from_millis(300);
 
 /// Builder Provided Responses
 pub struct BuilderResponses<TYPES: NodeType> {
@@ -74,7 +89,7 @@ pub struct TransactionTaskState<
     pub membership: Arc<TYPES::Membership>,
 
     /// Builder API client
-    pub builder_client: BuilderClient<TYPES, Ver>,
+    pub builder_clients: Vec<BuilderClient<TYPES, Ver>>,
 
     /// This Nodes Public Key
     pub public_key: TYPES::SignatureKey,
@@ -305,6 +320,90 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType>
         None
     }
 
+    /// Query the builders for available blocks. Queries only fraction of the builders
+    /// based on the response time.
+    async fn get_available_blocks(
+        &self,
+        parent_comm: VidCommitment,
+        view_number: TYPES::Time,
+        parent_comm_sig: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+    ) -> Vec<(AvailableBlockInfo<TYPES>, usize)> {
+        // Create a collection of futures that call available_blocks endpoint for every builder
+        let tasks = self
+            .builder_clients
+            .iter()
+            .enumerate()
+            .map(|(builder_idx, client)| async move {
+                client
+                    .available_blocks(
+                        parent_comm,
+                        view_number.u64(),
+                        self.public_key.clone(),
+                        parent_comm_sig,
+                    )
+                    .await
+                    .map(move |blocks| {
+                        // Add index into `self.builder_clients` for each block so that we know
+                        // where to claim it from later
+                        blocks
+                            .into_iter()
+                            .map(move |block_info| (block_info, builder_idx))
+                    })
+            })
+            .collect::<FuturesUnordered<_>>();
+
+        // A vector of resolved builder responses
+        let mut results = Vec::with_capacity(self.builder_clients.len());
+
+        // Instant we start querying builders for available blocks
+        let query_start = Instant::now();
+
+        // First we complete the query to the fastest fraction of the builders
+        let threshold = (self.builder_clients.len() * BUILDER_MAIN_BATCH_THRESHOLD_DIVIDEND)
+            .div_ceil(BUILDER_MAIN_BATCH_THRESHOLD_DIVISOR);
+        let mut tasks = tasks.take(threshold);
+        while let Some(result) = tasks.next().await {
+            results.push(result);
+            if query_start.elapsed() > BUILDER_MAIN_BATCH_CUTOFF {
+                break;
+            }
+        }
+
+        // Then we query the rest, alotting additional `elapsed * BUILDER_ADDITIONAL_TIME_MULTIPLIER`
+        // for them to respond. There's a fixed floor of `BUILDER_MINIMUM_QUERY_TIME` for both
+        // phases
+        let timeout = async_sleep(std::cmp::max(
+            query_start
+                .elapsed()
+                .mul_f32(BUILDER_ADDITIONAL_TIME_MULTIPLIER),
+            BUILDER_MINIMUM_QUERY_TIME - query_start.elapsed(),
+        ));
+        futures::pin_mut!(timeout); // Stream::next requires Self::Unpin
+        let mut tasks = tasks.into_inner().take_until(timeout);
+        while let Some(result) = tasks.next().await {
+            results.push(result);
+        }
+
+        results
+            .into_iter()
+            .filter_map(|result| match result {
+                Ok(value) => Some(value),
+                Err(err) => {
+                    tracing::warn!(%err, "Error getting available blocks");
+                    None
+                }
+            })
+            .flatten()
+            .collect::<Vec<_>>()
+    }
+
+    /// Get a block from builder.
+    /// Queries the sufficiently fast builders for available blocks and chooses the one with the
+    /// best fee/byte ratio, re-trying with the next best one in case of failure.
+    ///
+    /// # Errors
+    /// If none of the builder reports any available blocks or claiming block fails for all of the
+    /// builders.
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "block_from_builder", level = "error")]
     async fn block_from_builder(
         &self,
@@ -312,93 +411,114 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType>
         view_number: TYPES::Time,
         parent_comm_sig: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> anyhow::Result<BuilderResponses<TYPES>> {
-        let available_blocks = self
-            .builder_client
-            .available_blocks(
-                parent_comm,
-                view_number.u64(),
-                self.public_key.clone(),
-                parent_comm_sig,
-            )
-            .await
-            .context("getting available blocks")?;
-        tracing::debug!("Got available blocks: {available_blocks:?}");
+        let mut available_blocks = self
+            .get_available_blocks(parent_comm, view_number, parent_comm_sig)
+            .await;
 
-        let block_info = available_blocks
-            .into_iter()
-            .max_by(|l, r| {
-                // We want the block with the highest fee per byte of data we're going to have to
-                // process, thus our comparision function is:
-                //      (l.offered_fee / l.block_size) < (r.offered_fee / r.block_size)
-                // To avoid floating point math (which doesn't even have an `Ord` impl) we multiply
-                // through by the denominators to get
-                //      l.offered_fee * r.block_size < r.offered_fee * l.block_size
-                // We cast up to u128 to avoid overflow.
-                (u128::from(l.offered_fee) * u128::from(r.block_size))
-                    .cmp(&(u128::from(r.offered_fee) * u128::from(l.block_size)))
-            })
-            .context("no available blocks")?;
-        tracing::debug!("Selected block: {block_info:?}");
+        available_blocks.sort_by(|(l, _), (r, _)| {
+            // We want the block with the highest fee per byte of data we're going to have to
+            // process, thus our comparision function is:
+            //      (l.offered_fee / l.block_size) < (r.offered_fee / r.block_size)
+            // To avoid floating point math (which doesn't even have an `Ord` impl) we multiply
+            // through by the denominators to get
+            //      l.offered_fee * r.block_size < r.offered_fee * l.block_size
+            // We cast up to u128 to avoid overflow.
+            (u128::from(l.offered_fee) * u128::from(r.block_size))
+                .cmp(&(u128::from(r.offered_fee) * u128::from(l.block_size)))
+        });
 
-        // Verify signature over chosen block.
-        if !block_info.sender.validate_block_info_signature(
-            &block_info.signature,
-            block_info.block_size,
-            block_info.offered_fee,
-            &block_info.block_hash,
-        ) {
-            bail!("Failed to verify available block info response message signature");
+        if available_blocks.is_empty() {
+            bail!("No available blocks");
         }
 
-        let request_signature = <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
-            &self.private_key,
-            block_info.block_hash.as_ref(),
-        )
-        .context("signing block hash")?;
+        for (block_info, builder_idx) in available_blocks {
+            let client = &self.builder_clients[builder_idx];
 
-        let (block, header_input) = futures::join! {
-            self.builder_client.claim_block(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature),
-            self.builder_client.claim_block_header_input(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature)
-        };
+            // Verify signature over chosen block.
+            if !block_info.sender.validate_block_info_signature(
+                &block_info.signature,
+                block_info.block_size,
+                block_info.offered_fee,
+                &block_info.block_hash,
+            ) {
+                tracing::warn!("Failed to verify available block info response message signature");
+                continue;
+            }
 
-        let block_data = block.context("claiming block data")?;
+            let request_signature = match <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
+                &self.private_key,
+                block_info.block_hash.as_ref(),
+            ) {
+                Ok(request_signature) => request_signature,
+                Err(err) => {
+                    tracing::warn!(%err, "Failed to sign block hash");
+                    continue;
+                }
+            };
 
-        // verify the signature over the message, construct the builder commitment
-        let builder_commitment = block_data
-            .block_payload
-            .builder_commitment(&block_data.metadata);
-        if !block_data
-            .sender
-            .validate_builder_signature(&block_data.signature, builder_commitment.as_ref())
-        {
-            bail!("Failed to verify available block data response message signature");
+            let (block, header_input) = futures::join! {
+                client.claim_block(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature),
+                client.claim_block_header_input(block_info.block_hash.clone(), view_number.u64(), self.public_key.clone(), &request_signature)
+            };
+
+            let block_data = match block {
+                Ok(block_data) => block_data,
+                Err(err) => {
+                    tracing::warn!(%err, "Error claiming block data");
+                    continue;
+                }
+            };
+
+            let header_input = match header_input {
+                Ok(block_data) => block_data,
+                Err(err) => {
+                    tracing::warn!(%err, "Error claiming header input");
+                    continue;
+                }
+            };
+
+            // verify the signature over the message, construct the builder commitment
+            let builder_commitment = block_data
+                .block_payload
+                .builder_commitment(&block_data.metadata);
+            if !block_data
+                .sender
+                .validate_builder_signature(&block_data.signature, builder_commitment.as_ref())
+            {
+                tracing::warn!("Failed to verify available block data response message signature");
+                continue;
+            }
+
+            // first verify the message signature and later verify the fee_signature
+            if !header_input.sender.validate_builder_signature(
+                &header_input.message_signature,
+                header_input.vid_commitment.as_ref(),
+            ) {
+                tracing::warn!(
+                    "Failed to verify available block header input data response message signature"
+                );
+                continue;
+            }
+
+            // verify the signature over the message
+            if !header_input.sender.validate_fee_signature(
+                &header_input.fee_signature,
+                block_info.offered_fee,
+                &block_data.metadata,
+                &header_input.vid_commitment,
+            ) {
+                tracing::warn!("Failed to verify fee signature");
+                continue;
+            }
+
+            return Ok(BuilderResponses {
+                blocks_initial_info: block_info,
+                block_data,
+                block_header: header_input,
+            });
         }
 
-        let header_input = header_input.context("claiming header input")?;
-
-        // first verify the message signature and later verify the fee_signature
-        if !header_input.sender.validate_builder_signature(
-            &header_input.message_signature,
-            header_input.vid_commitment.as_ref(),
-        ) {
-            bail!("Failed to verify available block header input data response message signature");
-        }
-
-        // verify the signature over the message
-        if !header_input.sender.validate_fee_signature(
-            &header_input.fee_signature,
-            block_info.offered_fee,
-            &block_data.metadata,
-            &header_input.vid_commitment,
-        ) {
-            bail!("Failed to verify fee signature");
-        }
-
-        Ok(BuilderResponses {
-            blocks_initial_info: block_info,
-            block_data,
-            block_header: header_input,
-        })
+        bail!("Couldn't claim a block from any of the builders");
     }
 }
 

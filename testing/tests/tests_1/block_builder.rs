@@ -1,15 +1,25 @@
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use async_compatibility_layer::art::async_sleep;
+use hotshot_builder_api::block_info::AvailableBlockData;
 use hotshot_example_types::{
-    block_types::{TestBlockPayload, TestTransaction},
+    block_types::{TestBlockPayload, TestMetadata, TestTransaction},
     node_types::TestTypes,
 };
+use hotshot_orchestrator::config::RandomBuilderConfig;
 use hotshot_task_impls::builder::{BuilderClient, BuilderClientError};
-use hotshot_testing::block_builder::run_random_builder;
+use hotshot_testing::block_builder::{
+    BuilderTask, RandomBuilderImplementation, TestBuilderImplementation,
+};
 use hotshot_types::{
     constants::Base,
-    traits::{node_implementation::NodeType, signature_key::SignatureKey, BlockPayload},
+    traits::{
+        block_contents::vid_commitment, node_implementation::NodeType, signature_key::SignatureKey,
+        BlockPayload,
+    },
 };
 use tide_disco::Url;
 
@@ -20,26 +30,18 @@ use tide_disco::Url;
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_random_block_builder() {
-    use std::time::Instant;
+    let (task, api_url): (Box<dyn BuilderTask<TestTypes>>, Url) =
+        RandomBuilderImplementation::start(
+            1,
+            RandomBuilderConfig {
+                blocks_per_second: u32::MAX,
+                ..Default::default()
+            },
+            HashMap::new(),
+        )
+        .await;
+    task.start(Box::new(futures::stream::empty()));
 
-    use hotshot_builder_api::block_info::AvailableBlockData;
-    use hotshot_example_types::block_types::TestMetadata;
-    use hotshot_orchestrator::config::RandomBuilderConfig;
-    use hotshot_types::traits::block_contents::vid_commitment;
-
-    let port = portpicker::pick_unused_port().expect("Could not find an open port");
-    let api_url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
-
-    run_random_builder::<TestTypes>(
-        api_url.clone(),
-        1,
-        RandomBuilderConfig {
-            // Essentially removes delays so that builder doesn't slow
-            // down the test
-            blocks_per_second: u32::MAX,
-            ..Default::default()
-        },
-    );
     let builder_started = Instant::now();
 
     let client: BuilderClient<TestTypes, Base> = BuilderClient::new(api_url);

@@ -25,6 +25,7 @@ thiserror = "1"
 serde-inline-default = "0.1"
 csv = "1"
 vbs = { workspace = true }
+vec1 = { workspace = true }
 multiaddr = "0.18"
 anyhow.workspace = true
 bincode.workspace = true
