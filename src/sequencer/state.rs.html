@@ -1836,7 +1836,7 @@
 
     <span class="comment">// validate block size and fee
     </span><span class="kw">let </span>block_size = VidSchemeType::get_payload_byte_len(vid_common) <span class="kw">as </span>u64;
-    <span class="kw">if </span>block_size &gt;= <span class="kw-2">*</span>expected_chain_config.max_block_size {
+    <span class="kw">if </span>block_size &gt; <span class="kw-2">*</span>expected_chain_config.max_block_size {
         <span class="kw">return </span><span class="prelude-val">Err</span>(ProposalValidationError::MaxBlockSizeExceeded {
             max_block_size: expected_chain_config.max_block_size,
             block_size: block_size.into(),
