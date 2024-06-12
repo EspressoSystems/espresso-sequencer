@@ -10,6 +10,7 @@ use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
 use hotshot_types::traits::metrics::NoMetrics;
 use hotshot_types::traits::node_implementation::ConsensusTime;
+use libp2p::Multiaddr;
 use sequencer::persistence::no_storage::NoStorage;
 use sequencer::{eth_signature_key::EthKeyPair, Genesis};
 use sequencer::{L1Params, NetworkParams};
@@ -56,6 +57,18 @@ pub struct PermissionedBuilderOptions {
         default_value = "localhost:1769"
     )]
     pub libp2p_advertise_address: String,
+
+    /// A comma-separated list of Libp2p multiaddresses to use as bootstrap
+    /// nodes.
+    ///
+    /// Overrides those loaded from the `HotShot` config.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_BOOTSTRAP_NODES",
+        value_delimiter = ',',
+        num_args = 1..
+    )]
+    pub libp2p_bootstrap_nodes: Option<Vec<Multiaddr>>,
 
     /// URL of the Light Client State Relay Server
     #[clap(
@@ -243,6 +256,7 @@ async fn main() -> anyhow::Result<()> {
         cdn_endpoint: opt.cdn_endpoint,
         libp2p_advertise_address,
         libp2p_bind_address,
+        libp2p_bootstrap_nodes: opt.libp2p_bootstrap_nodes,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
         private_staking_key: private_staking_key.clone(),

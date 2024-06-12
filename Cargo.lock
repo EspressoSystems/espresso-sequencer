@@ -1379,6 +1379,7 @@ dependencies = [
  "hotshot-types",
  "jf-merkle-tree",
  "jf-signature",
+ "libp2p",
  "portpicker",
  "rand 0.8.5",
  "sequencer",
