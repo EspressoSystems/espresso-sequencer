@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use futures::future::select_all;
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkMessageTaskState};
 use hotshot_types::{
-    message::{Message, Messages},
+    message::{Messages, VersionedMessage},
     traits::{network::ConnectedNetwork, node_implementation::NodeType},
 };
 #[cfg(async_executor_impl = "tokio")]
@@ -102,7 +102,7 @@ impl<S: TestTaskState + Send + 'static> TestTask<S> {
 /// Add the network task to handle messages and publish events.
 pub async fn add_network_message_test_task<
     TYPES: NodeType,
-    NET: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+    NET: ConnectedNetwork<TYPES::SignatureKey>,
 >(
     event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     channel: Arc<NET>,
@@ -118,7 +118,24 @@ pub async fn add_network_message_test_task<
     async_spawn(async move {
         loop {
             let msgs = match network.recv_msgs().await {
-                Ok(msgs) => Messages(msgs),
+                Ok(msgs) => {
+                    let mut deserialized_messages = Vec::new();
+
+                    for msg in msgs {
+                        let deserialized_message = match VersionedMessage::deserialize(&msg, &None)
+                        {
+                            Ok(deserialized) => deserialized,
+                            Err(e) => {
+                                tracing::error!("Failed to deserialize message: {}", e);
+                                return;
+                            }
+                        };
+
+                        deserialized_messages.push(deserialized_message);
+                    }
+
+                    Messages(deserialized_messages)
+                }
                 Err(err) => {
                     error!("failed to receive messages: {err}");
 

@@ -5,6 +5,9 @@
 #[cfg(feature = "docs")]
 pub mod documentation;
 
+use hotshot_types::traits::network::BroadcastDelay;
+use vbs::version::StaticVersionType;
+
 /// Contains traits consumed by [`SystemContext`]
 pub mod traits;
 /// Contains types used by the crate
@@ -33,13 +36,11 @@ use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event, network
 pub use hotshot_types::error::HotShotError;
 use hotshot_types::{
     consensus::{Consensus, ConsensusMetricsValue, View, ViewInner},
-    constants::{
-        Version01, BASE_VERSION, EVENT_CHANNEL_SIZE, EXTERNAL_EVENT_CHANNEL_SIZE, STATIC_VER_0_1,
-    },
+    constants::{Base, EVENT_CHANNEL_SIZE, EXTERNAL_EVENT_CHANNEL_SIZE},
     data::{Leaf, QuorumProposal},
     event::{EventType, LeafInfo},
-    message::{DataMessage, Message, MessageKind, Proposal},
-    simple_certificate::QuorumCertificate,
+    message::{DataMessage, Message, MessageKind, Proposal, VersionedMessage},
+    simple_certificate::{QuorumCertificate, UpgradeCertificate},
     traits::{
         consensus_api::ConsensusApi,
         election::Membership,
@@ -162,6 +163,9 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// Reference to the internal storage for consensus datum.
     pub storage: Arc<RwLock<I::Storage>>,
+
+    /// a potential upgrade certificate that has been decided on by the consensus tasks.
+    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
 }
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Clone for SystemContext<TYPES, I> {
     #![allow(deprecated)]
@@ -183,6 +187,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Clone for SystemContext<TYPE
             internal_event_stream: self.internal_event_stream.clone(),
             id: self.id,
             storage: Arc::clone(&self.storage),
+            decided_upgrade_certificate: Arc::clone(&self.decided_upgrade_certificate),
         }
     }
 }
@@ -214,6 +219,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         let (internal_tx, internal_rx) = broadcast(EVENT_CHANNEL_SIZE);
         let (mut external_tx, mut external_rx) = broadcast(EXTERNAL_EVENT_CHANNEL_SIZE);
+
+        let decided_upgrade_certificate = Arc::new(RwLock::new(None));
 
         // Allow overflow on the channel, otherwise sending to it may block.
         external_rx.set_overflow(true);
@@ -271,7 +278,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         );
 
         let consensus = Arc::new(RwLock::new(consensus));
-        let version = Arc::new(RwLock::new(BASE_VERSION));
+        let version = Arc::new(RwLock::new(Base::VERSION));
 
         // This makes it so we won't block on broadcasting if there is not a receiver
         // Our own copy of the receiver is inactive so it doesn't count.
@@ -294,6 +301,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             external_event_stream: (external_tx, external_rx.deactivate()),
             anchored_leaf: anchored_leaf.clone(),
             storage: Arc::new(RwLock::new(storage)),
+            decided_upgrade_certificate,
         });
 
         Ok(inner)
@@ -407,6 +415,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     pub async fn publish_transaction_async(
         &self,
         transaction: TYPES::Transaction,
+        decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     ) -> Result<(), HotShotError<TYPES>> {
         trace!("Adding transaction to our own queue");
 
@@ -414,7 +423,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let view_number = api.consensus.read().await.cur_view();
 
         // Wrap up a message
-        let message = DataMessage::SubmitTransaction(transaction.clone(), view_number);
+        let message_kind: DataMessage<TYPES> =
+            DataMessage::SubmitTransaction(transaction.clone(), view_number);
+        let message = Message {
+            sender: api.public_key.clone(),
+            kind: MessageKind::from(message_kind),
+        };
+
+        let cert = decided_upgrade_certificate.read().await.clone();
+
+        let serialized_message = message
+            .serialize(&cert)
+            .map_err(|_| HotShotError::FailedToSerialize)?;
 
         async_spawn(async move {
             let da_membership = &api.memberships.da_membership.clone();
@@ -430,12 +450,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                     .networks
                     .da_network
                     .broadcast_message(
-                        Message {
-                            sender: api.public_key.clone(),
-                            kind: MessageKind::from(message),
-                        },
+                        serialized_message,
                         da_membership.whole_committee(view_number),
-                        STATIC_VER_0_1,
+                        BroadcastDelay::None,
                     ),
                 api
                     .send_external_event(Event {
@@ -583,8 +600,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         add_network_message_task(&mut handle, Arc::clone(&quorum_network)).await;
         add_network_message_task(&mut handle, Arc::clone(&da_network)).await;
 
-        if let Some(request_receiver) = da_network.spawn_request_receiver_task(STATIC_VER_0_1).await
-        {
+        if let Some(request_receiver) = da_network.spawn_request_receiver_task().await {
             add_response_task(&mut handle, request_receiver).await;
             add_request_network_task(&mut handle).await;
         }
@@ -624,7 +640,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             network::vid_filter,
         )
         .await;
-        add_consensus_tasks::<TYPES, I, Version01>(&mut handle).await;
+        add_consensus_tasks::<TYPES, I, Base>(&mut handle).await;
         handle
     }
 }

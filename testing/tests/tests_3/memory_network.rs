@@ -1,6 +1,7 @@
 #![allow(clippy::panic)]
 use std::{collections::BTreeSet, sync::Arc};
 
+use hotshot_types::traits::network::BroadcastDelay;
 use async_compatibility_layer::logging::setup_logging;
 use hotshot::{
     traits::{
@@ -16,9 +17,8 @@ use hotshot_example_types::{
     storage_types::TestStorage,
 };
 use hotshot_types::{
-    constants::STATIC_VER_0_1,
     data::ViewNumber,
-    message::{DataMessage, Message, MessageKind},
+    message::{DataMessage, Message, MessageKind, VersionedMessage},
     signature_key::{BLSPubKey, BuilderKey},
     traits::{
         network::{ConnectedNetwork, TestableNetworkingImplementation},
@@ -59,8 +59,8 @@ impl NodeType for Test {
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct TestImpl {}
 
-pub type DaNetwork = MemoryNetwork<Message<Test>, <Test as NodeType>::SignatureKey>;
-pub type QuorumNetwork = MemoryNetwork<Message<Test>, <Test as NodeType>::SignatureKey>;
+pub type DaNetwork = MemoryNetwork<<Test as NodeType>::SignatureKey>;
+pub type QuorumNetwork = MemoryNetwork<<Test as NodeType>::SignatureKey>;
 
 impl NodeImplementation<Test> for TestImpl {
     type QuorumNetwork = QuorumNetwork;
@@ -119,7 +119,7 @@ fn gen_messages(num_messages: u64, seed: u64, pk: BLSPubKey) -> Vec<Message<Test
 #[instrument]
 async fn memory_network_spawn_single() {
     setup_logging();
-    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
+    let group: Arc<MasterMap<<Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
     let _pub_key = pubkey();
 }
@@ -130,7 +130,7 @@ async fn memory_network_spawn_single() {
 #[instrument]
 async fn memory_network_spawn_double() {
     setup_logging();
-    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
+    let group: Arc<MasterMap<<Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
     let _pub_key_1 = pubkey();
     let _pub_key_2 = pubkey();
@@ -145,7 +145,7 @@ async fn memory_network_direct_queue() {
     // Create some dummy messages
 
     // Make and connect the networking instances
-    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
+    let group: Arc<MasterMap<<Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
 
     let pub_key_1 = pubkey();
@@ -169,8 +169,9 @@ async fn memory_network_direct_queue() {
     // Test 1 -> 2
     // Send messages
     for sent_message in first_messages {
+        let serialized_message = VersionedMessage::serialize(&sent_message, &None).unwrap();
         network1
-            .direct_message(sent_message.clone(), pub_key_2, STATIC_VER_0_1)
+            .direct_message(serialized_message.clone(), pub_key_2)
             .await
             .expect("Failed to message node");
         let mut recv_messages = network2
@@ -178,8 +179,9 @@ async fn memory_network_direct_queue() {
             .await
             .expect("Failed to receive message");
         let recv_message = recv_messages.pop().unwrap();
+        let deserialized_message = VersionedMessage::deserialize(&recv_message, &None).unwrap();
         assert!(recv_messages.is_empty());
-        fake_message_eq(sent_message, recv_message);
+        fake_message_eq(sent_message, deserialized_message);
     }
 
     let second_messages: Vec<Message<Test>> = gen_messages(5, 200, pub_key_2);
@@ -187,8 +189,9 @@ async fn memory_network_direct_queue() {
     // Test 2 -> 1
     // Send messages
     for sent_message in second_messages {
+        let serialized_message = VersionedMessage::serialize(&sent_message, &None).unwrap();
         network2
-            .direct_message(sent_message.clone(), pub_key_1, STATIC_VER_0_1)
+            .direct_message(serialized_message.clone(), pub_key_1)
             .await
             .expect("Failed to message node");
         let mut recv_messages = network1
@@ -196,8 +199,9 @@ async fn memory_network_direct_queue() {
             .await
             .expect("Failed to receive message");
         let recv_message = recv_messages.pop().unwrap();
+        let deserialized_message = VersionedMessage::deserialize(&recv_message, &None).unwrap();
         assert!(recv_messages.is_empty());
-        fake_message_eq(sent_message, recv_message);
+        fake_message_eq(sent_message, deserialized_message);
     }
 }
 
@@ -208,7 +212,7 @@ async fn memory_network_direct_queue() {
 async fn memory_network_broadcast_queue() {
     setup_logging();
     // Make and connect the networking instances
-    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
+    let group: Arc<MasterMap<<Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
     let pub_key_1 = pubkey();
     let network1 = MemoryNetwork::new(
@@ -230,11 +234,12 @@ async fn memory_network_broadcast_queue() {
     // Test 1 -> 2
     // Send messages
     for sent_message in first_messages {
+        let serialized_message = VersionedMessage::serialize(&sent_message, &None).unwrap();
         network1
             .broadcast_message(
-                sent_message.clone(),
+                serialized_message.clone(),
                 vec![pub_key_2].into_iter().collect::<BTreeSet<_>>(),
-                STATIC_VER_0_1,
+                BroadcastDelay::None,
             )
             .await
             .expect("Failed to message node");
@@ -243,8 +248,9 @@ async fn memory_network_broadcast_queue() {
             .await
             .expect("Failed to receive message");
         let recv_message = recv_messages.pop().unwrap();
+        let deserialized_message = VersionedMessage::deserialize(&recv_message, &None).unwrap();
         assert!(recv_messages.is_empty());
-        fake_message_eq(sent_message, recv_message);
+        fake_message_eq(sent_message, deserialized_message);
     }
 
     let second_messages: Vec<Message<Test>> = gen_messages(5, 200, pub_key_2);
@@ -252,11 +258,12 @@ async fn memory_network_broadcast_queue() {
     // Test 2 -> 1
     // Send messages
     for sent_message in second_messages {
+        let serialized_message = VersionedMessage::serialize(&sent_message, &None).unwrap();
         network2
             .broadcast_message(
-                sent_message.clone(),
+                serialized_message.clone(),
                 vec![pub_key_1].into_iter().collect::<BTreeSet<_>>(),
-                STATIC_VER_0_1,
+                BroadcastDelay::None,
             )
             .await
             .expect("Failed to message node");
@@ -265,8 +272,9 @@ async fn memory_network_broadcast_queue() {
             .await
             .expect("Failed to receive message");
         let recv_message = recv_messages.pop().unwrap();
+        let deserialized_message = VersionedMessage::deserialize(&recv_message, &None).unwrap();
         assert!(recv_messages.is_empty());
-        fake_message_eq(sent_message, recv_message);
+        fake_message_eq(sent_message, deserialized_message);
     }
 }
 
@@ -277,7 +285,7 @@ async fn memory_network_broadcast_queue() {
 async fn memory_network_test_in_flight_message_count() {
     setup_logging();
 
-    let group: Arc<MasterMap<Message<Test>, <Test as NodeType>::SignatureKey>> = MasterMap::new();
+    let group: Arc<MasterMap<<Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
     let pub_key_1 = pubkey();
     let network1 = MemoryNetwork::new(
@@ -298,44 +306,67 @@ async fn memory_network_test_in_flight_message_count() {
     let messages: Vec<Message<Test>> = gen_messages(5, 100, pub_key_1);
     let broadcast_recipients = BTreeSet::from([pub_key_1, pub_key_2]);
 
-    assert_eq!(network1.in_flight_message_count(), Some(0));
-    assert_eq!(network2.in_flight_message_count(), Some(0));
+    assert_eq!(
+        TestableNetworkingImplementation::<Test>::in_flight_message_count(&network1),
+        Some(0)
+    );
+    assert_eq!(
+        TestableNetworkingImplementation::<Test>::in_flight_message_count(&network2),
+        Some(0)
+    );
 
     for (count, message) in messages.iter().enumerate() {
+        let serialized_message = VersionedMessage::serialize(message, &None).unwrap();
+
         network1
-            .direct_message(message.clone(), pub_key_2, STATIC_VER_0_1)
+            .direct_message(serialized_message.clone(), pub_key_2)
             .await
             .unwrap();
         // network 2 has received `count` broadcast messages and `count + 1` direct messages
-        assert_eq!(network2.in_flight_message_count(), Some(count + count + 1));
+        assert_eq!(
+            TestableNetworkingImplementation::<Test>::in_flight_message_count(&network2),
+            Some(count + count + 1)
+        );
 
         network2
-            .broadcast_message(
-                message.clone(),
-                broadcast_recipients.clone(),
-                STATIC_VER_0_1,
-            )
+            .broadcast_message(serialized_message.clone(), broadcast_recipients.clone(), BroadcastDelay::None)
             .await
             .unwrap();
         // network 1 has received `count` broadcast messages
-        assert_eq!(network1.in_flight_message_count(), Some(count + 1));
+        assert_eq!(
+            TestableNetworkingImplementation::<Test>::in_flight_message_count(&network1),
+            Some(count + 1)
+        );
 
         // network 2 has received `count + 1` broadcast messages and `count + 1` direct messages
-        assert_eq!(network2.in_flight_message_count(), Some((count + 1) * 2));
+        assert_eq!(
+            TestableNetworkingImplementation::<Test>::in_flight_message_count(&network2),
+            Some((count + 1) * 2)
+        );
     }
 
-    while network1.in_flight_message_count().unwrap() > 0 {
+    while TestableNetworkingImplementation::<Test>::in_flight_message_count(&network1).unwrap() > 0
+    {
         network1.recv_msgs().await.unwrap();
     }
 
-    while network2.in_flight_message_count().unwrap() > messages.len() {
+    while TestableNetworkingImplementation::<Test>::in_flight_message_count(&network2).unwrap()
+        > messages.len()
+    {
         network2.recv_msgs().await.unwrap();
     }
 
-    while network2.in_flight_message_count().unwrap() > 0 {
+    while TestableNetworkingImplementation::<Test>::in_flight_message_count(&network2).unwrap() > 0
+    {
         network2.recv_msgs().await.unwrap();
     }
 
-    assert_eq!(network1.in_flight_message_count(), Some(0));
-    assert_eq!(network2.in_flight_message_count(), Some(0));
+    assert_eq!(
+        TestableNetworkingImplementation::<Test>::in_flight_message_count(&network1),
+        Some(0)
+    );
+    assert_eq!(
+        TestableNetworkingImplementation::<Test>::in_flight_message_count(&network2),
+        Some(0)
+    );
 }

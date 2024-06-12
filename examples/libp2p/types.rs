@@ -2,10 +2,7 @@ use std::fmt::Debug;
 
 use hotshot::traits::implementations::Libp2pNetwork;
 use hotshot_example_types::{state_types::TestTypes, storage_types::TestStorage};
-use hotshot_types::{
-    message::Message,
-    traits::node_implementation::{NodeImplementation, NodeType},
-};
+use hotshot_types::traits::node_implementation::{NodeImplementation, NodeType};
 use serde::{Deserialize, Serialize};
 
 use crate::infra::Libp2pDaRun;
@@ -15,9 +12,9 @@ use crate::infra::Libp2pDaRun;
 pub struct NodeImpl {}
 
 /// convenience type alias
-pub type DaNetwork = Libp2pNetwork<Message<TestTypes>, <TestTypes as NodeType>::SignatureKey>;
+pub type DaNetwork = Libp2pNetwork<<TestTypes as NodeType>::SignatureKey>;
 /// convenience type alias
-pub type QuorumNetwork = Libp2pNetwork<Message<TestTypes>, <TestTypes as NodeType>::SignatureKey>;
+pub type QuorumNetwork = Libp2pNetwork<<TestTypes as NodeType>::SignatureKey>;
 
 impl NodeImplementation<TestTypes> for NodeImpl {
     type QuorumNetwork = QuorumNetwork;

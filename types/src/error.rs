@@ -82,6 +82,8 @@ pub enum HotShotError<TYPES: NodeType> {
         /// source of error
         context: String,
     },
+    /// Failed to serialize message
+    FailedToSerialize,
     /// Internal value used to drive the state machine
     Continue,
 }

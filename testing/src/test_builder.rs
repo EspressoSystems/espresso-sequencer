@@ -297,6 +297,10 @@ impl TestDescription {
             data_request_delay: Duration::from_millis(200),
             // Placeholder until we spin up the builder
             builder_url: Url::parse("http://localhost:9999").expect("Valid URL"),
+            start_proposing_view: 0,
+            stop_proposing_view: 0,
+            start_voting_view: 0,
+            stop_voting_view: 0,
         };
         let TimingData {
             next_view_timeout,

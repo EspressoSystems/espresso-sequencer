@@ -1,12 +1,16 @@
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
 use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 use async_trait::async_trait;
+use committable::Committable;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
+    constants::{Base, Upgrade, UPGRADE_HASH},
+    data::UpgradeProposal,
     event::{Event, EventType},
+    message::Proposal,
     simple_certificate::UpgradeCertificate,
     simple_vote::{UpgradeProposalData, UpgradeVote},
     traits::{
@@ -17,6 +21,7 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 use tracing::{debug, error, info, instrument, warn};
+use vbs::version::StaticVersionType;
 
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
@@ -42,9 +47,6 @@ pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Network for all nodes
     pub quorum_network: Arc<I::QuorumNetwork>,
 
-    /// Whether we should vote affirmatively on a given upgrade proposal (true) or not (false)
-    pub should_vote: fn(UpgradeProposalData<TYPES>) -> bool,
-
     /// The current vote collection task, if there is one.
     pub vote_collector:
         RwLock<VoteCollectorOption<TYPES, UpgradeVote<TYPES>, UpgradeCertificate<TYPES>>>,
@@ -57,6 +59,18 @@ pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// This state's ID
     pub id: u64,
+
+    /// View to start proposing an upgrade
+    pub start_proposing_view: u64,
+
+    /// View to stop proposing an upgrade
+    pub stop_proposing_view: u64,
+
+    /// View to start voting on an upgrade
+    pub start_voting_view: u64,
+
+    /// View to stop voting on an upgrade
+    pub stop_voting_view: u64,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
@@ -71,9 +85,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
             HotShotEvent::UpgradeProposalRecv(proposal, sender) => {
                 info!("Received upgrade proposal: {:?}", proposal);
 
+                if *proposal.data.view_number() < self.start_voting_view
+                    || *proposal.data.view_number() >= self.stop_voting_view
+                {
+                    return None;
+                }
+
                 // If the proposal does not match our upgrade target, we immediately exit.
-                if !(self.should_vote)(proposal.data.upgrade_proposal.clone()) {
-                    info!("Received unexpected upgrade proposal:\n{:?}", proposal.data);
+                if proposal.data.upgrade_proposal.new_version_hash != UPGRADE_HASH
+                    || proposal.data.upgrade_proposal.old_version != Base::VERSION
+                    || proposal.data.upgrade_proposal.new_version != Upgrade::VERSION
+                {
                     return None;
                 }
 
@@ -190,9 +212,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
                     }
                 }
             }
-            HotShotEvent::VersionUpgrade(version) => {
-                error!("The network was upgraded to {:?}. This instance of HotShot did not expect an upgrade.", version);
-            }
             HotShotEvent::ViewChange(view) => {
                 let view = *view;
                 if *self.cur_view >= *view {
@@ -203,54 +222,47 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
                     warn!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
-
-                #[cfg(feature = "example-upgrade")]
+                // We try to form a certificate 5 views before we're leader.
+                if *view >= self.start_proposing_view
+                    && *view < self.stop_proposing_view
+                    && self.quorum_membership.leader(view + 5) == self.public_key
                 {
-                    use std::marker::PhantomData;
-
-                    use committable::Committable;
-                    use hotshot_types::{
-                        data::UpgradeProposal, message::Proposal,
-                        traits::node_implementation::ConsensusTime,
+                    let upgrade_proposal_data = UpgradeProposalData {
+                        old_version: Base::VERSION,
+                        new_version: Upgrade::VERSION,
+                        new_version_hash: UPGRADE_HASH.to_vec(),
+                        // We schedule the upgrade to begin 15 views in the future
+                        old_version_last_view: TYPES::Time::new(*view + 15),
+                        // and end 20 views in the future
+                        new_version_first_view: TYPES::Time::new(*view + 20),
+                        decide_by: TYPES::Time::new(*view + 10),
                     };
-                    use vbs::version::Version;
 
-                    if *view == 5 && self.quorum_membership.leader(view + 5) == self.public_key {
-                        let upgrade_proposal_data = UpgradeProposalData {
-                            old_version: Version { major: 0, minor: 1 },
-                            new_version: Version { major: 1, minor: 0 },
-                            new_version_hash: vec![1, 1, 0, 0, 1],
-                            old_version_last_view: TYPES::Time::new(15),
-                            new_version_first_view: TYPES::Time::new(18),
-                            decide_by: TYPES::Time::new(12),
-                        };
+                    let upgrade_proposal = UpgradeProposal {
+                        upgrade_proposal: upgrade_proposal_data.clone(),
+                        view_number: view + 5,
+                    };
 
-                        let upgrade_proposal = UpgradeProposal {
-                            upgrade_proposal: upgrade_proposal_data.clone(),
-                            view_number: view + 5,
-                        };
+                    let signature = TYPES::SignatureKey::sign(
+                        &self.private_key,
+                        upgrade_proposal_data.commit().as_ref(),
+                    )
+                    .expect("Failed to sign upgrade proposal commitment!");
 
-                        let signature = TYPES::SignatureKey::sign(
-                            &self.private_key,
-                            upgrade_proposal_data.commit().as_ref(),
-                        )
-                        .expect("Failed to sign upgrade proposal commitment!");
+                    let message = Proposal {
+                        data: upgrade_proposal,
+                        signature,
+                        _pd: PhantomData,
+                    };
 
-                        let message = Proposal {
-                            data: upgrade_proposal,
-                            signature,
-                            _pd: PhantomData,
-                        };
-
-                        broadcast_event(
-                            Arc::new(HotShotEvent::UpgradeProposalSend(
-                                message,
-                                self.public_key.clone(),
-                            )),
-                            &tx,
-                        )
-                        .await;
-                    }
+                    broadcast_event(
+                        Arc::new(HotShotEvent::UpgradeProposalSend(
+                            message,
+                            self.public_key.clone(),
+                        )),
+                        &tx,
+                    )
+                    .await;
                 }
 
                 return None;

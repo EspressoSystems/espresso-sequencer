@@ -1,6 +1,6 @@
 //! configurable constants for hotshot
 
-use vbs::version::{StaticVersion, Version};
+use vbs::version::StaticVersion;
 
 /// the number of views to gather information for ahead of time
 pub const LOOK_AHEAD: u64 = 5;
@@ -17,26 +17,15 @@ pub const COMBINED_NETWORK_MIN_PRIMARY_FAILURES: u64 = 5;
 /// the number of messages to send over the secondary network without delay before re-attempting the (presumed down) primary network
 pub const COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL: u64 = 50;
 
-/// CONSTANT for protocol major version
-pub const VERSION_MAJ: u16 = 0;
+/// Base protocol version, set to 0.1
+pub type Base = StaticVersion<0, 1>;
+/// Upgraded protocol version, set to 0.2
+pub type Upgrade = StaticVersion<0, 2>;
 
-/// CONSTANT for protocol major version
-pub const VERSION_MIN: u16 = 1;
-
-/// Constant for protocol version 0.1.
-pub const VERSION_0_1: Version = Version {
-    major: VERSION_MAJ,
-    minor: VERSION_MIN,
-};
-
-/// Constant for the base protocol version in this instance of HotShot.
-pub const BASE_VERSION: Version = VERSION_0_1;
-
-/// Type for protocol static version 0.1.
-pub type Version01 = StaticVersion<VERSION_MAJ, VERSION_MIN>;
-
-/// Constant for protocol static version 0.1.
-pub const STATIC_VER_0_1: Version01 = StaticVersion {};
+/// Hash for the upgrade from version 0.1 to version 0.2.
+pub const UPGRADE_HASH: [u8; 32] = [
+    1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+];
 
 /// Default channel size for consensus event sharing
 pub const EVENT_CHANNEL_SIZE: usize = 100_000;

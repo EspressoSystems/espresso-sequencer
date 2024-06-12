@@ -15,7 +15,6 @@ use hotshot_example_types::{
 use hotshot_types::{
     data::Leaf,
     event::Event,
-    message::Message,
     simple_certificate::QuorumCertificate,
     traits::{
         network::ConnectedNetwork,
@@ -58,7 +57,7 @@ pub struct SpinningTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
 impl<
         TYPES: NodeType<InstanceState = TestInstanceState, ValidatedState = TestValidatedState>,
         I: TestableNodeImplementation<TYPES>,
-        N: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+        N: ConnectedNetwork<TYPES::SignatureKey>,
     > TestTaskState for SpinningTask<TYPES, I>
 where
     I: TestableNodeImplementation<TYPES>,

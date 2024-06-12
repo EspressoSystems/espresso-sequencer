@@ -31,16 +31,14 @@ use hotshot_types::{
         COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
     },
     data::ViewNumber,
-    message::{GeneralConsensusMessage, Message, MessageKind, SequencingMessage},
     traits::{
-        network::{ConnectedNetwork, ResponseChannel, ResponseMessage, ViewMessage},
-        node_implementation::{ConsensusTime, NodeType},
+        network::{BroadcastDelay, ConnectedNetwork, ResponseChannel},
+        node_implementation::NodeType,
     },
     BoxSyncFuture,
 };
 use lru::LruCache;
 use tracing::{debug, warn};
-use vbs::version::StaticVersionType;
 
 use super::{push_cdn_network::PushCdnNetwork, NetworkError};
 use crate::traits::implementations::Libp2pNetwork;
@@ -90,7 +88,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
     #[must_use]
     pub fn new(
         primary_network: PushCdnNetwork<TYPES>,
-        secondary_network: Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
+        secondary_network: Libp2pNetwork<TYPES::SignatureKey>,
         delay_duration: Duration,
     ) -> Self {
         // Create networks from the ones passed in
@@ -120,29 +118,17 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
 
     /// Get a ref to the backup network
     #[must_use]
-    pub fn secondary(&self) -> &Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> {
+    pub fn secondary(&self) -> &Libp2pNetwork<TYPES::SignatureKey> {
         &self.networks.1
-    }
-
-    /// a helper function returning a bool whether a given message is of delayable type
-    fn should_delay(message: &Message<TYPES>) -> bool {
-        match &message.kind {
-            MessageKind::Consensus(consensus_message) => match &consensus_message {
-                SequencingMessage::General(general_consensus_message) => {
-                    matches!(general_consensus_message, GeneralConsensusMessage::Vote(_))
-                }
-                SequencingMessage::Da(_) => true,
-            },
-            MessageKind::Data(_) => false,
-        }
     }
 
     /// a helper function to send messages through both networks (possibly delayed)
     async fn send_both_networks(
         &self,
-        message: Message<TYPES>,
+        _message: Vec<u8>,
         primary_future: impl Future<Output = Result<(), NetworkError>> + Send + 'static,
         secondary_future: impl Future<Output = Result<(), NetworkError>> + Send + 'static,
+        broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
         // A local variable used to decide whether to delay this message or not
         let mut primary_failed = false;
@@ -170,7 +156,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
             primary_failed = true;
         };
 
-        if !primary_failed && Self::should_delay(&message) {
+        if let (BroadcastDelay::View(view), false) = (broadcast_delay, primary_failed) {
             // We are delaying this message
             let duration = *self.delay_duration.read().await;
             let primary_down = Arc::clone(&self.primary_down);
@@ -181,7 +167,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
                 .delayed_tasks_channels
                 .write()
                 .await
-                .entry(message.kind.view_number().u64())
+                .entry(view)
                 .or_insert_with(|| {
                     let (s, r) = broadcast(1);
                     (s, r.deactivate())
@@ -257,7 +243,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
 #[derive(Clone)]
 pub struct UnderlyingCombinedNetworks<TYPES: NodeType>(
     pub PushCdnNetwork<TYPES>,
-    pub Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
+    pub Libp2pNetwork<TYPES::SignatureKey>,
 );
 
 #[cfg(feature = "hotshot-testing")]
@@ -272,7 +258,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
         secondary_network_delay: Duration,
     ) -> AsyncGenerator<(Arc<Self>, Arc<Self>)> {
         let generators = (
-            <PushCdnNetwork<TYPES> as TestableNetworkingImplementation<_>>::generator(
+            <PushCdnNetwork<TYPES> as TestableNetworkingImplementation<TYPES>>::generator(
                 expected_node_count,
                 num_bootstrap,
                 network_id,
@@ -281,7 +267,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                 None,
                 Duration::default(),
             ),
-            <Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> as TestableNetworkingImplementation<_>>::generator(
+            <Libp2pNetwork<TYPES::SignatureKey> as TestableNetworkingImplementation<TYPES>>::generator(
                 expected_node_count,
                 num_bootstrap,
                 network_id,
@@ -302,15 +288,11 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
                 let (quorum_p2p, da_p2p) = gen1.await;
                 let da_networks = UnderlyingCombinedNetworks(
                     cdn.clone(),
-                    Arc::<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>::unwrap_or_clone(
-                        da_p2p,
-                    ),
+                    Arc::<Libp2pNetwork<TYPES::SignatureKey>>::unwrap_or_clone(da_p2p),
                 );
                 let quorum_networks = UnderlyingCombinedNetworks(
                     cdn,
-                    Arc::<Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>>::unwrap_or_clone(
-                        quorum_p2p,
-                    ),
+                    Arc::<Libp2pNetwork<TYPES::SignatureKey>>::unwrap_or_clone(quorum_p2p),
                 );
 
                 // We want to  the message cache between the two networks
@@ -351,27 +333,21 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
 }
 
 #[async_trait]
-impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
-    for CombinedNetworks<TYPES>
-{
-    async fn request_data<T: NodeType, VER: 'static + StaticVersionType>(
+impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks<TYPES> {
+    async fn request_data<T: NodeType>(
         &self,
-        request: Message<TYPES>,
+        request: Vec<u8>,
         recipient: &TYPES::SignatureKey,
-        bind_version: VER,
-    ) -> Result<ResponseMessage<T>, NetworkError> {
+    ) -> Result<Vec<u8>, NetworkError> {
         self.secondary()
-            .request_data(request, recipient, bind_version)
+            .request_data::<TYPES>(request, recipient)
             .await
     }
 
-    async fn spawn_request_receiver_task<VER: 'static + StaticVersionType>(
+    async fn spawn_request_receiver_task(
         &self,
-        bind_version: VER,
-    ) -> Option<mpsc::Receiver<(Message<TYPES>, ResponseChannel<Message<TYPES>>)>> {
-        self.secondary()
-            .spawn_request_receiver_task(bind_version)
-            .await
+    ) -> Option<mpsc::Receiver<(Vec<u8>, ResponseChannel<Vec<u8>>)>> {
+        self.secondary().spawn_request_receiver_task().await
     }
 
     fn pause(&self) {
@@ -400,11 +376,11 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
         boxed_sync(closure)
     }
 
-    async fn broadcast_message<VER: StaticVersionType + 'static>(
+    async fn broadcast_message(
         &self,
-        message: Message<TYPES>,
+        message: Vec<u8>,
         recipients: BTreeSet<TYPES::SignatureKey>,
-        bind_version: VER,
+        broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
         let primary = self.primary().clone();
         let secondary = self.secondary().clone();
@@ -415,23 +391,24 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
             message,
             async move {
                 primary
-                    .broadcast_message(primary_message, primary_recipients, bind_version)
+                    .broadcast_message(primary_message, primary_recipients, BroadcastDelay::None)
                     .await
             },
             async move {
                 secondary
-                    .broadcast_message(secondary_message, recipients, bind_version)
+                    .broadcast_message(secondary_message, recipients, BroadcastDelay::None)
                     .await
             },
+            broadcast_delay,
         )
         .await
     }
 
-    async fn da_broadcast_message<VER: StaticVersionType + 'static>(
+    async fn da_broadcast_message(
         &self,
-        message: Message<TYPES>,
+        message: Vec<u8>,
         recipients: BTreeSet<TYPES::SignatureKey>,
-        bind_version: VER,
+        broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
         let primary = self.primary().clone();
         let secondary = self.secondary().clone();
@@ -442,23 +419,23 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
             message,
             async move {
                 primary
-                    .da_broadcast_message(primary_message, primary_recipients, bind_version)
+                    .da_broadcast_message(primary_message, primary_recipients, BroadcastDelay::None)
                     .await
             },
             async move {
                 secondary
-                    .da_broadcast_message(secondary_message, recipients, bind_version)
+                    .da_broadcast_message(secondary_message, recipients, BroadcastDelay::None)
                     .await
             },
+            broadcast_delay,
         )
         .await
     }
 
-    async fn direct_message<VER: StaticVersionType + 'static>(
+    async fn direct_message(
         &self,
-        message: Message<TYPES>,
+        message: Vec<u8>,
         recipient: TYPES::SignatureKey,
-        bind_version: VER,
     ) -> Result<(), NetworkError> {
         let primary = self.primary().clone();
         let secondary = self.secondary().clone();
@@ -469,34 +446,27 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
             message,
             async move {
                 primary
-                    .direct_message(primary_message, primary_recipient, bind_version)
+                    .direct_message(primary_message, primary_recipient)
                     .await
             },
-            async move {
-                secondary
-                    .direct_message(secondary_message, recipient, bind_version)
-                    .await
-            },
+            async move { secondary.direct_message(secondary_message, recipient).await },
+            BroadcastDelay::None,
         )
         .await
     }
 
-    async fn vid_broadcast_message<VER: StaticVersionType + 'static>(
+    async fn vid_broadcast_message(
         &self,
-        messages: HashMap<TYPES::SignatureKey, Message<TYPES>>,
-        bind_version: VER,
+        messages: HashMap<TYPES::SignatureKey, Vec<u8>>,
     ) -> Result<(), NetworkError> {
-        self.networks
-            .0
-            .vid_broadcast_message(messages, bind_version)
-            .await
+        self.networks.0.vid_broadcast_message(messages).await
     }
 
     /// Receive one or many messages from the underlying network.
     ///
     /// # Errors
     /// Does not error
-    async fn recv_msgs(&self) -> Result<Vec<Message<TYPES>>, NetworkError> {
+    async fn recv_msgs(&self) -> Result<Vec<Vec<u8>>, NetworkError> {
         // recv on both networks because nodes may be accessible only on either. discard duplicates
         // TODO: improve this algorithm: https://github.com/EspressoSystems/HotShot/issues/2089
         let mut primary_fut = self.primary().recv_msgs().fuse();

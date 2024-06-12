@@ -108,3 +108,9 @@ nanos = 200_000_000
 [config.builder_timeout]
 secs = 2
 nanos = 0
+
+[config.upgrade]
+start_proposing_view = 0
+stop_proposing_view = 0
+start_voting_view = 0
+stop_voting_view = 0

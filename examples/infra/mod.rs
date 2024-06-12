@@ -50,7 +50,6 @@ use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::{Leaf, TestableLeaf},
     event::{Event, EventType},
-    message::Message,
     traits::{
         block_contents::{BlockHeader, TestableBlock},
         election::Membership,
@@ -327,8 +326,8 @@ fn calculate_num_tx_per_round(
 #[async_trait]
 pub trait RunDa<
     TYPES: NodeType<InstanceState = TestInstanceState>,
-    DANET: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
-    QUORUMNET: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+    DANET: ConnectedNetwork<TYPES::SignatureKey>,
+    QUORUMNET: ConnectedNetwork<TYPES::SignatureKey>,
     NODE: NodeImplementation<
         TYPES,
         QuorumNetwork = QUORUMNET,
@@ -674,9 +673,9 @@ pub struct Libp2pDaRun<TYPES: NodeType> {
     /// the network configuration
     config: NetworkConfig<TYPES::SignatureKey>,
     /// quorum channel
-    quorum_channel: Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
+    quorum_channel: Libp2pNetwork<TYPES::SignatureKey>,
     /// data availability channel
-    da_channel: Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
+    da_channel: Libp2pNetwork<TYPES::SignatureKey>,
 }
 
 #[async_trait]
@@ -689,17 +688,12 @@ impl<
         >,
         NODE: NodeImplementation<
             TYPES,
-            QuorumNetwork = Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
-            DaNetwork = Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
+            QuorumNetwork = Libp2pNetwork<TYPES::SignatureKey>,
+            DaNetwork = Libp2pNetwork<TYPES::SignatureKey>,
             Storage = TestStorage<TYPES>,
         >,
-    >
-    RunDa<
-        TYPES,
-        Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
-        Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
-        NODE,
-    > for Libp2pDaRun<TYPES>
+    > RunDa<TYPES, Libp2pNetwork<TYPES::SignatureKey>, Libp2pNetwork<TYPES::SignatureKey>, NODE>
+    for Libp2pDaRun<TYPES>
 where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
@@ -752,11 +746,11 @@ where
         }
     }
 
-    fn da_channel(&self) -> Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> {
+    fn da_channel(&self) -> Libp2pNetwork<TYPES::SignatureKey> {
         self.da_channel.clone()
     }
 
-    fn quorum_channel(&self) -> Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey> {
+    fn quorum_channel(&self) -> Libp2pNetwork<TYPES::SignatureKey> {
         self.quorum_channel.clone()
     }
 
@@ -806,8 +800,8 @@ where
         let libp2p_da_run: Libp2pDaRun<TYPES> =
             <Libp2pDaRun<TYPES> as RunDa<
                 TYPES,
-                Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
-                Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>,
+                Libp2pNetwork<TYPES::SignatureKey>,
+                Libp2pNetwork<TYPES::SignatureKey>,
                 Libp2pImpl,
             >>::initialize_networking(config.clone(), libp2p_advertise_address)
             .await;
@@ -870,8 +864,8 @@ pub async fn main_entry_point<
         BlockHeader = TestBlockHeader,
         InstanceState = TestInstanceState,
     >,
-    DACHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
-    QUORUMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+    DACHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
+    QUORUMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
     NODE: NodeImplementation<
         TYPES,
         QuorumNetwork = QUORUMCHANNEL,

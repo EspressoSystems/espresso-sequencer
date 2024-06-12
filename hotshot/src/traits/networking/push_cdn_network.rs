@@ -33,11 +33,9 @@ use hotshot_types::traits::network::{
 };
 use hotshot_types::{
     boxed_sync,
-    constants::{Version01, VERSION_0_1},
     data::ViewNumber,
-    message::Message,
     traits::{
-        network::{ConnectedNetwork, PushCdnNetworkError},
+        network::{BroadcastDelay, ConnectedNetwork, PushCdnNetworkError},
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
@@ -47,11 +45,7 @@ use hotshot_types::{
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 #[cfg(feature = "hotshot-testing")]
 use rand::{rngs::StdRng, RngCore, SeedableRng};
-use tracing::{error, warn};
-use vbs::{
-    version::{StaticVersionType, Version},
-    BinarySerializer, Serializer,
-};
+use tracing::error;
 
 use super::NetworkError;
 
@@ -206,32 +200,18 @@ impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
     /// # Errors
     /// - If we fail to serialize the message
     /// - If we fail to send the broadcast message.
-    async fn broadcast_message<Ver: StaticVersionType>(
-        &self,
-        message: Message<TYPES>,
-        topic: Topic,
-        _: Ver,
-    ) -> Result<(), NetworkError> {
+    async fn broadcast_message(&self, message: Vec<u8>, topic: Topic) -> Result<(), NetworkError> {
         // If we're paused, don't send the message
         #[cfg(feature = "hotshot-testing")]
         if self.is_paused.load(Ordering::Relaxed) {
             return Ok(());
         }
 
-        // Bincode the message
-        let serialized_message = match Serializer::<Ver>::serialize(&message) {
-            Ok(serialized) => serialized,
-            Err(e) => {
-                warn!("Failed to serialize message: {}", e);
-                return Err(NetworkError::FailedToSerialize { source: e });
-            }
-        };
-
         // Send the message
         // TODO: check if we need to print this error
         if self
             .client
-            .send_broadcast_message(vec![topic as u8], serialized_message)
+            .send_broadcast_message(vec![topic as u8], message)
             .await
             .is_err()
         {
@@ -409,9 +389,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
 }
 
 #[async_trait]
-impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
-    for PushCdnNetwork<TYPES>
-{
+impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for PushCdnNetwork<TYPES> {
     /// Pause sending and receiving on the PushCDN network.
     fn pause(&self) {
         #[cfg(feature = "hotshot-testing")]
@@ -443,14 +421,13 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
     /// # Errors
     /// - If we fail to serialize the message
     /// - If we fail to send the broadcast message.
-    async fn broadcast_message<Ver: StaticVersionType>(
+    async fn broadcast_message(
         &self,
-        message: Message<TYPES>,
+        message: Vec<u8>,
         _recipients: BTreeSet<TYPES::SignatureKey>,
-        bind_version: Ver,
+        _broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
-        self.broadcast_message(message, Topic::Global, bind_version)
-            .await
+        self.broadcast_message(message, Topic::Global).await
     }
 
     /// Broadcast a message to all members of the DA committee.
@@ -458,25 +435,23 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
     /// # Errors
     /// - If we fail to serialize the message
     /// - If we fail to send the broadcast message.
-    async fn da_broadcast_message<Ver: StaticVersionType>(
+    async fn da_broadcast_message(
         &self,
-        message: Message<TYPES>,
+        message: Vec<u8>,
         _recipients: BTreeSet<TYPES::SignatureKey>,
-        bind_version: Ver,
+        _broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
-        self.broadcast_message(message, Topic::Da, bind_version)
-            .await
+        self.broadcast_message(message, Topic::Da).await
     }
 
     /// Send a direct message to a node with a particular key. Does not retry.
     ///
     /// - If we fail to serialize the message
     /// - If we fail to send the direct message
-    async fn direct_message<Ver: StaticVersionType>(
+    async fn direct_message(
         &self,
-        message: Message<TYPES>,
+        message: Vec<u8>,
         recipient: TYPES::SignatureKey,
-        _: Ver,
     ) -> Result<(), NetworkError> {
         // If we're paused, don't send the message
         #[cfg(feature = "hotshot-testing")]
@@ -484,20 +459,11 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
             return Ok(());
         }
 
-        // Bincode the message
-        let serialized_message = match Serializer::<Ver>::serialize(&message) {
-            Ok(serialized) => serialized,
-            Err(e) => {
-                warn!("Failed to serialize message: {}", e);
-                return Err(NetworkError::FailedToSerialize { source: e });
-            }
-        };
-
         // Send the message
         // TODO: check if we need to print this error
         if self
             .client
-            .send_direct_message(&WrappedSignatureKey(recipient), serialized_message)
+            .send_direct_message(&WrappedSignatureKey(recipient), message)
             .await
             .is_err()
         {
@@ -512,7 +478,7 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
     ///
     /// # Errors
     /// - If we fail to receive messages. Will trigger a retry automatically.
-    async fn recv_msgs(&self) -> Result<Vec<Message<TYPES>>, NetworkError> {
+    async fn recv_msgs(&self) -> Result<Vec<Vec<u8>>, NetworkError> {
         // Receive a message
         let message = self.client.receive_message().await;
 
@@ -543,24 +509,7 @@ impl<TYPES: NodeType> ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>
             return Ok(vec![]);
         };
 
-        let message_version = Version::deserialize(&message)
-            .map_err(|e| NetworkError::FailedToDeserialize { source: e })?;
-        if message_version.0 == VERSION_0_1 {
-            let result: Message<TYPES> = Serializer::<Version01>::deserialize(&message)
-                .map_err(|e| NetworkError::FailedToDeserialize { source: e })?;
-
-            // Deserialize it
-            // Return it
-            Ok(vec![result])
-        } else {
-            Err(NetworkError::FailedToDeserialize {
-                source: anyhow::format_err!(
-                    "version mismatch, expected {}, got {}",
-                    VERSION_0_1,
-                    message_version.0
-                ),
-            })
-        }
+        Ok(vec![message])
     }
 
     /// Do nothing here, as we don't need to look up nodes.

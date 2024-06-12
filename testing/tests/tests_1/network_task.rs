@@ -1,5 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
+use async_broadcast::Sender;
 use async_compatibility_layer::art::async_timeout;
 use async_lock::RwLock;
 use hotshot::traits::implementations::MemoryNetwork;
@@ -14,7 +15,6 @@ use hotshot_testing::{
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
-    constants::BASE_VERSION,
     data::ViewNumber,
     traits::{
         election::Membership,
@@ -52,13 +52,13 @@ async fn test_network_task() {
         config.fixed_leader_for_gpuvid,
     );
     let channel = networks.0.clone();
-    let network_state: NetworkEventTaskState<TestTypes, MemoryNetwork<_, _>, _> =
+    let network_state: NetworkEventTaskState<TestTypes, MemoryNetwork<_>, _> =
         NetworkEventTaskState {
             channel: channel.clone(),
             view: ViewNumber::new(0),
             membership: membership.clone(),
             filter: network::quorum_filter,
-            version: BASE_VERSION,
+            decided_upgrade_certificate: None,
             storage,
         };
     let (tx, rx) = async_broadcast::broadcast(10);
@@ -79,7 +79,7 @@ async fn test_network_task() {
     )))
     .await
     .unwrap();
-    let res = async_timeout(Duration::from_millis(100), out_rx.recv_direct())
+    let res: Arc<HotShotEvent<TestTypes>> = async_timeout(Duration::from_millis(100), out_rx.recv_direct())
         .await
         .expect("timed out waiting for response")
         .expect("channel closed");
@@ -117,13 +117,13 @@ async fn test_network_storage_fail() {
         config.fixed_leader_for_gpuvid,
     );
     let channel = networks.0.clone();
-    let network_state: NetworkEventTaskState<TestTypes, MemoryNetwork<_, _>, _> =
+    let network_state: NetworkEventTaskState<TestTypes, MemoryNetwork<_>, _> =
         NetworkEventTaskState {
             channel: channel.clone(),
             view: ViewNumber::new(0),
             membership: membership.clone(),
             filter: network::quorum_filter,
-            version: BASE_VERSION,
+            decided_upgrade_certificate: None,
             storage,
         };
     let (tx, rx) = async_broadcast::broadcast(10);
@@ -135,7 +135,7 @@ async fn test_network_storage_fail() {
     let mut generator = TestViewGenerator::generate(membership.clone(), membership);
     let view = generator.next().await.unwrap();
 
-    let (out_tx, mut out_rx) = async_broadcast::broadcast(10);
+    let (out_tx, mut out_rx): (Sender<Arc<HotShotEvent<TestTypes>>>, _) = async_broadcast::broadcast(10);
     add_network_message_test_task(out_tx.clone(), channel.clone()).await;
 
     tx.broadcast_direct(Arc::new(HotShotEvent::QuorumProposalSend(

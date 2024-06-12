@@ -34,7 +34,6 @@ use rand::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use vbs::version::StaticVersionType;
 
 use super::{node_implementation::NodeType, signature_key::SignatureKey};
 use crate::{
@@ -174,9 +173,13 @@ pub trait NetworkMsg:
 {
 }
 
+impl<T> NetworkMsg for T where
+    T: Serialize + for<'a> Deserialize<'a> + Clone + Sync + Send + Debug + 'static
+{
+}
+
 /// Trait that bundles what we need from a request ID
 pub trait Id: Eq + PartialEq + Hash {}
-impl NetworkMsg for Vec<u8> {}
 
 /// a message
 pub trait ViewMessage<TYPES: NodeType> {
@@ -188,7 +191,10 @@ pub trait ViewMessage<TYPES: NodeType> {
 }
 
 /// Wraps a oneshot channel for responding to requests
-pub struct ResponseChannel<M: NetworkMsg>(pub oneshot::Sender<M>);
+pub struct ResponseChannel<M: NetworkMsg> {
+    /// underlying sender for this channel
+    pub sender: oneshot::Sender<M>,
+}
 
 /// A request for some data that the consensus layer is asking for.
 #[derive(Serialize, Deserialize, Derivative, Clone, Debug, PartialEq, Eq, Hash)]
@@ -229,14 +235,23 @@ pub enum ResponseMessage<TYPES: NodeType> {
     Denied,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// When a message should be broadcast to the network.
+///
+/// Network implementations may or may not respect this, at their discretion.
+pub enum BroadcastDelay {
+    /// Broadcast the message immediately
+    None,
+    /// Delay the broadcast to a given view.
+    View(u64),
+}
+
 #[async_trait]
 /// represents a networking implmentration
 /// exposes low level API for interacting with a network
 /// intended to be implemented for libp2p, the centralized server,
 /// and memory network
-pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
-    Clone + Send + Sync + 'static
-{
+pub trait ConnectedNetwork<K: SignatureKey + 'static>: Clone + Send + Sync + 'static {
     /// Pauses the underlying network
     fn pause(&self);
 
@@ -254,32 +269,31 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
 
     /// broadcast message to some subset of nodes
     /// blocking
-    async fn broadcast_message<VER: StaticVersionType + 'static>(
+    async fn broadcast_message(
         &self,
-        message: M,
+        message: Vec<u8>,
         recipients: BTreeSet<K>,
-        bind_version: VER,
+        broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError>;
 
     /// broadcast a message only to a DA committee
     /// blocking
-    async fn da_broadcast_message<VER: StaticVersionType + 'static>(
+    async fn da_broadcast_message(
         &self,
-        message: M,
+        message: Vec<u8>,
         recipients: BTreeSet<K>,
-        bind_version: VER,
+        broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError>;
 
     /// send messages with vid shares to its recipients
     /// blocking
-    async fn vid_broadcast_message<VER: StaticVersionType + 'static>(
+    async fn vid_broadcast_message(
         &self,
-        messages: HashMap<K, M>,
-        bind_version: VER,
+        messages: HashMap<K, Vec<u8>>,
     ) -> Result<(), NetworkError> {
-        let future_results = messages.into_iter().map(|(recipient_key, message)| {
-            self.direct_message(message, recipient_key, bind_version)
-        });
+        let future_results = messages
+            .into_iter()
+            .map(|(recipient_key, message)| self.direct_message(message, recipient_key));
         let results = join_all(future_results).await;
 
         let errors: Vec<_> = results
@@ -299,27 +313,21 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
 
     /// Sends a direct message to a specific node
     /// blocking
-    async fn direct_message<VER: StaticVersionType + 'static>(
-        &self,
-        message: M,
-        recipient: K,
-        bind_version: VER,
-    ) -> Result<(), NetworkError>;
+    async fn direct_message(&self, message: Vec<u8>, recipient: K) -> Result<(), NetworkError>;
 
     /// Receive one or many messages from the underlying network.
     ///
     /// # Errors
     /// If there is a network-related failure.
-    async fn recv_msgs(&self) -> Result<Vec<M>, NetworkError>;
+    async fn recv_msgs(&self) -> Result<Vec<Vec<u8>>, NetworkError>;
 
     /// Ask request the network for some data.  Returns the request ID for that data,
     /// The ID returned can be used for cancelling the request
-    async fn request_data<TYPES: NodeType, VER: StaticVersionType + 'static>(
+    async fn request_data<TYPES: NodeType>(
         &self,
-        _request: M,
+        _request: Vec<u8>,
         _recipient: &K,
-        _bind_version: VER,
-    ) -> Result<ResponseMessage<TYPES>, NetworkError> {
+    ) -> Result<Vec<u8>, NetworkError> {
         Err(NetworkError::UnimplementedFeature)
     }
 
@@ -329,10 +337,9 @@ pub trait ConnectedNetwork<M: NetworkMsg, K: SignatureKey + 'static>:
     /// with a return channel to send the response back to.
     ///
     /// Returns `None`` if network does not support handling requests
-    async fn spawn_request_receiver_task<VER: StaticVersionType + 'static>(
+    async fn spawn_request_receiver_task(
         &self,
-        _bind_version: VER,
-    ) -> Option<mpsc::Receiver<(M, ResponseChannel<M>)>> {
+    ) -> Option<mpsc::Receiver<(Vec<u8>, ResponseChannel<Vec<u8>>)>> {
         None
     }
 

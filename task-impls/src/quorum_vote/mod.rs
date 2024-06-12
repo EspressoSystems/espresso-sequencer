@@ -1,12 +1,6 @@
-use anyhow::{bail, ensure, Context, Result};
 use std::{collections::HashMap, sync::Arc};
-use vbs::version::Version;
 
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
-    quorum_vote::handlers::handle_quorum_proposal_validated,
-};
+use anyhow::{bail, ensure, Context, Result};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
@@ -40,6 +34,13 @@ use jf_vid::VidScheme;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, trace, warn};
+use vbs::version::Version;
+
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, cancel_task},
+    quorum_vote::handlers::handle_quorum_proposal_validated,
+};
 
 /// Event handlers for `QuorumProposalValidated`.
 mod handlers;

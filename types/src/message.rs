@@ -5,17 +5,22 @@
 
 use std::{fmt, fmt::Debug, marker::PhantomData};
 
-use anyhow::{ensure, Result};
+use anyhow::{bail, ensure, Context, Result};
 use cdn_proto::mnemonic;
 use committable::Committable;
 use derivative::Derivative;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use vbs::{
+    version::{StaticVersionType, Version},
+    BinarySerializer, Serializer,
+};
 
 use crate::{
+    constants::{Base, Upgrade},
     data::{DaProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare},
     simple_certificate::{
-        DaCertificate, ViewSyncCommitCertificate2, ViewSyncFinalizeCertificate2,
-        ViewSyncPreCommitCertificate2,
+        DaCertificate, UpgradeCertificate, ViewSyncCommitCertificate2,
+        ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
         DaVote, QuorumVote, TimeoutVote, UpgradeVote, ViewSyncCommitVote, ViewSyncFinalizeVote,
@@ -23,7 +28,7 @@ use crate::{
     },
     traits::{
         election::Membership,
-        network::{DataRequest, NetworkMsg, ResponseMessage, ViewMessage},
+        network::{DataRequest, ResponseMessage, ViewMessage},
         node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
     },
@@ -41,6 +46,103 @@ pub struct Message<TYPES: NodeType> {
     pub kind: MessageKind<TYPES>,
 }
 
+/// Trait for messages that have a versioned serialization.
+pub trait VersionedMessage<'a, TYPES>
+where
+    TYPES: NodeType,
+    Self: Serialize + Deserialize<'a> + HasViewNumber<TYPES> + Sized,
+{
+    /// Serialize a message with a version number, using `message.view_number()` and an optional decided upgrade certificate to determine the message's version.
+    ///
+    /// # Errors
+    ///
+    /// Errors if serialization fails.
+    fn serialize(
+        &self,
+        upgrade_certificate: &Option<UpgradeCertificate<TYPES>>,
+    ) -> Result<Vec<u8>> {
+        let view = self.view_number();
+
+        let version = match upgrade_certificate {
+            Some(ref cert) => {
+                if view >= cert.data.new_version_first_view
+                    && cert.data.new_version == Upgrade::VERSION
+                {
+                    Upgrade::VERSION
+                } else if view >= cert.data.new_version_first_view
+                    && cert.data.new_version != Upgrade::VERSION
+                {
+                    bail!("The network has upgraded to a new version that we do not support!");
+                } else {
+                    Base::VERSION
+                }
+            }
+            None => Base::VERSION,
+        };
+
+        let serialized_message = match version {
+            Base::VERSION => Serializer::<Base>::serialize(&self),
+            Upgrade::VERSION => Serializer::<Upgrade>::serialize(&self),
+            _ => {
+                bail!("Attempted to serialize with an incompatible version. This should be impossible.");
+            }
+        };
+
+        serialized_message.context("Failed to serialize message!")
+    }
+
+    /// Deserialize a message with a version number, using `message.view_number()` and an optional decided upgrade certificate to determine the message's version. This function will fail on improperly versioned messages.
+    ///
+    /// # Errors
+    ///
+    /// Errors if deserialization fails.
+    fn deserialize(
+        message: &'a [u8],
+        upgrade_certificate: &Option<UpgradeCertificate<TYPES>>,
+    ) -> Result<Self> {
+        let version = Version::deserialize(message)
+            .context("Failed to read message version!")?
+            .0;
+
+        let deserialized_message: Self = match version {
+            Base::VERSION => Serializer::<Base>::deserialize(message),
+            Upgrade::VERSION => Serializer::<Upgrade>::deserialize(message),
+            _ => {
+                bail!("Cannot deserialize message!");
+            }
+        }
+        .context("Failed to deserialize message!")?;
+
+        let view = deserialized_message.view_number();
+
+        let expected_version = match upgrade_certificate {
+            Some(ref cert) => {
+                if view >= cert.data.new_version_first_view
+                    && cert.data.new_version == Upgrade::VERSION
+                {
+                    Upgrade::VERSION
+                } else if view >= cert.data.new_version_first_view
+                    && cert.data.new_version != Upgrade::VERSION
+                {
+                    bail!("The network has upgraded to a new version that we do not support!");
+                } else {
+                    Base::VERSION
+                }
+            }
+            None => Base::VERSION,
+        };
+
+        ensure!(
+            version == expected_version,
+            "Message has invalid version number for its view. Expected: {expected_version}, Actual: {version}, View: {view:?}"
+        );
+
+        Ok(deserialized_message)
+    }
+}
+
+impl<'a, TYPES> VersionedMessage<'a, TYPES> for Message<TYPES> where TYPES: NodeType {}
+
 impl<TYPES: NodeType> fmt::Debug for Message<TYPES> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("Message")
@@ -50,15 +152,10 @@ impl<TYPES: NodeType> fmt::Debug for Message<TYPES> {
     }
 }
 
-impl<TYPES: NodeType> NetworkMsg for Message<TYPES> {}
-
-impl<TYPES: NodeType> ViewMessage<TYPES> for Message<TYPES> {
+impl<TYPES: NodeType> HasViewNumber<TYPES> for Message<TYPES> {
     /// get the view number out of a message
     fn view_number(&self) -> TYPES::Time {
         self.kind.view_number()
-    }
-    fn purpose(&self) -> MessagePurpose {
-        self.kind.purpose()
     }
 }
 

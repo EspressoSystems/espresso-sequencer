@@ -27,7 +27,6 @@ use super::{
 };
 use crate::{
     data::{Leaf, TestableLeaf},
-    message::Message,
     traits::{
         election::Membership, signature_key::SignatureKey, states::InstanceState, BlockPayload,
     },
@@ -45,10 +44,10 @@ pub trait NodeImplementation<TYPES: NodeType>:
     Send + Sync + Clone + Eq + Hash + 'static + Serialize + for<'de> Deserialize<'de>
 {
     /// Network for all nodes
-    type QuorumNetwork: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>;
+    type QuorumNetwork: ConnectedNetwork<TYPES::SignatureKey>;
 
     /// Network for those in the DA committee
-    type DaNetwork: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>;
+    type DaNetwork: ConnectedNetwork<TYPES::SignatureKey>;
 
     /// Storage for DA layer interactions
     type Storage: Storage<TYPES>;

@@ -23,7 +23,6 @@ use hotshot_types::{
     consensus::ConsensusMetricsValue,
     constants::EVENT_CHANNEL_SIZE,
     data::Leaf,
-    message::Message,
     simple_certificate::QuorumCertificate,
     traits::{
         election::Membership,
@@ -56,7 +55,7 @@ impl<T: std::error::Error + Sync + Send + 'static> TaskErr for T {}
 impl<
         TYPES: NodeType<InstanceState = TestInstanceState, ValidatedState = TestValidatedState>,
         I: TestableNodeImplementation<TYPES>,
-        N: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+        N: ConnectedNetwork<TYPES::SignatureKey>,
     > TestRunner<TYPES, I, N>
 where
     I: TestableNodeImplementation<TYPES>,
@@ -477,7 +476,7 @@ pub struct LateStartNode<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> 
 pub struct TestRunner<
     TYPES: NodeType,
     I: TestableNodeImplementation<TYPES>,
-    N: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+    N: ConnectedNetwork<TYPES::SignatureKey>,
 > {
     /// test launcher, contains a bunch of useful metadata and closures
     pub(crate) launcher: TestLauncher<TYPES, I>,

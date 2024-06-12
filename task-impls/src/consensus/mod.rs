@@ -147,6 +147,9 @@ pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// This node's storage ref
     pub storage: Arc<RwLock<I::Storage>>,
+
+    /// an upgrade certificate that has been decided on, if any
+    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I> {

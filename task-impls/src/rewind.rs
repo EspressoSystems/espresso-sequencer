@@ -1,12 +1,10 @@
-use std::sync::Arc;
+use std::{fs::OpenOptions, io::Write, sync::Arc};
 
 use anyhow::Result;
 use async_broadcast::{Receiver, Sender};
 use async_trait::async_trait;
 use hotshot_task::task::TaskState;
 use hotshot_types::traits::node_implementation::NodeType;
-use std::fs::OpenOptions;
-use std::io::Write;
 
 use crate::events::HotShotEvent;
 

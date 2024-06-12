@@ -3,7 +3,6 @@ use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 use hotshot::traits::{NodeImplementation, TestableNodeImplementation};
 use hotshot_example_types::storage_types::TestStorage;
 use hotshot_types::{
-    message::Message,
     traits::{
         network::{AsyncGenerator, ConnectedNetwork},
         node_implementation::NodeType,
@@ -43,9 +42,7 @@ pub struct TestLauncher<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, I> {
     /// launch the test
     #[must_use]
-    pub fn launch<N: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>>(
-        self,
-    ) -> TestRunner<TYPES, I, N> {
+    pub fn launch<N: ConnectedNetwork<TYPES::SignatureKey>>(self) -> TestRunner<TYPES, I, N> {
         TestRunner::<TYPES, I, N> {
             launcher: self,
             nodes: Vec::new(),

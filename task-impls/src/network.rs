@@ -7,23 +7,22 @@ use async_lock::RwLock;
 use async_trait::async_trait;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
-    constants::{BASE_VERSION, STATIC_VER_0_1},
     data::{VidDisperse, VidDisperseShare},
     event::HotShotAction,
     message::{
         DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message, MessageKind, Proposal,
-        SequencingMessage,
+        SequencingMessage, VersionedMessage,
     },
+    simple_certificate::UpgradeCertificate,
     traits::{
         election::Membership,
-        network::{ConnectedNetwork, TransmitType, ViewMessage},
+        network::{BroadcastDelay, ConnectedNetwork, TransmitType, ViewMessage},
         node_implementation::{ConsensusTime, NodeType},
         storage::Storage,
     },
     vote::{HasViewNumber, Vote},
 };
-use tracing::{debug, error, instrument, warn};
-use vbs::version::Version;
+use tracing::{error, instrument, warn};
 
 use crate::{
     events::{HotShotEvent, HotShotTaskCompleted},
@@ -38,7 +37,7 @@ pub fn quorum_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool 
             | HotShotEvent::QuorumVoteSend(_)
             | HotShotEvent::DacSend(_, _)
             | HotShotEvent::TimeoutVoteSend(_)
-            | HotShotEvent::VersionUpgrade(_)
+            | HotShotEvent::UpgradeDecided(_)
             | HotShotEvent::ViewChange(_)
     )
 }
@@ -49,7 +48,7 @@ pub fn upgrade_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool
         event.as_ref(),
         HotShotEvent::UpgradeProposalSend(_, _)
             | HotShotEvent::UpgradeVoteSend(_)
-            | HotShotEvent::VersionUpgrade(_)
+            | HotShotEvent::UpgradeDecided(_)
             | HotShotEvent::ViewChange(_)
     )
 }
@@ -60,7 +59,7 @@ pub fn da_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
         event.as_ref(),
         HotShotEvent::DaProposalSend(_, _)
             | HotShotEvent::DaVoteSend(_)
-            | HotShotEvent::VersionUpgrade(_)
+            | HotShotEvent::UpgradeDecided(_)
             | HotShotEvent::ViewChange(_)
     )
 }
@@ -70,7 +69,7 @@ pub fn vid_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
     !matches!(
         event.as_ref(),
         HotShotEvent::VidDisperseSend(_, _)
-            | HotShotEvent::VersionUpgrade(_)
+            | HotShotEvent::UpgradeDecided(_)
             | HotShotEvent::ViewChange(_)
     )
 }
@@ -85,7 +84,7 @@ pub fn view_sync_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bo
             | HotShotEvent::ViewSyncPreCommitVoteSend(_)
             | HotShotEvent::ViewSyncCommitVoteSend(_)
             | HotShotEvent::ViewSyncFinalizeVoteSend(_)
-            | HotShotEvent::VersionUpgrade(_)
+            | HotShotEvent::UpgradeDecided(_)
             | HotShotEvent::ViewChange(_)
     )
 }
@@ -190,15 +189,13 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
 /// network event task state
 pub struct NetworkEventTaskState<
     TYPES: NodeType,
-    COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+    COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
     S: Storage<TYPES>,
 > {
     /// comm channel
     pub channel: Arc<COMMCHANNEL>,
     /// view number
     pub view: TYPES::Time,
-    /// version
-    pub version: Version,
     /// membership for the channel
     pub membership: TYPES::Membership,
     // TODO ED Need to add exchange so we can get the recipient key and our own key?
@@ -206,12 +203,14 @@ pub struct NetworkEventTaskState<
     pub filter: fn(&Arc<HotShotEvent<TYPES>>) -> bool,
     /// Storage to store actionable events
     pub storage: Arc<RwLock<S>>,
+    /// Decided upgrade certificate
+    pub decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
 }
 
 #[async_trait]
 impl<
         TYPES: NodeType,
-        COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+        COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
         S: Storage<TYPES> + 'static,
     > TaskState for NetworkEventTaskState<TYPES, COMMCHANNEL, S>
 {
@@ -237,7 +236,7 @@ impl<
 
 impl<
         TYPES: NodeType,
-        COMMCHANNEL: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+        COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
         S: Storage<TYPES> + 'static,
     > NetworkEventTaskState<TYPES, COMMCHANNEL, S>
 {
@@ -250,7 +249,7 @@ impl<
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
         membership: &TYPES::Membership,
-    ) -> Option<HotShotTaskCompleted> {
+    ) {
         let mut maybe_action = None;
         let (sender, message_kind, transmit): (_, _, TransmitType<TYPES>) =
             match event.as_ref().clone() {
@@ -277,7 +276,8 @@ impl<
                     )
                 }
                 HotShotEvent::VidDisperseSend(proposal, sender) => {
-                    return self.handle_vid_disperse_proposal(proposal, &sender);
+                    self.handle_vid_disperse_proposal(proposal, &sender);
+                    return;
                 }
                 HotShotEvent::DaProposalSend(proposal, sender) => {
                     maybe_action = Some(HotShotAction::DaPropose);
@@ -381,22 +381,23 @@ impl<
                     self.channel
                         .update_view::<TYPES>(self.view.u64(), membership)
                         .await;
-                    return None;
+                    return;
                 }
-                HotShotEvent::VersionUpgrade(version) => {
-                    debug!("Updating internal version in network task to {:?}", version);
-                    self.version = version;
-                    return None;
+                HotShotEvent::UpgradeDecided(cert) => {
+                    self.decided_upgrade_certificate = Some(cert.clone());
+                    return;
                 }
-                HotShotEvent::Shutdown => {
-                    error!("Networking task shutting down");
-                    return Some(HotShotTaskCompleted);
-                }
-                event => {
-                    error!("Receieved unexpected message in network task {:?}", event);
-                    return None;
+                _ => {
+                    return;
                 }
             };
+        let broadcast_delay = match &message_kind {
+            MessageKind::Consensus(
+                SequencingMessage::General(GeneralConsensusMessage::Vote(_))
+                | SequencingMessage::Da(_),
+            ) => BroadcastDelay::View(*message_kind.view_number()),
+            _ => BroadcastDelay::None,
+        };
         let message = Message {
             sender,
             kind: message_kind,
@@ -405,7 +406,7 @@ impl<
         let committee = membership.whole_committee(view);
         let net = Arc::clone(&self.channel);
         let storage = Arc::clone(&self.storage);
-        let version = self.version;
+        let decided_upgrade_certificate = self.decided_upgrade_certificate.clone();
         async_spawn(async move {
             if NetworkEventTaskState::<TYPES, COMMCHANNEL, S>::maybe_record_action(
                 maybe_action,
@@ -426,23 +427,26 @@ impl<
                 }
             }
 
-            let transmit_result = if version == BASE_VERSION {
-                match transmit {
-                    TransmitType::Direct(recipient) => {
-                        net.direct_message(message, recipient, STATIC_VER_0_1).await
-                    }
-                    TransmitType::Broadcast => {
-                        net.broadcast_message(message, committee, STATIC_VER_0_1)
-                            .await
-                    }
-                    TransmitType::DaCommitteeBroadcast => {
-                        net.da_broadcast_message(message, committee, STATIC_VER_0_1)
-                            .await
-                    }
+            let serialized_message = match message.serialize(&decided_upgrade_certificate) {
+                Ok(serialized) => serialized,
+                Err(e) => {
+                    error!("Failed to serialize message: {}", e);
+                    return;
                 }
-            } else {
-                error!("The network has upgraded to {:?}, which is not implemented in this instance of HotShot.", version);
-                return;
+            };
+
+            let transmit_result = match transmit {
+                TransmitType::Direct(recipient) => {
+                    net.direct_message(serialized_message, recipient).await
+                }
+                TransmitType::Broadcast => {
+                    net.broadcast_message(serialized_message, committee, broadcast_delay)
+                        .await
+                }
+                TransmitType::DaCommitteeBroadcast => {
+                    net.da_broadcast_message(serialized_message, committee, broadcast_delay)
+                        .await
+                }
             };
 
             match transmit_result {
@@ -450,8 +454,6 @@ impl<
                 Err(e) => error!("Failed to send message from network task: {:?}", e),
             }
         });
-
-        None
     }
 
     /// handle `VidDisperseSend`
@@ -462,20 +464,26 @@ impl<
     ) -> Option<HotShotTaskCompleted> {
         let view = vid_proposal.data.view_number;
         let vid_share_proposals = VidDisperseShare::to_vid_share_proposals(vid_proposal);
-        let messages: HashMap<_, _> = vid_share_proposals
-            .into_iter()
-            .map(|proposal| {
-                (
-                    proposal.data.recipient_key.clone(),
-                    Message {
-                        sender: sender.clone(),
-                        kind: MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
-                            DaConsensusMessage::VidDisperseMsg(proposal),
-                        )), // TODO not a DaConsensusMessage https://github.com/EspressoSystems/HotShot/issues/1696
-                    },
-                )
-            })
-            .collect();
+        let mut messages = HashMap::new();
+
+        for proposal in vid_share_proposals {
+            let recipient = proposal.data.recipient_key.clone();
+            let message = Message {
+                sender: sender.clone(),
+                kind: MessageKind::<TYPES>::from_consensus_message(SequencingMessage::Da(
+                    DaConsensusMessage::VidDisperseMsg(proposal),
+                )), // TODO not a DaConsensusMessage https://github.com/EspressoSystems/HotShot/issues/1696
+            };
+            let serialized_message = match message.serialize(&self.decided_upgrade_certificate) {
+                Ok(serialized) => serialized,
+                Err(e) => {
+                    error!("Failed to serialize message: {}", e);
+                    continue;
+                }
+            };
+
+            messages.insert(recipient, serialized_message);
+        }
 
         let net = Arc::clone(&self.channel);
         let storage = Arc::clone(&self.storage);
@@ -490,7 +498,7 @@ impl<
             {
                 return;
             }
-            match net.vid_broadcast_message(messages, STATIC_VER_0_1).await {
+            match net.vid_broadcast_message(messages).await {
                 Ok(()) => {}
                 Err(e) => error!("Failed to send message from network task: {:?}", e),
             }

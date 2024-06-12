@@ -5,7 +5,6 @@ use hotshot::traits::{
 };
 use hotshot_types::{
     data::ViewNumber,
-    message::Message,
     signature_key::{BLSPubKey, BuilderKey},
     traits::node_implementation::NodeType,
 };
@@ -75,8 +74,8 @@ impl<TYPES: NodeType> NodeImplementation<TYPES> for PushCdnImpl {
 }
 
 impl<TYPES: NodeType> NodeImplementation<TYPES> for MemoryImpl {
-    type QuorumNetwork = MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>;
-    type DaNetwork = MemoryNetwork<Message<TYPES>, TYPES::SignatureKey>;
+    type QuorumNetwork = MemoryNetwork<TYPES::SignatureKey>;
+    type DaNetwork = MemoryNetwork<TYPES::SignatureKey>;
     type Storage = TestStorage<TYPES>;
 }
 
@@ -87,7 +86,7 @@ impl<TYPES: NodeType> NodeImplementation<TYPES> for CombinedImpl {
 }
 
 impl<TYPES: NodeType> NodeImplementation<TYPES> for Libp2pImpl {
-    type QuorumNetwork = Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>;
-    type DaNetwork = Libp2pNetwork<Message<TYPES>, TYPES::SignatureKey>;
+    type QuorumNetwork = Libp2pNetwork<TYPES::SignatureKey>;
+    type DaNetwork = Libp2pNetwork<TYPES::SignatureKey>;
     type Storage = TestStorage<TYPES>;
 }

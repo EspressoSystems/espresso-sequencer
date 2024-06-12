@@ -596,6 +596,35 @@ pub struct HotShotConfigFile<KEY: SignatureKey> {
     /// Builder API base URL
     #[serde(default = "default_builder_url")]
     pub builder_url: Url,
+    /// Upgrade config
+    pub upgrade: UpgradeConfig,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(bound(deserialize = ""))]
+/// Holds configuration for the upgrade task.
+pub struct UpgradeConfig {
+    /// View to start proposing an upgrade
+    pub start_proposing_view: u64,
+    /// View to stop proposing an upgrade. To prevent proposing an upgrade, set stop_proposing_view <= start_proposing_view.
+    pub stop_proposing_view: u64,
+    /// View to start voting on an upgrade
+    pub start_voting_view: u64,
+    /// View to stop voting on an upgrade. To prevent voting on an upgrade, set stop_voting_view <= start_voting_view.
+    pub stop_voting_view: u64,
+}
+
+// Explicitly implementing `Default` for clarity.
+#[allow(clippy::derivable_impls)]
+impl Default for UpgradeConfig {
+    fn default() -> Self {
+        UpgradeConfig {
+            start_proposing_view: u64::MAX,
+            stop_proposing_view: 0,
+            start_voting_view: u64::MAX,
+            stop_voting_view: 0,
+        }
+    }
 }
 
 /// Holds configuration for a validator node
@@ -675,6 +704,10 @@ impl<KEY: SignatureKey> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY> {
             builder_timeout: val.builder_timeout,
             data_request_delay: val.data_request_delay,
             builder_url: val.builder_url,
+            start_proposing_view: val.upgrade.start_proposing_view,
+            stop_proposing_view: val.upgrade.stop_proposing_view,
+            start_voting_view: val.upgrade.start_voting_view,
+            stop_voting_view: val.upgrade.stop_voting_view,
         }
     }
 }
@@ -744,6 +777,7 @@ impl<KEY: SignatureKey> Default for HotShotConfigFile<KEY> {
             builder_timeout: Duration::from_secs(10),
             data_request_delay: Duration::from_millis(200),
             builder_url: default_builder_url(),
+            upgrade: UpgradeConfig::default(),
         }
     }
 }

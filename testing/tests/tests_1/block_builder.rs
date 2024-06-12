@@ -8,7 +8,7 @@ use hotshot_example_types::{
 use hotshot_task_impls::builder::{BuilderClient, BuilderClientError};
 use hotshot_testing::block_builder::run_random_builder;
 use hotshot_types::{
-    constants::Version01,
+    constants::Base,
     traits::{node_implementation::NodeType, signature_key::SignatureKey, BlockPayload},
 };
 use tide_disco::Url;
@@ -42,7 +42,7 @@ async fn test_random_block_builder() {
     );
     let builder_started = Instant::now();
 
-    let client: BuilderClient<TestTypes, Version01> = BuilderClient::new(api_url);
+    let client: BuilderClient<TestTypes, Base> = BuilderClient::new(api_url);
     assert!(client.connect(Duration::from_millis(100)).await);
 
     let (pub_key, private_key) =

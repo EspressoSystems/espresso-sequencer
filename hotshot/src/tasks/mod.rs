@@ -5,7 +5,6 @@ pub mod task_state;
 
 use std::{sync::Arc, time::Duration};
 
-use crate::{tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use hotshot_task::task::Task;
 #[cfg(not(feature = "dependency-tasks"))]
@@ -29,14 +28,15 @@ use hotshot_task_impls::{
     view_sync::ViewSyncTaskState,
 };
 use hotshot_types::{
-    constants::{Version01, VERSION_0_1},
-    message::{Message, Messages},
+    message::{Messages, VersionedMessage},
     traits::{
         network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
     },
 };
 use vbs::version::StaticVersionType;
+
+use crate::{tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi};
 
 /// event for global event stream
 #[derive(Clone, Debug)]
@@ -51,7 +51,7 @@ pub enum GlobalEvent {
 pub async fn add_request_network_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     handle: &mut SystemContextHandle<TYPES, I>,
 ) {
-    let state = NetworkRequestState::<TYPES, I, Version01>::create_from(handle).await;
+    let state = NetworkRequestState::<TYPES, I>::create_from(handle).await;
 
     let task = Task::new(
         state,
@@ -64,7 +64,7 @@ pub async fn add_request_network_task<TYPES: NodeType, I: NodeImplementation<TYP
 /// Add a task which responds to requests on the network.
 pub async fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     handle: &mut SystemContextHandle<TYPES, I>,
-    request_receiver: RequestReceiver<TYPES>,
+    request_receiver: RequestReceiver,
 ) {
     let state = NetworkResponseState::<TYPES>::new(
         handle.hotshot.consensus(),
@@ -73,18 +73,16 @@ pub async fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         handle.public_key().clone(),
         handle.private_key().clone(),
     );
-    handle
-        .network_registry
-        .register(run_response_task::<TYPES, Version01>(
-            state,
-            handle.internal_event_stream.1.activate_cloned(),
-        ));
+    handle.network_registry.register(run_response_task::<TYPES>(
+        state,
+        handle.internal_event_stream.1.activate_cloned(),
+    ));
 }
 /// Add the network task to handle messages and publish events.
 pub async fn add_network_message_task<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
-    NET: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+    NET: ConnectedNetwork<TYPES::SignatureKey>,
 >(
     handle: &mut SystemContextHandle<TYPES, I>,
     channel: Arc<NET>,
@@ -94,12 +92,34 @@ pub async fn add_network_message_task<
         event_stream: handle.internal_event_stream.0.clone(),
     };
 
+    let decided_upgrade_certificate = Arc::clone(&handle.hotshot.decided_upgrade_certificate);
+
     let network = Arc::clone(&net);
     let mut state = network_state.clone();
     let task_handle = async_spawn(async move {
         loop {
+            let decided_upgrade_certificate_lock = decided_upgrade_certificate.read().await.clone();
             let msgs = match network.recv_msgs().await {
-                Ok(msgs) => Messages(msgs),
+                Ok(msgs) => {
+                    let mut deserialized_messages = Vec::new();
+
+                    for msg in msgs {
+                        let deserialized_message = match VersionedMessage::deserialize(
+                            &msg,
+                            &decided_upgrade_certificate_lock,
+                        ) {
+                            Ok(deserialized) => deserialized,
+                            Err(e) => {
+                                tracing::error!("Failed to deserialize message: {}", e);
+                                return;
+                            }
+                        };
+
+                        deserialized_messages.push(deserialized_message);
+                    }
+
+                    Messages(deserialized_messages)
+                }
                 Err(err) => {
                     tracing::error!("failed to receive messages: {err}");
 
@@ -121,7 +141,7 @@ pub async fn add_network_message_task<
 pub async fn add_network_event_task<
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
-    NET: ConnectedNetwork<Message<TYPES>, TYPES::SignatureKey>,
+    NET: ConnectedNetwork<TYPES::SignatureKey>,
 >(
     handle: &mut SystemContextHandle<TYPES, I>,
     channel: Arc<NET>,
@@ -131,10 +151,10 @@ pub async fn add_network_event_task<
     let network_state: NetworkEventTaskState<_, _, _> = NetworkEventTaskState {
         channel,
         view: TYPES::Time::genesis(),
-        version: VERSION_0_1,
         membership,
         filter,
         storage: Arc::clone(&handle.storage()),
+        decided_upgrade_certificate: None,
     };
     let task = Task::new(
         network_state,

@@ -13,9 +13,7 @@ pub mod push_cdn_network;
 
 use custom_debug::Debug;
 use hotshot_types::traits::metrics::{Counter, Gauge, Metrics, NoMetrics};
-pub use hotshot_types::traits::network::{
-    FailedToSerializeSnafu, NetworkError, NetworkReliability,
-};
+pub use hotshot_types::traits::network::{NetworkError, NetworkReliability};
 
 /// Contains several `NetworkingMetrics` that we're interested in from the networking interfaces
 #[derive(Clone, Debug)]
