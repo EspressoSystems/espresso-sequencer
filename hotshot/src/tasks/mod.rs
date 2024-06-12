@@ -21,11 +21,13 @@ use hotshot_task_impls::{
     vid::VidTaskState,
     view_sync::ViewSyncTaskState,
 };
+
 #[cfg(feature = "dependency-tasks")]
 use hotshot_task_impls::{
     consensus2::Consensus2TaskState, quorum_proposal::QuorumProposalTaskState,
     quorum_proposal_recv::QuorumProposalRecvTaskState, quorum_vote::QuorumVoteTaskState,
 };
+
 use hotshot_types::{
     constants::{Version01, VERSION_0_1},
     message::{Message, Messages},

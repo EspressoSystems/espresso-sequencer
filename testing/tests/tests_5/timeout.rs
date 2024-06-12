@@ -34,7 +34,7 @@ async fn test_timeout() {
     metadata.timing_data = timing_data;
 
     metadata.overall_safety_properties = OverallSafetyPropertiesDescription {
-        num_failed_views: 3,
+        num_failed_views: 25,
         num_successful_views: 25,
         ..Default::default()
     };
