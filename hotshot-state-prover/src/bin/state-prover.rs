@@ -122,12 +122,12 @@ async fn main() {
 
     if args.daemon {
         // Launching the prover service daemon
-        if let Err(err) = run_prover_service(config, SEQUENCER_VERSION).await{
+        if let Err(err) = run_prover_service(config, SEQUENCER_VERSION).await {
             tracing::error!("Error running prover service: {:?}", err);
         };
     } else {
         // Run light client state update once
-        if let Err(err) = run_prover_once(config, SEQUENCER_VERSION).await{
+        if let Err(err) = run_prover_once(config, SEQUENCER_VERSION).await {
             tracing::error!("Error running prover once: {:?}", err);
         };
     }
