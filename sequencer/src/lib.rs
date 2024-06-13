@@ -27,6 +27,8 @@ use genesis::{GenesisHeader, L1Finalized};
 
 use l1_client::L1Client;
 
+use libp2p::Multiaddr;
+use network::libp2p::split_off_peer_id;
 use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
@@ -292,6 +294,9 @@ pub struct NetworkParams {
     pub libp2p_advertise_address: SocketAddr,
     /// The address to bind to for Libp2p
     pub libp2p_bind_address: SocketAddr,
+    /// The (optional) bootstrap node addresses for Libp2p. If supplied, these will
+    /// override the bootstrap nodes specified in the config file.
+    pub libp2p_bootstrap_nodes: Option<Vec<Multiaddr>>,
 }
 
 pub struct L1Params {
@@ -380,9 +385,23 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         }
     };
 
-    // If the network is configured manually, override what we got from the orchestrator
-    if let Some(genesis_network_config) = genesis.network {
-        genesis_network_config.populate_config(&mut config)?;
+    // If the `Libp2p` bootstrap nodes were supplied via the command line, override those
+    // present in the config file.
+    if let Some(bootstrap_nodes) = network_params.libp2p_bootstrap_nodes {
+        if let Some(libp2p_config) = config.libp2p_config.as_mut() {
+            // If the libp2p configuration is present, we can override the bootstrap nodes.
+
+            // Split off the peer ID from the addresses
+            libp2p_config.bootstrap_nodes = bootstrap_nodes
+                .into_iter()
+                .map(split_off_peer_id)
+                .collect::<Result<Vec<_>, _>>()
+                .with_context(|| "Failed to parse peer ID from bootstrap node")?;
+        } else {
+            // If not, don't try launching with them. Eventually we may want to
+            // provide a default configuration here instead.
+            tracing::warn!("No libp2p configuration found, ignoring supplied bootstrap nodes");
+        }
     }
 
     let node_index = config.node_index;

@@ -9,12 +9,3 @@ fee_recipient = '0x0000000000000000000000000000000000000000'
 
 [header]
 timestamp = "1970-01-01T00:00:00Z"
-
-[network]
-# bootstrap_nodes = [
-#     "/ip4/127.0.0.1/udp/7003/quic-v1/p2p/12D3KooWFLKhKr61FhtdcMNR2wV4XHnceJQRFo6KKwQvwvRCRvy6",
-#     "/ip4/127.0.0.1/udp/7001/quic-v1/p2p/12D3KooWR9caJf3eqwyB3rZQX7DFUYTjM1jvXZJJxYbwhkAnPf4w",
-#     "/ip4/127.0.0.1/udp/7002/quic-v1/p2p/12D3KooWGbEJ2VsfX8KdUZgVaLYFndAxmtdScC91EritK57FbE2N",
-#     "/ip4/127.0.0.1/udp/7000/quic-v1/p2p/12D3KooWDtGECieXrqKoVxfDhU7afYnS6toj1GqWXuEDfcaGPDxa",
-#     "/ip4/127.0.0.1/udp/1769/quic-v1/p2p/12D3KooWCzRqAGWkUib7EqHgaWsJsGvKnujXSLsm4xf8u36nJKhH"
-# ]

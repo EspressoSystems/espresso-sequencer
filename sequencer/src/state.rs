@@ -273,7 +273,7 @@ pub fn validate_proposal(
 
     // validate block size and fee
     let block_size = VidSchemeType::get_payload_byte_len(vid_common) as u64;
-    if block_size >= *expected_chain_config.max_block_size {
+    if block_size > *expected_chain_config.max_block_size {
         return Err(ProposalValidationError::MaxBlockSizeExceeded {
             max_block_size: expected_chain_config.max_block_size,
             block_size: block_size.into(),
