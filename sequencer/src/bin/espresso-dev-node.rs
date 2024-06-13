@@ -181,7 +181,7 @@ async fn main() -> anyhow::Result<()> {
             .with_chain_id(chain_id)
             .signer()
             .clone(),
-        orchestrator_url: "http://localhost".parse().unwrap(), // This should not be used in dev-node
+        sequencer_url: "http://localhost".parse().unwrap(), // This should not be used in dev-node
         port: None,
         stake_table_capacity: STAKE_TABLE_CAPACITY_FOR_TEST as usize,
     };
@@ -211,7 +211,7 @@ mod tests {
     use ethers::types::{Address, U256};
     use futures::TryStreamExt;
     use hotshot_query_service::{
-        availability::{BlockQueryData, TransactionQueryData},
+        availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
         data_source::sql::testing::TmpDb,
     };
     use hotshot_types::light_client::StateSignaturesBundle;
@@ -396,6 +396,14 @@ mod tests {
 
             api_client
                 .get::<Header>("availability/header/3")
+                .send()
+                .await
+                .unwrap();
+
+            api_client
+                .get::<VidCommonQueryData<SeqTypes>>(&format!(
+                    "availability/vid/common/{tx_block_height}"
+                ))
                 .send()
                 .await
                 .unwrap();
