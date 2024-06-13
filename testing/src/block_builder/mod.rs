@@ -10,7 +10,6 @@ use hotshot_builder_api::{
     builder::{Error, Options},
     data_source::BuilderDataSource,
 };
-use hotshot_example_types::block_types::TestTransaction;
 use hotshot_types::{
     constants::Base,
     traits::{
@@ -68,7 +67,7 @@ pub fn run_builder_source<TYPES, Source>(
     mut change_receiver: Receiver<BuilderChange>,
     source: Source,
 ) where
-    TYPES: NodeType<Transaction = TestTransaction>,
+    TYPES: NodeType,
     <TYPES as NodeType>::InstanceState: Default,
     Source: Clone + Send + Sync + tide_disco::method::ReadState + 'static,
     <Source as ReadState>::State: Sync + Send + BuilderDataSource<TYPES>,
