@@ -18,7 +18,7 @@ use crate::{
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::Display;
 use hotshot_types::traits::EncodeBytes;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::{collections::HashSet, sync::Arc};
 use thiserror::Error;
 
@@ -125,9 +125,34 @@ const NS_ID_BYTE_LEN: usize = 4;
 /// but we need to maintain serialization compatibility.
 /// <https://github.com/EspressoSystems/espresso-sequencer/issues/1575>
 #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(remote = "Self")] // workaround https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
 pub struct NsTable {
     #[serde(with = "base64_bytes")]
     bytes: Vec<u8>,
+}
+
+// Boilerplate to check invariants on deserialization
+// https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
+impl<'de> Deserialize<'de> for NsTable {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let unchecked = NsTable::deserialize(deserializer)?;
+        unchecked.validate().map_err(de::Error::custom)?;
+        Ok(unchecked)
+    }
+}
+
+// Boilerplate to check invariants on deserialization
+// https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
+impl Serialize for NsTable {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        NsTable::serialize(self, serializer)
+    }
 }
 
 impl NsTable {
