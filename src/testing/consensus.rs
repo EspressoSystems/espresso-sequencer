@@ -108,11 +108,12 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             <SimpleBuilderImplementation as TestBuilderImplementation<MockTypes>>::start(
                 NUM_NODES,
                 SimpleBuilderConfig::default(),
+                Default::default(),
             )
             .await;
 
         let mut config = HotShotConfig {
-            builder_url: builder_url.clone(),
+            builder_urls: vec1::vec1![builder_url.clone()],
             fixed_leader_for_gpuvid: 0,
             num_nodes_with_stake: num_staked_nodes,
             num_nodes_without_stake: 0,
@@ -135,6 +136,10 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                 known_nodes_with_stake.len() as u64,
             ),
             builder_timeout: Duration::from_secs(1),
+            start_proposing_view: 0,
+            stop_proposing_view: 0,
+            start_voting_view: 0,
+            stop_voting_view: 0,
         };
         update_config(&mut config);
 
@@ -205,7 +210,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
         .await;
 
         // Hook the builder up to the event stream from the first node
-        if let Some(builder_task) = builder_task {
+        let builder_task  = {
             builder_task.start(Box::new(nodes[0].hotshot.event_stream()));
         }
 

@@ -213,9 +213,10 @@ mod test {
         Error,
     };
     use futures::stream::StreamExt;
-    use hotshot_types::constants::STATIC_VER_0_1;
+    use hotshot_types::constants::Base;
     use portpicker::pick_unused_port;
     use tide_disco::App;
+    use vbs::version::StaticVersionType;
 
     type Provider = AnyProvider<MockTypes>;
 
@@ -231,12 +232,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
-            define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+            define_api(&Default::default(), Base::instance()).unwrap(),
         )
         .unwrap();
         let _server = BackgroundTask::spawn(
             "server",
-            app.serve(format!("0.0.0.0:{port}"), STATIC_VER_0_1),
+            app.serve(format!("0.0.0.0:{port}"), Base::instance()),
         );
 
         // Start a data source which is not receiving events from consensus, only from a peer.
@@ -246,7 +247,7 @@ mod test {
                 .with_provider(NoFetching)
                 .with_provider(QueryServiceProvider::new(
                     format!("http://localhost:{port}").parse().unwrap(),
-                    STATIC_VER_0_1,
+                    Base::instance(),
                 ));
         let mut data_source = db.config().connect(provider.clone()).await.unwrap();
 

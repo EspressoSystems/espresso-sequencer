@@ -27,7 +27,6 @@ use hotshot_example_types::{
 };
 use hotshot_types::{
     data::{QuorumProposal, ViewNumber},
-    message::Message,
     signature_key::BLSPubKey,
     traits::node_implementation::NodeType,
 };
@@ -136,7 +135,7 @@ impl NodeType for MockTypes {
 
 pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;
 pub type MockQuorumProposal = QuorumProposal<MockTypes>;
-pub type MockNetwork = MemoryNetwork<Message<MockTypes>, BLSPubKey>;
+pub type MockNetwork = MemoryNetwork<BLSPubKey>;
 
 pub type MockStorage = TestStorage<MockTypes>;
 
