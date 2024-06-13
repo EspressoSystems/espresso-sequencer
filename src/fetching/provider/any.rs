@@ -66,7 +66,7 @@ type VidCommonProvider<Types> = Arc<dyn DebugProvider<Types, VidCommonRequest>>;
 /// Fetching from multiple query services, for resiliency.
 ///
 /// ```
-/// # use hotshot_types::constants::STATIC_VER_0_1;
+/// # use hotshot_types::constants::Base::instance();
 /// # use hotshot_types::traits::node_implementation::NodeType;
 /// # async fn doc<Types>() -> anyhow::Result<()>
 /// # where
@@ -74,8 +74,8 @@ type VidCommonProvider<Types> = Arc<dyn DebugProvider<Types, VidCommonRequest>>;
 /// # {
 /// use hotshot_query_service::fetching::provider::{AnyProvider, QueryServiceProvider};
 ///
-/// let qs1 = QueryServiceProvider::new("https://backup.query-service.1".parse()?, STATIC_VER_0_1);
-/// let qs2 = QueryServiceProvider::new("https://backup.query-service.2".parse()?, STATIC_VER_0_1);
+/// let qs1 = QueryServiceProvider::new("https://backup.query-service.1".parse()?, Base::instance());
+/// let qs2 = QueryServiceProvider::new("https://backup.query-service.2".parse()?, Base::instance());
 /// let provider = AnyProvider::<Types>::default()
 ///     .with_provider(qs1)
 ///     .with_provider(qs2);

@@ -210,9 +210,8 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
         .await;
 
         // Hook the builder up to the event stream from the first node
-        let builder_task  = {
-            builder_task.start(Box::new(nodes[0].hotshot.event_stream()));
-        }
+
+        builder_task.start(Box::new(nodes[0].hotshot.event_stream()));
 
         let mut network = Self {
             nodes,

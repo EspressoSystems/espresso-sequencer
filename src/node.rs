@@ -181,7 +181,7 @@ mod test {
     use async_std::{sync::RwLock, task::sleep};
     use committable::Committable;
     use futures::{FutureExt, StreamExt};
-    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
+    use hotshot_types::constants::Base;
     use hotshot_types::event::EventType;
     use hotshot_types::event::LeafInfo;
     use portpicker::pick_unused_port;
@@ -205,18 +205,17 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "node",
-            define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+            define_api(&Default::default(), Base::instance()).unwrap(),
         )
         .unwrap();
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{}", port), STATIC_VER_0_1),
+            app.serve(format!("0.0.0.0:{}", port), Base::instance()),
         );
 
         // Start a client.
-        let client = Client::<Error, Version01>::new(
-            format!("http://localhost:{}/node", port).parse().unwrap(),
-        );
+        let client =
+            Client::<Error, Base>::new(format!("http://localhost:{}/node", port).parse().unwrap());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
         // Wait until a few blocks have been sequenced.
@@ -379,12 +378,12 @@ mod test {
         };
 
         let mut api =
-            define_api::<RwLock<ExtensibleDataSource<MockDataSource, u64>>, MockTypes, Version01>(
+            define_api::<RwLock<ExtensibleDataSource<MockDataSource, u64>>, MockTypes, Base>(
                 &Options {
                     extensions: vec![extensions.into()],
                     ..Default::default()
                 },
-                STATIC_VER_0_1,
+                Base::instance(),
             )
             .unwrap();
         api.get("get_ext", |_, state| {
@@ -406,12 +405,11 @@ mod test {
         let port = pick_unused_port().unwrap();
         let _server = BackgroundTask::spawn(
             "server",
-            app.serve(format!("0.0.0.0:{}", port), STATIC_VER_0_1),
+            app.serve(format!("0.0.0.0:{}", port), Base::instance()),
         );
 
-        let client = Client::<Error, Version01>::new(
-            format!("http://localhost:{}/node", port).parse().unwrap(),
-        );
+        let client =
+            Client::<Error, Base>::new(format!("http://localhost:{}/node", port).parse().unwrap());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
         assert_eq!(client.get::<u64>("ext").send().await.unwrap(), 0);
