@@ -16,9 +16,11 @@ use crate::{
     NamespaceId,
 };
 use committable::{Commitment, Committable, RawCommitmentBuilder};
+use derive_more::Display;
 use hotshot_types::traits::EncodeBytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{collections::HashSet, sync::Arc};
+use thiserror::Error;
 
 /// Byte lengths for the different items that could appear in a namespace table.
 const NUM_NSS_BYTE_LEN: usize = 4;
@@ -179,6 +181,27 @@ impl NsTable {
         index.0 < num_nss_with_duplicates
     }
 
+    /// Are the bytes of this [`NsTable`] uncorrupted?
+    ///
+    /// # Checks
+    /// 1. Disallow duplicate namespace IDs
+    /// 2. Sort by namespace ID
+    /// 3. Monotonically increasing offsets
+    /// 4. No partial entries
+    /// 5. Header consistent with byte length (obsolete after
+    ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>)
+    pub fn validate(&self) -> Result<(), NsTableValidationError> {
+        use NsTableValidationError::*;
+
+        // byte length for a table with `x` entries must be exactly
+        // `x * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN`
+        if self.bytes.len() % (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) != NUM_NSS_BYTE_LEN {
+            return Err(InvalidByteLen);
+        }
+
+        Ok(())
+    }
+
     // CRATE-VISIBLE HELPERS START HERE
 
     /// Read subslice range for the `index`th namespace from the namespace
@@ -235,6 +258,15 @@ impl Committable for NsTable {
     fn tag() -> String {
         "NSTABLE".into()
     }
+}
+
+/// Return type for [`NsTable::validate`].
+///
+/// TODO wtf is our error handling pattern?
+#[derive(Error, Debug, Display, Eq, PartialEq)]
+pub enum NsTableValidationError {
+    InvalidByteLen,
+    InvalidHeader, // TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
 }
 
 pub struct NsTableBuilder {
