@@ -75,9 +75,9 @@ derivative = "2.2"
 derive_more = "0.99"
 either = "1.12"
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main" }
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main" }
+hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.58" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.58" }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.58" }
 itertools = "0.12.1"
 jf-merkle-tree = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
 	"std",
@@ -117,7 +117,7 @@ tokio-postgres = { version = "0.7", optional = true, default-features = false, f
 
 # Dependencies enabled by feature "testing".
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0", optional = true }
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main", optional = true }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.58", optional = true }
 portpicker = { version = "0.1", optional = true }
 rand = { version = "0.8", optional = true }
 spin_sleep = { version = "1.2", optional = true }
@@ -138,7 +138,7 @@ backtrace-on-stack-overflow = { version = "0.3", optional = true }
 clap = { version = "4.5", features = ["derive", "env"] }
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
 generic-array = "0.14"
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.58" }
 portpicker = "0.1"
 rand = "0.8"
 reqwest = "0.12.3"
