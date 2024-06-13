@@ -67,6 +67,7 @@ type VidCommonProvider<Types> = Arc<dyn DebugProvider<Types, VidCommonRequest>>;
 ///
 /// ```
 /// # use hotshot_types::constants::Base;
+/// # use vbs::version::StaticVersionType;
 /// # use hotshot_types::traits::node_implementation::NodeType;
 /// # async fn doc<Types>() -> anyhow::Result<()>
 /// # where

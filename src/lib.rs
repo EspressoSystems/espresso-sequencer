@@ -38,7 +38,8 @@
 //!
 //! use async_std::{sync::{Arc, RwLock}, task::spawn};
 //! use futures::StreamExt;
-//! use hotshot_types::constants::{Base,  Base::instance()};
+//! use vbs::version::StaticVersionType;
+//! use hotshot_types::constants::Base;
 //! use hotshot::SystemContext;
 //! use tide_disco::App;
 //!
@@ -96,7 +97,8 @@
 //! ```
 //! # use async_std::task::spawn;
 //! # use hotshot::types::SystemContextHandle;
-//! # use hotshot_types::constants:: Base::instance();
+//! # use vbs::version::StaticVersionType;
+//! # use hotshot_types::constants::Base;
 //! # use hotshot_query_service::{data_source::FileSystemDataSource, Error, Options};
 //! # use hotshot_query_service::fetching::provider::NoFetching;
 //! # use hotshot_query_service::testing::mocks::{MockNodeImpl, MockTypes};
@@ -177,7 +179,7 @@
 //! # use async_std::sync::RwLock;
 //! # use async_trait::async_trait;
 //! # use futures::FutureExt;
-//! # use hotshot_types::constants:: Base::instance();
+//! # use hotshot_types::constants::Base;
 //! # use hotshot_query_service::availability::{
 //! #   self, AvailabilityDataSource, FetchBlockSnafu, TransactionIndex,
 //! # };
