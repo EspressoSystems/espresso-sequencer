@@ -1,6 +1,5 @@
 use crate::{
     l1_client::L1BlockInfo,
-    network::GenesisNetworkConfig,
     state::{FeeAccount, FeeAmount},
     ChainConfig,
 };
@@ -103,7 +102,6 @@ pub struct Genesis {
     pub accounts: HashMap<FeeAccount, FeeAmount>,
     pub l1_finalized: Option<L1Finalized>,
     pub header: GenesisHeader,
-    pub network: Option<GenesisNetworkConfig>,
     #[serde(rename = "upgrade", with = "upgrade_serialization")]
     #[serde(default)]
     pub upgrades: BTreeMap<Version, Upgrade>,

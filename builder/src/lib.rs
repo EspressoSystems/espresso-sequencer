@@ -217,7 +217,7 @@ pub mod testing {
                 data_request_delay: Duration::from_millis(200),
                 view_sync_timeout: Duration::from_secs(5),
                 fixed_leader_for_gpuvid: 0,
-                builder_url,
+                builder_urls: vec1::vec1![builder_url],
                 builder_timeout: Duration::from_secs(1),
                 start_threshold: (
                     known_nodes_with_stake.clone().len() as u64,
@@ -670,7 +670,7 @@ mod test {
         vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
     };
     use hotshot_types::utils::BuilderCommitment;
-    use sequencer::block::payload::Payload;
+    use sequencer::block::Payload;
     use sequencer::persistence::no_storage::{self, NoStorage};
     use sequencer::persistence::sql;
     use sequencer::{empty_builder_commitment, Header};

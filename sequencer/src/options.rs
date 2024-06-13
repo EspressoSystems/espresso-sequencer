@@ -8,6 +8,7 @@ use derivative::Derivative;
 use derive_more::From;
 use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
+use libp2p::Multiaddr;
 use snafu::Snafu;
 use std::{
     collections::{HashMap, HashSet},
@@ -77,6 +78,18 @@ pub struct Options {
         default_value = "localhost:1769"
     )]
     pub libp2p_advertise_address: String,
+
+    /// A comma-separated list of Libp2p multiaddresses to use as bootstrap
+    /// nodes.
+    ///
+    /// Overrides those loaded from the `HotShot` config.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_BOOTSTRAP_NODES",
+        value_delimiter = ',',
+        num_args = 1..
+    )]
+    pub libp2p_bootstrap_nodes: Option<Vec<Multiaddr>>,
 
     /// URL of the Light Client State Relay Server
     #[clap(

@@ -11,6 +11,7 @@ use std::num::{NonZeroUsize, ParseIntError};
 use std::str::FromStr;
 use std::time::Duration;
 use url::Url;
+use vec1::Vec1;
 
 #[derive(Parser)]
 struct Args {
@@ -76,8 +77,8 @@ struct Args {
     keygen_seed: [u8; 32],
 
     /// HotShot builder URL
-    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_BUILDER_URL")]
-    builder_url: Url,
+    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_BUILDER_URL", value_delimiter = ',')]
+    builder_urls: Vec<Url>,
 
     /// The maximum amount of time a leader can wait to get a block from a builder.
     ///
@@ -196,7 +197,7 @@ async fn main() {
     config.config.start_delay = args.start_delay.as_millis() as u64;
     config.config.da_staked_committee_size = args.num_nodes.get();
     config.config.da_non_staked_committee_size = 0;
-    config.config.builder_url = args.builder_url;
+    config.config.builder_urls = Vec1::try_from_vec(args.builder_urls).unwrap();
     config.config.builder_timeout = args.builder_timeout;
     run_orchestrator(
         config,

@@ -47,19 +47,19 @@ dotenvy = "0.15"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "ss/fee-upgrade" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 # Hotshot imports
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "ss/fee-upgrade" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "abdul/update-hotshot" }
-hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", branch = "abdul/update-hotshot" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "ss/fee-upgrade" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "abdul/update-hotshot" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", branch = "ss/fee-upgrade" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "daily-build" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", branch = "ss/fee-upgrade" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "ss/fee-upgrade" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "ss/fee-upgrade" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "main" }
+hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", branch = "daily-build" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "daily-build" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
@@ -97,11 +97,13 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4
   "std",
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
+libp2p = { version = "0.53", default-features = false } 
 snafu = "0.8"
 strum = { version = "0.26", features = ["derive"] }
-surf-disco = "0.7"
+surf-disco = "0.8"
 tagged-base64 = "0.4"
-tide-disco = "0.7"
+tide-disco = "0.8"
+thiserror = "1.0.61"
 time = "0.3"
 tracing = "0.1"
 bytesize = "1.3"
@@ -113,6 +115,7 @@ serde = { version = "1.0.195", features = ["derive"] }
 toml = "0.8"
 url = "2.3"
 vbs = "0.1"
+vec1 = "1.12"
 vergen = { version = "8.3", features = ["git", "gitcl"] }
 zeroize = "1.7"
 committable = "0.2"

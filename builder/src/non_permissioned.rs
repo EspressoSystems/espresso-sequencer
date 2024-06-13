@@ -290,7 +290,7 @@ mod test {
         );
 
         // builder api url
-        let hotshot_builder_api_url = hotshot_config.config.builder_url.clone();
+        let hotshot_builder_api_url = hotshot_config.config.builder_urls[0].clone();
 
         let builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder(
             &hotshot_config,

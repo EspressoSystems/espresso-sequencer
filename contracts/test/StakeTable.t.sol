@@ -120,6 +120,7 @@ contract StakeTable_Test is StakeTableCommonTest {
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
         genesis = state;
+
         lc = new LCTest(genesis, BLOCKS_PER_EPOCH_TEST);
         stakeTable = new S(address(token), address(lc), 10);
     }

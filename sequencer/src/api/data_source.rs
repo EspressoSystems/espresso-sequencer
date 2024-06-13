@@ -30,6 +30,7 @@ use hotshot_types::{
 use serde::Serialize;
 use tide_disco::Url;
 use vbs::version::StaticVersionType;
+use vec1::Vec1;
 
 pub trait DataSourceOptions: persistence::PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
@@ -215,7 +216,7 @@ pub struct PublicHotShotConfig {
     pub num_bootstrap: usize,
     pub builder_timeout: Duration,
     pub data_request_delay: Duration,
-    pub builder_url: Url,
+    pub builder_urls: Vec1<Url>,
     pub start_proposing_view: u64,
     pub stop_proposing_view: u64,
     pub start_voting_view: u64,
@@ -247,7 +248,7 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             num_bootstrap,
             builder_timeout,
             data_request_delay,
-            builder_url,
+            builder_urls,
             start_proposing_view,
             stop_proposing_view,
             start_voting_view,
@@ -274,7 +275,7 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             num_bootstrap,
             builder_timeout,
             data_request_delay,
-            builder_url,
+            builder_urls,
             start_proposing_view,
             stop_proposing_view,
             start_voting_view,
