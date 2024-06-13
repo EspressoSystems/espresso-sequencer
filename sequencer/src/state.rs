@@ -905,8 +905,6 @@ impl HotShotState<SeqTypes> for ValidatedState {
         vid_common: VidCommon,
         version: Version,
     ) -> Result<(Self, Self::Delta), Self::Error> {
-        tracing::info!("{version:?}");
-
         //validate builder fee
         if let Err(err) = validate_builder_fee(proposed_header) {
             tracing::error!("invalid builder fee: {err:#}");

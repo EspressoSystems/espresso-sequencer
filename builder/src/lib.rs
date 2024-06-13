@@ -88,7 +88,7 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     app.register_module("txn_submit", private_mempool_api)
         .expect("Failed to register the private mempool API");
 
-    async_spawn(app.serve(url, vbs::version::StaticVersion::<0, 1> {}));
+    async_spawn(app.serve(url, Base::instance()));
 }
 
 #[cfg(test)]
@@ -446,7 +446,7 @@ pub mod testing {
             app.register_module("hotshot-events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");
 
-            async_spawn(app.serve(url, vbs::version::StaticVersion::<0, 1> {}));
+            async_spawn(app.serve(url, Base::instance()));
         }
         // enable hotshot event streaming
         pub fn enable_hotshot_node_event_streaming<P: SequencerPersistence>(
