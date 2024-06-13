@@ -105,18 +105,8 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
     }
 
     // We must send the genesis cert here to initialize hotshot successfully.
-    let (validated_state, _ /* state delta */) = <TestValidatedState as ValidatedState<
-        TestTypes,
-    >>::genesis(&*handle.hotshot.instance_state());
     let genesis_cert = proposals[0].data.justify_qc.clone();
-    let genesis_leaf = Leaf::genesis(&validated_state, &*handle.hotshot.instance_state()).await;
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
-    // Special case: the genesis validated state is already
-    // present
-    consensus_writer.update_validated_state_map(
-        ViewNumber::new(0),
-        build_fake_view_with_leaf(genesis_leaf.clone()),
-    );
     drop(consensus_writer);
 
     let inputs = vec![
@@ -199,13 +189,6 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
     >>::genesis(&*handle.hotshot.instance_state());
     let genesis_cert = proposals[0].data.justify_qc.clone();
     let genesis_leaf = Leaf::genesis(&validated_state, &*handle.hotshot.instance_state()).await;
-
-    // Special case: the genesis validated state is already
-    // present
-    consensus_writer.update_validated_state_map(
-        ViewNumber::new(0),
-        build_fake_view_with_leaf(genesis_leaf.clone()),
-    );
 
     drop(consensus_writer);
 

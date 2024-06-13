@@ -64,7 +64,7 @@ async fn test_quorum_proposal_recv_task() {
         consensus_writer.update_validated_state_map(
             view.quorum_proposal.data.view_number,
             build_fake_view_with_leaf(view.leaf.clone()),
-        );
+        ).unwrap();
     }
     drop(consensus_writer);
 
@@ -154,7 +154,7 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
         consensus_writer.update_validated_state_map(
             inserted_view_number,
             build_fake_view_with_leaf(view.leaf.clone()),
-        );
+        ).unwrap();
 
         // The index here is important. Since we're proposing for view 4, we need the
         // value from entry 2 to align the public key from the shares map.

@@ -199,14 +199,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
                 broadcast_event(Arc::new(HotShotEvent::DaVoteSend(vote)), &event_stream).await;
                 let mut consensus = self.consensus.write().await;
 
-                // Ensure this view is in the view map for garbage collection, but do not overwrite if
-                // there is already a view there: the replica task may have inserted a `Leaf` view which
-                // contains strictly more information.
-                if !consensus.validated_state_map().contains_key(&view_number) {
-                    let view = View {
-                        view_inner: ViewInner::Da { payload_commitment },
-                    };
-                    consensus.update_validated_state_map(view_number, view.clone());
+                // Ensure this view is in the view map for garbage collection.
+                let view = View {
+                    view_inner: ViewInner::Da { payload_commitment },
+                };
+                if let Err(e) = consensus.update_validated_state_map(view_number, view.clone()) {
+                    tracing::trace!("{e:?}");
                 }
 
                 // Record the payload we have promised to make available.

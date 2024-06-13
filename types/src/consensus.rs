@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{ensure, Result};
+use anyhow::{bail, ensure, Result};
 use async_lock::{RwLock, RwLockUpgradableReadGuard};
 use committable::{Commitment, Committable};
 use tracing::{debug, error};
@@ -299,8 +299,32 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     }
 
     /// Update the validated state map with a new view_number/view combo.
-    pub fn update_validated_state_map(&mut self, view_number: TYPES::Time, view: View<TYPES>) {
+    ///
+    /// # Errors
+    /// Can return an error when the new view contains less information than the exisiting view
+    /// with the same view number.
+    pub fn update_validated_state_map(
+        &mut self,
+        view_number: TYPES::Time,
+        view: View<TYPES>,
+    ) -> Result<()> {
+        if let Some(existing_view) = self.validated_state_map().get(&view_number) {
+            if let ViewInner::Leaf { .. } = existing_view.view_inner {
+                match view.view_inner {
+                    ViewInner::Leaf { ref delta, .. } => {
+                        ensure!(
+                            delta.is_some(),
+                            "Skipping the state update to not override a `Leaf` view with `None` state delta."
+                        );
+                    }
+                    _ => {
+                        bail!("Skipping the state update to not override a `Leaf` view with a non-`Leaf` view.");
+                    }
+                }
+            }
+        }
         self.validated_state_map.insert(view_number, view);
+        Ok(())
     }
 
     /// Update the saved leaves with a new leaf.

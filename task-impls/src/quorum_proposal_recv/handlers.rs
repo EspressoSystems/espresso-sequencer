@@ -63,7 +63,9 @@ async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES
         },
     };
 
-    consensus_write.update_validated_state_map(view_number, view.clone());
+    if let Err(e) = consensus_write.update_validated_state_map(view_number, view.clone()) {
+        tracing::trace!("{e:?}");
+    }
     consensus_write.update_saved_leaves(leaf.clone());
 
     if let Err(e) = task_state

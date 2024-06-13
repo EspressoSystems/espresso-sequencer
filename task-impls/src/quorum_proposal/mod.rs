@@ -472,10 +472,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             }
             HotShotEvent::ValidatedStateUpdated(view_number, view) => {
                 // Update the internal validated state map.
-                self.consensus
+                if let Err(e) = self
+                    .consensus
                     .write()
                     .await
-                    .update_validated_state_map(*view_number, view.clone());
+                    .update_validated_state_map(*view_number, view.clone())
+                {
+                    tracing::trace!("{e:?}");
+                }
 
                 self.create_dependency_task_if_new(
                     *view_number + 1,

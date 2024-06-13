@@ -53,7 +53,7 @@ async fn test_quorum_vote_task_success() {
         consensus_writer.update_validated_state_map(
             view.quorum_proposal.data.view_number(),
             build_fake_view_with_leaf(view.leaf.clone()),
-        );
+        ).unwrap();
         consensus_writer.update_saved_leaves(view.leaf.clone());
     }
     drop(consensus_writer);
@@ -173,7 +173,7 @@ async fn test_quorum_vote_task_miss_dependency() {
         consensus_writer.update_validated_state_map(
             view.quorum_proposal.data.view_number(),
             build_fake_view_with_leaf(view.leaf.clone()),
-        );
+        ).unwrap();
         consensus_writer.update_saved_leaves(view.leaf.clone());
     }
     drop(consensus_writer);

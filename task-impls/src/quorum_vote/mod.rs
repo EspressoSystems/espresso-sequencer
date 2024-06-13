@@ -1,5 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
+use crate::{
+    events::HotShotEvent,
+    helpers::{broadcast_event, cancel_task},
+    quorum_vote::handlers::handle_quorum_proposal_validated,
+};
 use anyhow::{bail, ensure, Context, Result};
 use async_broadcast::{Receiver, Sender};
 use async_lock::RwLock;
@@ -35,12 +40,6 @@ use jf_vid::VidScheme;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, instrument, trace, warn};
 use vbs::version::Version;
-
-use crate::{
-    events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
-    quorum_vote::handlers::handle_quorum_proposal_validated,
-};
 
 /// Event handlers for `QuorumProposalValidated`.
 mod handlers;
@@ -135,7 +134,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> VoteDependencyHand
                 delta: Some(Arc::clone(&delta)),
             },
         };
-        consensus_writer.update_validated_state_map(proposed_leaf.view_number(), view.clone());
+        if let Err(e) =
+            consensus_writer.update_validated_state_map(proposed_leaf.view_number(), view.clone())
+        {
+            tracing::trace!("{e:?}");
+        }
         consensus_writer.update_saved_leaves(proposed_leaf.clone());
 
         // Kick back our updated structures for downstream usage.

@@ -8,6 +8,14 @@ use std::{
 };
 
 #[cfg(not(feature = "dependency-tasks"))]
+use super::ConsensusTaskState;
+#[cfg(not(feature = "dependency-tasks"))]
+use crate::{
+    consensus::{update_view, view_change::SEND_VIEW_CHANGE_EVENT},
+    helpers::AnyhowTracing,
+};
+use crate::{events::HotShotEvent, helpers::broadcast_event};
+#[cfg(not(feature = "dependency-tasks"))]
 use anyhow::bail;
 use anyhow::{ensure, Context, Result};
 use async_broadcast::Sender;
@@ -53,15 +61,6 @@ use tracing::{debug, info, warn};
 #[cfg(not(feature = "dependency-tasks"))]
 use vbs::version::Version;
 
-#[cfg(not(feature = "dependency-tasks"))]
-use super::ConsensusTaskState;
-#[cfg(not(feature = "dependency-tasks"))]
-use crate::{
-    consensus::{update_view, view_change::SEND_VIEW_CHANGE_EVENT},
-    helpers::AnyhowTracing,
-};
-use crate::{events::HotShotEvent, helpers::broadcast_event};
-
 /// Validate the state and safety and liveness of a proposal then emit
 /// a `QuorumProposalValidated` event.
 ///
@@ -99,10 +98,13 @@ pub async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
         },
     };
 
-    consensus
+    if let Err(e) = consensus
         .write()
         .await
-        .update_validated_state_map(view_number, view.clone());
+        .update_validated_state_map(view_number, view.clone())
+    {
+        tracing::trace!("{e:?}");
+    }
 
     // Broadcast that we've updated our consensus state so that other tasks know it's safe to grab.
     broadcast_event(
@@ -647,7 +649,7 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
             ),
         );
 
-        consensus_write.update_validated_state_map(
+        if let Err(e) = consensus_write.update_validated_state_map(
             view,
             View {
                 view_inner: ViewInner::Leaf {
@@ -656,7 +658,9 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
                     delta: None,
                 },
             },
-        );
+        ) {
+            tracing::trace!("{e:?}");
+        }
 
         consensus_write.update_saved_leaves(leaf.clone());
         let new_leaves = consensus_write.saved_leaves().clone();
@@ -1210,7 +1214,7 @@ pub async fn update_state_and_vote_if_able<TYPES: NodeType, I: NodeImplementatio
     };
 
     let mut consensus = consensus.write().await;
-    consensus.update_validated_state_map(
+    if let Err(e) = consensus.update_validated_state_map(
         cur_view,
         View {
             view_inner: ViewInner::Leaf {
@@ -1219,7 +1223,9 @@ pub async fn update_state_and_vote_if_able<TYPES: NodeType, I: NodeImplementatio
                 delta: Some(Arc::clone(&delta)),
             },
         },
-    );
+    ) {
+        tracing::trace!("{e:?}");
+    }
     consensus.update_saved_leaves(proposed_leaf.clone());
     let new_leaves = consensus.saved_leaves().clone();
     let new_state = consensus.validated_state_map().clone();
