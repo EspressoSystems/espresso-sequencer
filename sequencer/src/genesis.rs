@@ -119,6 +119,7 @@ pub enum UpgradeType {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Upgrade {
     pub view: u64,
+    pub propose_window: u64,
     #[serde(flatten)]
     pub upgrade_type: UpgradeType,
 }
@@ -171,6 +172,7 @@ mod upgrade_serialization {
                 struct UpgradeFields {
                     version: String,
                     view: u64,
+                    propose_window: u64,
                     #[serde(flatten)]
                     upgrade_type: UpgradeType,
                 }
@@ -188,6 +190,7 @@ mod upgrade_serialization {
                         version,
                         Upgrade {
                             view: fields.view,
+                            propose_window: fields.propose_window,
                             upgrade_type: fields.upgrade_type,
                         },
                     );
@@ -252,6 +255,7 @@ mod test {
             [[upgrade]]
             version = "1.0"
             view = 1
+            propose_window = 100
 
             [upgrade.chain_config]
             chain_id = 12345

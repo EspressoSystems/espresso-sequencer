@@ -524,9 +524,16 @@ async fn update_state_storage(
             .resolve()
             .context("failed to resolve to chain config")?;
 
-        if let Err(err) = storage.insert_chain_config(cf).await {
-            storage.revert().await;
-            return Err(err);
+        match storage.insert_chain_config(cf).await {
+            Err(err) => {
+                return Err(err);
+            }
+            Ok(()) => {
+                if let Err(err) = storage.commit().await {
+                    storage.revert().await;
+                    return Err(err.into());
+                }
+            }
         }
     }
 
@@ -815,8 +822,8 @@ impl ValidatedState {
 
         let cf = match (state_cf.resolve(), header_cf.resolve()) {
             (Some(cf), _) => cf,
-            (_, Some(cf)) if cf.commit() == state_cf.commit() => cf,
-            (_, Some(_)) | (None, None) => {
+            (_, Some(cf)) => cf,
+            (None, None) => {
                 instance
                     .peers
                     .as_ref()

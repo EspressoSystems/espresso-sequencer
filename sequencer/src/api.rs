@@ -1374,10 +1374,13 @@ mod test {
             ..Default::default()
         };
         let mut map = std::collections::BTreeMap::new();
+        let view = 5;
+        let propose_window = 100;
         map.insert(
             Version { major: 0, minor: 2 },
             Upgrade {
-                view: 5,
+                view,
+                propose_window,
                 upgrade_type: UpgradeType::ChainConfig {
                     chain_config: chain_config_upgrade,
                 },
@@ -1387,8 +1390,8 @@ mod test {
         let stop_voting_view = 100;
         let upgrades = TestNetworkUpgrades {
             upgrades: map,
-            start_proposing_view: 5,
-            stop_proposing_view: 6,
+            start_proposing_view: view,
+            stop_proposing_view: view + propose_window,
             start_voting_view: 1,
             stop_voting_view,
         };
