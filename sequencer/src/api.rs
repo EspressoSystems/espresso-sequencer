@@ -439,6 +439,8 @@ pub mod test_helpers {
             .await
         }
 
+        // TODO: Remove this constructor and rename `new_with_config` to `new`.
+        // https://github.com/EspressoSystems/espresso-sequencer/issues/1603
         pub async fn new(
             opt: Options,
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
