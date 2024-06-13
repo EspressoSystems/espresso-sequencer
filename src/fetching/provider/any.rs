@@ -66,7 +66,7 @@ type VidCommonProvider<Types> = Arc<dyn DebugProvider<Types, VidCommonRequest>>;
 /// Fetching from multiple query services, for resiliency.
 ///
 /// ```
-/// # use hotshot_types::constants::Base::instance();
+/// # use hotshot_types::constants::Base;
 /// # use hotshot_types::traits::node_implementation::NodeType;
 /// # async fn doc<Types>() -> anyhow::Result<()>
 /// # where
