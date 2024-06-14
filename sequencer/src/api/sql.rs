@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     persistence::{
-        sql::{sql_param, Options},
+        sql::{sql_param, transaction, Options},
         ChainConfigPersistence,
     },
     state::{BlockMerkleTree, FeeAccountProof, FeeMerkleTree},
@@ -14,6 +14,7 @@ use anyhow::{bail, Context};
 use async_trait::async_trait;
 use committable::Commitment;
 use ethers::prelude::Address;
+use futures::FutureExt;
 use hotshot_query_service::{
     data_source::{
         sql::{Config, Query, SqlDataSource},
@@ -130,18 +131,20 @@ impl ChainConfigPersistence for SqlStorage {
         let commitment = chain_config.commitment();
         let data = bincode::serialize(&chain_config)?;
 
-        let mut transaction = self.transaction().await?;
-
-        transaction
-            .upsert(
-                "chain_config",
-                ["commitment", "data"],
-                ["commitment"],
-                [[sql_param(&(commitment.to_string())), sql_param(&data)]],
-            )
-            .await?;
-
-        Ok(())
+        transaction(self, |mut tx| {
+            async move {
+                tx.upsert(
+                    "chain_config",
+                    ["commitment", "data"],
+                    ["commitment"],
+                    [[sql_param(&(commitment.to_string())), sql_param(&data)]],
+                )
+                .await?;
+                Ok(())
+            }
+            .boxed()
+        })
+        .await
     }
 
     async fn load_chain_config(

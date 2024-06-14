@@ -1245,11 +1245,7 @@ mod test {
         let states = std::array::from_fn(|_| state.clone());
 
         let mut network = TestNetwork::with_state(
-            Options::from(options::Http {
-                port,
-                max_connections: None,
-            })
-            .catchup(Default::default()),
+            Options::with_port(port).catchup(Default::default()),
             states,
             [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|_| {

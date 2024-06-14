@@ -256,7 +256,7 @@ mod test {
             [[upgrade]]
             version = "1.0"
             view = 1
-            propose_window = 100
+            propose_window = 10
 
             [upgrade.chain_config]
             chain_id = 12345

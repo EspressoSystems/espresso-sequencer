@@ -524,17 +524,7 @@ async fn update_state_storage(
             .resolve()
             .context("failed to resolve to chain config")?;
 
-        match storage.insert_chain_config(cf).await {
-            Err(err) => {
-                return Err(err);
-            }
-            Ok(()) => {
-                if let Err(err) = storage.commit().await {
-                    storage.revert().await;
-                    return Err(err.into());
-                }
-            }
-        }
+        storage.insert_chain_config(cf).await?
     }
 
     Ok(state)
