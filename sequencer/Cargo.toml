@@ -84,7 +84,7 @@ jf-rescue = { workspace = true }
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
-libp2p = { version = "0.53", default-features = false } 
+libp2p = { workspace = true } 
 num-traits = "0.2.18"
 num_enum = "0.7"
 portpicker = { workspace = true }
@@ -115,6 +115,7 @@ typenum = { version = "1.15.0", default-features = false, features = [
 ] }
 url = { workspace = true }
 vbs = { workspace = true }
+vec1 = { workspace = true }
 zeroize = { workspace = true }
 
 [package.metadata.cargo-udeps.ignore]

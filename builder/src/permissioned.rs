@@ -12,8 +12,8 @@ use hotshot::{
     traits::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
-            derive_libp2p_peer_id, CombinedNetworks, KeyPair, Libp2pNetwork,
-            NetworkingMetricsValue, PushCdnNetwork, Topic, WrappedSignatureKey,
+            derive_libp2p_peer_id, CdnMetricsValue, CombinedNetworks, KeyPair, Libp2pNetwork,
+            PushCdnNetwork, Topic, WrappedSignatureKey,
         },
     },
     types::{SignatureKey, SystemContextHandle},
@@ -65,11 +65,7 @@ use hotshot_builder_core::{
 use hotshot_state_prover;
 use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 use jf_signature::bls_over_bn254::VerKey;
-use sequencer::state_signature::StakeTableCommitmentType;
-use sequencer::{
-    catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, network::libp2p::BootstrapNode,
-    ChainConfig,
-};
+use sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, ChainConfig};
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
@@ -82,6 +78,7 @@ use sequencer::{
     state_signature::{static_stake_table_commitment, StateSigner},
     Genesis, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey, SeqTypes,
 };
+use sequencer::{network::libp2p::split_off_peer_id, state_signature::StakeTableCommitmentType};
 use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
 use std::{net::Ipv4Addr, thread::Builder};
@@ -89,7 +86,6 @@ use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::StaticVersionType;
 
 use hotshot_types::{
-    constants::{Version01, STATIC_VER_0_1},
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
@@ -178,9 +174,23 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     .await?
     .0;
 
-    // If the network is configured manually, override what we got from the orchestrator
-    if let Some(genesis_network_config) = genesis.network {
-        genesis_network_config.populate_config(&mut config)?;
+    // If the `Libp2p` bootstrap nodes were supplied via the command line, override those
+    // present in the config file.
+    if let Some(bootstrap_nodes) = network_params.libp2p_bootstrap_nodes {
+        if let Some(libp2p_config) = config.libp2p_config.as_mut() {
+            // If the libp2p configuration is present, we can override the bootstrap nodes.
+
+            // Split off the peer ID from the addresses
+            libp2p_config.bootstrap_nodes = bootstrap_nodes
+                .into_iter()
+                .map(split_off_peer_id)
+                .collect::<Result<Vec<_>, _>>()
+                .with_context(|| "Failed to parse peer ID from bootstrap node")?;
+        } else {
+            // If not, don't try launching with them. Eventually we may want to
+            // provide a default configuration here instead.
+            tracing::warn!("No libp2p configuration found, ignoring bootstrap nodes");
+        }
     }
 
     tracing::info!(
@@ -199,6 +209,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
             public_key: WrappedSignatureKey(my_config.public_key),
             private_key: my_config.private_key.clone(),
         },
+        CdnMetricsValue::new(metrics),
     )
     .with_context(|| "Failed to create CDN network")?;
 
@@ -211,6 +222,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         // We need the private key so we can derive our Libp2p keypair
         // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
         &my_config.private_key,
+        hotshot::traits::implementations::Libp2pMetricsValue::new(metrics),
     )
     .await
     .with_context(|| "Failed to create libp2p network")?;
@@ -242,13 +254,10 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         _pd: Default::default(),
     };
 
-    // The web server network doesn't have any metrics. By creating and dropping a
-    // `NetworkingMetricsValue`, we ensure the networking metrics are created, but just not
-    // populated, so that monitoring software built to work with network-related metrics doesn't
-    // crash horribly just because we're not using the P2P network yet.
-    let _ = NetworkingMetricsValue::new(metrics);
-
-    let mut genesis_state = ValidatedState::default();
+    let mut genesis_state = ValidatedState {
+        chain_config: genesis.chain_config.into(),
+        ..Default::default()
+    };
     for (address, amount) in genesis.accounts {
         tracing::warn!(%address, %amount, "Prefunding account for demo");
         genesis_state.prefund_account(address, amount);
@@ -271,6 +280,8 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         l1_genesis,
         peers: Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
         node_id: node_index,
+        upgrades: Default::default(),
+        current_version: Ver::VERSION,
     };
 
     let stake_table_commit =
@@ -298,11 +309,11 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         bootstrapped_view,
         channel_capacity,
         instance_state,
+        genesis_state,
         hotshot_builder_api_url,
         max_api_timeout_duration,
         buffered_view_num_count,
         maximize_txns_count_timeout_duration,
-        genesis_state,
     )
     .await?;
 
@@ -396,11 +407,11 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         bootstrapped_view: ViewNumber,
         channel_capacity: NonZeroUsize,
         instance_state: NodeState,
+        validated_state: ValidatedState,
         hotshot_builder_api_url: Url,
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
-        validated_state: ValidatedState,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
@@ -546,8 +557,8 @@ mod test {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
+    use hotshot_types::constants::Base;
     use hotshot_types::{
-        constants::{Version01, STATIC_VER_0_1},
         signature_key::BLSPubKey,
         traits::{
             block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
@@ -589,7 +600,7 @@ mod test {
         let state_signer = handles[node_id].1.take().unwrap();
 
         // builder api url
-        let hotshot_builder_api_url = hotshot_config.config.builder_url.clone();
+        let hotshot_builder_api_url = hotshot_config.config.builder_urls[0].clone();
         let builder_config = PermissionedBuilderTestConfig::init_permissioned_builder(
             hotshot_config,
             hotshot_context_handle,
@@ -602,7 +613,7 @@ mod test {
         let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
-        let builder_client = Client::<hotshot_builder_api::builder::Error, Version01>::new(
+        let builder_client = Client::<hotshot_builder_api::builder::Error, Base>::new(
             hotshot_builder_api_url.clone(),
         );
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
