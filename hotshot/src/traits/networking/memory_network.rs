@@ -35,7 +35,7 @@ use hotshot_types::{
 use rand::Rng;
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 
-use super::{NetworkError, NetworkReliability, NetworkingMetricsValue};
+use super::{NetworkError, NetworkReliability};
 
 /// Shared state for in-memory mock networking.
 ///
@@ -74,9 +74,6 @@ struct MemoryNetworkInner<K: SignatureKey> {
     /// Count of messages that are in-flight (send but not processed yet)
     in_flight_message_count: AtomicUsize,
 
-    /// The networking metrics we're keeping track of
-    metrics: NetworkingMetricsValue,
-
     /// config to introduce unreliability to the network
     reliability_config: Option<Box<dyn NetworkReliability>>,
 }
@@ -104,11 +101,9 @@ impl<K: SignatureKey> Debug for MemoryNetwork<K> {
 
 impl<K: SignatureKey> MemoryNetwork<K> {
     /// Creates a new `MemoryNetwork` and hooks it up to the group through the provided `MasterMap`
-    #[instrument(skip(metrics))]
     pub fn new(
         pub_key: K,
-        metrics: NetworkingMetricsValue,
-        master_map: Arc<MasterMap<K>>,
+        master_map: &Arc<MasterMap<K>>,
         reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> MemoryNetwork<K> {
         info!("Attaching new MemoryNetwork");
@@ -143,9 +138,8 @@ impl<K: SignatureKey> MemoryNetwork<K> {
             inner: Arc::new(MemoryNetworkInner {
                 input: RwLock::new(Some(input)),
                 output: Mutex::new(output),
-                master_map: Arc::clone(&master_map),
+                master_map: Arc::clone(master_map),
                 in_flight_message_count,
-                metrics,
                 reliability_config,
             }),
         };
@@ -162,7 +156,6 @@ impl<K: SignatureKey> MemoryNetwork<K> {
             .fetch_add(1, Ordering::Relaxed);
         let input = self.inner.input.read().await;
         if let Some(input) = &*input {
-            self.inner.metrics.outgoing_direct_message_count.add(1);
             input.send(message).await
         } else {
             Err(SendError(message))
@@ -187,12 +180,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
         Box::pin(move |node_id| {
             let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
             let pubkey = TYPES::SignatureKey::from_private(&privkey);
-            let net = MemoryNetwork::new(
-                pubkey,
-                NetworkingMetricsValue::default(),
-                Arc::clone(&master),
-                reliability_config.clone(),
-            );
+            let net = MemoryNetwork::new(pubkey, &master, reliability_config.clone());
             Box::pin(async move { (net.clone().into(), net.into()) })
         })
     }
@@ -263,11 +251,9 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for MemoryNetwork<K> {
                 let res = node.input(message.clone()).await;
                 match res {
                     Ok(()) => {
-                        self.inner.metrics.outgoing_broadcast_message_count.add(1);
                         trace!(?key, "Delivered message to remote");
                     }
                     Err(e) => {
-                        self.inner.metrics.message_failed_to_send.add(1);
                         warn!(?e, ?key, "Error sending broadcast message to node");
                     }
                 }
@@ -314,19 +300,16 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for MemoryNetwork<K> {
                 let res = node.input(message).await;
                 match res {
                     Ok(()) => {
-                        self.inner.metrics.outgoing_direct_message_count.add(1);
                         trace!(?recipient, "Delivered message to remote");
                         Ok(())
                     }
                     Err(e) => {
-                        self.inner.metrics.message_failed_to_send.add(1);
                         warn!(?e, ?recipient, "Error delivering direct message");
                         Err(NetworkError::CouldNotDeliver)
                     }
                 }
             }
         } else {
-            self.inner.metrics.message_failed_to_send.add(1);
             warn!(
                 "{:#?} {:#?} {:#?}",
                 recipient, self.inner.master_map.map, "Node does not exist in map"
@@ -352,7 +335,6 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for MemoryNetwork<K> {
         self.inner
             .in_flight_message_count
             .fetch_sub(ret.len(), Ordering::Relaxed);
-        self.inner.metrics.incoming_message_count.add(ret.len());
         Ok(ret)
     }
 }

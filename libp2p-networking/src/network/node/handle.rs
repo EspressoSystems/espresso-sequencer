@@ -1,8 +1,4 @@
-use std::{
-    collections::HashSet,
-    fmt::Debug,
-    time::{Duration, Instant},
-};
+use std::{collections::HashSet, fmt::Debug, time::Duration};
 
 use async_compatibility_layer::{
     art::{async_sleep, async_timeout, future::to},
@@ -156,15 +152,10 @@ impl NetworkNodeHandle {
         &self,
         num_peers: usize,
         node_id: usize,
-        timeout: Duration,
     ) -> Result<(), NetworkNodeHandleError> {
-        let start = Instant::now();
         self.begin_bootstrap().await?;
         let mut connected_ok = false;
         while !connected_ok {
-            if start.elapsed() >= timeout {
-                return Err(NetworkNodeHandleError::ConnectTimeout);
-            }
             async_sleep(Duration::from_secs(1)).await;
             let num_connected = self.num_connected().await?;
             info!(

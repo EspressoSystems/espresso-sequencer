@@ -170,6 +170,8 @@ pub enum NetworkEvent {
     ResponseRequested(Request, ResponseChannel<Response>),
     /// Report that kademlia has successfully bootstrapped into the network
     IsBootstrapped,
+    /// The number of connected peers has possibly changed
+    ConnectedPeersUpdate(usize),
 }
 
 #[derive(Debug)]

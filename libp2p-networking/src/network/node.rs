@@ -555,6 +555,12 @@ impl NetworkNode {
                 } else {
                     info!("peerid {:?} connection is established to {:?} with endpoint {:?} with concurrent dial errors {:?}. {:?} connections left", self.peer_id, peer_id, endpoint, concurrent_dial_errors, num_established);
                 }
+
+                // Send the number of connected peers to the client
+                send_to_client
+                    .send(NetworkEvent::ConnectedPeersUpdate(self.num_connected()))
+                    .await
+                    .map_err(|_e| NetworkError::StreamClosed)?;
             }
             SwarmEvent::ConnectionClosed {
                 connection_id: _,
@@ -571,6 +577,12 @@ impl NetworkNode {
                 } else {
                     info!("peerid {:?} connection is closed to {:?} with endpoint {:?}. {:?} connections left. Cause: {:?}", self.peer_id, peer_id, endpoint, num_established, cause);
                 }
+
+                // Send the number of connected peers to the client
+                send_to_client
+                    .send(NetworkEvent::ConnectedPeersUpdate(self.num_connected()))
+                    .await
+                    .map_err(|_e| NetworkError::StreamClosed)?;
             }
             SwarmEvent::Dialing {
                 peer_id,

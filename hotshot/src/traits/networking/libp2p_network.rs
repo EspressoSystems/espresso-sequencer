@@ -40,6 +40,7 @@ use hotshot_types::{
     message::{DataMessage::DataResponse, Message, MessageKind},
     traits::{
         election::Membership,
+        metrics::{Counter, Gauge, Metrics, NoMetrics},
         network::{self, ConnectedNetwork, NetworkError, ResponseMessage},
         node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
@@ -62,10 +63,39 @@ use libp2p_networking::{
 };
 use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use serde::Serialize;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
-use super::NetworkingMetricsValue;
 use crate::BroadcastDelay;
+
+/// Libp2p-specific metrics
+#[derive(Clone, Debug)]
+pub struct Libp2pMetricsValue {
+    /// The number of currently connected peers
+    pub num_connected_peers: Box<dyn Gauge>,
+    /// The number of failed messages
+    pub num_failed_messages: Box<dyn Counter>,
+}
+
+impl Libp2pMetricsValue {
+    /// Populate the metrics with Libp2p-specific metrics
+    pub fn new(metrics: &dyn Metrics) -> Self {
+        // Create a `libp2p subgroup
+        let subgroup = metrics.subgroup("libp2p".into());
+
+        // Create the metrics
+        Self {
+            num_connected_peers: subgroup.create_gauge("num_connected_peers".into(), None),
+            num_failed_messages: subgroup.create_counter("num_failed_messages".into(), None),
+        }
+    }
+}
+
+impl Default for Libp2pMetricsValue {
+    /// Initialize with empty metrics
+    fn default() -> Self {
+        Self::new(&*NoMetrics::boxed())
+    }
+}
 
 /// convenience alias for the type for bootstrap addresses
 /// concurrency primitives are needed for having tests
@@ -127,8 +157,8 @@ struct Libp2pNetworkInner<K: SignatureKey + 'static> {
     dht_timeout: Duration,
     /// whether or not we've bootstrapped into the DHT yet
     is_bootstrapped: Arc<AtomicBool>,
-    /// The networking metrics we're keeping track of
-    metrics: NetworkingMetricsValue,
+    /// The Libp2p metrics we're managing
+    metrics: Libp2pMetricsValue,
     /// topic map
     /// hash(hashset) -> topic
     /// btreemap ordered so is hashable
@@ -267,7 +297,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
                 Box::pin(async move {
                     let net = Arc::new(
                         match Libp2pNetwork::new(
-                            NetworkingMetricsValue::default(),
+                            Libp2pMetricsValue::default(),
                             config,
                             pubkey.clone(),
                             bootstrap_addrs_ref,
@@ -341,6 +371,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         bind_address: SocketAddr,
         pub_key: &K,
         priv_key: &K::PrivateKey,
+        metrics: Libp2pMetricsValue,
     ) -> anyhow::Result<Self> {
         // Try to take our Libp2p config from our broader network config
         let libp2p_config = config
@@ -403,7 +434,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         }
 
         Ok(Libp2pNetwork::new(
-            NetworkingMetricsValue::default(),
+            metrics,
             node_config,
             pub_key.clone(),
             Arc::new(RwLock::new(bootstrap_nodes)),
@@ -443,7 +474,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
     /// This will panic if there are less than 5 bootstrap nodes
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
-        metrics: NetworkingMetricsValue,
+        metrics: Libp2pMetricsValue,
         config: NetworkNodeConfig,
         pk: K,
         bootstrap_addrs: BootstrapAddrs,
@@ -540,7 +571,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
                 #[allow(clippy::cast_possible_truncation)]
                 const THRESHOLD: u64 = (LOOK_AHEAD as f64 * 0.8) as u64;
 
-                info!("Performing lookup for peer {:?}", pk);
+                trace!("Performing lookup for peer {:?}", pk);
 
                 // only run if we are not too close to the next view number
                 if latest_seen_view.load(Ordering::Relaxed) + THRESHOLD <= *view_number {
@@ -567,7 +598,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         let handle = Arc::clone(&self.inner.handle);
         let is_bootstrapped = Arc::clone(&self.inner.is_bootstrapped);
         let node_type = self.inner.handle.config().node_type;
-        let metrics_connected_peers = Arc::clone(&self.inner);
         let is_da = self.inner.is_da;
 
         async_spawn({
@@ -632,28 +662,16 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
                 {
                     async_sleep(Duration::from_secs(1)).await;
                 }
-                // 10 minute timeout
-                let timeout_duration = Duration::from_secs(600);
                 // perform connection
                 info!("WAITING TO CONNECT ON NODE {:?}", id);
-                handle
-                    .wait_to_connect(4, id, timeout_duration)
-                    .await
-                    .unwrap();
-                info!(
-                    "node {:?} is barring bootstrap, type: {:?}",
-                    handle.peer_id(),
-                    node_type
-                );
 
-                let connected_num = handle.num_connected().await?;
-                metrics_connected_peers
-                    .metrics
-                    .connected_peers
-                    .set(connected_num);
+                // Wait for the network to connect to the required number of peers
+                if let Err(e) = handle.wait_to_connect(4, id).await {
+                    error!("Failed to connect to peers: {:?}", e);
+                    return Err::<(), NetworkError>(e.into());
+                }
 
                 is_ready.store(true, Ordering::Relaxed);
-                info!("STARTING CONSENSUS ON {:?}", handle.peer_id());
                 Ok::<(), NetworkError>(())
             }
         });
@@ -700,6 +718,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
                 let res = request_tx.try_send((msg, chan));
                 res.map_err(|_| NetworkError::ChannelSend)?;
             }
+            NetworkEvent::ConnectedPeersUpdate(_) => {}
         }
         Ok::<(), NetworkError>(())
     }
@@ -739,6 +758,9 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
                                 let _ = handle
                                     .handle_recvd_events(message, &sender, request_tx.clone())
                                     .await;
+                            }
+                            NetworkEvent::ConnectedPeersUpdate(num_peers) => {
+                                handle.inner.metrics.num_connected_peers.set(*num_peers);
                             }
                         }
                         // re-set the `kill_switch` for the next loop
@@ -781,7 +803,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
         {
             Ok(pid) => pid,
             Err(err) => {
-                self.inner.metrics.message_failed_to_send.add(1);
+                self.inner.metrics.num_failed_messages.add(1);
                 error!(
                     "Failed to message {:?} because could not find recipient peer id for pk {:?}",
                     request, recipient
@@ -809,7 +831,10 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
                 }
                 None => ResponseMessage::NotFound,
             },
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                self.inner.metrics.num_failed_messages.add(1);
+                return Err(e.into());
+            }
         };
 
         Ok(bincode::serialize(&result).map_err(|e| NetworkError::Libp2p { source: e.into() })?)
@@ -880,7 +905,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
         _broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
         self.wait_for_ready().await;
-        info!(
+        trace!(
             "broadcasting msg: {:?} with nodes: {:?} connected",
             message,
             self.inner.handle.connected_pids().await
@@ -893,7 +918,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
                 source: Box::new(NetworkNodeHandleError::NoSuchTopic),
             })?
             .clone();
-        info!("broadcasting to topic: {}", topic);
+        trace!("broadcasting to topic: {}", topic);
 
         // gossip doesn't broadcast from itself, so special case
         if recipients.contains(&self.inner.pk) {
@@ -919,14 +944,9 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
                         let handle_2 = Arc::clone(&handle);
                         let metrics_2 = metrics.clone();
                         boxed_sync(async move {
-                            match handle_2.gossip_no_serialize(topic_2, msg).await {
-                                Err(e) => {
-                                    metrics_2.message_failed_to_send.add(1);
-                                    warn!("Failed to broadcast to libp2p: {:?}", e);
-                                }
-                                Ok(()) => {
-                                    metrics_2.outgoing_direct_message_count.add(1);
-                                }
+                            if let Err(e) = handle_2.gossip_no_serialize(topic_2, msg).await {
+                                metrics_2.num_failed_messages.add(1);
+                                warn!("Failed to broadcast to libp2p: {:?}", e);
                             }
                         })
                     }),
@@ -936,16 +956,12 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
             }
         }
 
-        match self.inner.handle.gossip(topic, &message).await {
-            Ok(()) => {
-                self.inner.metrics.outgoing_broadcast_message_count.add(1);
-                Ok(())
-            }
-            Err(e) => {
-                self.inner.metrics.message_failed_to_send.add(1);
-                Err(e.into())
-            }
+        if let Err(e) = self.inner.handle.gossip(topic, &message).await {
+            self.inner.metrics.num_failed_messages.add(1);
+            return Err(e.into());
         }
+
+        Ok(())
     }
 
     #[instrument(name = "Libp2pNetwork::da_broadcast_message", skip_all)]
@@ -1002,7 +1018,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
         {
             Ok(pid) => pid,
             Err(err) => {
-                self.inner.metrics.message_failed_to_send.add(1);
+                self.inner.metrics.num_failed_messages.add(1);
                 error!(
                     "Failed to message {:?} because could not find recipient peer id for pk {:?}",
                     message, recipient
@@ -1025,14 +1041,9 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
                         let handle_2 = Arc::clone(&handle);
                         let metrics_2 = metrics.clone();
                         boxed_sync(async move {
-                            match handle_2.direct_request_no_serialize(pid, msg).await {
-                                Err(e) => {
-                                    metrics_2.message_failed_to_send.add(1);
-                                    warn!("Failed to broadcast to libp2p: {:?}", e);
-                                }
-                                Ok(()) => {
-                                    metrics_2.outgoing_direct_message_count.add(1);
-                                }
+                            if let Err(e) = handle_2.direct_request_no_serialize(pid, msg).await {
+                                metrics_2.num_failed_messages.add(1);
+                                warn!("Failed to broadcast to libp2p: {:?}", e);
                             }
                         })
                     }),
@@ -1060,7 +1071,6 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
             .drain_at_least_one()
             .await
             .map_err(|_x| NetworkError::ShutDown)?;
-        self.inner.metrics.incoming_message_count.add(result.len());
 
         Ok(result)
     }

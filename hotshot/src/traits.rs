@@ -13,12 +13,13 @@ pub mod implementations {
     pub use super::networking::{
         combined_network::{CombinedNetworks, UnderlyingCombinedNetworks},
         libp2p_network::{
-            derive_libp2p_keypair, derive_libp2p_peer_id, Libp2pNetwork, PeerInfoVec,
+            derive_libp2p_keypair, derive_libp2p_peer_id, Libp2pMetricsValue, Libp2pNetwork,
+            PeerInfoVec,
         },
         memory_network::{MasterMap, MemoryNetwork},
         push_cdn_network::{
-            KeyPair, ProductionDef, PushCdnNetwork, TestingDef, Topic, WrappedSignatureKey,
+            CdnMetricsValue, KeyPair, ProductionDef, PushCdnNetwork, TestingDef, Topic,
+            WrappedSignatureKey,
         },
-        NetworkingMetricsValue,
     };
 }

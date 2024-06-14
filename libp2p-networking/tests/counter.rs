@@ -71,7 +71,9 @@ pub async fn counter_handle_network_event(
     use CounterMessage::*;
     use NetworkEvent::*;
     match event {
-        IsBootstrapped | NetworkEvent::ResponseRequested(..) => {}
+        IsBootstrapped
+        | NetworkEvent::ResponseRequested(..)
+        | NetworkEvent::ConnectedPeersUpdate(..) => {}
         GossipMsg(m) | DirectResponse(m, _) => {
             if let Ok(msg) = bincode::deserialize::<CounterMessage>(&m) {
                 match msg {
