@@ -83,11 +83,11 @@ impl NamespaceId {
 
 impl Namespace for NamespaceId {
     fn max() -> Self {
-        Self(u32::max_value() as u64)
+        Self(u32::MAX as u64)
     }
 
     fn min() -> Self {
-        Self(u32::min_value() as u64)
+        Self(u32::MIN as u64)
     }
 }
 
