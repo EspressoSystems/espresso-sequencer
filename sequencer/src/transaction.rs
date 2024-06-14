@@ -23,9 +23,8 @@ use serde::{de::Error, Deserialize, Deserializer, Serialize};
 ///   <https://github.com/EspressoSystems/espresso-sequencer/pull/1499#issuecomment-2134065090>
 /// - It impls [`Namespace`] from [`jf_merkle_tree`], but this seems unneeded
 ///   now that we're not using jellyfish's namespace merkle tree.
-/// - We derive lots of things that perhaps we shouldn't: `Into`, `From`,
-///   `Default`, `Ord`. Perhaps derivations for [`NamespaceId`] should match
-///   that of [`Transaction`].
+/// - We derive some things that perhaps we shouldn't: `Default`. Perhaps
+///   derivations for [`NamespaceId`] should match that of [`Transaction`].
 #[derive(
     Clone,
     Copy,
