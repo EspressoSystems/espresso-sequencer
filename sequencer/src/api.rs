@@ -340,7 +340,7 @@ pub mod test_helpers {
 
     impl<P: SequencerPersistence> TestNetwork<P> {
         pub async fn with_state(
-            opt: Options,
+            api_config: Options,
             state: [ValidatedState; TestConfig::NUM_NODES],
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
             catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
@@ -350,23 +350,23 @@ pub mod test_helpers {
             let mut cfg = TestConfig::default_with_l1(l1);
             cfg.builder_port = builder_port;
 
-            Self::with_state_and_config(opt, state, persistence, catchup, cfg).await
+            Self::with_state_and_config(api_config, state, persistence, catchup, cfg).await
         }
 
         pub async fn with_state_and_config(
-            opt: Options,
+            api_config: Options,
             state: [ValidatedState; TestConfig::NUM_NODES],
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
             catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
-            mut config: TestConfig,
+            mut network_config: TestConfig,
         ) -> Self {
-            let (builder_task, builder_url) = run_test_builder(config.builder_port).await;
-            config.set_hotshot_builder_url(builder_url);
+            let (builder_task, builder_url) = run_test_builder(network_config.builder_port).await;
+            network_config.set_hotshot_builder_url(builder_url);
 
             let mut nodes = join_all(izip!(state, persistence, catchup).enumerate().map(
                 |(i, (state, persistence, catchup))| {
-                    let opt = opt.clone();
-                    let cfg = &config;
+                    let opt = api_config.clone();
+                    let cfg = &network_config;
                     async move {
                         if i == 0 {
                             opt.serve(
@@ -424,21 +424,21 @@ pub mod test_helpers {
             Self {
                 server,
                 peers,
-                cfg: config,
+                cfg: network_config,
             }
         }
 
         pub async fn new_with_config(
-            opt: Options,
+            api_config: Options,
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
-            config: TestConfig,
+            network_config: TestConfig,
         ) -> Self {
             Self::with_state_and_config(
-                opt,
+                api_config,
                 Default::default(),
                 persistence,
                 std::array::from_fn(|_| MockStateCatchup::default()),
-                config,
+                network_config,
             )
             .await
         }
@@ -446,13 +446,13 @@ pub mod test_helpers {
         // TODO: Remove this constructor and rename `new_with_config` to `new`.
         // https://github.com/EspressoSystems/espresso-sequencer/issues/1603
         pub async fn new(
-            opt: Options,
+            api_config: Options,
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
             l1: Url,
             builder_port: Option<u16>,
         ) -> Self {
             Self::with_state(
-                opt,
+                api_config,
                 Default::default(),
                 persistence,
                 std::array::from_fn(|_| MockStateCatchup::default()),
