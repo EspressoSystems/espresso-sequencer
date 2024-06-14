@@ -376,7 +376,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType>
             query_start
                 .elapsed()
                 .mul_f32(BUILDER_ADDITIONAL_TIME_MULTIPLIER),
-            BUILDER_MINIMUM_QUERY_TIME - query_start.elapsed(),
+            BUILDER_MINIMUM_QUERY_TIME.saturating_sub(query_start.elapsed()),
         ));
         futures::pin_mut!(timeout); // Stream::next requires Self::Unpin
         let mut tasks = tasks.into_inner().take_until(timeout);
