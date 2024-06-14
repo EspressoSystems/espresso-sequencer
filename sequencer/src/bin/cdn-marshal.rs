@@ -1,7 +1,7 @@
 //! The following is the main `Marshal` binary, which just instantiates and runs
 //! a `Marshal` object.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use cdn_marshal::{Config, Marshal};
 use clap::Parser;
 use sequencer::{network::cdn::ProductionDef, options::parse_size, SeqTypes};
@@ -68,6 +68,15 @@ async fn main() -> Result<()> {
             .init();
     }
 
+    // Cast the memory pool size to a `usize`
+    let global_memory_pool_size =
+        usize::try_from(args.global_memory_pool_size).with_context(|| {
+            format!(
+                "Failed to convert global memory pool size to usize: {}",
+                args.global_memory_pool_size
+            )
+        })?;
+
     // Create a new `Config`
     let config = Config {
         discovery_endpoint: args.discovery_endpoint,
@@ -75,7 +84,7 @@ async fn main() -> Result<()> {
         metrics_bind_endpoint: args.metrics_bind_endpoint,
         ca_cert_path: args.ca_cert_path,
         ca_key_path: args.ca_key_path,
-        global_memory_pool_size: Some(args.global_memory_pool_size),
+        global_memory_pool_size: Some(global_memory_pool_size),
     };
 
     // Create new `Marshal` from the config

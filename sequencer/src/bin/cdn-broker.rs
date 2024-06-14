@@ -1,6 +1,6 @@
 //! The following is the main `Broker` binary, which just instantiates and runs
 //! a `Broker` object.
-use anyhow::Result;
+use anyhow::{Context, Result};
 use cdn_broker::reexports::crypto::signature::KeyPair;
 use cdn_broker::{Broker, Config};
 use clap::Parser;
@@ -83,7 +83,7 @@ struct Args {
         value_parser = parse_size,
         env = "ESPRESSO_CDN_BROKER_GLOBAL_MEMORY_POOL_SIZE"
     )]
-    global_memory_pool_size: usize,
+    global_memory_pool_size: u64,
 }
 #[async_std::main]
 async fn main() -> Result<()> {
@@ -107,6 +107,15 @@ async fn main() -> Result<()> {
     let (public_key, private_key) =
         <SeqTypes as NodeType>::SignatureKey::generated_from_seed_indexed(key_hash.into(), 1337);
 
+    // Cast the memory pool size to a `usize`
+    let global_memory_pool_size =
+        usize::try_from(args.global_memory_pool_size).with_context(|| {
+            format!(
+                "Failed to convert global memory pool size to usize: {}",
+                args.global_memory_pool_size
+            )
+        })?;
+
     // Create config
     let broker_config: Config<ProductionDef<SeqTypes>> = Config {
         ca_cert_path: args.ca_cert_path,
@@ -123,7 +132,7 @@ async fn main() -> Result<()> {
         public_advertise_endpoint: args.public_advertise_endpoint,
         private_bind_endpoint: args.private_bind_endpoint,
         private_advertise_endpoint: args.private_advertise_endpoint,
-        global_memory_pool_size: Some(args.global_memory_pool_size),
+        global_memory_pool_size: Some(global_memory_pool_size),
     };
 
     // Create new `Broker`
