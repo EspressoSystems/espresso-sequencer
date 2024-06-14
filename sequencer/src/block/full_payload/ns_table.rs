@@ -163,14 +163,14 @@ impl NsTable {
     }
 
     /// Number of entries in the namespace table.
+    ///
+    /// Returns the maximum number of entries that could fit in the namespace
+    /// table, ignoring what's declared in the table header.
     pub fn len(&self) -> NumNss {
-        NumNss(std::cmp::min(
-            // Number of namespaces declared in the ns table
-            self.read_num_nss(),
-            // Max number of entries that could fit in the namespace table
+        NumNss(
             self.bytes.len().saturating_sub(NUM_NSS_BYTE_LEN)
                 / NS_ID_BYTE_LEN.saturating_add(NS_OFFSET_BYTE_LEN),
-        ))
+        )
     }
 
     /// Iterator over all unique namespaces in the namespace table.
@@ -219,14 +219,24 @@ impl NsTable {
     pub fn validate(&self) -> Result<(), NsTableValidationError> {
         use NsTableValidationError::*;
 
-        // byte length for a table with `x` entries must be exactly
+        // Byte length for a table with `x` entries must be exactly
         // `x * NsTableBuilder::entry_byte_len() + NsTableBuilder::header_byte_len()`
         if self.bytes.len() % NsTableBuilder::entry_byte_len() != NsTableBuilder::header_byte_len()
         {
             return Err(InvalidByteLen);
         }
 
+        // Header must declare the correct number of namespaces
+        //
+        // TODO this check obsolete after
+        // https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+        if self.len().0 != self.read_num_nss() {
+            return Err(InvalidHeader);
+        }
+
         // Namespace IDs and offsets must increase monotonically
+        //
+        // TODO don't allow 0 offset in first entry
         {
             let (mut prev_ns_id, mut prev_offset) = (None, None);
             for (ns_id, offset) in self.iter().map(|i| {
@@ -270,12 +280,11 @@ impl NsTable {
 
     // PRIVATE HELPERS START HERE
 
-    /// Read the number of namespaces declared in the namespace table. This
-    /// quantity might exceed the number of entries that could fit in the
-    /// namespace table.
+    /// Read the number of namespaces declared in the namespace table. THIS
+    /// QUANTITY IS NEVER USED. Instead use [`NsTable::len`].
     ///
-    /// For a correct count of the number of unique namespaces in this
-    /// namespace table use [`NsTable::len`].
+    /// TODO Delete this method after
+    /// <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>
     fn read_num_nss(&self) -> usize {
         let num_nss_byte_len = NUM_NSS_BYTE_LEN.min(self.bytes.len());
         usize_from_bytes::<NUM_NSS_BYTE_LEN>(&self.bytes[..num_nss_byte_len])

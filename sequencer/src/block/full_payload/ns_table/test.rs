@@ -1,6 +1,9 @@
-use super::{NsTable, NsTableBuilder, NsTableValidationError, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN};
+use super::{
+    NsTable, NsTableBuilder, NsTableValidationError, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
+    NUM_NSS_BYTE_LEN,
+};
 use crate::{
-    block::uint_bytes::{u32_max_from_byte_len, usize_max_from_byte_len},
+    block::uint_bytes::{u32_max_from_byte_len, usize_max_from_byte_len, usize_to_bytes},
     NamespaceId,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -26,23 +29,24 @@ fn byte_len() {
     let mut rng = jf_utils::test_rng();
 
     // Extremely small byte lengths should get rejected.
-    let ns_table = NsTable { bytes: Vec::new() };
-    assert_eq!(
-        ns_table.validate().unwrap_err(),
-        NsTableValidationError::InvalidByteLen
-    );
-    expect_num_bytes_invalid(ns_table, NsTableBuilder::header_byte_len(), &mut rng);
+    {
+        let mut ns_table = NsTable { bytes: Vec::new() };
+        assert_eq!(
+            ns_table.validate().unwrap_err(),
+            NsTableValidationError::InvalidByteLen
+        );
+        expect_num_bytes_invalid(&mut ns_table, NsTableBuilder::header_byte_len(), &mut rng);
+    }
 
     // Add enough bytes for a new entry.
-    expect_num_bytes_invalid(
-        random_valid_ns_table(20, &mut rng),
-        NsTableBuilder::entry_byte_len(),
-        &mut rng,
-    );
+    {
+        let mut ns_table = random_valid_ns_table(20, &mut rng);
+        expect_num_bytes_invalid(&mut ns_table, NsTableBuilder::entry_byte_len(), &mut rng);
+    }
 
     // Helper fn: add 1 byte to the `ns_table` `num_bytes` times. Expect
     // invalidity in all but the final time.
-    fn expect_num_bytes_invalid<R>(mut ns_table: NsTable, num_bytes: usize, rng: &mut R)
+    fn expect_num_bytes_invalid<R>(ns_table: &mut NsTable, num_bytes: usize, rng: &mut R)
     where
         R: RngCore,
     {
@@ -56,7 +60,10 @@ fn byte_len() {
                 NsTableValidationError::InvalidByteLen
             );
         }
-        ns_table.validate().unwrap();
+        assert_eq!(
+            ns_table.validate().unwrap_err(),
+            NsTableValidationError::InvalidHeader,
+        );
     }
 }
 
@@ -94,6 +101,36 @@ fn monotonic_increase() {
                 NsTableValidationError::NonIncreasingEntries
             );
         }
+    }
+}
+
+// TODO this test obsolete after
+// https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+#[test]
+fn header() {
+    setup_logging();
+    setup_backtrace();
+    let mut rng = jf_utils::test_rng();
+
+    for num_entries in 0..20 {
+        let mut ns_table = random_valid_ns_table(num_entries, &mut rng);
+        if num_entries != 0 {
+            set_header(&mut ns_table, 0);
+            set_header(&mut ns_table, num_entries - 1);
+        }
+        set_header(&mut ns_table, num_entries + 1);
+        set_header(&mut ns_table, usize_max_from_byte_len(NUM_NSS_BYTE_LEN));
+    }
+
+    // Helper fn: set the header of `ns_table` to declare `num_nss` entries,
+    // assert failure.
+    fn set_header(ns_table: &mut NsTable, num_nss: usize) {
+        ns_table.bytes[..NUM_NSS_BYTE_LEN]
+            .copy_from_slice(&usize_to_bytes::<NUM_NSS_BYTE_LEN>(num_nss));
+        assert_eq!(
+            ns_table.validate().unwrap_err(),
+            NsTableValidationError::InvalidHeader
+        );
     }
 }
 
