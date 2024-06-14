@@ -805,8 +805,8 @@ impl ValidatedState {
 
         let cf = match (state_cf.resolve(), header_cf.resolve()) {
             (Some(cf), _) => cf,
-            (_, Some(cf)) => cf,
-            (None, None) => {
+            (_, Some(cf)) if cf.commit() == state_cf.commit() => cf,
+            (_, Some(_)) | (None, None) => {
                 instance
                     .peers
                     .as_ref()
