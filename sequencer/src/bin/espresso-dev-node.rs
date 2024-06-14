@@ -69,10 +69,6 @@ struct Args {
     #[clap(short, long, env = "ESPRESSO_BUILDER_PORT")]
     builder_port: Option<u16>,
 
-    /// Port for connecting to the prover.
-    #[clap(short, long, env = "ESPRESSO_STATE_RELAY_PORT")]
-    state_relay_port: Option<u16>,
-
     #[clap(flatten)]
     sql: persistence::sql::Options,
 }
@@ -102,11 +98,7 @@ async fn main() -> anyhow::Result<()> {
         (url, Some(instance))
     };
 
-    let relay_server_port = if let Some(p) = cli_params.state_relay_port {
-        p
-    } else {
-        pick_unused_port().unwrap()
-    };
+    let relay_server_port = pick_unused_port().unwrap();
     let relay_server_url: Url = format!("http://localhost:{}", relay_server_port)
         .parse()
         .unwrap();
@@ -218,7 +210,6 @@ mod tests {
         availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
         data_source::sql::testing::TmpDb,
     };
-    use hotshot_types::light_client::StateSignaturesBundle;
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
     use sequencer::{
@@ -253,8 +244,6 @@ mod tests {
 
         let api_port = pick_unused_port().unwrap();
 
-        let state_relay_port = pick_unused_port().unwrap();
-
         let instance = AnvilOptions::default().spawn().await;
         let l1_url = instance.url();
 
@@ -271,7 +260,6 @@ mod tests {
             .env("ESPRESSO_SEQUENCER_L1_PROVIDER", l1_url.to_string())
             .env("ESPRESSO_BUILDER_PORT", builder_port.to_string())
             .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
-            .env("ESPRESSO_STATE_RELAY_PORT", state_relay_port.to_string())
             .env("ESPRESSO_SEQUENCER_POSTGRES_HOST", "localhost")
             .env("ESPRESSO_SEQUENCER_ETH_MNEMONIC", TEST_MNEMONIC)
             .env("ESPRESSO_DEPLOYER_ACCOUNT_INDEX", "0")
@@ -304,21 +292,6 @@ mod tests {
         let builder_api_client: Client<ServerError, SequencerVersion> =
             Client::new(format!("http://localhost:{builder_port}").parse().unwrap());
         builder_api_client.connect(None).await;
-
-        let relay_client: Client<ServerError, SequencerVersion> = Client::new(
-            format!("http://localhost:{state_relay_port}")
-                .parse()
-                .unwrap(),
-        );
-        relay_client.connect(None).await;
-        while relay_client
-            .get::<StateSignaturesBundle>("api/state")
-            .send()
-            .await
-            .is_err()
-        {
-            sleep(Duration::from_secs(3)).await;
-        }
 
         let builder_address = builder_api_client
             .get::<String>("block_info/builderaddress")
