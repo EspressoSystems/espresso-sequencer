@@ -392,3 +392,6 @@ impl<'a> Iterator for NsIter<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod test;
