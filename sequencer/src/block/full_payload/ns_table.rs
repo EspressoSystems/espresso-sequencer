@@ -220,9 +220,28 @@ impl NsTable {
         use NsTableValidationError::*;
 
         // byte length for a table with `x` entries must be exactly
-        // `x * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN`
-        if self.bytes.len() % (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) != NUM_NSS_BYTE_LEN {
+        // `x * NsTableBuilder::entry_byte_len() + NsTableBuilder::header_byte_len()`
+        if self.bytes.len() % NsTableBuilder::entry_byte_len() != NsTableBuilder::header_byte_len()
+        {
             return Err(InvalidByteLen);
+        }
+
+        // Namespace IDs and offsets must increase monotonically
+        {
+            let (mut prev_ns_id, mut prev_offset) = (None, None);
+            for (ns_id, offset) in self.iter().map(|i| {
+                (
+                    self.read_ns_id_unchecked(&i),
+                    self.read_ns_offset_unchecked(&i),
+                )
+            }) {
+                if let (Some(prev_ns_id), Some(prev_offset)) = (prev_ns_id, prev_offset) {
+                    if ns_id <= prev_ns_id || offset <= prev_offset {
+                        return Err(NonIncreasingEntries);
+                    }
+                }
+                (prev_ns_id, prev_offset) = (Some(ns_id), Some(offset));
+            }
         }
 
         Ok(())
@@ -237,11 +256,13 @@ impl NsTable {
         index: &NsIndex,
         payload_byte_len: &PayloadByteLen,
     ) -> NsPayloadRange {
-        let end = self.read_ns_offset(index).min(payload_byte_len.as_usize());
+        let end = self
+            .read_ns_offset_unchecked(index)
+            .min(payload_byte_len.as_usize());
         let start = if index.0 == 0 {
             0
         } else {
-            self.read_ns_offset(&NsIndex(index.0 - 1))
+            self.read_ns_offset_unchecked(&NsIndex(index.0 - 1))
         }
         .min(end);
         NsPayloadRange::new(start, end)
@@ -261,7 +282,7 @@ impl NsTable {
     }
 
     /// Read the namespace offset from the `index`th entry from the namespace table.
-    fn read_ns_offset(&self, index: &NsIndex) -> usize {
+    fn read_ns_offset_unchecked(&self, index: &NsIndex) -> usize {
         let start =
             index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
         usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.bytes[start..start + NS_OFFSET_BYTE_LEN])
@@ -292,6 +313,7 @@ impl Committable for NsTable {
 #[derive(Error, Debug, Display, Eq, PartialEq)]
 pub enum NsTableValidationError {
     InvalidByteLen,
+    NonIncreasingEntries,
     InvalidHeader, // TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
 }
 
