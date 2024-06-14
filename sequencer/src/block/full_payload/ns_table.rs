@@ -19,7 +19,7 @@ use committable::{Commitment, Committable, RawCommitmentBuilder};
 use derive_more::Display;
 use hotshot_types::traits::EncodeBytes;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::{collections::HashSet, sync::Arc};
+use std::{ops::Range, sync::Arc};
 use thiserror::Error;
 
 /// Byte lengths for the different items that could appear in a namespace table.
@@ -162,9 +162,20 @@ impl NsTable {
             .find(|index| self.read_ns_id_unchecked(index) == *ns_id)
     }
 
+    /// Number of entries in the namespace table.
+    pub fn len(&self) -> NumNss {
+        NumNss(std::cmp::min(
+            // Number of namespaces declared in the ns table
+            self.read_num_nss(),
+            // Max number of entries that could fit in the namespace table
+            self.bytes.len().saturating_sub(NUM_NSS_BYTE_LEN)
+                / NS_ID_BYTE_LEN.saturating_add(NS_OFFSET_BYTE_LEN),
+        ))
+    }
+
     /// Iterator over all unique namespaces in the namespace table.
     pub fn iter(&self) -> impl Iterator<Item = NsIndex> + '_ {
-        NsIter::new(self)
+        NsIter::new(&self.len())
     }
 
     /// Read the namespace id from the `index`th entry from the namespace table.
@@ -193,17 +204,7 @@ impl NsTable {
 
     /// Does the `index`th entry exist in the namespace table?
     pub fn in_bounds(&self, index: &NsIndex) -> bool {
-        // The number of entries in the namespace table, including all duplicate
-        // namespace IDs.
-        let num_nss_with_duplicates = std::cmp::min(
-            // Number of namespaces declared in the ns table
-            self.read_num_nss(),
-            // Max number of entries that could fit in the namespace table
-            self.bytes.len().saturating_sub(NUM_NSS_BYTE_LEN)
-                / NS_ID_BYTE_LEN.saturating_add(NS_OFFSET_BYTE_LEN),
-        );
-
-        index.0 < num_nss_with_duplicates
+        self.len().in_bounds(index)
     }
 
     /// Are the bytes of this [`NsTable`] uncorrupted?
@@ -253,7 +254,7 @@ impl NsTable {
     /// namespace table.
     ///
     /// For a correct count of the number of unique namespaces in this
-    /// namespace table use `iter().count()`.
+    /// namespace table use [`NsTable::len`].
     fn read_num_nss(&self) -> usize {
         let num_nss_byte_len = NUM_NSS_BYTE_LEN.min(self.bytes.len());
         usize_from_bytes::<NUM_NSS_BYTE_LEN>(&self.bytes[..num_nss_byte_len])
@@ -352,39 +353,30 @@ impl NsIndex {
     }
 }
 
-/// Return type for [`Payload::ns_iter`].
-pub(in crate::block) struct NsIter<'a> {
-    cur_index: usize,
-    repeat_nss: HashSet<NamespaceId>,
-    ns_table: &'a NsTable,
-}
+/// Number of entries in a namespace table.
+pub struct NumNss(usize);
 
-impl<'a> NsIter<'a> {
-    pub fn new(ns_table: &'a NsTable) -> Self {
-        Self {
-            cur_index: 0,
-            repeat_nss: HashSet::new(),
-            ns_table,
-        }
+impl NumNss {
+    pub fn in_bounds(&self, index: &NsIndex) -> bool {
+        index.0 < self.0
     }
 }
 
-impl<'a> Iterator for NsIter<'a> {
+/// Return type for [`Payload::ns_iter`].
+pub(in crate::block) struct NsIter(Range<usize>);
+
+impl NsIter {
+    pub fn new(num_nss: &NumNss) -> Self {
+        Self(0..num_nss.0)
+    }
+}
+
+// Simple `impl Iterator` delegates to `Range`.
+impl Iterator for NsIter {
     type Item = NsIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let candidate_result = NsIndex(self.cur_index);
-            let ns_id = self.ns_table.read_ns_id(&candidate_result)?;
-            self.cur_index += 1;
-
-            // skip duplicate namespace IDs
-            if !self.repeat_nss.insert(ns_id) {
-                continue;
-            }
-
-            break Some(candidate_result);
-        }
+        self.0.next().map(NsIndex)
     }
 }
 
