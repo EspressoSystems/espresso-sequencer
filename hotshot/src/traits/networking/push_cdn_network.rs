@@ -1,8 +1,9 @@
 #[cfg(feature = "hotshot-testing")]
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::{collections::BTreeSet, marker::PhantomData};
 #[cfg(feature = "hotshot-testing")]
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{path::Path, time::Duration};
 
 use async_compatibility_layer::channel::UnboundedSendError;
 #[cfg(feature = "hotshot-testing")]
