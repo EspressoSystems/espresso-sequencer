@@ -77,7 +77,7 @@ struct Args {
     keygen_seed: [u8; 32],
 
     /// HotShot builder URL
-    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_BUILDER_URL", value_delimiter = ',')]
+    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_BUILDER_URLS", num_args = 1.., value_delimiter = ',')]
     builder_urls: Vec<Url>,
 
     /// The maximum amount of time a leader can wait to get a block from a builder.

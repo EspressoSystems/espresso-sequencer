@@ -143,6 +143,7 @@ mod upgrade_serialization {
             seq.serialize_element(&(
                 version.to_string(),
                 upgrade.view,
+                upgrade.propose_window,
                 upgrade.upgrade_type.clone(),
             ))?;
         }
