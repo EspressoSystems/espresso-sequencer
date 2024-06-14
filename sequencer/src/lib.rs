@@ -689,7 +689,7 @@ pub mod testing {
     }
 
     impl TestConfig {
-        pub const NUM_NODES: usize = 4;
+        pub const NUM_NODES: usize = 5;
 
         pub fn num_nodes(&self) -> usize {
             self.priv_keys.len()
