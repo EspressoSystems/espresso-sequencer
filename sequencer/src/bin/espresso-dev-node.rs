@@ -142,6 +142,7 @@ async fn main() -> anyhow::Result<()> {
     )
     .await?;
 
+    // Run the relay server
     let st = network.cfg.stake_table();
     let total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
     spawn(run_relay_server(
@@ -153,6 +154,9 @@ async fn main() -> anyhow::Result<()> {
         SEQUENCER_VERSION,
     ));
 
+    // Run the prover service. These code are basically from `hotshot-state-prover`. The difference
+    // is that here we don't need to fetch the `stake table` from other entities.
+    // TODO: Remove the redundant code.
     let proving_key =
         spawn_blocking(move || Arc::new(load_proving_key(STAKE_TABLE_CAPACITY_FOR_TEST as usize)))
             .await;
