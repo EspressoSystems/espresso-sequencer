@@ -210,11 +210,9 @@ impl NsTable {
     /// Are the bytes of this [`NsTable`] uncorrupted?
     ///
     /// # Checks
-    /// 1. Disallow duplicate namespace IDs
-    /// 2. Sort by namespace ID
-    /// 3. Monotonically increasing offsets
-    /// 4. No partial entries
-    /// 5. Header consistent with byte length (obsolete after
+    /// 1. Byte length must hold a whole number of entries.
+    /// 2. All namespace IDs and offsets must be nonzero and monotonically increasing
+    /// 3. Header consistent with byte length (obsolete after
     ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>)
     pub fn validate(&self) -> Result<(), NsTableValidationError> {
         use NsTableValidationError::*;
