@@ -15,16 +15,12 @@ fn byte_len() {
         ns_table.validate().unwrap_err(),
         NsTableValidationError::InvalidByteLen
     );
-    expect_num_bytes_invalid(
-        ns_table,
-        NsTableBuilder::fixed_overhead_byte_len(),
-        &mut rng,
-    );
+    expect_num_bytes_invalid(ns_table, NsTableBuilder::header_byte_len(), &mut rng);
 
     // Add enough bytes for a new entry.
     let ns_table = random_valid_ns_table(20, &mut rng);
     ns_table.validate().unwrap();
-    expect_num_bytes_invalid(ns_table, NsTableBuilder::ns_overhead_byte_len(), &mut rng);
+    expect_num_bytes_invalid(ns_table, NsTableBuilder::entry_byte_len(), &mut rng);
 
     // Add 1 byte to the `ns_table` `num_bytes` times. Expect invalidity in all
     // but the final time.

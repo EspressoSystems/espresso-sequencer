@@ -327,18 +327,13 @@ impl NsTableBuilder {
         NsTable { bytes }
     }
 
-    /// Byte length of a namespace table with zero entries.
-    ///
-    /// Currently this quantity equals the byte length of the ns table header.
-    pub const fn fixed_overhead_byte_len() -> usize {
+    /// Byte length of a namespace table header.
+    pub const fn header_byte_len() -> usize {
         NUM_NSS_BYTE_LEN
     }
 
-    /// Byte length added to a namespace table by a new entry.
-    ///
-    /// Currently this quantity equals the byte length of a single ns table
-    /// entry.
-    pub const fn ns_overhead_byte_len() -> usize {
+    /// Byte length of a single namespace table entry.
+    pub const fn entry_byte_len() -> usize {
         NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN
     }
 }
