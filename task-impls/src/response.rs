@@ -9,7 +9,10 @@ use hotshot_task::dependency::{Dependency, EventDependency};
 use hotshot_types::{
     consensus::{Consensus, LockedConsensusState},
     data::VidDisperseShare,
-    message::{DaConsensusMessage, DataMessage, Message, MessageKind, Proposal, SequencingMessage},
+    message::{
+        DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message, MessageKind, Proposal,
+        SequencingMessage,
+    },
     traits::{
         election::Membership,
         network::{DataRequest, RequestKind, ResponseChannel, ResponseMessage},
@@ -211,12 +214,13 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
         self.quorum.has_stake(sender)
     }
     /// Lookup the proposal for the view and respond if it's found/not found
-    #[allow(clippy::no_effect_underscore_binding)]
-    async fn respond_with_proposal(&self, _view: TYPES::Time) -> ResponseMessage<TYPES> {
-        // Complete after we are storing our last proposed view:
-        // https://github.com/EspressoSystems/HotShot/issues/3240
-        async {}.await;
-        todo!();
+    async fn respond_with_proposal(&self, view: TYPES::Time) -> ResponseMessage<TYPES> {
+        match self.consensus.read().await.last_proposals().get(&view) {
+            Some(prop) => ResponseMessage::Found(SequencingMessage::General(
+                GeneralConsensusMessage::Proposal(prop.clone()),
+            )),
+            None => ResponseMessage::NotFound,
+        }
     }
 }
 

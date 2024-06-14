@@ -601,8 +601,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         add_network_message_task(&mut handle, Arc::clone(&da_network)).await;
 
         if let Some(request_receiver) = da_network.spawn_request_receiver_task().await {
-            add_response_task(&mut handle, request_receiver).await;
             add_request_network_task(&mut handle).await;
+            add_response_task(&mut handle, request_receiver).await;
         }
 
         add_network_event_task(

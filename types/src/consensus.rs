@@ -239,6 +239,11 @@ impl<TYPES: NodeType> Consensus<TYPES> {
         &self.saved_da_certs
     }
 
+    /// Get the map of our recent proposals
+    pub fn last_proposals(&self) -> &BTreeMap<TYPES::Time, Proposal<TYPES, QuorumProposal<TYPES>>> {
+        &self.last_proposals
+    }
+
     /// Update the current view.
     /// # Errors
     /// Can return an error when the new view_number is not higher than the existing view number.
