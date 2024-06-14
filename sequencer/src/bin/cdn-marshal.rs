@@ -48,7 +48,7 @@ struct Args {
         value_parser = parse_size,
         env = "ESPRESSO_CDN_MARSHAL_GLOBAL_MEMORY_POOL_SIZE"
     )]
-    global_memory_pool_size: usize,
+    global_memory_pool_size: u64,
 }
 
 #[async_std::main]
