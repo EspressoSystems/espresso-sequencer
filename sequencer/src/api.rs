@@ -1375,7 +1375,7 @@ mod test {
         };
         let mut map = std::collections::BTreeMap::new();
         let view = 5;
-        let propose_window = 100;
+        let propose_window = 10;
         map.insert(
             Version { major: 0, minor: 2 },
             Upgrade {
