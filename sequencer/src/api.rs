@@ -350,23 +350,23 @@ pub mod test_helpers {
             let mut cfg = TestConfig::default_with_l1(l1);
             cfg.builder_port = builder_port;
 
-            Self::with_state_config(opt, state, persistence, catchup, cfg).await
+            Self::with_state_and_config(opt, state, persistence, catchup, cfg).await
         }
 
-        pub async fn with_state_config(
+        pub async fn with_state_and_config(
             opt: Options,
             state: [ValidatedState; TestConfig::NUM_NODES],
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
             catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
-            mut cfg: TestConfig,
+            mut config: TestConfig,
         ) -> Self {
-            let (builder_task, builder_url) = run_test_builder(cfg.builder_port).await;
-            cfg.set_hotshot_builder_url(builder_url);
+            let (builder_task, builder_url) = run_test_builder(config.builder_port).await;
+            config.set_hotshot_builder_url(builder_url);
 
             let mut nodes = join_all(izip!(state, persistence, catchup).enumerate().map(
                 |(i, (state, persistence, catchup))| {
                     let opt = opt.clone();
-                    let cfg = &cfg;
+                    let cfg = &config;
                     async move {
                         if i == 0 {
                             opt.serve(
@@ -421,7 +421,11 @@ pub mod test_helpers {
             let server = nodes.remove(0);
             let peers = nodes;
 
-            Self { server, peers, cfg }
+            Self {
+                server,
+                peers,
+                cfg: config,
+            }
         }
 
         pub async fn new_with_config(
@@ -429,7 +433,7 @@ pub mod test_helpers {
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
             config: TestConfig,
         ) -> Self {
-            Self::with_state_config(
+            Self::with_state_and_config(
                 opt,
                 Default::default(),
                 persistence,
