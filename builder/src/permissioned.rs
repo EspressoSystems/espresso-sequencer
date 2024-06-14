@@ -12,8 +12,8 @@ use hotshot::{
     traits::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
-            derive_libp2p_peer_id, CombinedNetworks, KeyPair, Libp2pNetwork,
-            NetworkingMetricsValue, PushCdnNetwork, Topic, WrappedSignatureKey,
+            derive_libp2p_peer_id, CdnMetricsValue, CombinedNetworks, KeyPair, Libp2pNetwork,
+            PushCdnNetwork, Topic, WrappedSignatureKey,
         },
     },
     types::{SignatureKey, SystemContextHandle},
@@ -209,6 +209,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
             public_key: WrappedSignatureKey(my_config.public_key),
             private_key: my_config.private_key.clone(),
         },
+        CdnMetricsValue::new(metrics),
     )
     .with_context(|| "Failed to create CDN network")?;
 
@@ -221,6 +222,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         // We need the private key so we can derive our Libp2p keypair
         // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
         &my_config.private_key,
+        hotshot::traits::implementations::Libp2pMetricsValue::new(metrics),
     )
     .await
     .with_context(|| "Failed to create libp2p network")?;
@@ -251,12 +253,6 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         quorum_network,
         _pd: Default::default(),
     };
-
-    // The web server network doesn't have any metrics. By creating and dropping a
-    // `NetworkingMetricsValue`, we ensure the networking metrics are created, but just not
-    // populated, so that monitoring software built to work with network-related metrics doesn't
-    // crash horribly just because we're not using the P2P network yet.
-    let _ = NetworkingMetricsValue::new(metrics);
 
     let mut genesis_state = ValidatedState {
         chain_config: genesis.chain_config.into(),

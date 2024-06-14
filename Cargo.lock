@@ -4220,7 +4220,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.39"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=rc-0.1.40#0a2481db04df0a2076613546413f592e160ec1be"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=rc-0.1.40#a41c0a50aef228b1a0ea017bdb4341d06c902725"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -7589,7 +7589,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.66",
@@ -8712,6 +8712,7 @@ dependencies = [
  "jf-vid",
  "libp2p",
  "num-traits",
+ "num_enum",
  "paste",
  "portpicker",
  "pretty_assertions",
@@ -8724,6 +8725,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.8",
  "snafu 0.8.3",
+ "static_assertions",
  "strum",
  "surf-disco",
  "tagged-base64",

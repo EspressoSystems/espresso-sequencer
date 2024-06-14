@@ -9,9 +9,7 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::{
-        election::static_committee::GeneralStaticCommittee, implementations::NetworkingMetricsValue,
-    },
+    traits::election::static_committee::GeneralStaticCommittee,
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
@@ -379,8 +377,7 @@ pub mod testing {
 
             let network = Arc::new(MemoryNetwork::new(
                 config.my_own_validator_config.public_key,
-                NetworkingMetricsValue::new(metrics),
-                self.master_map.clone(),
+                &self.master_map,
                 None,
             ));
             let networks = Networks {
