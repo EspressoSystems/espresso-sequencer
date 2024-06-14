@@ -27,7 +27,7 @@ use futures::{
     stream::StreamExt,
 };
 use hotshot::{
-    traits::implementations::{MasterMap, MemoryNetwork, NetworkingMetricsValue},
+    traits::implementations::{MasterMap, MemoryNetwork},
     types::{Event, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
@@ -168,8 +168,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
 
                         let network = Arc::new(MemoryNetwork::new(
                             pub_keys[node_id],
-                            NetworkingMetricsValue::new(&*data_source.populate_metrics()),
-                            master_map.clone(),
+                            &master_map.clone(),
                             None,
                         ));
 

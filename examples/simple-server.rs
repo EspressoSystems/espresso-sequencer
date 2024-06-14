@@ -21,7 +21,7 @@ use async_std::sync::Arc;
 use clap::Parser;
 use futures::future::{join_all, try_join_all};
 use hotshot::{
-    traits::implementations::{MasterMap, MemoryNetwork, NetworkingMetricsValue},
+    traits::implementations::{MasterMap, MemoryNetwork},
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
@@ -232,8 +232,7 @@ async fn init_consensus(
 
                 let network = Arc::new(MemoryNetwork::new(
                     pub_keys[node_id],
-                    NetworkingMetricsValue::new(&*data_source.populate_metrics()),
-                    master_map.clone(),
+                    &master_map.clone(),
                     None,
                 ));
                 let networks = Networks {
