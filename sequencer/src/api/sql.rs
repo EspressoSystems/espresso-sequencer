@@ -139,8 +139,8 @@ impl ChainConfigPersistence for SqlStorage {
                     ["commitment"],
                     [[sql_param(&(commitment.to_string())), sql_param(&data)]],
                 )
-                .await?;
-                Ok(())
+                .await
+                .map_err(Into::into)
             }
             .boxed()
         })

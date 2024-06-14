@@ -675,7 +675,7 @@ impl ValidatedState {
         // through returned value.
 
         let mut validated_state = self.clone();
-        validated_state.apply_upgrade(instance, proposed_header, version);
+        validated_state.apply_upgrade(instance, version);
 
         let chain_config = validated_state
             .get_chain_config(instance, &proposed_header.chain_config)
@@ -768,12 +768,7 @@ impl ValidatedState {
     }
 
     /// Updates the `ValidatedState` if a protocol upgrade has occurred.
-    pub(crate) fn apply_upgrade(
-        &mut self,
-        instance: &NodeState,
-        header: &Header,
-        version: Version,
-    ) {
+    pub(crate) fn apply_upgrade(&mut self, instance: &NodeState, version: Version) {
         // Check for protocol upgrade based on sequencer version
         if version <= instance.current_version {
             return;
@@ -785,9 +780,7 @@ impl ValidatedState {
 
         match upgrade.upgrade_type {
             UpgradeType::ChainConfig { chain_config } => {
-                if header.chain_config.commit() == chain_config.commit() {
-                    self.chain_config = chain_config.into();
-                }
+                self.chain_config = chain_config.into();
             }
         }
     }
