@@ -74,6 +74,7 @@ async fn main() {
             metrics_bind_endpoint: None,
             ca_cert_path: None,
             ca_key_path: None,
+            global_memory_pool_size: Some(1024 * 1024 * 1024),
         };
 
         // Create and spawn the broker
@@ -99,6 +100,7 @@ async fn main() {
         metrics_bind_endpoint: None,
         ca_cert_path: None,
         ca_key_path: None,
+        global_memory_pool_size: Some(1024 * 1024 * 1024),
     };
 
     // Spawn the marshal

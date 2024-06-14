@@ -54,6 +54,13 @@ struct Args {
     /// The seed for broker key generation
     #[arg(short, long, default_value_t = 0)]
     key_seed: u64,
+
+    /// The size of the global memory pool (in bytes). This is the maximum number of bytes that
+    /// can be allocated at once for all connections. A connection will block if it
+    /// tries to allocate more than this amount until some memory is freed.
+    /// Default is 1GB.
+    #[arg(long, default_value_t = 1_073_741_824)]
+    global_memory_pool_size: usize,
 }
 #[cfg_attr(async_executor_impl = "tokio", tokio::main)]
 #[cfg_attr(async_executor_impl = "async-std", async_std::main)]
@@ -94,6 +101,7 @@ async fn main() -> Result<()> {
         public_advertise_endpoint: args.public_advertise_endpoint,
         private_bind_endpoint: args.private_bind_endpoint,
         private_advertise_endpoint: args.private_advertise_endpoint,
+        global_memory_pool_size: Some(args.global_memory_pool_size),
     };
 
     // Create new `Broker`

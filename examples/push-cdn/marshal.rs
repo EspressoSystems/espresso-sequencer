@@ -36,6 +36,13 @@ struct Args {
     /// If not provided, a local, pinned CA is used
     #[arg(long)]
     ca_key_path: Option<String>,
+
+    /// The size of the global memory pool (in bytes). This is the maximum number of bytes that
+    /// can be allocated at once for all connections. A connection will block if it
+    /// tries to allocate more than this amount until some memory is freed.
+    /// Default is 1GB.
+    #[arg(long, default_value_t = 1_073_741_824)]
+    global_memory_pool_size: usize,
 }
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::main)]
@@ -63,6 +70,7 @@ async fn main() -> Result<()> {
         metrics_bind_endpoint: args.metrics_bind_endpoint,
         ca_cert_path: args.ca_cert_path,
         ca_key_path: args.ca_key_path,
+        global_memory_pool_size: Some(args.global_memory_pool_size),
     };
 
     // Create new `Marshal` from the config
