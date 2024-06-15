@@ -17,7 +17,7 @@ and robust infrastructure.
 
 ### Architecture
 
-This diagram below depicts a simplified view of the current architecture of the Espresso Sequencer. The diagram includes
+The diagram below depicts a simplified view of the current architecture of the Espresso Sequencer. The diagram includes
 views of an Espresso Sequencer node, the Espresso Sequencer Network (nodes, CDN, builders, prover, state relay service),
 two rollups (one ZK rollup "Z", one optimistic rollup "O") that use the Espresso Sequencer for sequencing and some
 important L1 contracts.
@@ -85,7 +85,7 @@ Build all executables with `cargo build --release`. You may then start a sequenc
 orchestrator. Choose a port `$PORT` to run it on and decide how many sequencer nodes `$N` you will use, then run
 `target/release/orchestrator -p $PORT -n $N`.
 
-The sequencer will distribute a HotShot configuration to all the nodes which connect to it, which specifies consensus
+The sequencer will distribute a HotShot configuration to all the nodes that connect to it, which specifies consensus
 parameters like view timers. There is a default config, but you can override any parameters you want by passing
 additional options to the `orchestrator` executable. Run `target/release/orchestrator --help` to see a list of available
 options.
