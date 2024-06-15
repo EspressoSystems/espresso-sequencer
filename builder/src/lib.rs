@@ -478,7 +478,7 @@ pub mod testing {
         }
     }
 
-    // Wait for decide event, make sure it matches submitted transaction. Return the block number
+    // Wait for decide event, and make sure it matches the submitted transaction. Return the block number
     // containing the transaction.
     pub async fn wait_for_decide_on_handle(
         events: &mut (impl Stream<Item = Event> + Unpin),
