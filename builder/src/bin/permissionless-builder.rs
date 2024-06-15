@@ -25,7 +25,7 @@ struct NonPermissionedBuilderOptions {
 
     /// Mnemonic phrase for builder account.
     ///
-    /// This is the address fees will be charged to.
+    /// This is the address for fees that will be charged to.
     /// It must be funded with ETH in the Espresso fee ledger
     #[clap(long, env = "ESPRESSO_BUILDER_ETH_MNEMONIC")]
     eth_mnemonic: String,
