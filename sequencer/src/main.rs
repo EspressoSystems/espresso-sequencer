@@ -7,7 +7,8 @@ use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
-    init_node,
+    context::SequencerContext,
+    init_node, network,
     options::{Modules, Options},
     persistence, Genesis, L1Params, NetworkParams,
 };
@@ -22,7 +23,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::warn!(?modules, "sequencer starting up");
 
     if let Some(storage) = modules.storage_fs.take() {
-        init_with_storage(
+        run_with_storage(
             modules,
             opt,
             storage,
@@ -30,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .await
     } else if let Some(storage) = modules.storage_sql.take() {
-        init_with_storage(
+        run_with_storage(
             modules,
             opt,
             storage,
@@ -39,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
         .await
     } else {
         // Persistence is required. If none is provided, just use the local file system.
-        init_with_storage(
+        run_with_storage(
             modules,
             opt,
             persistence::fs::Options::default(),
@@ -49,12 +50,30 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
-async fn init_with_storage<S, Ver: StaticVersionType + 'static>(
+async fn run_with_storage<S, Ver: StaticVersionType + 'static>(
     modules: Modules,
     opt: Options,
     storage_opt: S,
     bind_version: Ver,
 ) -> anyhow::Result<()>
+where
+    S: DataSourceOptions,
+{
+    let ctx = init_with_storage(modules, opt, storage_opt, bind_version).await?;
+
+    // Start doing consensus.
+    ctx.start_consensus().await;
+    ctx.join().await;
+
+    Ok(())
+}
+
+async fn init_with_storage<S, Ver: StaticVersionType + 'static>(
+    modules: Modules,
+    opt: Options,
+    storage_opt: S,
+    bind_version: Ver,
+) -> anyhow::Result<SequencerContext<network::Production, S::Persistence, Ver>>
 where
     S: DataSourceOptions,
 {
@@ -178,12 +197,10 @@ where
         }
     };
 
-    // Start doing consensus.
-    ctx.start_consensus().await;
-    ctx.join().await;
-
-    Ok(())
+    Ok(ctx)
 }
+
+mod restart_tests;
 
 #[cfg(test)]
 mod test {

@@ -7,7 +7,7 @@ edition = "2021"
 
 [features]
 default = ["libp2p"]
-testing = ["hotshot-testing"]
+testing = ["hotshot-testing", "tempfile"]
 libp2p = []
 benchmarking = []
 
@@ -23,7 +23,7 @@ hotshot-testing = { workspace = true }
 pretty_assertions = { workspace = true }
 rand = "0.8.5"
 reqwest = { workspace = true }
-tempfile = "3.9.0"
+tempfile = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
@@ -73,6 +73,7 @@ itertools = { workspace = true }
 jf-crhf = { workspace = true }
 jf-merkle-tree = { workspace = true }
 jf-rescue = { workspace = true }
+tempfile = { workspace = true, optional = true }
 
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-vid = { workspace = true }
