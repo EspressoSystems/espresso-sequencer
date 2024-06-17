@@ -102,21 +102,52 @@
 <a href="#102" id="102">102</a>
 <a href="#103" id="103">103</a>
 <a href="#104" id="104">104</a>
+<a href="#105" id="105">105</a>
+<a href="#106" id="106">106</a>
+<a href="#107" id="107">107</a>
+<a href="#108" id="108">108</a>
+<a href="#109" id="109">109</a>
+<a href="#110" id="110">110</a>
+<a href="#111" id="111">111</a>
+<a href="#112" id="112">112</a>
+<a href="#113" id="113">113</a>
+<a href="#114" id="114">114</a>
+<a href="#115" id="115">115</a>
+<a href="#116" id="116">116</a>
+<a href="#117" id="117">117</a>
+<a href="#118" id="118">118</a>
 </pre></div><pre class="rust"><code><span class="doccomment">/// Trait implementations for the CDN
 </span><span class="kw">use </span>std::marker::PhantomData;
 
 <span class="kw">use </span>bincode::Options;
 <span class="kw">use </span>cdn_broker::reexports::{
-    connection::{
-        protocols::{Quic, Tcp},
-        NoMiddleware, TrustedMiddleware, UntrustedMiddleware,
-    },
+    connection::protocols::{Quic, Tcp},
     crypto::signature::{Serializable, SignatureScheme},
-    def::{ConnectionDef, RunDef},
+    def::{ConnectionDef, RunDef, Topic <span class="kw">as </span>TopicTrait},
     discovery::{Embedded, Redis},
 };
-<span class="kw">use </span>hotshot::{traits::implementations::Topic, types::SignatureKey};
+<span class="kw">use </span>hotshot::{traits::implementations::Topic <span class="kw">as </span>HotShotTopic, types::SignatureKey};
 <span class="kw">use </span>hotshot_types::{traits::node_implementation::NodeType, utils::bincode_opts};
+<span class="kw">use </span>num_enum::{IntoPrimitive, TryFromPrimitive};
+<span class="kw">use </span>static_assertions::const_assert_eq;
+
+<span class="doccomment">/// The enum for the topics we can subscribe to in the Push CDN
+</span><span class="attr">#[repr(u8)]
+#[derive(IntoPrimitive, TryFromPrimitive, Clone, PartialEq, Eq)]
+</span><span class="kw">pub enum </span>Topic {
+    <span class="doccomment">/// The global topic
+    </span>Global = <span class="number">0</span>,
+    <span class="doccomment">/// The DA topic
+    </span>Da = <span class="number">1</span>,
+}
+
+<span class="comment">// Make sure the topics are the same as defined in `HotShot`.
+</span><span class="macro">const_assert_eq!</span>(Topic::Global <span class="kw">as </span>u8, HotShotTopic::Global <span class="kw">as </span>u8);
+<span class="macro">const_assert_eq!</span>(Topic::Da <span class="kw">as </span>u8, HotShotTopic::Da <span class="kw">as </span>u8);
+
+<span class="doccomment">/// Implement the `TopicTrait` for our `Topic` enum. This lets us define
+/// compatible topics at the broker-level. Others will be rejected.
+</span><span class="kw">impl </span>TopicTrait <span class="kw">for </span>Topic {}
 
 <span class="doccomment">/// A wrapped `SignatureKey`. We need to implement the Push CDN's `SignatureScheme`
 /// trait in order to sign and verify messages to/from the CDN.
@@ -174,7 +205,6 @@
 <span class="kw">impl</span>&lt;TYPES: NodeType&gt; ConnectionDef <span class="kw">for </span>UserDef&lt;TYPES&gt; {
     <span class="kw">type </span>Scheme = WrappedSignatureKey&lt;TYPES::SignatureKey&gt;;
     <span class="kw">type </span>Protocol = Quic;
-    <span class="kw">type </span>Middleware = UntrustedMiddleware;
 }
 
 <span class="doccomment">/// The broker definition for the Push CDN.
@@ -183,7 +213,6 @@
 <span class="kw">impl</span>&lt;TYPES: NodeType&gt; ConnectionDef <span class="kw">for </span>BrokerDef&lt;TYPES&gt; {
     <span class="kw">type </span>Scheme = WrappedSignatureKey&lt;TYPES::SignatureKey&gt;;
     <span class="kw">type </span>Protocol = Tcp;
-    <span class="kw">type </span>Middleware = TrustedMiddleware;
 }
 
 <span class="doccomment">/// The client definition for the Push CDN. Uses the Quic
@@ -194,7 +223,6 @@
 <span class="kw">impl</span>&lt;TYPES: NodeType&gt; ConnectionDef <span class="kw">for </span>ClientDef&lt;TYPES&gt; {
     <span class="kw">type </span>Scheme = WrappedSignatureKey&lt;TYPES::SignatureKey&gt;;
     <span class="kw">type </span>Protocol = Quic;
-    <span class="kw">type </span>Middleware = NoMiddleware;
 }
 
 <span class="doccomment">/// The testing run definition for the Push CDN.

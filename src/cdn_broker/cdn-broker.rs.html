@@ -122,15 +122,38 @@
 <a href="#122" id="122">122</a>
 <a href="#123" id="123">123</a>
 <a href="#124" id="124">124</a>
+<a href="#125" id="125">125</a>
+<a href="#126" id="126">126</a>
+<a href="#127" id="127">127</a>
+<a href="#128" id="128">128</a>
+<a href="#129" id="129">129</a>
+<a href="#130" id="130">130</a>
+<a href="#131" id="131">131</a>
+<a href="#132" id="132">132</a>
+<a href="#133" id="133">133</a>
+<a href="#134" id="134">134</a>
+<a href="#135" id="135">135</a>
+<a href="#136" id="136">136</a>
+<a href="#137" id="137">137</a>
+<a href="#138" id="138">138</a>
+<a href="#139" id="139">139</a>
+<a href="#140" id="140">140</a>
+<a href="#141" id="141">141</a>
+<a href="#142" id="142">142</a>
+<a href="#143" id="143">143</a>
+<a href="#144" id="144">144</a>
+<a href="#145" id="145">145</a>
+<a href="#146" id="146">146</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! The following is the main `Broker` binary, which just instantiates and runs
 //! a `Broker` object.
-</span><span class="kw">use </span>anyhow::Result;
+</span><span class="kw">use </span>anyhow::{Context, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>cdn_broker::reexports::crypto::signature::KeyPair;
 <span class="kw">use </span>cdn_broker::{Broker, Config};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
 <span class="kw">use </span>hotshot_types::traits::signature_key::SignatureKey;
 <span class="kw">use </span>sequencer::network::cdn::{ProductionDef, WrappedSignatureKey};
+<span class="kw">use </span>sequencer::options::parse_size;
 <span class="kw">use </span>sequencer::SeqTypes;
 <span class="kw">use </span>sha2::Digest;
 <span class="kw">use </span>tracing_subscriber::EnvFilter;
@@ -196,6 +219,17 @@
     <span class="doccomment">/// The seed for broker key generation
     </span><span class="attr">#[arg(short, long, default_value_t = <span class="number">0</span>, env = <span class="string">"ESPRESSO_CDN_BROKER_KEY_SEED"</span>)]
     </span>key_seed: u64,
+
+    <span class="doccomment">/// The size of the global memory pool. This is the maximum number of bytes that
+    /// can be allocated at once for all connections. A connection will block if it
+    /// tries to allocate more than this amount until some memory is freed.
+    </span><span class="attr">#[arg(
+        long,
+        default_value = <span class="string">"1GB"</span>,
+        value_parser = parse_size,
+        env = <span class="string">"ESPRESSO_CDN_BROKER_GLOBAL_MEMORY_POOL_SIZE"
+    </span>)]
+    </span>global_memory_pool_size: u64,
 }
 <span class="attr">#[async_std::main]
 </span><span class="kw">async fn </span>main() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
@@ -219,6 +253,15 @@
     <span class="kw">let </span>(public_key, private_key) =
         &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey::generated_from_seed_indexed(key_hash.into(), <span class="number">1337</span>);
 
+    <span class="comment">// Cast the memory pool size to a `usize`
+    </span><span class="kw">let </span>global_memory_pool_size =
+        usize::try_from(args.global_memory_pool_size).with_context(|| {
+            <span class="macro">format!</span>(
+                <span class="string">"Failed to convert global memory pool size to usize: {}"</span>,
+                args.global_memory_pool_size
+            )
+        })<span class="question-mark">?</span>;
+
     <span class="comment">// Create config
     </span><span class="kw">let </span>broker_config: Config&lt;ProductionDef&lt;SeqTypes&gt;&gt; = Config {
         ca_cert_path: args.ca_cert_path,
@@ -235,6 +278,7 @@
         public_advertise_endpoint: args.public_advertise_endpoint,
         private_bind_endpoint: args.private_bind_endpoint,
         private_advertise_endpoint: args.private_advertise_endpoint,
+        global_memory_pool_size: <span class="prelude-val">Some</span>(global_memory_pool_size),
     };
 
     <span class="comment">// Create new `Broker`

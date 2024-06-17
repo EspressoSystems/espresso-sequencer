@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["fs","no_storage","sql"],"trait":["PersistenceOptions","SequencerPersistence"],"type":["NetworkConfig"]};
+window.SIDEBAR_ITEMS = {"mod":["fs","no_storage","sql"],"trait":["ChainConfigPersistence","PersistenceOptions","SequencerPersistence"],"type":["NetworkConfig"]};

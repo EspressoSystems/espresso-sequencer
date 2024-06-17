@@ -275,6 +275,29 @@
 <a href="#275" id="275">275</a>
 <a href="#276" id="276">276</a>
 <a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use super</span>::{
@@ -285,10 +308,11 @@
 <span class="kw">use crate</span>::{
     network,
     persistence::{<span class="self">self</span>, SequencerPersistence},
-    PubKey, SeqTypes, Transaction,
+    ChainConfig, PubKey, SeqTypes, Transaction,
 };
 <span class="kw">use </span>anyhow::bail;
 <span class="kw">use </span>async_trait::async_trait;
+<span class="kw">use </span>committable::Commitment;
 <span class="kw">use </span>ethers::prelude::Address;
 <span class="kw">use </span>futures::future::Future;
 <span class="kw">use </span>hotshot_query_service::{
@@ -306,6 +330,7 @@
 <span class="kw">use </span>serde::Serialize;
 <span class="kw">use </span>tide_disco::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
+<span class="kw">use </span>vec1::Vec1;
 
 <span class="kw">pub trait </span>DataSourceOptions: persistence::PersistenceOptions {
     <span class="kw">type </span>DataSource: SequencerDataSource&lt;Options = <span class="self">Self</span>&gt;;
@@ -418,6 +443,15 @@
             <span class="macro">bail!</span>(<span class="string">"merklized state catchup is not supported for this data source"</span>);
         }
     }
+
+    <span class="kw">fn </span>get_chain_config(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        _commitment: Commitment&lt;ChainConfig&gt;,
+    ) -&gt; <span class="kw">impl </span>Send + Future&lt;Output = anyhow::Result&lt;ChainConfig&gt;&gt; {
+        <span class="kw">async </span>{
+            <span class="macro">bail!</span>(<span class="string">"chain config catchup is not supported for this data source"</span>);
+        }
+    }
 }
 
 <span class="kw">impl </span>CatchupDataSource <span class="kw">for </span>MetricsDataSource {}
@@ -482,7 +516,11 @@
     <span class="kw">pub </span>num_bootstrap: usize,
     <span class="kw">pub </span>builder_timeout: Duration,
     <span class="kw">pub </span>data_request_delay: Duration,
-    <span class="kw">pub </span>builder_url: Url,
+    <span class="kw">pub </span>builder_urls: Vec1&lt;Url&gt;,
+    <span class="kw">pub </span>start_proposing_view: u64,
+    <span class="kw">pub </span>stop_proposing_view: u64,
+    <span class="kw">pub </span>start_voting_view: u64,
+    <span class="kw">pub </span>stop_voting_view: u64,
 }
 
 <span class="kw">impl </span>From&lt;HotShotConfig&lt;PubKey&gt;&gt; <span class="kw">for </span>PublicHotShotConfig {
@@ -510,7 +548,11 @@
             num_bootstrap,
             builder_timeout,
             data_request_delay,
-            builder_url,
+            builder_urls,
+            start_proposing_view,
+            stop_proposing_view,
+            start_voting_view,
+            stop_voting_view,
         } = v;
 
         <span class="self">Self </span>{
@@ -533,7 +575,11 @@
             num_bootstrap,
             builder_timeout,
             data_request_delay,
-            builder_url,
+            builder_urls,
+            start_proposing_view,
+            stop_proposing_view,
+            start_voting_view,
+            stop_voting_view,
         }
     }
 }

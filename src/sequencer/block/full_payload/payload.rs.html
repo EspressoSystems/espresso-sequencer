@@ -281,14 +281,35 @@
 <a href="#281" id="281">281</a>
 <a href="#282" id="282">282</a>
 <a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
     block::{
         full_payload::ns_table::{NsIndex, NsTable, NsTableBuilder},
         namespace_payload::{Index, Iter, NsPayload, NsPayloadBuilder, NsPayloadRange, TxProof},
     },
-    NamespaceId, NodeState, SeqTypes, Transaction, ValidatedState,
+    ChainConfig, NamespaceId, NodeState, SeqTypes, Transaction, ValidatedState,
 };
+
 <span class="kw">use </span>async_trait::async_trait;
+<span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>hotshot_query_service::availability::QueryablePayload;
 <span class="kw">use </span>hotshot_types::{
     traits::{BlockPayload, EncodeBytes},
@@ -367,14 +388,14 @@
     </span><span class="doccomment">/// Need a sync version of [`BlockPayload::from_transactions`] in order to impl [`BlockPayload::empty`].
     </span><span class="kw">fn </span>from_transactions_sync(
         transactions: <span class="kw">impl </span>IntoIterator&lt;Item = &lt;<span class="self">Self </span><span class="kw">as </span>BlockPayload&lt;SeqTypes&gt;&gt;::Transaction&gt; + Send,
-        _validated_state: <span class="kw-2">&amp;</span>&lt;<span class="self">Self </span><span class="kw">as </span>BlockPayload&lt;SeqTypes&gt;&gt;::ValidatedState,
-        instance_state: <span class="kw-2">&amp;</span>&lt;<span class="self">Self </span><span class="kw">as </span>BlockPayload&lt;SeqTypes&gt;&gt;::Instance,
+        chain_config: ChainConfig,
+        _instance_state: <span class="kw-2">&amp;</span>&lt;<span class="self">Self </span><span class="kw">as </span>BlockPayload&lt;SeqTypes&gt;&gt;::Instance,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;
         (<span class="self">Self</span>, &lt;<span class="self">Self </span><span class="kw">as </span>BlockPayload&lt;SeqTypes&gt;&gt;::Metadata),
         &lt;<span class="self">Self </span><span class="kw">as </span>BlockPayload&lt;SeqTypes&gt;&gt;::Error,
     &gt; {
         <span class="comment">// accounting for block byte length limit
-        </span><span class="kw">let </span>max_block_byte_len: usize = u64::from(instance_state.chain_config.max_block_size)
+        </span><span class="kw">let </span>max_block_byte_len: usize = u64::from(chain_config.max_block_size)
             .try_into()
             .map_err(|<span class="kw">_</span>| &lt;<span class="self">Self </span><span class="kw">as </span>BlockPayload&lt;SeqTypes&gt;&gt;::Error::BlockBuilding)<span class="question-mark">?</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>block_byte_len = NsTableBuilder::fixed_overhead_byte_len();
@@ -432,7 +453,25 @@
         validated_state: <span class="kw-2">&amp;</span><span class="self">Self</span>::ValidatedState,
         instance_state: <span class="kw-2">&amp;</span><span class="self">Self</span>::Instance,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>, <span class="self">Self</span>::Metadata), <span class="self">Self</span>::Error&gt; {
-        <span class="self">Self</span>::from_transactions_sync(transactions, validated_state, instance_state)
+        <span class="kw">let </span>validated_state_cf = validated_state.chain_config;
+        <span class="kw">let </span>instance_state_cf = instance_state.chain_config;
+
+        <span class="kw">let </span>chain_config = <span class="kw">if </span>validated_state_cf.commit() == instance_state_cf.commit() {
+            instance_state_cf
+        } <span class="kw">else </span>{
+            <span class="kw">match </span>validated_state_cf.resolve() {
+                <span class="prelude-val">Some</span>(cf) =&gt; cf,
+                <span class="prelude-val">None </span>=&gt; {
+                    instance_state
+                        .peers
+                        .as_ref()
+                        .fetch_chain_config(validated_state_cf.commit())
+                        .<span class="kw">await
+                </span>}
+            }
+        };
+
+        <span class="self">Self</span>::from_transactions_sync(transactions, chain_config, instance_state)
     }
 
     <span class="comment">// TODO avoid cloning the entire payload here?
@@ -444,10 +483,9 @@
     }
 
     <span class="kw">fn </span>empty() -&gt; (<span class="self">Self</span>, <span class="self">Self</span>::Metadata) {
-        <span class="kw">let </span>payload =
-            <span class="self">Self</span>::from_transactions_sync(<span class="macro">vec!</span>[], <span class="kw-2">&amp;</span>Default::default(), <span class="kw-2">&amp;</span>Default::default())
-                .unwrap()
-                .<span class="number">0</span>;
+        <span class="kw">let </span>payload = <span class="self">Self</span>::from_transactions_sync(<span class="macro">vec!</span>[], Default::default(), <span class="kw-2">&amp;</span>Default::default())
+            .unwrap()
+            .<span class="number">0</span>;
         <span class="kw">let </span>ns_table = payload.ns_table().clone();
         (payload, ns_table)
     }

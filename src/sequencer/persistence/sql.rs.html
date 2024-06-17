@@ -655,6 +655,12 @@
 <a href="#655" id="655">655</a>
 <a href="#656" id="656">656</a>
 <a href="#657" id="657">657</a>
+<a href="#658" id="658">658</a>
+<a href="#659" id="659">659</a>
+<a href="#660" id="660">660</a>
+<a href="#661" id="661">661</a>
+<a href="#662" id="662">662</a>
+<a href="#663" id="663">663</a>
 </pre></div><pre class="rust"><code><span class="kw">use super</span>::{NetworkConfig, PersistenceOptions, SequencerPersistence};
 <span class="kw">use crate</span>::{
     catchup::{SqlStateCatchup, StateCatchup},
@@ -910,19 +916,25 @@
     store_undecided_state: bool,
 }
 
-<span class="kw">async fn </span>transaction(
-    persistence: <span class="kw-2">&amp;mut </span>Persistence,
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>transaction(
+    sql: <span class="kw-2">&amp;mut </span>SqlStorage,
     f: <span class="kw">impl </span>FnOnce(Transaction) -&gt; BoxFuture&lt;anyhow::Result&lt;()&gt;&gt;,
 ) -&gt; anyhow::Result&lt;()&gt; {
-    <span class="kw">let </span>tx = persistence.db.transaction().<span class="kw">await</span><span class="question-mark">?</span>;
+    <span class="kw">let </span>tx = sql.transaction().<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="kw">match </span>f(tx).<span class="kw">await </span>{
         <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {
-            persistence.db.commit().<span class="kw">await</span><span class="question-mark">?</span>;
+            <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = sql.commit().<span class="kw">await </span>{
+                <span class="macro">tracing::warn!</span>(<span class="string">"transaction failed, reverting: {err:#}"</span>);
+                sql.revert().<span class="kw">await</span>;
+
+                <span class="kw">return </span><span class="prelude-val">Err</span>(err.into());
+            }
+
             <span class="prelude-val">Ok</span>(())
         }
         <span class="prelude-val">Err</span>(err) =&gt; {
             <span class="macro">tracing::warn!</span>(<span class="string">"transaction failed, reverting: {err:#}"</span>);
-            persistence.db.revert().<span class="kw">await</span>;
+            sql.revert().<span class="kw">await</span>;
             <span class="prelude-val">Err</span>(err)
         }
     }
@@ -956,7 +968,7 @@
         <span class="macro">tracing::info!</span>(<span class="string">"saving config to Postgres"</span>);
         <span class="kw">let </span>json = serde_json::to_value(cfg)<span class="question-mark">?</span>;
 
-        transaction(<span class="self">self</span>, |<span class="kw-2">mut </span>tx| {
+        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
             <span class="kw">async move </span>{
                 tx.execute_one_with_retries(
                     <span class="string">"INSERT INTO network_config (config) VALUES ($1)"</span>,
@@ -971,7 +983,7 @@
     </span>}
 
     <span class="kw">async fn </span>collect_garbage(<span class="kw-2">&amp;mut </span><span class="self">self</span>, view: ViewNumber) -&gt; anyhow::Result&lt;()&gt; {
-        transaction(<span class="self">self</span>, |<span class="kw-2">mut </span>tx| {
+        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
             <span class="kw">async move </span>{
                 <span class="kw">let </span>stmt1 = <span class="string">"DELETE FROM vid_share where view &lt;= $1"</span>;
                 tx.execute(stmt1, [<span class="kw-2">&amp;</span>(view.u64() <span class="kw">as </span>i64)]).<span class="kw">await</span><span class="question-mark">?</span>;
@@ -1017,7 +1029,7 @@
         <span class="kw">let </span>leaf_bytes = bincode::serialize(leaf)<span class="question-mark">?</span>;
         <span class="kw">let </span>qc_bytes = bincode::serialize(qc)<span class="question-mark">?</span>;
 
-        transaction(<span class="self">self</span>, |<span class="kw-2">mut </span>tx| {
+        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
             <span class="kw">async move </span>{
                 tx.execute_one_with_retries(
                     stmt,
@@ -1159,7 +1171,7 @@
         <span class="kw">let </span>view = data.view_number().u64();
         <span class="kw">let </span>data_bytes = bincode::serialize(proposal).unwrap();
 
-        transaction(<span class="self">self</span>, |<span class="kw-2">mut </span>tx| {
+        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
             <span class="kw">async move </span>{
                 tx.upsert(
                     <span class="string">"vid_share"</span>,
@@ -1182,7 +1194,7 @@
         <span class="kw">let </span>view = data.view_number().u64();
         <span class="kw">let </span>data_bytes = bincode::serialize(proposal).unwrap();
 
-        transaction(<span class="self">self</span>, |<span class="kw-2">mut </span>tx| {
+        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
             <span class="kw">async move </span>{
                 tx.upsert(
                     <span class="string">"da_proposal"</span>,
@@ -1206,7 +1218,7 @@
         INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
         ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)"</span>;
 
-        transaction(<span class="self">self</span>, |<span class="kw-2">mut </span>tx| {
+        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
             <span class="kw">async move </span>{
                 tx.execute_one_with_retries(stmt, [view.u64() <span class="kw">as </span>i64])
                     .<span class="kw">await</span><span class="question-mark">?</span>;
@@ -1228,7 +1240,7 @@
         <span class="kw">let </span>leaves_bytes = bincode::serialize(<span class="kw-2">&amp;</span>leaves).context(<span class="string">"serializing leaves"</span>)<span class="question-mark">?</span>;
         <span class="kw">let </span>state_bytes = bincode::serialize(<span class="kw-2">&amp;</span>state).context(<span class="string">"serializing state"</span>)<span class="question-mark">?</span>;
 
-        transaction(<span class="self">self</span>, |<span class="kw-2">mut </span>tx| {
+        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
             <span class="kw">async move </span>{
                 tx.upsert(
                     <span class="string">"undecided_state"</span>,
@@ -1253,7 +1265,7 @@
     ) -&gt; anyhow::Result&lt;()&gt; {
         <span class="kw">let </span>view_number = proposal.data.view_number().u64();
         <span class="kw">let </span>proposal_bytes = bincode::serialize(<span class="kw-2">&amp;</span>proposal).context(<span class="string">"serializing proposal"</span>)<span class="question-mark">?</span>;
-        transaction(<span class="self">self</span>, |<span class="kw-2">mut </span>tx| {
+        transaction(<span class="kw-2">&amp;mut </span><span class="self">self</span>.db, |<span class="kw-2">mut </span>tx| {
             <span class="kw">async move </span>{
                 tx.upsert(
                     <span class="string">"quorum_proposals"</span>,
@@ -1270,7 +1282,7 @@
     </span>}
 }
 
-<span class="kw">fn </span>sql_param&lt;T: ToSql + Sync&gt;(param: <span class="kw-2">&amp;</span>T) -&gt; <span class="kw-2">&amp;</span>(<span class="kw">dyn </span>ToSql + Sync) {
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>sql_param&lt;T: ToSql + Sync&gt;(param: <span class="kw-2">&amp;</span>T) -&gt; <span class="kw-2">&amp;</span>(<span class="kw">dyn </span>ToSql + Sync) {
     param
 }
 

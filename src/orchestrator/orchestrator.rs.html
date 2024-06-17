@@ -205,6 +205,7 @@
 <a href="#205" id="205">205</a>
 <a href="#206" id="206">206</a>
 <a href="#207" id="207">207</a>
+<a href="#208" id="208">208</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>derive_more::From;
@@ -218,6 +219,7 @@
 <span class="kw">use </span>std::str::FromStr;
 <span class="kw">use </span>std::time::Duration;
 <span class="kw">use </span>url::Url;
+<span class="kw">use </span>vec1::Vec1;
 
 <span class="attr">#[derive(Parser)]
 </span><span class="kw">struct </span>Args {
@@ -283,8 +285,8 @@
     </span>keygen_seed: [u8; <span class="number">32</span>],
 
     <span class="doccomment">/// HotShot builder URL
-    </span><span class="attr">#[arg(long, env = <span class="string">"ESPRESSO_ORCHESTRATOR_BUILDER_URL"</span>)]
-    </span>builder_url: Url,
+    </span><span class="attr">#[arg(long, env = <span class="string">"ESPRESSO_ORCHESTRATOR_BUILDER_URLS"</span>, num_args = <span class="number">1</span>.., value_delimiter = <span class="string">','</span>)]
+    </span>builder_urls: Vec&lt;Url&gt;,
 
     <span class="doccomment">/// The maximum amount of time a leader can wait to get a block from a builder.
     ///
@@ -403,7 +405,7 @@
     config.config.start_delay = args.start_delay.as_millis() <span class="kw">as </span>u64;
     config.config.da_staked_committee_size = args.num_nodes.get();
     config.config.da_non_staked_committee_size = <span class="number">0</span>;
-    config.config.builder_url = args.builder_url;
+    config.config.builder_urls = Vec1::try_from_vec(args.builder_urls).unwrap();
     config.config.builder_timeout = args.builder_timeout;
     run_orchestrator(
         config,

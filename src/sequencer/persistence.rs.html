@@ -591,6 +591,18 @@
 <a href="#591" id="591">591</a>
 <a href="#592" id="592">592</a>
 <a href="#593" id="593">593</a>
+<a href="#594" id="594">594</a>
+<a href="#595" id="595">595</a>
+<a href="#596" id="596">596</a>
+<a href="#597" id="597">597</a>
+<a href="#598" id="598">598</a>
+<a href="#599" id="599">599</a>
+<a href="#600" id="600">600</a>
+<a href="#601" id="601">601</a>
+<a href="#602" id="602">602</a>
+<a href="#603" id="603">603</a>
+<a href="#604" id="604">604</a>
+<a href="#605" id="605">605</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer node persistence.
 //!
 //! This module implements the persistence required for a sequencer node to rejoin the network and
@@ -601,11 +613,13 @@
 //! an extension that node operators can opt into. This module defines the minimum level of
 //! persistence which is _required_ to run a node.
 
-</span><span class="kw">use crate</span>::{Leaf, NodeState, PubKey, SeqTypes, StateCatchup, ValidatedState, ViewNumber};
+</span><span class="kw">use crate</span>::{
+    ChainConfig, Leaf, NodeState, PubKey, SeqTypes, StateCatchup, ValidatedState, ViewNumber,
+};
 <span class="kw">use </span>anyhow::{bail, ensure, Context};
 <span class="kw">use </span>async_std::sync::Arc;
 <span class="kw">use </span>async_trait::async_trait;
-<span class="kw">use </span>committable::Committable;
+<span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>hotshot::{
     traits::ValidatedState <span class="kw">as _</span>,
     types::{Event, EventType},
@@ -846,8 +860,18 @@
     ) -&gt; anyhow::Result&lt;()&gt;;
 }
 
+<span class="attr">#[async_trait]
+</span><span class="kw">pub trait </span>ChainConfigPersistence: Sized + Send + Sync + <span class="lifetime">'static </span>{
+    <span class="kw">async fn </span>insert_chain_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>, chain_config: ChainConfig) -&gt; anyhow::Result&lt;()&gt;;
+    <span class="kw">async fn </span>load_chain_config(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        commitment: Commitment&lt;ChainConfig&gt;,
+    ) -&gt; anyhow::Result&lt;ChainConfig&gt;;
+}
+
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>testing {
+
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
 
     <span class="attr">#[async_trait]

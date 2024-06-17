@@ -150,6 +150,7 @@
 <a href="#150" id="150">150</a>
 <a href="#151" id="151">151</a>
 <a href="#152" id="152">152</a>
+<a href="#153" id="153">153</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>builder::non_permissioned::{build_instance_state, BuilderConfig};
 <span class="kw">use </span>clap::Parser;
@@ -274,13 +275,14 @@
     )
     .unwrap();
 
+    <span class="kw">let </span>validated_state = ValidatedState::genesis(<span class="kw-2">&amp;</span>instance_state).<span class="number">0</span>;
+
     <span class="kw">let </span>api_response_timeout_duration = opt.max_api_timeout_duration;
 
     <span class="comment">// make the txn timeout as 1/4 of the api_response_timeout_duration
     </span><span class="kw">let </span>txn_timeout_duration = api_response_timeout_duration / <span class="number">4</span>;
 
     <span class="kw">let </span>buffer_view_num_count = opt.buffer_view_num_count;
-    <span class="kw">let </span>validated_state = ValidatedState::genesis(<span class="kw-2">&amp;</span>instance_state).<span class="number">0</span>;
 
     <span class="kw">let </span>_builder_config = BuilderConfig::init(
         builder_key_pair,
@@ -288,12 +290,12 @@
         opt.channel_capacity,
         opt.node_count,
         instance_state,
+        validated_state,
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,
         buffer_view_num_count,
         txn_timeout_duration,
-        validated_state,
     )
     .<span class="kw">await</span>;
 

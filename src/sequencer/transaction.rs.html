@@ -260,11 +260,11 @@
 
 <span class="kw">impl </span>Namespace <span class="kw">for </span>NamespaceId {
     <span class="kw">fn </span>max() -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(u32::max_value() <span class="kw">as </span>u64)
+        <span class="self">Self</span>(u32::MAX <span class="kw">as </span>u64)
     }
 
     <span class="kw">fn </span>min() -&gt; <span class="self">Self </span>{
-        <span class="self">Self</span>(u32::min_value() <span class="kw">as </span>u64)
+        <span class="self">Self</span>(u32::MIN <span class="kw">as </span>u64)
     }
 }
 

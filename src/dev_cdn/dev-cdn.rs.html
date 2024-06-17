@@ -104,6 +104,8 @@
 <a href="#104" id="104">104</a>
 <a href="#105" id="105">105</a>
 <a href="#106" id="106">106</a>
+<a href="#107" id="107">107</a>
+<a href="#108" id="108">108</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! The following is the main `Broker` binary, which just instantiates and runs
 //! a `Broker` object.
 
@@ -181,6 +183,7 @@
 
         ca_cert_path: <span class="prelude-val">None</span>,
         ca_key_path: <span class="prelude-val">None</span>,
+        global_memory_pool_size: <span class="prelude-val">Some</span>(<span class="number">1024 </span>* <span class="number">1024 </span>* <span class="number">1024</span>),
     };
 
     <span class="comment">// Configure the marshal
@@ -190,6 +193,7 @@
         discovery_endpoint: discovery_endpoint.clone(),
         ca_cert_path: <span class="prelude-val">None</span>,
         ca_key_path: <span class="prelude-val">None</span>,
+        global_memory_pool_size: <span class="prelude-val">Some</span>(<span class="number">1024 </span>* <span class="number">1024 </span>* <span class="number">1024</span>),
     };
 
     <span class="comment">// Create a new `Broker`

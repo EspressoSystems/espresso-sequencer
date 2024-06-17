@@ -1559,9 +1559,125 @@
 <a href="#1559" id="1559">1559</a>
 <a href="#1560" id="1560">1560</a>
 <a href="#1561" id="1561">1561</a>
-</pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
-    api::data_source::CatchupDataSource, catchup::SqlStateCatchup, chain_config::BlockSize,
-    eth_signature_key::EthKeyPair, ChainConfig, Header, Leaf, NodeState, SeqTypes,
+<a href="#1562" id="1562">1562</a>
+<a href="#1563" id="1563">1563</a>
+<a href="#1564" id="1564">1564</a>
+<a href="#1565" id="1565">1565</a>
+<a href="#1566" id="1566">1566</a>
+<a href="#1567" id="1567">1567</a>
+<a href="#1568" id="1568">1568</a>
+<a href="#1569" id="1569">1569</a>
+<a href="#1570" id="1570">1570</a>
+<a href="#1571" id="1571">1571</a>
+<a href="#1572" id="1572">1572</a>
+<a href="#1573" id="1573">1573</a>
+<a href="#1574" id="1574">1574</a>
+<a href="#1575" id="1575">1575</a>
+<a href="#1576" id="1576">1576</a>
+<a href="#1577" id="1577">1577</a>
+<a href="#1578" id="1578">1578</a>
+<a href="#1579" id="1579">1579</a>
+<a href="#1580" id="1580">1580</a>
+<a href="#1581" id="1581">1581</a>
+<a href="#1582" id="1582">1582</a>
+<a href="#1583" id="1583">1583</a>
+<a href="#1584" id="1584">1584</a>
+<a href="#1585" id="1585">1585</a>
+<a href="#1586" id="1586">1586</a>
+<a href="#1587" id="1587">1587</a>
+<a href="#1588" id="1588">1588</a>
+<a href="#1589" id="1589">1589</a>
+<a href="#1590" id="1590">1590</a>
+<a href="#1591" id="1591">1591</a>
+<a href="#1592" id="1592">1592</a>
+<a href="#1593" id="1593">1593</a>
+<a href="#1594" id="1594">1594</a>
+<a href="#1595" id="1595">1595</a>
+<a href="#1596" id="1596">1596</a>
+<a href="#1597" id="1597">1597</a>
+<a href="#1598" id="1598">1598</a>
+<a href="#1599" id="1599">1599</a>
+<a href="#1600" id="1600">1600</a>
+<a href="#1601" id="1601">1601</a>
+<a href="#1602" id="1602">1602</a>
+<a href="#1603" id="1603">1603</a>
+<a href="#1604" id="1604">1604</a>
+<a href="#1605" id="1605">1605</a>
+<a href="#1606" id="1606">1606</a>
+<a href="#1607" id="1607">1607</a>
+<a href="#1608" id="1608">1608</a>
+<a href="#1609" id="1609">1609</a>
+<a href="#1610" id="1610">1610</a>
+<a href="#1611" id="1611">1611</a>
+<a href="#1612" id="1612">1612</a>
+<a href="#1613" id="1613">1613</a>
+<a href="#1614" id="1614">1614</a>
+<a href="#1615" id="1615">1615</a>
+<a href="#1616" id="1616">1616</a>
+<a href="#1617" id="1617">1617</a>
+<a href="#1618" id="1618">1618</a>
+<a href="#1619" id="1619">1619</a>
+<a href="#1620" id="1620">1620</a>
+<a href="#1621" id="1621">1621</a>
+<a href="#1622" id="1622">1622</a>
+<a href="#1623" id="1623">1623</a>
+<a href="#1624" id="1624">1624</a>
+<a href="#1625" id="1625">1625</a>
+<a href="#1626" id="1626">1626</a>
+<a href="#1627" id="1627">1627</a>
+<a href="#1628" id="1628">1628</a>
+<a href="#1629" id="1629">1629</a>
+<a href="#1630" id="1630">1630</a>
+<a href="#1631" id="1631">1631</a>
+<a href="#1632" id="1632">1632</a>
+<a href="#1633" id="1633">1633</a>
+<a href="#1634" id="1634">1634</a>
+<a href="#1635" id="1635">1635</a>
+<a href="#1636" id="1636">1636</a>
+<a href="#1637" id="1637">1637</a>
+<a href="#1638" id="1638">1638</a>
+<a href="#1639" id="1639">1639</a>
+<a href="#1640" id="1640">1640</a>
+<a href="#1641" id="1641">1641</a>
+<a href="#1642" id="1642">1642</a>
+<a href="#1643" id="1643">1643</a>
+<a href="#1644" id="1644">1644</a>
+<a href="#1645" id="1645">1645</a>
+<a href="#1646" id="1646">1646</a>
+<a href="#1647" id="1647">1647</a>
+<a href="#1648" id="1648">1648</a>
+<a href="#1649" id="1649">1649</a>
+<a href="#1650" id="1650">1650</a>
+<a href="#1651" id="1651">1651</a>
+<a href="#1652" id="1652">1652</a>
+<a href="#1653" id="1653">1653</a>
+<a href="#1654" id="1654">1654</a>
+<a href="#1655" id="1655">1655</a>
+<a href="#1656" id="1656">1656</a>
+<a href="#1657" id="1657">1657</a>
+<a href="#1658" id="1658">1658</a>
+<a href="#1659" id="1659">1659</a>
+<a href="#1660" id="1660">1660</a>
+<a href="#1661" id="1661">1661</a>
+<a href="#1662" id="1662">1662</a>
+<a href="#1663" id="1663">1663</a>
+<a href="#1664" id="1664">1664</a>
+<a href="#1665" id="1665">1665</a>
+<a href="#1666" id="1666">1666</a>
+<a href="#1667" id="1667">1667</a>
+<a href="#1668" id="1668">1668</a>
+<a href="#1669" id="1669">1669</a>
+<a href="#1670" id="1670">1670</a>
+<a href="#1671" id="1671">1671</a>
+<a href="#1672" id="1672">1672</a>
+<a href="#1673" id="1673">1673</a>
+<a href="#1674" id="1674">1674</a>
+<a href="#1675" id="1675">1675</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::chain_config::BlockSize;
+<span class="kw">use crate</span>::{
+    api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
+    chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair, genesis::UpgradeType,
+    persistence::ChainConfigPersistence, ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
 <span class="kw">use </span>anyhow::{bail, ensure, Context};
 <span class="kw">use </span>ark_serialize::{
@@ -1635,6 +1751,7 @@
     </span><span class="kw">pub </span>block_merkle_tree: BlockMerkleTree,
     <span class="doccomment">/// Fee Merkle Tree
     </span><span class="kw">pub </span>fee_merkle_tree: FeeMerkleTree,
+    <span class="kw">pub </span>chain_config: ResolvableChainConfig,
 }
 
 <span class="attr">#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -1660,9 +1777,13 @@
             Vec::&lt;(FeeAccount, FeeAmount)&gt;::new(),
         )
         .unwrap();
+
+        <span class="kw">let </span>chain_config = ResolvableChainConfig::from(ChainConfig::default());
+
         <span class="self">Self </span>{
             block_merkle_tree,
             fee_merkle_tree,
+            chain_config,
         }
     }
 }
@@ -1775,6 +1896,7 @@
             block_merkle_tree: BlockMerkleTree::from_commitment(
                 <span class="self">self</span>.block_merkle_tree.commitment(),
             ),
+            chain_config: ResolvableChainConfig::from(<span class="self">self</span>.chain_config.commit()),
         }
     }
 }
@@ -1860,6 +1982,7 @@
     <span class="kw">let </span>ValidatedState {
         block_merkle_tree,
         fee_merkle_tree,
+        ..
     } = state;
 
     <span class="kw">let </span>block_merkle_tree_root = block_merkle_tree.commitment();
@@ -1949,6 +2072,7 @@
     instance: <span class="kw-2">&amp;</span>NodeState,
     parent_leaf: <span class="kw-2">&amp;</span>LeafQueryData&lt;SeqTypes&gt;,
     proposed_leaf: <span class="kw-2">&amp;</span>LeafQueryData&lt;SeqTypes&gt;,
+    version: Version,
 ) -&gt; anyhow::Result&lt;(ValidatedState, Delta)&gt; {
     <span class="kw">let </span>proposed_leaf = proposed_leaf.leaf();
     <span class="kw">let </span>parent_leaf = parent_leaf.leaf();
@@ -1969,7 +2093,9 @@
         parent_header.fee_merkle_tree_root
     );
 
-    state.apply_header(instance, parent_leaf, header).<span class="kw">await
+    state
+        .apply_header(instance, parent_leaf, header, version)
+        .<span class="kw">await
 </span>}
 
 <span class="kw">async fn </span>store_state_update(
@@ -1981,6 +2107,7 @@
     <span class="kw">let </span>ValidatedState {
         fee_merkle_tree,
         block_merkle_tree,
+        ..
     } = state;
     <span class="kw">let </span>Delta { fees_delta } = delta;
 
@@ -2050,10 +2177,14 @@
     instance: <span class="kw-2">&amp;</span>NodeState,
     parent_leaf: <span class="kw-2">&amp;</span>LeafQueryData&lt;SeqTypes&gt;,
     proposed_leaf: <span class="kw-2">&amp;</span>LeafQueryData&lt;SeqTypes&gt;,
+    version: Version,
 ) -&gt; anyhow::Result&lt;ValidatedState&gt; {
-    <span class="kw">let </span>(state, delta) = compute_state_update(parent_state, instance, parent_leaf, proposed_leaf)
-        .<span class="kw">await
-        </span>.context(<span class="string">"computing state update"</span>)<span class="question-mark">?</span>;
+    <span class="kw">let </span>parent_chain_config = parent_state.chain_config;
+
+    <span class="kw">let </span>(state, delta) =
+        compute_state_update(parent_state, instance, parent_leaf, proposed_leaf, version)
+            .<span class="kw">await
+            </span>.context(<span class="string">"computing state update"</span>)<span class="question-mark">?</span>;
 
     <span class="kw">let </span><span class="kw-2">mut </span>storage = storage.write().<span class="kw">await</span>;
     <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = store_state_update(<span class="kw-2">&amp;mut *</span>storage, proposed_leaf.height(), <span class="kw-2">&amp;</span>state, delta).<span class="kw">await
@@ -2062,11 +2193,21 @@
         <span class="kw">return </span><span class="prelude-val">Err</span>(err);
     }
 
+    <span class="kw">if </span>parent_chain_config != state.chain_config {
+        <span class="kw">let </span>cf = state
+            .chain_config
+            .resolve()
+            .context(<span class="string">"failed to resolve to chain config"</span>)<span class="question-mark">?</span>;
+
+        storage.insert_chain_config(cf).<span class="kw">await</span><span class="question-mark">?
+    </span>}
+
     <span class="prelude-val">Ok</span>(state)
 }
 
 <span class="kw">async fn </span>store_genesis_state(
     storage: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>SequencerStateDataSource,
+    chain_config: ChainConfig,
     state: <span class="kw-2">&amp;</span>ValidatedState,
 ) -&gt; anyhow::Result&lt;()&gt; {
     <span class="macro">ensure!</span>(
@@ -2094,6 +2235,8 @@
         </span>.context(<span class="string">"failed to store fee merkle nodes"</span>)<span class="question-mark">?</span>;
     }
 
+    storage.insert_chain_config(chain_config).<span class="kw">await</span><span class="question-mark">?</span>;
+
     storage.commit().<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="prelude-val">Ok</span>(())
 }
@@ -2101,6 +2244,7 @@
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>update_state_storage_loop(
     storage: Arc&lt;RwLock&lt;<span class="kw">impl </span>SequencerStateDataSource&gt;&gt;,
     instance: <span class="kw">impl </span>Future&lt;Output = NodeState&gt;,
+    version: Version,
 ) -&gt; anyhow::Result&lt;()&gt; {
     <span class="kw">let </span><span class="kw-2">mut </span>instance = instance.<span class="kw">await</span>;
     instance.peers = Arc::new(SqlStateCatchup::from(storage.clone()));
@@ -2126,7 +2270,13 @@
         // never the result of a state update and thus is not inserted in the loop below.
         </span><span class="macro">tracing::info!</span>(<span class="string">"storing genesis merklized state"</span>);
         <span class="kw">let </span><span class="kw-2">mut </span>storage = storage.write().<span class="kw">await</span>;
-        <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = store_genesis_state(<span class="kw-2">&amp;mut *</span>storage, <span class="kw-2">&amp;</span>instance.genesis_state).<span class="kw">await </span>{
+        <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = store_genesis_state(
+            <span class="kw-2">&amp;mut *</span>storage,
+            instance.chain_config,
+            <span class="kw-2">&amp;</span>instance.genesis_state,
+        )
+        .<span class="kw">await
+        </span>{
             <span class="macro">tracing::error!</span>(<span class="string">"failed to store genesis state: {err:#}"</span>);
             storage.revert().<span class="kw">await</span>;
             <span class="kw">return </span><span class="prelude-val">Err</span>(err);
@@ -2135,8 +2285,15 @@
 
     <span class="kw">while let </span><span class="prelude-val">Some</span>(leaf) = leaves.next().<span class="kw">await </span>{
         <span class="kw">loop </span>{
-            <span class="kw">match </span>update_state_storage(<span class="kw-2">&amp;</span>parent_state, <span class="kw-2">&amp;</span>storage, <span class="kw-2">&amp;</span>instance, <span class="kw-2">&amp;</span>parent_leaf, <span class="kw-2">&amp;</span>leaf)
-                .<span class="kw">await
+            <span class="kw">match </span>update_state_storage(
+                <span class="kw-2">&amp;</span>parent_state,
+                <span class="kw-2">&amp;</span>storage,
+                <span class="kw-2">&amp;</span>instance,
+                <span class="kw-2">&amp;</span>parent_leaf,
+                <span class="kw-2">&amp;</span>leaf,
+                version,
+            )
+            .<span class="kw">await
             </span>{
                 <span class="prelude-val">Ok</span>(state) =&gt; {
                     parent_leaf = leaf;
@@ -2164,6 +2321,7 @@
     + UpdateStateData&lt;SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }&gt;
     + UpdateStateData&lt;SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }&gt;
     + MerklizedStateHeightPersistence
+    + ChainConfigPersistence
 {
 }
 
@@ -2176,6 +2334,7 @@
         + UpdateStateData&lt;SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }&gt;
         + UpdateStateData&lt;SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }&gt;
         + MerklizedStateHeightPersistence
+        + ChainConfigPersistence
 {
 }
 
@@ -2185,24 +2344,37 @@
         instance: <span class="kw-2">&amp;</span>NodeState,
         parent_leaf: <span class="kw-2">&amp;</span>Leaf,
         proposed_header: <span class="kw-2">&amp;</span>Header,
+        version: Version,
     ) -&gt; anyhow::Result&lt;(<span class="self">Self</span>, Delta)&gt; {
         <span class="comment">// Clone state to avoid mutation. Consumer can take update
         // through returned value.
 
-        </span><span class="kw">let </span>l1_deposits = get_l1_deposits(instance, proposed_header, parent_leaf).<span class="kw">await</span>;
+        </span><span class="kw">let </span><span class="kw-2">mut </span>validated_state = <span class="self">self</span>.clone();
+        validated_state.apply_upgrade(instance, version);
 
-        <span class="kw">let </span><span class="kw-2">mut </span>validated_state = <span class="self">self</span>.clone();
+        <span class="kw">let </span>chain_config = validated_state
+            .get_chain_config(instance, <span class="kw-2">&amp;</span>proposed_header.chain_config)
+            .<span class="kw">await</span><span class="question-mark">?</span>;
+
+        <span class="kw">if </span><span class="prelude-val">Some</span>(chain_config) != validated_state.chain_config.resolve() {
+            validated_state.chain_config = chain_config.into();
+        }
+
+        <span class="kw">let </span>l1_deposits = get_l1_deposits(
+            instance,
+            proposed_header,
+            parent_leaf,
+            chain_config.fee_contract,
+        )
+        .<span class="kw">await</span>;
 
         <span class="comment">// Find missing fee state entries. We will need to use the builder account which is paying a
         // fee and the recipient account which is receiving it, plus any counts receiving deposits
         // in this block.
         </span><span class="kw">let </span>missing_accounts = <span class="self">self</span>.forgotten_accounts(
-            [
-                proposed_header.fee_info.account,
-                instance.chain_config.fee_recipient,
-            ]
-            .into_iter()
-            .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
+            [proposed_header.fee_info.account, chain_config.fee_recipient]
+                .into_iter()
+                .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
         );
 
         <span class="kw">let </span>parent_height = parent_leaf.height();
@@ -2264,10 +2436,61 @@
             <span class="kw-2">&amp;mut </span>validated_state,
             <span class="kw-2">&amp;mut </span>delta,
             proposed_header.fee_info,
-            instance.chain_config.fee_recipient,
+            chain_config.fee_recipient,
         )<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>((validated_state, delta))
+    }
+
+    <span class="doccomment">/// Updates the `ValidatedState` if a protocol upgrade has occurred.
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>apply_upgrade(<span class="kw-2">&amp;mut </span><span class="self">self</span>, instance: <span class="kw-2">&amp;</span>NodeState, version: Version) {
+        <span class="comment">// Check for protocol upgrade based on sequencer version
+        </span><span class="kw">if </span>version &lt;= instance.current_version {
+            <span class="kw">return</span>;
+        }
+
+        <span class="kw">let </span><span class="prelude-val">Some</span>(upgrade) = instance.upgrades.get(<span class="kw-2">&amp;</span>version) <span class="kw">else </span>{
+            <span class="kw">return</span>;
+        };
+
+        <span class="kw">match </span>upgrade.upgrade_type {
+            UpgradeType::ChainConfig { chain_config } =&gt; {
+                <span class="self">self</span>.chain_config = chain_config.into();
+            }
+        }
+    }
+
+    <span class="doccomment">/// Retrieves the `ChainConfig`.
+    ///
+    ///  Returns the `NodeState` `ChainConfig` if the `ValidatedState` `ChainConfig` commitment matches the `NodeState` `ChainConfig`` commitment.
+    ///  If the commitments do not match, it returns the `ChainConfig` available in either `ValidatedState` or proposed header.
+    ///  If neither has the `ChainConfig`, it fetches the config from the peers.
+    ///
+    /// Returns an error if it fails to fetch the `ChainConfig` from the peers.
+    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>get_chain_config(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        instance: <span class="kw-2">&amp;</span>NodeState,
+        header_cf: <span class="kw-2">&amp;</span>ResolvableChainConfig,
+    ) -&gt; anyhow::Result&lt;ChainConfig&gt; {
+        <span class="kw">let </span>state_cf = <span class="self">self</span>.chain_config;
+
+        <span class="kw">if </span>state_cf.commit() == instance.chain_config.commit() {
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(instance.chain_config);
+        }
+
+        <span class="kw">let </span>cf = <span class="kw">match </span>(state_cf.resolve(), header_cf.resolve()) {
+            (<span class="prelude-val">Some</span>(cf), <span class="kw">_</span>) =&gt; cf,
+            (<span class="kw">_</span>, <span class="prelude-val">Some</span>(cf)) <span class="kw">if </span>cf.commit() == state_cf.commit() =&gt; cf,
+            (<span class="kw">_</span>, <span class="prelude-val">Some</span>(<span class="kw">_</span>)) | (<span class="prelude-val">None</span>, <span class="prelude-val">None</span>) =&gt; {
+                instance
+                    .peers
+                    .as_ref()
+                    .fetch_chain_config(state_cf.commit())
+                    .<span class="kw">await
+            </span>}
+        };
+
+        <span class="prelude-val">Ok</span>(cf)
     }
 }
 
@@ -2275,10 +2498,9 @@
     instance: <span class="kw-2">&amp;</span>NodeState,
     header: <span class="kw-2">&amp;</span>Header,
     parent_leaf: <span class="kw-2">&amp;</span>Leaf,
+    fee_contract_address: <span class="prelude-ty">Option</span>&lt;Address&gt;,
 ) -&gt; Vec&lt;FeeInfo&gt; {
-    <span class="kw">if let </span>(<span class="prelude-val">Some</span>(addr), <span class="prelude-val">Some</span>(block_info)) =
-        (instance.chain_config.fee_contract, header.l1_finalized)
-    {
+    <span class="kw">if let </span>(<span class="prelude-val">Some</span>(addr), <span class="prelude-val">Some</span>(block_info)) = (fee_contract_address, header.l1_finalized) {
         instance
             .l1_client
             .get_finalized_deposits(
@@ -2346,7 +2568,7 @@
         parent_leaf: <span class="kw-2">&amp;</span>Leaf,
         proposed_header: <span class="kw-2">&amp;</span>Header,
         vid_common: VidCommon,
-        _version: Version,
+        version: Version,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="self">Self</span>, <span class="self">Self</span>::Delta), <span class="self">Self</span>::Error&gt; {
         <span class="comment">//validate builder fee
         </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = validate_builder_fee(proposed_header) {
@@ -2357,14 +2579,19 @@
         <span class="comment">// Unwrapping here is okay as we retry in a loop
         //so we should either get a validated state or until hotshot cancels the task
         </span><span class="kw">let </span>(validated_state, delta) = <span class="self">self
-            </span>.apply_header(instance, parent_leaf, proposed_header)
+            </span>.apply_header(instance, parent_leaf, proposed_header, version)
             .<span class="kw">await
             </span>.unwrap();
+
+        <span class="kw">let </span>chain_config = validated_state
+            .chain_config
+            .resolve()
+            .expect(<span class="string">"Chain Config not found in validated state"</span>);
 
         <span class="comment">// validate the proposal
         </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = validate_proposal(
             <span class="kw-2">&amp;</span>validated_state,
-            instance.chain_config,
+            chain_config,
             parent_leaf,
             proposed_header,
             <span class="kw-2">&amp;</span>vid_common,
@@ -2401,6 +2628,7 @@
         <span class="self">Self </span>{
             fee_merkle_tree,
             block_merkle_tree,
+            chain_config: block_header.chain_config,
         }
     }
     <span class="doccomment">/// Construct a genesis validated state.

@@ -421,10 +421,6 @@
 <a href="#421" id="421">421</a>
 <a href="#422" id="422">422</a>
 <a href="#423" id="423">423</a>
-<a href="#424" id="424">424</a>
-<a href="#425" id="425">425</a>
-<a href="#426" id="426">426</a>
-<a href="#427" id="427">427</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_broadcast::{
     broadcast, Receiver <span class="kw">as </span>BroadcastReceiver, RecvError, Sender <span class="kw">as </span>BroadcastSender, TryRecvError,
@@ -452,7 +448,6 @@
 };
 
 <span class="kw">use </span>hotshot_types::{
-    constants::{Version01, STATIC_VER_0_1},
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
@@ -509,12 +504,12 @@
         channel_capacity: NonZeroUsize,
         node_count: NonZeroUsize,
         instance_state: NodeState,
+        validated_state: ValidatedState,
         hotshot_events_api_url: Url,
         hotshot_builder_apis_url: Url,
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
-        validated_state: ValidatedState,
     ) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
         <span class="macro">tracing::info!</span>(
             address = %builder_key_pair.fee_account(),
@@ -588,8 +583,7 @@
                 .base_fee
                 .as_u64()
                 .context(<span class="string">"the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)"</span>)<span class="question-mark">?</span>,
-            Arc::new(instance_state),
-            Duration::from_secs(<span class="number">60</span>),
+            Arc::new(instance_state), Duration::from_secs(<span class="number">60</span>),
             Arc::new(validated_state),
         );
 
@@ -659,12 +653,10 @@
         events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
-    <span class="kw">use </span>hotshot_types::{
-        constants::{Version01, STATIC_VER_0_1},
-        traits::{
-            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
-            node_implementation::NodeType,
-        },
+    <span class="kw">use </span>hotshot_types::constants::Base;
+    <span class="kw">use </span>hotshot_types::traits::{
+        block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+        node_implementation::NodeType,
     };
     <span class="kw">use </span>hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     <span class="kw">use </span>sequencer::{
@@ -721,7 +713,7 @@
         );
 
         <span class="comment">// builder api url
-        </span><span class="kw">let </span>hotshot_builder_api_url = hotshot_config.config.builder_url.clone();
+        </span><span class="kw">let </span>hotshot_builder_api_url = hotshot_config.config.builder_urls[<span class="number">0</span>].clone();
 
         <span class="kw">let </span>builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder(
             <span class="kw-2">&amp;</span>hotshot_config,
@@ -733,7 +725,7 @@
         <span class="kw">let </span>builder_pub_key = builder_config.fee_account;
 
         <span class="comment">// Start a builder api client
-        </span><span class="kw">let </span>builder_client = Client::&lt;hotshot_builder_api::builder::Error, Version01&gt;::new(
+        </span><span class="kw">let </span>builder_client = Client::&lt;hotshot_builder_api::builder::Error, Base&gt;::new(
             hotshot_builder_api_url.clone(),
         );
         <span class="macro">assert!</span>(builder_client.connect(<span class="prelude-val">Some</span>(Duration::from_secs(<span class="number">60</span>))).<span class="kw">await</span>);

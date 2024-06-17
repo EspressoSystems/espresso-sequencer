@@ -539,10 +539,6 @@
 <a href="#539" id="539">539</a>
 <a href="#540" id="540">540</a>
 <a href="#541" id="541">541</a>
-<a href="#542" id="542">542</a>
-<a href="#543" id="543">543</a>
-<a href="#544" id="544">544</a>
-<a href="#545" id="545">545</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Result;
 <span class="kw">use </span>ark_bn254::Bn254;
 <span class="kw">use </span>ark_ed_on_bn254::EdwardsConfig;
@@ -1022,23 +1018,19 @@
     </span><span class="kw">let </span><span class="kw-2">mut </span>proofs = <span class="macro">vec!</span>[];
     <span class="kw">let </span><span class="kw-2">mut </span>extra_msgs = <span class="macro">vec!</span>[];
 
-    circuits
-        .iter()
-        .zip(prove_keys.iter())
-        .enumerate()
-        .for_each(|(<span class="kw">_</span>, (cs, pk))| {
-            <span class="kw">let </span>extra_msg = <span class="prelude-val">Some</span>(<span class="macro">vec!</span>[]); <span class="comment">// We set extra_msg="" for the contract tests to pass
-            </span>proofs.push(
-                PlonkKzgSnark::&lt;Bn254&gt;::prove::&lt;<span class="kw">_</span>, <span class="kw">_</span>, SolidityTranscript&gt;(
-                    rng,
-                    cs,
-                    pk,
-                    extra_msg.clone(),
-                )
-                .unwrap(),
-            );
-            extra_msgs.push(extra_msg);
-        });
+    circuits.iter().zip(prove_keys.iter()).for_each(|(cs, pk)| {
+        <span class="kw">let </span>extra_msg = <span class="prelude-val">Some</span>(<span class="macro">vec!</span>[]); <span class="comment">// We set extra_msg="" for the contract tests to pass
+        </span>proofs.push(
+            PlonkKzgSnark::&lt;Bn254&gt;::prove::&lt;<span class="kw">_</span>, <span class="kw">_</span>, SolidityTranscript&gt;(
+                rng,
+                cs,
+                pk,
+                extra_msg.clone(),
+            )
+            .unwrap(),
+        );
+        extra_msgs.push(extra_msg);
+    });
 
     <span class="kw">let </span>public_inputs: Vec&lt;Vec&lt;F&gt;&gt; = circuits
         .iter()

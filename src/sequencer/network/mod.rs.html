@@ -30,18 +30,14 @@
 <a href="#30" id="30">30</a>
 <a href="#31" id="31">31</a>
 <a href="#32" id="32">32</a>
-<a href="#33" id="33">33</a>
-<a href="#34" id="34">34</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>hotshot_types::message::Message;
-
-<span class="kw">use super</span>::<span class="kw-2">*</span>;
+</pre></div><pre class="rust"><code><span class="kw">use super</span>::<span class="kw-2">*</span>;
 
 <span class="kw">pub mod </span>cdn;
 <span class="kw">pub mod </span>libp2p;
 
 <span class="kw">pub trait </span>Type: <span class="lifetime">'static </span>{
-    <span class="kw">type </span>DAChannel: ConnectedNetwork&lt;Message&lt;SeqTypes&gt;, PubKey&gt;;
-    <span class="kw">type </span>QuorumChannel: ConnectedNetwork&lt;Message&lt;SeqTypes&gt;, PubKey&gt;;
+    <span class="kw">type </span>DAChannel: ConnectedNetwork&lt;PubKey&gt;;
+    <span class="kw">type </span>QuorumChannel: ConnectedNetwork&lt;PubKey&gt;;
 }
 
 <span class="attr">#[derive(Clone, Copy, Default)]
@@ -63,7 +59,7 @@
 </span><span class="kw">pub struct </span>Memory;
 
 <span class="kw">impl </span>Type <span class="kw">for </span>Memory {
-    <span class="kw">type </span>DAChannel = MemoryNetwork&lt;Message&lt;SeqTypes&gt;, PubKey&gt;;
-    <span class="kw">type </span>QuorumChannel = MemoryNetwork&lt;Message&lt;SeqTypes&gt;, PubKey&gt;;
+    <span class="kw">type </span>DAChannel = MemoryNetwork&lt;PubKey&gt;;
+    <span class="kw">type </span>QuorumChannel = MemoryNetwork&lt;PubKey&gt;;
 }
 </code></pre></div></section></main></body></html>
