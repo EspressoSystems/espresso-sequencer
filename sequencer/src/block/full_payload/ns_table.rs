@@ -211,7 +211,8 @@ impl NsTable {
     ///
     /// # Checks
     /// 1. Byte length must hold a whole number of entries.
-    /// 2. All namespace IDs and offsets must be nonzero and monotonically increasing
+    /// 2. All namespace IDs and offsets must increase monotonically. Offsets
+    ///    must be nonzero.
     /// 3. Header consistent with byte length (obsolete after
     ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>)
     pub fn validate(&self) -> Result<(), NsTableValidationError> {
