@@ -1,25 +1,15 @@
-use std::{io, time::Duration};
+use std::time::Duration;
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use async_std::task::spawn;
+use async_std::task::sleep;
 use clap::Parser;
-use es_version::SEQUENCER_VERSION;
-use ethers::types::Address;
 use futures::FutureExt;
-use sequencer::{
-    api::options,
-    api::test_helpers::TestNetwork,
-    hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
-    persistence,
-    testing::TestConfig,
-};
+use sequencer::{api::options, api::test_helpers::TestNetwork, persistence, testing::TestConfig};
 use sequencer_utils::{
-    deployer::{deploy, Contract, Contracts},
+    deployer::{deploy, Contracts},
     AnvilOptions,
 };
-use tide_disco::{error::ServerError, Api};
 use url::Url;
-use vbs::version::StaticVersionType;
 
 #[derive(Clone, Debug, Parser)]
 struct Args {
@@ -46,14 +36,18 @@ struct Args {
         default_value = "0"
     )]
     account_index: u32,
+
     /// Port that the HTTP API will use.
     #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
     sequencer_api_port: u16,
-    /// If provided, the service will run a basic HTTP server on the given port.
-    ///
-    /// The server provides healthcheck and version endpoints.
-    #[clap(short, long, env = "ESPRESSO_COMMITMENT_TASK_PORT")]
-    commitment_task_port: u16,
+
+    /// Maximum concurrent connections allowed by the HTTP API server.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_CONNECTIONS")]
+    sequencer_api_max_connections: Option<usize>,
+
+    /// Port for connecting to the builder.
+    #[clap(short, long, env = "ESPRESSO_BUILDER_PORT")]
+    builder_port: Option<u16>,
 
     #[clap(flatten)]
     sql: persistence::sql::Options,
@@ -64,16 +58,17 @@ async fn main() -> anyhow::Result<()> {
     setup_logging();
     setup_backtrace();
 
-    let opt = Args::parse();
-    let options = options::Options::from(options::Http {
-        port: opt.sequencer_api_port,
+    let cli_params = Args::parse();
+    let api_options = options::Options::from(options::Http {
+        port: cli_params.sequencer_api_port,
+        max_connections: cli_params.sequencer_api_max_connections,
     })
     .status(Default::default())
     .state(Default::default())
     .submit(Default::default())
-    .query_sql(Default::default(), opt.sql);
+    .query_sql(Default::default(), cli_params.sql);
 
-    let (url, _anvil) = if let Some(url) = opt.rpc_url {
+    let (url, _anvil) = if let Some(url) = cli_params.rpc_url {
         (url, None)
     } else {
         tracing::warn!("L1 url is not provided. running an anvil node");
@@ -84,9 +79,10 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let network = TestNetwork::new(
-        options,
+        api_options,
         [persistence::no_storage::Options; TestConfig::NUM_NODES],
         url.clone(),
+        cli_params.builder_port,
     )
     .await;
 
@@ -99,10 +95,10 @@ async fn main() -> anyhow::Result<()> {
 
     let light_client_genesis = network.light_client_genesis();
 
-    let contracts = deploy(
+    let _contracts = deploy(
         url.clone(),
-        opt.mnemonic.clone(),
-        opt.account_index,
+        cli_params.mnemonic.clone(),
+        cli_params.account_index,
         true,
         None,
         async { Ok(light_client_genesis) }.boxed(),
@@ -110,57 +106,9 @@ async fn main() -> anyhow::Result<()> {
     )
     .await?;
 
-    let hotshot_address = contracts
-        .get_contract_address(Contract::HotShot)
-        .expect("Cannot get the hotshot contract address");
-    tracing::info!("hotshot address: {}", hotshot_address);
-
-    tracing::info!("starting the commitment server");
-    start_commitment_server(opt.commitment_task_port, hotshot_address, SEQUENCER_VERSION).unwrap();
-
-    let sequencer_url =
-        Url::parse(format!("http://localhost:{}", opt.sequencer_api_port).as_str()).unwrap();
-    let commitment_task_options = CommitmentTaskOptions {
-        l1_provider: url,
-        l1_chain_id: None,
-        hotshot_address,
-        sequencer_mnemonic: opt.mnemonic,
-        sequencer_account_index: opt.account_index,
-        query_service_url: Some(sequencer_url),
-        request_timeout: Duration::from_secs(5),
-        delay: None,
-    };
-
-    tracing::info!("starting hotshot commitment task");
-    run_hotshot_commitment_task::<es_version::SequencerVersion>(&commitment_task_options).await;
-
-    Ok(())
-}
-
-// Copied from `commitment_task::start_http_server`.
-// TODO: Remove these redundant code
-fn start_commitment_server<Ver: StaticVersionType + 'static>(
-    port: u16,
-    hotshot_address: Address,
-    bind_version: Ver,
-) -> io::Result<()> {
-    let mut app = tide_disco::App::<(), ServerError>::with_state(());
-    let toml = toml::from_str::<toml::value::Value>(include_str!("../../api/commitment_task.toml"))
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    let mut api = Api::<(), ServerError, Ver>::new(toml)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    api.get("gethotshotcontract", move |_, _| {
-        async move { Ok(hotshot_address) }.boxed()
-    })
-    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    app.register_module("api", api)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    spawn(app.serve(format!("localhost:{port}"), bind_version));
-    Ok(())
+    loop {
+        sleep(Duration::from_secs(3600)).await
+    }
 }
 
 #[cfg(test)]
@@ -204,7 +152,7 @@ mod tests {
         setup_logging();
         setup_backtrace();
 
-        let commitment_task_port = pick_unused_port().unwrap();
+        let builder_port = pick_unused_port().unwrap();
 
         let api_port = pick_unused_port().unwrap();
 
@@ -218,10 +166,7 @@ mod tests {
             .run()
             .unwrap()
             .command()
-            .env(
-                "ESPRESSO_COMMITMENT_TASK_PORT",
-                commitment_task_port.to_string(),
-            )
+            .env("ESPRESSO_BUILDER_PORT", builder_port.to_string())
             .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
             .env("ESPRESSO_SEQUENCER_POSTGRES_HOST", "localhost")
             .env(
@@ -250,20 +195,17 @@ mod tests {
             .await
             .unwrap();
 
-        let commitment_api_client: Client<ServerError, SequencerVersion> = Client::new(
-            format!("http://localhost:{commitment_task_port}/api")
-                .parse()
-                .unwrap(),
-        );
-        commitment_api_client.connect(None).await;
+        let builder_api_client: Client<ServerError, SequencerVersion> =
+            Client::new(format!("http://localhost:{builder_port}").parse().unwrap());
+        builder_api_client.connect(None).await;
 
-        let hotshot_contract = commitment_api_client
-            .get::<String>("hotshot_contract")
+        let builder_address = builder_api_client
+            .get::<String>("block_info/builderaddress")
             .send()
             .await
             .unwrap();
 
-        assert!(!hotshot_contract.is_empty());
+        assert!(!builder_address.is_empty());
 
         let tx = Transaction::new(100.into(), vec![1, 2, 3]);
 

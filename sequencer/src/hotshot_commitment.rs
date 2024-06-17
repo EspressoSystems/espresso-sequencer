@@ -320,7 +320,7 @@ mod test {
                 .flatten()
                 .ok_or_else(|| {
                     Self::Error::catch_all(
-                        StatusCode::NotFound,
+                        StatusCode::NOT_FOUND,
                         format!("no leaf for height {height}"),
                     )
                 })

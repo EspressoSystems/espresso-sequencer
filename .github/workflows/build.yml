@@ -256,6 +256,7 @@ jobs:
         id: espresso-dev-node
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node
+
       - name: Generate bridge metadata
         uses: docker/metadata-action@v5
         id: bridge
@@ -386,7 +387,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./
-          file: ./docker/nasty-client.Dockerfile
+          file: ./docker/espresso-dev-node.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.espresso-dev-node.outputs.tags }}
@@ -395,7 +396,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./
-          file: ./docker/bridge.Dockerfile
+          file: ./docker/espresso-bridge.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.bridge.outputs.tags }}

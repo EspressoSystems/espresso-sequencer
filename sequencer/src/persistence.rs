@@ -8,11 +8,13 @@
 //! an extension that node operators can opt into. This module defines the minimum level of
 //! persistence which is _required_ to run a node.
 
-use crate::{Leaf, NodeState, PubKey, SeqTypes, StateCatchup, ValidatedState, ViewNumber};
+use crate::{
+    ChainConfig, Leaf, NodeState, PubKey, SeqTypes, StateCatchup, ValidatedState, ViewNumber,
+};
 use anyhow::{bail, ensure, Context};
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use committable::Committable;
+use committable::{Commitment, Committable};
 use hotshot::{
     traits::ValidatedState as _,
     types::{Event, EventType},
@@ -20,7 +22,7 @@ use hotshot::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::{HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -86,6 +88,11 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     async fn load_undecided_state(
         &self,
     ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>>;
+
+    /// Load the proposals saved by consensus
+    async fn load_quorum_proposals(
+        &self,
+    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>;
 
     async fn load_vid_share(
         &self,
@@ -168,6 +175,13 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             .context("loading undecided state")?
             .unwrap_or_default();
 
+        let saved_proposals = self
+            .load_quorum_proposals()
+            .await
+            .context("loading saved proposals")
+            .unwrap_or_default()
+            .unwrap_or_default();
+
         tracing::info!(
             ?leaf,
             ?view,
@@ -175,6 +189,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             ?validated_state,
             ?undecided_leaves,
             ?undecided_state,
+            ?saved_proposals,
             "loaded consensus state"
         );
         Ok(HotShotInitializer::from_reload(
@@ -182,6 +197,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             state,
             validated_state,
             view,
+            saved_proposals,
             high_qc,
             undecided_leaves.into_values().collect(),
             undecided_state,
@@ -233,10 +249,24 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         leaves: CommitmentMap<Leaf>,
         state: BTreeMap<ViewNumber, View<SeqTypes>>,
     ) -> anyhow::Result<()>;
+    async fn append_quorum_proposal(
+        &mut self,
+        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+    ) -> anyhow::Result<()>;
+}
+
+#[async_trait]
+pub trait ChainConfigPersistence: Sized + Send + Sync + 'static {
+    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()>;
+    async fn load_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig>;
 }
 
 #[cfg(test)]
 mod testing {
+
     use super::*;
 
     #[async_trait]
@@ -368,12 +398,28 @@ mod persistence_tests {
         let bytes = payload.encode().to_vec();
         let disperse = vid_scheme(2).disperse(bytes).unwrap();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
+        let signature = PubKey::sign(&privkey, &[]).unwrap();
         let mut vid = VidDisperseShare::<SeqTypes> {
             view_number: ViewNumber::new(1),
             payload_commitment: Default::default(),
             share: disperse.shares[0].clone(),
             common: disperse.common,
             recipient_key: pubkey,
+        };
+        let mut quorum_proposal = Proposal {
+            data: QuorumProposal::<SeqTypes> {
+                block_header: leaf.block_header().clone(),
+                view_number: ViewNumber::genesis(),
+                justify_qc: QuorumCertificate::genesis(
+                    &ValidatedState::default(),
+                    &NodeState::mock(),
+                )
+                .await,
+                upgrade_certificate: None,
+                proposal_certificate: None,
+            },
+            signature,
+            _pd: Default::default(),
         };
 
         let vid_share1 = vid.clone().to_proposal(&privkey).unwrap().clone();
@@ -457,6 +503,70 @@ mod persistence_tests {
             Some(da_proposal3.clone())
         );
 
+        let quorum_proposal1 = quorum_proposal.clone();
+        storage
+            .append_quorum_proposal(&quorum_proposal1)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            storage.load_quorum_proposals().await.unwrap(),
+            Some(BTreeMap::from_iter([(
+                ViewNumber::genesis(),
+                quorum_proposal1.clone()
+            )]))
+        );
+
+        quorum_proposal.data.view_number = ViewNumber::new(1);
+        let quorum_proposal2 = quorum_proposal.clone();
+        storage
+            .append_quorum_proposal(&quorum_proposal2)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            storage.load_quorum_proposals().await.unwrap(),
+            Some(BTreeMap::from_iter([
+                (ViewNumber::genesis(), quorum_proposal1.clone()),
+                (ViewNumber::new(1), quorum_proposal2.clone())
+            ]))
+        );
+
+        quorum_proposal.data.view_number = ViewNumber::new(2);
+        let quorum_proposal3 = quorum_proposal.clone();
+        storage
+            .append_quorum_proposal(&quorum_proposal3)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            storage.load_quorum_proposals().await.unwrap(),
+            Some(BTreeMap::from_iter([
+                (ViewNumber::genesis(), quorum_proposal1.clone()),
+                (ViewNumber::new(1), quorum_proposal2.clone()),
+                (ViewNumber::new(2), quorum_proposal3.clone())
+            ]))
+        );
+
+        quorum_proposal.data.view_number = ViewNumber::new(10);
+
+        // This one should stick around after GC runs.
+        let quorum_proposal4 = quorum_proposal.clone();
+        storage
+            .append_quorum_proposal(&quorum_proposal4)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            storage.load_quorum_proposals().await.unwrap(),
+            Some(BTreeMap::from_iter([
+                (ViewNumber::genesis(), quorum_proposal1),
+                (ViewNumber::new(1), quorum_proposal2),
+                (ViewNumber::new(2), quorum_proposal3),
+                (ViewNumber::new(10), quorum_proposal4.clone())
+            ]))
+        );
+
         // Test garbage collection
         // Deleting da proposals and vid shares with view number <=2
         storage.collect_garbage(ViewNumber::new(2)).await.unwrap();
@@ -482,5 +592,14 @@ mod persistence_tests {
             storage.load_vid_share(ViewNumber::new(3)).await.unwrap(),
             Some(vid_share3)
         );
+
+        let proposals = storage.load_quorum_proposals().await.unwrap();
+        assert_eq!(
+            proposals,
+            Some(BTreeMap::from_iter([(
+                ViewNumber::new(10),
+                quorum_proposal4
+            )]))
+        )
     }
 }

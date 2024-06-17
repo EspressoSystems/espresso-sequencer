@@ -22,31 +22,42 @@
 //! test.
 
 use crate::{
-    block::tables::NameSpaceTable, state::FeeInfo, ChainConfig, FeeAccount, Header, L1BlockInfo,
-    Payload, SeqTypes, Transaction, TxTableEntryWord, ValidatedState,
+    block::NsTable, state::FeeInfo, ChainConfig, FeeAccount, Header, L1BlockInfo, Payload,
+    Transaction, ValidatedState,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
 use es_version::SequencerVersion;
 use hotshot_types::traits::{
-    block_contents::vid_commitment, block_contents::TestableBlock,
-    signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
+    block_contents::vid_commitment, signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
 };
 use jf_merkle_tree::MerkleTreeScheme;
 use pretty_assertions::assert_eq;
 use sequencer_utils::commitment_to_u256;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
-use std::{path::Path, str::FromStr};
+use std::{fmt::Debug, path::Path, str::FromStr};
+use tagged_base64::TaggedBase64;
 use vbs::BinarySerializer;
 
 type Serializer = vbs::Serializer<SequencerVersion>;
 
-fn reference_ns_table() -> NameSpaceTable<TxTableEntryWord> {
-    NameSpaceTable::from_bytes([0; 48])
+async fn reference_payload() -> Payload {
+    Payload::from_transactions(
+        vec![reference_transaction()],
+        &Default::default(),
+        &Default::default(),
+    )
+    .await
+    .unwrap()
+    .0
 }
 
-const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~GL-lEBAwNZDldxDpySRZQChNnmn9vNzdIAL8W9ENOuh_";
+async fn reference_ns_table() -> NsTable {
+    reference_payload().await.ns_table().clone()
+}
+
+const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~jqBfNUW1lSijWpKpPNc9yxQs28YckB80gFJWnHIwOQMC";
 
 fn reference_l1_block() -> L1BlockInfo {
     L1BlockInfo {
@@ -82,11 +93,11 @@ fn reference_fee_info() -> FeeInfo {
 
 const REFERENCE_FEE_INFO_COMMITMENT: &str = "FEE_INFO~xCCeTjJClBtwtOUrnAmT65LNTQGceuyjSJHUFfX6VRXR";
 
-fn reference_header() -> Header {
+async fn reference_header() -> Header {
     let builder_key = FeeAccount::generated_from_seed_indexed(Default::default(), 0).1;
     let fee_info = reference_fee_info();
-    let ns_table = reference_ns_table();
-    let payload = <Payload<_> as TestableBlock<SeqTypes>>::genesis();
+    let payload = reference_payload().await;
+    let ns_table = payload.ns_table().clone();
     let payload_commitment = vid_commitment(&payload.encode(), 1);
     let builder_commitment = payload.builder_commitment(&ns_table);
     let builder_signature = FeeAccount::sign_fee(
@@ -115,7 +126,7 @@ fn reference_header() -> Header {
     }
 }
 
-const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~6Ol30XYkdKaNFXw0QAkcif18Lk8V8qkC4M81qTlwL707";
+const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~mHlaknD1qKCz0UBtV2GpnqfO6gFqF5yN-9qkmLMRG3rp";
 
 fn reference_transaction() -> Transaction {
     let payload: [u8; 1024] = std::array::from_fn(|i| (i % (u8::MAX as usize)) as u8);
@@ -124,10 +135,9 @@ fn reference_transaction() -> Transaction {
 
 const REFERENCE_TRANSACTION_COMMITMENT: &str = "TX~jmYCutMVgguprgpZHywPwkehwXfibQx951gh4LSLmfwp";
 
-fn reference_test<T: Committable + Serialize + DeserializeOwned>(
+fn reference_test_without_committable<T: Serialize + DeserializeOwned + Eq + Debug>(
     name: &str,
-    reference: T,
-    commitment: &str,
+    reference: &T,
 ) {
     setup_logging();
     setup_backtrace();
@@ -138,7 +148,7 @@ fn reference_test<T: Committable + Serialize + DeserializeOwned>(
     let expected: Value = serde_json::from_slice(&expected_bytes).unwrap();
 
     // Check that the reference object matches the expected serialized form.
-    let actual = serde_json::to_value(&reference).unwrap();
+    let actual = serde_json::to_value(reference).unwrap();
 
     if actual != expected {
         let actual_pretty = serde_json::to_string_pretty(&actual).unwrap();
@@ -167,8 +177,8 @@ change in the serialization of this data structure.
     // Check that we can deserialize from the reference JSON object.
     let parsed: T = serde_json::from_value(expected).unwrap();
     assert_eq!(
-        reference.commit(),
-        parsed.commit(),
+        *reference,
+        parsed,
         "Reference object commitment does not match commitment of parsed JSON. This is indicative of
         inconsistency or non-determinism in the commitment scheme.",
     );
@@ -183,9 +193,10 @@ change in the serialization of this data structure.
         std::fs::write(&actual_path, &actual).unwrap();
 
         // Fail the test with an assertion that outputs a diff.
+        // Use TaggedBase64 for compact console output.
         assert_eq!(
-            expected,
-            actual,
+            TaggedBase64::encode_raw(&expected),
+            TaggedBase64::encode_raw(&actual),
             r#"
 Serialized {name} does not match expected binary file. The actual serialization has been written to
 {}. If you intended to make a breaking change to the API, you may replace the reference file in
@@ -199,11 +210,21 @@ change in the serialization of this data structure.
     // Check that we can deserialize from the reference binary object.
     let parsed: T = Serializer::deserialize(&expected).unwrap();
     assert_eq!(
-        reference.commit(),
-        parsed.commit(),
+        *reference, parsed,
         "Reference object commitment does not match commitment of parsed binary object. This is
         indicative of inconsistency or non-determinism in the commitment scheme.",
     );
+}
+
+fn reference_test<T: Committable + Serialize + DeserializeOwned + Eq + Debug>(
+    name: &str,
+    reference: T,
+    commitment: &str,
+) {
+    setup_logging();
+    setup_backtrace();
+
+    reference_test_without_committable(name, &reference);
 
     // Print information about the commitment that might be useful in generating tests for other
     // languages.
@@ -230,11 +251,16 @@ Actual: {actual}
     );
 }
 
-#[test]
-fn test_reference_ns_table() {
+#[async_std::test]
+async fn test_reference_payload() {
+    reference_test_without_committable("payload", &reference_payload().await);
+}
+
+#[async_std::test]
+async fn test_reference_ns_table() {
     reference_test(
         "ns_table",
-        reference_ns_table(),
+        reference_ns_table().await,
         REFERENCE_NS_TABLE_COMMITMENT,
     );
 }
@@ -266,9 +292,13 @@ fn test_reference_fee_info() {
     );
 }
 
-#[test]
-fn test_reference_header() {
-    reference_test("header", reference_header(), REFERENCE_HEADER_COMMITMENT);
+#[async_std::test]
+async fn test_reference_header() {
+    reference_test(
+        "header",
+        reference_header().await,
+        REFERENCE_HEADER_COMMITMENT,
+    );
 }
 
 #[test]

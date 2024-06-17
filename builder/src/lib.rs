@@ -9,9 +9,7 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::{
-        election::static_committee::GeneralStaticCommittee, implementations::NetworkingMetricsValue,
-    },
+    traits::election::static_committee::GeneralStaticCommittee,
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
@@ -21,12 +19,11 @@ use hotshot_orchestrator::{
 };
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    constants::{Version01, STATIC_VER_0_1},
+    constants::Base,
     event::Event,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
-    traits::election::Membership,
-    traits::metrics::Metrics,
+    traits::{election::Membership, metrics::Metrics},
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::fmt::Display;
@@ -68,20 +65,18 @@ pub mod permissioned;
 // It runs the api service for the builder
 pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     // it is to serve hotshot
-    let builder_api = hotshot_builder_api::builder::define_api::<
-        ProxyGlobalState<SeqTypes>,
-        SeqTypes,
-        Version01,
-    >(&HotshotBuilderApiOptions::default())
-    .expect("Failed to construct the builder APIs");
+    let builder_api =
+        hotshot_builder_api::builder::define_api::<ProxyGlobalState<SeqTypes>, SeqTypes, Base>(
+            &HotshotBuilderApiOptions::default(),
+        )
+        .expect("Failed to construct the builder APIs");
 
     // it enables external clients to submit txn to the builder's private mempool
-    let private_mempool_api = hotshot_builder_api::builder::submit_api::<
-        ProxyGlobalState<SeqTypes>,
-        SeqTypes,
-        Version01,
-    >(&HotshotBuilderApiOptions::default())
-    .expect("Failed to construct the builder API for private mempool txns");
+    let private_mempool_api =
+        hotshot_builder_api::builder::submit_api::<ProxyGlobalState<SeqTypes>, SeqTypes, Base>(
+            &HotshotBuilderApiOptions::default(),
+        )
+        .expect("Failed to construct the builder API for private mempool txns");
 
     let mut app: App<ProxyGlobalState<SeqTypes>, BuilderApiError> = App::with_state(source);
 
@@ -91,7 +86,7 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     app.register_module("txn_submit", private_mempool_api)
         .expect("Failed to register the private mempool API");
 
-    async_spawn(app.serve(url, STATIC_VER_0_1));
+    async_spawn(app.serve(url, Base::instance()));
 }
 
 #[cfg(test)]
@@ -121,6 +116,7 @@ pub mod testing {
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     use portpicker::pick_unused_port;
+    use vbs::version::StaticVersion;
     //use sequencer::persistence::NoStorage;
     use async_broadcast::{
         broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender,
@@ -160,7 +156,6 @@ pub mod testing {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
-    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use serde::{Deserialize, Serialize};
     use snafu::{guide::feature_flags, *};
 
@@ -172,7 +167,7 @@ pub mod testing {
         staking_nodes_state_key_pairs: Vec<StateKeyPair>,
         non_staking_nodes_state_key_pairs: Vec<StateKeyPair>,
         non_staking_nodes_stake_entries: Vec<PeerConfig<hotshot_state_prover::QCVerKey>>,
-        master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
+        master_map: Arc<MasterMap<PubKey>>,
         anvil: Arc<AnvilInstance>,
     }
 
@@ -220,12 +215,16 @@ pub mod testing {
                 data_request_delay: Duration::from_millis(200),
                 view_sync_timeout: Duration::from_secs(5),
                 fixed_leader_for_gpuvid: 0,
-                builder_url,
+                builder_urls: vec1::vec1![builder_url],
                 builder_timeout: Duration::from_secs(1),
                 start_threshold: (
                     known_nodes_with_stake.clone().len() as u64,
                     known_nodes_with_stake.clone().len() as u64,
                 ),
+                start_proposing_view: 0,
+                stop_proposing_view: 0,
+                start_voting_view: 0,
+                stop_voting_view: 0,
             };
 
             Self {
@@ -378,8 +377,7 @@ pub mod testing {
 
             let network = Arc::new(MemoryNetwork::new(
                 config.my_own_validator_config.public_key,
-                NetworkingMetricsValue::new(metrics),
-                self.master_map.clone(),
+                &self.master_map,
                 None,
             ));
             let networks = Networks {
@@ -436,7 +434,7 @@ pub mod testing {
             let hotshot_events_api = hotshot_events_service::events::define_api::<
                 Arc<RwLock<EventsStreamer<SeqTypes>>>,
                 SeqTypes,
-                Version01,
+                Base,
             >(&EventStreamingApiOptions::default())
             .expect("Failed to define hotshot eventsAPI");
 
@@ -445,7 +443,7 @@ pub mod testing {
             app.register_module("hotshot-events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");
 
-            async_spawn(app.serve(url, STATIC_VER_0_1));
+            async_spawn(app.serve(url, Base::instance()));
         }
         // enable hotshot event streaming
         pub fn enable_hotshot_node_event_streaming<P: SequencerPersistence>(
@@ -555,12 +553,12 @@ pub mod testing {
                 channel_capacity,
                 node_count,
                 node_state,
+                ValidatedState::default(),
                 hotshot_events_streaming_api_url,
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
                 15,
                 Duration::from_millis(500),
-                ValidatedState::default(),
             )
             .await
             .unwrap();
@@ -620,11 +618,11 @@ pub mod testing {
                 bootstrapped_view,
                 channel_capacity,
                 node_state,
+                ValidatedState::default(),
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
                 15,
                 Duration::from_millis(500),
-                ValidatedState::default(),
             )
             .await
             .unwrap();
@@ -669,7 +667,7 @@ mod test {
         vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
     };
     use hotshot_types::utils::BuilderCommitment;
-    use sequencer::block::payload::Payload;
+    use sequencer::block::Payload;
     use sequencer::persistence::no_storage::{self, NoStorage};
     use sequencer::persistence::sql;
     use sequencer::{empty_builder_commitment, Header};
@@ -703,10 +701,11 @@ mod test {
         }
 
         let genesis_state = NodeState::mock();
+        let validated_state = ValidatedState::default();
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], &ValidatedState::default(), &genesis_state)
+                Payload::from_transactions([], &validated_state, &genesis_state)
                     .await
                     .expect("unable to create genesis payload");
             let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
