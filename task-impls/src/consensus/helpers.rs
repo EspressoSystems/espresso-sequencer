@@ -1,44 +1,14 @@
-use crate::{events::HotShotEvent, helpers::broadcast_event};
-
-#[cfg(not(feature = "dependency-tasks"))]
-use crate::{events::ProposalMissing, request::REQUEST_TIMEOUT};
-
-#[cfg(not(feature = "dependency-tasks"))]
-use super::ConsensusTaskState;
-#[cfg(not(feature = "dependency-tasks"))]
-use crate::{
-    consensus::{update_view, view_change::SEND_VIEW_CHANGE_EVENT},
-    helpers::AnyhowTracing,
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
 };
-#[cfg(not(feature = "dependency-tasks"))]
-use anyhow::bail;
+
 use anyhow::{ensure, Context, Result};
-#[cfg(not(feature = "dependency-tasks"))]
-use async_broadcast::broadcast;
 use async_broadcast::Sender;
-#[cfg(not(feature = "dependency-tasks"))]
-use async_compatibility_layer::art::async_timeout;
-#[cfg(not(feature = "dependency-tasks"))]
-use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
-#[cfg(not(feature = "dependency-tasks"))]
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
-#[cfg(not(feature = "dependency-tasks"))]
-use chrono::Utc;
 use committable::{Commitment, Committable};
-#[cfg(not(feature = "dependency-tasks"))]
-use core::time::Duration;
-#[cfg(not(feature = "dependency-tasks"))]
-use futures::FutureExt;
-#[cfg(not(feature = "dependency-tasks"))]
-use hotshot_types::{
-    consensus::CommitmentAndMetadata,
-    traits::{
-        node_implementation::{ConsensusTime, NodeImplementation},
-        storage::Storage,
-    },
-};
 use hotshot_types::{
     consensus::{Consensus, View},
     data::{Leaf, QuorumProposal, ViewChangeEvidence},
@@ -52,21 +22,38 @@ use hotshot_types::{
     utils::{Terminator, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
-#[cfg(not(feature = "dependency-tasks"))]
-use hotshot_types::{data::null_block, message::GeneralConsensusMessage, simple_vote::QuorumData};
-#[cfg(not(feature = "dependency-tasks"))]
-use std::marker::PhantomData;
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-#[cfg(not(feature = "dependency-tasks"))]
-use tracing::error;
 use tracing::{debug, info, warn};
 #[cfg(not(feature = "dependency-tasks"))]
-use vbs::version::Version;
+use {
+    super::ConsensusTaskState,
+    crate::{
+        consensus::{update_view, view_change::SEND_VIEW_CHANGE_EVENT},
+        helpers::AnyhowTracing,
+    },
+    crate::{events::ProposalMissing, request::REQUEST_TIMEOUT},
+    anyhow::bail,
+    async_broadcast::broadcast,
+    async_compatibility_layer::art::async_timeout,
+    async_compatibility_layer::art::{async_sleep, async_spawn},
+    chrono::Utc,
+    core::time::Duration,
+    futures::FutureExt,
+    hotshot_types::{
+        consensus::CommitmentAndMetadata,
+        traits::{
+            node_implementation::{ConsensusTime, NodeImplementation},
+            storage::Storage,
+        },
+    },
+    hotshot_types::{data::null_block, message::GeneralConsensusMessage, simple_vote::QuorumData},
+    std::marker::PhantomData,
+    tracing::error,
+    vbs::version::Version,
+};
+
+use crate::{events::HotShotEvent, helpers::broadcast_event};
 
 /// Validate the state and safety and liveness of a proposal then emit
 /// a `QuorumProposalValidated` event.

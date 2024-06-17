@@ -5,7 +5,6 @@ pub mod task_state;
 
 use std::{sync::Arc, time::Duration};
 
-use crate::{tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use hotshot_task::task::Task;
 #[cfg(not(feature = "dependency-tasks"))]
@@ -36,6 +35,8 @@ use hotshot_types::{
     },
 };
 use vbs::version::StaticVersionType;
+
+use crate::{tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi};
 
 /// event for global event stream
 #[derive(Clone, Debug)]

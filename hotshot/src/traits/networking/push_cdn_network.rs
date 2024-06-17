@@ -1,7 +1,6 @@
 #[cfg(feature = "hotshot-testing")]
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::{collections::BTreeSet, marker::PhantomData};
+use std::{collections::BTreeSet, marker::PhantomData, sync::Arc};
 #[cfg(feature = "hotshot-testing")]
 use std::{path::Path, time::Duration};
 
