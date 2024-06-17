@@ -1,0 +1,1 @@
+searchState.loadedDescShard("gen_vk_contract", 0, "This executable generates the solidity files with …")

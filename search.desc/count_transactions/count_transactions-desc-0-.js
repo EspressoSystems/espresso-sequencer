@@ -1,0 +1,1 @@
+searchState.loadedDescShard("count_transactions", 0, "Utility program to count transactions sequenced by HotShot.\nUtility program to count transactions sequenced by HotShot.\nReturns the argument unchanged.\nStart counting from block FROM.\nCalls <code>U::from(self)</code>.\nNumber of parallel tasks to run.\nStop counting at block TO.\nURL of the HotShot query service.")
