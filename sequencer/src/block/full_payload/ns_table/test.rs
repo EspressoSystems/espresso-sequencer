@@ -8,6 +8,7 @@ use crate::{
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use rand::{Rng, RngCore};
+use NsTableValidationError::*;
 
 #[test]
 fn random_valid() {
@@ -16,9 +17,7 @@ fn random_valid() {
     let mut rng = jf_utils::test_rng();
 
     for num_entries in 0..20 {
-        random_valid_ns_table(num_entries, &mut rng)
-            .validate()
-            .unwrap();
+        expect_valid(&random_valid_ns_table(num_entries, &mut rng));
     }
 }
 
@@ -31,10 +30,7 @@ fn byte_len() {
     // Extremely small byte lengths should get rejected.
     {
         let mut ns_table = NsTable { bytes: Vec::new() };
-        assert_eq!(
-            ns_table.validate().unwrap_err(),
-            NsTableValidationError::InvalidByteLen
-        );
+        expect_invalid(&ns_table, InvalidByteLen);
         expect_num_bytes_invalid(&mut ns_table, NsTableBuilder::header_byte_len(), &mut rng);
     }
 
@@ -55,15 +51,9 @@ fn byte_len() {
             if i == num_bytes - 1 {
                 break; // final iteration: no error expected
             }
-            assert_eq!(
-                ns_table.validate().unwrap_err(),
-                NsTableValidationError::InvalidByteLen
-            );
+            expect_invalid(ns_table, InvalidByteLen);
         }
-        assert_eq!(
-            ns_table.validate().unwrap_err(),
-            NsTableValidationError::InvalidHeader,
-        );
+        expect_invalid(ns_table, InvalidHeader);
     }
 }
 
@@ -96,10 +86,7 @@ fn monotonic_increase() {
         ns_table_builder.append_entry(NamespaceId::from(entry1.0), entry1.1);
         ns_table_builder.append_entry(NamespaceId::from(entry2.0), entry2.1);
         let ns_table = ns_table_builder.into_ns_table();
-        assert_eq!(
-            ns_table.validate().unwrap_err(),
-            NsTableValidationError::NonIncreasingEntries
-        );
+        expect_invalid(&ns_table, NonIncreasingEntries);
     }
 }
 
@@ -126,10 +113,7 @@ fn header() {
     fn set_header(ns_table: &mut NsTable, num_nss: usize) {
         ns_table.bytes[..NUM_NSS_BYTE_LEN]
             .copy_from_slice(&usize_to_bytes::<NUM_NSS_BYTE_LEN>(num_nss));
-        assert_eq!(
-            ns_table.validate().unwrap_err(),
-            NsTableValidationError::InvalidHeader
-        );
+        expect_invalid(ns_table, InvalidHeader);
     }
 }
 
@@ -157,4 +141,32 @@ where
         ns_table_builder.append_entry(NamespaceId::from(ns_id), offset);
     }
     ns_table_builder.into_ns_table()
+}
+
+fn expect_valid(ns_table: &NsTable) {
+    // `validate` should succeed
+    ns_table.validate().unwrap();
+
+    // serde round-trip should succeed
+    let serde_bytes = bincode::serialize(ns_table).unwrap();
+    let ns_table_serde: NsTable = bincode::deserialize(&serde_bytes).unwrap();
+    assert_eq!(&ns_table_serde, ns_table);
+}
+
+fn expect_invalid(ns_table: &NsTable, err: NsTableValidationError) {
+    use serde::de::Error;
+
+    // `validate` should fail
+    assert_eq!(ns_table.validate().unwrap_err(), err);
+
+    // serde round-trip should fail
+    //
+    // need to use `to_string` because `bincode::Error`` is not `Eq`
+    let serde_bytes = bincode::serialize(ns_table).unwrap();
+    assert_eq!(
+        bincode::deserialize::<NsTable>(&serde_bytes)
+            .unwrap_err()
+            .to_string(),
+        bincode::Error::custom(err).to_string(),
+    );
 }
