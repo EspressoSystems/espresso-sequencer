@@ -24,7 +24,7 @@ transactions applied to the state are the one sequenced by Espresso.
 
 **Figure 1:** Circuit used when the rollup falls back to using its default (centralized) sequencer. The public inputs
 are the current state of the rollup _COMM_STATE_VM i_, the new rollup state after update _COMM_STATE_VM i+1_ and a
-commitment to the transactions applied to the state, _COMM_TXS_ROLLUP_. The private input (in bold) corresponds the list
+commitment to the transactions applied to the state, _COMM_TXS_ROLLUP_. The private input (in bold) corresponds to the list
 of transactions.
 
 ## Integration 1: Rollup contract fetches Espresso block commitment from the Espresso light client contract
