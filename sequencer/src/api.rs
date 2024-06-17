@@ -832,8 +832,6 @@ pub mod test_helpers {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod api_tests {
-    use self::options::HotshotEvents;
-
     use super::*;
     use crate::{
         testing::{wait_for_decide_on_handle, TestConfigBuilder},
@@ -976,71 +974,13 @@ mod api_tests {
         let storage = D::create_storage().await;
         catchup_test_helper(|opt| D::options(&storage, opt)).await
     }
-
-    #[async_std::test]
-    pub(crate) async fn test_hotshot_event_streaming<D: TestableSequencerDataSource>() {
-        use hotshot_events_service::events_source::BuilderEvent;
-        use HotshotEvents;
-
-        setup_logging();
-
-        setup_backtrace();
-
-        let hotshot_event_streaming_port =
-            pick_unused_port().expect("No ports free for hotshot event streaming");
-        let query_service_port = pick_unused_port().expect("No ports free for query service");
-
-        let url = format!("http://localhost:{hotshot_event_streaming_port}")
-            .parse()
-            .unwrap();
-
-        let hotshot_events = HotshotEvents {
-            events_service_port: hotshot_event_streaming_port,
-        };
-
-        let client: Client<ServerError, SequencerVersion> = Client::new(url);
-
-        let options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
-
-        let anvil = Anvil::new().spawn();
-        let l1 = anvil.endpoint().parse().unwrap();
-        let network_config = TestConfigBuilder::default().l1_url(l1).build();
-        let config = TestNetworkConfigBuilder::default()
-            .api_config(options)
-            .network_config(network_config)
-            .build();
-        let _network = TestNetwork::new(config).await;
-
-        let mut subscribed_events = client
-            .socket("hotshot-events/events")
-            .subscribe::<BuilderEvent<SeqTypes>>()
-            .await
-            .unwrap();
-
-        let total_count = 5;
-        // wait for these events to receive on client 1
-        let mut receive_count = 0;
-        loop {
-            let event = subscribed_events.next().await.unwrap();
-            tracing::info!(
-                "Received event in hotshot event streaming Client 1: {:?}",
-                event
-            );
-            receive_count += 1;
-            if receive_count > total_count {
-                tracing::info!("Client Received atleast desired events, exiting loop");
-                break;
-            }
-        }
-        // Offset 1 is due to the startup event info
-        assert_eq!(receive_count, total_count + 1);
-    }
 }
 
 #[cfg(test)]
 mod test {
     use self::{
-        data_source::testing::TestableSequencerDataSource, sql::DataSource as SqlDataSource,
+        data_source::testing::TestableSequencerDataSource, options::HotshotEvents,
+        sql::DataSource as SqlDataSource,
     };
     use super::*;
     use crate::{
@@ -1673,5 +1613,60 @@ mod test {
             .await
             .unwrap();
         assert_eq!(chain, new_chain);
+    }
+
+    #[async_std::test]
+    async fn test_hotshot_event_streaming() {
+        setup_logging();
+        setup_backtrace();
+
+        let hotshot_event_streaming_port =
+            pick_unused_port().expect("No ports free for hotshot event streaming");
+        let query_service_port = pick_unused_port().expect("No ports free for query service");
+
+        let url = format!("http://localhost:{hotshot_event_streaming_port}")
+            .parse()
+            .unwrap();
+
+        let hotshot_events = HotshotEvents {
+            events_service_port: hotshot_event_streaming_port,
+        };
+
+        let client: Client<ServerError, SequencerVersion> = Client::new(url);
+
+        let options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
+
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let _network = TestNetwork::new(config).await;
+
+        let mut subscribed_events = client
+            .socket("hotshot-events/events")
+            .subscribe::<BuilderEvent<SeqTypes>>()
+            .await
+            .unwrap();
+
+        let total_count = 5;
+        // wait for these events to receive on client 1
+        let mut receive_count = 0;
+        loop {
+            let event = subscribed_events.next().await.unwrap();
+            tracing::info!(
+                "Received event in hotshot event streaming Client 1: {:?}",
+                event
+            );
+            receive_count += 1;
+            if receive_count > total_count {
+                tracing::info!("Client Received atleast desired events, exiting loop");
+                break;
+            }
+        }
+        // Offset 1 is due to the startup event info
+        assert_eq!(receive_count, total_count + 1);
     }
 }

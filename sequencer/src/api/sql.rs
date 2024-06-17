@@ -180,7 +180,7 @@ impl ChainConfigPersistence for DataSource {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 mod impl_testable_data_source {
 
     use super::*;

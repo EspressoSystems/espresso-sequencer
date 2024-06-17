@@ -238,6 +238,10 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         self.handle.read().await.decided_state().await
     }
 
+    pub fn node_id(&self) -> u64 {
+        self.node_state.node_id
+    }
+
     pub fn node_state(&self) -> NodeState {
         self.node_state.clone()
     }
