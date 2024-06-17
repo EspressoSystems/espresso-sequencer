@@ -65,20 +65,22 @@ use hotshot_builder_core::{
 use hotshot_state_prover;
 use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 use jf_signature::bls_over_bn254::VerKey;
-use sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, ChainConfig};
 use sequencer::{
-    catchup::StatePeers,
+    catchup::{mock::MockStateCatchup, StatePeers},
     context::{Consensus, SequencerContext},
+    eth_signature_key::EthKeyPair,
     genesis::L1Finalized,
     l1_client::L1Client,
     network,
+    network::libp2p::split_off_peer_id,
     persistence::SequencerPersistence,
     state::FeeAccount,
     state::ValidatedState,
+    state_signature::StakeTableCommitmentType,
     state_signature::{static_stake_table_commitment, StateSigner},
-    Genesis, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey, SeqTypes,
+    ChainConfig, Genesis, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey,
+    SeqTypes,
 };
-use sequencer::{network::libp2p::split_off_peer_id, state_signature::StakeTableCommitmentType};
 use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
 use std::{net::Ipv4Addr, thread::Builder};
@@ -568,8 +570,7 @@ mod test {
     };
     use sequencer::{
         persistence::no_storage::{self, NoStorage},
-        transaction::{NamespaceId, Transaction},
-        Payload,
+        NamespaceId, Payload, Transaction,
     };
     use std::time::Duration;
     use surf_disco::Client;

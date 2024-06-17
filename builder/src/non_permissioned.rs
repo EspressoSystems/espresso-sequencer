@@ -236,15 +236,13 @@ mod test {
         node_implementation::NodeType,
     };
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-    use sequencer::NamespaceId;
     use sequencer::{
         persistence::{
             no_storage::{self, NoStorage},
             PersistenceOptions,
         },
         state::FeeAccount,
-        transaction::Transaction,
-        Payload,
+        NamespaceId, Payload, Transaction,
     };
     use std::time::Duration;
     use surf_disco::Client;
