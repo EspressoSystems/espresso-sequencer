@@ -30,8 +30,8 @@ of transactions.
 ## Integration 1: Rollup contract fetches Espresso block commitment from the Espresso light client contract
 
 For this integration, Espresso consensus verification is delegated to the Espresso light client contract. In practice
-the rollup contract will fetch the last Espresso block commitment and feed it to the circuit. Still additional gadgets
-need to be introduced in order to implement the derivation pipeline logic consisting at a high level in:
+the rollup contract will be given the last Espresso block commitment and feed it to the circuit. Still additional
+gadgets need to be introduced in order to implement the derivation pipeline logic consisting at a high level in:
 
 - Collecting all the Espresso commitments since the last update.
 - For each of these commitments, filter the corresponding Espresso blocks in order to obtain the transactions belonging
