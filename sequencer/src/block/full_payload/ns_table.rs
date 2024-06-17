@@ -118,13 +118,13 @@ const NS_ID_BYTE_LEN: usize = 4;
 /// TODO prefer [`NsTable`] to be a newtype like this
 /// ```ignore
 /// #[repr(transparent)]
-/// #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+/// #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 /// #[serde(transparent)]
 /// pub struct NsTable(#[serde(with = "base64_bytes")] Vec<u8>);
 /// ```
 /// but we need to maintain serialization compatibility.
 /// <https://github.com/EspressoSystems/espresso-sequencer/issues/1575>
-#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(remote = "Self")] // workaround https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
 pub struct NsTable {
     #[serde(with = "base64_bytes")]
