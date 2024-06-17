@@ -1,7 +1,8 @@
 use crate::{
     api::data_source::CatchupDataSource, block::NsTableValidationError, catchup::SqlStateCatchup,
-    chain_config::BlockSize, eth_signature_key::EthKeyPair, ChainConfig, Header, Leaf, NodeState,
-    SeqTypes,
+    chain_config::BlockSize, chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair,
+    genesis::UpgradeType, persistence::ChainConfigPersistence, ChainConfig, Header, Leaf,
+    NodeState, SeqTypes,
 };
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
@@ -75,6 +76,7 @@ pub struct ValidatedState {
     pub block_merkle_tree: BlockMerkleTree,
     /// Fee Merkle Tree
     pub fee_merkle_tree: FeeMerkleTree,
+    pub chain_config: ResolvableChainConfig,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -100,9 +102,13 @@ impl Default for ValidatedState {
             Vec::<(FeeAccount, FeeAmount)>::new(),
         )
         .unwrap();
+
+        let chain_config = ResolvableChainConfig::from(ChainConfig::default());
+
         Self {
             block_merkle_tree,
             fee_merkle_tree,
+            chain_config,
         }
     }
 }
@@ -215,6 +221,7 @@ impl ValidatedState {
             block_merkle_tree: BlockMerkleTree::from_commitment(
                 self.block_merkle_tree.commitment(),
             ),
+            chain_config: ResolvableChainConfig::from(self.chain_config.commit()),
         }
     }
 }
@@ -308,6 +315,7 @@ pub fn validate_proposal(
     let ValidatedState {
         block_merkle_tree,
         fee_merkle_tree,
+        ..
     } = state;
 
     let block_merkle_tree_root = block_merkle_tree.commitment();
@@ -400,6 +408,7 @@ async fn compute_state_update(
     instance: &NodeState,
     parent_leaf: &LeafQueryData<SeqTypes>,
     proposed_leaf: &LeafQueryData<SeqTypes>,
+    version: Version,
 ) -> anyhow::Result<(ValidatedState, Delta)> {
     let proposed_leaf = proposed_leaf.leaf();
     let parent_leaf = parent_leaf.leaf();
@@ -420,7 +429,9 @@ async fn compute_state_update(
         parent_header.fee_merkle_tree_root
     );
 
-    state.apply_header(instance, parent_leaf, header).await
+    state
+        .apply_header(instance, parent_leaf, header, version)
+        .await
 }
 
 async fn store_state_update(
@@ -432,6 +443,7 @@ async fn store_state_update(
     let ValidatedState {
         fee_merkle_tree,
         block_merkle_tree,
+        ..
     } = state;
     let Delta { fees_delta } = delta;
 
@@ -501,10 +513,14 @@ async fn update_state_storage(
     instance: &NodeState,
     parent_leaf: &LeafQueryData<SeqTypes>,
     proposed_leaf: &LeafQueryData<SeqTypes>,
+    version: Version,
 ) -> anyhow::Result<ValidatedState> {
-    let (state, delta) = compute_state_update(parent_state, instance, parent_leaf, proposed_leaf)
-        .await
-        .context("computing state update")?;
+    let parent_chain_config = parent_state.chain_config;
+
+    let (state, delta) =
+        compute_state_update(parent_state, instance, parent_leaf, proposed_leaf, version)
+            .await
+            .context("computing state update")?;
 
     let mut storage = storage.write().await;
     if let Err(err) = store_state_update(&mut *storage, proposed_leaf.height(), &state, delta).await
@@ -513,11 +529,21 @@ async fn update_state_storage(
         return Err(err);
     }
 
+    if parent_chain_config != state.chain_config {
+        let cf = state
+            .chain_config
+            .resolve()
+            .context("failed to resolve to chain config")?;
+
+        storage.insert_chain_config(cf).await?
+    }
+
     Ok(state)
 }
 
 async fn store_genesis_state(
     storage: &mut impl SequencerStateDataSource,
+    chain_config: ChainConfig,
     state: &ValidatedState,
 ) -> anyhow::Result<()> {
     ensure!(
@@ -545,6 +571,8 @@ async fn store_genesis_state(
         .context("failed to store fee merkle nodes")?;
     }
 
+    storage.insert_chain_config(chain_config).await?;
+
     storage.commit().await?;
     Ok(())
 }
@@ -552,6 +580,7 @@ async fn store_genesis_state(
 pub(crate) async fn update_state_storage_loop(
     storage: Arc<RwLock<impl SequencerStateDataSource>>,
     instance: impl Future<Output = NodeState>,
+    version: Version,
 ) -> anyhow::Result<()> {
     let mut instance = instance.await;
     instance.peers = Arc::new(SqlStateCatchup::from(storage.clone()));
@@ -577,7 +606,13 @@ pub(crate) async fn update_state_storage_loop(
         // never the result of a state update and thus is not inserted in the loop below.
         tracing::info!("storing genesis merklized state");
         let mut storage = storage.write().await;
-        if let Err(err) = store_genesis_state(&mut *storage, &instance.genesis_state).await {
+        if let Err(err) = store_genesis_state(
+            &mut *storage,
+            instance.chain_config,
+            &instance.genesis_state,
+        )
+        .await
+        {
             tracing::error!("failed to store genesis state: {err:#}");
             storage.revert().await;
             return Err(err);
@@ -586,8 +621,15 @@ pub(crate) async fn update_state_storage_loop(
 
     while let Some(leaf) = leaves.next().await {
         loop {
-            match update_state_storage(&parent_state, &storage, &instance, &parent_leaf, &leaf)
-                .await
+            match update_state_storage(
+                &parent_state,
+                &storage,
+                &instance,
+                &parent_leaf,
+                &leaf,
+                version,
+            )
+            .await
             {
                 Ok(state) => {
                     parent_leaf = leaf;
@@ -615,6 +657,7 @@ pub(crate) trait SequencerStateDataSource:
     + UpdateStateData<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
     + UpdateStateData<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
     + MerklizedStateHeightPersistence
+    + ChainConfigPersistence
 {
 }
 
@@ -627,6 +670,7 @@ impl<T> SequencerStateDataSource for T where
         + UpdateStateData<SeqTypes, FeeMerkleTree, { FeeMerkleTree::ARITY }>
         + UpdateStateData<SeqTypes, BlockMerkleTree, { BlockMerkleTree::ARITY }>
         + MerklizedStateHeightPersistence
+        + ChainConfigPersistence
 {
 }
 
@@ -636,24 +680,37 @@ impl ValidatedState {
         instance: &NodeState,
         parent_leaf: &Leaf,
         proposed_header: &Header,
+        version: Version,
     ) -> anyhow::Result<(Self, Delta)> {
         // Clone state to avoid mutation. Consumer can take update
         // through returned value.
 
-        let l1_deposits = get_l1_deposits(instance, proposed_header, parent_leaf).await;
-
         let mut validated_state = self.clone();
+        validated_state.apply_upgrade(instance, version);
+
+        let chain_config = validated_state
+            .get_chain_config(instance, &proposed_header.chain_config)
+            .await?;
+
+        if Some(chain_config) != validated_state.chain_config.resolve() {
+            validated_state.chain_config = chain_config.into();
+        }
+
+        let l1_deposits = get_l1_deposits(
+            instance,
+            proposed_header,
+            parent_leaf,
+            chain_config.fee_contract,
+        )
+        .await;
 
         // Find missing fee state entries. We will need to use the builder account which is paying a
         // fee and the recipient account which is receiving it, plus any counts receiving deposits
         // in this block.
         let missing_accounts = self.forgotten_accounts(
-            [
-                proposed_header.fee_info.account,
-                instance.chain_config.fee_recipient,
-            ]
-            .into_iter()
-            .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
+            [proposed_header.fee_info.account, chain_config.fee_recipient]
+                .into_iter()
+                .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
         );
 
         let parent_height = parent_leaf.height();
@@ -715,10 +772,61 @@ impl ValidatedState {
             &mut validated_state,
             &mut delta,
             proposed_header.fee_info,
-            instance.chain_config.fee_recipient,
+            chain_config.fee_recipient,
         )?;
 
         Ok((validated_state, delta))
+    }
+
+    /// Updates the `ValidatedState` if a protocol upgrade has occurred.
+    pub(crate) fn apply_upgrade(&mut self, instance: &NodeState, version: Version) {
+        // Check for protocol upgrade based on sequencer version
+        if version <= instance.current_version {
+            return;
+        }
+
+        let Some(upgrade) = instance.upgrades.get(&version) else {
+            return;
+        };
+
+        match upgrade.upgrade_type {
+            UpgradeType::ChainConfig { chain_config } => {
+                self.chain_config = chain_config.into();
+            }
+        }
+    }
+
+    /// Retrieves the `ChainConfig`.
+    ///
+    ///  Returns the `NodeState` `ChainConfig` if the `ValidatedState` `ChainConfig` commitment matches the `NodeState` `ChainConfig`` commitment.
+    ///  If the commitments do not match, it returns the `ChainConfig` available in either `ValidatedState` or proposed header.
+    ///  If neither has the `ChainConfig`, it fetches the config from the peers.
+    ///
+    /// Returns an error if it fails to fetch the `ChainConfig` from the peers.
+    pub(crate) async fn get_chain_config(
+        &self,
+        instance: &NodeState,
+        header_cf: &ResolvableChainConfig,
+    ) -> anyhow::Result<ChainConfig> {
+        let state_cf = self.chain_config;
+
+        if state_cf.commit() == instance.chain_config.commit() {
+            return Ok(instance.chain_config);
+        }
+
+        let cf = match (state_cf.resolve(), header_cf.resolve()) {
+            (Some(cf), _) => cf,
+            (_, Some(cf)) if cf.commit() == state_cf.commit() => cf,
+            (_, Some(_)) | (None, None) => {
+                instance
+                    .peers
+                    .as_ref()
+                    .fetch_chain_config(state_cf.commit())
+                    .await
+            }
+        };
+
+        Ok(cf)
     }
 }
 
@@ -726,10 +834,9 @@ pub async fn get_l1_deposits(
     instance: &NodeState,
     header: &Header,
     parent_leaf: &Leaf,
+    fee_contract_address: Option<Address>,
 ) -> Vec<FeeInfo> {
-    if let (Some(addr), Some(block_info)) =
-        (instance.chain_config.fee_contract, header.l1_finalized)
-    {
+    if let (Some(addr), Some(block_info)) = (fee_contract_address, header.l1_finalized) {
         instance
             .l1_client
             .get_finalized_deposits(
@@ -797,7 +904,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         parent_leaf: &Leaf,
         proposed_header: &Header,
         vid_common: VidCommon,
-        _version: Version,
+        version: Version,
     ) -> Result<(Self, Self::Delta), Self::Error> {
         //validate builder fee
         if let Err(err) = validate_builder_fee(proposed_header) {
@@ -808,14 +915,19 @@ impl HotShotState<SeqTypes> for ValidatedState {
         // Unwrapping here is okay as we retry in a loop
         //so we should either get a validated state or until hotshot cancels the task
         let (validated_state, delta) = self
-            .apply_header(instance, parent_leaf, proposed_header)
+            .apply_header(instance, parent_leaf, proposed_header, version)
             .await
             .unwrap();
+
+        let chain_config = validated_state
+            .chain_config
+            .resolve()
+            .expect("Chain Config not found in validated state");
 
         // validate the proposal
         if let Err(err) = validate_proposal(
             &validated_state,
-            instance.chain_config,
+            chain_config,
             parent_leaf,
             proposed_header,
             &vid_common,
@@ -852,6 +964,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         Self {
             fee_merkle_tree,
             block_merkle_tree,
+            chain_config: block_header.chain_config,
         }
     }
     /// Construct a genesis validated state.

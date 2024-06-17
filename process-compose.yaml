@@ -64,7 +64,7 @@ processes:
   orchestrator:
     command: orchestrator
     environment: 
-      - ESPRESSO_ORCHESTRATOR_BUILDER_URL=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT
+      - ESPRESSO_ORCHESTRATOR_BUILDER_URLS=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT
     readiness_probe:
       http_get:
         scheme: http
