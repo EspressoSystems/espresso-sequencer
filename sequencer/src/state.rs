@@ -334,8 +334,7 @@ pub fn validate_proposal(
         });
     }
 
-    // TODO debugging
-    // proposal.ns_table.validate()?;
+    proposal.ns_table.validate()?;
 
     Ok(())
 }
