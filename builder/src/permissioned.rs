@@ -568,7 +568,7 @@ mod test {
     };
     use sequencer::{
         persistence::no_storage::{self, NoStorage},
-        transaction::Transaction,
+        transaction::{NamespaceId, Transaction},
         Payload,
     };
     use std::time::Duration;
@@ -715,7 +715,7 @@ mod test {
             }
         }
 
-        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
+        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3]);
         match builder_client
             .post::<()>("txn_submit/submit")
             .body_json(&txn)

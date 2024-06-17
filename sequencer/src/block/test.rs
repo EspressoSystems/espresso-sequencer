@@ -178,8 +178,8 @@ impl ValidTest {
         for tx_lens in tx_lengths.into_iter() {
             let ns_id = NamespaceId::random(rng);
             for len in tx_lens {
-                let ns: &mut Vec<_> = nss.entry(ns_id).or_default();
-                ns.push(Transaction::new(ns_id, random_bytes(len, rng)));
+                let ns: &mut Vec<_> = nss.entry(ns_id.clone()).or_default();
+                ns.push(Transaction::new(ns_id.clone(), random_bytes(len, rng)));
             }
         }
         Self { nss }

@@ -3,7 +3,6 @@ use committable::{Commitment, Committable};
 use derive_more::Display;
 use hotshot_query_service::explorer::ExplorerTransaction;
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
-use jf_merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 
 /// TODO [`NamespaceId`] has historical debt to repay:
@@ -21,20 +20,14 @@ use serde::{de::Error, Deserialize, Deserializer, Serialize};
 ///   module because that's where it's byte length is dictated, so that's where
 ///   it makes the most sense to put serialization. See
 ///   <https://github.com/EspressoSystems/espresso-sequencer/pull/1499#issuecomment-2134065090>
-/// - It impls [`Namespace`] from [`jf_merkle_tree`], but this seems unneeded
-///   now that we're not using jellyfish's namespace merkle tree.
-/// - We derive some things that perhaps we shouldn't: `Default`. Perhaps
-///   derivations for [`NamespaceId`] should match that of [`Transaction`].
 #[derive(
     Clone,
-    Copy,
     Serialize,
     Debug,
     Display,
     PartialEq,
     Eq,
     Hash,
-    Default,
     CanonicalDeserialize,
     CanonicalSerialize,
     PartialOrd,
@@ -66,7 +59,12 @@ impl<'de> Deserialize<'de> for NamespaceId {
         if ns_id > u32::MAX as u64 {
             Err(D::Error::invalid_value(
                 Unexpected::Unsigned(ns_id),
-                &"exceeds u32::MAX",
+                &"at most u32::MAX",
+            ))
+        } else if ns_id == 0 {
+            Err(D::Error::invalid_value(
+                Unexpected::Unsigned(ns_id),
+                &"nonzero",
             ))
         } else {
             Ok(NamespaceId(ns_id))
@@ -78,16 +76,6 @@ impl NamespaceId {
     #[cfg(any(test, feature = "testing"))]
     pub fn random(rng: &mut dyn rand::RngCore) -> Self {
         Self(rng.next_u32() as u64)
-    }
-}
-
-impl Namespace for NamespaceId {
-    fn max() -> Self {
-        Self(u32::MAX as u64)
-    }
-
-    fn min() -> Self {
-        Self(u32::MIN as u64)
     }
 }
 
@@ -114,7 +102,7 @@ impl Transaction {
     }
 
     pub fn namespace(&self) -> NamespaceId {
-        self.namespace
+        self.namespace.clone()
     }
 
     pub fn payload(&self) -> &[u8] {
@@ -146,14 +134,6 @@ impl Transaction {
 
 impl HotShotTransaction for Transaction {}
 
-// TODO seems that `Namespaced` is unneeded.
-impl Namespaced for Transaction {
-    type Namespace = NamespaceId;
-    fn get_namespace(&self) -> Self::Namespace {
-        self.namespace
-    }
-}
-
 impl Committable for Transaction {
     fn commit(&self) -> Commitment<Self> {
         committable::RawCommitmentBuilder::new("Transaction")
@@ -170,6 +150,6 @@ impl Committable for Transaction {
 impl ExplorerTransaction for Transaction {
     type NamespaceId = NamespaceId;
     fn namespace_id(&self) -> Self::NamespaceId {
-        self.namespace
+        self.namespace.clone()
     }
 }

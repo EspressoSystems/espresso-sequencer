@@ -236,6 +236,7 @@ mod test {
         node_implementation::NodeType,
     };
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
+    use sequencer::NamespaceId;
     use sequencer::{
         persistence::{
             no_storage::{self, NoStorage},
@@ -403,7 +404,7 @@ mod test {
             }
         }
 
-        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
+        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3]);
         match builder_client
             .post::<()>("txn_submit/submit")
             .body_json(&txn)

@@ -915,7 +915,7 @@ mod test {
         }
 
         // Submit target transaction to handle
-        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
+        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3]);
         handles[0]
             .submit_transaction(txn.clone())
             .await
