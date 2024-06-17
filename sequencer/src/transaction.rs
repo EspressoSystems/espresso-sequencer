@@ -61,11 +61,6 @@ impl<'de> Deserialize<'de> for NamespaceId {
                 Unexpected::Unsigned(ns_id),
                 &"at most u32::MAX",
             ))
-        } else if ns_id == 0 {
-            Err(D::Error::invalid_value(
-                Unexpected::Unsigned(ns_id),
-                &"nonzero",
-            ))
         } else {
             Ok(NamespaceId(ns_id))
         }

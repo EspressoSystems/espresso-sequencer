@@ -232,19 +232,25 @@ impl NsTable {
             return Err(InvalidHeader);
         }
 
-        // Namespace IDs and offsets must be nonzero and increase monotonically.
+        // Namespace IDs and offsets must increase monotonically. Offsets must
+        // be nonzero.
         {
-            let (mut prev_ns_id, mut prev_offset) = (NamespaceId::from(0), 0);
+            let (mut prev_ns_id, mut prev_offset) = (None, 0);
             for (ns_id, offset) in self.iter().map(|i| {
                 (
                     self.read_ns_id_unchecked(&i),
                     self.read_ns_offset_unchecked(&i),
                 )
             }) {
-                if ns_id <= prev_ns_id || offset <= prev_offset {
+                if let Some(prev_ns_id) = prev_ns_id {
+                    if ns_id <= prev_ns_id {
+                        return Err(NonIncreasingEntries);
+                    }
+                }
+                if offset <= prev_offset {
                     return Err(NonIncreasingEntries);
                 }
-                (prev_ns_id, prev_offset) = (ns_id, offset);
+                (prev_ns_id, prev_offset) = (Some(ns_id), offset);
             }
         }
 
