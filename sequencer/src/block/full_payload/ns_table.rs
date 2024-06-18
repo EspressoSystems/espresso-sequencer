@@ -125,13 +125,18 @@ const NS_ID_BYTE_LEN: usize = 4;
 /// but we need to maintain serialization compatibility.
 /// <https://github.com/EspressoSystems/espresso-sequencer/issues/1575>
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[serde(remote = "Self")] // workaround https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
+// Boilerplate: `#[serde(remote = "Self")]` needed to check invariants on
+// deserialization. See
+// https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
+#[serde(remote = "Self")]
 pub struct NsTable {
     #[serde(with = "base64_bytes")]
     bytes: Vec<u8>,
 }
 
-// Boilerplate to check invariants on deserialization
+// Boilerplate: `#[serde(remote = "Self")]` allows invariant checking on
+// deserialization via re-implementation of `Deserialize` in terms of default
+// derivation. See
 // https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
 impl<'de> Deserialize<'de> for NsTable {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -144,7 +149,8 @@ impl<'de> Deserialize<'de> for NsTable {
     }
 }
 
-// Boilerplate to check invariants on deserialization
+// Boilerplate: use of `#[serde(remote = "Self")]` must include a trivial
+// `Serialize` impl. See
 // https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
 impl Serialize for NsTable {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
