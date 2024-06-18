@@ -451,7 +451,6 @@ mod persistence_tests {
             Some(vid_share3.clone())
         );
 
-        // TODO `leaf` is the genesis (empty) block; is that ok?
         let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
             .expect("Failed to sign block payload");
 
