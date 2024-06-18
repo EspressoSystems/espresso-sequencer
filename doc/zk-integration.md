@@ -27,11 +27,106 @@ are the current state of the rollup _COMM_STATE_VM i_, the new rollup state afte
 commitment to the transactions applied to the state, _COMM_TXS_ROLLUP_. The private input (in bold) corresponds to the list
 of transactions.
 
+## Rollup Contract
+
+The rollup contract allows rollups to settle their state on layer 1 (Ethereum) via the verification of a snark proof.
+This state update on the layer 1 happens periodically and consists of a high number of transactions in order to amortize
+gas costs. The abstract version of this contract is sketched below. In addition to contract variables and a constructor,
+it contains a function `isEscapeHatchActivated` which allows to detect whether the Espresso consensus protocol is live
+or not. In case liveness is lost, the rollup can update its state without reading from the Espresso ledger by calling
+the function `updateStateDefaultSequencingMode`. Note that the Espresso state is read from the Espresso light client
+contract which is referenced by the rollup contract via the variable `lcContract`.
+
+```solidity
+// Abstract rollup contract
+contract RollupContract {
+
+    VMState previousVMState;
+    EspressoState previousEspressoState;
+    uint256 lastEspressoBlockNumber;
+    LightClient lcContract;
+    bytes[] vkRollup; // This verification key corresponds to the circuit depicted in Figure 1.
+    bytes[] vkEspresso; // This verification key corresponds to the circuits depicted in Figure 2 or 3.
+    uint256 escapeHatchThreshold; // Number of L1 blocks the Espresso light client contract is allowed to lag behind in order to consider the Espresso finality gadget is still live.
+
+    constructor(address EspressoLightClientAddress,...) public {
+        lcContract = LightClient(EspressoLightClientAddress);
+        ...
+    }
+
+    /// Detects if the escape hatch is activated or not.
+    function isEscapeHatchActivated() private returns (bool) {
+        if (lcContract.getFinalizedState().blockHeight > lastEspressoBlockNumber){
+            return false;
+        } else {
+            return lcContract.lagOverEscapeHatchThreshold(block.number, escapeHatchThreshold);
+        }
+    }
+
+    /// Updates the state of the rollup if the Espresso finality gadget looses liveness.
+    function updateStateDefaultSequencingMode(commTxsRollup, newVMState) virtual {
+      bytes[] publicInputs = [
+        previousVMState,
+        newVMState,
+        commTxsRollup,
+      ];
+
+      SnarkVerify(
+        publicInputs,
+        snarkProof,
+        vkRollup);
+
+      previousVMState = newVMState;
+    }
+
+
+    // Update the rollup state using the Espresso ledger as input.
+    function updateStateFromEspresso(
+        newEspressoState,
+        blockNumberEspresso,
+        commTxsRollup,
+        newVMState,
+        snarkProof) virtual {
+
+        if (blockNumberEspresso <= lastBlockNumberEspresso) {
+          revert();
+        }
+
+        bytes[] publicInputs = [
+          previousVMState,
+          newVMState,
+          commTxsRollup,
+          previousEspressoState,
+          newEspressoState,
+          lastEspressoBlockNumber,
+          blockNumberEspresso
+        ];
+
+        SnarkVerify(
+          publicInputs,
+          snarkProof,
+          vkEspresso
+        );
+
+        previousEspressoState = newEspressoState;
+        lastBlockNumberEspresso =  blockNumberEspresso;
+
+        previousVMState = newVMState;
+    }
+
+    // Main function to update the rollup state. Specific to the type of integration (see below)
+    function updateRollupState(...
+        ){
+        ...
+    }
+}
+```
+
 ## Integration 1: Rollup contract fetches Espresso block commitment from the Espresso light client contract
 
 For this integration, Espresso consensus verification is delegated to the Espresso light client contract. In practice
 the rollup contract will be given the last Espresso block commitment and feed it to the circuit. Still additional
-gadgets need to be introduced in order to implement the derivation pipeline logic consisting at a high level in:
+gadgets need to be introduced in order to implement the derivation pipeline logic consisting at a high level of:
 
 - Collecting all the Espresso commitments since the last update.
 - For each of these commitments, filter the corresponding Espresso blocks in order to obtain the transactions belonging
@@ -58,19 +153,13 @@ The circuit depicted in Figure 2 operates as follows:
 - These three gadgets above return a boolean: true if the verification succeeds and false otherwise.
 - For the circuit to accept, all these gadget outputs must be true, and thus we add an _AND_ gate.
 
+The pseudocode of the rollup contract below shows that in the case we rely on the Espresso light client contract to
+fetch the Espresso state, the only inputs to the function `updateRollupState` are `newVMState`, `commTxsRollup` and
+`snarkProof`.
+
 ```solidity
 /// Uses the Espresso light client contract to fetch the last state.
-contract RollupContract1 {
-
-    VMState previousVMState;
-    EspressoState previousEspressoState;
-    uint256 lastEspressoBlockNumber;
-    LightClient lcContract;
-
-    constructor(address EspressoLightClientAddress,...) public {
-        lcContract = LightClient(EspressoLightClientAddress);
-        ...
-    }
+contract RollupContract1 is RollupContract {
 
     function updateRollupState(
         newVMState,
@@ -78,52 +167,16 @@ contract RollupContract1 {
         snarkProof){
 
         // Escape hatch is activated, switch to default sequencing mode
-        if lcContract.escapeHatch(lastEspressoBlockNumber, ...){
-            bytes[] publicInputs = [
-                previousVMState,
-                newVMState,
-                commTxsRollup,
-            ];
-
-            SnarkVerify(
-                publicInputs,
-                snarkProof,
-                vkRollup); // This verification key corresponds to the circuit depicted in Figure 1.
-        );
-
+        if (isEscapeHatchActivated()){
+            this.updateStateDefaultSequencingMode(commTxsRollup);
         } else { // No escape hatch, use the state of Espresso consensus
-
-            (newEspressoState,  blockNumberEspresso) = lcContract.getLastBlockCommitment();
-
-
-            if (blockNumberEspresso <= lastBlockNumberEspresso) {
-                revert();
-            }
-
-            bytes[] publicInputs = [
-                previousVMState,
-                newVMState,
-                commTxsRollup,
-                previousEspressoState,
-                newEspressoState
-            ];
-
-            SnarkVerify(
-                publicInputs,
-                snarkProof,
-                vkEspresso // This verification key corresponds to the circuit depicted in Figure 2.
-            );
-
-            previousEspressoState = newEspressoState;
-            lastBlockNumberEspresso =  blockNumberEspresso;
-
+            lightClientState = lcContract.getFinalizedState();
+            newEspressoState = lightClientState.blockCommRoot;
+            blockNumberEspresso = lightClientState.blockHeight;
+            this.updateStateFromEspresso(newEspressoState, blockNumberEspresso, commTxsRollup, newVMState, snarkProof);
         }
-
-        previousVMState = newVMState;
-
     }
 }
-
 ```
 
 ## Integration 2: Verify Espresso consensus inside the rollup circuit
@@ -149,69 +202,28 @@ The circuit depicted in Figure 3 operates as follows:
 - These three gadgets above return a boolean: true if the verification succeeds and false otherwise.
 - For the circuit to accept, all these gadget outputs must be true, and thus we add an _AND_ gate.
 
+The pseudocode of the rollup contract below shows that in the case we do not rely on the Espresso light client contract
+to fetch the Espresso state, the function `updateRollupState` requires additional inputs (compared to Integration 1)
+which are `newEspressoState` and `blockNumberEspresso`.
+
 ```solidity
 
-/// Does not use the Espresso Light client contract for fetching the state
-contract RollupContract2 {
+/// Does not use the Espresso Light client contract for fetching the Espresso state
+contract RollupContract2 is RollupContract {
 
-    VMState previousVMState;
-    EspressoState previousEspressoState;
-    uint256 lastEspressoBlockNumber;
-    LightClient lcContract;
+  function updateRollupState(
+    newEspressoState,
+    blockNumberEspresso,
+    newVMState,
+    commTxsRollup,
+    snarkProof){
 
-
-    constructor(address EspressoLightClientAddress,...) public {
-        lcContract = LightClient(EspressoLightClientAddress);
+    // Escape hatch is activated, switch to default sequencing mode
+    if (isEscapeHatchActivated()){
+      this.updateStateDefaultSequencingMode(commTxsRollup);
+    } else { // No escape hatch, use the state of Espresso consensus
+      this.updateStateFromEspresso(newEspressoState, blockNumberEspresso, commTxsRollup, newVMState, snarkProof);
     }
-
-    function updateRollupState(
-            newVMState,
-            commTxsRollup,
-            newEspressoState,
-            blockNumberEspresso,
-            snarkProof){
-
-        if lcContract.escapeHatch(lastEspressoBlockNumber,...){
-            bytes[] publicInputs = [
-                        previousVMState,
-                        newVMState,
-                        commTxsRollup
-                ];
-
-            SnarkVerify(
-                publicInputs,
-                snarkProof,
-                vkRollup // This verification key corresponds to the circuit depicted in Figure 1.
-            );
-
-        } else { // No escape hatch, use the state of the Espresso sequencer
-
-            if (blockNumberEspresso <= lastBlockNumberEspresso) {
-                revert();
-            }
-
-            bytes[] publicInputs = [
-                        previousVMState,
-                        newVMState,
-                        commTxsRollup,
-                        previousEspressoState,
-                        newEspressoState,
-                        blockNumberEspresso,
-                    ];
-
-            SnarkVerify(
-                publicInputs,
-                snarkProof,
-                vkEspresso // This verification key corresponds to the circuit depicted in Figure 3.
-            );
-
-            previousEspressoState = newEspressoState;
-            lastBlockNumberEspresso =  blockNumberEspresso;
-
-        }
-
-        previousVMState = newVMState;
-    }
-
+  }
 }
 ```
