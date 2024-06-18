@@ -92,11 +92,6 @@ async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES
         event_sender,
     )
     .await;
-    broadcast_event(
-        HotShotEvent::NewUndecidedView(leaf.clone()).into(),
-        event_sender,
-    )
-    .await;
 
     if !liveness_check {
         bail!("Liveness invalid.");

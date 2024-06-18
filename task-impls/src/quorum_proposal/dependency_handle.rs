@@ -4,14 +4,17 @@
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 use anyhow::{ensure, Context, Result};
-use async_broadcast::Sender;
+use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::async_sleep;
 use async_lock::RwLock;
 use committable::Committable;
-use hotshot_task::dependency_task::HandleDepOutput;
+use hotshot_task::{
+    dependency::{Dependency, EventDependency},
+    dependency_task::HandleDepOutput,
+};
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, Consensus},
-    data::{Leaf, QuorumProposal, VidDisperseShare, ViewChangeEvidence},
+    data::{Leaf, QuorumProposal, VidDisperse, ViewChangeEvidence},
     message::Proposal,
     traits::{
         block_contents::BlockHeader, node_implementation::NodeType, signature_key::SignatureKey,
@@ -31,7 +34,7 @@ pub(crate) enum ProposalDependency {
     PayloadAndMetadata,
 
     /// For the `QcFormed` event.
-    QC,
+    Qc,
 
     /// For the `ViewSyncFinalizeCertificate2Recv` event.
     ViewSyncCert,
@@ -44,13 +47,10 @@ pub(crate) enum ProposalDependency {
 
     /// For the `VidShareValidated` event.
     VidShare,
-
-    /// For the `ValidatedStateUpdated` event.
-    ValidatedState,
 }
 
 /// Handler for the proposal dependency
-pub(crate) struct ProposalDependencyHandle<TYPES: NodeType> {
+pub struct ProposalDependencyHandle<TYPES: NodeType> {
     /// Latest view number that has been proposed for (proxy for cur_view).
     pub latest_proposed_view: TYPES::Time,
 
@@ -59,6 +59,9 @@ pub(crate) struct ProposalDependencyHandle<TYPES: NodeType> {
 
     /// The event sender.
     pub sender: Sender<Arc<HotShotEvent<TYPES>>>,
+
+    /// The event receiver.
+    pub receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
 
     /// Immutable instance state
     pub instance_state: Arc<TYPES::InstanceState>,
@@ -83,17 +86,16 @@ pub(crate) struct ProposalDependencyHandle<TYPES: NodeType> {
 }
 
 impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
-    /// Publishes a proposal given the [`CommitmentAndMetadata`], [`VidDisperseShare`]
+    /// Publishes a proposal given the [`CommitmentAndMetadata`], [`VidDisperse`]
     /// and high qc [`hotshot_types::simple_certificate::QuorumCertificate`],
     /// with optional [`ViewChangeEvidence`].
     async fn publish_proposal(
         &self,
         commitment_and_metadata: CommitmentAndMetadata<TYPES>,
-        vid_share: Proposal<TYPES, VidDisperseShare<TYPES>>,
+        vid_share: Proposal<TYPES, VidDisperse<TYPES>>,
         view_change_evidence: Option<ViewChangeEvidence<TYPES>>,
     ) -> Result<()> {
         let (parent_leaf, state) = parent_leaf_and_state(
-            self.latest_proposed_view,
             self.view_number,
             Arc::clone(&self.quorum_membership),
             self.public_key.clone(),
@@ -175,6 +177,30 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
 
     #[allow(clippy::no_effect_underscore_binding)]
     async fn handle_dep_result(self, res: Self::Output) {
+        let high_qc_view_number = self.consensus.read().await.high_qc().view_number;
+        if !self
+            .consensus
+            .read()
+            .await
+            .validated_state_map()
+            .contains_key(&high_qc_view_number)
+        {
+            // Block on receiving the event from the event stream.
+            EventDependency::new(
+                self.receiver.clone(),
+                Box::new(move |event| {
+                    let event = event.as_ref();
+                    if let HotShotEvent::ValidatedStateUpdated(view_number, _) = event {
+                        *view_number == high_qc_view_number
+                    } else {
+                        false
+                    }
+                }),
+            )
+            .completed()
+            .await;
+        }
+
         let mut commit_and_metadata: Option<CommitmentAndMetadata<TYPES>> = None;
         let mut timeout_certificate = None;
         let mut view_sync_finalize_cert = None;
@@ -201,13 +227,13 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
                         timeout_certificate = Some(timeout.clone());
                     }
                     either::Left(_) => {
-                        // Handled by the HighQcUpdated event.
+                        // Handled by the UpdateHighQc event.
                     }
                 },
                 HotShotEvent::ViewSyncFinalizeCertificate2Recv(cert) => {
                     view_sync_finalize_cert = Some(cert.clone());
                 }
-                HotShotEvent::VidShareValidated(share) => {
+                HotShotEvent::VidDisperseSend(share, _) => {
                     vid_share = Some(share.clone());
                 }
                 _ => {}

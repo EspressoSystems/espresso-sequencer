@@ -214,7 +214,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
         event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     ) -> Result<()> {
         let create_and_send_proposal_handle = publish_proposal_if_able(
-            self.cur_view,
             view,
             event_stream,
             Arc::clone(&self.quorum_membership),

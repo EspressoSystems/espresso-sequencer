@@ -42,7 +42,7 @@ pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>
     pub latest_proposed_view: TYPES::Time,
 
     /// Table for the in-progress proposal depdencey tasks.
-    pub propose_dependencies: HashMap<TYPES::Time, JoinHandle<()>>,
+    pub proposal_dependencies: HashMap<TYPES::Time, JoinHandle<()>>,
 
     /// Network for all nodes
     pub quorum_network: Arc<I::QuorumNetwork>,
@@ -104,7 +104,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             Box::new(move |event| {
                 let event = event.as_ref();
                 let event_view = match dependency_type {
-                    ProposalDependency::QC => {
+                    ProposalDependency::Qc => {
                         if let HotShotEvent::UpdateHighQc(qc) = event {
                             qc.view_number() + 1
                         } else {
@@ -149,15 +149,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                         }
                     }
                     ProposalDependency::VidShare => {
-                        if let HotShotEvent::VidShareValidated(vid_share) = event {
+                        if let HotShotEvent::VidDisperseSend(vid_share, _) = event {
                             vid_share.data.view_number()
-                        } else {
-                            return false;
-                        }
-                    }
-                    ProposalDependency::ValidatedState => {
-                        if let HotShotEvent::ValidatedStateUpdated(view_number, _) = event {
-                            *view_number + 1
                         } else {
                             return false;
                         }
@@ -176,7 +169,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
     fn create_and_complete_dependencies(
         &self,
         view_number: TYPES::Time,
-        event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
+        event_receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
         event: Arc<HotShotEvent<TYPES>>,
     ) -> AndDependency<Vec<Vec<Arc<HotShotEvent<TYPES>>>>> {
         let mut proposal_dependency = self.create_event_dependency(
@@ -186,7 +179,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
         );
 
         let mut qc_dependency = self.create_event_dependency(
-            ProposalDependency::QC,
+            ProposalDependency::Qc,
             view_number,
             event_receiver.clone(),
         );
@@ -215,12 +208,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             event_receiver.clone(),
         );
 
-        let mut validated_state_update_dependency = self.create_event_dependency(
-            ProposalDependency::ValidatedState,
-            view_number,
-            event_receiver,
-        );
-
         match event.as_ref() {
             HotShotEvent::SendPayloadCommitmentAndMetadata(..) => {
                 payload_commitment_dependency.mark_as_completed(Arc::clone(&event));
@@ -239,11 +226,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             HotShotEvent::ViewSyncFinalizeCertificate2Recv(_) => {
                 view_sync_dependency.mark_as_completed(event);
             }
-            HotShotEvent::VidShareValidated(_) => {
+            HotShotEvent::VidDisperseSend(_, _) => {
                 vid_share_dependency.mark_as_completed(event);
-            }
-            HotShotEvent::ValidatedStateUpdated(_, _) => {
-                validated_state_update_dependency.mark_as_completed(event);
             }
             HotShotEvent::UpdateHighQc(_) => {
                 qc_dependency.mark_as_completed(event);
@@ -268,11 +252,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             secondary_deps.push(AndDependency::from_deps(vec![qc_dependency]));
         }
 
-        let mut primary_deps = vec![payload_commitment_dependency, vid_share_dependency];
-
-        if *view_number > 1 {
-            primary_deps.push(validated_state_update_dependency);
-        }
+        let primary_deps = vec![payload_commitment_dependency, vid_share_dependency];
 
         AndDependency::from_deps(vec![OrDependency::from_deps(vec![
             AndDependency::from_deps(vec![
@@ -308,13 +288,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
         }
 
         debug!("Attempting to make dependency task for view {view_number:?} and event {event:?}");
-        if self.propose_dependencies.contains_key(&view_number) {
+        if self.proposal_dependencies.contains_key(&view_number) {
             debug!("Task already exists");
             return;
         }
 
         let dependency_chain =
-            self.create_and_complete_dependencies(view_number, event_receiver, event);
+            self.create_and_complete_dependencies(view_number, &event_receiver, event);
 
         let dependency_task = DependencyTask::new(
             dependency_chain,
@@ -322,6 +302,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                 latest_proposed_view: self.latest_proposed_view,
                 view_number,
                 sender: event_sender,
+                receiver: event_receiver,
                 quorum_membership: Arc::clone(&self.quorum_membership),
                 public_key: self.public_key.clone(),
                 private_key: self.private_key.clone(),
@@ -331,7 +312,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                 version: self.version,
             },
         );
-        self.propose_dependencies
+        self.proposal_dependencies
             .insert(view_number, dependency_task.run());
     }
 
@@ -346,7 +327,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
 
             // Cancel the old dependency tasks.
             for view in (*self.latest_proposed_view + 1)..=(*new_view) {
-                if let Some(dependency) = self.propose_dependencies.remove(&TYPES::Time::new(view))
+                if let Some(dependency) = self.proposal_dependencies.remove(&TYPES::Time::new(view))
                 {
                     cancel_task(dependency).await;
                 }
@@ -453,36 +434,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                     return;
                 }
             }
-            HotShotEvent::VidShareValidated(vid_share) => {
+            HotShotEvent::VidDisperseSend(vid_share, _) => {
                 let view_number = vid_share.data.view_number();
-
-                // Update the vid shares map if we need to include the new value.
-                let share = vid_share.clone();
-                self.consensus
-                    .write()
-                    .await
-                    .update_vid_shares(view_number, share.clone());
 
                 self.create_dependency_task_if_new(
                     view_number,
-                    event_receiver,
-                    event_sender,
-                    Arc::clone(&event),
-                );
-            }
-            HotShotEvent::ValidatedStateUpdated(view_number, view) => {
-                // Update the internal validated state map.
-                if let Err(e) = self
-                    .consensus
-                    .write()
-                    .await
-                    .update_validated_state_map(*view_number, view.clone())
-                {
-                    tracing::trace!("{e:?}");
-                }
-
-                self.create_dependency_task_if_new(
-                    *view_number + 1,
                     event_receiver,
                     event_sender,
                     Arc::clone(&event),
@@ -530,7 +486,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState
 
     async fn cancel_subtasks(&mut self) {
         for handle in self
-            .propose_dependencies
+            .proposal_dependencies
             .drain()
             .map(|(_view, handle)| handle)
         {

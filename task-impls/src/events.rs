@@ -194,9 +194,6 @@ pub enum HotShotEvent<TYPES: NodeType> {
 
     /// A new high_qc has been reached by this node.
     UpdateHighQc(QuorumCertificate<TYPES>),
-
-    /// A new undecided view has been proposed.
-    NewUndecidedView(Leaf<TYPES>),
 }
 
 impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
@@ -431,9 +428,6 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             }
             HotShotEvent::UpdateHighQc(cert) => {
                 write!(f, "UpdateHighQc(view_number={:?})", cert.view_number())
-            }
-            HotShotEvent::NewUndecidedView(leaf) => {
-                write!(f, "NewUndecidedView(view_number={:?})", leaf.view_number())
             }
         }
     }

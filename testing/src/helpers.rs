@@ -241,12 +241,16 @@ pub fn da_payload_commitment(
 }
 
 /// TODO: <https://github.com/EspressoSystems/HotShot/issues/2821>
+#[allow(clippy::type_complexity)]
 pub fn build_vid_proposal(
     quorum_membership: &<TestTypes as NodeType>::Membership,
     view_number: ViewNumber,
     transactions: Vec<TestTransaction>,
     private_key: &<BLSPubKey as SignatureKey>::PrivateKey,
-) -> Vec<Proposal<TestTypes, VidDisperseShare<TestTypes>>> {
+) -> (
+    Proposal<TestTypes, VidDisperse<TestTypes>>,
+    Vec<Proposal<TestTypes, VidDisperseShare<TestTypes>>>,
+) {
     let mut vid = vid_scheme_from_view_number::<TestTypes>(quorum_membership, view_number);
     let encoded_transactions = TestTransaction::encode(&transactions);
 
@@ -256,14 +260,26 @@ pub fn build_vid_proposal(
         quorum_membership,
     );
 
-    VidDisperseShare::from_vid_disperse(vid_disperse)
-        .into_iter()
-        .map(|vid_disperse| {
-            vid_disperse
-                .to_proposal(private_key)
-                .expect("Failed to sign payload commitment")
-        })
-        .collect()
+    let signature =
+        <BLSPubKey as SignatureKey>::sign(private_key, vid_disperse.payload_commitment.as_ref())
+            .expect("Failed to sign VID commitment");
+    let vid_disperse_proposal = Proposal {
+        data: vid_disperse.clone(),
+        signature,
+        _pd: PhantomData,
+    };
+
+    (
+        vid_disperse_proposal,
+        VidDisperseShare::from_vid_disperse(vid_disperse)
+            .into_iter()
+            .map(|vid_disperse| {
+                vid_disperse
+                    .to_proposal(private_key)
+                    .expect("Failed to sign payload commitment")
+            })
+            .collect(),
+    )
 }
 
 pub fn build_da_certificate(

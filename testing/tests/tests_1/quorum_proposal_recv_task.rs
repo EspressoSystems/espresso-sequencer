@@ -192,7 +192,6 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
             ),
         )),
         exact(UpdateHighQc(proposals[2].data.justify_qc.clone())),
-        exact(NewUndecidedView(leaves[2].clone())),
         vote_now(),
     ])];
 

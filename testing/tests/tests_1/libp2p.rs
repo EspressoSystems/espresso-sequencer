@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use hotshot_example_types::node_types::{Libp2pImpl, TestTypes};
-#[cfg(not(feature = "dependency-tasks"))]
 use hotshot_testing::spinning_task::{ChangeNode, SpinningTaskDescription, UpDown};
 use hotshot_testing::{
     block_builder::SimpleBuilderImplementation,
@@ -43,7 +42,6 @@ async fn libp2p_network() {
 }
 
 /// libp2p network test with failures
-#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]

@@ -15,7 +15,10 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
 };
 use hotshot_types::{
-    data::{DaProposal, Leaf, QuorumProposal, VidDisperseShare, ViewChangeEvidence, ViewNumber},
+    data::{
+        DaProposal, Leaf, QuorumProposal, VidDisperse, VidDisperseShare, ViewChangeEvidence,
+        ViewNumber,
+    },
     message::Proposal,
     simple_certificate::{
         DaCertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
@@ -45,6 +48,7 @@ pub struct TestView {
     pub view_number: ViewNumber,
     pub quorum_membership: <TestTypes as NodeType>::Membership,
     pub da_membership: <TestTypes as NodeType>::Membership,
+    pub vid_disperse: Proposal<TestTypes, VidDisperse<TestTypes>>,
     pub vid_proposal: (
         Vec<Proposal<TestTypes, VidDisperseShare<TestTypes>>>,
         <TestTypes as NodeType>::SignatureKey,
@@ -87,7 +91,7 @@ impl TestView {
 
         let payload_commitment = da_payload_commitment(quorum_membership, transactions.clone());
 
-        let vid_proposal = build_vid_proposal(
+        let (vid_disperse, vid_proposal) = build_vid_proposal(
             quorum_membership,
             genesis_view,
             transactions.clone(),
@@ -160,6 +164,7 @@ impl TestView {
             view_number: genesis_view,
             quorum_membership: quorum_membership.clone(),
             da_membership: da_membership.clone(),
+            vid_disperse,
             vid_proposal: (vid_proposal, public_key),
             da_certificate,
             transactions,
@@ -215,7 +220,7 @@ impl TestView {
 
         let payload_commitment = da_payload_commitment(quorum_membership, transactions.clone());
 
-        let vid_proposal = build_vid_proposal(
+        let (vid_disperse, vid_proposal) = build_vid_proposal(
             quorum_membership,
             next_view,
             transactions.clone(),
@@ -360,6 +365,7 @@ impl TestView {
             view_number: next_view,
             quorum_membership: quorum_membership.clone(),
             da_membership: self.da_membership.clone(),
+            vid_disperse,
             vid_proposal: (vid_proposal, public_key),
             da_certificate,
             leader_public_key,

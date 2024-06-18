@@ -8,7 +8,7 @@ use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use committable::Committable;
 use hotshot_task::{
-    dependency::{AndDependency, EventDependency, OrDependency},
+    dependency::{AndDependency, Dependency, EventDependency, OrDependency},
     dependency_task::{DependencyTask, HandleDepOutput},
     task::TaskState,
 };
@@ -77,6 +77,8 @@ struct VoteDependencyHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     view_number: TYPES::Time,
     /// Event sender.
     sender: Sender<Arc<HotShotEvent<TYPES>>>,
+    /// Event receiver.
+    receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     /// The current version of HotShot
     version: Version,
     /// The node's id
@@ -213,8 +215,30 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> HandleDepOutput
 
     #[allow(clippy::too_many_lines)]
     async fn handle_dep_result(self, res: Self::Output) {
-        #[allow(unused_variables)]
-        let mut cur_proposal = None;
+        let high_qc_view_number = self.consensus.read().await.high_qc().view_number;
+        if !self
+            .consensus
+            .read()
+            .await
+            .validated_state_map()
+            .contains_key(&high_qc_view_number)
+        {
+            // Block on receiving the event from the event stream.
+            EventDependency::new(
+                self.receiver.clone(),
+                Box::new(move |event| {
+                    let event = event.as_ref();
+                    if let HotShotEvent::ValidatedStateUpdated(view_number, _) = event {
+                        *view_number == high_qc_view_number
+                    } else {
+                        false
+                    }
+                }),
+            )
+            .completed()
+            .await;
+        }
+
         let mut payload_commitment = None;
         let mut leaf = None;
         let mut vid_share = None;
@@ -222,7 +246,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> HandleDepOutput
             match event.as_ref() {
                 #[allow(unused_assignments)]
                 HotShotEvent::QuorumProposalValidated(proposal, parent_leaf) => {
-                    cur_proposal = Some(proposal.clone());
                     let proposal_payload_comm = proposal.block_header.payload_commitment();
                     if let Some(comm) = payload_commitment {
                         if proposal_payload_comm != comm {
@@ -471,6 +494,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                 storage: Arc::clone(&self.storage),
                 view_number,
                 sender: event_sender.clone(),
+                receiver: event_receiver.clone(),
                 version: self.version,
                 id: self.id,
             },
