@@ -7,7 +7,11 @@ edition = "2021"
 
 [features]
 default = ["libp2p"]
-testing = ["hotshot-testing", "tempfile"]
+testing = [
+	"hotshot-query-service/testing",
+	"hotshot-testing",
+	"tempfile",
+]
 libp2p = []
 benchmarking = []
 
