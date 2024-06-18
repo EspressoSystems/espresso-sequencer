@@ -806,7 +806,7 @@ mod api_tests {
 
         // Arbitrary transaction, arbitrary namespace ID
         let ns_id = NamespaceId::from(42);
-        let txn = Transaction::new(ns_id.clone(), vec![1, 2, 3, 4]);
+        let txn = Transaction::new(ns_id, vec![1, 2, 3, 4]);
 
         // Start query service.
         let port = pick_unused_port().expect("No ports free");

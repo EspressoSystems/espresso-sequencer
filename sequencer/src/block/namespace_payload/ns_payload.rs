@@ -89,7 +89,7 @@ impl NsPayload {
         // TODO don't copy the tx bytes into the return value
         // https://github.com/EspressoSystems/hotshot-query-service/issues/267
         let tx_payload = self.read(&tx_range).to_payload_bytes().to_vec();
-        Transaction::new(ns_id.clone(), tx_payload)
+        Transaction::new(*ns_id, tx_payload)
     }
 }
 

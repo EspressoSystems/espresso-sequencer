@@ -22,6 +22,7 @@ use serde::{de::Error, Deserialize, Deserializer, Serialize};
 ///   <https://github.com/EspressoSystems/espresso-sequencer/pull/1499#issuecomment-2134065090>
 #[derive(
     Clone,
+    Copy,
     Serialize,
     Debug,
     Display,
@@ -97,7 +98,7 @@ impl Transaction {
     }
 
     pub fn namespace(&self) -> NamespaceId {
-        self.namespace.clone()
+        self.namespace
     }
 
     pub fn payload(&self) -> &[u8] {
@@ -145,6 +146,6 @@ impl Committable for Transaction {
 impl ExplorerTransaction for Transaction {
     type NamespaceId = NamespaceId;
     fn namespace_id(&self) -> Self::NamespaceId {
-        self.namespace.clone()
+        self.namespace
     }
 }
