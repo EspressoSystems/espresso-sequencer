@@ -1673,11 +1673,21 @@
 <a href="#1673" id="1673">1673</a>
 <a href="#1674" id="1674">1674</a>
 <a href="#1675" id="1675">1675</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::chain_config::BlockSize;
-<span class="kw">use crate</span>::{
-    api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
-    chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair, genesis::UpgradeType,
-    persistence::ChainConfigPersistence, ChainConfig, Header, Leaf, NodeState, SeqTypes,
+<a href="#1676" id="1676">1676</a>
+<a href="#1677" id="1677">1677</a>
+<a href="#1678" id="1678">1678</a>
+<a href="#1679" id="1679">1679</a>
+<a href="#1680" id="1680">1680</a>
+<a href="#1681" id="1681">1681</a>
+<a href="#1682" id="1682">1682</a>
+<a href="#1683" id="1683">1683</a>
+<a href="#1684" id="1684">1684</a>
+<a href="#1685" id="1685">1685</a>
+</pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
+    api::data_source::CatchupDataSource, block::NsTableValidationError, catchup::SqlStateCatchup,
+    chain_config::BlockSize, chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair,
+    genesis::UpgradeType, persistence::ChainConfigPersistence, ChainConfig, Header, Leaf,
+    NodeState, SeqTypes,
 };
 <span class="kw">use </span>anyhow::{bail, ensure, Context};
 <span class="kw">use </span>ark_serialize::{
@@ -1935,6 +1945,14 @@
         expected_root: FeeMerkleCommitment,
         proposal_root: FeeMerkleCommitment,
     },
+    <span class="attr">#[error(<span class="string">"Invalid namespace table: {err}"</span>)]
+    </span>InvalidNsTable { err: NsTableValidationError },
+}
+
+<span class="kw">impl </span>From&lt;NsTableValidationError&gt; <span class="kw">for </span>ProposalValidationError {
+    <span class="kw">fn </span>from(err: NsTableValidationError) -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::InvalidNsTable { err }
+    }
 }
 
 <span class="kw">pub fn </span>validate_proposal(
@@ -2000,6 +2018,8 @@
             proposal_root: proposal.fee_merkle_tree_root,
         });
     }
+
+    proposal.ns_table.validate()<span class="question-mark">?</span>;
 
     <span class="prelude-val">Ok</span>(())
 }

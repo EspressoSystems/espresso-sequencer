@@ -335,6 +335,92 @@
 <a href="#335" id="335">335</a>
 <a href="#336" id="336">336</a>
 <a href="#337" id="337">337</a>
+<a href="#338" id="338">338</a>
+<a href="#339" id="339">339</a>
+<a href="#340" id="340">340</a>
+<a href="#341" id="341">341</a>
+<a href="#342" id="342">342</a>
+<a href="#343" id="343">343</a>
+<a href="#344" id="344">344</a>
+<a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a>
+<a href="#349" id="349">349</a>
+<a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
+<a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
+<a href="#354" id="354">354</a>
+<a href="#355" id="355">355</a>
+<a href="#356" id="356">356</a>
+<a href="#357" id="357">357</a>
+<a href="#358" id="358">358</a>
+<a href="#359" id="359">359</a>
+<a href="#360" id="360">360</a>
+<a href="#361" id="361">361</a>
+<a href="#362" id="362">362</a>
+<a href="#363" id="363">363</a>
+<a href="#364" id="364">364</a>
+<a href="#365" id="365">365</a>
+<a href="#366" id="366">366</a>
+<a href="#367" id="367">367</a>
+<a href="#368" id="368">368</a>
+<a href="#369" id="369">369</a>
+<a href="#370" id="370">370</a>
+<a href="#371" id="371">371</a>
+<a href="#372" id="372">372</a>
+<a href="#373" id="373">373</a>
+<a href="#374" id="374">374</a>
+<a href="#375" id="375">375</a>
+<a href="#376" id="376">376</a>
+<a href="#377" id="377">377</a>
+<a href="#378" id="378">378</a>
+<a href="#379" id="379">379</a>
+<a href="#380" id="380">380</a>
+<a href="#381" id="381">381</a>
+<a href="#382" id="382">382</a>
+<a href="#383" id="383">383</a>
+<a href="#384" id="384">384</a>
+<a href="#385" id="385">385</a>
+<a href="#386" id="386">386</a>
+<a href="#387" id="387">387</a>
+<a href="#388" id="388">388</a>
+<a href="#389" id="389">389</a>
+<a href="#390" id="390">390</a>
+<a href="#391" id="391">391</a>
+<a href="#392" id="392">392</a>
+<a href="#393" id="393">393</a>
+<a href="#394" id="394">394</a>
+<a href="#395" id="395">395</a>
+<a href="#396" id="396">396</a>
+<a href="#397" id="397">397</a>
+<a href="#398" id="398">398</a>
+<a href="#399" id="399">399</a>
+<a href="#400" id="400">400</a>
+<a href="#401" id="401">401</a>
+<a href="#402" id="402">402</a>
+<a href="#403" id="403">403</a>
+<a href="#404" id="404">404</a>
+<a href="#405" id="405">405</a>
+<a href="#406" id="406">406</a>
+<a href="#407" id="407">407</a>
+<a href="#408" id="408">408</a>
+<a href="#409" id="409">409</a>
+<a href="#410" id="410">410</a>
+<a href="#411" id="411">411</a>
+<a href="#412" id="412">412</a>
+<a href="#413" id="413">413</a>
+<a href="#414" id="414">414</a>
+<a href="#415" id="415">415</a>
+<a href="#416" id="416">416</a>
+<a href="#417" id="417">417</a>
+<a href="#418" id="418">418</a>
+<a href="#419" id="419">419</a>
+<a href="#420" id="420">420</a>
+<a href="#421" id="421">421</a>
+<a href="#422" id="422">422</a>
+<a href="#423" id="423">423</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Types related to a namespace table.
 //!
 //! All code that needs to know the binary format of a namespace table is
@@ -353,9 +439,11 @@
     NamespaceId,
 };
 <span class="kw">use </span>committable::{Commitment, Committable, RawCommitmentBuilder};
+<span class="kw">use </span>derive_more::Display;
 <span class="kw">use </span>hotshot_types::traits::EncodeBytes;
-<span class="kw">use </span>serde::{Deserialize, Deserializer, Serialize, Serializer};
-<span class="kw">use </span>std::{collections::HashSet, sync::Arc};
+<span class="kw">use </span>serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+<span class="kw">use </span>std::{ops::Range, sync::Arc};
+<span class="kw">use </span>thiserror::Error;
 
 <span class="doccomment">/// Byte lengths for the different items that could appear in a namespace table.
 </span><span class="kw">const </span>NUM_NSS_BYTE_LEN: usize = <span class="number">4</span>;
@@ -453,16 +541,47 @@
 /// TODO prefer [`NsTable`] to be a newtype like this
 /// ```ignore
 /// #[repr(transparent)]
-/// #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+/// #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 /// #[serde(transparent)]
 /// pub struct NsTable(#[serde(with = "base64_bytes")] Vec&lt;u8&gt;);
 /// ```
 /// but we need to maintain serialization compatibility.
 /// &lt;https://github.com/EspressoSystems/espresso-sequencer/issues/1575&gt;
-</span><span class="attr">#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+</span><span class="attr">#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+</span><span class="comment">// Boilerplate: `#[serde(remote = "Self")]` needed to check invariants on
+// deserialization. See
+// https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
+</span><span class="attr">#[serde(remote = <span class="string">"Self"</span>)]
 </span><span class="kw">pub struct </span>NsTable {
     <span class="attr">#[serde(with = <span class="string">"base64_bytes"</span>)]
     </span>bytes: Vec&lt;u8&gt;,
+}
+
+<span class="comment">// Boilerplate: `#[serde(remote = "Self")]` allows invariant checking on
+// deserialization via re-implementation of `Deserialize` in terms of default
+// derivation. See
+// https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
+</span><span class="kw">impl</span>&lt;<span class="lifetime">'de</span>&gt; Deserialize&lt;<span class="lifetime">'de</span>&gt; <span class="kw">for </span>NsTable {
+    <span class="kw">fn </span>deserialize&lt;D&gt;(deserializer: D) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, D::Error&gt;
+    <span class="kw">where
+        </span>D: Deserializer&lt;<span class="lifetime">'de</span>&gt;,
+    {
+        <span class="kw">let </span>unchecked = NsTable::deserialize(deserializer)<span class="question-mark">?</span>;
+        unchecked.validate().map_err(de::Error::custom)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(unchecked)
+    }
+}
+
+<span class="comment">// Boilerplate: use of `#[serde(remote = "Self")]` must include a trivial
+// `Serialize` impl. See
+// https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
+</span><span class="kw">impl </span>Serialize <span class="kw">for </span>NsTable {
+    <span class="kw">fn </span>serialize&lt;S&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, serializer: S) -&gt; <span class="prelude-ty">Result</span>&lt;S::Ok, S::Error&gt;
+    <span class="kw">where
+        </span>S: Serializer,
+    {
+        NsTable::serialize(<span class="self">self</span>, serializer)
+    }
 }
 
 <span class="kw">impl </span>NsTable {
@@ -472,9 +591,20 @@
             .find(|index| <span class="self">self</span>.read_ns_id_unchecked(index) == <span class="kw-2">*</span>ns_id)
     }
 
+    <span class="doccomment">/// Number of entries in the namespace table.
+    ///
+    /// Defined as the maximum number of entries that could fit in the namespace
+    /// table, ignoring what's declared in the table header.
+    </span><span class="kw">pub fn </span>len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; NumNss {
+        NumNss(
+            <span class="self">self</span>.bytes.len().saturating_sub(NUM_NSS_BYTE_LEN)
+                / NS_ID_BYTE_LEN.saturating_add(NS_OFFSET_BYTE_LEN),
+        )
+    }
+
     <span class="doccomment">/// Iterator over all unique namespaces in the namespace table.
     </span><span class="kw">pub fn </span>iter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = NsIndex&gt; + <span class="lifetime">'_ </span>{
-        NsIter::new(<span class="self">self</span>)
+        NsIter::new(<span class="kw-2">&amp;</span><span class="self">self</span>.len())
     }
 
     <span class="doccomment">/// Read the namespace id from the `index`th entry from the namespace table.
@@ -503,17 +633,61 @@
 
     <span class="doccomment">/// Does the `index`th entry exist in the namespace table?
     </span><span class="kw">pub fn </span>in_bounds(<span class="kw-2">&amp;</span><span class="self">self</span>, index: <span class="kw-2">&amp;</span>NsIndex) -&gt; bool {
-        <span class="comment">// The number of entries in the namespace table, including all duplicate
-        // namespace IDs.
-        </span><span class="kw">let </span>num_nss_with_duplicates = std::cmp::min(
-            <span class="comment">// Number of namespaces declared in the ns table
-            </span><span class="self">self</span>.read_num_nss(),
-            <span class="comment">// Max number of entries that could fit in the namespace table
-            </span><span class="self">self</span>.bytes.len().saturating_sub(NUM_NSS_BYTE_LEN)
-                / NS_ID_BYTE_LEN.saturating_add(NS_OFFSET_BYTE_LEN),
-        );
+        <span class="self">self</span>.len().in_bounds(index)
+    }
 
-        index.<span class="number">0 </span>&lt; num_nss_with_duplicates
+    <span class="doccomment">/// Are the bytes of this [`NsTable`] uncorrupted?
+    ///
+    /// # Checks
+    /// 1. Byte length must hold a whole number of entries.
+    /// 2. All namespace IDs and offsets must increase monotonically. Offsets
+    ///    must be nonzero.
+    /// 3. Header consistent with byte length (obsolete after
+    ///    &lt;https://github.com/EspressoSystems/espresso-sequencer/issues/1604&gt;)
+    </span><span class="kw">pub fn </span>validate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), NsTableValidationError&gt; {
+        <span class="kw">use </span>NsTableValidationError::<span class="kw-2">*</span>;
+
+        <span class="comment">// Byte length for a table with `x` entries must be exactly
+        // `x * NsTableBuilder::entry_byte_len() + NsTableBuilder::header_byte_len()`
+        </span><span class="kw">if </span><span class="self">self</span>.bytes.len() &lt; NsTableBuilder::header_byte_len()
+            || (<span class="self">self</span>.bytes.len() - NsTableBuilder::header_byte_len())
+                % NsTableBuilder::entry_byte_len()
+                != <span class="number">0
+        </span>{
+            <span class="kw">return </span><span class="prelude-val">Err</span>(InvalidByteLen);
+        }
+
+        <span class="comment">// Header must declare the correct number of namespaces
+        //
+        // TODO this check obsolete after
+        // https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+        </span><span class="kw">if </span><span class="self">self</span>.len().<span class="number">0 </span>!= <span class="self">self</span>.read_num_nss() {
+            <span class="kw">return </span><span class="prelude-val">Err</span>(InvalidHeader);
+        }
+
+        <span class="comment">// Namespace IDs and offsets must increase monotonically. Offsets must
+        // be nonzero.
+        </span>{
+            <span class="kw">let </span>(<span class="kw-2">mut </span>prev_ns_id, <span class="kw-2">mut </span>prev_offset) = (<span class="prelude-val">None</span>, <span class="number">0</span>);
+            <span class="kw">for </span>(ns_id, offset) <span class="kw">in </span><span class="self">self</span>.iter().map(|i| {
+                (
+                    <span class="self">self</span>.read_ns_id_unchecked(<span class="kw-2">&amp;</span>i),
+                    <span class="self">self</span>.read_ns_offset_unchecked(<span class="kw-2">&amp;</span>i),
+                )
+            }) {
+                <span class="kw">if let </span><span class="prelude-val">Some</span>(prev_ns_id) = prev_ns_id {
+                    <span class="kw">if </span>ns_id &lt;= prev_ns_id {
+                        <span class="kw">return </span><span class="prelude-val">Err</span>(NonIncreasingEntries);
+                    }
+                }
+                <span class="kw">if </span>offset &lt;= prev_offset {
+                    <span class="kw">return </span><span class="prelude-val">Err</span>(NonIncreasingEntries);
+                }
+                (prev_ns_id, prev_offset) = (<span class="prelude-val">Some</span>(ns_id), offset);
+            }
+        }
+
+        <span class="prelude-val">Ok</span>(())
     }
 
     <span class="comment">// CRATE-VISIBLE HELPERS START HERE
@@ -525,11 +699,13 @@
         index: <span class="kw-2">&amp;</span>NsIndex,
         payload_byte_len: <span class="kw-2">&amp;</span>PayloadByteLen,
     ) -&gt; NsPayloadRange {
-        <span class="kw">let </span>end = <span class="self">self</span>.read_ns_offset(index).min(payload_byte_len.as_usize());
+        <span class="kw">let </span>end = <span class="self">self
+            </span>.read_ns_offset_unchecked(index)
+            .min(payload_byte_len.as_usize());
         <span class="kw">let </span>start = <span class="kw">if </span>index.<span class="number">0 </span>== <span class="number">0 </span>{
             <span class="number">0
         </span>} <span class="kw">else </span>{
-            <span class="self">self</span>.read_ns_offset(<span class="kw-2">&amp;</span>NsIndex(index.<span class="number">0 </span>- <span class="number">1</span>))
+            <span class="self">self</span>.read_ns_offset_unchecked(<span class="kw-2">&amp;</span>NsIndex(index.<span class="number">0 </span>- <span class="number">1</span>))
         }
         .min(end);
         NsPayloadRange::new(start, end)
@@ -537,19 +713,18 @@
 
     <span class="comment">// PRIVATE HELPERS START HERE
 
-    </span><span class="doccomment">/// Read the number of namespaces declared in the namespace table. This
-    /// quantity might exceed the number of entries that could fit in the
-    /// namespace table.
+    </span><span class="doccomment">/// Read the number of namespaces declared in the namespace table. THIS
+    /// QUANTITY IS NEVER USED. Instead use [`NsTable::len`].
     ///
-    /// For a correct count of the number of unique namespaces in this
-    /// namespace table use `iter().count()`.
+    /// TODO Delete this method after
+    /// &lt;https://github.com/EspressoSystems/espresso-sequencer/issues/1604&gt;
     </span><span class="kw">fn </span>read_num_nss(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
         <span class="kw">let </span>num_nss_byte_len = NUM_NSS_BYTE_LEN.min(<span class="self">self</span>.bytes.len());
         usize_from_bytes::&lt;NUM_NSS_BYTE_LEN&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>.bytes[..num_nss_byte_len])
     }
 
     <span class="doccomment">/// Read the namespace offset from the `index`th entry from the namespace table.
-    </span><span class="kw">fn </span>read_ns_offset(<span class="kw-2">&amp;</span><span class="self">self</span>, index: <span class="kw-2">&amp;</span>NsIndex) -&gt; usize {
+    </span><span class="kw">fn </span>read_ns_offset_unchecked(<span class="kw-2">&amp;</span><span class="self">self</span>, index: <span class="kw-2">&amp;</span>NsIndex) -&gt; usize {
         <span class="kw">let </span>start =
             index.<span class="number">0 </span>* (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
         usize_from_bytes::&lt;NS_OFFSET_BYTE_LEN&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>.bytes[start..start + NS_OFFSET_BYTE_LEN])
@@ -573,6 +748,14 @@
         <span class="string">"NSTABLE"</span>.into()
     }
 }
+
+<span class="doccomment">/// Return type for [`NsTable::validate`].
+</span><span class="attr">#[derive(Error, Debug, Display, Eq, PartialEq)]
+</span><span class="kw">pub enum </span>NsTableValidationError {
+    InvalidByteLen,
+    NonIncreasingEntries,
+    InvalidHeader, <span class="comment">// TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+</span>}
 
 <span class="kw">pub struct </span>NsTableBuilder {
     bytes: Vec&lt;u8&gt;,
@@ -607,18 +790,13 @@
         NsTable { bytes }
     }
 
-    <span class="doccomment">/// Byte length of a namespace table with zero entries.
-    ///
-    /// Currently this quantity equals the byte length of the ns table header.
-    </span><span class="kw">pub const fn </span>fixed_overhead_byte_len() -&gt; usize {
+    <span class="doccomment">/// Byte length of a namespace table header.
+    </span><span class="kw">pub const fn </span>header_byte_len() -&gt; usize {
         NUM_NSS_BYTE_LEN
     }
 
-    <span class="doccomment">/// Byte length added to a namespace table by a new entry.
-    ///
-    /// Currently this quantity equals the byte length of a single ns table
-    /// entry.
-    </span><span class="kw">pub const fn </span>ns_overhead_byte_len() -&gt; usize {
+    <span class="doccomment">/// Byte length of a single namespace table entry.
+    </span><span class="kw">pub const fn </span>entry_byte_len() -&gt; usize {
         NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN
     }
 }
@@ -637,39 +815,33 @@
     }
 }
 
-<span class="doccomment">/// Return type for [`Payload::ns_iter`].
-</span><span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::block) <span class="kw">struct </span>NsIter&lt;<span class="lifetime">'a</span>&gt; {
-    cur_index: usize,
-    repeat_nss: HashSet&lt;NamespaceId&gt;,
-    ns_table: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>NsTable,
+<span class="doccomment">/// Number of entries in a namespace table.
+</span><span class="kw">pub struct </span>NumNss(usize);
+
+<span class="kw">impl </span>NumNss {
+    <span class="kw">pub fn </span>in_bounds(<span class="kw-2">&amp;</span><span class="self">self</span>, index: <span class="kw-2">&amp;</span>NsIndex) -&gt; bool {
+        index.<span class="number">0 </span>&lt; <span class="self">self</span>.<span class="number">0
+    </span>}
 }
 
-<span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; NsIter&lt;<span class="lifetime">'a</span>&gt; {
-    <span class="kw">pub fn </span>new(ns_table: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>NsTable) -&gt; <span class="self">Self </span>{
-        <span class="self">Self </span>{
-            cur_index: <span class="number">0</span>,
-            repeat_nss: HashSet::new(),
-            ns_table,
-        }
+<span class="doccomment">/// Return type for [`Payload::ns_iter`].
+</span><span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::block) <span class="kw">struct </span>NsIter(Range&lt;usize&gt;);
+
+<span class="kw">impl </span>NsIter {
+    <span class="kw">pub fn </span>new(num_nss: <span class="kw-2">&amp;</span>NumNss) -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>(<span class="number">0</span>..num_nss.<span class="number">0</span>)
     }
 }
 
-<span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; Iterator <span class="kw">for </span>NsIter&lt;<span class="lifetime">'a</span>&gt; {
+<span class="comment">// Simple `impl Iterator` delegates to `Range`.
+</span><span class="kw">impl </span>Iterator <span class="kw">for </span>NsIter {
     <span class="kw">type </span>Item = NsIndex;
 
     <span class="kw">fn </span>next(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Item&gt; {
-        <span class="kw">loop </span>{
-            <span class="kw">let </span>candidate_result = NsIndex(<span class="self">self</span>.cur_index);
-            <span class="kw">let </span>ns_id = <span class="self">self</span>.ns_table.read_ns_id(<span class="kw-2">&amp;</span>candidate_result)<span class="question-mark">?</span>;
-            <span class="self">self</span>.cur_index += <span class="number">1</span>;
-
-            <span class="comment">// skip duplicate namespace IDs
-            </span><span class="kw">if </span>!<span class="self">self</span>.repeat_nss.insert(ns_id) {
-                <span class="kw">continue</span>;
-            }
-
-            <span class="kw">break </span><span class="prelude-val">Some</span>(candidate_result);
-        }
+        <span class="self">self</span>.<span class="number">0</span>.next().map(NsIndex)
     }
 }
+
+<span class="attr">#[cfg(test)]
+</span><span class="kw">mod </span>test;
 </code></pre></div></section></main></body></html>

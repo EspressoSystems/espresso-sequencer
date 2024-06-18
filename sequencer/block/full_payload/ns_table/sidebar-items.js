@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["NS_ID_BYTE_LEN","NS_OFFSET_BYTE_LEN","NUM_NSS_BYTE_LEN"],"struct":["NsIndex","NsIter","NsTable","NsTableBuilder"]};
+window.SIDEBAR_ITEMS = {"constant":["NS_ID_BYTE_LEN","NS_OFFSET_BYTE_LEN","NUM_NSS_BYTE_LEN"],"enum":["NsTableValidationError"],"struct":["NsIndex","NsIter","NsTable","NsTableBuilder","NumNss"]};

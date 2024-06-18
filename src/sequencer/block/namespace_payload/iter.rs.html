@@ -120,7 +120,7 @@
 
 <span class="doccomment">/// Cartesian product of [`NsIter`], [`TxIter`].
 </span><span class="kw">pub struct </span>Iter&lt;<span class="lifetime">'a</span>&gt; {
-    ns_iter: Peekable&lt;NsIter&lt;<span class="lifetime">'a</span>&gt;&gt;,
+    ns_iter: Peekable&lt;NsIter&gt;,
     tx_iter: <span class="prelude-ty">Option</span>&lt;TxIter&gt;,
     block: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Payload,
 }
@@ -128,7 +128,7 @@
 <span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; Iter&lt;<span class="lifetime">'a</span>&gt; {
     <span class="kw">pub fn </span>new(block: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Payload) -&gt; <span class="self">Self </span>{
         <span class="self">Self </span>{
-            ns_iter: NsIter::new(block.ns_table()).peekable(),
+            ns_iter: NsIter::new(<span class="kw-2">&amp;</span>block.ns_table().len()).peekable(),
             tx_iter: <span class="prelude-val">None</span>,
             block,
         }

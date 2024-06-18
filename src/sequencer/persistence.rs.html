@@ -597,12 +597,6 @@
 <a href="#597" id="597">597</a>
 <a href="#598" id="598">598</a>
 <a href="#599" id="599">599</a>
-<a href="#600" id="600">600</a>
-<a href="#601" id="601">601</a>
-<a href="#602" id="602">602</a>
-<a href="#603" id="603">603</a>
-<a href="#604" id="604">604</a>
-<a href="#605" id="605">605</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer node persistence.
 //!
 //! This module implements the persistence required for a sequencer node to rejoin the network and
@@ -888,7 +882,7 @@
 </span><span class="kw">mod </span>persistence_tests {
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use crate</span>::{NodeState, Transaction};
+    <span class="kw">use </span><span class="kw">crate</span>::NodeState;
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
     <span class="kw">use </span>hotshot::types::BLSPubKey;
@@ -896,8 +890,6 @@
     <span class="kw">use </span>hotshot_types::traits::EncodeBytes;
     <span class="kw">use </span>hotshot_types::{event::HotShotAction, vid::vid_scheme};
     <span class="kw">use </span>jf_vid::VidScheme;
-    <span class="kw">use </span>rand::{RngCore, SeedableRng};
-    <span class="kw">use </span>sha2::{Digest, Sha256};
     <span class="kw">use </span>testing::TestablePersistence;
 
     <span class="attr">#[async_std::test]
@@ -999,9 +991,11 @@
         </span>);
 
         <span class="kw">let </span>leaf = Leaf::genesis(<span class="kw-2">&amp;</span>ValidatedState::default(), <span class="kw-2">&amp;</span>NodeState::mock()).<span class="kw">await</span>;
-        <span class="kw">let </span>payload = leaf.block_payload().unwrap();
-        <span class="kw">let </span>bytes = payload.encode().to_vec();
-        <span class="kw">let </span>disperse = vid_scheme(<span class="number">2</span>).disperse(bytes).unwrap();
+        <span class="kw">let </span>leaf_payload = leaf.block_payload().unwrap();
+        <span class="kw">let </span>leaf_payload_bytes_arc = leaf_payload.encode();
+        <span class="kw">let </span>disperse = vid_scheme(<span class="number">2</span>)
+            .disperse(leaf_payload_bytes_arc.clone())
+            .unwrap();
         <span class="kw">let </span>(pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">1</span>);
         <span class="kw">let </span>signature = PubKey::sign(<span class="kw-2">&amp;</span>privkey, <span class="kw-2">&amp;</span>[]).unwrap();
         <span class="kw">let </span><span class="kw-2">mut </span>vid = VidDisperseShare::&lt;SeqTypes&gt; {
@@ -1056,18 +1050,12 @@
             <span class="prelude-val">Some</span>(vid_share3.clone())
         );
 
-        <span class="kw">let </span><span class="kw-2">mut </span>seed = [<span class="number">0u8</span>; <span class="number">32</span>];
-        <span class="kw">let </span><span class="kw-2">mut </span>rng = rand_chacha::ChaChaRng::from_entropy();
-        rng.fill_bytes(<span class="kw-2">&amp;mut </span>seed);
-
-        <span class="kw">let </span>tx = Transaction::random(<span class="kw-2">&amp;mut </span>rng);
-        <span class="kw">let </span>tx_hash = Sha256::digest(tx.payload()).to_vec();
-        <span class="kw">let </span>block_payload_signature =
-            BLSPubKey::sign(<span class="kw-2">&amp;</span>privkey, <span class="kw-2">&amp;</span>tx_hash).expect(<span class="string">"Failed to sign tx hash"</span>);
+        <span class="kw">let </span>block_payload_signature = BLSPubKey::sign(<span class="kw-2">&amp;</span>privkey, <span class="kw-2">&amp;</span>leaf_payload_bytes_arc)
+            .expect(<span class="string">"Failed to sign block payload"</span>);
 
         <span class="kw">let </span>da_proposal_inner = DaProposal::&lt;SeqTypes&gt; {
-            encoded_transactions: Arc::from(tx_hash),
-            metadata: Default::default(),
+            encoded_transactions: leaf_payload_bytes_arc,
+            metadata: leaf_payload.ns_table().clone(),
             view_number: ViewNumber::new(<span class="number">1</span>),
         };
 

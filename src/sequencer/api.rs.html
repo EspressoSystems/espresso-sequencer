@@ -1606,7 +1606,7 @@
     persistence::{ChainConfigPersistence, SequencerPersistence},
     state::{BlockMerkleTree, FeeAccountProof},
     state_signature::StateSigner,
-    ChainConfig, Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
+    ChainConfig, NamespaceId, Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
 };
 <span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>async_once_cell::Lazy;
@@ -2185,7 +2185,7 @@
         setup_logging();
         setup_backtrace();
 
-        <span class="kw">let </span>txn = Transaction::new(Default::default(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]);
+        <span class="kw">let </span>txn = Transaction::new(NamespaceId::from(<span class="number">1</span>), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]);
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
 

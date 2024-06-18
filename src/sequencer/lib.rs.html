@@ -1919,7 +1919,7 @@
         }
 
         <span class="comment">// Submit target transaction to handle
-        </span><span class="kw">let </span>txn = Transaction::new(Default::default(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]);
+        </span><span class="kw">let </span>txn = Transaction::new(NamespaceId::from(<span class="number">1</span>), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]);
         handles[<span class="number">0</span>]
             .submit_transaction(txn.clone())
             .<span class="kw">await

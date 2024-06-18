@@ -319,7 +319,7 @@
 <span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>sha2::Digest;
-<span class="kw">use </span>std::{collections::HashMap, fmt::Display, sync::Arc};
+<span class="kw">use </span>std::{collections::BTreeMap, fmt::Display, sync::Arc};
 
 <span class="doccomment">/// Raw payload data for an entire block.
 ///
@@ -398,17 +398,17 @@
         </span><span class="kw">let </span>max_block_byte_len: usize = u64::from(chain_config.max_block_size)
             .try_into()
             .map_err(|<span class="kw">_</span>| &lt;<span class="self">Self </span><span class="kw">as </span>BlockPayload&lt;SeqTypes&gt;&gt;::Error::BlockBuilding)<span class="question-mark">?</span>;
-        <span class="kw">let </span><span class="kw-2">mut </span>block_byte_len = NsTableBuilder::fixed_overhead_byte_len();
+        <span class="kw">let </span><span class="kw-2">mut </span>block_byte_len = NsTableBuilder::header_byte_len();
 
         <span class="comment">// add each tx to its namespace
-        </span><span class="kw">let </span><span class="kw-2">mut </span>ns_builders = HashMap::&lt;NamespaceId, NsPayloadBuilder&gt;::new();
+        </span><span class="kw">let </span><span class="kw-2">mut </span>ns_builders = BTreeMap::&lt;NamespaceId, NsPayloadBuilder&gt;::new();
         <span class="kw">for </span>tx <span class="kw">in </span>transactions.into_iter() {
             <span class="comment">// accounting for block byte length limit
-            </span>block_byte_len += tx.payload().len() + NsPayloadBuilder::tx_overhead_byte_len();
+            </span>block_byte_len += tx.payload().len() + NsPayloadBuilder::tx_table_entry_byte_len();
             <span class="kw">if </span>!ns_builders.contains_key(<span class="kw-2">&amp;</span>tx.namespace()) {
                 <span class="comment">// each new namespace adds overhead
-                </span>block_byte_len += NsTableBuilder::ns_overhead_byte_len()
-                    + NsPayloadBuilder::fixed_overhead_byte_len();
+                </span>block_byte_len +=
+                    NsTableBuilder::entry_byte_len() + NsPayloadBuilder::tx_table_header_byte_len();
             }
             <span class="kw">if </span>block_byte_len &gt; max_block_byte_len {
                 <span class="macro">tracing::warn!</span>(<span class="string">"transactions truncated to fit in maximum block byte length {max_block_byte_len}"</span>);

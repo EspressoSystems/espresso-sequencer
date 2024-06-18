@@ -733,6 +733,7 @@
 <a href="#733" id="733">733</a>
 <a href="#734" id="734">734</a>
 <a href="#735" id="735">735</a>
+<a href="#736" id="736">736</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -800,20 +801,22 @@
 <span class="kw">use </span>hotshot_state_prover;
 <span class="kw">use </span>jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 <span class="kw">use </span>jf_signature::bls_over_bn254::VerKey;
-<span class="kw">use </span>sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, ChainConfig};
 <span class="kw">use </span>sequencer::{
-    catchup::StatePeers,
+    catchup::{mock::MockStateCatchup, StatePeers},
     context::{Consensus, SequencerContext},
+    eth_signature_key::EthKeyPair,
     genesis::L1Finalized,
     l1_client::L1Client,
     network,
+    network::libp2p::split_off_peer_id,
     persistence::SequencerPersistence,
     state::FeeAccount,
     state::ValidatedState,
+    state_signature::StakeTableCommitmentType,
     state_signature::{static_stake_table_commitment, StateSigner},
-    Genesis, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey, SeqTypes,
+    ChainConfig, Genesis, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey,
+    SeqTypes,
 };
-<span class="kw">use </span>sequencer::{network::libp2p::split_off_peer_id, state_signature::StakeTableCommitmentType};
 <span class="kw">use </span>std::{alloc::System, any, fmt::Debug, mem};
 <span class="kw">use </span>std::{marker::PhantomData, net::IpAddr};
 <span class="kw">use </span>std::{net::Ipv4Addr, thread::Builder};
@@ -1303,8 +1306,7 @@
     };
     <span class="kw">use </span>sequencer::{
         persistence::no_storage::{<span class="self">self</span>, NoStorage},
-        transaction::Transaction,
-        Payload,
+        NamespaceId, Payload, Transaction,
     };
     <span class="kw">use </span>std::time::Duration;
     <span class="kw">use </span>surf_disco::Client;
@@ -1450,7 +1452,7 @@
             }
         }
 
-        <span class="kw">let </span>txn = Transaction::new(Default::default(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]);
+        <span class="kw">let </span>txn = Transaction::new(NamespaceId::from(<span class="number">1</span>), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]);
         <span class="kw">match </span>builder_client
             .post::&lt;()&gt;(<span class="string">"txn_submit/submit"</span>)
             .body_json(<span class="kw-2">&amp;</span>txn)
