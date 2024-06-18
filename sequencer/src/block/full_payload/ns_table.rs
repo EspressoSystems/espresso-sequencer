@@ -16,9 +16,11 @@ use crate::{
     NamespaceId,
 };
 use committable::{Commitment, Committable, RawCommitmentBuilder};
+use derive_more::Display;
 use hotshot_types::traits::EncodeBytes;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::{collections::HashSet, sync::Arc};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use std::{ops::Range, sync::Arc};
+use thiserror::Error;
 
 /// Byte lengths for the different items that could appear in a namespace table.
 const NUM_NSS_BYTE_LEN: usize = 4;
@@ -116,16 +118,47 @@ const NS_ID_BYTE_LEN: usize = 4;
 /// TODO prefer [`NsTable`] to be a newtype like this
 /// ```ignore
 /// #[repr(transparent)]
-/// #[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+/// #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 /// #[serde(transparent)]
 /// pub struct NsTable(#[serde(with = "base64_bytes")] Vec<u8>);
 /// ```
 /// but we need to maintain serialization compatibility.
 /// <https://github.com/EspressoSystems/espresso-sequencer/issues/1575>
-#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+// Boilerplate: `#[serde(remote = "Self")]` needed to check invariants on
+// deserialization. See
+// https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
+#[serde(remote = "Self")]
 pub struct NsTable {
     #[serde(with = "base64_bytes")]
     bytes: Vec<u8>,
+}
+
+// Boilerplate: `#[serde(remote = "Self")]` allows invariant checking on
+// deserialization via re-implementation of `Deserialize` in terms of default
+// derivation. See
+// https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
+impl<'de> Deserialize<'de> for NsTable {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let unchecked = NsTable::deserialize(deserializer)?;
+        unchecked.validate().map_err(de::Error::custom)?;
+        Ok(unchecked)
+    }
+}
+
+// Boilerplate: use of `#[serde(remote = "Self")]` must include a trivial
+// `Serialize` impl. See
+// https://github.com/serde-rs/serde/issues/1220#issuecomment-382589140
+impl Serialize for NsTable {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        NsTable::serialize(self, serializer)
+    }
 }
 
 impl NsTable {
@@ -135,9 +168,20 @@ impl NsTable {
             .find(|index| self.read_ns_id_unchecked(index) == *ns_id)
     }
 
+    /// Number of entries in the namespace table.
+    ///
+    /// Defined as the maximum number of entries that could fit in the namespace
+    /// table, ignoring what's declared in the table header.
+    pub fn len(&self) -> NumNss {
+        NumNss(
+            self.bytes.len().saturating_sub(NUM_NSS_BYTE_LEN)
+                / NS_ID_BYTE_LEN.saturating_add(NS_OFFSET_BYTE_LEN),
+        )
+    }
+
     /// Iterator over all unique namespaces in the namespace table.
     pub fn iter(&self) -> impl Iterator<Item = NsIndex> + '_ {
-        NsIter::new(self)
+        NsIter::new(&self.len())
     }
 
     /// Read the namespace id from the `index`th entry from the namespace table.
@@ -166,17 +210,61 @@ impl NsTable {
 
     /// Does the `index`th entry exist in the namespace table?
     pub fn in_bounds(&self, index: &NsIndex) -> bool {
-        // The number of entries in the namespace table, including all duplicate
-        // namespace IDs.
-        let num_nss_with_duplicates = std::cmp::min(
-            // Number of namespaces declared in the ns table
-            self.read_num_nss(),
-            // Max number of entries that could fit in the namespace table
-            self.bytes.len().saturating_sub(NUM_NSS_BYTE_LEN)
-                / NS_ID_BYTE_LEN.saturating_add(NS_OFFSET_BYTE_LEN),
-        );
+        self.len().in_bounds(index)
+    }
 
-        index.0 < num_nss_with_duplicates
+    /// Are the bytes of this [`NsTable`] uncorrupted?
+    ///
+    /// # Checks
+    /// 1. Byte length must hold a whole number of entries.
+    /// 2. All namespace IDs and offsets must increase monotonically. Offsets
+    ///    must be nonzero.
+    /// 3. Header consistent with byte length (obsolete after
+    ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>)
+    pub fn validate(&self) -> Result<(), NsTableValidationError> {
+        use NsTableValidationError::*;
+
+        // Byte length for a table with `x` entries must be exactly
+        // `x * NsTableBuilder::entry_byte_len() + NsTableBuilder::header_byte_len()`
+        if self.bytes.len() < NsTableBuilder::header_byte_len()
+            || (self.bytes.len() - NsTableBuilder::header_byte_len())
+                % NsTableBuilder::entry_byte_len()
+                != 0
+        {
+            return Err(InvalidByteLen);
+        }
+
+        // Header must declare the correct number of namespaces
+        //
+        // TODO this check obsolete after
+        // https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+        if self.len().0 != self.read_num_nss() {
+            return Err(InvalidHeader);
+        }
+
+        // Namespace IDs and offsets must increase monotonically. Offsets must
+        // be nonzero.
+        {
+            let (mut prev_ns_id, mut prev_offset) = (None, 0);
+            for (ns_id, offset) in self.iter().map(|i| {
+                (
+                    self.read_ns_id_unchecked(&i),
+                    self.read_ns_offset_unchecked(&i),
+                )
+            }) {
+                if let Some(prev_ns_id) = prev_ns_id {
+                    if ns_id <= prev_ns_id {
+                        return Err(NonIncreasingEntries);
+                    }
+                }
+                if offset <= prev_offset {
+                    return Err(NonIncreasingEntries);
+                }
+                (prev_ns_id, prev_offset) = (Some(ns_id), offset);
+            }
+        }
+
+        Ok(())
     }
 
     // CRATE-VISIBLE HELPERS START HERE
@@ -188,11 +276,13 @@ impl NsTable {
         index: &NsIndex,
         payload_byte_len: &PayloadByteLen,
     ) -> NsPayloadRange {
-        let end = self.read_ns_offset(index).min(payload_byte_len.as_usize());
+        let end = self
+            .read_ns_offset_unchecked(index)
+            .min(payload_byte_len.as_usize());
         let start = if index.0 == 0 {
             0
         } else {
-            self.read_ns_offset(&NsIndex(index.0 - 1))
+            self.read_ns_offset_unchecked(&NsIndex(index.0 - 1))
         }
         .min(end);
         NsPayloadRange::new(start, end)
@@ -200,19 +290,18 @@ impl NsTable {
 
     // PRIVATE HELPERS START HERE
 
-    /// Read the number of namespaces declared in the namespace table. This
-    /// quantity might exceed the number of entries that could fit in the
-    /// namespace table.
+    /// Read the number of namespaces declared in the namespace table. THIS
+    /// QUANTITY IS NEVER USED. Instead use [`NsTable::len`].
     ///
-    /// For a correct count of the number of unique namespaces in this
-    /// namespace table use `iter().count()`.
+    /// TODO Delete this method after
+    /// <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>
     fn read_num_nss(&self) -> usize {
         let num_nss_byte_len = NUM_NSS_BYTE_LEN.min(self.bytes.len());
         usize_from_bytes::<NUM_NSS_BYTE_LEN>(&self.bytes[..num_nss_byte_len])
     }
 
     /// Read the namespace offset from the `index`th entry from the namespace table.
-    fn read_ns_offset(&self, index: &NsIndex) -> usize {
+    fn read_ns_offset_unchecked(&self, index: &NsIndex) -> usize {
         let start =
             index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
         usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.bytes[start..start + NS_OFFSET_BYTE_LEN])
@@ -235,6 +324,14 @@ impl Committable for NsTable {
     fn tag() -> String {
         "NSTABLE".into()
     }
+}
+
+/// Return type for [`NsTable::validate`].
+#[derive(Error, Debug, Display, Eq, PartialEq)]
+pub enum NsTableValidationError {
+    InvalidByteLen,
+    NonIncreasingEntries,
+    InvalidHeader, // TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
 }
 
 pub struct NsTableBuilder {
@@ -270,18 +367,13 @@ impl NsTableBuilder {
         NsTable { bytes }
     }
 
-    /// Byte length of a namespace table with zero entries.
-    ///
-    /// Currently this quantity equals the byte length of the ns table header.
-    pub const fn fixed_overhead_byte_len() -> usize {
+    /// Byte length of a namespace table header.
+    pub const fn header_byte_len() -> usize {
         NUM_NSS_BYTE_LEN
     }
 
-    /// Byte length added to a namespace table by a new entry.
-    ///
-    /// Currently this quantity equals the byte length of a single ns table
-    /// entry.
-    pub const fn ns_overhead_byte_len() -> usize {
+    /// Byte length of a single namespace table entry.
+    pub const fn entry_byte_len() -> usize {
         NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN
     }
 }
@@ -300,38 +392,32 @@ impl NsIndex {
     }
 }
 
-/// Return type for [`Payload::ns_iter`].
-pub(in crate::block) struct NsIter<'a> {
-    cur_index: usize,
-    repeat_nss: HashSet<NamespaceId>,
-    ns_table: &'a NsTable,
-}
+/// Number of entries in a namespace table.
+pub struct NumNss(usize);
 
-impl<'a> NsIter<'a> {
-    pub fn new(ns_table: &'a NsTable) -> Self {
-        Self {
-            cur_index: 0,
-            repeat_nss: HashSet::new(),
-            ns_table,
-        }
+impl NumNss {
+    pub fn in_bounds(&self, index: &NsIndex) -> bool {
+        index.0 < self.0
     }
 }
 
-impl<'a> Iterator for NsIter<'a> {
+/// Return type for [`Payload::ns_iter`].
+pub(in crate::block) struct NsIter(Range<usize>);
+
+impl NsIter {
+    pub fn new(num_nss: &NumNss) -> Self {
+        Self(0..num_nss.0)
+    }
+}
+
+// Simple `impl Iterator` delegates to `Range`.
+impl Iterator for NsIter {
     type Item = NsIndex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let candidate_result = NsIndex(self.cur_index);
-            let ns_id = self.ns_table.read_ns_id(&candidate_result)?;
-            self.cur_index += 1;
-
-            // skip duplicate namespace IDs
-            if !self.repeat_nss.insert(ns_id) {
-                continue;
-            }
-
-            break Some(candidate_result);
-        }
+        self.0.next().map(NsIndex)
     }
 }
+
+#[cfg(test)]
+mod test;
