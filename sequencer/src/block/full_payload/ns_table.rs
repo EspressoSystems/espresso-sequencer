@@ -327,8 +327,6 @@ impl Committable for NsTable {
 }
 
 /// Return type for [`NsTable::validate`].
-///
-/// TODO wtf is our error handling pattern?
 #[derive(Error, Debug, Display, Eq, PartialEq)]
 pub enum NsTableValidationError {
     InvalidByteLen,
