@@ -242,8 +242,7 @@ mod test {
             PersistenceOptions,
         },
         state::FeeAccount,
-        transaction::Transaction,
-        Payload,
+        NamespaceId, Payload, Transaction,
     };
     use std::time::Duration;
     use surf_disco::Client;
@@ -403,7 +402,7 @@ mod test {
             }
         }
 
-        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
+        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3]);
         match builder_client
             .post::<()>("txn_submit/submit")
             .body_json(&txn)

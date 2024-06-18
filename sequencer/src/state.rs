@@ -1,8 +1,8 @@
-use crate::chain_config::BlockSize;
 use crate::{
-    api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
-    chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair, genesis::UpgradeType,
-    persistence::ChainConfigPersistence, ChainConfig, Header, Leaf, NodeState, SeqTypes,
+    api::data_source::CatchupDataSource, block::NsTableValidationError, catchup::SqlStateCatchup,
+    chain_config::BlockSize, chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair,
+    genesis::UpgradeType, persistence::ChainConfigPersistence, ChainConfig, Header, Leaf,
+    NodeState, SeqTypes,
 };
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
@@ -260,6 +260,14 @@ pub enum ProposalValidationError {
         expected_root: FeeMerkleCommitment,
         proposal_root: FeeMerkleCommitment,
     },
+    #[error("Invalid namespace table: {err}")]
+    InvalidNsTable { err: NsTableValidationError },
+}
+
+impl From<NsTableValidationError> for ProposalValidationError {
+    fn from(err: NsTableValidationError) -> Self {
+        Self::InvalidNsTable { err }
+    }
 }
 
 pub fn validate_proposal(
@@ -325,6 +333,8 @@ pub fn validate_proposal(
             proposal_root: proposal.fee_merkle_tree_root,
         });
     }
+
+    proposal.ns_table.validate()?;
 
     Ok(())
 }
