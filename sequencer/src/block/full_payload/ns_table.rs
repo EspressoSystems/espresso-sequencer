@@ -170,7 +170,7 @@ impl NsTable {
 
     /// Number of entries in the namespace table.
     ///
-    /// Returns the maximum number of entries that could fit in the namespace
+    /// Defined as the maximum number of entries that could fit in the namespace
     /// table, ignoring what's declared in the table header.
     pub fn len(&self) -> NumNss {
         NumNss(
