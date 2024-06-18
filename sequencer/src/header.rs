@@ -2,6 +2,7 @@ use crate::{
     block::NsTable,
     chain_config::ResolvableChainConfig,
     eth_signature_key::BuilderSignature,
+    genesis::UpgradeType,
     l1_client::L1Snapshot,
     state::{BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment},
     ChainConfig, L1BlockInfo, Leaf, NamespaceId, NodeState, SeqTypes, ValidatedState,
@@ -9,7 +10,7 @@ use crate::{
 use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
-use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
+use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader, Resolvable};
 use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BlockPayload, BuilderFee},
@@ -234,6 +235,31 @@ impl Header {
             builder_signature,
         })
     }
+
+    async fn get_chain_config(
+        validated_state: &ValidatedState,
+        instance_state: &NodeState,
+    ) -> ChainConfig {
+        let validated_cf = validated_state.chain_config;
+        let instance_cf = instance_state.chain_config;
+
+        if validated_cf.commit() == instance_cf.commitment() {
+            return instance_cf;
+        }
+
+        match validated_cf.resolve() {
+            Some(cf) => cf,
+            None => {
+                tracing::info!("fetching chain config {} from peers", validated_cf.commit());
+
+                instance_state
+                    .peers
+                    .as_ref()
+                    .fetch_chain_config(validated_cf.commit())
+                    .await
+            }
+        }
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -274,13 +300,28 @@ impl BlockHeader<SeqTypes> for Header {
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: BuilderFee<SeqTypes>,
         _vid_common: VidCommon,
-        _version: Version,
+        version: Version,
     ) -> Result<Self, Self::Error> {
-        let chain_config = instance_state.chain_config;
         let height = parent_leaf.height();
         let view = parent_leaf.view_number();
 
         let mut validated_state = parent_state.clone();
+
+        let chain_config = if version > instance_state.current_version {
+            match instance_state
+                .upgrades
+                .get(&version)
+                .map(|upgrade| match upgrade.upgrade_type {
+                    UpgradeType::ChainConfig { chain_config } => chain_config,
+                }) {
+                Some(cf) => cf,
+                None => Header::get_chain_config(&validated_state, instance_state).await,
+            }
+        } else {
+            Header::get_chain_config(&validated_state, instance_state).await
+        };
+
+        validated_state.chain_config = chain_config.into();
 
         // Fetch the latest L1 snapshot.
         let l1_snapshot = instance_state.l1_client.snapshot().await;
@@ -373,6 +414,7 @@ impl BlockHeader<SeqTypes> for Header {
         let ValidatedState {
             fee_merkle_tree,
             block_merkle_tree,
+            ..
         } = ValidatedState::genesis(instance_state).0;
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
@@ -481,6 +523,7 @@ mod test_headers {
     };
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
     use jf_vid::VidScheme;
+    use vbs::version::{StaticVersion, StaticVersionType};
 
     #[derive(Debug, Default)]
     #[must_use]
@@ -533,6 +576,7 @@ mod test_headers {
             let mut validated_state = ValidatedState {
                 block_merkle_tree: block_merkle_tree.clone(),
                 fee_merkle_tree,
+                chain_config: genesis.instance_state.chain_config.into(),
             };
 
             let (fee_account, fee_key) = FeeAccount::generated_from_seed_indexed([0; 32], 0);
@@ -784,9 +828,11 @@ mod test_headers {
         parent_header.block_merkle_tree_root = block_merkle_tree_root;
         let mut proposal = parent_header.clone();
 
+        let ver = StaticVersion::<1, 0>::version();
+
         // Pass a different chain config to trigger a chain config validation error.
         let state = validated_state
-            .apply_header(&genesis.instance_state, &parent_leaf, &proposal)
+            .apply_header(&genesis.instance_state, &parent_leaf, &proposal, ver)
             .await
             .unwrap()
             .0;
@@ -809,7 +855,7 @@ mod test_headers {
         // Advance `proposal.height` to trigger validation error.
 
         let validated_state = validated_state
-            .apply_header(&genesis.instance_state, &parent_leaf, &proposal)
+            .apply_header(&genesis.instance_state, &parent_leaf, &proposal, ver)
             .await
             .unwrap()
             .0;
@@ -833,7 +879,7 @@ mod test_headers {
         proposal.height += 1;
 
         let validated_state = validated_state
-            .apply_header(&genesis.instance_state, &parent_leaf, &proposal)
+            .apply_header(&genesis.instance_state, &parent_leaf, &proposal, ver)
             .await
             .unwrap()
             .0;
@@ -918,7 +964,7 @@ mod test_headers {
             ns_table,
             builder_fee,
             vid_common.clone(),
-            hotshot_types::constants::BASE_VERSION,
+            hotshot_types::constants::Base::VERSION,
         )
         .await
         .unwrap();
@@ -936,7 +982,12 @@ mod test_headers {
         block_merkle_tree.push(proposal.commit()).unwrap();
 
         let proposal_state = proposal_state
-            .apply_header(&genesis_state, &parent_leaf, &proposal)
+            .apply_header(
+                &genesis_state,
+                &parent_leaf,
+                &proposal,
+                StaticVersion::<1, 0>::version(),
+            )
             .await
             .unwrap()
             .0;

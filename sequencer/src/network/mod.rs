@@ -1,13 +1,11 @@
-use hotshot_types::message::Message;
-
 use super::*;
 
 pub mod cdn;
 pub mod libp2p;
 
 pub trait Type: 'static {
-    type DAChannel: ConnectedNetwork<Message<SeqTypes>, PubKey>;
-    type QuorumChannel: ConnectedNetwork<Message<SeqTypes>, PubKey>;
+    type DAChannel: ConnectedNetwork<PubKey>;
+    type QuorumChannel: ConnectedNetwork<PubKey>;
 }
 
 #[derive(Clone, Copy, Default)]
@@ -29,6 +27,6 @@ impl Type for Production {
 pub struct Memory;
 
 impl Type for Memory {
-    type DAChannel = MemoryNetwork<Message<SeqTypes>, PubKey>;
-    type QuorumChannel = MemoryNetwork<Message<SeqTypes>, PubKey>;
+    type DAChannel = MemoryNetwork<PubKey>;
+    type QuorumChannel = MemoryNetwork<PubKey>;
 }
