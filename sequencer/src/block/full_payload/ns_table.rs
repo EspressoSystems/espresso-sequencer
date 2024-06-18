@@ -226,7 +226,8 @@ impl NsTable {
 
         // Byte length for a table with `x` entries must be exactly
         // `x * NsTableBuilder::entry_byte_len() + NsTableBuilder::header_byte_len()`
-        if self.bytes.len() % NsTableBuilder::entry_byte_len() != NsTableBuilder::header_byte_len()
+        if (self.bytes.len() - NsTableBuilder::header_byte_len()) % NsTableBuilder::entry_byte_len()
+            != 0
         {
             return Err(InvalidByteLen);
         }
