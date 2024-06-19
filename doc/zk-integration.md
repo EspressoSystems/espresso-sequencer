@@ -5,8 +5,8 @@ integrate with Espresso. There are a number of alternatives for such integration
 rollup may have such as using a particular data availability layer in addition to Tiramisu, or the need to update their
 state on the L1 at a faster pace than the Espresso light client contract does.
 
-As described in the [sequence diagram](../README.md#architecture), zk rollups relying on Espresso blocks as their source
-of transactions will have to prove their state update is consistent with the Espresso state. This can be achieved in two
+As described in the [sequence diagram](../README.md#Architecture), zk rollups relying on Espresso blocks as their source
+of transactions have to prove their state update is consistent with the Espresso state. This can be achieved in two
 ways:
 
 1. The rollup relies on the Espresso light client contract to fetch the Espresso state updates.
@@ -152,10 +152,20 @@ The circuit depicted in Figure 2 operates as follows:
   block available and _BLOCK_COMM_ESP_OLD_. Both of these commitments are public inputs. The first witness of this
   circuit is _COMM_TXS_HISTORY_ESP_ which is a commitment to all the rollup transactions that have been sequenced since
   the last Espresso state update _BLOCK_COMM_ESP_OLD_. The relationship between _BLOCK_COMM_ESP_NEW_,
-  _BLOCK_COMM_ESP_OLD_, and _COMM_TXS_HISTORY_ESP_ can be checked using a second witness _PROOF_TXS_HISTORY_ESP_.
+  _BLOCK_COMM_ESP_OLD_, and _COMM_TXS_HISTORY_ESP_ can be checked using a second witness _PROOF_TXS_HISTORY_ESP_. This
+  gadget is required in order to ensure that for each Espresso block in a the range defined by _BLOCK_COMM_ESP_OLD_ and
+  _BLOCK_COMM_ESP_NEW_, the transactions applied to the rollup state correspond to the rollup namespace. The value
+  _PROOF_TXS_HISTORY_ contains a list of namespace proofs, one for each Espresso block in the range. Note that such list
+  of proofs could be aggregated or verified in batch depending on the commitment scheme used to represent each Espresso
+  block.
 - The _COMMs Equivalence_ gadget checks that using the same rollup inputs _ROLLUP_TXS_, we obtain _COMM_TXS_HISTORY_ESP_
   using the Espresso commitment scheme for representing a set of transactions and the commitment _COMM_TXS_ROLLUPS_ that
-  is used the by _zkVM_ gadget.
+  is used the by _zkVM_ gadget. This gadget is required in order to ensure that the set of transactions fetched from the
+  Espresso blocks and represented as _COMM_TXS_HISTORY_ESP_ is consistent with the set of transactions applied to the
+  rollup state and represented by the commitment _COMM_TXS_ROLLUP_. Note that if both commitment schemes (used in
+  Espresso and the Rollup) were the same, this gadget would not be necessary. Thus, if updating the zkVM circuit is
+  possible in practice, by using the Espresso commitment scheme inside the zkVM gadget, one can remove the need for the
+  _COMMs Equivalence_ gadget.
 - The _zkVM_ gadget is the original gadget of the rollup circuit that proves a correct transition from state
   _COMM_STATE_VM i_ to the next state _COMM_STATE_VM i+1_ when applying the transactions represented by the commitment
   value _COMM_TXS_ROLLUP_.
