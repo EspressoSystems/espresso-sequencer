@@ -37,6 +37,7 @@ use tracing::{debug, error, instrument, trace, warn};
 use vbs::version::Version;
 
 use crate::{
+    consensus::helpers::fetch_proposal,
     events::HotShotEvent,
     helpers::{broadcast_event, cancel_task},
     quorum_vote::handlers::handle_quorum_proposal_validated,
@@ -92,19 +93,33 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> VoteDependencyHand
         proposed_leaf: &Leaf<TYPES>,
         vid_share: &Proposal<TYPES, VidDisperseShare<TYPES>>,
     ) -> Result<()> {
-        let consensus_reader = self.consensus.read().await;
         let justify_qc = &proposed_leaf.justify_qc();
 
         // Justify qc's leaf commitment should be the same as the parent's leaf commitment.
-        let parent = consensus_reader
+        let mut maybe_parent = self
+            .consensus
+            .read()
+            .await
             .saved_leaves()
             .get(&justify_qc.date().leaf_commit)
-            .cloned()
-            .context(format!(
-                "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
-                justify_qc.date().leaf_commit,
-                proposed_leaf.view_number(),
-            ))?;
+            .cloned();
+        maybe_parent = match maybe_parent {
+            Some(p) => Some(p),
+            None => fetch_proposal(
+                justify_qc.view_number(),
+                self.sender.clone(),
+                Arc::clone(&self.quorum_membership),
+                Arc::clone(&self.consensus),
+            )
+            .await
+            .ok(),
+        };
+        let parent = maybe_parent.context(format!(
+            "Proposal's parent missing from storage with commitment: {:?}, proposal view {:?}",
+            justify_qc.date().leaf_commit,
+            proposed_leaf.view_number(),
+        ))?;
+        let consensus_reader = self.consensus.read().await;
 
         let (Some(parent_state), _) = consensus_reader.state_and_delta(parent.view_number()) else {
             bail!("Parent state not found! Consensus internally inconsistent")

@@ -5,7 +5,7 @@ use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 use anyhow::{ensure, Context, Result};
 use async_broadcast::{Receiver, Sender};
-use async_compatibility_layer::art::async_sleep;
+use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
 use committable::Committable;
 use hotshot_task::{
@@ -24,7 +24,9 @@ use tracing::{debug, error};
 use vbs::version::Version;
 
 use crate::{
-    consensus::helpers::parent_leaf_and_state, events::HotShotEvent, helpers::broadcast_event,
+    consensus::helpers::{fetch_proposal, parent_leaf_and_state},
+    events::HotShotEvent,
+    helpers::broadcast_event,
 };
 
 /// Proposal dependency types. These types represent events that precipitate a proposal.
@@ -185,6 +187,13 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
             .validated_state_map()
             .contains_key(&high_qc_view_number)
         {
+            // The proposal for the high qc view is missing, try to get it asynchronously
+            let memberhsip = Arc::clone(&self.quorum_membership);
+            let sender = self.sender.clone();
+            let consensus = Arc::clone(&self.consensus);
+            async_spawn(async move {
+                fetch_proposal(high_qc_view_number, sender, memberhsip, consensus).await
+            });
             // Block on receiving the event from the event stream.
             EventDependency::new(
                 self.receiver.clone(),

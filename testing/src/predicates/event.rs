@@ -208,6 +208,17 @@ where
     Box::new(EventPredicate { check, info })
 }
 
+pub fn quorum_proposal_missing<TYPES>() -> Box<EventPredicate<TYPES>>
+where
+    TYPES: NodeType,
+{
+    let info = "QuorumProposalRequest".to_string();
+    let check: EventCallback<TYPES> = Arc::new(move |e: Arc<HotShotEvent<TYPES>>| {
+        matches!(*e.clone(), QuorumProposalRequest(..))
+    });
+    Box::new(EventPredicate { check, info })
+}
+
 pub fn quorum_proposal_send<TYPES>() -> Box<EventPredicate<TYPES>>
 where
     TYPES: NodeType,
