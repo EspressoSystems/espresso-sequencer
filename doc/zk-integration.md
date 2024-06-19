@@ -1,5 +1,23 @@
 # Integration with ZK rollups
 
+## Background
+
+> For more context and terminology about the architecture of Espresso, please read [README.md](../README.md).
+
+At a high level, ZK rollups produce blocks and periodically settle their new state on layer 1 (e.g. Ethereum), after
+applying all the transactions of this block to their current state. The time between two consecutive updates can vary,
+yet it is high enough in order to amortize gas costs for the rollup and thus offer low fees to end users. ZK rollups
+have the option to build their blocks by reading from HotShot, the Espresso consensus protocol, that produces blocks
+containing transactions from multiple rollups. In this setting each rollup is identified by an identifier called
+_namespace_. Moreover, HotShot generates an authenticated piece of data, the _finality gadget_, that guarantees that a
+specific state of the Espresso ledger will not be reverted. ZK rollups can leverage this finality gadget and a scheme to
+filter transactions by namespace in order to prove their source of transactions is the Espresso ledger. Note that in
+this document we will not refer to the Espresso market place that allows rollups to sell their sequencing rights to
+other parties. Hence, in the following we focus only on the interaction between the rollup and the Espresso consensus
+protocol once some Espresso block is appended the ledger.
+
+## Integration approaches
+
 Similarly to their optimistic alternatives, ZK rollups need to instantiate their derivation pipeline in order to
 integrate with Espresso. There are a number of alternatives for such integration, depending on specific constraints the
 rollup may have such as using a particular data availability layer in addition to Tiramisu, or the need to update their
@@ -22,7 +40,7 @@ For both alternatives we describe:
 - how rollups use the escape hatch function of the Espresso light client contract to source the transactions from the
   backup sequencer.
 
-For rollups relying exclusively on a centralized sequencer (such as most current production deployments today) , the
+For rollups relying exclusively on a centralized sequencer (such as most current production deployments today), the
 circuit only checks the correct update of the zkVM as depicted in Figure 1. Naturally this same circuit can be used when
 the escape hatch is activated, as in this case the backup sequencer is in control of the rollup operator. When the
 escape hatch is not activated, because the Espresso consensus is making progress, the circuit depicted in Figure 1 needs
@@ -39,11 +57,10 @@ list of transactions.
 ## Rollup Contract
 
 The rollup contract allows rollups to settle their state on layer 1 (Ethereum) via the verification of a snark proof.
-This state update on the layer 1 happens periodically and consists of a high number of transactions in order to amortize
-gas costs. The abstract version of this contract is sketched below. In addition to contract variables and a constructor,
-it contains a function `isEscapeHatchActivated` which allows to detect whether the Espresso consensus protocol is live
-or not. In case liveness is lost, the rollup can update its state without reading from the Espresso ledger by calling
-the function `updateStateDefaultSequencingMode`. Note that the Espresso state is read from the Espresso light client
+The abstract version of this contract is sketched below. In addition to contract variables and a constructor, it
+contains a function `isEscapeHatchActivated` which allows to detect whether the Espresso consensus protocol is live or
+not. In case liveness is lost, the rollup can update its state without reading from the Espresso ledger by calling the
+function `updateStateDefaultSequencingMode`. Note that the Espresso state is read from the Espresso light client
 contract which is referenced by the rollup contract via the variable `lcContract`.
 
 ```solidity
