@@ -56,7 +56,7 @@ contract RollupContract {
     LightClient lcContract;
     bytes[] vkRollup; // This verification key corresponds to the circuit depicted in Figure 1.
     bytes[] vkEspresso; // This verification key corresponds to the circuits depicted in Figure 2 or 3.
-    uint256 escapeHatchThreshold; // Number of L1 blocks the Espresso light client contract is allowed to lag behind in order to consider the Espresso finality gadget is still live.
+    uint256 escapeHatchThreshold; // Number of L1 blocks the Espresso light client contract is allowed to lag behind in order to consider the Espresso consensus is still live.
 
     constructor(address EspressoLightClientAddress,...) public {
         lcContract = LightClient(EspressoLightClientAddress);
