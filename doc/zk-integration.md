@@ -50,8 +50,8 @@ instead of some trusted / local source.
 ![image](zk-rollup-default-sequencer.svg)
 
 **Figure 1:** Circuit used when the rollup falls back to using its default (centralized) sequencer. The public inputs
-are the current state of the rollup _COMM_STATE_VM i_, the new rollup state after update _COMM_STATE_VM i+1_ and a
-commitment to the transactions applied to the state, _COMM_TXS_ROLLUP_. The private input (in bold) corresponds to the
+are the current state of the rollup _cm_state_vm i_, the new rollup state after update _cm_state_vm i+1_ and a
+commitment to the transactions applied to the state, _cm_txs_rollup_. The private input (in bold) corresponds to the
 list of transactions.
 
 ## Rollup Contract
