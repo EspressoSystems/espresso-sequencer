@@ -73,7 +73,7 @@ contract RollupContract {
     }
 
     /// Updates the state of the rollup if the Espresso finality gadget looses liveness.
-    function updateStateDefaultSequencingMode(commTxsRollup, newVMState) virtual {
+    function updateStateBackupSequencingMode(commTxsRollup, newVMState) virtual {
       bytes[] publicInputs = [
         previousVMState,
         newVMState,
@@ -177,7 +177,7 @@ contract RollupContract1 is RollupContract {
 
         // Escape hatch is activated, switch to default sequencing mode
         if (isEscapeHatchActivated()){
-            this.updateStateDefaultSequencingMode(commTxsRollup);
+            this.updateStateBackupSequencingMode(commTxsRollup);
         } else { // No escape hatch, use the state of Espresso consensus
             lightClientState = lcContract.getFinalizedState();
             newEspressoState = lightClientState.blockCommRoot;
@@ -229,7 +229,7 @@ contract RollupContract2 is RollupContract {
 
     // Escape hatch is activated, switch to default sequencing mode
     if (isEscapeHatchActivated()){
-      this.updateStateDefaultSequencingMode(commTxsRollup);
+      this.updateStateBackupSequencingMode(commTxsRollup);
     } else { // No escape hatch, use the state of Espresso consensus
       this.updateStateFromEspresso(newEspressoState, blockNumberEspresso, commTxsRollup, newVMState, snarkProof);
     }
