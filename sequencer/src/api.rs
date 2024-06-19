@@ -401,7 +401,7 @@ pub mod test_helpers {
 
     impl<P: SequencerPersistence> TestNetwork<P> {
         pub async fn with_state(
-            opt: Options,
+            api_config: Options,
             state: [ValidatedState; TestConfig::NUM_NODES],
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
             catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
@@ -410,12 +410,7 @@ pub mod test_helpers {
             builder_port: Option<u16>,
         ) -> Self {
             let mut cfg = TestConfig::default_with_l1(l1);
-
-            let (builder_task, builder_url) = run_test_builder(builder_port).await;
-
-            cfg.set_builder_urls(vec1::vec1![builder_url]);
-
-            let mut upgrades_map = BTreeMap::default();
+            cfg.builder_port = builder_port;
             if let Some(upgrades) = upgrades {
                 cfg.set_upgrade_parameters(
                     upgrades.start_proposing_view,
@@ -423,15 +418,26 @@ pub mod test_helpers {
                     upgrades.start_voting_view,
                     upgrades.stop_voting_view,
                 );
-
-                upgrades_map = upgrades.upgrades;
             }
+
+            Self::with_state_and_config(api_config, state, persistence, catchup, cfg).await
+        }
+
+        pub async fn with_state_and_config(
+            api_config: Options,
+            state: [ValidatedState; TestConfig::NUM_NODES],
+            persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
+            catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
+            mut network_config: TestConfig,
+        ) -> Self {
+            let (builder_task, builder_url) = run_test_builder(network_config.builder_port).await;
+            network_config.set_builder_urls(vec1::vec1![builder_url]);
 
             let mut nodes = join_all(izip!(state, persistence, catchup).enumerate().map(
                 |(i, (state, persistence, catchup))| {
-                    let opt = opt.clone();
-                    let upgrades_map = upgrades_map.clone();
-                    let cfg = &cfg;
+                    let opt = api_config.clone();
+                    let cfg = &network_config;
+                    let upgrades_map = cfg.upgrades.clone().map(|e| e.upgrades).unwrap_or_default();
                     async move {
                         if i == 0 {
                             opt.serve(
@@ -486,17 +492,38 @@ pub mod test_helpers {
             let server = nodes.remove(0);
             let peers = nodes;
 
-            Self { server, peers, cfg }
+            Self {
+                server,
+                peers,
+                cfg: network_config,
+            }
         }
 
+        pub async fn new_with_config(
+            api_config: Options,
+            persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
+            network_config: TestConfig,
+        ) -> Self {
+            Self::with_state_and_config(
+                api_config,
+                Default::default(),
+                persistence,
+                std::array::from_fn(|_| MockStateCatchup::default()),
+                network_config,
+            )
+            .await
+        }
+
+        // TODO: Remove this constructor and rename `new_with_config` to `new`.
+        // https://github.com/EspressoSystems/espresso-sequencer/issues/1603
         pub async fn new(
-            opt: Options,
+            api_config: Options,
             persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
             l1: Url,
             builder_port: Option<u16>,
         ) -> Self {
             Self::with_state(
-                opt,
+                api_config,
                 Default::default(),
                 persistence,
                 std::array::from_fn(|_| MockStateCatchup::default()),
@@ -508,7 +535,7 @@ pub mod test_helpers {
         }
 
         pub fn light_client_genesis(&self) -> ParsedLightClientState {
-            let st = self.cfg.stake_table(STAKE_TABLE_CAPACITY_FOR_TEST as usize);
+            let st = self.cfg.stake_table();
             light_client_genesis_from_stake_table(st).unwrap()
         }
 
