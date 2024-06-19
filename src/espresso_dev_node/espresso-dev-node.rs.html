@@ -266,17 +266,169 @@
 <a href="#266" id="266">266</a>
 <a href="#267" id="267">267</a>
 <a href="#268" id="268">268</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::time::Duration;
+<a href="#269" id="269">269</a>
+<a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a>
+<a href="#273" id="273">273</a>
+<a href="#274" id="274">274</a>
+<a href="#275" id="275">275</a>
+<a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
+<a href="#278" id="278">278</a>
+<a href="#279" id="279">279</a>
+<a href="#280" id="280">280</a>
+<a href="#281" id="281">281</a>
+<a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
+<a href="#291" id="291">291</a>
+<a href="#292" id="292">292</a>
+<a href="#293" id="293">293</a>
+<a href="#294" id="294">294</a>
+<a href="#295" id="295">295</a>
+<a href="#296" id="296">296</a>
+<a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
+<a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+<a href="#313" id="313">313</a>
+<a href="#314" id="314">314</a>
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
+<a href="#320" id="320">320</a>
+<a href="#321" id="321">321</a>
+<a href="#322" id="322">322</a>
+<a href="#323" id="323">323</a>
+<a href="#324" id="324">324</a>
+<a href="#325" id="325">325</a>
+<a href="#326" id="326">326</a>
+<a href="#327" id="327">327</a>
+<a href="#328" id="328">328</a>
+<a href="#329" id="329">329</a>
+<a href="#330" id="330">330</a>
+<a href="#331" id="331">331</a>
+<a href="#332" id="332">332</a>
+<a href="#333" id="333">333</a>
+<a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a>
+<a href="#337" id="337">337</a>
+<a href="#338" id="338">338</a>
+<a href="#339" id="339">339</a>
+<a href="#340" id="340">340</a>
+<a href="#341" id="341">341</a>
+<a href="#342" id="342">342</a>
+<a href="#343" id="343">343</a>
+<a href="#344" id="344">344</a>
+<a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a>
+<a href="#349" id="349">349</a>
+<a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
+<a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
+<a href="#354" id="354">354</a>
+<a href="#355" id="355">355</a>
+<a href="#356" id="356">356</a>
+<a href="#357" id="357">357</a>
+<a href="#358" id="358">358</a>
+<a href="#359" id="359">359</a>
+<a href="#360" id="360">360</a>
+<a href="#361" id="361">361</a>
+<a href="#362" id="362">362</a>
+<a href="#363" id="363">363</a>
+<a href="#364" id="364">364</a>
+<a href="#365" id="365">365</a>
+<a href="#366" id="366">366</a>
+<a href="#367" id="367">367</a>
+<a href="#368" id="368">368</a>
+<a href="#369" id="369">369</a>
+<a href="#370" id="370">370</a>
+<a href="#371" id="371">371</a>
+<a href="#372" id="372">372</a>
+<a href="#373" id="373">373</a>
+<a href="#374" id="374">374</a>
+<a href="#375" id="375">375</a>
+<a href="#376" id="376">376</a>
+<a href="#377" id="377">377</a>
+<a href="#378" id="378">378</a>
+<a href="#379" id="379">379</a>
+<a href="#380" id="380">380</a>
+<a href="#381" id="381">381</a>
+<a href="#382" id="382">382</a>
+<a href="#383" id="383">383</a>
+<a href="#384" id="384">384</a>
+<a href="#385" id="385">385</a>
+<a href="#386" id="386">386</a>
+<a href="#387" id="387">387</a>
+<a href="#388" id="388">388</a>
+<a href="#389" id="389">389</a>
+<a href="#390" id="390">390</a>
+<a href="#391" id="391">391</a>
+<a href="#392" id="392">392</a>
+<a href="#393" id="393">393</a>
+<a href="#394" id="394">394</a>
+<a href="#395" id="395">395</a>
+<a href="#396" id="396">396</a>
+<a href="#397" id="397">397</a>
+<a href="#398" id="398">398</a>
+<a href="#399" id="399">399</a>
+<a href="#400" id="400">400</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{sync::Arc, time::Duration};
 
 <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-<span class="kw">use </span>async_std::task::sleep;
+<span class="kw">use </span>async_std::task::{sleep, spawn, spawn_blocking};
 <span class="kw">use </span>clap::Parser;
+<span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
+<span class="kw">use </span>ethers::{
+    providers::{Http, Middleware, Provider},
+    signers::{coins_bip39::English, MnemonicBuilder, Signer},
+};
 <span class="kw">use </span>futures::FutureExt;
-<span class="kw">use </span>sequencer::{api::options, api::test_helpers::TestNetwork, persistence, testing::TestConfig};
+<span class="kw">use </span>hotshot_state_prover::service::{
+    load_proving_key, one_honest_threshold, sync_state, StateProverConfig,
+};
+<span class="kw">use </span>hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
+<span class="kw">use </span>portpicker::pick_unused_port;
+<span class="kw">use </span>sequencer::{
+    api::{
+        options,
+        test_helpers::{TestNetwork, STAKE_TABLE_CAPACITY_FOR_TEST},
+    },
+    persistence,
+    state_signature::relay_server::run_relay_server,
+    testing::TestConfig,
+};
 <span class="kw">use </span>sequencer_utils::{
-    deployer::{deploy, Contracts},
+    deployer::{deploy, Contract, Contracts},
     AnvilOptions,
 };
+<span class="kw">use </span>surf_disco::Client;
+<span class="kw">use </span>tide_disco::error::ServerError;
 <span class="kw">use </span>url::Url;
 
 <span class="attr">#[derive(Clone, Debug, Parser)]
@@ -346,11 +498,19 @@
         (url, <span class="prelude-val">Some</span>(instance))
     };
 
-    <span class="kw">let </span>network = TestNetwork::new(
+    <span class="kw">let </span>relay_server_port = pick_unused_port().unwrap();
+    <span class="kw">let </span>relay_server_url: Url = <span class="macro">format!</span>(<span class="string">"http://localhost:{}"</span>, relay_server_port)
+        .parse()
+        .unwrap();
+
+    <span class="kw">let </span><span class="kw-2">mut </span>config = TestConfig::default_with_l1(url.clone());
+    config.builder_port = cli_params.builder_port;
+    config.state_relay_url = <span class="prelude-val">Some</span>(relay_server_url.clone());
+
+    <span class="kw">let </span>network = TestNetwork::new_with_config(
         api_options,
         [persistence::no_storage::Options; TestConfig::NUM_NODES],
-        url.clone(),
-        cli_params.builder_port,
+        config,
     )
     .<span class="kw">await</span>;
 
@@ -363,7 +523,7 @@
 
     <span class="kw">let </span>light_client_genesis = network.light_client_genesis();
 
-    <span class="kw">let </span>_contracts = deploy(
+    <span class="kw">let </span>contracts = deploy(
         url.clone(),
         cli_params.mnemonic.clone(),
         cli_params.account_index,
@@ -374,23 +534,80 @@
     )
     .<span class="kw">await</span><span class="question-mark">?</span>;
 
+    <span class="comment">// Run the relay server
+    </span><span class="kw">let </span>st = network.cfg.stake_table();
+    <span class="kw">let </span>total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
+    spawn(run_relay_server(
+        <span class="prelude-val">None</span>,
+        one_honest_threshold(total_stake),
+        <span class="macro">format!</span>(<span class="string">"http://0.0.0.0:{relay_server_port}"</span>)
+            .parse()
+            .unwrap(),
+        SEQUENCER_VERSION,
+    ));
+
+    <span class="comment">// Run the prover service. These code are basically from `hotshot-state-prover`. The difference
+    // is that here we don't need to fetch the `stake table` from other entities.
+    // TODO: Remove the redundant code.
+    </span><span class="kw">let </span>proving_key =
+        spawn_blocking(<span class="kw">move </span>|| Arc::new(load_proving_key(STAKE_TABLE_CAPACITY_FOR_TEST <span class="kw">as </span>usize)))
+            .<span class="kw">await</span>;
+    <span class="kw">let </span>relay_server_client =
+        Client::&lt;ServerError, SequencerVersion&gt;::new(relay_server_url.clone());
+
+    <span class="kw">let </span>provider = Provider::&lt;Http&gt;::try_from(url.to_string()).unwrap();
+    <span class="kw">let </span>chain_id = provider.get_chainid().<span class="kw">await</span>.unwrap().as_u64();
+
+    <span class="kw">let </span>update_interval = Duration::from_secs(<span class="number">20</span>);
+    <span class="kw">let </span>retry_interval = Duration::from_secs(<span class="number">2</span>);
+    <span class="kw">let </span>config = StateProverConfig {
+        relay_server: relay_server_url,
+        update_interval,
+        retry_interval,
+        l1_provider: url,
+        light_client_address: contracts
+            .get_contract_address(Contract::LightClientProxy)
+            .unwrap(),
+        eth_signing_key: MnemonicBuilder::&lt;English&gt;::default()
+            .phrase(cli_params.mnemonic.as_str())
+            .index(cli_params.account_index)
+            .expect(<span class="string">"error building wallet"</span>)
+            .build()
+            .expect(<span class="string">"error opening wallet"</span>)
+            .with_chain_id(chain_id)
+            .signer()
+            .clone(),
+        sequencer_url: <span class="string">"http://localhost"</span>.parse().unwrap(), <span class="comment">// This should not be used in dev-node
+        </span>port: <span class="prelude-val">None</span>,
+        stake_table_capacity: STAKE_TABLE_CAPACITY_FOR_TEST <span class="kw">as </span>usize,
+    };
+
     <span class="kw">loop </span>{
-        sleep(Duration::from_secs(<span class="number">3600</span>)).<span class="kw">await
-    </span>}
+        <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = sync_state(<span class="kw-2">&amp;</span>st, proving_key.clone(), <span class="kw-2">&amp;</span>relay_server_client, <span class="kw-2">&amp;</span>config).<span class="kw">await
+        </span>{
+            <span class="macro">tracing::error!</span>(<span class="string">"Cannot sync the light client state, will retry: {}"</span>, err);
+            sleep(retry_interval).<span class="kw">await</span>;
+        } <span class="kw">else </span>{
+            <span class="macro">tracing::info!</span>(<span class="string">"Sleeping for {:?}"</span>, update_interval);
+            sleep(update_interval).<span class="kw">await</span>;
+        }
+    }
 }
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>tests {
-    <span class="kw">use </span>std::{process::Child, thread::sleep, time::Duration};
+    <span class="kw">use </span>std::{process::Child, sync::Arc, time::Duration};
 
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    <span class="kw">use </span>async_std::stream::StreamExt;
+    <span class="kw">use </span>async_std::{stream::StreamExt, task::sleep};
     <span class="kw">use </span>committable::{Commitment, Committable};
+    <span class="kw">use </span>contract_bindings::light_client::LightClient;
     <span class="kw">use </span>es_version::SequencerVersion;
     <span class="kw">use </span>escargot::CargoBuild;
+    <span class="kw">use </span>ethers::types::{Address, U256};
     <span class="kw">use </span>futures::TryStreamExt;
     <span class="kw">use </span>hotshot_query_service::{
-        availability::{BlockQueryData, TransactionQueryData},
+        availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
         data_source::sql::testing::TmpDb,
     };
     <span class="kw">use </span>jf_merkle_tree::MerkleTreeScheme;
@@ -399,8 +616,11 @@
         api::endpoints::NamespaceProofQueryData, state::BlockMerkleTree, Header, SeqTypes,
         Transaction,
     };
+    <span class="kw">use </span>sequencer_utils::{init_signer, AnvilOptions};
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>tide_disco::error::ServerError;
+
+    <span class="kw">const </span>TEST_MNEMONIC: <span class="kw-2">&amp;</span>str = <span class="string">"test test test test test test test test test test test junk"</span>;
 
     <span class="kw">pub struct </span>BackgroundProcess(Child);
 
@@ -424,6 +644,9 @@
 
         <span class="kw">let </span>api_port = pick_unused_port().unwrap();
 
+        <span class="kw">let </span>instance = AnvilOptions::default().spawn().<span class="kw">await</span>;
+        <span class="kw">let </span>l1_url = instance.url();
+
         <span class="kw">let </span>db = TmpDb::init().<span class="kw">await</span>;
         <span class="kw">let </span>postgres_port = db.port();
 
@@ -434,9 +657,12 @@
             .run()
             .unwrap()
             .command()
+            .env(<span class="string">"ESPRESSO_SEQUENCER_L1_PROVIDER"</span>, l1_url.to_string())
             .env(<span class="string">"ESPRESSO_BUILDER_PORT"</span>, builder_port.to_string())
             .env(<span class="string">"ESPRESSO_SEQUENCER_API_PORT"</span>, api_port.to_string())
             .env(<span class="string">"ESPRESSO_SEQUENCER_POSTGRES_HOST"</span>, <span class="string">"localhost"</span>)
+            .env(<span class="string">"ESPRESSO_SEQUENCER_ETH_MNEMONIC"</span>, TEST_MNEMONIC)
+            .env(<span class="string">"ESPRESSO_DEPLOYER_ACCOUNT_INDEX"</span>, <span class="string">"0"</span>)
             .env(
                 <span class="string">"ESPRESSO_SEQUENCER_POSTGRES_PORT"</span>,
                 postgres_port.to_string(),
@@ -488,17 +714,53 @@
         <span class="kw">let </span>tx_hash = tx.commit();
         <span class="macro">assert_eq!</span>(hash, tx_hash);
 
-        <span class="kw">while </span>api_client
+        <span class="kw">let </span><span class="kw-2">mut </span>tx_result = api_client
             .get::&lt;TransactionQueryData&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
-                <span class="string">"availability/transaction/hash/{}"</span>,
-                tx_hash
+                <span class="string">"availability/transaction/hash/{tx_hash}"</span>,
             ))
             .send()
+            .<span class="kw">await</span>;
+        <span class="kw">while </span>tx_result.is_err() {
+            sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
+
+            tx_result = api_client
+                .get::&lt;TransactionQueryData&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
+                    <span class="string">"availability/transaction/hash/{}"</span>,
+                    tx_hash
+                ))
+                .send()
+                .<span class="kw">await</span>;
+        }
+
+        <span class="kw">let </span>tx_block_height = tx_result.unwrap().block_height();
+
+        <span class="kw">let </span>light_client_address = <span class="string">"0xdc64a140aa3e981100a9beca4e685f962f0cf6c9"</span>;
+
+        <span class="kw">let </span>signer = init_signer(<span class="kw-2">&amp;</span>l1_url, TEST_MNEMONIC, <span class="number">0</span>).<span class="kw">await</span>.unwrap();
+        <span class="kw">let </span>light_client = LightClient::new(
+            light_client_address.parse::&lt;Address&gt;().unwrap(),
+            Arc::new(signer),
+        );
+
+        <span class="kw">while </span>light_client
+            .get_hot_shot_commitment(U256::from(<span class="number">1</span>))
+            .call()
             .<span class="kw">await
             </span>.is_err()
         {
-            sleep(Duration::from_secs(<span class="number">3</span>))
+            <span class="macro">tracing::info!</span>(<span class="string">"waiting for commitment"</span>);
+            sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
         }
+
+        <span class="comment">// Check the namespace proof
+        </span><span class="kw">let </span>proof = api_client
+            .get::&lt;NamespaceProofQueryData&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
+                <span class="string">"availability/block/{tx_block_height}/namespace/100"
+            </span>))
+            .send()
+            .<span class="kw">await
+            </span>.unwrap();
+        <span class="macro">assert!</span>(proof.proof.is_some());
 
         <span class="comment">// These endpoints are currently used in `espresso-sequencer-go`. These checks
         // serve as reminders of syncing the API updates to go client repo when they change.
@@ -516,7 +778,9 @@
                 </span>.unwrap();
 
             api_client
-                .get::&lt;NamespaceProofQueryData&gt;(<span class="string">"availability/block/2/namespace/0"</span>)
+                .get::&lt;VidCommonQueryData&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
+                    <span class="string">"availability/vid/common/{tx_block_height}"
+                </span>))
                 .send()
                 .<span class="kw">await
                 </span>.unwrap();
@@ -527,7 +791,7 @@
                 .<span class="kw">await
                 </span>.is_err()
             {
-                sleep(Duration::from_secs(<span class="number">3</span>))
+                sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
             }
         }
 

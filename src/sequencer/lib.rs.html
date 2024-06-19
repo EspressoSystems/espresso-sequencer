@@ -1002,6 +1002,15 @@
 <a href="#1002" id="1002">1002</a>
 <a href="#1003" id="1003">1003</a>
 <a href="#1004" id="1004">1004</a>
+<a href="#1005" id="1005">1005</a>
+<a href="#1006" id="1006">1006</a>
+<a href="#1007" id="1007">1007</a>
+<a href="#1008" id="1008">1008</a>
+<a href="#1009" id="1009">1009</a>
+<a href="#1010" id="1010">1010</a>
+<a href="#1011" id="1011">1011</a>
+<a href="#1012" id="1012">1012</a>
+<a href="#1013" id="1013">1013</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>block;
 <span class="kw">pub mod </span>catchup;
@@ -1571,6 +1580,7 @@
         eth_signature_key::EthKeyPair,
         persistence::no_storage::{<span class="self">self</span>, NoStorage},
     };
+    <span class="kw">use </span>api::test_helpers::TestNetworkUpgrades;
     <span class="kw">use </span>committable::Committable;
     <span class="kw">use </span>futures::{
         future::join_all,
@@ -1615,10 +1625,13 @@
     <span class="attr">#[derive(Clone)]
     </span><span class="kw">pub struct </span>TestConfig {
         config: HotShotConfig&lt;PubKey&gt;,
-        priv_keys: Vec&lt;BLSPrivKey&gt;,
-        state_key_pairs: Vec&lt;StateKeyPair&gt;,
-        master_map: Arc&lt;MasterMap&lt;PubKey&gt;&gt;,
-        url: Url,
+        <span class="kw">pub </span>priv_keys: Vec&lt;BLSPrivKey&gt;,
+        <span class="kw">pub </span>state_key_pairs: Vec&lt;StateKeyPair&gt;,
+        <span class="kw">pub </span>master_map: Arc&lt;MasterMap&lt;PubKey&gt;&gt;,
+        <span class="kw">pub </span>url: Url,
+        <span class="kw">pub </span>state_relay_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
+        <span class="kw">pub </span>builder_port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
+        <span class="kw">pub </span>upgrades: <span class="prelude-ty">Option</span>&lt;TestNetworkUpgrades&gt;,
     }
 
     <span class="kw">impl </span>Default <span class="kw">for </span>TestConfig {
@@ -1684,6 +1697,9 @@
                 state_key_pairs,
                 master_map,
                 url: <span class="string">"http://localhost:8545"</span>.parse().unwrap(),
+                state_relay_url: <span class="prelude-val">None</span>,
+                builder_port: <span class="prelude-val">None</span>,
+                upgrades: <span class="prelude-val">None</span>,
             }
         }
     }
@@ -1701,6 +1717,10 @@
 
         <span class="kw">pub fn </span>set_builder_urls(<span class="kw-2">&amp;mut </span><span class="self">self</span>, builder_urls: vec1::Vec1&lt;Url&gt;) {
             <span class="self">self</span>.config.builder_urls = builder_urls;
+        }
+
+        <span class="kw">pub fn </span>set_state_relay_url(<span class="kw-2">&amp;mut </span><span class="self">self</span>, url: Url) {
+            <span class="self">self</span>.state_relay_url = <span class="prelude-val">Some</span>(url);
         }
 
         <span class="kw">pub fn </span>default_with_l1(l1: Url) -&gt; <span class="self">Self </span>{
@@ -1743,12 +1763,10 @@
             .<span class="kw">await
         </span>}
 
-        <span class="kw">pub fn </span>stake_table(
-            <span class="kw-2">&amp;</span><span class="self">self</span>,
-            stake_table_capacity: usize,
-        ) -&gt; StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt; {
-            <span class="kw">let </span><span class="kw-2">mut </span>st =
-                StakeTable::&lt;BLSPubKey, StateVerKey, CircuitField&gt;::new(stake_table_capacity);
+        <span class="kw">pub fn </span>stake_table(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt; {
+            <span class="kw">let </span><span class="kw-2">mut </span>st = StakeTable::&lt;BLSPubKey, StateVerKey, CircuitField&gt;::new(
+                STAKE_TABLE_CAPACITY_FOR_TEST <span class="kw">as </span>usize,
+            );
             <span class="self">self</span>.config
                 .known_nodes_with_stake
                 .iter()
@@ -1822,7 +1840,7 @@
                 node_state,
                 persistence_opt.create().<span class="kw">await</span>.unwrap(),
                 networks,
-                <span class="prelude-val">None</span>,
+                <span class="self">self</span>.state_relay_url.clone(),
                 metrics,
                 stake_table_capacity,
                 bind_version,

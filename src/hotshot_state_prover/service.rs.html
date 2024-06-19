@@ -1112,10 +1112,11 @@
     config: StateProverConfig,
     bind_version: Ver,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-    <span class="macro">tracing::info!</span>(<span class="string">"Stake table capacity: {}"</span>, config.stake_table_capacity);
+    <span class="kw">let </span>stake_table_capacity = config.stake_table_capacity;
+    <span class="macro">tracing::info!</span>(<span class="string">"Stake table capacity: {}"</span>, stake_table_capacity);
     <span class="comment">// TODO(#1022): maintain the following stake table
     </span><span class="kw">let </span>st = Arc::new(
-        init_stake_table_from_sequencer(<span class="kw-2">&amp;</span>config.sequencer_url, config.stake_table_capacity)
+        init_stake_table_from_sequencer(<span class="kw-2">&amp;</span>config.sequencer_url, stake_table_capacity)
             .<span class="kw">await
             </span>.with_context(|| <span class="string">"Failed to initialize stake table"</span>)<span class="question-mark">?</span>,
     );
@@ -1131,7 +1132,6 @@
         }
     }
 
-    <span class="kw">let </span>stake_table_capacity = config.stake_table_capacity;
     <span class="kw">let </span>proving_key =
         spawn_blocking(<span class="kw">move </span>|| Arc::new(load_proving_key(stake_table_capacity))).<span class="kw">await</span>;
 

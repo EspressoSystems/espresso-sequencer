@@ -235,10 +235,10 @@
     </span><span class="kw">let </span>provider = Provider::&lt;Http&gt;::try_from(args.l1_provider.to_string()).unwrap();
     <span class="kw">let </span>chain_id = provider.get_chainid().<span class="kw">await</span>.unwrap().as_u64();
     <span class="kw">let </span>config = StateProverConfig {
-        relay_server: args.relay_server.clone(),
+        relay_server: args.relay_server,
         update_interval: args.update_interval,
         retry_interval: args.retry_interval,
-        l1_provider: args.l1_provider.clone(),
+        l1_provider: args.l1_provider,
         light_client_address: args.light_client_address,
         eth_signing_key: MnemonicBuilder::&lt;English&gt;::default()
             .phrase(args.eth_mnemonic.as_str())
