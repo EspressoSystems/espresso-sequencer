@@ -4,7 +4,7 @@ use crate::{
     persistence::{ChainConfigPersistence, SequencerPersistence},
     state::{BlockMerkleTree, FeeAccountProof},
     state_signature::StateSigner,
-    ChainConfig, Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
+    ChainConfig, NamespaceId, Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
 };
 use anyhow::{bail, Context};
 use async_once_cell::Lazy;
@@ -583,7 +583,7 @@ pub mod test_helpers {
         setup_logging();
         setup_backtrace();
 
-        let txn = Transaction::new(Default::default(), vec![1, 2, 3, 4]);
+        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3, 4]);
 
         let port = pick_unused_port().expect("No ports free");
 

@@ -17,7 +17,7 @@ use hotshot_types::{
 use jf_vid::VidScheme;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use std::{collections::HashMap, fmt::Display, sync::Arc};
+use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 
 /// Raw payload data for an entire block.
 ///
@@ -96,17 +96,17 @@ impl Payload {
         let max_block_byte_len: usize = u64::from(chain_config.max_block_size)
             .try_into()
             .map_err(|_| <Self as BlockPayload<SeqTypes>>::Error::BlockBuilding)?;
-        let mut block_byte_len = NsTableBuilder::fixed_overhead_byte_len();
+        let mut block_byte_len = NsTableBuilder::header_byte_len();
 
         // add each tx to its namespace
-        let mut ns_builders = HashMap::<NamespaceId, NsPayloadBuilder>::new();
+        let mut ns_builders = BTreeMap::<NamespaceId, NsPayloadBuilder>::new();
         for tx in transactions.into_iter() {
             // accounting for block byte length limit
-            block_byte_len += tx.payload().len() + NsPayloadBuilder::tx_overhead_byte_len();
+            block_byte_len += tx.payload().len() + NsPayloadBuilder::tx_table_entry_byte_len();
             if !ns_builders.contains_key(&tx.namespace()) {
                 // each new namespace adds overhead
-                block_byte_len += NsTableBuilder::ns_overhead_byte_len()
-                    + NsPayloadBuilder::fixed_overhead_byte_len();
+                block_byte_len +=
+                    NsTableBuilder::entry_byte_len() + NsPayloadBuilder::tx_table_header_byte_len();
             }
             if block_byte_len > max_block_byte_len {
                 tracing::warn!("transactions truncated to fit in maximum block byte length {max_block_byte_len}");
