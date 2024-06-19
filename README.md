@@ -24,7 +24,7 @@ important L1 contracts.
 
 - Glossary
   - Namespace: an identifier to distinguish rollups, akin to an Ethereum chain ID
-  - Rollup transaction: an transaction a user submits to a rollup, usually an EVM transaction
+  - Rollup transaction: a transaction a user submits to a rollup, usually an EVM transaction
   - Transaction: a transaction inside the Espresso Sequencer: a rollup transaction plus a namespace ID of the rollup
   - Rollup block: a block in a rollup consisting only of transactions in this rollup
   - Espresso block: a block produced by the Espresso sequencer containing transactions of multiple rollups
@@ -45,6 +45,11 @@ The sequence diagram below serves as a complement to the architecture diagram. T
 
 ![Sequence diagram](./doc/sequence-diagram.svg)
 
+#### ZK rollups integration
+
+In order for ZK rollups to rely on blocks produced by Espresso as a source of transactions, it is required to adjust the
+circuit that encodes the state update logic. See [zk-rollups integration](doc/zk-integration.md) for more details.
+
 # Running the demo
 
 Refer to [sequencer-example-l2](https://github.com/EspressoSystems/sequencer-example-l2) for instructions on how to run
@@ -58,9 +63,10 @@ a dockerized Espresso Sequencer network with an example Layer 2 rollup applicati
 - For installation without nix please see [ubuntu.md](./doc/ubuntu.md).
 
 ## Documentation
+
 The rust code documentation can be found at
-[http://sequencer.docs.espressosys.com](http://sequencer.docs.espressosys.com).
-Please note the disclaimer about API stability at the end of the readme.
+[http://sequencer.docs.espressosys.com](http://sequencer.docs.espressosys.com). Please note the disclaimer about API
+stability at the end of the readme.
 
 To generate the documentation locally and view it in the browser, run
 

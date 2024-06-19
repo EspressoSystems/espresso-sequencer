@@ -5,27 +5,36 @@ integrate with Espresso. There are a number of alternatives for such integration
 rollup may have such as using a particular data availability layer in addition to Tiramisu, or the need to update their
 state on the L1 at a faster pace than the Espresso light client contract does.
 
-In the following, we assume that the rollup relies on Tiramisu for data availability and explore two different
-integrations flavors. With integration 1, the rollup relies on the Espresso light client contract to fetch the latest
-Espresso state updates. while with integration 2 the rollup checks Espresso consensus directly inside its circuit.
+As described in the [sequence diagram](../README.md#architecture), zk rollups relying on Espresso blocks as their source
+of transactions will have to prove their state update is consistent with the Espresso state. This can be achieved in two
+ways:
 
-For both integrations:
+1. The rollup relies on the Espresso light client contract to fetch the Espresso state updates.
+2. The rollup verifies some value equivalent to the Espresso finality gadget inside its circuit.
 
-- We describe the high level structure of the circuit as well as the rollup L1 contract and how they are related.
-- We describe the use of an Espresso liveness escape hatch in the rollup L1 contract.
+Moreover, in case the Espresso consensus looses liveness, and thus the corresponding finality gadget is not available,
+the rollup can fall back to a backup sequencer. In order to reliably detect that the Espresso consensus is not making
+progress, the rollup contract will call an escape hatch function part of the Espresso light client contract.
 
-When a rollup is not integrated with Espresso, i.e. it uses its own centralized sequencer, its circuit only needs to
-check the correct update of the zkVM as depicted in Figure 1. This is also the circuit used when the escape hatch is
-activated, as in this case the rollup falls back to using its own centralized sequencer. When the escape hatch is not
-activated the circuit depicted in Figure 1 needs to be extended with additional gadgets in order to prove the
-transactions applied to the state are the one sequenced by Espresso.
+For both alternatives we describe:
+
+- the high level structure of the circuit as well as the rollup L1 contract and how they are related.
+- how rollups use the escape hatch function of the Espresso light client contract to source the transactions from the
+  backup sequencer.
+
+For rollups relying exclusively on a centralized sequencer (such as most current production deployments today) , the
+circuit only checks the correct update of the zkVM as depicted in Figure 1. Naturally this same circuit can be used when
+the escape hatch is activated, as in this case the backup sequencer is in control of the rollup operator. When the
+escape hatch is not activated, because the Espresso consensus is making progress, the circuit depicted in Figure 1 needs
+to be extended with additional gadgets in order to guarantee the transactions are fetched from the Espresso ledger
+instead of some trusted / local source.
 
 ![image](zk-rollup-default-sequencer.svg)
 
 **Figure 1:** Circuit used when the rollup falls back to using its default (centralized) sequencer. The public inputs
 are the current state of the rollup _COMM_STATE_VM i_, the new rollup state after update _COMM_STATE_VM i+1_ and a
-commitment to the transactions applied to the state, _COMM_TXS_ROLLUP_. The private input (in bold) corresponds to the list
-of transactions.
+commitment to the transactions applied to the state, _COMM_TXS_ROLLUP_. The private input (in bold) corresponds to the
+list of transactions.
 
 ## Rollup Contract
 
@@ -142,8 +151,8 @@ The circuit depicted in Figure 2 operates as follows:
 - The _Collect & Filter_ gadget receives as input _BLOCK_COMM_ESP_NEW_ which is the commitment to the latest Espresso
   block available and _BLOCK_COMM_ESP_OLD_. Both of these commitments are public inputs. The first witness of this
   circuit is _COMM_TXS_HISTORY_ESP_ which is a commitment to all the rollup transactions that have been sequenced since
-  the last Espresso state update _BLOCK_COMM_ESP_OLD_. The relationship between _BLOCK_COMM_ESP_NEW_, _BLOCK_COMM_ESP_OLD_,
-  and _COMM_TXS_HISTORY_ESP_ can be checked using a second witness _PROOF_TXS_HISTORY_ESP_.
+  the last Espresso state update _BLOCK_COMM_ESP_OLD_. The relationship between _BLOCK_COMM_ESP_NEW_,
+  _BLOCK_COMM_ESP_OLD_, and _COMM_TXS_HISTORY_ESP_ can be checked using a second witness _PROOF_TXS_HISTORY_ESP_.
 - The _COMMs Equivalence_ gadget checks that using the same rollup inputs _ROLLUP_TXS_, we obtain _COMM_TXS_HISTORY_ESP_
   using the Espresso commitment scheme for representing a set of transactions and the commitment _COMM_TXS_ROLLUPS_ that
   is used the by _zkVM_ gadget.
