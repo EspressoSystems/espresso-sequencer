@@ -7,19 +7,19 @@
 
 [zkVM] as ZK
 
-BLOCK_COMM_ESP_OLD --> CF
-BLOCK_COMM_ESP_NEW --> CF
+blk_cm_old --> CF
+blk_cm_new --> CF
 "<b>PROOF_TXS_HISTORY_ESP</b>" --> CF
 "<b>ROLLUP_TXS</b>" --> CE
 "<b>ROLLUP_TXS</b>" --> ZK
 
-COMM_TXS_ROLLUP --> CE
-"<b>COMM_TXS_HISTORY_ESP</b>" --> CE
-"<b>COMM_TXS_HISTORY_ESP</b>" --> CF
+cm_txs_rollup --> CE
+"cm_txs_history" --> CE
+"cm_txs_history" --> CF
 
-"COMM_STATE_VM i" --> ZK
-"COMM_STATE_VM i+1" --> ZK
-COMM_TXS_ROLLUP --> ZK
+"cm_state_vm i" --> ZK
+"cm_state_vm i+1" --> ZK
+cm_txs_rollup --> ZK
 
 
 ZK --> AND

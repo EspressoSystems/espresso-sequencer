@@ -2,9 +2,9 @@
 
 [zkVM] as ZK
 
-"COMM_STATE_VM i" --> ZK
-"COMM_STATE_VM i+1" --> ZK
-COMM_TXS_ROLLUP --> ZK
+"cm_state_vm i" --> ZK
+"cm_state_vm i+1" --> ZK
+cm_txs_rollup --> ZK
 "<b>ROLLUP_TXS</b>" --> ZK
 ZK --> OUTPUT
 

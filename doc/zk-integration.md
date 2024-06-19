@@ -148,27 +148,26 @@ Filter_, and _COMMs Equivalence_. Private inputs of the circuit are written in b
 
 The circuit depicted in Figure 2 operates as follows:
 
-- The _Collect & Filter_ gadget receives as input _BLOCK_COMM_ESP_NEW_ which is the commitment to the latest Espresso
-  block available and _BLOCK_COMM_ESP_OLD_. Both of these commitments are public inputs. The first witness of this
-  circuit is _COMM_TXS_HISTORY_ESP_ which is a commitment to all the rollup transactions that have been sequenced since
-  the last Espresso state update _BLOCK_COMM_ESP_OLD_. The relationship between _BLOCK_COMM_ESP_NEW_,
-  _BLOCK_COMM_ESP_OLD_, and _COMM_TXS_HISTORY_ESP_ can be checked using a second witness _PROOF_TXS_HISTORY_ESP_. This
-  gadget is required in order to ensure that for each Espresso block in a the range defined by _BLOCK_COMM_ESP_OLD_ and
-  _BLOCK_COMM_ESP_NEW_, the transactions applied to the rollup state correspond to the rollup namespace. The value
-  _PROOF_TXS_HISTORY_ contains a list of namespace proofs, one for each Espresso block in the range. Note that such list
-  of proofs could be aggregated or verified in batch depending on the commitment scheme used to represent each Espresso
-  block.
-- The _COMMs Equivalence_ gadget checks that using the same rollup inputs _ROLLUP_TXS_, we obtain _COMM_TXS_HISTORY_ESP_
-  using the Espresso commitment scheme for representing a set of transactions and the commitment _COMM_TXS_ROLLUPS_ that
-  is used the by _zkVM_ gadget. This gadget is required in order to ensure that the set of transactions fetched from the
-  Espresso blocks and represented as _COMM_TXS_HISTORY_ESP_ is consistent with the set of transactions applied to the
-  rollup state and represented by the commitment _COMM_TXS_ROLLUP_. Note that if both commitment schemes (used in
-  Espresso and the Rollup) were the same, this gadget would not be necessary. Thus, if updating the zkVM circuit is
-  possible in practice, by using the Espresso commitment scheme inside the zkVM gadget, one can remove the need for the
-  _COMMs Equivalence_ gadget.
+- The _Collect & Filter_ gadget receives as input _blk_cm_new_ which is the commitment to the latest Espresso block
+  available and _blk_cm_old_. Both of these commitments are public inputs. The first witness of this circuit is
+  _cm_txs_history_ESP_ which is a commitment to all the rollup transactions that have been sequenced since the last
+  Espresso state update _blk_cm_old_. The relationship between _blk_cm_new_, _blk_cm_old_, and _cm_txs_history_ can be
+  checked using a second witness _proof_txs_history_. This gadget is required in order to ensure that for each Espresso
+  block in the range defined by _blk_cm_old_ and _blk_cm_new_, the transactions applied to the rollup state correspond
+  to the rollup namespace. The value _proof_txs_history_ contains a list of namespace proofs, one for each Espresso
+  block in the range. Note that such list of proofs could be aggregated or verified in batch depending on the commitment
+  scheme used to represent each Espresso block.
+- The _COMMs Equivalence_ gadget checks that using the same rollup inputs _ROLLUP_TXS_, we obtain _cm_txs_history_ using
+  the Espresso commitment scheme for representing a set of transactions and the commitment _cm_txs_rollup_ that is used
+  the by _zkVM_ gadget. This gadget is required in order to ensure that the set of transactions fetched from the
+  Espresso blocks and represented as _cm_txs_history_ is consistent with the set of transactions applied to the rollup
+  state and represented by the commitment _cm_txs_rollup_. Note that if both commitment schemes (used in Espresso and
+  the Rollup) were the same, this gadget would not be necessary. Thus, if updating the zkVM circuit is possible in
+  practice, by using the Espresso commitment scheme inside the zkVM gadget, one can remove the need for the _COMMs
+  Equivalence_ gadget.
 - The _zkVM_ gadget is the original gadget of the rollup circuit that proves a correct transition from state
-  _COMM_STATE_VM i_ to the next state _COMM_STATE_VM i+1_ when applying the transactions represented by the commitment
-  value _COMM_TXS_ROLLUP_.
+  _cm_state_vm i_ to the next state _cm_state_vm i+1_ when applying the transactions represented by the commitment value
+  _COMM_TXS_ROLLUP_.
 - These three gadgets above return a boolean: true if the verification succeeds and false otherwise.
 - For the circuit to accept, all these gadget outputs must be true, and thus we add an _AND_ gate.
 
@@ -205,19 +204,19 @@ Filter_, and _COMMs Equivalence_. Private inputs of the circuit are written in b
 
 The circuit depicted in Figure 3 operates as follows:
 
-- The _Espresso Consensus_ gadget checks that the block commitment for Espresso block _BLOCK_NUMBER_ESP_ is
-  _BLOCK_COMM_ESP_, using the multi-signature _STATE_SIGS_ESP_.
-- The _Collect & Filter_ gadget receives as input _BLOCK_COMM_ESP_NEW_ which is the commitment to the latest Espresso
-  block available and _BLOCK_COMM_ESP_OLD_. Both of these commitments are public inputs. The first witness of this
-  circuit is _COMM_TXS_HISTORY_ESP_ which is a commitment to all the rollup transactions that have been sequenced since
-  the last Espresso state update _BLOCK_COMM_ESP_OLD_. The relationship between _BLOCK_COMM_ESP_, _BLOCK_COMM_ESP_OLD_,
-  and _COMM_TXS_HISTORY_ESP_ can be checked using a second witness _PROOF_TXS_HISTORY_ESP_.
-- The _COMMs Equivalence_ gadget checks that using the same rollup inputs _ROLLUP_TXS_, we obtain _COMM_TXS_HISTORY_ESP_
-  using the Espresso commitment scheme for representing a set of transactions and the commitment _COMM_TXS_ROLLUPS_ that
-  is used the by _zkVM_ gadget.
-- The zkVM gadget is the original gadget of the rollup circuit that proves a correct transition from state
-  _COMM_STATE_VM i_ to the next state _COMM_STATE_VM i+1_ when applying the transactions represented by the commitment
-  value _COMM_TXS_ROLLUP_.
+- The _Espresso Consensus_ gadget checks that the block commitment for Espresso block _BLOCK_NUMBER_ is _blk_cm_, using
+  the multi-signature _STATE_SIGS_.
+- The _Collect & Filter_ gadget receives as input _blk_cm_new_ which is the commitment to the latest Espresso block
+  available and _blk_cm_old_. Both of these commitments are public inputs. The first witness of this circuit is
+  _cm_txs_history_ which is a commitment to all the rollup transactions that have been sequenced since the last Espresso
+  state update _blk_cm_old_. The relationship between _blk_cm_, _blk_cm_old_, and _cm_txs_history_ can be checked using
+  a second witness _PROOF_TXS_HISTORY_.
+- The _COMMs Equivalence_ gadget checks that using the same rollup inputs _ROLLUP_TXS_, we obtain _cm_txs_history_ using
+  the Espresso commitment scheme for representing a set of transactions and the commitment _cm_txs_rollups_ that is used
+  the by _zkVM_ gadget.
+- The zkVM gadget is the original gadget of the rollup circuit that proves a correct transition from state _cm_state_vm
+  i_ to the next state _cm_state_vm i+1_ when applying the transactions represented by the commitment value
+  _cm_txs_rollup_.
 - These three gadgets above return a boolean: true if the verification succeeds and false otherwise.
 - For the circuit to accept, all these gadget outputs must be true, and thus we add an _AND_ gate.
 
