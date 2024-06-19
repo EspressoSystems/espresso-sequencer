@@ -23,7 +23,7 @@ integrate with Espresso. There are a number of alternatives for such integration
 rollup may have, such as using a particular data availability layer in addition to Tiramisu, or the need to update their
 state on the L1 at a faster pace than the Espresso light client contract does.
 
-As described in the [sequence diagram](../README.md#Architecture), zk rollups relying on Espresso blocks as their source
+As described in the [sequence diagram](../README.md#Architecture), ZK rollups relying on Espresso blocks as their source
 of transactions have to prove their state update is consistent with the Espresso state. This can be achieved in two
 ways:
 
