@@ -429,11 +429,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         returns (HotShotCommitment memory)
     {
         uint256 commitmentsHeight = hotShotCommitments.length;
-        if (hotShotBlockHeight > hotShotCommitments[commitmentsHeight - 1].blockHeight) {
+        if (hotShotBlockHeight >= hotShotCommitments[commitmentsHeight - 1].blockHeight) {
             revert InvalidHotShotBlockForCommitmentCheck();
         }
         for (uint256 i = 0; i < commitmentsHeight; i++) {
-            if (hotShotCommitments[i].blockHeight >= hotShotBlockHeight) {
+            if (hotShotCommitments[i].blockHeight > hotShotBlockHeight) {
                 return hotShotCommitments[i];
             }
         }
