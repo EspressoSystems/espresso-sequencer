@@ -36,7 +36,7 @@ chrono = { workspace = true }
 clap = { workspace = true, optional = true }
 committable = { workspace = true }
 custom_debug = { workspace = true }
-dashmap = "5"
+dashmap = "6"
 derive_more = "0.99"
 either = { workspace = true }
 ethereum-types = { workspace = true }
