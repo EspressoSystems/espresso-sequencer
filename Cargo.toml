@@ -75,8 +75,8 @@ derivative = "2.2"
 derive_more = "0.99"
 either = "1.12"
 futures = "0.3"
-hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main" }
+hotshot = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main", features = ["dependency-tasks"] }
+hotshot-testing = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main", features = ["dependency-tasks"] }
 hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "main" }
 itertools = "0.12.1"
 jf-merkle-tree = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
