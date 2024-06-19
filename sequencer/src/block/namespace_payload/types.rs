@@ -417,19 +417,13 @@ impl NsPayloadBuilder {
         result
     }
 
-    /// Byte length of a namespace with zero transactions.
-    ///
-    /// Currently this quantity equals the byte length of the tx table header.
-    pub const fn fixed_overhead_byte_len() -> usize {
+    /// Byte length of a tx table header.
+    pub const fn tx_table_header_byte_len() -> usize {
         NUM_TXS_BYTE_LEN
     }
 
-    /// Byte length added to a namespace by a new transaction beyond that
-    /// transaction's payload byte length.
-    ///
-    /// Currently this quantity equals the byte length of a single tx table
-    /// entry.
-    pub const fn tx_overhead_byte_len() -> usize {
+    /// Byte length of a single tx table entry.
+    pub const fn tx_table_entry_byte_len() -> usize {
         TX_OFFSET_BYTE_LEN
     }
 }

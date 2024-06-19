@@ -2,10 +2,12 @@ use crate::{
     api::{data_source::CatchupDataSource, AccountQueryData, BlocksFrontier},
     persistence::PersistenceOptions,
     state::{BlockMerkleTree, FeeAccount, FeeMerkleCommitment},
+    ChainConfig,
 };
 use anyhow::{bail, Context};
 use async_std::{sync::RwLock, task::sleep};
 use async_trait::async_trait;
+use committable::Commitment;
 use derive_more::From;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
@@ -141,6 +143,30 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
 
         Ok(())
     }
+
+    async fn try_fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig>;
+
+    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+        // Retry until we succeed.
+        let mut delay = MIN_RETRY_DELAY;
+
+        loop {
+            match self.try_fetch_chain_config(commitment).await {
+                Ok(cf) => return cf,
+                Err(err) => {
+                    tracing::warn!(
+                        ?delay,
+                        "Could not fetch chain config from any peer, retrying: {err:#}"
+                    );
+                    sleep(delay).await;
+                    delay = backoff(delay);
+                }
+            }
+        }
+    }
 }
 
 /// A catchup implementation that falls back to a remote provider, but prefers a local provider when
@@ -241,6 +267,28 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
         }
         bail!("Could not fetch frontier from any peer");
     }
+
+    async fn try_fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        for client in self.clients.iter() {
+            tracing::info!("Fetching chain config from {}", client.url);
+            match client
+                .get::<ChainConfig>(&format!("catchup/chain-config/{}", commitment))
+                .send()
+                .await
+            {
+                Ok(cf) => {
+                    return Ok(cf);
+                }
+                Err(err) => {
+                    tracing::warn!("Error fetching chain config from peer: {}", err);
+                }
+            }
+        }
+        bail!("Could not fetch chain config from any peer");
+    }
 }
 
 #[derive(Debug, From)]
@@ -291,6 +339,13 @@ where
             _ => bail!("invalid proof"),
         }
     }
+
+    async fn try_fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        self.db.read().await.get_chain_config(commitment).await
+    }
 }
 
 #[async_trait]
@@ -338,6 +393,17 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
     ) -> anyhow::Result<()> {
         (**self).remember_blocks_merkle_tree(height, view, mt).await
     }
+
+    async fn try_fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        (**self).try_fetch_chain_config(commitment).await
+    }
+
+    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+        (**self).fetch_chain_config(commitment).await
+    }
 }
 
 #[async_trait]
@@ -384,6 +450,17 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         (**self).remember_blocks_merkle_tree(height, view, mt).await
+    }
+
+    async fn try_fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        (**self).try_fetch_chain_config(commitment).await
+    }
+
+    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+        (**self).fetch_chain_config(commitment).await
     }
 }
 
@@ -433,6 +510,22 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
         }
 
         bail!("could not fetch account from any provider");
+    }
+
+    async fn try_fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        for provider in self {
+            match provider.try_fetch_chain_config(commitment).await {
+                Ok(cf) => return Ok(cf),
+                Err(err) => {
+                    tracing::warn!(?provider, "failed to fetch chain config: {err:#}");
+                }
+            }
+        }
+
+        bail!("could not fetch chain config from any provider");
     }
 }
 
@@ -495,6 +588,13 @@ pub mod mock {
                 .expect("Proof verifies");
 
             Ok(())
+        }
+
+        async fn try_fetch_chain_config(
+            &self,
+            _commitment: Commitment<ChainConfig>,
+        ) -> anyhow::Result<ChainConfig> {
+            Ok(ChainConfig::default())
         }
     }
 }

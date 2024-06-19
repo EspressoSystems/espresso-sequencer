@@ -122,13 +122,14 @@ async fn main() -> anyhow::Result<()> {
     )
     .unwrap();
 
+    let validated_state = ValidatedState::genesis(&instance_state).0;
+
     let api_response_timeout_duration = opt.max_api_timeout_duration;
 
     // make the txn timeout as 1/4 of the api_response_timeout_duration
     let txn_timeout_duration = api_response_timeout_duration / 4;
 
     let buffer_view_num_count = opt.buffer_view_num_count;
-    let validated_state = ValidatedState::genesis(&instance_state).0;
 
     let _builder_config = BuilderConfig::init(
         builder_key_pair,
@@ -136,12 +137,12 @@ async fn main() -> anyhow::Result<()> {
         opt.channel_capacity,
         opt.node_count,
         instance_state,
+        validated_state,
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,
         buffer_view_num_count,
         txn_timeout_duration,
-        validated_state,
     )
     .await;
 

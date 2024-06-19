@@ -25,7 +25,6 @@ use hotshot_builder_core::{
 };
 
 use hotshot_types::{
-    constants::{Version01, STATIC_VER_0_1},
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
@@ -82,12 +81,12 @@ impl BuilderConfig {
         channel_capacity: NonZeroUsize,
         node_count: NonZeroUsize,
         instance_state: NodeState,
+        validated_state: ValidatedState,
         hotshot_events_api_url: Url,
         hotshot_builder_apis_url: Url,
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
-        validated_state: ValidatedState,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
@@ -161,8 +160,7 @@ impl BuilderConfig {
                 .base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
-            Arc::new(instance_state),
-            Duration::from_secs(60),
+            Arc::new(instance_state), Duration::from_secs(60),
             Arc::new(validated_state),
         );
 
@@ -232,12 +230,10 @@ mod test {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
-    use hotshot_types::{
-        constants::{Version01, STATIC_VER_0_1},
-        traits::{
-            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
-            node_implementation::NodeType,
-        },
+    use hotshot_types::constants::Base;
+    use hotshot_types::traits::{
+        block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+        node_implementation::NodeType,
     };
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use sequencer::{
@@ -246,8 +242,7 @@ mod test {
             PersistenceOptions,
         },
         state::FeeAccount,
-        transaction::Transaction,
-        Payload,
+        NamespaceId, Payload, Transaction,
     };
     use std::time::Duration;
     use surf_disco::Client;
@@ -294,7 +289,7 @@ mod test {
         );
 
         // builder api url
-        let hotshot_builder_api_url = hotshot_config.config.builder_url.clone();
+        let hotshot_builder_api_url = hotshot_config.config.builder_urls[0].clone();
 
         let builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder(
             &hotshot_config,
@@ -306,7 +301,7 @@ mod test {
         let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
-        let builder_client = Client::<hotshot_builder_api::builder::Error, Version01>::new(
+        let builder_client = Client::<hotshot_builder_api::builder::Error, Base>::new(
             hotshot_builder_api_url.clone(),
         );
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
@@ -407,7 +402,7 @@ mod test {
             }
         }
 
-        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
+        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3]);
         match builder_client
             .post::<()>("txn_submit/submit")
             .body_json(&txn)

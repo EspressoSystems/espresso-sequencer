@@ -8,11 +8,13 @@
 //! an extension that node operators can opt into. This module defines the minimum level of
 //! persistence which is _required_ to run a node.
 
-use crate::{Leaf, NodeState, PubKey, SeqTypes, StateCatchup, ValidatedState, ViewNumber};
+use crate::{
+    ChainConfig, Leaf, NodeState, PubKey, SeqTypes, StateCatchup, ValidatedState, ViewNumber,
+};
 use anyhow::{bail, ensure, Context};
 use async_std::sync::Arc;
 use async_trait::async_trait;
-use committable::Committable;
+use committable::{Commitment, Committable};
 use hotshot::{
     traits::ValidatedState as _,
     types::{Event, EventType},
@@ -253,8 +255,18 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     ) -> anyhow::Result<()>;
 }
 
+#[async_trait]
+pub trait ChainConfigPersistence: Sized + Send + Sync + 'static {
+    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()>;
+    async fn load_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig>;
+}
+
 #[cfg(test)]
 mod testing {
+
     use super::*;
 
     #[async_trait]
@@ -271,7 +283,7 @@ mod testing {
 mod persistence_tests {
 
     use super::*;
-    use crate::{NodeState, Transaction};
+    use crate::NodeState;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
     use hotshot::types::BLSPubKey;
@@ -279,8 +291,6 @@ mod persistence_tests {
     use hotshot_types::traits::EncodeBytes;
     use hotshot_types::{event::HotShotAction, vid::vid_scheme};
     use jf_vid::VidScheme;
-    use rand::{RngCore, SeedableRng};
-    use sha2::{Digest, Sha256};
     use testing::TestablePersistence;
 
     #[async_std::test]
@@ -382,9 +392,11 @@ mod persistence_tests {
         );
 
         let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
-        let payload = leaf.block_payload().unwrap();
-        let bytes = payload.encode().to_vec();
-        let disperse = vid_scheme(2).disperse(bytes).unwrap();
+        let leaf_payload = leaf.block_payload().unwrap();
+        let leaf_payload_bytes_arc = leaf_payload.encode();
+        let disperse = vid_scheme(2)
+            .disperse(leaf_payload_bytes_arc.clone())
+            .unwrap();
         let (pubkey, privkey) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
         let signature = PubKey::sign(&privkey, &[]).unwrap();
         let mut vid = VidDisperseShare::<SeqTypes> {
@@ -439,18 +451,12 @@ mod persistence_tests {
             Some(vid_share3.clone())
         );
 
-        let mut seed = [0u8; 32];
-        let mut rng = rand_chacha::ChaChaRng::from_entropy();
-        rng.fill_bytes(&mut seed);
-
-        let tx = Transaction::random(&mut rng);
-        let tx_hash = Sha256::digest(tx.payload()).to_vec();
-        let block_payload_signature =
-            BLSPubKey::sign(&privkey, &tx_hash).expect("Failed to sign tx hash");
+        let block_payload_signature = BLSPubKey::sign(&privkey, &leaf_payload_bytes_arc)
+            .expect("Failed to sign block payload");
 
         let da_proposal_inner = DaProposal::<SeqTypes> {
-            encoded_transactions: Arc::from(tx_hash),
-            metadata: Default::default(),
+            encoded_transactions: leaf_payload_bytes_arc,
+            metadata: leaf_payload.ns_table().clone(),
             view_number: ViewNumber::new(1),
         };
 
