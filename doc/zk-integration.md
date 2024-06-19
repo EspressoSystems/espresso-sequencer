@@ -4,7 +4,7 @@
 
 > For more context and terminology about the architecture of Espresso, please read [README.md](../README.md).
 
-At a high level, ZK rollups produce blocks and periodically settle their new state on layer 1 (e.g. Ethereum), after
+At a high level ZK rollups produce blocks and periodically settle their new state on layer 1 (e.g. Ethereum), after
 applying all the transactions of this block to their current state. The time between two consecutive updates can vary,
 yet it is high enough in order to amortize gas costs for the rollup and thus offer low fees to end users. ZK rollups
 have the option to build their blocks by reading from HotShot, the Espresso consensus protocol, that produces blocks
