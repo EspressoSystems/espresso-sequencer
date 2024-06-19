@@ -295,13 +295,14 @@ pub fn validate_proposal(
             block_size: block_size.into(),
         });
     }
-
-    if proposal.fee_info.amount() < expected_chain_config.base_fee * block_size {
-        return Err(ProposalValidationError::InsufficientFee {
-            max_block_size: expected_chain_config.max_block_size,
-            base_fee: expected_chain_config.base_fee,
-            proposed_fee: proposal.fee_info.amount(),
-        });
+    for fee_info in proposal.fee_info.clone() {
+        if fee_info.amount() < expected_chain_config.base_fee * block_size {
+            return Err(ProposalValidationError::InsufficientFee {
+                max_block_size: expected_chain_config.max_block_size,
+                base_fee: expected_chain_config.base_fee,
+                proposed_fee: fee_info.amount(),
+            });
+        }
     }
 
     // validate height
@@ -360,11 +361,13 @@ impl From<MerkleTreeError> for FeeError {
 fn charge_fee(
     state: &mut ValidatedState,
     delta: &mut Delta,
-    fee_info: FeeInfo,
+    fee_info: FeeInfos,
     recipient: FeeAccount,
 ) -> Result<(), FeeError> {
-    state.charge_fee(fee_info, recipient)?;
-    delta.fees_delta.extend([fee_info.account, recipient]);
+    for fee_info in fee_info {
+        state.charge_fee(fee_info, recipient)?;
+        delta.fees_delta.extend([fee_info.account, recipient]);
+    }
     Ok(())
 }
 
@@ -373,8 +376,8 @@ fn charge_fee(
 pub enum BuilderValidationError {
     #[error("Builder signature not found")]
     SignatureNotFound,
-    #[error("Fee amount out of range: {0}")]
-    FeeAmountOutOfRange(FeeAmount),
+    #[error("Some fee amount out of range")]
+    FeeAmountOutOfRange,
     #[error("Invalid Builder Signature")]
     InvalidBuilderSignature,
 }
@@ -385,21 +388,39 @@ fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidatio
     let signature = proposed_header
         .builder_signature
         .ok_or(BuilderValidationError::SignatureNotFound)?;
-    let fee_amount = proposed_header.fee_info.amount().as_u64().ok_or(
-        BuilderValidationError::FeeAmountOutOfRange(proposed_header.fee_info.amount()),
-    )?;
 
-    // verify signature
-    if !proposed_header.fee_info.account.validate_fee_signature(
-        &signature,
-        fee_amount,
-        proposed_header.metadata(),
-        &proposed_header.payload_commitment(),
-    ) {
-        return Err(BuilderValidationError::InvalidBuilderSignature);
-    }
+    // TODO remove
+    // At some point I thought we would need to sum the amounts
+    // let fee_amount = proposed_header
+    //     .fee_info
+    //     .amount()
+    //     // if so `amount()` should return `Result`
+    //     .ok_or(BuilderValidationError::FeeAmountOutOfRange)?;
 
-    Ok(())
+    // verify signatures
+    // TODO since we are iterating, should we include account/amount in errors?
+    proposed_header
+        .fee_info
+        .clone()
+        .map(|fee_info| {
+            fee_info
+                .amount
+                .as_u64()
+                .ok_or(BuilderValidationError::FeeAmountOutOfRange)
+                .and_then(|amount| {
+                    fee_info
+                        .account
+                        .validate_fee_signature(
+                            &signature,
+                            amount,
+                            proposed_header.metadata(),
+                            &proposed_header.payload_commitment(),
+                        )
+                        .then_some(())
+                        .ok_or(BuilderValidationError::InvalidBuilderSignature)
+                })
+        })
+        .collect()
 }
 
 async fn compute_state_update(
@@ -707,9 +728,16 @@ impl ValidatedState {
         // fee and the recipient account which is receiving it, plus any counts receiving deposits
         // in this block.
         let missing_accounts = self.forgotten_accounts(
-            [proposed_header.fee_info.account, chain_config.fee_recipient]
-                .into_iter()
-                .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
+            [
+                proposed_header.fee_info.accounts(),
+                vec![chain_config.fee_recipient],
+                l1_deposits
+                    .iter()
+                    .map(|fee_info| fee_info.account)
+                    .collect(),
+            ]
+            .into_iter()
+            .flatten(),
         );
 
         let parent_height = parent_leaf.height();
@@ -770,7 +798,7 @@ impl ValidatedState {
         charge_fee(
             &mut validated_state,
             &mut delta,
-            proposed_header.fee_info,
+            proposed_header.fee_info.clone(),
             chain_config.fee_recipient,
         )?;
 
@@ -1024,6 +1052,75 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for BlockMerkleTree {
         };
         self.remember(key, elem, proof)?;
         Ok(())
+    }
+}
+#[derive(
+    Hash,
+    Clone,
+    Default,
+    Debug,
+    Deserialize,
+    Serialize,
+    PartialEq,
+    Eq,
+    CanonicalSerialize,
+    CanonicalDeserialize,
+)]
+pub struct FeeInfos(Vec<FeeInfo>);
+impl FeeInfos {
+    pub fn new() -> Self {
+        Self(vec![])
+    }
+    pub fn accounts(&self) -> Vec<FeeAccount> {
+        self.0.iter().map(|entry| entry.account).collect()
+    }
+    pub fn iter(&self) -> std::slice::Iter<'_, FeeInfo> {
+        self.0.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, FeeInfo> {
+        self.0.iter_mut()
+    }
+    /// Sum of entry amounts
+    pub fn amount(&self) -> Option<u64> {
+        self.iter()
+            .map(|fee_info| fee_info.amount.as_u64())
+            .collect::<Option<Vec<u64>>>()
+            .and_then(|amounts| amounts.iter().try_fold(0u64, |acc, n| acc.checked_add(*n)))
+    }
+    pub fn genesis() -> Self {
+        Self(vec![FeeInfo::genesis()])
+    }
+}
+// TODO this is likely completely wrong
+impl Committable for FeeInfos {
+    fn commit(&self) -> Commitment<Self> {
+        let bytes: Vec<Commitment<FeeInfo>> = self
+            .clone()
+            .into_iter()
+            .map(|fee_info| fee_info.commit())
+            .collect();
+        RawCommitmentBuilder::new(&Self::tag())
+            // TODO verify we want `var_size_bytes`
+            .var_size_bytes(&bincode::serialize(&bytes).unwrap())
+            .finalize()
+    }
+    fn tag() -> String {
+        "FEE_INFOS".into()
+    }
+}
+
+impl From<Vec<FeeInfo>> for FeeInfos {
+    fn from(items: Vec<FeeInfo>) -> Self {
+        Self(items)
+    }
+}
+
+impl Iterator for FeeInfos {
+    type Item = FeeInfo;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.clone().into_iter().next()
     }
 }
 
