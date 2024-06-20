@@ -9,19 +9,19 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::election::static_committee::GeneralStaticCommittee,
-    types::{Event, SystemContextHandle},
+    traits::{election::static_committee::GeneralStaticCommittee, BlockPayload},
+    types::{Event, EventType, SystemContextHandle},
     Memberships, Networks, SystemContext,
 };
-use hotshot_orchestrator::client::OrchestratorClient;
+use hotshot_orchestrator::client::{BenchResults, OrchestratorClient};
 use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
-    traits::{election::Membership, metrics::Metrics},
+    traits::{block_contents::BlockHeader, election::Membership, metrics::Metrics},
     HotShotConfig,
 };
-use std::fmt::Display;
+use std::{fmt::Display, time::Instant};
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -251,7 +251,93 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 .await;
         }
         tracing::warn!("starting consensus");
+        let start = Instant::now();
         self.handle.read().await.hotshot.start_consensus().await;
+
+        let mut event_stream = self.event_stream().await;
+        let mut num_successful_commits = 0;
+        let mut total_transactions_committed = 0;
+        let node_index = self.node_state().node_id;
+        loop {
+            match event_stream.next().await {
+                None => {
+                    panic!("Error! Event stream completed before consensus ended.");
+                }
+                Some(Event { event, .. }) => {
+                    match event {
+                        EventType::Error { error } => {
+                            tracing::error!("Error in consensus: {:?}", error);
+                        }
+                        EventType::Decide {
+                            leaf_chain,
+                            qc: _,
+                            block_size,
+                        } => {
+                            if let Some(leaf_info) = leaf_chain.first() {
+                                let leaf = &leaf_info.leaf;
+                                tracing::info!("Decide event for leaf: {}", *leaf.view_number());
+
+                                // iterate all the decided transactions
+                                // Sishan TODO: to calculate latency
+                                if let Some(block_payload) = &leaf.block_payload() {
+                                    for tx in
+                                        block_payload.transactions(leaf.block_header().metadata())
+                                    {
+                                        println!("tx = {:?}", tx);
+                                    }
+                                }
+                            }
+
+                            if let Some(size) = block_size {
+                                total_transactions_committed += size;
+                            }
+
+                            num_successful_commits += leaf_chain.len();
+                            if num_successful_commits % 100 == 0 {
+                                let bench_results: BenchResults;
+                                println!("[{node_index}]: {num_successful_commits} rounds completed - Total transactions committed: {total_transactions_committed}");
+                                if num_successful_commits == 100 {
+                                    if total_transactions_committed != 0 {
+                                        let total_time_elapsed = start.elapsed(); // in seconds
+                                        let total_time_elapsed_sec =
+                                            std::cmp::max(total_time_elapsed.as_secs(), 1u64);
+                                        let throughput_bytes_per_sec = total_transactions_committed
+                                        * 8 //Sishan TODO: transaction_size_in_bytes
+                                        / total_time_elapsed_sec;
+                                        // Sishan TODO: for latency and failed view number
+                                        bench_results = BenchResults {
+                                            avg_latency_in_sec: 0,
+                                            num_latency: 1,
+                                            minimum_latency_in_sec: 0,
+                                            maximum_latency_in_sec: 0,
+                                            throughput_bytes_per_sec,
+                                            total_transactions_committed,
+                                            transaction_size_in_bytes: 8, //transaction_size_in_bytes,
+                                            total_time_elapsed_in_sec: total_time_elapsed.as_secs(),
+                                            total_num_views: 100,
+                                            failed_num_views: 0,
+                                        };
+                                    } else {
+                                        bench_results = BenchResults::default();
+                                    }
+                                    if let Some(orchestrator_client) = &self.wait_for_orchestrator {
+                                        orchestrator_client.post_bench_results(bench_results).await;
+                                    }
+                                }
+                            }
+                            if leaf_chain.len() > 1 {
+                                tracing::warn!(
+                                    "Leaf chain is greater than 1 with len {}",
+                                    leaf_chain.len()
+                                );
+                            }
+                            // when we make progress, submit new events
+                        }
+                        _ => {} // mostly DA proposal
+                    }
+                }
+            }
+        }
     }
 
     /// Spawn a background task attached to this context.
