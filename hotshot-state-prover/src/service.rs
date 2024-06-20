@@ -397,10 +397,11 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
     config: StateProverConfig,
     bind_version: Ver,
 ) -> Result<()> {
-    tracing::info!("Stake table capacity: {}", config.stake_table_capacity);
+    let stake_table_capacity = config.stake_table_capacity;
+    tracing::info!("Stake table capacity: {}", stake_table_capacity);
     // TODO(#1022): maintain the following stake table
     let st = Arc::new(
-        init_stake_table_from_sequencer(&config.sequencer_url, config.stake_table_capacity)
+        init_stake_table_from_sequencer(&config.sequencer_url, stake_table_capacity)
             .await
             .with_context(|| "Failed to initialize stake table")?,
     );
@@ -416,7 +417,6 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
         }
     }
 
-    let stake_table_capacity = config.stake_table_capacity;
     let proving_key =
         spawn_blocking(move || Arc::new(load_proving_key(stake_table_capacity))).await;
 

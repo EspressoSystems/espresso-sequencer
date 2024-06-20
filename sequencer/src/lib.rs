@@ -567,6 +567,7 @@ pub mod testing {
         eth_signature_key::EthKeyPair,
         persistence::no_storage::{self, NoStorage},
     };
+    use api::test_helpers::TestNetworkUpgrades;
     use committable::Committable;
     use futures::{
         future::join_all,
@@ -611,10 +612,13 @@ pub mod testing {
     #[derive(Clone)]
     pub struct TestConfig {
         config: HotShotConfig<PubKey>,
-        priv_keys: Vec<BLSPrivKey>,
-        state_key_pairs: Vec<StateKeyPair>,
-        master_map: Arc<MasterMap<PubKey>>,
-        url: Url,
+        pub priv_keys: Vec<BLSPrivKey>,
+        pub state_key_pairs: Vec<StateKeyPair>,
+        pub master_map: Arc<MasterMap<PubKey>>,
+        pub url: Url,
+        pub state_relay_url: Option<Url>,
+        pub builder_port: Option<u16>,
+        pub upgrades: Option<TestNetworkUpgrades>,
     }
 
     impl Default for TestConfig {
@@ -680,6 +684,9 @@ pub mod testing {
                 state_key_pairs,
                 master_map,
                 url: "http://localhost:8545".parse().unwrap(),
+                state_relay_url: None,
+                builder_port: None,
+                upgrades: None,
             }
         }
     }
@@ -697,6 +704,10 @@ pub mod testing {
 
         pub fn set_builder_urls(&mut self, builder_urls: vec1::Vec1<Url>) {
             self.config.builder_urls = builder_urls;
+        }
+
+        pub fn set_state_relay_url(&mut self, url: Url) {
+            self.state_relay_url = Some(url);
         }
 
         pub fn default_with_l1(l1: Url) -> Self {
@@ -739,12 +750,10 @@ pub mod testing {
             .await
         }
 
-        pub fn stake_table(
-            &self,
-            stake_table_capacity: usize,
-        ) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
-            let mut st =
-                StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(stake_table_capacity);
+        pub fn stake_table(&self) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
+            let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(
+                STAKE_TABLE_CAPACITY_FOR_TEST as usize,
+            );
             self.config
                 .known_nodes_with_stake
                 .iter()
@@ -818,7 +827,7 @@ pub mod testing {
                 node_state,
                 persistence_opt.create().await.unwrap(),
                 networks,
-                None,
+                self.state_relay_url.clone(),
                 metrics,
                 stake_table_capacity,
                 bind_version,
