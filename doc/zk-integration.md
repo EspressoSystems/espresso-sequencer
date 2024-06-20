@@ -167,8 +167,9 @@ The circuit depicted in Figure 2 operates as follows:
 
 - The _Collect & Filter_ gadget receives as input _blk_cm_new_ which is the commitment to the latest Espresso block
   available and _blk_cm_old_. Both of these commitments are public inputs. The first witness of this circuit is
-  _cm_txs_history_ESP_ which is a commitment to all the rollup transactions that have been sequenced since the last
-  Espresso state update _blk_cm_old_. The relationship between _blk_cm_new_, _blk_cm_old_, and _cm_txs_history_ can be
+  _cm_txs_history_ which is a commitment to all the rollup transactions that have been sequenced since the last Espresso
+  state update _blk_cm_old_ (_cm_txs_history_ is a rollup-specific commitment, so each rollup's prover must compute this
+  commitment in order to proceed.). The relationship between _blk_cm_new_, _blk_cm_old_, and _cm_txs_history_ can be
   checked using a second witness _proof_txs_history_. This gadget is required in order to ensure that for each Espresso
   block in the range defined by _blk_cm_old_ and _blk_cm_new_, the transactions applied to the rollup state correspond
   to the rollup namespace. The value _proof_txs_history_ contains a list of namespace proofs, one for each Espresso
