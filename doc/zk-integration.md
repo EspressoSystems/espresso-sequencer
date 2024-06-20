@@ -151,7 +151,7 @@ contract RollupContract {
 ## Integration 1: Rollup contract fetches Espresso block commitment from the Espresso light client contract
 
 For this integration, Espresso consensus verification is delegated to the Espresso light client contract. In practice
-the rollup contract will be given the last Espresso block commitment and feed it to the circuit. Still additional
+the rollup contract will be given some recent Espresso block commitment[^1] and feed it to the circuit. Still additional
 gadgets need to be introduced in order to implement the derivation pipeline logic consisting at a high level of:
 
 - Collecting all the Espresso commitments since the last update.
@@ -263,3 +263,7 @@ contract RollupContract2 is RollupContract {
   }
 }
 ```
+
+[^1]:
+    Note that the rollup state is updated at a much lower frequency (in the order of minutes / hours) than the Espresso
+    state (in the order of seconds).
