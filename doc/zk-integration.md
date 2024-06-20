@@ -7,14 +7,13 @@
 At a high level ZK rollups produce blocks and periodically settle their new state on layer 1 (e.g. Ethereum), after
 applying all the transactions of such blocks to their current state. The time between two consecutive updates can vary,
 yet it is high enough in order to amortize gas costs for the rollup and thus offer low fees to end users. ZK rollups
-have the option to build their blocks by reading from HotShot, the Espresso consensus protocol, that produces blocks
-containing transactions from multiple rollups. In this setting each rollup is identified by an identifier called
-_namespace_. Moreover, Espresso _finality gadget_ produces a piece of authenticated data that guarantees that a specific
-state of the Espresso ledger will not be reverted. ZK rollups can leverage this finality gadget and a scheme to filter
-transactions by namespace in order to prove their source of transactions is notarized by Espresso finality gadget. Note
-that in this document we will not refer to the Espresso marketplace that allows rollups to sell their sequencing rights
-to other parties. Hence, in the following we focus only on the interaction between the rollup and the Espresso consensus
-protocol once some Espresso block is appended to the ledger.
+have the option to participate in Espresso's marketplace for rollup sequencers. This marketplace can produce blocks
+simultaneously for multiple rollups. In this context each rollup assigns itself an identifier called a _namespace_. Each
+rollup uses its namespace identifier to extract its own rollup-specific transactions from the Espresso ledger, along
+with a succinct proof of inclusion of these transactions in the Espresso ledger. Participation in the Espresso
+marketplace has many benefits for rollups, which we discuss
+[elsewhere](https://hackmd.io/@EspressoSystems/market-design) . In this document we focus on how a zk rollup might
+integrate with the Espresso marketplace.
 
 ## Integration approaches
 
