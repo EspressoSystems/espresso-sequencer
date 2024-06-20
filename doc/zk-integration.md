@@ -55,7 +55,7 @@ list of transactions.
 
 ## Rollup Contract
 
-The rollup contract allows rollups to settle their state on layer 1 (Ethereum) via the verification of a snark proof.
+Each zk rollup already has its own contract on the L1 (Ethereum) that allows the rollup to settle its state to the L1 via verification of a snark proof.
 The abstract version of this contract is sketched below. In addition to contract variables and a constructor, it
 contains a function `isEscapeHatchActivated` which allows to detect whether the Espresso consensus protocol is live or
 not. In case liveness is lost, the rollup can update its state without reading from the Espresso ledger by calling the
