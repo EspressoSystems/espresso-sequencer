@@ -9,12 +9,12 @@ applying all the transactions of such blocks to their current state. The time be
 yet it is high enough in order to amortize gas costs for the rollup and thus offer low fees to end users. ZK rollups
 have the option to build their blocks by reading from HotShot, the Espresso consensus protocol, that produces blocks
 containing transactions from multiple rollups. In this setting each rollup is identified by an identifier called
-_namespace_. Moreover, HotShot generates an authenticated piece of data, the _finality gadget_, that guarantees that a
+_namespace_. Moreover, HotShot's _finality gadget_ produces a piece of authenticated data that guarantees that a
 specific state of the Espresso ledger will not be reverted. ZK rollups can leverage this finality gadget and a scheme to
 filter transactions by namespace in order to prove their source of transactions is the Espresso ledger. Note that in
-this document we will not refer to the Espresso market place that allows rollups to sell their sequencing rights to
-other parties. Hence, in the following we focus only on the interaction between the rollup and the Espresso consensus
-protocol once some Espresso block is appended the ledger.
+this document we will not refer to the Espresso marketplace that allows rollups to sell their sequencing rights to other
+parties. Hence, in the following we focus only on the interaction between the rollup and the Espresso consensus protocol
+once some Espresso block is appended the ledger.
 
 ## Integration approaches
 
