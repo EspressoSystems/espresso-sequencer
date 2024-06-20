@@ -65,11 +65,11 @@ hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" 
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
   "runtime-async-std",
   "global-permits",
-], tag = "0.3.12", package = "cdn-broker" }
+], tag = "0.4.0", package = "cdn-broker" }
 cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
   "runtime-async-std",
   "global-permits",
-], tag = "0.3.12", package = "cdn-marshal" }
+], tag = "0.4.0", package = "cdn-marshal" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
   "test-apis",
@@ -97,7 +97,7 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4
   "std",
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
-libp2p = { version = "0.53", default-features = false } 
+libp2p = { version = "0.53", default-features = false }
 snafu = "0.8"
 strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.8"
