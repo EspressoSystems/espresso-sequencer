@@ -14,7 +14,7 @@ state of the Espresso ledger will not be reverted. ZK rollups can leverage this 
 transactions by namespace in order to prove their source of transactions is notarized by Espresso finality gadget. Note
 that in this document we will not refer to the Espresso marketplace that allows rollups to sell their sequencing rights
 to other parties. Hence, in the following we focus only on the interaction between the rollup and the Espresso consensus
-protocol once some Espresso block is appended the ledger.
+protocol once some Espresso block is appended to the ledger.
 
 ## Integration approaches
 
