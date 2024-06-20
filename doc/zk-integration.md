@@ -222,20 +222,7 @@ Filter_, and _COMMs Equivalence_. Private inputs of the circuit are written in b
 The circuit depicted in Figure 3 operates as follows:
 
 - The _Espresso Consensus_ gadget checks that the block commitment for Espresso block _BLOCK_NUMBER_ is `blk_cm`, using
-  the multi-signature _STATE_SIGS_.
-- The _Collect & Filter_ gadget receives as input `blk_cm_new` which is the commitment to the latest Espresso block
-  available and `blk_cm_old`. Both of these commitments are public inputs. The first witness of this circuit is
-  `cm_txs_history` which is a commitment to all the rollup transactions that have been sequenced since the last Espresso
-  state update `blk_cm_old`. The relationship between `blk_cm`, `blk_cm_old`, and `cm_txs_history` can be checked using
-  a second witness _PROOF_TXS_HISTORY_.
-- The _COMMs Equivalence_ gadget checks that using the same rollup inputs _ROLLUP_TXS_, we obtain `cm_txs_history` using
-  the Espresso commitment scheme for representing a set of transactions and the commitment `cm_txs_rollups` that is used
-  the by _zkVM_ gadget.
-- The zkVM gadget is the original gadget of the rollup circuit that proves a correct transition from state
-  `cm_state_vm i` to the next state `cm_state_vm i+1` when applying the transactions represented by the commitment value
-  `cm_txs_rollup`.
-- These three gadgets above return a boolean: true if the verification succeeds and false otherwise.
-- For the circuit to accept, all these gadget outputs must be true, and thus we add an _AND_ gate.
+  the multi-signature _STATE_SIGS_. The other gadgets are the same as in Integration 1.
 
 The pseudocode of the rollup contract below shows that in the case we do not rely on the Espresso light client contract
 to fetch the Espresso state, the function `updateRollupState` requires additional inputs (compared to Integration 1)
