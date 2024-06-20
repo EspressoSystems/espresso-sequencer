@@ -185,7 +185,7 @@ The circuit depicted in Figure 2 operates as follows:
   Equivalence_ gadget.
 - The _zkVM_ gadget is the original gadget of the rollup circuit that proves a correct transition from state
   _cm_state_vm i_ to the next state _cm_state_vm i+1_ when applying the transactions represented by the commitment value
-  _COMM_TXS_ROLLUP_.
+  _cm_txs_rollup_.
 - These three gadgets above return a boolean: true if the verification succeeds and false otherwise.
 - For the circuit to accept, all these gadget outputs must be true, and thus we add an _AND_ gate.
 
