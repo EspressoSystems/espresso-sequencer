@@ -44,7 +44,7 @@ use hotshot_orchestrator::{
     },
 };
 use hotshot_testing::block_builder::{
-    RandomBuilderImplementation, SimpleBuilderConfig, SimpleBuilderImplementation,
+    BuilderTask, RandomBuilderImplementation, SimpleBuilderImplementation,
     TestBuilderImplementation,
 };
 use hotshot_types::{
@@ -62,7 +62,7 @@ use hotshot_types::{
 };
 use rand::{rngs::StdRng, SeedableRng};
 use surf_disco::Url;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone)]
 /// Arguments passed to the orchestrator
@@ -153,7 +153,7 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (NetworkConfig<TYPES:
         )
         .arg(
             Arg::new("commit_sha")
-                .short('m')
+                .short('h')
                 .long("commit_sha")
                 .value_name("SHA")
                 .help("Sets the commit sha to output in the results")
@@ -198,6 +198,14 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (NetworkConfig<TYPES:
                 .value_name("BUILDER_TYPE")
                 .value_parser(value_parser!(BuilderType))
                 .help("Sets type of builder. `simple` or `random` to run corresponding integrated builder, `external` to use the one specified by `[config.builder_url]` in config")
+                .required(false),
+        )
+        .arg(
+            Arg::new("cdn_marshal_address")
+                .short('m')
+                .long("cdn_marshal_address")
+                .value_name("URL")
+                .help("Sets the url for cdn_broker_marshal_endpoint")
                 .required(false),
         )
         .get_matches();
@@ -263,6 +271,9 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (NetworkConfig<TYPES:
     if let Some(builder_type) = matches.get_one::<BuilderType>("builder") {
         config.builder = *builder_type;
     }
+    if let Some(cdn_marshal_address_string) = matches.get_one::<String>("cdn_marshal_address") {
+        config.cdn_marshal_address = Some(cdn_marshal_address_string.to_string());
+    }
 
     (config, orchestrator_url)
 }
@@ -309,7 +320,7 @@ pub async fn run_orchestrator<TYPES: NodeType>(
     let _ = hotshot_orchestrator::run_orchestrator::<TYPES::SignatureKey>(config, url).await;
 }
 
-/// Helper function to calculate the nuymber of transactions to send per node per round
+/// Helper function to calculate the number of transactions to send per node per round
 #[allow(clippy::cast_possible_truncation)]
 fn calculate_num_tx_per_round(
     node_index: u64,
@@ -337,7 +348,7 @@ where
     let mut txn_rng = StdRng::seed_from_u64(node_index);
     let mut transactions = Vec::new();
 
-    for round in 0..rounds {
+    for _ in 0..rounds {
         for _ in 0..transactions_to_send_per_round {
             let txn = <TYPES::ValidatedState>::create_random_transaction(
                 None,
@@ -345,12 +356,7 @@ where
                 transaction_size as u64,
             );
 
-            // prepend destined view number to transaction
-            let view_execute_number: u64 = round as u64 + 4;
-            let mut bytes = txn.into_bytes();
-            bytes[0..8].copy_from_slice(&view_execute_number.to_be_bytes());
-
-            transactions.push(TestTransaction::new(bytes));
+            transactions.push(txn);
         }
     }
     transactions
@@ -544,6 +550,7 @@ pub trait RunDa<
 
                             if let Some(size) = block_size {
                                 total_transactions_committed += size;
+                                debug!("[{node_index}] got block with size: {:?}", size);
                             }
 
                             num_successful_commits += leaf_chain.len();
@@ -587,6 +594,7 @@ pub trait RunDa<
             let avg_latency_in_sec = total_latency / num_latency;
             println!("[{node_index}]: throughput: {throughput_bytes_per_sec} bytes/sec, avg_latency: {avg_latency_in_sec} sec.");
             BenchResults {
+                partial_results: "Unset".to_string(),
                 avg_latency_in_sec,
                 num_latency,
                 minimum_latency_in_sec: minimum_latency,
@@ -952,35 +960,24 @@ pub async fn main_entry_point<
     .await
     .expect("failed to get config");
 
-    let builder_task = match run_config.builder {
-        BuilderType::External => None,
-        BuilderType::Random => {
-            let (builder_task, builder_url) =
-                <RandomBuilderImplementation as TestBuilderImplementation<TYPES>>::start(
-                    run_config.config.num_nodes_with_stake.into(),
-                    run_config.random_builder.clone().unwrap_or_default(),
-                    HashMap::new(),
-                )
-                .await;
+    let builder_task = initialize_builder(&mut run_config, &args, &orchestrator_client).await;
 
-            run_config.config.builder_urls = vec1::vec1![builder_url];
+    run_config.config.builder_urls = orchestrator_client
+        .get_builder_addresses()
+        .await
+        .try_into()
+        .expect("Orchestrator didn't provide any builder addresses");
 
-            Some(builder_task)
-        }
-        BuilderType::Simple => {
-            let (builder_task, builder_url) =
-                <SimpleBuilderImplementation as TestBuilderImplementation<TYPES>>::start(
-                    run_config.config.num_nodes_with_stake.into(),
-                    SimpleBuilderConfig::default(),
-                    HashMap::new(),
-                )
-                .await;
-
-            run_config.config.builder_urls = vec1::vec1![builder_url];
-
-            Some(builder_task)
-        }
-    };
+    debug!(
+        "Assigned urls from orchestrator: {}",
+        run_config
+            .config
+            .builder_urls
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<String>>()
+            .join(",")
+    );
 
     info!("Initializing networking");
     let run = RUNDA::initialize_networking(run_config.clone(), args.advertise_address).await;
@@ -1032,4 +1029,103 @@ pub async fn main_entry_point<
         )
         .await;
     orchestrator_client.post_bench_results(bench_results).await;
+}
+
+/// Sets correct builder_url and registers a builder with orchestrator if this node is running one.
+/// Returns a `BuilderTask` if this node is going to be running a builder.
+async fn initialize_builder<
+    TYPES: NodeType<
+        Transaction = TestTransaction,
+        BlockHeader = TestBlockHeader,
+        InstanceState = TestInstanceState,
+    >,
+>(
+    run_config: &mut NetworkConfig<<TYPES as NodeType>::SignatureKey>,
+    args: &ValidatorArgs,
+    orchestrator_client: &OrchestratorClient,
+) -> Option<Box<dyn BuilderTask<TYPES>>>
+where
+    <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
+    <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
+    Leaf<TYPES>: TestableLeaf,
+{
+    if !run_config.config.my_own_validator_config.is_da {
+        return None;
+    }
+
+    let advertise_urls: Vec<Url>;
+    let bind_address: Url;
+
+    match args.builder_address {
+        None => {
+            let port = portpicker::pick_unused_port().expect("Failed to pick an unused port");
+            advertise_urls = local_ip_address::list_afinet_netifas()
+                .expect("Couldn't get list of local IP addresses")
+                .into_iter()
+                .map(|(_name, ip)| ip)
+                .filter(|ip| !ip.is_loopback())
+                .map(|ip| match ip {
+                    IpAddr::V4(addr) => Url::parse(&format!("http://{addr}:{port}")).unwrap(),
+                    IpAddr::V6(addr) => Url::parse(&format!("http://[{addr}]:{port}")).unwrap(),
+                })
+                .collect();
+            bind_address = Url::parse(&format!("http://0.0.0.0:{port}")).unwrap();
+        }
+        Some(ref addr) => {
+            bind_address = Url::parse(&format!("http://{addr}")).expect("Valid URL");
+            advertise_urls = vec![bind_address.clone()];
+        }
+    }
+
+    match run_config.builder {
+        BuilderType::External => None,
+        BuilderType::Random => {
+            let builder_task =
+                <RandomBuilderImplementation as TestBuilderImplementation<TYPES>>::start(
+                    run_config.config.num_nodes_with_stake.into(),
+                    bind_address,
+                    run_config.random_builder.clone().unwrap_or_default(),
+                    HashMap::new(),
+                )
+                .await;
+
+            orchestrator_client
+                .post_builder_addresses(advertise_urls)
+                .await;
+
+            Some(builder_task)
+        }
+        BuilderType::Simple => {
+            let builder_task =
+                <SimpleBuilderImplementation as TestBuilderImplementation<TYPES>>::start(
+                    run_config.config.num_nodes_with_stake.into(),
+                    bind_address,
+                    (),
+                    HashMap::new(),
+                )
+                .await;
+
+            orchestrator_client
+                .post_builder_addresses(advertise_urls)
+                .await;
+
+            Some(builder_task)
+        }
+    }
+}
+
+/// Base port for validator
+pub const VALIDATOR_BASE_PORT: u16 = 8000;
+/// Base port for builder
+pub const BUILDER_BASE_PORT: u16 = 9000;
+
+/// Generate a local address for node with index `node_index`, offsetting from port `BASE_PORT`.
+/// # Panics
+/// If `node_index` is too large to fit in a `u16`
+#[must_use]
+pub fn gen_local_address<const BASE_PORT: u16>(node_index: usize) -> SocketAddr {
+    SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::LOCALHOST),
+        BASE_PORT + (u16::try_from(node_index).expect("node index too large")),
+    )
 }

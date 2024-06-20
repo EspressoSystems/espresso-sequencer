@@ -1,4 +1,4 @@
-//! A multi-validator using both the web server libp2p
+//! A multi validator
 use async_compatibility_layer::{
     art::async_spawn,
     logging::{setup_backtrace, setup_logging},

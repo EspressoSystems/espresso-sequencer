@@ -27,7 +27,7 @@ pub mod random;
 pub use random::RandomBuilderImplementation;
 
 pub mod simple;
-pub use simple::{SimpleBuilderConfig, SimpleBuilderImplementation};
+pub use simple::SimpleBuilderImplementation;
 
 #[async_trait]
 pub trait TestBuilderImplementation<TYPES: NodeType>
@@ -38,9 +38,10 @@ where
 
     async fn start(
         num_storage_nodes: usize,
+        url: Url,
         options: Self::Config,
         changes: HashMap<u64, BuilderChange>,
-    ) -> (Box<dyn BuilderTask<TYPES>>, Url);
+    ) -> Box<dyn BuilderTask<TYPES>>;
 }
 
 pub trait BuilderTask<TYPES: NodeType>: Send + Sync {

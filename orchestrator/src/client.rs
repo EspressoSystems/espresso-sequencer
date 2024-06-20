@@ -22,6 +22,8 @@ pub struct OrchestratorClient {
 /// Struct describing a benchmark result
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct BenchResults {
+    /// Whether it's partial collected results
+    pub partial_results: String,
     /// The average latency of the transactions
     pub avg_latency_in_sec: i64,
     /// The number of transactions that were latency measured
@@ -48,7 +50,7 @@ impl BenchResults {
     /// printout the results of one example run
     pub fn printout(&self) {
         println!("=====================");
-        println!("Benchmark results:");
+        println!("{0} Benchmark results:", self.partial_results);
         println!(
             "Average latency: {} seconds, Minimum latency: {} seconds, Maximum latency: {} seconds",
             self.avg_latency_in_sec, self.minimum_latency_in_sec, self.maximum_latency_in_sec
@@ -76,6 +78,8 @@ pub struct BenchResultsDownloadConfig {
     pub total_nodes: usize,
     /// The size of the da committee
     pub da_committee_size: usize,
+    /// The number of fixed_leader_for_gpuvid when we enable the feature [fixed-leader-election]
+    pub fixed_leader_for_gpuvid: usize,
     /// Number of transactions submitted per round
     pub transactions_per_round: usize,
     /// The size of each transaction in bytes
@@ -84,7 +88,13 @@ pub struct BenchResultsDownloadConfig {
     pub rounds: usize,
     /// The type of leader election: static, fixed, random
     pub leader_election_type: String,
+
     // Results starting here
+    /// Whether the results are partially collected
+    /// "One" when the results are collected for one node
+    /// "Half" when the results are collecte for half running nodes if not all nodes terminate successfully
+    /// "Full" if the results are successfully collected from all nodes
+    pub partial_results: String,
     /// The average latency of the transactions
     pub avg_latency_in_sec: i64,
     /// The minimum latency of the transactions
@@ -116,6 +126,8 @@ pub struct ValidatorArgs {
     pub url: Url,
     /// The optional advertise address to use for Libp2p
     pub advertise_address: Option<SocketAddr>,
+    /// Optional address to run builder on. Address must be accessible by other nodes
+    pub builder_address: Option<SocketAddr>,
     /// An optional network config file to save to/load from
     /// Allows for rejoining the network on a complete state loss
     #[arg(short, long)]
@@ -166,6 +178,7 @@ impl ValidatorArgs {
         Self {
             url: multi_args.url,
             advertise_address: multi_args.advertise_address,
+            builder_address: None,
             network_config_file: multi_args
                 .network_config_file
                 .map(|s| format!("{s}-{node_index}")),
@@ -295,6 +308,51 @@ impl OrchestratorClient {
         // Loop until successful
         self.wait_for_fn_from_orchestrator(get_config_after_collection)
             .await
+    }
+
+    /// Registers a builder URL with the orchestrator
+    ///
+    /// # Panics
+    /// if unable to serialize `address`
+    pub async fn post_builder_addresses(&self, addresses: Vec<Url>) {
+        let send_builder_f = |client: Client<ClientError, OrchestratorVersion>| {
+            let request_body = vbs::Serializer::<Base>::serialize(&addresses)
+                .expect("Failed to serialize request");
+
+            async move {
+                let result: Result<_, ClientError> = client
+                    .post("api/builder")
+                    .body_binary(&request_body)
+                    .unwrap()
+                    .send()
+                    .await
+                    .inspect_err(|err| tracing::error!("{err}"));
+                result
+            }
+            .boxed()
+        };
+        self.wait_for_fn_from_orchestrator::<_, _, ()>(send_builder_f)
+            .await;
+    }
+
+    /// Requests a builder URL from orchestrator
+    pub async fn get_builder_addresses(&self) -> Vec<Url> {
+        // Define the request for post-register configurations
+        let get_builder = |client: Client<ClientError, OrchestratorVersion>| {
+            async move {
+                let result = client.get("api/builders").send().await;
+
+                if let Err(ref err) = result {
+                    tracing::error!("{err}");
+                }
+
+                result
+            }
+            .boxed()
+        };
+
+        // Loop until successful
+        self.wait_for_fn_from_orchestrator(get_builder).await
     }
 
     /// Sends my public key to the orchestrator so that it can collect all public keys

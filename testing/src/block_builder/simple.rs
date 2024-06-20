@@ -76,38 +76,24 @@ impl SimpleBuilderImplementation {
     }
 }
 
-/// Configuration for `SimpleBuilder`
-pub struct SimpleBuilderConfig {
-    pub port: u16,
-}
-
-impl Default for SimpleBuilderConfig {
-    fn default() -> Self {
-        Self {
-            port: portpicker::pick_unused_port().expect("No free ports"),
-        }
-    }
-}
-
 #[async_trait]
 impl<TYPES: NodeType> TestBuilderImplementation<TYPES> for SimpleBuilderImplementation
 where
     <TYPES as NodeType>::InstanceState: Default,
 {
-    type Config = SimpleBuilderConfig;
+    type Config = ();
 
     async fn start(
         num_storage_nodes: usize,
-        config: Self::Config,
+        url: Url,
+        _config: Self::Config,
         changes: HashMap<u64, BuilderChange>,
-    ) -> (Box<dyn BuilderTask<TYPES>>, Url) {
-        let url = Url::parse(&format!("http://0.0.0.0:{0}", config.port)).expect("Valid URL");
-
+    ) -> Box<dyn BuilderTask<TYPES>> {
         let (change_sender, change_receiver) = broadcast(128);
         let (source, task) = Self::create(num_storage_nodes, changes, change_sender).await;
-        run_builder_source(url.clone(), change_receiver, source);
+        run_builder_source(url, change_receiver, source);
 
-        (Box::new(task), url)
+        Box::new(task)
     }
 }
 

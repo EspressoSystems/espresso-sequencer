@@ -31,6 +31,7 @@ use hotshot_types::{
     },
     HotShotConfig, ValidatorConfig,
 };
+use tide_disco::Url;
 #[allow(deprecated)]
 use tracing::info;
 
@@ -291,8 +292,12 @@ where
         let mut builder_tasks = Vec::new();
         let mut builder_urls = Vec::new();
         for metadata in &self.launcher.metadata.builders {
-            let (builder_task, builder_url) = B::start(
+            let builder_port = portpicker::pick_unused_port().expect("No free ports");
+            let builder_url =
+                Url::parse(&format!("http://localhost:{builder_port}")).expect("Valid URL");
+            let builder_task = B::start(
                 config.num_nodes_with_stake.into(),
+                builder_url.clone(),
                 B::Config::default(),
                 metadata.changes.clone(),
             )

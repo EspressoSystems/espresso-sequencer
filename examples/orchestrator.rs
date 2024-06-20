@@ -1,4 +1,4 @@
-//! A orchestrator using the web server
+//! A orchestrator
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot_example_types::state_types::TestTypes;

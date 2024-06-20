@@ -12,6 +12,7 @@ use hotshot::{
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
 use hotshot_types::traits::node_implementation::NodeType;
+use infra::{gen_local_address, BUILDER_BASE_PORT};
 
 use crate::{
     infra::{read_orchestrator_init_config, run_orchestrator, OrchestratorArgs},
@@ -117,13 +118,15 @@ async fn main() {
 
     // Start the proper number of nodes
     let mut nodes = Vec::new();
-    for _ in 0..(config.config.num_nodes_with_stake.get()) {
+    for i in 0..(config.config.num_nodes_with_stake.get()) {
         let orchestrator_url = orchestrator_url.clone();
+        let builder_address = gen_local_address::<BUILDER_BASE_PORT>(i);
         let node = async_spawn(async move {
             infra::main_entry_point::<TestTypes, DaNetwork, QuorumNetwork, NodeImpl, ThisRun>(
                 ValidatorArgs {
                     url: orchestrator_url,
                     advertise_address: None,
+                    builder_address: Some(builder_address),
                     network_config_file: None,
                 },
             )

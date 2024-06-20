@@ -77,16 +77,15 @@ where
 
     async fn start(
         num_storage_nodes: usize,
+        url: Url,
         config: RandomBuilderConfig,
         changes: HashMap<u64, BuilderChange>,
-    ) -> (Box<dyn BuilderTask<TYPES>>, Url) {
-        let port = portpicker::pick_unused_port().expect("No free ports");
-        let url = Url::parse(&format!("http://0.0.0.0:{port}")).expect("Valid URL");
+    ) -> Box<dyn BuilderTask<TYPES>> {
         let (change_sender, change_receiver) = broadcast(128);
 
         let (task, source) = Self::create(num_storage_nodes, config, changes, change_sender).await;
-        run_builder_source(url.clone(), change_receiver, source);
-        (Box::new(task), url)
+        run_builder_source(url, change_receiver, source);
+        Box::new(task)
     }
 }
 

@@ -1,9 +1,9 @@
-//! A validator using the web server
+//! A validator
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
-use tracing::{info, instrument};
+use tracing::{debug, instrument};
 
 use crate::types::{DaNetwork, NodeImpl, QuorumNetwork, ThisRun};
 
@@ -21,6 +21,6 @@ async fn main() {
     setup_logging();
     setup_backtrace();
     let args = ValidatorArgs::parse();
-    info!("connecting to orchestrator at {:?}", args.url);
+    debug!("connecting to orchestrator at {:?}", args.url);
     infra::main_entry_point::<TestTypes, DaNetwork, QuorumNetwork, NodeImpl, ThisRun>(args).await;
 }

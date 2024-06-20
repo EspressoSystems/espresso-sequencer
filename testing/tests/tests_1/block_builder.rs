@@ -30,16 +30,18 @@ use tide_disco::Url;
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_random_block_builder() {
-    let (task, api_url): (Box<dyn BuilderTask<TestTypes>>, Url) =
-        RandomBuilderImplementation::start(
-            1,
-            RandomBuilderConfig {
-                blocks_per_second: u32::MAX,
-                ..Default::default()
-            },
-            HashMap::new(),
-        )
-        .await;
+    let port = portpicker::pick_unused_port().expect("No free ports");
+    let api_url = Url::parse(&format!("http://localhost:{port}")).expect("Valid URL");
+    let task: Box<dyn BuilderTask<TestTypes>> = RandomBuilderImplementation::start(
+        1,
+        api_url.clone(),
+        RandomBuilderConfig {
+            blocks_per_second: u32::MAX,
+            ..Default::default()
+        },
+        HashMap::new(),
+    )
+    .await;
     task.start(Box::new(futures::stream::empty()));
 
     let builder_started = Instant::now();

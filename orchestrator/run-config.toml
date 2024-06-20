@@ -106,7 +106,7 @@ nanos = 200_000_000
 # TODO (Keyao) Clean up configuration parameters.
 # <https://github.com/EspressoSystems/HotShot/issues/1823>
 [config.builder_timeout]
-secs = 2
+secs = 10
 nanos = 0
 
 [config.upgrade]

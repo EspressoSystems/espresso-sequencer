@@ -5,12 +5,18 @@ pub mod client;
 /// Configuration for the orchestrator
 pub mod config;
 
-use std::{collections::HashMap, fs::OpenOptions, io, io::ErrorKind};
+use std::{
+    collections::HashMap,
+    fs::OpenOptions,
+    io::{self, ErrorKind},
+    time::Duration,
+};
 
 use async_lock::RwLock;
 use client::{BenchResults, BenchResultsDownloadConfig};
+use config::BuilderType;
 use csv::Writer;
-use futures::FutureExt;
+use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use hotshot_types::{constants::Base, traits::signature_key::SignatureKey, PeerConfig};
 use libp2p::{
     identity::{
@@ -84,11 +90,18 @@ struct OrchestratorState<KEY: SignatureKey> {
     manual_start_allowed: bool,
     /// Whether we are still accepting new keys for registration
     accepting_new_keys: bool,
+    /// Builder address pool
+    builders: Vec<Url>,
 }
 
 impl<KEY: SignatureKey + 'static> OrchestratorState<KEY> {
     /// create a new [`OrchestratorState`]
     pub fn new(network_config: NetworkConfig<KEY>) -> Self {
+        let builders = if matches!(network_config.builder, BuilderType::External) {
+            network_config.config.builder_urls.clone().into()
+        } else {
+            vec![]
+        };
         OrchestratorState {
             latest_index: 0,
             tmp_latest_index: 0,
@@ -101,6 +114,7 @@ impl<KEY: SignatureKey + 'static> OrchestratorState<KEY> {
             nodes_post_results: 0,
             manual_start_allowed: true,
             accepting_new_keys: true,
+            builders,
         }
     }
 
@@ -131,10 +145,12 @@ impl<KEY: SignatureKey + 'static> OrchestratorState<KEY> {
             commit_sha: self.config.commit_sha.clone(),
             total_nodes: self.config.config.num_nodes_with_stake.into(),
             da_committee_size: self.config.config.da_staked_committee_size,
+            fixed_leader_for_gpuvid: self.config.config.fixed_leader_for_gpuvid,
             transactions_per_round: self.config.transactions_per_round,
             transaction_size: self.bench_results.transaction_size_in_bytes,
             rounds: self.config.rounds,
             leader_election_type: OrchestratorState::<KEY>::election_type(),
+            partial_results: self.bench_results.partial_results.clone(),
             avg_latency_in_sec: self.bench_results.avg_latency_in_sec,
             minimum_latency_in_sec: self.bench_results.minimum_latency_in_sec,
             maximum_latency_in_sec: self.bench_results.maximum_latency_in_sec,
@@ -211,6 +227,14 @@ pub trait OrchestratorApi<KEY: SignatureKey> {
     /// # Errors
     /// if unable to serve
     fn post_manual_start(&mut self, password_bytes: Vec<u8>) -> Result<(), ServerError>;
+    /// post endpoint for registering a builder with the orchestrator
+    /// # Errors
+    /// if unable to serve
+    fn post_builder(&mut self, builder: Url) -> Result<(), ServerError>;
+    /// get endpoints for builders
+    /// # Errors
+    /// if not all builders are registered yet
+    fn get_builders(&self) -> Result<Vec<Url>, ServerError>;
 }
 
 impl<KEY> OrchestratorApi<KEY> for OrchestratorState<KEY>
@@ -488,15 +512,55 @@ where
             }
         }
         self.nodes_post_results += 1;
-        if self.nodes_post_results >= (self.config.config.num_nodes_with_stake.get() as u64) {
+        if self.bench_results.partial_results == "Unset" {
+            self.bench_results.partial_results = "One".to_string();
+            self.bench_results.printout();
+            self.output_to_csv();
+        }
+        if self.bench_results.partial_results == "One"
+            && self.nodes_post_results >= (self.config.config.da_staked_committee_size as u64 / 2)
+        {
+            self.bench_results.partial_results = "HalfDA".to_string();
+            self.bench_results.printout();
+            self.output_to_csv();
+        }
+        if self.bench_results.partial_results == "HalfDA"
+            && self.nodes_post_results >= (self.config.config.num_nodes_with_stake.get() as u64 / 2)
+        {
+            self.bench_results.partial_results = "Half".to_string();
+            self.bench_results.printout();
+            self.output_to_csv();
+        }
+        if self.bench_results.partial_results != "Full"
+            && self.nodes_post_results >= (self.config.config.num_nodes_with_stake.get() as u64)
+        {
+            self.bench_results.partial_results = "Full".to_string();
             self.bench_results.printout();
             self.output_to_csv();
         }
         Ok(())
     }
+
+    fn post_builder(&mut self, builder: Url) -> Result<(), ServerError> {
+        self.builders.push(builder);
+        Ok(())
+    }
+
+    fn get_builders(&self) -> Result<Vec<Url>, ServerError> {
+        if !matches!(self.config.builder, BuilderType::External)
+            && self.builders.len() != self.config.config.da_staked_committee_size
+        {
+            return Err(ServerError {
+                status: tide_disco::StatusCode::NOT_FOUND,
+                message: "Not all builders are registered yet".to_string(),
+            });
+        }
+        Ok(self.builders.clone())
+    }
 }
 
 /// Sets up all API routes
+#[allow(clippy::too_many_lines)]
 fn define_api<KEY, State, VER>() -> Result<Api<State, ServerError, VER>, ApiError>
 where
     State: 'static + Send + Sync + ReadState + WriteState,
@@ -591,6 +655,47 @@ where
             state.post_run_results(metrics.unwrap())
         }
         .boxed()
+    })?
+    .post("post_builder", |req, state| {
+        async move {
+            // Read the bytes from the body
+            let mut body_bytes = req.body_bytes();
+            body_bytes.drain(..12);
+
+            let Ok(urls) = vbs::Serializer::<Base>::deserialize::<Vec<Url>>(&body_bytes) else {
+                return Err(ServerError {
+                    status: tide_disco::StatusCode::BAD_REQUEST,
+                    message: "Malformed body".to_string(),
+                });
+            };
+
+            let mut futures = urls
+                .into_iter()
+                .map(|url| async {
+                    let client: surf_disco::Client<ServerError, Base> =
+                        surf_disco::client::Client::builder(url.clone()).build();
+                    if client.connect(Some(Duration::from_secs(2))).await {
+                        Some(url)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<FuturesUnordered<_>>()
+                .filter_map(futures::future::ready);
+
+            if let Some(url) = futures.next().await {
+                state.post_builder(url)
+            } else {
+                Err(ServerError {
+                    status: tide_disco::StatusCode::BAD_REQUEST,
+                    message: "No reachable adddresses".to_string(),
+                })
+            }
+        }
+        .boxed()
+    })?
+    .get("get_builders", |_req, state| {
+        async move { state.get_builders() }.boxed()
     })?;
     Ok(api)
 }
