@@ -88,7 +88,7 @@ contract RollupContract {
         }
     }
 
-    /// Updates the state of the rollup if the Espresso finality gadget looses liveness.
+    /// Updates the state of the rollup if the Espresso finality gadget loses liveness.
     function updateStateBackupSequencingMode(commTxsRollup, newVMState) virtual {
       bytes[] publicInputs = [
         previousVMState,
