@@ -29,7 +29,7 @@ ways:
 1. The rollup relies on the Espresso light client contract to fetch the Espresso state updates.
 2. The rollup verifies some value equivalent to the Espresso finality gadget inside its circuit.
 
-Moreover, in case the Espresso consensus looses liveness, and thus the corresponding finality gadget is not available,
+Moreover, in case the Espresso consensus loses liveness, and thus the corresponding finality gadget is not available,
 the rollup can fall back to a backup sequencer. In order to reliably detect that the Espresso consensus is not making
 progress, the rollup contract will call an escape hatch function part of the Espresso light client contract.
 
