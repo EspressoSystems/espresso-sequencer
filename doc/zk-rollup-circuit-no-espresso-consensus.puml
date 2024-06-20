@@ -14,8 +14,8 @@ blk_cm_new --> CF
 "<b>ROLLUP_TXS</b>" --> ZK
 
 cm_txs_rollup --> CE
-"cm_txs_history" --> CE
-"cm_txs_history" --> CF
+"<b>cm_txs_history</b>" --> CE
+"<b>cm_txs_history</b>" --> CF
 
 "cm_state_vm i" --> ZK
 "cm_state_vm i+1" --> ZK
