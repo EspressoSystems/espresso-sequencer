@@ -460,8 +460,6 @@ where
             ConsensusMetricsValue::default(),
             storage,
         )
-        .await
-        .expect("Could not init hotshot")
     }
 }
 

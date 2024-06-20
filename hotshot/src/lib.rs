@@ -198,9 +198,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     ///
     /// To do a full initialization, use `fn init` instead, which will set up background tasks as
     /// well.
+    ///
+    /// # Errors
+    /// -
     #[allow(clippy::too_many_arguments)]
-    #[instrument(skip(private_key, memberships, networks, initializer, metrics, storage))]
-    pub async fn new(
+    pub fn new(
         public_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
@@ -210,7 +212,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
         storage: I::Storage,
-    ) -> Result<Arc<Self>, HotShotError<TYPES>> {
+    ) -> Arc<Self> {
         debug!("Creating a new hotshot");
 
         let consensus_metrics = Arc::new(metrics);
@@ -304,7 +306,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             decided_upgrade_certificate,
         });
 
-        Ok(inner)
+        inner
     }
 
     /// "Starts" consensus by sending a `QcFormed`, `ViewChange`, and `ValidatedStateUpdated` events
@@ -555,8 +557,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             initializer,
             metrics,
             storage,
-        )
-        .await?;
+        );
         let handle = Arc::clone(&hotshot).run_tasks().await;
         let (tx, rx) = hotshot.internal_event_stream.clone();
 
