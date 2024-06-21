@@ -253,19 +253,25 @@ pub struct Persistence {
     store_undecided_state: bool,
 }
 
-async fn transaction(
-    persistence: &mut Persistence,
+pub(crate) async fn transaction(
+    sql: &mut SqlStorage,
     f: impl FnOnce(Transaction) -> BoxFuture<anyhow::Result<()>>,
 ) -> anyhow::Result<()> {
-    let tx = persistence.db.transaction().await?;
+    let tx = sql.transaction().await?;
     match f(tx).await {
         Ok(_) => {
-            persistence.db.commit().await?;
+            if let Err(err) = sql.commit().await {
+                tracing::warn!("transaction failed, reverting: {err:#}");
+                sql.revert().await;
+
+                return Err(err.into());
+            }
+
             Ok(())
         }
         Err(err) => {
             tracing::warn!("transaction failed, reverting: {err:#}");
-            persistence.db.revert().await;
+            sql.revert().await;
             Err(err)
         }
     }
@@ -299,7 +305,7 @@ impl SequencerPersistence for Persistence {
         tracing::info!("saving config to Postgres");
         let json = serde_json::to_value(cfg)?;
 
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 tx.execute_one_with_retries(
                     "INSERT INTO network_config (config) VALUES ($1)",
@@ -314,7 +320,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 let stmt1 = "DELETE FROM vid_share where view <= $1";
                 tx.execute(stmt1, [&(view.u64() as i64)]).await?;
@@ -360,7 +366,7 @@ impl SequencerPersistence for Persistence {
         let leaf_bytes = bincode::serialize(leaf)?;
         let qc_bytes = bincode::serialize(qc)?;
 
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 tx.execute_one_with_retries(
                     stmt,
@@ -502,7 +508,7 @@ impl SequencerPersistence for Persistence {
         let view = data.view_number().u64();
         let data_bytes = bincode::serialize(proposal).unwrap();
 
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 tx.upsert(
                     "vid_share",
@@ -525,7 +531,7 @@ impl SequencerPersistence for Persistence {
         let view = data.view_number().u64();
         let data_bytes = bincode::serialize(proposal).unwrap();
 
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 tx.upsert(
                     "da_proposal",
@@ -549,7 +555,7 @@ impl SequencerPersistence for Persistence {
         INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
         ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)";
 
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 tx.execute_one_with_retries(stmt, [view.u64() as i64])
                     .await?;
@@ -571,7 +577,7 @@ impl SequencerPersistence for Persistence {
         let leaves_bytes = bincode::serialize(&leaves).context("serializing leaves")?;
         let state_bytes = bincode::serialize(&state).context("serializing state")?;
 
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 tx.upsert(
                     "undecided_state",
@@ -596,7 +602,7 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<()> {
         let view_number = proposal.data.view_number().u64();
         let proposal_bytes = bincode::serialize(&proposal).context("serializing proposal")?;
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 tx.upsert(
                     "quorum_proposals",
@@ -613,7 +619,7 @@ impl SequencerPersistence for Persistence {
     }
 }
 
-fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
+pub(crate) fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
     param
 }
 

@@ -8,10 +8,11 @@ use super::{
 use crate::{
     network,
     persistence::{self, SequencerPersistence},
-    PubKey, SeqTypes, Transaction,
+    ChainConfig, PubKey, SeqTypes, Transaction,
 };
 use anyhow::bail;
 use async_trait::async_trait;
+use committable::Commitment;
 use ethers::prelude::Address;
 use futures::future::Future;
 use hotshot_query_service::{
@@ -29,6 +30,7 @@ use hotshot_types::{
 use serde::Serialize;
 use tide_disco::Url;
 use vbs::version::StaticVersionType;
+use vec1::Vec1;
 
 pub trait DataSourceOptions: persistence::PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
@@ -141,6 +143,15 @@ pub(crate) trait CatchupDataSource {
             bail!("merklized state catchup is not supported for this data source");
         }
     }
+
+    fn get_chain_config(
+        &self,
+        _commitment: Commitment<ChainConfig>,
+    ) -> impl Send + Future<Output = anyhow::Result<ChainConfig>> {
+        async {
+            bail!("chain config catchup is not supported for this data source");
+        }
+    }
 }
 
 impl CatchupDataSource for MetricsDataSource {}
@@ -205,7 +216,11 @@ pub struct PublicHotShotConfig {
     pub num_bootstrap: usize,
     pub builder_timeout: Duration,
     pub data_request_delay: Duration,
-    pub builder_url: Url,
+    pub builder_urls: Vec1<Url>,
+    pub start_proposing_view: u64,
+    pub stop_proposing_view: u64,
+    pub start_voting_view: u64,
+    pub stop_voting_view: u64,
 }
 
 impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
@@ -233,7 +248,11 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             num_bootstrap,
             builder_timeout,
             data_request_delay,
-            builder_url,
+            builder_urls,
+            start_proposing_view,
+            stop_proposing_view,
+            start_voting_view,
+            stop_voting_view,
         } = v;
 
         Self {
@@ -256,7 +275,11 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             num_bootstrap,
             builder_timeout,
             data_request_delay,
-            builder_url,
+            builder_urls,
+            start_proposing_view,
+            stop_proposing_view,
+            start_voting_view,
+            stop_voting_view,
         }
     }
 }
