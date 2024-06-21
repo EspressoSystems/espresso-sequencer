@@ -81,7 +81,8 @@ impl BuilderConfig {
     pub async fn init(
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
-        channel_capacity: NonZeroUsize,
+        tx_channel_capacity: NonZeroUsize,
+        event_channel_capacity: NonZeroUsize,
         node_count: NonZeroUsize,
         instance_state: NodeState,
         validated_state: ValidatedState,
@@ -103,20 +104,24 @@ impl BuilderConfig {
 
         // tx channel
         let (tx_sender, tx_receiver) =
-            broadcast::<Arc<ReceivedTransaction<SeqTypes>>>(channel_capacity.get());
+            broadcast::<Arc<ReceivedTransaction<SeqTypes>>>(tx_channel_capacity.get());
+        tx_sender.set_overflow(true);
 
         // da channel
-        let (da_sender, da_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (da_sender, da_receiver) =
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // qc channel
-        let (qc_sender, qc_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (qc_sender, qc_receiver) =
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // decide channel
         let (decide_sender, decide_receiver) =
-            broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // builder api request channel
-        let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (req_sender, req_receiver) =
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         let (genesis_payload, genesis_ns_table) =
             Payload::from_transactions([], &validated_state, &instance_state)

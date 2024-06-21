@@ -134,7 +134,8 @@ async fn main() -> anyhow::Result<()> {
     let _builder_config = BuilderConfig::init(
         builder_key_pair,
         bootstrapped_view,
-        opt.channel_capacity,
+        opt.tx_channel_capacity,
+        opt.event_channel_capacity,
         opt.node_count,
         instance_state,
         validated_state,

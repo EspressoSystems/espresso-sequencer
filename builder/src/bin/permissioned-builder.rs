@@ -154,9 +154,13 @@ pub struct PermissionedBuilderOptions {
     #[clap(short, long, env = "ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW")]
     pub view_number: u64,
 
-    /// BUILDER CHANNEL CAPACITY
-    #[clap(long, env = "ESPRESSO_BUILDER_CHANNEL_CAPACITY")]
-    pub channel_capacity: NonZeroUsize,
+    /// BUILDER TRANSACTIONS CHANNEL CAPACITY
+    #[clap(long, env = "ESPRESSO_BUILDER_TX_CHANNEL_CAPACITY")]
+    pub tx_channel_capacity: NonZeroUsize,
+
+    /// BUILDER HS EVENTS CHANNEL CAPACITY
+    #[clap(long, env = "ESPRESSO_BUILDER_EVENT_CHANNEL_CAPACITY")]
+    pub event_channel_capacity: NonZeroUsize,
 
     /// Url a sequencer can use to stream hotshot events
     #[clap(long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENTS_PROVIDER")]
