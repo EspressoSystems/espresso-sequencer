@@ -59,7 +59,8 @@ use hotshot_builder_core::{
     },
     service::{
         run_non_permissioned_standalone_builder_service,
-        run_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState, ReceivedTransaction
+        run_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
+        ReceivedTransaction,
     },
 };
 use hotshot_state_prover;
@@ -416,7 +417,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         maximize_txns_count_timeout_duration: Duration,
     ) -> anyhow::Result<Self> {
         // tx channel
-        let (tx_sender, tx_receiver) = broadcast::<Arc<ReceivedTransaction<SeqTypes>>>(channel_capacity.get());
+        let (tx_sender, tx_receiver) =
+            broadcast::<Arc<ReceivedTransaction<SeqTypes>>>(channel_capacity.get());
 
         // da channel
         let (da_sender, da_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());

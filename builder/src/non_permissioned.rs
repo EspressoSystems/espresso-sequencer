@@ -21,7 +21,10 @@ use hotshot_builder_core::{
         BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromProposedBlock, MessageType,
         ResponseMessage,
     },
-    service::{run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState, ReceivedTransaction},
+    service::{
+        run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
+        ReceivedTransaction,
+    },
 };
 
 use hotshot_types::{
@@ -99,7 +102,8 @@ impl BuilderConfig {
         );
 
         // tx channel
-        let (tx_sender, tx_receiver) = broadcast::<Arc<ReceivedTransaction<SeqTypes>>>(channel_capacity.get());
+        let (tx_sender, tx_receiver) =
+            broadcast::<Arc<ReceivedTransaction<SeqTypes>>>(channel_capacity.get());
 
         // da channel
         let (da_sender, da_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
