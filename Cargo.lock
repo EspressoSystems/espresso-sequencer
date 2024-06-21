@@ -3141,8 +3141,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot"
-version = "0.5.57"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.58#9b642d35e88db3083dbbe1ab6e2aa8bd32ac68ea"
+version = "0.5.58"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3188,7 +3188,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.58#9b642d35e88db3083dbbe1ab6e2aa8bd32ac68ea"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
 dependencies = [
  "async-trait",
  "clap",
@@ -3206,8 +3206,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-example-types"
-version = "0.5.57"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.58#9b642d35e88db3083dbbe1ab6e2aa8bd32ac68ea"
+version = "0.5.58"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3237,8 +3237,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-macros"
-version = "0.5.57"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.58#9b642d35e88db3083dbbe1ab6e2aa8bd32ac68ea"
+version = "0.5.58"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -3248,8 +3248,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-orchestrator"
-version = "0.5.57"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.58#9b642d35e88db3083dbbe1ab6e2aa8bd32ac68ea"
+version = "0.5.58"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -3331,13 +3331,12 @@ dependencies = [
  "trait-variant",
  "typenum",
  "vbs",
- "vec1",
 ]
 
 [[package]]
 name = "hotshot-task"
-version = "0.5.57"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.58#9b642d35e88db3083dbbe1ab6e2aa8bd32ac68ea"
+version = "0.5.58"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3351,8 +3350,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task-impls"
-version = "0.5.57"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.58#9b642d35e88db3083dbbe1ab6e2aa8bd32ac68ea"
+version = "0.5.58"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3386,8 +3385,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-testing"
-version = "0.5.57"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.58#9b642d35e88db3083dbbe1ab6e2aa8bd32ac68ea"
+version = "0.5.58"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3429,7 +3428,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.58#9b642d35e88db3083dbbe1ab6e2aa8bd32ac68ea"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -4656,8 +4655,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-networking"
-version = "0.5.57"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.58#9b642d35e88db3083dbbe1ab6e2aa8bd32ac68ea"
+version = "0.5.58"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
