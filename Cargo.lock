@@ -4225,7 +4225,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.39"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=rc-0.1.41#7798d8dc1a2f9693e42908c9661d95a5ab1090c2"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=rc-0.1.41#bd03a5d909e8705f6038f2066a7633732c653219"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4274,6 +4274,7 @@ dependencies = [
  "trait-variant",
  "typenum",
  "vbs",
+ "vec1",
 ]
 
 [[package]]
