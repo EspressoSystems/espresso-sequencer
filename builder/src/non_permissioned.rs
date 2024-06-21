@@ -95,7 +95,8 @@ impl BuilderConfig {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
             ?bootstrapped_view,
-            %channel_capacity,
+            %tx_channel_capacity,
+            %event_channel_capacity,
             ?max_api_timeout_duration,
             buffered_view_num_count,
             ?maximize_txns_count_timeout_duration,
@@ -103,7 +104,7 @@ impl BuilderConfig {
         );
 
         // tx channel
-        let (tx_sender, tx_receiver) =
+        let (mut tx_sender, tx_receiver) =
             broadcast::<Arc<ReceivedTransaction<SeqTypes>>>(tx_channel_capacity.get());
         tx_sender.set_overflow(true);
 

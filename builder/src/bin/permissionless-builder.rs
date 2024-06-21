@@ -50,9 +50,13 @@ struct NonPermissionedBuilderOptions {
     #[clap(short, long, env = "ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW")]
     view_number: u64,
 
-    /// BUILDER CHANNEL CAPACITY
-    #[clap(short, long, env = "ESPRESSO_BUILDER_CHANNEL_CAPACITY")]
-    channel_capacity: NonZeroUsize,
+    /// BUILDER TRANSACTIONS CHANNEL CAPACITY
+    #[clap(long, env = "ESPRESSO_BUILDER_TX_CHANNEL_CAPACITY")]
+    pub tx_channel_capacity: NonZeroUsize,
+
+    /// BUILDER HS EVENTS CHANNEL CAPACITY
+    #[clap(long, env = "ESPRESSO_BUILDER_EVENT_CHANNEL_CAPACITY")]
+    pub event_channel_capacity: NonZeroUsize,
 
     /// NETWORK INITIAL NODE COUNT
     #[clap(short, long, env = "ESPRESSO_BUILDER_INIT_NODE_COUNT")]
