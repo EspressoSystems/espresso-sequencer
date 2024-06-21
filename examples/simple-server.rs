@@ -21,7 +21,7 @@ use async_std::sync::Arc;
 use clap::Parser;
 use futures::future::{join_all, try_join_all};
 use hotshot::{
-    traits::implementations::{MasterMap, MemoryNetwork, NetworkingMetricsValue},
+    traits::implementations::{MasterMap, MemoryNetwork},
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
@@ -45,6 +45,7 @@ use hotshot_types::{
     traits::election::Membership, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::{num::NonZeroUsize, time::Duration};
+use vbs::version::StaticVersionType;
 
 const NUM_NODES: usize = 2;
 
@@ -114,8 +115,7 @@ async fn main() -> Result<(), Error> {
     let nodes = init_consensus(&data_sources).await;
 
     // Use version 0.1, for no particular reason
-    let bind_version: hotshot_types::constants::Version01 =
-        hotshot_types::constants::STATIC_VER_0_1;
+    let bind_version: hotshot_types::constants::Base = hotshot_types::constants::Base::instance();
 
     // Start the servers.
     try_join_all(
@@ -173,12 +173,14 @@ async fn init_consensus(
     // Start the builder server
     let (builder_task, builder_url) = <SimpleBuilderImplementation as TestBuilderImplementation<
         MockTypes,
-    >>::start(1, SimpleBuilderConfig::default())
+    >>::start(
+        1, SimpleBuilderConfig::default(), Default::default()
+    )
     .await;
 
     // Create the configuration
     let config = HotShotConfig {
-        builder_url,
+        builder_urls: vec1::vec1![builder_url],
         fixed_leader_for_gpuvid: 0,
         num_nodes_with_stake,
         num_nodes_without_stake: 0,
@@ -201,6 +203,10 @@ async fn init_consensus(
             known_nodes_with_stake.len() as u64,
         ),
         builder_timeout: Duration::from_secs(1),
+        start_proposing_view: 0,
+        stop_proposing_view: 0,
+        start_voting_view: 0,
+        stop_voting_view: 0,
     };
 
     let nodes = join_all(priv_keys.into_iter().zip(data_sources).enumerate().map(
@@ -226,8 +232,7 @@ async fn init_consensus(
 
                 let network = Arc::new(MemoryNetwork::new(
                     pub_keys[node_id],
-                    NetworkingMetricsValue::new(&*data_source.populate_metrics()),
-                    master_map.clone(),
+                    &master_map.clone(),
                     None,
                 ));
                 let networks = Networks {
@@ -260,10 +265,8 @@ async fn init_consensus(
     .await;
 
     // Hook the builder up to the event stream from the first node
-    if let Some(builder_task) = builder_task {
-        let event_stream = nodes[0].event_stream();
-        builder_task.start(Box::new(event_stream));
-    }
+    let event_stream = nodes[0].event_stream();
+    builder_task.start(Box::new(event_stream));
 
     nodes
 }

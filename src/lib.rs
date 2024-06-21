@@ -38,7 +38,8 @@
 //!
 //! use async_std::{sync::{Arc, RwLock}, task::spawn};
 //! use futures::StreamExt;
-//! use hotshot_types::constants::{Version01, STATIC_VER_0_1};
+//! use vbs::version::StaticVersionType;
+//! use hotshot_types::constants::Base;
 //! use hotshot::SystemContext;
 //! use tide_disco::App;
 //!
@@ -55,11 +56,11 @@
 //! ).await.map_err(Error::internal)?.0;
 //!
 //! // Create API modules.
-//! let availability_api = availability::define_api(&Default::default(), STATIC_VER_0_1)
+//! let availability_api = availability::define_api(&Default::default(),  Base::instance())
 //!     .map_err(Error::internal)?;
-//! let node_api = node::define_api(&Default::default(), STATIC_VER_0_1)
+//! let node_api = node::define_api(&Default::default(),  Base::instance())
 //!     .map_err(Error::internal)?;
-//! let status_api = status::define_api(&Default::default(), STATIC_VER_0_1)
+//! let status_api = status::define_api(&Default::default(),  Base::instance())
 //!     .map_err(Error::internal)?;
 //!
 //! // Create app. We wrap `data_source` into an `RwLock` so we can share it with the web server.
@@ -74,7 +75,7 @@
 //!     .map_err(Error::internal)?;
 //!
 //! // Serve app.
-//! spawn(app.serve("0.0.0.0:8080", STATIC_VER_0_1));
+//! spawn(app.serve("0.0.0.0:8080",  Base::instance()));
 //!
 //! // Update query data using HotShot events.
 //! let mut events = hotshot.event_stream();
@@ -96,7 +97,8 @@
 //! ```
 //! # use async_std::task::spawn;
 //! # use hotshot::types::SystemContextHandle;
-//! # use hotshot_types::constants::STATIC_VER_0_1;
+//! # use vbs::version::StaticVersionType;
+//! # use hotshot_types::constants::Base;
 //! # use hotshot_query_service::{data_source::FileSystemDataSource, Error, Options};
 //! # use hotshot_query_service::fetching::provider::NoFetching;
 //! # use hotshot_query_service::testing::mocks::{MockNodeImpl, MockTypes};
@@ -105,7 +107,7 @@
 //! use hotshot_query_service::run_standalone_service;
 //!
 //! let data_source = FileSystemDataSource::create(storage_path, NoFetching).await.map_err(Error::internal)?;
-//! spawn(run_standalone_service(options, data_source, hotshot, STATIC_VER_0_1));
+//! spawn(run_standalone_service(options, data_source, hotshot,  Base::instance()));
 //! # Ok(())
 //! # }
 //! ```
@@ -177,7 +179,7 @@
 //! # use async_std::sync::RwLock;
 //! # use async_trait::async_trait;
 //! # use futures::FutureExt;
-//! # use hotshot_types::constants::STATIC_VER_0_1;
+//! # use hotshot_types::constants::Base;
 //! # use hotshot_query_service::availability::{
 //! #   self, AvailabilityDataSource, FetchBlockSnafu, TransactionIndex,
 //! # };
@@ -564,7 +566,7 @@ mod test {
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::future::{BoxFuture, FutureExt};
     use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
-    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
+    use hotshot_types::constants::Base;
     use portpicker::pick_unused_port;
     use std::ops::RangeBounds;
     use std::time::Duration;
@@ -739,20 +741,20 @@ mod test {
         let mut app = App::<_, Error>::with_state(RwLock::new(state));
         app.register_module(
             "availability",
-            availability::define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+            availability::define_api(&Default::default(), Base::instance()).unwrap(),
         )
         .unwrap()
         .register_module(
             "node",
-            node::define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+            node::define_api(&Default::default(), Base::instance()).unwrap(),
         )
         .unwrap()
         .register_module(
             "status",
-            status::define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+            status::define_api(&Default::default(), Base::instance()).unwrap(),
         )
         .unwrap()
-        .module::<Error, Version01>("mod", module_spec)
+        .module::<Error, Base>("mod", module_spec)
         .unwrap()
         .get("get_ext", |_, state| {
             async move { state.module_state.load_latest().map_err(Error::internal) }.boxed()
@@ -782,11 +784,11 @@ mod test {
         let port = pick_unused_port().unwrap();
         let _server = BackgroundTask::spawn(
             "server",
-            app.serve(format!("0.0.0.0:{}", port), STATIC_VER_0_1),
+            app.serve(format!("0.0.0.0:{}", port), Base::instance()),
         );
 
         let client =
-            Client::<Error, Version01>::new(format!("http://localhost:{}", port).parse().unwrap());
+            Client::<Error, Base>::new(format!("http://localhost:{}", port).parse().unwrap());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
         client.post::<()>("mod/ext/42").send().await.unwrap();

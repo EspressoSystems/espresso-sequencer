@@ -210,10 +210,11 @@ pub mod testing {
     };
     use futures::stream::{BoxStream, StreamExt};
     use hotshot::types::Event;
-    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
+    use hotshot_types::constants::Base;
     use portpicker::pick_unused_port;
     use std::{fmt::Display, time::Duration};
     use tide_disco::App;
+    use vbs::version::StaticVersionType;
 
     /// Either Postgres or no storage.
     ///
@@ -231,7 +232,7 @@ pub mod testing {
 
     pub enum DataSource {
         Sql(SqlDataSource<MockTypes, NoFetching>),
-        NoStorage(FetchingDataSource<MockTypes, NoStorage, QueryServiceProvider<Version01>>),
+        NoStorage(FetchingDataSource<MockTypes, NoStorage, QueryServiceProvider<Base>>),
     }
 
     #[async_trait]
@@ -267,7 +268,7 @@ pub mod testing {
                         format!("http://localhost:{fetch_from_port}")
                             .parse()
                             .unwrap(),
-                        STATIC_VER_0_1,
+                        Base::instance(),
                     );
                     Self::NoStorage(
                         FetchingDataSource::builder(NoStorage, provider)
@@ -316,12 +317,12 @@ pub mod testing {
             let mut app = App::<_, Error>::with_state(api_data_source);
             app.register_module(
                 "availability",
-                define_api(&Default::default(), STATIC_VER_0_1).unwrap(),
+                define_api(&Default::default(), Base::instance()).unwrap(),
             )
             .unwrap();
             network.spawn(
                 "server",
-                app.serve(format!("0.0.0.0:{fetch_from_port}"), STATIC_VER_0_1),
+                app.serve(format!("0.0.0.0:{fetch_from_port}"), Base::instance()),
             );
         }
 

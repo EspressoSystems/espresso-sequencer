@@ -404,13 +404,13 @@ mod test {
         Error,
     };
     use futures::StreamExt;
-    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
+    use hotshot_types::constants::Base;
     use portpicker::pick_unused_port;
     use std::{cmp::min, time::Duration};
     use surf_disco::Client;
     use tide_disco::App;
 
-    async fn validate(client: &Client<Error, Version01>) {
+    async fn validate(client: &Client<Error, Base>) {
         let explorer_summary_response: ExplorerSummaryResponse<MockTypes> =
             client.get("explorer-summary").send().await.unwrap();
 
@@ -869,7 +869,7 @@ mod test {
         // Start the web server.
         let port = pick_unused_port().unwrap();
         let mut app = App::<_, Error>::with_state(network.data_source());
-        app.register_module("explorer", define_api(STATIC_VER_0_1).unwrap())
+        app.register_module("explorer", define_api(Base::instance()).unwrap())
             .unwrap();
         app.register_module(
             "availability",
@@ -878,7 +878,7 @@ mod test {
                     fetch_timeout: Duration::from_secs(5),
                     ..Default::default()
                 },
-                STATIC_VER_0_1,
+                Base::instance(),
             )
             .unwrap(),
         )
@@ -886,16 +886,16 @@ mod test {
 
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{}", port), STATIC_VER_0_1),
+            app.serve(format!("0.0.0.0:{}", port), Base::instance()),
         );
 
         // Start a client.
-        let availability_client = Client::<Error, Version01>::new(
+        let availability_client = Client::<Error, Base>::new(
             format!("http://localhost:{}/availability", port)
                 .parse()
                 .unwrap(),
         );
-        let explorer_client = Client::<Error, Version01>::new(
+        let explorer_client = Client::<Error, Base>::new(
             format!("http://localhost:{}/explorer", port)
                 .parse()
                 .unwrap(),
