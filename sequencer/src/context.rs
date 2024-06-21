@@ -13,7 +13,10 @@ use hotshot::{
     types::{Event, EventType, SystemContextHandle},
     Memberships, Networks, SystemContext,
 };
-use hotshot_orchestrator::client::{BenchResults, OrchestratorClient};
+use hotshot_orchestrator::{
+    client::{BenchResults, OrchestratorClient},
+    config::NetworkConfig,
+};
 use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -244,11 +247,15 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     /// Start participating in consensus.
     pub async fn start_consensus(&self) {
+        let mut transaction_size_in_bytes: u64 = 8; //Sishan TODO: change this initialization
         if let Some(orchestrator_client) = &self.wait_for_orchestrator {
             tracing::warn!("waiting for orchestrated start");
             orchestrator_client
                 .wait_for_all_nodes_ready(self.node_state.node_id)
                 .await;
+            let network_config: NetworkConfig<PubKey> =
+                orchestrator_client.get_config_after_collection().await;
+            transaction_size_in_bytes = network_config.transaction_size as u64;
         }
         tracing::warn!("starting consensus");
         let start = Instant::now();
@@ -299,11 +306,9 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                 if num_successful_commits == 100 {
                                     if total_transactions_committed != 0 {
                                         let total_time_elapsed = start.elapsed(); // in seconds
-                                        let total_time_elapsed_sec =
-                                            std::cmp::max(total_time_elapsed.as_secs(), 1u64);
                                         let throughput_bytes_per_sec = total_transactions_committed
-                                        * 8 //Sishan TODO: transaction_size_in_bytes
-                                        / total_time_elapsed_sec;
+                                            * transaction_size_in_bytes
+                                            / std::cmp::max(total_time_elapsed.as_secs(), 1u64);
                                         // Sishan TODO: for latency and failed view number
                                         bench_results = BenchResults {
                                             avg_latency_in_sec: 0,
@@ -312,7 +317,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                             maximum_latency_in_sec: 0,
                                             throughput_bytes_per_sec,
                                             total_transactions_committed,
-                                            transaction_size_in_bytes: 8, //transaction_size_in_bytes,
+                                            transaction_size_in_bytes,
                                             total_time_elapsed_in_sec: total_time_elapsed.as_secs(),
                                             total_num_views: 100,
                                             failed_num_views: 0,
