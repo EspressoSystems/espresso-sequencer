@@ -3331,6 +3331,7 @@ dependencies = [
  "trait-variant",
  "typenum",
  "vbs",
+ "vec1",
 ]
 
 [[package]]
