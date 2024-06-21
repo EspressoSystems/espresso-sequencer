@@ -65,6 +65,12 @@ pub enum OverallSafetyTaskErr<TYPES: NodeType> {
     InconsistentStates,
     /// mismatched blocks for a view
     InconsistentBlocks,
+    /// not enough failures. this likely means there is an issue in the test
+    NotEnoughFailures {
+        expected: usize,
+
+        failed_views: HashSet<TYPES::Time>,
+    },
 }
 
 /// Data availability task state
@@ -225,6 +231,18 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
                 failed_views: self.ctx.failed_views.clone(),
             }));
         }
+
+        // We should really be able to include a check like this:
+        //
+        //        if self.ctx.failed_views.len() < num_failed_rounds_total {
+        //            return TestResult::Fail(Box::new(OverallSafetyTaskErr::<TYPES>::NotEnoughFailures {
+        //                expected: num_failed_rounds_total,
+        //                failed_views: self.ctx.failed_views.clone(),
+        //            }));
+        //        }
+        //
+        // but we have several tests where it's not possible to fail pin down an exact number of failures (just from async timing issues, if nothing else). Ideally, we should refactor some of the failure count logic for this.
+
         TestResult::Pass
     }
 }

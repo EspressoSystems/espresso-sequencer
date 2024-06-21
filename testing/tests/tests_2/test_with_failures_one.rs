@@ -31,7 +31,7 @@ cross_tests!(
         metadata.spinning_properties = SpinningTaskDescription {
             node_changes: vec![(5, dead_nodes)]
         };
-        metadata.overall_safety_properties.num_failed_views = 3;
+        metadata.overall_safety_properties.num_failed_views = 1;
         metadata.overall_safety_properties.num_successful_views = 25;
         metadata
     }

@@ -127,7 +127,6 @@ impl<K: SignatureKey> MemoryNetwork<K> {
                     } else {
                         error!("Output queue receivers are shutdown");
                     }
-                    warn!("Stream shutdown");
                 }
             }
             .instrument(info_span!("MemoryNetwork Background task", map = ?master_map)),

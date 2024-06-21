@@ -37,6 +37,7 @@ use tracing::info;
 
 use super::{
     completion_task::CompletionTask,
+    consistency_task::ConsistencyTask,
     overall_safety_task::{OverallSafetyTask, RoundCtx},
     txn_task::TxnTask,
 };
@@ -170,12 +171,23 @@ where
         let overall_safety_task_state = OverallSafetyTask {
             handles: Arc::clone(&handles),
             ctx: RoundCtx::default(),
-            properties: self.launcher.metadata.overall_safety_properties,
+            properties: self.launcher.metadata.overall_safety_properties.clone(),
             error: None,
             test_sender,
         };
 
-        let safety_task = TestTask::<OverallSafetyTask<TYPES, I>>::new(
+        let consistency_task_state = ConsistencyTask {
+            consensus_leaves: BTreeMap::new(),
+            safety_properties: self.launcher.metadata.overall_safety_properties,
+        };
+
+        let consistency_task = TestTask::<ConsistencyTask<TYPES>>::new(
+            consistency_task_state,
+            event_rxs.clone(),
+            test_receiver.clone(),
+        );
+
+        let overall_safety_task = TestTask::<OverallSafetyTask<TYPES, I>>::new(
             overall_safety_task_state,
             event_rxs.clone(),
             test_receiver.clone(),
@@ -211,7 +223,8 @@ where
 
         drop(nodes);
 
-        task_futs.push(safety_task.run());
+        task_futs.push(overall_safety_task.run());
+        task_futs.push(consistency_task.run());
         task_futs.push(view_sync_task.run());
         task_futs.push(spinning_task.run());
 
@@ -272,7 +285,12 @@ where
 
         assert!(
             error_list.is_empty(),
-            "TEST FAILED! Results: {error_list:?}"
+            "{}",
+            error_list
+                .iter()
+                .fold("TEST FAILED! Results:".to_string(), |acc, error| {
+                    format!("{acc}\n\n{error:?}")
+                })
         );
     }
 

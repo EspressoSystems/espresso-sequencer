@@ -21,7 +21,7 @@ pub enum TestResult {
     /// the test task passed
     Pass,
     /// the test task failed with an error
-    Fail(Box<dyn snafu::Error + Send + Sync>),
+    Fail(Box<dyn std::fmt::Debug + Send + Sync>),
 }
 
 #[async_trait]

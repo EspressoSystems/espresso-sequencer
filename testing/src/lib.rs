@@ -21,6 +21,9 @@ pub mod test_runner;
 /// task that's consuming events and asserting safety
 pub mod overall_safety_task;
 
+/// task that checks leaves received across all nodes from decide events for consistency
+pub mod consistency_task;
+
 /// task that's submitting transactions to the stream
 pub mod txn_task;
 
