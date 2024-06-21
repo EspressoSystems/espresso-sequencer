@@ -137,7 +137,6 @@ impl BuilderConfig {
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
-
         let global_state_clone = global_state.clone();
 
         let builder_state = BuilderState::<SeqTypes>::new(
@@ -147,11 +146,12 @@ impl BuilderConfig {
                 leaf_commit: fake_commitment(),
                 builder_commitment,
             },
-            tx_receiver,
             decide_receiver,
             da_receiver,
             qc_receiver,
             req_receiver,
+            tx_receiver,
+            Vec::new() /* tx_queue */,
             global_state_clone,
             node_count,
             maximize_txns_count_timeout_duration,
@@ -160,7 +160,8 @@ impl BuilderConfig {
                 .base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
-            Arc::new(instance_state), Duration::from_secs(60),
+            Arc::new(instance_state),
+            Duration::from_secs(60),
             Arc::new(validated_state),
         );
 
@@ -184,10 +185,10 @@ impl BuilderConfig {
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
         async_spawn(async move {
             let res = run_non_permissioned_standalone_builder_service(
-                tx_sender,
                 da_sender,
                 qc_sender,
                 decide_sender,
+                tx_sender,
                 events_url,
             )
             .await;
