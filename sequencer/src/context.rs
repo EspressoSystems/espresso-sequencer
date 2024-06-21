@@ -21,7 +21,10 @@ use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
-    traits::{block_contents::BlockHeader, election::Membership, metrics::Metrics},
+    traits::{
+        block_contents::BlockHeader, election::Membership, metrics::Metrics,
+        node_implementation::ConsensusTime,
+    },
     HotShotConfig,
 };
 use std::{fmt::Display, time::Instant};
@@ -247,7 +250,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     /// Start participating in consensus.
     pub async fn start_consensus(&self) {
-        let mut transaction_size_in_bytes: u64 = 8; //Sishan TODO: change this initialization
+        let transaction_size_in_bytes: u64;
+        let rounds: usize = 100;
         if let Some(orchestrator_client) = &self.wait_for_orchestrator {
             tracing::warn!("waiting for orchestrated start");
             orchestrator_client
@@ -256,6 +260,10 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             let network_config: NetworkConfig<PubKey> =
                 orchestrator_client.get_config_after_collection().await;
             transaction_size_in_bytes = network_config.transaction_size as u64;
+            // rounds = network_config.rounds; // uncomment after ORCHESTRATOR_DEFAULT_NUM_ROUNDS is updated
+        } else {
+            transaction_size_in_bytes = 0;
+            tracing::error!("Cannot get transaction_size_in_bytes from orchestrator client");
         }
         tracing::warn!("starting consensus");
         let start = Instant::now();
@@ -300,43 +308,47 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                             }
 
                             num_successful_commits += leaf_chain.len();
-                            if num_successful_commits % 100 == 0 {
-                                let bench_results: BenchResults;
-                                println!("[{node_index}]: {num_successful_commits} rounds completed - Total transactions committed: {total_transactions_committed}");
-                                if num_successful_commits == 100 {
-                                    if total_transactions_committed != 0 {
-                                        let total_time_elapsed = start.elapsed(); // in seconds
-                                        let throughput_bytes_per_sec = total_transactions_committed
-                                            * transaction_size_in_bytes
-                                            / std::cmp::max(total_time_elapsed.as_secs(), 1u64);
-                                        // Sishan TODO: for latency and failed view number
-                                        bench_results = BenchResults {
-                                            avg_latency_in_sec: 0,
-                                            num_latency: 1,
-                                            minimum_latency_in_sec: 0,
-                                            maximum_latency_in_sec: 0,
-                                            throughput_bytes_per_sec,
-                                            total_transactions_committed,
-                                            transaction_size_in_bytes,
-                                            total_time_elapsed_in_sec: total_time_elapsed.as_secs(),
-                                            total_num_views: 100,
-                                            failed_num_views: 0,
-                                        };
-                                    } else {
-                                        bench_results = BenchResults::default();
+
+                            if num_successful_commits == rounds {
+                                let total_time_elapsed = start.elapsed(); // in seconds
+                                let consensus_lock = self.handle.read().await.hotshot.consensus();
+                                let consensus = consensus_lock.read().await;
+                                let total_num_views =
+                                    usize::try_from(consensus.locked_view().u64()).unwrap();
+                                let failed_num_views = total_num_views - num_successful_commits;
+                                let bench_results = if total_transactions_committed != 0 {
+                                    let throughput_bytes_per_sec = total_transactions_committed
+                                        * transaction_size_in_bytes
+                                        / std::cmp::max(total_time_elapsed.as_secs(), 1u64);
+
+                                    // Sishan TODO: for latency
+                                    BenchResults {
+                                        avg_latency_in_sec: 0,
+                                        num_latency: 1,
+                                        minimum_latency_in_sec: 0,
+                                        maximum_latency_in_sec: 0,
+                                        throughput_bytes_per_sec,
+                                        total_transactions_committed,
+                                        transaction_size_in_bytes,
+                                        total_time_elapsed_in_sec: total_time_elapsed.as_secs(),
+                                        total_num_views,
+                                        failed_num_views,
                                     }
-                                    if let Some(orchestrator_client) = &self.wait_for_orchestrator {
-                                        orchestrator_client.post_bench_results(bench_results).await;
-                                    }
+                                } else {
+                                    BenchResults::default()
+                                };
+                                println!("[{node_index}]: {total_transactions_committed} committed in {total_time_elapsed:?}, total number of views = {total_num_views}.");
+                                if let Some(orchestrator_client) = &self.wait_for_orchestrator {
+                                    orchestrator_client.post_bench_results(bench_results).await;
                                 }
                             }
+
                             if leaf_chain.len() > 1 {
                                 tracing::warn!(
                                     "Leaf chain is greater than 1 with len {}",
                                     leaf_chain.len()
                                 );
                             }
-                            // when we make progress, submit new events
                         }
                         _ => {} // mostly DA proposal
                     }
