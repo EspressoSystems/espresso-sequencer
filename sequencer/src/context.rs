@@ -13,10 +13,7 @@ use hotshot::{
     types::{Event, EventType, SystemContextHandle},
     Memberships, Networks, SystemContext,
 };
-use hotshot_orchestrator::{
-    client::{BenchResults, OrchestratorClient},
-    config::NetworkConfig,
-};
+use hotshot_orchestrator::client::{BenchResults, OrchestratorClient};
 use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -250,20 +247,18 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     /// Start participating in consensus.
     pub async fn start_consensus(&self) {
-        let transaction_size_in_bytes: u64;
         let rounds: usize = 100;
         if let Some(orchestrator_client) = &self.wait_for_orchestrator {
             tracing::warn!("waiting for orchestrated start");
             orchestrator_client
                 .wait_for_all_nodes_ready(self.node_state.node_id)
                 .await;
-            let network_config: NetworkConfig<PubKey> =
-                orchestrator_client.get_config_after_collection().await;
-            transaction_size_in_bytes = network_config.transaction_size as u64;
-            // rounds = network_config.rounds; // uncomment after ORCHESTRATOR_DEFAULT_NUM_ROUNDS is updated
+            // Sishan: uncomment after ORCHESTRATOR_DEFAULT_NUM_ROUNDS in HotShot is updated to 100.
+            // let network_config: NetworkConfig<PubKey> =
+            //     orchestrator_client.get_config_after_collection().await;
+            // rounds = network_config.rounds;
         } else {
-            transaction_size_in_bytes = 0;
-            tracing::error!("Cannot get transaction_size_in_bytes from orchestrator client");
+            tracing::error!("Cannot get info from orchestrator client");
         }
         tracing::warn!("starting consensus");
         let start = Instant::now();
@@ -272,6 +267,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         let mut event_stream = self.event_stream().await;
         let mut num_successful_commits = 0;
         let mut total_transactions_committed = 0;
+        let mut total_throughput = 0;
         let node_index = self.node_state().node_id;
         loop {
             match event_stream.next().await {
@@ -298,7 +294,11 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                     for tx in
                                         block_payload.transactions(leaf.block_header().metadata())
                                     {
-                                        println!("tx = {:?}", tx);
+                                        let payload_length = tx.into_payload().len();
+                                        // Transaction = NamespaceId + Vec<u8>
+                                        let tx_sz = payload_length * std::mem::size_of::<u8>()
+                                            + std::mem::size_of::<u64>();
+                                        total_throughput += tx_sz;
                                     }
                                 }
                             }
@@ -317,10 +317,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                     usize::try_from(consensus.locked_view().u64()).unwrap();
                                 let failed_num_views = total_num_views - num_successful_commits;
                                 let bench_results = if total_transactions_committed != 0 {
-                                    let throughput_bytes_per_sec = total_transactions_committed
-                                        * transaction_size_in_bytes
+                                    let throughput_bytes_per_sec = (total_throughput as u64)
                                         / std::cmp::max(total_time_elapsed.as_secs(), 1u64);
-
                                     // Sishan TODO: for latency
                                     BenchResults {
                                         avg_latency_in_sec: 0,
@@ -329,7 +327,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                         maximum_latency_in_sec: 0,
                                         throughput_bytes_per_sec,
                                         total_transactions_committed,
-                                        transaction_size_in_bytes,
+                                        transaction_size_in_bytes: 0, // this is useless, refer to `submit-transactions.rs` for real transaction size
                                         total_time_elapsed_in_sec: total_time_elapsed.as_secs(),
                                         total_num_views,
                                         failed_num_views,
