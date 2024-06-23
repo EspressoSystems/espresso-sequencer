@@ -247,7 +247,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     /// Start participating in consensus.
     pub async fn start_consensus(&self) {
-        let rounds: usize = 100;
         if let Some(orchestrator_client) = &self.wait_for_orchestrator {
             tracing::warn!("waiting for orchestrated start");
             orchestrator_client
@@ -264,11 +263,14 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         let start = Instant::now();
         self.handle.read().await.hotshot.start_consensus().await;
 
+        // number of rounds for warm up, which will not be counted in for benchmarking phase
+        let start_rounds: usize = 20;
+        let end_rounds: usize = 120;
         let mut event_stream = self.event_stream().await;
         let mut num_successful_commits = 0;
         let mut total_transactions_committed = 0;
         let mut total_throughput = 0;
-        let node_index = self.node_state().node_id;
+        let node_index: u64 = self.node_state().node_id;
         loop {
             match event_stream.next().await {
                 None => {
@@ -287,29 +289,39 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                             if let Some(leaf_info) = leaf_chain.first() {
                                 let leaf = &leaf_info.leaf;
                                 tracing::info!("Decide event for leaf: {}", *leaf.view_number());
+                                num_successful_commits += leaf_chain.len();
 
-                                // iterate all the decided transactions
-                                // Sishan TODO: to calculate latency
-                                if let Some(block_payload) = &leaf.block_payload() {
-                                    for tx in
-                                        block_payload.transactions(leaf.block_header().metadata())
-                                    {
-                                        let payload_length = tx.into_payload().len();
-                                        // Transaction = NamespaceId + Vec<u8>
-                                        let tx_sz = payload_length * std::mem::size_of::<u8>()
-                                            + std::mem::size_of::<u64>();
-                                        total_throughput += tx_sz;
+                                // only count in the info after warm up
+                                if num_successful_commits >= start_rounds {
+                                    // iterate all the decided transactions
+                                    // Sishan TODO: to calculate latency
+                                    if let Some(block_payload) = &leaf.block_payload() {
+                                        for tx in block_payload
+                                            .transactions(leaf.block_header().metadata())
+                                        {
+                                            let payload_length = tx.into_payload().len();
+                                            // Transaction = NamespaceId(u64) + payload(Vec<u8>) + has_timestamp(bool)
+                                            println!(
+                                                "Transaction Structure size = {:?}",
+                                                std::mem::size_of::<Transaction>()
+                                            );
+                                            let tx_sz = payload_length * std::mem::size_of::<u8>() // size of payload
+                                                + std::mem::size_of::<u64>() // size of the namespace
+                                                + std::mem::size_of::<bool>() // size of has_timestamp
+                                                + std::mem::size_of::<Transaction>(); // size of the struct wrapper
+                                            total_throughput += tx_sz;
+                                        }
                                     }
                                 }
                             }
 
-                            if let Some(size) = block_size {
-                                total_transactions_committed += size;
+                            if num_successful_commits >= start_rounds {
+                                if let Some(size) = block_size {
+                                    total_transactions_committed += size;
+                                }
                             }
 
-                            num_successful_commits += leaf_chain.len();
-
-                            if num_successful_commits == rounds {
+                            if num_successful_commits >= end_rounds {
                                 let total_time_elapsed = start.elapsed(); // in seconds
                                 let consensus_lock = self.handle.read().await.hotshot.consensus();
                                 let consensus = consensus_lock.read().await;
@@ -327,7 +339,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                         maximum_latency_in_sec: 0,
                                         throughput_bytes_per_sec,
                                         total_transactions_committed,
-                                        transaction_size_in_bytes: 0, // this is useless, refer to `submit-transactions.rs` for real transaction size
+                                        transaction_size_in_bytes: (total_throughput as u64)
+                                            / total_transactions_committed, // refer to `submit-transactions.rs` for the range of transaction size
                                         total_time_elapsed_in_sec: total_time_elapsed.as_secs(),
                                         total_num_views,
                                         failed_num_views,
@@ -339,6 +352,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                 if let Some(orchestrator_client) = &self.wait_for_orchestrator {
                                     orchestrator_client.post_bench_results(bench_results).await;
                                 }
+                                break;
                             }
 
                             if leaf_chain.len() > 1 {
