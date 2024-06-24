@@ -540,7 +540,8 @@ pub mod testing {
             let (fee_account, key_pair) = FeeAccount::generated_from_seed_indexed(seed, 2011_u64);
 
             // channel capacity for the builder states
-            let channel_capacity = NonZeroUsize::new(100).unwrap();
+            let tx_channel_capacity = NonZeroUsize::new(500).unwrap();
+            let event_channel_capacity = NonZeroUsize::new(20).unwrap();
             // bootstrapping view number
             // A new builder can use this view number to start building blocks from this view number
             let bootstrapped_view = ViewNumber::new(0);
@@ -550,7 +551,8 @@ pub mod testing {
             let builder_config = BuilderConfig::init(
                 key_pair,
                 bootstrapped_view,
-                channel_capacity,
+                tx_channel_capacity,
+                event_channel_capacity,
                 node_count,
                 node_state,
                 ValidatedState::default(),
@@ -605,7 +607,8 @@ pub mod testing {
             let (fee_account, key_pair) = FeeAccount::generated_from_seed_indexed(seed, 2011_u64);
 
             // channel capacity for the builder states
-            let channel_capacity = NonZeroUsize::new(100).unwrap();
+            let tx_channel_capacity = NonZeroUsize::new(20).unwrap();
+            let event_channel_capacity = NonZeroUsize::new(500).unwrap();
             // bootstrapping view number
             // A new builder can use this view number to start building blocks from this view number
             let bootstrapped_view = ViewNumber::new(0);
@@ -616,7 +619,8 @@ pub mod testing {
                 node_id,
                 key_pair,
                 bootstrapped_view,
-                channel_capacity,
+                tx_channel_capacity,
+                event_channel_capacity,
                 node_state,
                 ValidatedState::default(),
                 hotshot_builder_api_url,
