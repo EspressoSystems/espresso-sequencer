@@ -2,19 +2,51 @@ use crate::{
     api::{data_source::CatchupDataSource, AccountQueryData, BlocksFrontier},
     persistence::PersistenceOptions,
     state::{BlockMerkleTree, FeeAccount, FeeMerkleCommitment},
+    ChainConfig,
 };
 use anyhow::{bail, Context};
-use async_std::sync::RwLock;
+use async_std::{sync::RwLock, task::sleep};
 use async_trait::async_trait;
+use committable::Commitment;
 use derive_more::From;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
+use rand::Rng;
 use serde::de::DeserializeOwned;
-use std::{fmt::Debug, sync::Arc, time::Duration};
+use std::{cmp::min, fmt::Debug, sync::Arc, time::Duration};
 use surf_disco::Request;
 use tide_disco::error::ServerError;
 use url::Url;
 use vbs::version::StaticVersionType;
+
+const MIN_RETRY_DELAY: Duration = Duration::from_millis(500);
+const MAX_RETRY_DELAY: Duration = Duration::from_secs(5);
+const BACKOFF_FACTOR: u32 = 2;
+// Exponential backoff jitter as a fraction of the backoff delay, (numerator, denominator).
+const BACKOFF_JITTER: (u64, u64) = (1, 10);
+
+#[must_use]
+fn backoff(delay: Duration) -> Duration {
+    if delay >= MAX_RETRY_DELAY {
+        return MAX_RETRY_DELAY;
+    }
+
+    let mut rng = rand::thread_rng();
+
+    // Increase the backoff by the backoff factor.
+    let ms = (delay * BACKOFF_FACTOR).as_millis() as u64;
+
+    // Sample a random jitter factor in the range [0, BACKOFF_JITTER.0 / BACKOFF_JITTER.1].
+    let jitter_num = rng.gen_range(0..BACKOFF_JITTER.0);
+    let jitter_den = BACKOFF_JITTER.1;
+
+    // Increase the delay by the jitter factor.
+    let jitter = ms * jitter_num / jitter_den;
+    let delay = Duration::from_millis(ms + jitter);
+
+    // Bound the delay by the maximum.
+    min(delay, MAX_RETRY_DELAY)
+}
 
 // This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.
@@ -59,6 +91,7 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         let mut ret = vec![];
         for account in accounts {
             // Retry until we succeed.
+            let mut delay = MIN_RETRY_DELAY;
             let account = loop {
                 match self
                     .try_fetch_account(height, view, fee_merkle_tree_root, account)
@@ -66,8 +99,9 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
                 {
                     Ok(account) => break account,
                     Err(err) => {
-                        tracing::warn!(%account, "Could not fetch account, retrying: {err:#}");
-                        async_std::task::sleep(self.retry_interval()).await;
+                        tracing::warn!(%account, ?delay, "Could not fetch account, retrying: {err:#}");
+                        sleep(delay).await;
+                        delay = backoff(delay);
                     }
                 }
             };
@@ -91,12 +125,18 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
+        // Retry until we succeed.
+        let mut delay = MIN_RETRY_DELAY;
         loop {
             match self.try_remember_blocks_merkle_tree(height, view, mt).await {
                 Ok(()) => break,
                 Err(err) => {
-                    tracing::warn!("Could not fetch frontier from any peer, retrying: {err:#}");
-                    async_std::task::sleep(self.retry_interval()).await;
+                    tracing::warn!(
+                        ?delay,
+                        "Could not fetch frontier from any peer, retrying: {err:#}"
+                    );
+                    sleep(delay).await;
+                    delay = backoff(delay);
                 }
             }
         }
@@ -104,8 +144,28 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         Ok(())
     }
 
-    fn retry_interval(&self) -> Duration {
-        Duration::from_millis(100)
+    async fn try_fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig>;
+
+    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+        // Retry until we succeed.
+        let mut delay = MIN_RETRY_DELAY;
+
+        loop {
+            match self.try_fetch_chain_config(commitment).await {
+                Ok(cf) => return cf,
+                Err(err) => {
+                    tracing::warn!(
+                        ?delay,
+                        "Could not fetch chain config from any peer, retrying: {err:#}"
+                    );
+                    sleep(delay).await;
+                    delay = backoff(delay);
+                }
+            }
+        }
     }
 }
 
@@ -127,7 +187,6 @@ pub(crate) async fn local_and_remote(
 #[derive(Debug, Clone, Default)]
 pub struct StatePeers<Ver: StaticVersionType> {
     clients: Vec<Client<ServerError, Ver>>,
-    interval: Duration,
 }
 
 impl<Ver: StaticVersionType> StatePeers<Ver> {
@@ -138,7 +197,6 @@ impl<Ver: StaticVersionType> StatePeers<Ver> {
 
         Self {
             clients: urls.into_iter().map(Client::new).collect(),
-            interval: Duration::from_secs(1),
         }
     }
 }
@@ -210,8 +268,26 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
         bail!("Could not fetch frontier from any peer");
     }
 
-    fn retry_interval(&self) -> Duration {
-        self.interval
+    async fn try_fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        for client in self.clients.iter() {
+            tracing::info!("Fetching chain config from {}", client.url);
+            match client
+                .get::<ChainConfig>(&format!("catchup/chain-config/{}", commitment))
+                .send()
+                .await
+            {
+                Ok(cf) => {
+                    return Ok(cf);
+                }
+                Err(err) => {
+                    tracing::warn!("Error fetching chain config from peer: {}", err);
+                }
+            }
+        }
+        bail!("Could not fetch chain config from any peer");
     }
 }
 
@@ -263,6 +339,13 @@ where
             _ => bail!("invalid proof"),
         }
     }
+
+    async fn try_fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        self.db.read().await.get_chain_config(commitment).await
+    }
 }
 
 #[async_trait]
@@ -310,6 +393,17 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
     ) -> anyhow::Result<()> {
         (**self).remember_blocks_merkle_tree(height, view, mt).await
     }
+
+    async fn try_fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        (**self).try_fetch_chain_config(commitment).await
+    }
+
+    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+        (**self).fetch_chain_config(commitment).await
+    }
 }
 
 #[async_trait]
@@ -356,6 +450,17 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
         (**self).remember_blocks_merkle_tree(height, view, mt).await
+    }
+
+    async fn try_fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        (**self).try_fetch_chain_config(commitment).await
+    }
+
+    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
+        (**self).fetch_chain_config(commitment).await
     }
 }
 
@@ -405,6 +510,22 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
         }
 
         bail!("could not fetch account from any provider");
+    }
+
+    async fn try_fetch_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        for provider in self {
+            match provider.try_fetch_chain_config(commitment).await {
+                Ok(cf) => return Ok(cf),
+                Err(err) => {
+                    tracing::warn!(?provider, "failed to fetch chain config: {err:#}");
+                }
+            }
+        }
+
+        bail!("could not fetch chain config from any provider");
     }
 }
 
@@ -467,6 +588,13 @@ pub mod mock {
                 .expect("Proof verifies");
 
             Ok(())
+        }
+
+        async fn try_fetch_chain_config(
+            &self,
+            _commitment: Commitment<ChainConfig>,
+        ) -> anyhow::Result<ChainConfig> {
+            Ok(ChainConfig::default())
         }
     }
 }

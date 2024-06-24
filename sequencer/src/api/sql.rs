@@ -3,19 +3,25 @@ use super::{
     AccountQueryData, BlocksFrontier,
 };
 use crate::{
-    persistence::sql::Options,
+    persistence::{
+        sql::{sql_param, transaction, Options},
+        ChainConfigPersistence,
+    },
     state::{BlockMerkleTree, FeeAccountProof, FeeMerkleTree},
-    SeqTypes,
+    ChainConfig, SeqTypes,
 };
 use anyhow::{bail, Context};
 use async_trait::async_trait;
+use committable::Commitment;
 use ethers::prelude::Address;
+use futures::FutureExt;
 use hotshot_query_service::{
     data_source::{
-        sql::{Config, SqlDataSource},
+        sql::{Config, Query, SqlDataSource},
         storage::SqlStorage,
     },
     merklized_state::{MerklizedStateDataSource, Snapshot},
+    Resolvable,
 };
 use hotshot_types::data::ViewNumber;
 use jf_merkle_tree::{prelude::MerkleNode, MerkleTreeScheme};
@@ -27,12 +33,28 @@ impl SequencerDataSource for DataSource {
     type Options = Options;
 
     async fn create(opt: Self::Options, provider: Provider, reset: bool) -> anyhow::Result<Self> {
+        let fetch_limit = opt.fetch_rate_limit;
+        let active_fetch_delay = opt.active_fetch_delay;
+        let chunk_fetch_delay = opt.chunk_fetch_delay;
         let mut cfg = Config::try_from(opt)?;
+
         if reset {
             cfg = cfg.reset_schema();
         }
 
-        Ok(cfg.connect(provider).await?)
+        let mut builder = cfg.builder(provider).await?;
+
+        if let Some(limit) = fetch_limit {
+            builder = builder.with_rate_limit(limit);
+        }
+        if let Some(delay) = active_fetch_delay {
+            builder = builder.with_active_fetch_delay(delay);
+        }
+        if let Some(delay) = chunk_fetch_delay {
+            builder = builder.with_chunk_fetch_delay(delay);
+        }
+
+        builder.build().await
     }
 }
 
@@ -77,6 +99,13 @@ impl CatchupDataSource for SqlStorage {
         .await
         .context(format!("fetching frontier at height {height}"))
     }
+
+    async fn get_chain_config(
+        &self,
+        commitment: committable::Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        self.load_chain_config(commitment).await
+    }
 }
 
 impl CatchupDataSource for DataSource {
@@ -96,10 +125,67 @@ impl CatchupDataSource for DataSource {
     }
 }
 
+#[async_trait]
+impl ChainConfigPersistence for SqlStorage {
+    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
+        let commitment = chain_config.commitment();
+        let data = bincode::serialize(&chain_config)?;
+
+        transaction(self, |mut tx| {
+            async move {
+                tx.upsert(
+                    "chain_config",
+                    ["commitment", "data"],
+                    ["commitment"],
+                    [[sql_param(&(commitment.to_string())), sql_param(&data)]],
+                )
+                .await
+                .map_err(Into::into)
+            }
+            .boxed()
+        })
+        .await
+    }
+
+    async fn load_chain_config(
+        &self,
+        commitment: committable::Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        let query = self
+            .query_one(
+                "SELECT * from chain_config where commitment = $1",
+                [&commitment.to_string()],
+            )
+            .await?;
+
+        let data: Vec<u8> = query.try_get("data")?;
+
+        bincode::deserialize(&data[..]).context("failed to deserialize")
+    }
+}
+
+#[async_trait]
+impl ChainConfigPersistence for DataSource {
+    async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
+        (*self.storage_mut().await)
+            .insert_chain_config(chain_config)
+            .await
+    }
+
+    async fn load_chain_config(
+        &self,
+        commitment: Commitment<ChainConfig>,
+    ) -> anyhow::Result<ChainConfig> {
+        self.storage().await.load_chain_config(commitment).await
+    }
+}
+
 #[cfg(test)]
 mod impl_testable_data_source {
+
     use super::*;
     use crate::api::{self, data_source::testing::TestableSequencerDataSource};
+
     use hotshot_query_service::data_source::storage::sql::testing::TmpDb;
 
     fn tmp_options(db: &TmpDb) -> Options {

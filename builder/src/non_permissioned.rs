@@ -21,11 +21,13 @@ use hotshot_builder_core::{
         BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromProposedBlock, MessageType,
         ResponseMessage,
     },
-    service::{run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState},
+    service::{
+        run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
+        ReceivedTransaction,
+    },
 };
 
 use hotshot_types::{
-    constants::{Version01, STATIC_VER_0_1},
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
@@ -35,8 +37,8 @@ use hotshot_types::{
     utils::BuilderCommitment,
 };
 use sequencer::{
-    catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, BuilderParams,
-    ChainConfig, L1Params, NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes,
+    catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, ChainConfig, L1Params,
+    NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes, ValidatedState,
 };
 
 use hotshot_events_service::{
@@ -59,9 +61,9 @@ pub struct BuilderConfig {
 }
 
 pub fn build_instance_state<Ver: StaticVersionType + 'static>(
+    chain_config: ChainConfig,
     l1_params: L1Params,
     state_peers: Vec<Url>,
-    chain_config: ChainConfig,
     _: Ver,
 ) -> anyhow::Result<NodeState> {
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
@@ -79,9 +81,11 @@ impl BuilderConfig {
     pub async fn init(
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
-        channel_capacity: NonZeroUsize,
+        tx_channel_capacity: NonZeroUsize,
+        event_channel_capacity: NonZeroUsize,
         node_count: NonZeroUsize,
         instance_state: NodeState,
+        validated_state: ValidatedState,
         hotshot_events_api_url: Url,
         hotshot_builder_apis_url: Url,
         max_api_timeout_duration: Duration,
@@ -91,7 +95,8 @@ impl BuilderConfig {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
             ?bootstrapped_view,
-            %channel_capacity,
+            %tx_channel_capacity,
+            %event_channel_capacity,
             ?max_api_timeout_duration,
             buffered_view_num_count,
             ?maximize_txns_count_timeout_duration,
@@ -99,23 +104,30 @@ impl BuilderConfig {
         );
 
         // tx channel
-        let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (mut tx_sender, tx_receiver) =
+            broadcast::<Arc<ReceivedTransaction<SeqTypes>>>(tx_channel_capacity.get());
+        tx_sender.set_overflow(true);
 
         // da channel
-        let (da_sender, da_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (da_sender, da_receiver) =
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // qc channel
-        let (qc_sender, qc_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (qc_sender, qc_receiver) =
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // decide channel
         let (decide_sender, decide_receiver) =
-            broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // builder api request channel
-        let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (req_sender, req_receiver) =
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
-        let (genesis_payload, genesis_ns_table) = Payload::from_transactions([], &instance_state)
-            .expect("genesis payload construction failed");
+        let (genesis_payload, genesis_ns_table) =
+            Payload::from_transactions([], &validated_state, &instance_state)
+                .await
+                .expect("genesis payload construction failed");
 
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
 
@@ -135,7 +147,6 @@ impl BuilderConfig {
         );
 
         let global_state = Arc::new(RwLock::new(global_state));
-
         let global_state_clone = global_state.clone();
 
         let builder_state = BuilderState::<SeqTypes>::new(
@@ -145,20 +156,23 @@ impl BuilderConfig {
                 leaf_commit: fake_commitment(),
                 builder_commitment,
             },
-            tx_receiver,
             decide_receiver,
             da_receiver,
             qc_receiver,
             req_receiver,
+            tx_receiver,
+            Vec::new() /* tx_queue */,
             global_state_clone,
             node_count,
             maximize_txns_count_timeout_duration,
             instance_state
-                .chain_config()
+                .chain_config
                 .base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
+            Duration::from_secs(60),
+            Arc::new(validated_state),
         );
 
         // spawn the builder event loop
@@ -181,10 +195,10 @@ impl BuilderConfig {
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
         async_spawn(async move {
             let res = run_non_permissioned_standalone_builder_service(
-                tx_sender,
                 da_sender,
                 qc_sender,
                 decide_sender,
+                tx_sender,
                 events_url,
             )
             .await;
@@ -227,12 +241,10 @@ mod test {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
-    use hotshot_types::{
-        constants::{Version01, STATIC_VER_0_1},
-        traits::{
-            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
-            node_implementation::NodeType,
-        },
+    use hotshot_types::constants::Base;
+    use hotshot_types::traits::{
+        block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+        node_implementation::NodeType,
     };
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use sequencer::{
@@ -241,8 +253,7 @@ mod test {
             PersistenceOptions,
         },
         state::FeeAccount,
-        transaction::Transaction,
-        Payload,
+        NamespaceId, Payload, Transaction,
     };
     use std::time::Duration;
     use surf_disco::Client;
@@ -274,10 +285,8 @@ mod test {
         let num_non_staking_nodes = hotshot_config.config.num_nodes_without_stake;
 
         // non-staking node handle
-        let hotshot_context_handle = handles
-            [NonPermissionedBuilderTestConfig::SUBSCRIBED_DA_NODE_ID]
-            .0
-            .clone();
+        let hotshot_context_handle =
+            &handles[NonPermissionedBuilderTestConfig::SUBSCRIBED_DA_NODE_ID].0;
 
         // hotshot event streaming api url
         let hotshot_events_streaming_api_url = HotShotTestConfig::hotshot_event_streaming_api_url();
@@ -287,11 +296,11 @@ mod test {
             hotshot_events_streaming_api_url.clone(),
             known_nodes_with_stake,
             num_non_staking_nodes,
-            hotshot_context_handle,
+            Arc::clone(hotshot_context_handle),
         );
 
         // builder api url
-        let hotshot_builder_api_url = hotshot_config.config.builder_url.clone();
+        let hotshot_builder_api_url = hotshot_config.config.builder_urls[0].clone();
 
         let builder_config = NonPermissionedBuilderTestConfig::init_non_permissioned_builder(
             &hotshot_config,
@@ -303,7 +312,7 @@ mod test {
         let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
-        let builder_client = Client::<hotshot_builder_api::builder::Error, Version01>::new(
+        let builder_client = Client::<hotshot_builder_api::builder::Error, Base>::new(
             hotshot_builder_api_url.clone(),
         );
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
@@ -404,7 +413,7 @@ mod test {
             }
         }
 
-        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
+        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3]);
         match builder_client
             .post::<()>("txn_submit/submit")
             .body_json(&txn)

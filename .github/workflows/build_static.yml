@@ -46,7 +46,7 @@ jobs:
         uses: cachix/install-nix-action@V27
 
       - name: Enable Cachix
-        uses: cachix/cachix-action@v14
+        uses: cachix/cachix-action@v15
         # If PR is from a non-collaborator (e. g. dependabot) the secrets are missing and the login to cachix fails.
         continue-on-error: true
         with:
@@ -89,7 +89,8 @@ jobs:
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/deploy
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/keygen
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/pub-key
-            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/bridge
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/espresso-bridge
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/espresso-dev-node
 
   static-dockers:
     runs-on: ubuntu-latest
@@ -193,6 +194,13 @@ jobs:
           images: ghcr.io/espressosystems/espresso-sequencer/deploy
           flavor: suffix=musl
 
+      - name: Generate espresso-dev-node metadata
+        uses: docker/metadata-action@v5
+        id: espresso-dev-node
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node
+          flavor: suffix=musl
+
       - name: Generate bridge metadata
         uses: docker/metadata-action@v5
         id: bridge
@@ -201,7 +209,7 @@ jobs:
           flavor: suffix=musl
 
       - name: Build and push sequencer docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/sequencer.Dockerfile
@@ -211,7 +219,7 @@ jobs:
           labels: ${{ steps.sequencer.outputs.labels }}
 
       - name: Build and push cdn-broker docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/cdn-broker.Dockerfile
@@ -221,7 +229,7 @@ jobs:
           labels: ${{ steps.cdn-broker.outputs.labels }}
 
       - name: Build and push cdn-marshal docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/cdn-marshal.Dockerfile
@@ -231,7 +239,7 @@ jobs:
           labels: ${{ steps.cdn-marshal.outputs.labels }}
 
       - name: Build and push cdn-whitelist docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/cdn-whitelist.Dockerfile
@@ -241,7 +249,7 @@ jobs:
           labels: ${{ steps.cdn-whitelist.outputs.labels }}
 
       - name: Build and push state-relay-server docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/state-relay-server.Dockerfile
@@ -251,7 +259,7 @@ jobs:
           labels: ${{ steps.state-relay-server.outputs.labels }}
 
       - name: Build and push prover-service docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/prover-service.Dockerfile
@@ -261,7 +269,7 @@ jobs:
           labels: ${{ steps.prover-service.outputs.labels }}
 
       - name: Build and push orchestrator docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/orchestrator.Dockerfile
@@ -271,7 +279,7 @@ jobs:
           labels: ${{ steps.orchestrator.outputs.labels }}
 
       - name: Build and push commitment-task docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/commitment-task.Dockerfile
@@ -281,7 +289,7 @@ jobs:
           labels: ${{ steps.commitment-task.outputs.labels }}
 
       - name: Build and push submit-transactions docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/submit-transactions.Dockerfile
@@ -291,7 +299,7 @@ jobs:
           labels: ${{ steps.submit-transactions.outputs.labels }}
 
       - name: Build and push deploy docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/deploy.Dockerfile
@@ -300,11 +308,21 @@ jobs:
           tags: ${{ steps.deploy.outputs.tags }}
           labels: ${{ steps.deploy.outputs.labels }}
 
-      - name: Build and push bridge docker
-        uses: docker/build-push-action@v5
+      - name: Build and push dev node docker
+        uses: docker/build-push-action@v6
         with:
           context: ./
-          file: ./docker/bridge.Dockerfile
+          file: ./docker/espresso-dev-node.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.espresso-dev-node.outputs.tags }}
+          labels: ${{ steps.espresso-dev-node.outputs.labels }}
+
+      - name: Build and push bridge docker
+        uses: docker/build-push-action@v6
+        with:
+          context: ./
+          file: ./docker/espresso-bridge.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.bridge.outputs.tags }}

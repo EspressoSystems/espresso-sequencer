@@ -2,7 +2,7 @@
 
 use serde::de::Error as _;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap},
     env,
 };
 
@@ -14,10 +14,7 @@ use super::{
     StorageState,
 };
 use crate::{
-    block::payload::{parse_ns_payload, NamespaceProof},
-    network,
-    persistence::SequencerPersistence,
-    NamespaceId, SeqTypes, Transaction,
+    block::NsProof, network, persistence::SequencerPersistence, NamespaceId, SeqTypes, Transaction,
 };
 use anyhow::Result;
 use async_std::sync::{Arc, RwLock};
@@ -45,7 +42,7 @@ use vbs::version::StaticVersionType;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
-    pub proof: NamespaceProof,
+    pub proof: Option<NsProof>,
     pub transactions: Vec<Transaction>,
 }
 
@@ -74,8 +71,7 @@ where
     api.get("getnamespaceproof", move |req, state| {
         async move {
             let height: usize = req.integer_param("height")?;
-            let ns_id: u64 = req.integer_param("namespace")?;
-            let ns_id = NamespaceId::from(ns_id);
+            let ns_id = NamespaceId::from(req.integer_param::<_, u32>("namespace")?);
             let (block, common) = try_join!(
                 async move {
                     state
@@ -99,32 +95,25 @@ where
                 }
             )?;
 
-            let proof = block
-                .payload()
-                .namespace_with_proof(
-                    block.payload().get_ns_table(),
-                    ns_id,
-                    common.common().clone(),
-                )
-                .context(CustomSnafu {
-                    message: format!("failed to make proof for namespace {ns_id}"),
-                    status: StatusCode::NotFound,
-                })?;
+            if let Some(ns_index) = block.payload().ns_table().find_ns_id(&ns_id) {
+                let proof = NsProof::new(block.payload(), &ns_index, common.common()).context(
+                    CustomSnafu {
+                        message: format!("failed to make proof for namespace {ns_id}"),
+                        status: StatusCode::NOT_FOUND,
+                    },
+                )?;
 
-            let transactions = if let NamespaceProof::Existence {
-                ref ns_payload_flat,
-                ..
-            } = proof
-            {
-                parse_ns_payload(ns_payload_flat, ns_id)
+                Ok(NamespaceProofQueryData {
+                    transactions: proof.export_all_txs(&ns_id),
+                    proof: Some(proof),
+                })
             } else {
-                Vec::new()
-            };
-
-            Ok(NamespaceProofQueryData {
-                transactions,
-                proof,
-            })
+                // ns_id not found in ns_table
+                Ok(NamespaceProofQueryData {
+                    proof: None,
+                    transactions: Vec::new(),
+                })
+            }
         }
         .boxed()
     })?;
@@ -172,14 +161,15 @@ where
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/submit.toml"))?;
     let mut api = Api::<S, Error, Ver>::new(toml)?;
 
-    api.post("submit", |req, state| {
+    api.at("submit", |req, state| {
         async move {
             let tx = req
                 .body_auto::<Transaction, Ver>(Ver::instance())
                 .map_err(Error::from_request_error)?;
+
             let hash = tx.commit();
             state
-                .submit(tx)
+                .read(|state| state.submit(tx).boxed())
                 .await
                 .map_err(|err| Error::internal(err.to_string()))?;
             Ok(hash)
@@ -210,7 +200,7 @@ where
                 .get_state_signature(height)
                 .await
                 .ok_or(tide_disco::Error::catch_all(
-                    StatusCode::NotFound,
+                    StatusCode::NOT_FOUND,
                     "Signature not found.".to_owned(),
                 ))
         }
@@ -241,7 +231,7 @@ where
                 .map_err(Error::from_request_error)?;
             let account = account.parse().map_err(|err| {
                 Error::catch_all(
-                    StatusCode::BadRequest,
+                    StatusCode::BAD_REQUEST,
                     format!("malformed account {account}: {err}"),
                 )
             })?;
@@ -249,7 +239,7 @@ where
             state
                 .get_account(height, ViewNumber::new(view), account)
                 .await
-                .map_err(|err| Error::catch_all(StatusCode::NotFound, format!("{err:#}")))
+                .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
         }
         .boxed()
     })?
@@ -265,7 +255,20 @@ where
             state
                 .get_frontier(height, ViewNumber::new(view))
                 .await
-                .map_err(|err| Error::catch_all(StatusCode::NotFound, format!("{err:#}")))
+                .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
+        }
+        .boxed()
+    })?
+    .get("chainconfig", |req, state| {
+        async move {
+            let commitment = req
+                .blob_param("commitment")
+                .map_err(Error::from_request_error)?;
+
+            state
+                .get_chain_config(commitment)
+                .await
+                .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
         }
         .boxed()
     })?;
@@ -303,7 +306,7 @@ where
     let mut api = Api::<S, Error, Ver>::new(toml)?;
 
     let env_variables = get_public_env_vars()
-        .map_err(|err| Error::catch_all(StatusCode::InternalServerError, format!("{err:#}")))?;
+        .map_err(|err| Error::catch_all(StatusCode::INTERNAL_SERVER_ERROR, format!("{err:#}")))?;
 
     api.get("hotshot", |_, state| {
         async move { Ok(state.get_config().await) }.boxed()
@@ -330,7 +333,7 @@ fn get_public_env_vars() -> Result<Vec<String>> {
         .clone()
         .into_iter()
         .map(|v| v.try_into())
-        .collect::<Result<HashSet<String>, toml::de::Error>>()?;
+        .collect::<Result<BTreeSet<String>, toml::de::Error>>()?;
 
     let hashmap: HashMap<String, String> = env::vars().collect();
     let mut public_env_vars: Vec<String> = Vec::new();

@@ -5,7 +5,10 @@ use crate::{
     Leaf, SeqTypes, ViewNumber,
 };
 use anyhow::Context;
-use async_std::sync::{Arc, RwLock};
+use async_std::{
+    stream::StreamExt,
+    sync::{Arc, RwLock},
+};
 use async_trait::async_trait;
 use clap::Parser;
 use derivative::Derivative;
@@ -19,7 +22,7 @@ use hotshot_query_service::data_source::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -90,6 +93,27 @@ pub struct Options {
 
     #[clap(long, env = "ESPRESSO_SEQUENCER_STORE_UNDECIDED_STATE", hide = true)]
     pub(crate) store_undecided_state: bool,
+
+    /// Specifies the maximum number of concurrent fetch requests allowed from peers.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_FETCH_RATE_LIMIT")]
+    pub(crate) fetch_rate_limit: Option<usize>,
+
+    /// The minimum delay between active fetches in a stream.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_ACTIVE_FETCH_DELAY", value_parser = parse_duration)]
+    pub(crate) active_fetch_delay: Option<Duration>,
+
+    /// The minimum delay between loading chunks in a stream.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_CHUNK_FETCH_DELAY", value_parser = parse_duration)]
+    pub(crate) chunk_fetch_delay: Option<Duration>,
+
+    /// Disable pruning and reconstruct previously pruned data.
+    ///
+    /// While running without pruning is the default behavior, the default will not try to
+    /// reconstruct data that was pruned in a previous run where pruning was enabled. This option
+    /// instructs the service to run without pruning _and_ reconstruct all previously pruned data by
+    /// fetching from peers.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_ARCHIVE", conflicts_with = "prune")]
+    pub(crate) archive: bool,
 }
 
 impl TryFrom<Options> for Config {
@@ -123,6 +147,9 @@ impl TryFrom<Options> for Config {
 
         if opt.prune {
             cfg = cfg.pruner_cfg(PrunerCfg::from(opt.pruning))?;
+        }
+        if opt.archive {
+            cfg = cfg.archive();
         }
 
         Ok(cfg)
@@ -226,19 +253,25 @@ pub struct Persistence {
     store_undecided_state: bool,
 }
 
-async fn transaction(
-    persistence: &mut Persistence,
+pub(crate) async fn transaction(
+    sql: &mut SqlStorage,
     f: impl FnOnce(Transaction) -> BoxFuture<anyhow::Result<()>>,
 ) -> anyhow::Result<()> {
-    let tx = persistence.db.transaction().await?;
+    let tx = sql.transaction().await?;
     match f(tx).await {
         Ok(_) => {
-            persistence.db.commit().await?;
+            if let Err(err) = sql.commit().await {
+                tracing::warn!("transaction failed, reverting: {err:#}");
+                sql.revert().await;
+
+                return Err(err.into());
+            }
+
             Ok(())
         }
         Err(err) => {
             tracing::warn!("transaction failed, reverting: {err:#}");
-            persistence.db.revert().await;
+            sql.revert().await;
             Err(err)
         }
     }
@@ -272,7 +305,7 @@ impl SequencerPersistence for Persistence {
         tracing::info!("saving config to Postgres");
         let json = serde_json::to_value(cfg)?;
 
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 tx.execute_one_with_retries(
                     "INSERT INTO network_config (config) VALUES ($1)",
@@ -287,13 +320,16 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 let stmt1 = "DELETE FROM vid_share where view <= $1";
                 tx.execute(stmt1, [&(view.u64() as i64)]).await?;
 
                 let stmt2 = "DELETE FROM da_proposal where view <= $1";
                 tx.execute(stmt2, [&(view.u64() as i64)]).await?;
+
+                let stmt3 = "DELETE FROM quorum_proposals where view <= $1";
+                tx.execute(stmt3, [&(view.u64() as i64)]).await?;
                 Ok(())
             }
             .boxed()
@@ -330,7 +366,7 @@ impl SequencerPersistence for Persistence {
         let leaf_bytes = bincode::serialize(leaf)?;
         let qc_bytes = bincode::serialize(qc)?;
 
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 tx.execute_one_with_retries(
                     stmt,
@@ -440,6 +476,30 @@ impl SequencerPersistence for Persistence {
             .transpose()
     }
 
+    async fn load_quorum_proposals(
+        &self,
+    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
+    {
+        let rows = self
+            .db
+            .query_static("SELECT * FROM quorum_proposals")
+            .await?;
+
+        Ok(Some(BTreeMap::from_iter(
+            rows.map(|row| {
+                let row = row?;
+                let view: i64 = row.get("view");
+                let view_number: ViewNumber = ViewNumber::new(view.try_into()?);
+                let bytes: Vec<u8> = row.get("data");
+                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                    bincode::deserialize(&bytes)?;
+                Ok((view_number, proposal))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()
+            .await?,
+        )))
+    }
+
     async fn append_vid(
         &mut self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
@@ -448,7 +508,7 @@ impl SequencerPersistence for Persistence {
         let view = data.view_number().u64();
         let data_bytes = bincode::serialize(proposal).unwrap();
 
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 tx.upsert(
                     "vid_share",
@@ -471,7 +531,7 @@ impl SequencerPersistence for Persistence {
         let view = data.view_number().u64();
         let data_bytes = bincode::serialize(proposal).unwrap();
 
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 tx.upsert(
                     "da_proposal",
@@ -495,7 +555,7 @@ impl SequencerPersistence for Persistence {
         INSERT INTO highest_voted_view (id, view) VALUES (0, $1)
         ON CONFLICT (id) DO UPDATE SET view = GREATEST(highest_voted_view.view, excluded.view)";
 
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 tx.execute_one_with_retries(stmt, [view.u64() as i64])
                     .await?;
@@ -517,7 +577,7 @@ impl SequencerPersistence for Persistence {
         let leaves_bytes = bincode::serialize(&leaves).context("serializing leaves")?;
         let state_bytes = bincode::serialize(&state).context("serializing state")?;
 
-        transaction(self, |mut tx| {
+        transaction(&mut self.db, |mut tx| {
             async move {
                 tx.upsert(
                     "undecided_state",
@@ -536,9 +596,30 @@ impl SequencerPersistence for Persistence {
         })
         .await
     }
+    async fn append_quorum_proposal(
+        &mut self,
+        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let view_number = proposal.data.view_number().u64();
+        let proposal_bytes = bincode::serialize(&proposal).context("serializing proposal")?;
+        transaction(&mut self.db, |mut tx| {
+            async move {
+                tx.upsert(
+                    "quorum_proposals",
+                    ["view", "data"],
+                    ["view"],
+                    [[sql_param(&(view_number as i64)), sql_param(&proposal_bytes)]],
+                )
+                .await?;
+                Ok(())
+            }
+            .boxed()
+        })
+        .await
+    }
 }
 
-fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
+pub(crate) fn sql_param<T: ToSql + Sync>(param: &T) -> &(dyn ToSql + Sync) {
     param
 }
 

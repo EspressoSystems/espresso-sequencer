@@ -7,7 +7,6 @@ nix develop .#armCrossShell --ignore-environment --command cargo build --release
 # The rest of the script doesn't run in a nix shell but we need to know where
 # the binaries are.
 CARGO_TARGET_DIR="./target/nix"
-CONTRACTS_DIR="./contracts"
 
 # Copy binaries to a temporary directory.
 WORKDIR=$(mktemp -d -t espresso-docker-build-XXXXXXXX)
@@ -17,6 +16,10 @@ trap cleanup EXIT
 cleanup(){
     rm -rfv ${WORKDIR}
 }
+
+# Copy data files to Docker context.
+mkdir -p ${WORKDIR}/data
+cp -rv data/genesis ${WORKDIR}/data/
 
 for ARCH in "amd64" "arm64"; do
   case "$ARCH" in
@@ -32,10 +35,17 @@ for ARCH in "amd64" "arm64"; do
       ;;
   esac
   mkdir -p ${WORKDIR}/target/$ARCH/release
-  for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "permissionless-builder" "nasty-client" "pub-key" "bridge"; do
+  for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "permissionless-builder" "nasty-client" "pub-key" "espresso-bridge" "espresso-dev-node"; do
     cp -v "${CARGO_TARGET_DIR}/${TARGET}/release/$binary" ${WORKDIR}/target/$ARCH/release
   done
+
+  # Download the latest foundry binary and extract anvil for the dev-node docker image.
+  curl -L https://github.com/foundry-rs/foundry/releases/download/nightly/foundry_nightly_linux_${ARCH}.tar.gz -o ${WORKDIR}/foundry.tar.gz
+  tar -xzvf ${WORKDIR}/foundry.tar.gz -C ${WORKDIR}/target/$ARCH/release anvil
 done
+
+# Copy the dev-node launch script
+cp -v scripts/launch-dev-node-with-postgres ${WORKDIR}
 
 export DOCKER_BUILDKIT=1
 docker build -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}
@@ -50,4 +60,5 @@ docker build -t ghcr.io/espressosystems/espresso-sequencer/submit-transactions:m
 docker build -t ghcr.io/espressosystems/espresso-sequencer/deploy:main -f docker/deploy.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/builder:main -f docker/permissionless-builder.Dockerfile ${WORKDIR}
 docker build -t ghcr.io/espressosystems/espresso-sequencer/nasty-client:main -f docker/nasty-client.Dockerfile ${WORKDIR}
-docker build -t ghcr.io/espressosystems/espresso-sequencer/bridge:main -f docker/bridge.Dockerfile ${WORKDIR}
+docker build -t ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:main -f docker/espresso-dev-node.Dockerfile ${WORKDIR}
+docker build -t ghcr.io/espressosystems/espresso-sequencer/bridge:main -f docker/espresso-bridge.Dockerfile ${WORKDIR}

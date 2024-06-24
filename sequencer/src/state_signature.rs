@@ -151,12 +151,12 @@ fn form_light_client_state(
     let header = leaf.block_header();
     let mut block_comm_root_bytes = vec![];
     header
-        .block_merkle_tree_root()
+        .block_merkle_tree_root
         .serialize_compressed(&mut block_comm_root_bytes)?;
 
     let mut fee_ledger_comm_bytes = vec![];
     header
-        .fee_merkle_tree_root()
+        .fee_merkle_tree_root
         .serialize_compressed(&mut fee_ledger_comm_bytes)?;
     Ok(LightClientState {
         view_number: leaf.view_number().u64() as usize,

@@ -60,7 +60,7 @@ struct Options {
         default_value = "10000",
         env = "ESPRESSO_SUBMIT_TRANSACTIONS_MIN_NAMESPACE"
     )]
-    min_namespace: u64,
+    min_namespace: u32,
 
     /// Maximum namespace ID to submit to.
     #[clap(
@@ -68,7 +68,7 @@ struct Options {
         default_value = "10010",
         env = "ESPRESSO_SUBMIT_TRANSACTIONS_MAX_NAMESPACE"
     )]
-    max_namespace: u64,
+    max_namespace: u32,
 
     /// Mean delay between submitting transactions.
     ///
@@ -327,6 +327,8 @@ async fn server<Ver: StaticVersionType + 'static>(port: u16, bind_version: Ver) 
 }
 
 fn random_transaction(opt: &Options, rng: &mut ChaChaRng) -> Transaction {
+    // TODO instead use NamespaceId::random, but that does not allow us to
+    // enforce `gen_range(opt.min_namespace..=opt.max_namespace)`
     let namespace = rng.gen_range(opt.min_namespace..=opt.max_namespace);
 
     let len = rng.gen_range(opt.min_size..=opt.max_size);

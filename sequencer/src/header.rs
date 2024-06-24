@@ -1,7 +1,8 @@
 use crate::{
-    block::{entry::TxTableEntryWord, tables::NameSpaceTable, NsTable},
+    block::NsTable,
     chain_config::ResolvableChainConfig,
     eth_signature_key::BuilderSignature,
+    genesis::UpgradeType,
     l1_client::L1Snapshot,
     state::{BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment},
     ChainConfig, L1BlockInfo, Leaf, NamespaceId, NodeState, SeqTypes, ValidatedState,
@@ -9,7 +10,7 @@ use crate::{
 use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
-use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
+use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader, Resolvable};
 use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BlockPayload, BuilderFee},
@@ -26,179 +27,240 @@ use snafu::Snafu;
 use time::OffsetDateTime;
 use vbs::version::Version;
 
-// /// A header is like a [`Block`] with the body replaced by a digest.
-// #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
-// pub struct Header {
-//     pub(crate) chain_config: ResolvableChainConfig,
-//     pub(crate) height: u64,
-//     pub(crate) timestamp: u64,
-//     pub(crate) l1_head: u64,
-//     pub(crate) l1_finalized: Option<L1BlockInfo>,
-//     pub(crate) payload_commitment: VidCommitment,
-//     pub(crate) builder_commitment: BuilderCommitment,
-//     pub(crate) ns_table: NameSpaceTable<TxTableEntryWord>,
-//     pub(crate) block_merkle_tree_root: BlockMerkleCommitment,
-//     pub(crate) fee_merkle_tree_root: FeeMerkleCommitment,
-//     pub(crate) fee_info: FeeInfo,
-//     pub(crate) builder_signature: Option<BuilderSignature>,
-// }
+/// A header is like a [`Block`] with the body replaced by a digest.
+#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
+pub struct Header {
+    /// A commitment to a ChainConfig or a full ChainConfig.
+    pub chain_config: ResolvableChainConfig,
 
-// impl Header {
-//     /// A commitment to a ChainConfig or a full ChainConfig.
-//     pub fn chain_config(&self) -> &ResolvableChainConfig {
-//         &self.chain_config
-//     }
+    pub height: u64,
+    pub timestamp: u64,
 
-//     pub fn height(&self) -> u64 {
-//         self.height
-//     }
+    /// The Espresso block header includes a reference to the current head of the L1 chain.
+    ///
+    /// Rollups can use this to facilitate bridging between the L1 and L2 in a deterministic way.
+    /// This field deterministically associates an L2 block with a recent L1 block the instant the
+    /// L2 block is sequenced. Rollups can then define the L2 state after this block as the state
+    /// obtained by executing all the transactions in this block _plus_ all the L1 deposits up to
+    /// the given L1 block number. Since there is no need to wait for the L2 block to be reflected
+    /// on the L1, this bridge design retains the low confirmation latency of HotShot.
+    ///
+    /// This block number indicates the unsafe head of the L1 chain, so it is subject to reorgs. For
+    /// this reason, the Espresso header does not include any information that might change in a
+    /// reorg, such as the L1 block timestamp or hash. It includes only the L1 block number, which
+    /// will always refer to _some_ block after a reorg: if the L1 head at the time this block was
+    /// sequenced gets reorged out, the L1 chain will eventually (and probably quickly) grow to the
+    /// same height once again, and a different block will exist with the same height. In this way,
+    /// Espresso does not have to handle L1 reorgs, and the Espresso blockchain will always be
+    /// reflective of the current state of the L1 blockchain. Rollups that use this block number
+    /// _do_ have to handle L1 reorgs, but each rollup and each rollup client can decide how many
+    /// confirmations they want to wait for on top of this `l1_head` before they consider an L2
+    /// block finalized. This offers a tradeoff between low-latency L1-L2 bridges and finality.
+    ///
+    /// Rollups that want a stronger guarantee of finality, or that want Espresso to attest to data
+    /// from the L1 block that might change in reorgs, can instead use the latest L1 _finalized_
+    /// block at the time this L2 block was sequenced: `l1_finalized`.
+    pub l1_head: u64,
 
-//     pub fn timestamp(&self) -> u64 {
-//         self.timestamp
-//     }
+    /// The Espresso block header includes information a bout the latest finalized L1 block.
+    ///
+    /// Similar to `l1_head`, rollups can use this information to implement a bridge between the L1
+    /// and L2 while retaining the finality of low-latency block confirmations from HotShot. Since
+    /// this information describes the finalized L1 block, a bridge using this L1 block will have
+    /// much higher latency than a bridge using `l1_head`. In exchange, rollups that use the
+    /// finalized block do not have to worry about L1 reorgs, and can inject verifiable attestations
+    /// to the L1 block metadata (such as its timestamp or hash) into their execution layers, since
+    /// Espresso replicas will sign this information for the finalized L1 block.
+    ///
+    /// This block may be `None` in the rare case where Espresso has started shortly after the
+    /// genesis of the L1, and the L1 has yet to finalize a block. In all other cases it will be
+    /// `Some`.
+    pub l1_finalized: Option<L1BlockInfo>,
 
-//     /// The Espresso block header includes a reference to the current head of the L1 chain.
-//     ///
-//     /// Rollups can use this to facilitate bridging between the L1 and L2 in a deterministic way.
-//     /// This field deterministically associates an L2 block with a recent L1 block the instant the
-//     /// L2 block is sequenced. Rollups can then define the L2 state after this block as the state
-//     /// obtained by executing all the transactions in this block _plus_ all the L1 deposits up to
-//     /// the given L1 block number. Since there is no need to wait for the L2 block to be reflected
-//     /// on the L1, this bridge design retains the low confirmation latency of HotShot.
-//     ///
-//     /// This block number indicates the unsafe head of the L1 chain, so it is subject to reorgs. For
-//     /// this reason, the Espresso header does not include any information that might change in a
-//     /// reorg, such as the L1 block timestamp or hash. It includes only the L1 block number, which
-//     /// will always refer to _some_ block after a reorg: if the L1 head at the time this block was
-//     /// sequenced gets reorged out, the L1 chain will eventually (and probably quickly) grow to the
-//     /// same height once again, and a different block will exist with the same height. In this way,
-//     /// Espresso does not have to handle L1 reorgs, and the Espresso blockchain will always be
-//     /// reflective of the current state of the L1 blockchain. Rollups that use this block number
-//     /// _do_ have to handle L1 reorgs, but each rollup and each rollup client can decide how many
-//     /// confirmations they want to wait for on top of this `l1_head` before they consider an L2
-//     /// block finalized. This offers a tradeoff between low-latency L1-L2 bridges and finality.
-//     ///
-//     /// Rollups that want a stronger guarantee of finality, or that want Espresso to attest to data
-//     /// from the L1 block that might change in reorgs, can instead use the latest L1 _finalized_
-//     /// block at the time this L2 block was sequenced: [`Self::l1_finalized`].
-//     pub fn l1_head(&self) -> u64 {
-//         self.l1_head
-//     }
+    pub payload_commitment: VidCommitment,
+    pub builder_commitment: BuilderCommitment,
+    pub ns_table: NsTable,
+    /// Root Commitment of Block Merkle Tree
+    pub block_merkle_tree_root: BlockMerkleCommitment,
+    /// Root Commitment of `FeeMerkleTree`
+    pub fee_merkle_tree_root: FeeMerkleCommitment,
+    /// Fee paid by the block builder
+    pub fee_info: FeeInfo,
+    /// Account (etheruem address) of builder
+    ///
+    /// This signature is not considered formally part of the header; it is just evidence proving
+    /// that other parts of the header (`fee_info`) are correct. It exists in the header so that it
+    /// is available to all nodes to be used during validation. But since it is checked during
+    /// consensus, any downstream client who has a proof of consensus finality of a header can trust
+    /// that `fee_info` is correct without relying on the signature. Thus, this signature is not
+    /// included in the header commitment.
+    pub builder_signature: Option<BuilderSignature>,
+}
 
-//     /// The Espresso block header includes information a bout the latest finalized L1 block.
-//     ///
-//     /// Similar to [`l1_head`](Self::l1_head), rollups can use this information to implement a
-//     /// bridge between the L1 and L2 while retaining the finality of low-latency block confirmations
-//     /// from HotShot. Since this information describes the finalized L1 block, a bridge using this
-//     /// L1 block will have much higher latency than a bridge using [`l1_head`](Self::l1_head). In
-//     /// exchange, rollups that use the finalized block do not have to worry about L1 reorgs, and can
-//     /// inject verifiable attestations to the L1 block metadata (such as its timestamp or hash) into
-//     /// their execution layers, since Espresso replicas will sign this information for the finalized
-//     /// L1 block.
-//     ///
-//     /// This block may be `None` in the rare case where Espresso has started shortly after the
-//     /// genesis of the L1, and the L1 has yet to finalize a block. In all other cases it will be
-//     /// `Some`.
-//     pub fn l1_finalized(&self) -> Option<L1BlockInfo> {
-//         self.l1_finalized
-//     }
+impl Committable for Header {
+    fn commit(&self) -> Commitment<Self> {
+        let mut bmt_bytes = vec![];
+        self.block_merkle_tree_root
+            .serialize_with_mode(&mut bmt_bytes, ark_serialize::Compress::Yes)
+            .unwrap();
+        let mut fmt_bytes = vec![];
+        self.fee_merkle_tree_root
+            .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
+            .unwrap();
 
-//     pub fn payload_commitment(&self) -> VidCommitment {
-//         self.payload_commitment
-//     }
+        RawCommitmentBuilder::new(&Self::tag())
+            .field("chain_config", self.chain_config.commit())
+            .u64_field("height", self.height)
+            .u64_field("timestamp", self.timestamp)
+            .u64_field("l1_head", self.l1_head)
+            .optional("l1_finalized", &self.l1_finalized)
+            .constant_str("payload_commitment")
+            .fixed_size_bytes(self.payload_commitment.as_ref().as_ref())
+            .constant_str("builder_commitment")
+            .fixed_size_bytes(self.builder_commitment.as_ref())
+            .field("ns_table", self.ns_table.commit())
+            .var_size_field("block_merkle_tree_root", &bmt_bytes)
+            .var_size_field("fee_merkle_tree_root", &fmt_bytes)
+            .field("fee_info", self.fee_info.commit())
+            .finalize()
+    }
 
-//     pub fn builder_commitment(&self) -> &BuilderCommitment {
-//         &self.builder_commitment
-//     }
+    fn tag() -> String {
+        // We use the tag "BLOCK" since blocks are identified by the hash of their header. This will
+        // thus be more intuitive to users than "HEADER".
+        "BLOCK".into()
+    }
+}
 
-//     pub fn ns_table(&self) -> &NameSpaceTable<TxTableEntryWord> {
-//         &self.ns_table
-//     }
+impl Header {
+    #[allow(clippy::too_many_arguments)]
+    fn from_info(
+        payload_commitment: VidCommitment,
+        builder_commitment: BuilderCommitment,
+        ns_table: NsTable,
+        parent_leaf: &Leaf,
+        mut l1: L1Snapshot,
+        l1_deposits: &[FeeInfo],
+        builder_fee: BuilderFee<SeqTypes>,
+        mut timestamp: u64,
+        mut state: ValidatedState,
+        chain_config: ChainConfig,
+    ) -> anyhow::Result<Self> {
+        // Increment height.
+        let parent_header = parent_leaf.block_header();
+        let height = parent_header.height + 1;
 
-//     /// Root Commitment of Block Merkle Tree
-//     pub fn block_merkle_tree_root(&self) -> BlockMerkleCommitment {
-//         self.block_merkle_tree_root
-//     }
+        // Ensure the timestamp does not decrease. We can trust `parent.timestamp` because `parent`
+        // has already been voted on by consensus. If our timestamp is behind, either f + 1 nodes
+        // are lying about the current time, or our clock is just lagging.
+        if timestamp < parent_header.timestamp {
+            tracing::warn!(
+                "Espresso timestamp {timestamp} behind parent {}, local clock may be out of sync",
+                parent_header.timestamp
+            );
+            timestamp = parent_header.timestamp;
+        }
 
-//     /// Root Commitment of `FeeMerkleTree`
-//     pub fn fee_merkle_tree_root(&self) -> FeeMerkleCommitment {
-//         self.fee_merkle_tree_root
-//     }
+        // Ensure the L1 block references don't decrease. Again, we can trust `parent.l1_*` are
+        // accurate.
+        if l1.head < parent_header.l1_head {
+            tracing::warn!(
+                "L1 head {} behind parent {}, L1 client may be lagging",
+                l1.head,
+                parent_header.l1_head
+            );
+            l1.head = parent_header.l1_head;
+        }
+        if l1.finalized < parent_header.l1_finalized {
+            tracing::warn!(
+                "L1 finalized {:?} behind parent {:?}, L1 client may be lagging",
+                l1.finalized,
+                parent_header.l1_finalized
+            );
+            l1.finalized = parent_header.l1_finalized;
+        }
 
-//     /// Fee paid by the block builder
-//     pub fn fee_info(&self) -> FeeInfo {
-//         self.fee_info
-//     }
+        // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
+        // only happen if our clock is badly out of sync with L1.
+        if let Some(l1_block) = &l1.finalized {
+            let l1_timestamp = l1_block.timestamp.as_u64();
+            if timestamp < l1_timestamp {
+                tracing::warn!("Espresso timestamp {timestamp} behind L1 timestamp {l1_timestamp}, local clock may be out of sync");
+                timestamp = l1_timestamp;
+            }
+        }
 
-//     /// Account (etheruem address) of builder
-//     ///
-//     /// This signature is not considered formally part of the header; it is just evidence proving
-//     /// that other parts of the header ([`fee_info`](Self::fee_info)) are correct. It exists in the
-//     /// header so that it is available to all nodes to be used during validation. But since it is
-//     /// checked during consensus, any downstream client who has a proof of consensus finality of a
-//     /// header can trust that [`fee_info`](Self::fee_info) is correct without relying on the
-//     /// signature. Thus, this signature is not included in the header commitment.
-//     pub fn builder_signature(&self) -> Option<BuilderSignature> {
-//         self.builder_signature
-//     }
-// }
+        state
+            .block_merkle_tree
+            .push(parent_header.commit())
+            .context("missing blocks frontier")?;
+        let block_merkle_tree_root = state.block_merkle_tree.commitment();
 
-// #[cfg(any(test, feature = "testing"))]
-// /// Expose some fields directly for tests that need to directly manipulate or construct headers.
-// impl Header {
-//     pub fn set_height(&mut self, height: u64) {
-//         self.height = height;
-//     }
-// }
+        // Insert the new L1 deposits
+        for fee_info in l1_deposits {
+            state
+                .insert_fee_deposit(*fee_info)
+                .context(format!("missing fee account {}", fee_info.account()))?;
+        }
 
-// impl Committable for Header {
-//     fn commit(&self) -> Commitment<Self> {
-//         let mut bmt_bytes = vec![];
-//         self.block_merkle_tree_root()
-//             .serialize_with_mode(&mut bmt_bytes, ark_serialize::Compress::Yes)
-//             .unwrap();
-//         let mut fmt_bytes = vec![];
-//         self.fee_merkle_tree_root()
-//             .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
-//             .unwrap();
+        // Charge the builder fee.
+        ensure!(
+            builder_fee.fee_account.validate_fee_signature(
+                &builder_fee.fee_signature,
+                builder_fee.fee_amount,
+                &ns_table,
+                &payload_commitment,
+            ),
+            "invalid builder signature"
+        );
+        let builder_signature = Some(builder_fee.fee_signature);
+        let fee_info = builder_fee.into();
+        state
+            .charge_fee(fee_info, chain_config.fee_recipient)
+            .context(format!("invalid builder fee {fee_info:?}"))?;
 
-//         RawCommitmentBuilder::new(&Self::tag())
-//             .field("chain_config", self.chain_config().commit())
-//             .u64_field("height", self.height())
-//             .u64_field("timestamp", self.timestamp())
-//             .u64_field("l1_head", self.l1_head())
-//             .optional("l1_finalized", &self.l1_finalized())
-//             .constant_str("payload_commitment")
-//             .fixed_size_bytes(self.payload_commitment().as_ref().as_ref())
-//             .constant_str("builder_commitment")
-//             .fixed_size_bytes(self.builder_commitment().as_ref())
-//             .field("ns_table", self.ns_table().commit())
-//             .var_size_field("block_merkle_tree_root", &bmt_bytes)
-//             .var_size_field("fee_merkle_tree_root", &fmt_bytes)
-//             .field("fee_info", self.fee_info().commit())
-//             .finalize()
-//     }
+        let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
+        Ok(Self {
+            chain_config: chain_config.commit().into(),
+            height,
+            timestamp,
+            l1_head: l1.head,
+            l1_finalized: l1.finalized,
+            payload_commitment,
+            builder_commitment,
+            ns_table,
+            fee_merkle_tree_root,
+            block_merkle_tree_root,
+            fee_info,
+            builder_signature,
+        })
+    }
 
-//     fn tag() -> String {
-//         // We use the tag "BLOCK" since blocks are identified by the hash of their header. This will
-//         // thus be more intuitive to users than "HEADER".
-//         "BLOCK".into()
-//     }
-// }
+    async fn get_chain_config(
+        validated_state: &ValidatedState,
+        instance_state: &NodeState,
+    ) -> ChainConfig {
+        let validated_cf = validated_state.chain_config;
+        let instance_cf = instance_state.chain_config;
 
-// impl Committable for NameSpaceTable<TxTableEntryWord> {
-//     fn commit(&self) -> Commitment<Self> {
-//         RawCommitmentBuilder::new(&Self::tag())
-//             .var_size_bytes(self.get_bytes())
-//             .finalize()
-//     }
+        if validated_cf.commit() == instance_cf.commitment() {
+            return instance_cf;
+        }
 
-//     fn tag() -> String {
-//         "NSTABLE".into()
-//     }
-// }
+        match validated_cf.resolve() {
+            Some(cf) => cf,
+            None => {
+                tracing::info!("fetching chain config {} from peers", validated_cf.commit());
 
-use espresso_types::Header;
+                instance_state
+                    .peers
+                    .as_ref()
+                    .fetch_chain_config(validated_cf.commit())
+                    .await
+            }
+        }
+    }
+}
 
 #[derive(Debug, Snafu)]
 #[snafu(display("Invalid Block Header {msg}"))]
@@ -235,19 +297,34 @@ impl BlockHeader<SeqTypes> for Header {
         parent_leaf: &Leaf,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+        metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: BuilderFee<SeqTypes>,
         _vid_common: VidCommon,
         version: Version,
     ) -> Result<Self, Self::Error> {
-        let chain_config = instance_state.chain_config;
         let height = parent_leaf.height();
         let view = parent_leaf.view_number();
 
         let mut validated_state = parent_state.clone();
 
+        let chain_config = if version > instance_state.current_version {
+            match instance_state
+                .upgrades
+                .get(&version)
+                .map(|upgrade| match upgrade.upgrade_type {
+                    UpgradeType::ChainConfig { chain_config } => chain_config,
+                }) {
+                Some(cf) => cf,
+                None => Header::get_chain_config(&validated_state, instance_state).await,
+            }
+        } else {
+            Header::get_chain_config(&validated_state, instance_state).await
+        };
+
+        validated_state.chain_config = chain_config.into();
+
         // Fetch the latest L1 snapshot.
-        let l1_snapshot = instance_state.l1_client().snapshot().await;
+        let l1_snapshot = instance_state.l1_client.snapshot().await;
         // Fetch the new L1 deposits between parent and current finalized L1 block.
         let l1_deposits = if let (Some(addr), Some(block_info)) =
             (chain_config.fee_contract, l1_snapshot.finalized)
@@ -325,7 +402,6 @@ impl BlockHeader<SeqTypes> for Header {
             OffsetDateTime::now_utc().unix_timestamp() as u64,
             validated_state,
             chain_config,
-            version,
         )?)
     }
 
@@ -333,11 +409,12 @@ impl BlockHeader<SeqTypes> for Header {
         instance_state: &NodeState,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+        ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
     ) -> Self {
         let ValidatedState {
             fee_merkle_tree,
             block_merkle_tree,
+            ..
         } = ValidatedState::genesis(instance_state).0;
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
@@ -347,9 +424,13 @@ impl BlockHeader<SeqTypes> for Header {
             // timestamps or L1 values.
             chain_config: instance_state.chain_config.into(),
             height: 0,
-            timestamp: 0,
-            l1_head: 0,
+            timestamp: instance_state.genesis_header.timestamp.unix_timestamp(),
             l1_finalized: instance_state.l1_genesis,
+            // Make sure the L1 head is not behind the finalized block.
+            l1_head: instance_state
+                .l1_genesis
+                .map(|block| block.number)
+                .unwrap_or_default(),
             payload_commitment,
             builder_commitment,
             ns_table,
@@ -368,7 +449,9 @@ impl BlockHeader<SeqTypes> for Header {
         self.payload_commitment
     }
 
-    fn metadata(&self) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata {
+    fn metadata(
+        &self,
+    ) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata {
         &self.ns_table
     }
 
@@ -412,14 +495,10 @@ impl ExplorerHeader<SeqTypes> for Header {
     }
 
     fn namespace_ids(&self) -> Vec<Self::NamespaceId> {
-        let l = self.ns_table.len();
-        let mut result: Vec<Self::NamespaceId> = Vec::with_capacity(l);
-        for i in 0..l {
-            let (ns_id, _) = self.ns_table.get_table_entry(i);
-            result.push(ns_id);
-        }
-
-        result
+        self.ns_table
+            .iter()
+            .map(|i| self.ns_table.read_ns_id_unchecked(&i))
+            .collect()
     }
 }
 
@@ -432,7 +511,9 @@ mod test_headers {
         catchup::mock::MockStateCatchup,
         eth_signature_key::EthKeyPair,
         l1_client::L1Client,
-        state::{validate_proposal, BlockMerkleTree, FeeAccount, FeeMerkleTree},
+        state::{
+            validate_proposal, BlockMerkleTree, FeeAccount, FeeMerkleTree, ProposalValidationError,
+        },
         NodeState,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -442,6 +523,7 @@ mod test_headers {
     };
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
     use jf_vid::VidScheme;
+    use vbs::version::{StaticVersion, StaticVersionType};
 
     #[derive(Debug, Default)]
     #[must_use]
@@ -464,7 +546,7 @@ mod test_headers {
     }
 
     impl TestCase {
-        fn run(self) {
+        async fn run(self) {
             setup_logging();
             setup_backtrace();
 
@@ -473,7 +555,7 @@ mod test_headers {
             assert!(self.expected_l1_head >= self.parent_l1_head);
             assert!(self.expected_l1_finalized >= self.parent_l1_finalized);
 
-            let genesis = GenesisForTest::default();
+            let genesis = GenesisForTest::default().await;
             let mut parent = genesis.header.clone();
             parent.timestamp = self.parent_timestamp;
             parent.l1_head = self.parent_l1_head;
@@ -494,6 +576,7 @@ mod test_headers {
             let mut validated_state = ValidatedState {
                 block_merkle_tree: block_merkle_tree.clone(),
                 fee_merkle_tree,
+                chain_config: genesis.instance_state.chain_config.into(),
             };
 
             let (fee_account, fee_key) = FeeAccount::generated_from_seed_indexed([0; 32], 0);
@@ -524,7 +607,6 @@ mod test_headers {
                 self.timestamp,
                 validated_state.clone(),
                 genesis.instance_state.chain_config,
-                Version { major: 0, minor: 1 },
             )
             .unwrap();
             assert_eq!(header.height, parent.height + 1);
@@ -555,24 +637,25 @@ mod test_headers {
         }
     }
 
-    #[test]
-    fn test_new_header() {
+    #[async_std::test]
+    async fn test_new_header() {
         // Simplest case: building on genesis, L1 info and timestamp unchanged.
-        TestCase::default().run()
+        TestCase::default().run().await
     }
 
-    #[test]
-    fn test_new_header_advance_timestamp() {
+    #[async_std::test]
+    async fn test_new_header_advance_timestamp() {
         TestCase {
             timestamp: 1,
             expected_timestamp: 1,
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_advance_l1_block() {
+    #[async_std::test]
+    async fn test_new_header_advance_l1_block() {
         TestCase {
             parent_l1_head: 0,
             parent_l1_finalized: Some(l1_block(0)),
@@ -586,20 +669,22 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_advance_l1_finalized_from_none() {
+    #[async_std::test]
+    async fn test_new_header_advance_l1_finalized_from_none() {
         TestCase {
             l1_finalized: Some(l1_block(1)),
             expected_l1_finalized: Some(l1_block(1)),
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_timestamp_behind_finalized_l1_block() {
+    #[async_std::test]
+    async fn test_new_header_timestamp_behind_finalized_l1_block() {
         let l1_finalized = Some(L1BlockInfo {
             number: 1,
             timestamp: 1.into(),
@@ -617,10 +702,11 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_timestamp_behind() {
+    #[async_std::test]
+    async fn test_new_header_timestamp_behind() {
         TestCase {
             parent_timestamp: 1,
             timestamp: 0,
@@ -629,10 +715,11 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_l1_head_behind() {
+    #[async_std::test]
+    async fn test_new_header_l1_head_behind() {
         TestCase {
             parent_l1_head: 1,
             l1_head: 0,
@@ -641,10 +728,11 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_l1_finalized_behind_some() {
+    #[async_std::test]
+    async fn test_new_header_l1_finalized_behind_some() {
         TestCase {
             parent_l1_finalized: Some(l1_block(1)),
             l1_finalized: Some(l1_block(0)),
@@ -653,10 +741,11 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_l1_finalized_behind_none() {
+    #[async_std::test]
+    async fn test_new_header_l1_finalized_behind_none() {
         TestCase {
             parent_l1_finalized: Some(l1_block(0)),
             l1_finalized: None,
@@ -665,19 +754,21 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_deposits_one() {
+    #[async_std::test]
+    async fn test_new_header_deposits_one() {
         TestCase {
             l1_deposits: vec![FeeInfo::new(Address::default(), 1)],
             ..Default::default()
         }
         .run()
+        .await
     }
 
-    #[test]
-    fn test_new_header_deposits_many() {
+    #[async_std::test]
+    async fn test_new_header_deposits_many() {
         TestCase {
             l1_deposits: [
                 (Address::default(), 1),
@@ -690,6 +781,7 @@ mod test_headers {
             ..Default::default()
         }
         .run()
+        .await
     }
 
     struct GenesisForTest {
@@ -697,16 +789,16 @@ mod test_headers {
         pub validated_state: ValidatedState,
         pub leaf: Leaf,
         pub header: Header,
-        pub ns_table: NameSpaceTable<TxTableEntryWord>,
+        pub ns_table: NsTable,
     }
 
-    impl Default for GenesisForTest {
-        fn default() -> Self {
+    impl GenesisForTest {
+        async fn default() -> Self {
             let instance_state = NodeState::mock();
             let validated_state = ValidatedState::genesis(&instance_state).0;
-            let leaf = Leaf::genesis(&instance_state);
+            let leaf = Leaf::genesis(&validated_state, &instance_state).await;
             let header = leaf.block_header().clone();
-            let ns_table = leaf.block_payload().unwrap().get_ns_table().clone();
+            let ns_table = leaf.block_payload().unwrap().ns_table().clone();
             Self {
                 instance_state,
                 validated_state,
@@ -719,7 +811,7 @@ mod test_headers {
 
     #[async_std::test]
     async fn test_validate_proposal_error_cases() {
-        let genesis = GenesisForTest::default();
+        let genesis = GenesisForTest::default().await;
         let vid_common = vid_scheme(1).disperse([]).unwrap().common;
 
         let mut validated_state = ValidatedState::default();
@@ -736,35 +828,38 @@ mod test_headers {
         parent_header.block_merkle_tree_root = block_merkle_tree_root;
         let mut proposal = parent_header.clone();
 
+        let ver = StaticVersion::<1, 0>::version();
+
         // Pass a different chain config to trigger a chain config validation error.
         let state = validated_state
-            .apply_header(&genesis.instance_state, &parent_leaf, &proposal)
+            .apply_header(&genesis.instance_state, &parent_leaf, &proposal, ver)
             .await
             .unwrap()
             .0;
 
-        let result = validate_proposal(
-            &state,
-            ChainConfig {
-                chain_id: U256::zero().into(),
-                ..Default::default()
-            },
-            &parent_leaf,
-            &proposal,
-            &vid_common,
-        )
-        .unwrap_err();
+        let chain_config = ChainConfig {
+            chain_id: U256::zero().into(),
+            ..Default::default()
+        };
+        let err = validate_proposal(&state, chain_config, &parent_leaf, &proposal, &vid_common)
+            .unwrap_err();
 
-        assert!(format!("{}", result.root_cause()).starts_with("Invalid Chain Config:"));
+        assert_eq!(
+            ProposalValidationError::InvalidChainConfig {
+                expected: format!("{:?}", chain_config),
+                proposal: format!("{:?}", proposal.chain_config)
+            },
+            err
+        );
 
         // Advance `proposal.height` to trigger validation error.
 
         let validated_state = validated_state
-            .apply_header(&genesis.instance_state, &parent_leaf, &proposal)
+            .apply_header(&genesis.instance_state, &parent_leaf, &proposal, ver)
             .await
             .unwrap()
             .0;
-        let result = validate_proposal(
+        let err = validate_proposal(
             &validated_state,
             genesis.instance_state.chain_config,
             &parent_leaf,
@@ -773,20 +868,23 @@ mod test_headers {
         )
         .unwrap_err();
         assert_eq!(
-            format!("{}", result.root_cause()),
-            "Invalid Height Error: 0, 0"
+            ProposalValidationError::InvalidHeight {
+                parent_height: 0,
+                proposal_height: 0
+            },
+            err
         );
 
         // proposed `Header` root should include parent + parent.commit
         proposal.height += 1;
 
         let validated_state = validated_state
-            .apply_header(&genesis.instance_state, &parent_leaf, &proposal)
+            .apply_header(&genesis.instance_state, &parent_leaf, &proposal, ver)
             .await
             .unwrap()
             .0;
 
-        let result = validate_proposal(
+        let err = validate_proposal(
             &validated_state,
             genesis.instance_state.chain_config,
             &parent_leaf,
@@ -795,7 +893,13 @@ mod test_headers {
         )
         .unwrap_err();
         // Fails b/c `proposal` has not advanced from `parent`
-        assert!(format!("{}", result.root_cause()).contains("Invalid Block Root Error"));
+        assert_eq!(
+            ProposalValidationError::InvalidBlockRoot {
+                expected_root: validated_state.block_merkle_tree.commitment(),
+                proposal_root: proposal.block_merkle_tree_root
+            },
+            err
+        );
     }
 
     #[async_std::test]
@@ -807,7 +911,7 @@ mod test_headers {
         let mut genesis_state =
             NodeState::mock().with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1));
 
-        let genesis = GenesisForTest::default();
+        let genesis = GenesisForTest::default().await;
         let vid_common = vid_scheme(1).disperse([]).unwrap().common;
 
         let mut parent_state = genesis.validated_state.clone();
@@ -842,7 +946,7 @@ mod test_headers {
         let key_pair = EthKeyPair::for_test();
         let fee_amount = 0u64;
         let payload_commitment = parent_header.payload_commitment;
-        let builder_commitment = parent_header.builder_commitment().clone();
+        let builder_commitment = parent_header.builder_commitment();
         let ns_table = genesis.ns_table;
         let fee_signature =
             FeeAccount::sign_fee(&key_pair, fee_amount, &ns_table, &payload_commitment).unwrap();
@@ -860,7 +964,7 @@ mod test_headers {
             ns_table,
             builder_fee,
             vid_common.clone(),
-            hotshot_types::constants::BASE_VERSION,
+            hotshot_types::constants::Base::VERSION,
         )
         .await
         .unwrap();
@@ -878,7 +982,12 @@ mod test_headers {
         block_merkle_tree.push(proposal.commit()).unwrap();
 
         let proposal_state = proposal_state
-            .apply_header(&genesis_state, &parent_leaf, &proposal)
+            .apply_header(
+                &genesis_state,
+                &parent_leaf,
+                &proposal,
+                StaticVersion::<1, 0>::version(),
+            )
             .await
             .unwrap()
             .0;

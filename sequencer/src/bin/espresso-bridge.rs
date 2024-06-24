@@ -204,15 +204,15 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
                 continue;
             }
         };
-        let Some(l1_finalized) = header.l1_finalized() else {
+        let Some(l1_finalized) = header.l1_finalized else {
             continue;
         };
         if l1_finalized.number >= l1_block {
-            tracing::info!(block = header.height(), "deposit finalized on Espresso");
-            break header.height();
+            tracing::info!(block = header.height, "deposit finalized on Espresso");
+            break header.height;
         } else {
             tracing::debug!(
-                block = header.height(),
+                block = header.height,
                 l1_block,
                 ?l1_finalized,
                 "waiting for deposit on Espresso"
@@ -318,7 +318,7 @@ async fn get_espresso_balance(
                 if retry == max_retries {
                     return Err(err).context("getting account balance");
                 } else {
-                    sleep(Duration::from_secs(1)).await;
+                    sleep(Duration::from_secs(5)).await;
                 }
             }
         }

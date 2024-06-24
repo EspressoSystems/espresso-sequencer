@@ -6,7 +6,7 @@ use clap::Parser;
 
 use hotshot_types::{
     consensus::CommitmentMap,
-    data::{DaProposal, VidDisperseShare},
+    data::{DaProposal, QuorumProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -99,6 +99,10 @@ impl Persistence {
         self.path.join("undecided_state")
     }
 
+    fn quorum_proposals_dir_path(&self) -> PathBuf {
+        self.path.join("quorum_proposals")
+    }
+
     /// Overwrite a file if a condition is met.
     ///
     /// The file at `path`, if it exists, is opened in read mode and passed to `pred`. If `pred`
@@ -187,7 +191,8 @@ impl SequencerPersistence for Persistence {
         };
 
         delete_files(self.da_dir_path())?;
-        delete_files(self.vid_dir_path())
+        delete_files(self.vid_dir_path())?;
+        delete_files(self.quorum_proposals_dir_path())
     }
 
     async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
@@ -407,6 +412,85 @@ impl SequencerPersistence for Persistence {
                 Ok(())
             },
         )
+    }
+    async fn append_quorum_proposal(
+        &mut self,
+        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
+    ) -> anyhow::Result<()> {
+        let view_number = proposal.data.view_number().u64();
+        let dir_path = self.quorum_proposals_dir_path();
+
+        fs::create_dir_all(dir_path.clone()).context("failed to create proposals dir")?;
+
+        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
+        self.replace(
+            &file_path,
+            |_| {
+                // Always overwrite the previous file
+                Ok(true)
+            },
+            |mut file| {
+                let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
+
+                file.write_all(&proposal_bytes)?;
+                Ok(())
+            },
+        )
+    }
+    async fn load_quorum_proposals(
+        &self,
+    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
+    {
+        // First, get the proposal directory.
+        let dir_path = self.quorum_proposals_dir_path();
+
+        // Then, we want to get the entries in this directory since they'll be the
+        // key/value pairs for our map.
+        let files: Vec<fs::DirEntry> = fs::read_dir(dir_path.clone())?
+            .filter_map(|entry| {
+                entry
+                    .ok()
+                    .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
+            })
+            .collect();
+
+        // Do we have any entries?
+        if files.is_empty() {
+            // Don't bother continuing if we don't have any data.
+            return Ok(None);
+        }
+
+        // Read all of the files
+        let proposal_files = files
+            .into_iter()
+            .map(|entry| dir_path.join(entry.file_name()).with_extension("txt"));
+
+        let mut map = BTreeMap::new();
+        for file in proposal_files.into_iter() {
+            // This operation shouldn't fail, but we don't want to panic here if the filesystem
+            // somehow gets corrupted. We get the stem to remove the ".txt" from the end.
+            if let Some(file_name) = file.file_stem() {
+                // We need to convert the filename (which corresponds to the view)
+                let view_number = ViewNumber::new(
+                    file_name
+                        .to_string_lossy()
+                        .parse::<u64>()
+                        .context("convert file name to u64")?,
+                );
+
+                // Now, we'll try and load the proposal associated with this function.
+                let proposal_bytes = fs::read(file)?;
+
+                // Then, deserialize.
+                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
+                    bincode::deserialize(&proposal_bytes)?;
+
+                // Push to the map and we're done.
+                map.insert(view_number, proposal);
+            }
+        }
+
+        Ok(Some(map))
     }
 }
 
