@@ -1,7 +1,7 @@
 use crate::{
     api::data_source::CatchupDataSource,
     block::{NsTableValidationError, PayloadByteLen},
-    auction::{ExecutionError, FullNetworkTx, MarketplaceResults, Slot},
+    auction::{ExecutionError, FullNetworkTx},
     catchup::SqlStateCatchup,
     chain_config::BlockSize,
     chain_config::ResolvableChainConfig,
@@ -59,7 +59,7 @@ use sequencer_utils::{
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use std::{collections::HashMap, sync::Arc};
+use std::{sync::Arc};
 use std::{collections::HashSet, ops::Add, str::FromStr};
 use thiserror::Error;
 use vbs::version::Version;
