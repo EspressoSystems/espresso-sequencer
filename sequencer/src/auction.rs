@@ -146,9 +146,6 @@ impl Committable for BidTxBody {
 
 impl Default for BidTxBody {
     fn default() -> Self {
-        let message = ";)";
-        let mut commitment = [0u8; 32];
-        commitment[..message.len()].copy_from_slice(message.as_bytes());
         let key = FeeAccount::test_key_pair();
         let nsid = NamespaceId::from(999);
         Self {
@@ -166,7 +163,7 @@ impl Default for BidTx {
     fn default() -> Self {
         let body = BidTxBody::default();
         let commitment = body.commit();
-        let (account, key) = FeeAccount::generated_from_seed_indexed([0; 32], 0);
+        let key = FeeAccount::test_key_pair();
         let signature = FeeAccount::sign_builder_message(&key, commitment.as_ref()).unwrap();
         Self { signature, body }
     }
@@ -205,7 +202,7 @@ impl BidTx {
         Ok(())
     }
     // fn charge(&self) {}
-    /// Verify signature
+    /// Cryptographic signature verification
     fn verify(&self) -> Result<(), ExecutionError> {
         if !self
             .body
@@ -249,7 +246,7 @@ mod test {
     use super::*;
 
     impl BidTx {
-        fn mock(account: FeeAccount, key: EthKeyPair) -> Self {
+        fn mock(key: EthKeyPair) -> Self {
             let body = BidTxBody::default();
             let commitment = body.commit();
             let signature = FeeAccount::sign_builder_message(&key, commitment.as_ref()).unwrap();
@@ -259,13 +256,9 @@ mod test {
 
     #[test]
     fn test_default_bidtx_body() {
-        let a = FeeAccount::default();
-
         let message = ";)";
         let mut commitment = [0u8; 32];
         commitment[..message.len()].copy_from_slice(message.as_bytes());
-        let key = FeeAccount::generated_from_seed_indexed([0; 32], 0).1;
-        let signature = FeeAccount::sign_builder_message(&key, &commitment).unwrap();
         let bid = BidTxBody::default();
         dbg!(&bid);
     }
@@ -277,8 +270,7 @@ mod test {
     #[test]
     fn test_sign_and_verify_mock_bid() {
         let key = FeeAccount::test_key_pair();
-        let account = key.fee_account();
-        let bidtx = BidTx::mock(account, key);
+        let bidtx = BidTx::mock(key);
         bidtx.verify().unwrap();
     }
 }
