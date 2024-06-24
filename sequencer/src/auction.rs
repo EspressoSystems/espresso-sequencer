@@ -1,15 +1,12 @@
 use crate::{
     eth_signature_key::EthKeyPair,
     state::{FeeAccount, FeeAmount},
-    NamespaceId, Transaction, ValidatedState,
+    NamespaceId, ValidatedState,
 };
-use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable};
-use derivative::Derivative;
 use ethers::types::Signature;
 use hotshot::types::SignatureKey;
 use hotshot_types::{data::ViewNumber, traits::signature_key::BuilderSignatureKey};
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -170,7 +167,7 @@ impl Default for BidTx {
         let body = BidTxBody::default();
         let commitment = body.commit();
         let (account, key) = FeeAccount::generated_from_seed_indexed([0; 32], 0);
-        let signature = FeeAccount::sign_builder_message(&key, &commitment.as_ref()).unwrap();
+        let signature = FeeAccount::sign_builder_message(&key, commitment.as_ref()).unwrap();
         Self { signature, body }
     }
 }
