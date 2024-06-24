@@ -151,6 +151,11 @@
 <a href="#151" id="151">151</a>
 <a href="#152" id="152">152</a>
 <a href="#153" id="153">153</a>
+<a href="#154" id="154">154</a>
+<a href="#155" id="155">155</a>
+<a href="#156" id="156">156</a>
+<a href="#157" id="157">157</a>
+<a href="#158" id="158">158</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>builder::non_permissioned::{build_instance_state, BuilderConfig};
 <span class="kw">use </span>clap::Parser;
@@ -203,9 +208,13 @@
     </span><span class="attr">#[clap(short, long, env = <span class="string">"ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW"</span>)]
     </span>view_number: u64,
 
-    <span class="doccomment">/// BUILDER CHANNEL CAPACITY
-    </span><span class="attr">#[clap(short, long, env = <span class="string">"ESPRESSO_BUILDER_CHANNEL_CAPACITY"</span>)]
-    </span>channel_capacity: NonZeroUsize,
+    <span class="doccomment">/// BUILDER TRANSACTIONS CHANNEL CAPACITY
+    </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_BUILDER_TX_CHANNEL_CAPACITY"</span>)]
+    </span><span class="kw">pub </span>tx_channel_capacity: NonZeroUsize,
+
+    <span class="doccomment">/// BUILDER HS EVENTS CHANNEL CAPACITY
+    </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_BUILDER_EVENT_CHANNEL_CAPACITY"</span>)]
+    </span><span class="kw">pub </span>event_channel_capacity: NonZeroUsize,
 
     <span class="doccomment">/// NETWORK INITIAL NODE COUNT
     </span><span class="attr">#[clap(short, long, env = <span class="string">"ESPRESSO_BUILDER_INIT_NODE_COUNT"</span>)]
@@ -287,7 +296,8 @@
     <span class="kw">let </span>_builder_config = BuilderConfig::init(
         builder_key_pair,
         bootstrapped_view,
-        opt.channel_capacity,
+        opt.tx_channel_capacity,
+        opt.event_channel_capacity,
         opt.node_count,
         instance_state,
         validated_state,

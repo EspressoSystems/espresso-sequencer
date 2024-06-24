@@ -734,6 +734,16 @@
 <a href="#734" id="734">734</a>
 <a href="#735" id="735">735</a>
 <a href="#736" id="736">736</a>
+<a href="#737" id="737">737</a>
+<a href="#738" id="738">738</a>
+<a href="#739" id="739">739</a>
+<a href="#740" id="740">740</a>
+<a href="#741" id="741">741</a>
+<a href="#742" id="742">742</a>
+<a href="#743" id="743">743</a>
+<a href="#744" id="744">744</a>
+<a href="#745" id="745">745</a>
+<a href="#746" id="746">746</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -796,6 +806,7 @@
     service::{
         run_non_permissioned_standalone_builder_service,
         run_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
+        ReceivedTransaction,
     },
 };
 <span class="kw">use </span>hotshot_state_prover;
@@ -872,7 +883,8 @@
     hotshot_builder_api_url: Url,
     eth_key_pair: EthKeyPair,
     bootstrapped_view: ViewNumber,
-    channel_capacity: NonZeroUsize,
+    tx_channel_capacity: NonZeroUsize,
+    event_channel_capacity: NonZeroUsize,
     bind_version: Ver,
     persistence: P,
     max_api_timeout_duration: Duration,
@@ -1045,7 +1057,8 @@
         node_index,
         eth_key_pair,
         bootstrapped_view,
-        channel_capacity,
+        tx_channel_capacity,
+        event_channel_capacity,
         instance_state,
         genesis_state,
         hotshot_builder_api_url,
@@ -1143,7 +1156,8 @@
         node_index: u64,
         eth_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
-        channel_capacity: NonZeroUsize,
+        tx_channel_capacity: NonZeroUsize,
+        event_channel_capacity: NonZeroUsize,
         instance_state: NodeState,
         validated_state: ValidatedState,
         hotshot_builder_api_url: Url,
@@ -1152,20 +1166,25 @@
         maximize_txns_count_timeout_duration: Duration,
     ) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
         <span class="comment">// tx channel
-        </span><span class="kw">let </span>(tx_sender, tx_receiver) = broadcast::&lt;MessageType&lt;SeqTypes&gt;&gt;(channel_capacity.get());
+        </span><span class="kw">let </span>(<span class="kw-2">mut </span>tx_sender, tx_receiver) =
+            broadcast::&lt;Arc&lt;ReceivedTransaction&lt;SeqTypes&gt;&gt;&gt;(tx_channel_capacity.get());
+        tx_sender.set_overflow(<span class="bool-val">true</span>);
 
         <span class="comment">// da channel
-        </span><span class="kw">let </span>(da_sender, da_receiver) = broadcast::&lt;MessageType&lt;SeqTypes&gt;&gt;(channel_capacity.get());
+        </span><span class="kw">let </span>(da_sender, da_receiver) =
+            broadcast::&lt;MessageType&lt;SeqTypes&gt;&gt;(event_channel_capacity.get());
 
         <span class="comment">// qc channel
-        </span><span class="kw">let </span>(qc_sender, qc_receiver) = broadcast::&lt;MessageType&lt;SeqTypes&gt;&gt;(channel_capacity.get());
+        </span><span class="kw">let </span>(qc_sender, qc_receiver) =
+            broadcast::&lt;MessageType&lt;SeqTypes&gt;&gt;(event_channel_capacity.get());
 
         <span class="comment">// decide channel
         </span><span class="kw">let </span>(decide_sender, decide_receiver) =
-            broadcast::&lt;MessageType&lt;SeqTypes&gt;&gt;(channel_capacity.get());
+            broadcast::&lt;MessageType&lt;SeqTypes&gt;&gt;(event_channel_capacity.get());
 
         <span class="comment">// builder api request channel
-        </span><span class="kw">let </span>(req_sender, req_receiver) = broadcast::&lt;MessageType&lt;SeqTypes&gt;&gt;(channel_capacity.get());
+        </span><span class="kw">let </span>(req_sender, req_receiver) =
+            broadcast::&lt;MessageType&lt;SeqTypes&gt;&gt;(event_channel_capacity.get());
 
         <span class="kw">let </span>(genesis_payload, genesis_ns_table) =
             Payload::from_transactions([], <span class="kw-2">&amp;</span>validated_state, <span class="kw-2">&amp;</span>instance_state)
@@ -1201,11 +1220,12 @@
                 leaf_commit: fake_commitment(),
                 builder_commitment,
             },
-            tx_receiver,
             decide_receiver,
             da_receiver,
             qc_receiver,
             req_receiver,
+            tx_receiver,
+            Vec::new() <span class="comment">/* tx_queue */</span>,
             global_state_clone,
             NonZeroUsize::new(<span class="number">1</span>).unwrap(),
             maximize_txns_count_timeout_duration,

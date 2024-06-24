@@ -751,6 +751,10 @@
 <a href="#751" id="751">751</a>
 <a href="#752" id="752">752</a>
 <a href="#753" id="753">753</a>
+<a href="#754" id="754">754</a>
+<a href="#755" id="755">755</a>
+<a href="#756" id="756">756</a>
+<a href="#757" id="757">757</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
 </span><span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -1293,7 +1297,8 @@
             <span class="kw">let </span>(fee_account, key_pair) = FeeAccount::generated_from_seed_indexed(seed, <span class="number">2011_u64</span>);
 
             <span class="comment">// channel capacity for the builder states
-            </span><span class="kw">let </span>channel_capacity = NonZeroUsize::new(<span class="number">100</span>).unwrap();
+            </span><span class="kw">let </span>tx_channel_capacity = NonZeroUsize::new(<span class="number">500</span>).unwrap();
+            <span class="kw">let </span>event_channel_capacity = NonZeroUsize::new(<span class="number">20</span>).unwrap();
             <span class="comment">// bootstrapping view number
             // A new builder can use this view number to start building blocks from this view number
             </span><span class="kw">let </span>bootstrapped_view = ViewNumber::new(<span class="number">0</span>);
@@ -1303,7 +1308,8 @@
             <span class="kw">let </span>builder_config = BuilderConfig::init(
                 key_pair,
                 bootstrapped_view,
-                channel_capacity,
+                tx_channel_capacity,
+                event_channel_capacity,
                 node_count,
                 node_state,
                 ValidatedState::default(),
@@ -1358,7 +1364,8 @@
             <span class="kw">let </span>(fee_account, key_pair) = FeeAccount::generated_from_seed_indexed(seed, <span class="number">2011_u64</span>);
 
             <span class="comment">// channel capacity for the builder states
-            </span><span class="kw">let </span>channel_capacity = NonZeroUsize::new(<span class="number">100</span>).unwrap();
+            </span><span class="kw">let </span>tx_channel_capacity = NonZeroUsize::new(<span class="number">20</span>).unwrap();
+            <span class="kw">let </span>event_channel_capacity = NonZeroUsize::new(<span class="number">500</span>).unwrap();
             <span class="comment">// bootstrapping view number
             // A new builder can use this view number to start building blocks from this view number
             </span><span class="kw">let </span>bootstrapped_view = ViewNumber::new(<span class="number">0</span>);
@@ -1369,7 +1376,8 @@
                 node_id,
                 key_pair,
                 bootstrapped_view,
-                channel_capacity,
+                tx_channel_capacity,
+                event_channel_capacity,
                 node_state,
                 ValidatedState::default(),
                 hotshot_builder_api_url,
