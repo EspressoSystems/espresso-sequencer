@@ -12,7 +12,7 @@ use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{traits::EncodeBytes, vid::vid_scheme};
 use jf_vid::VidScheme;
 use rand::RngCore;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[async_std::test]
 async fn basic_correctness() {
@@ -166,7 +166,7 @@ async fn enforce_max_block_size() {
 
 // TODO lots of infra here that could be reused in other tests.
 pub struct ValidTest {
-    nss: HashMap<NamespaceId, Vec<Transaction>>,
+    nss: BTreeMap<NamespaceId, Vec<Transaction>>,
 }
 
 impl ValidTest {
@@ -174,7 +174,7 @@ impl ValidTest {
     where
         R: RngCore,
     {
-        let mut nss = HashMap::new();
+        let mut nss = BTreeMap::new();
         for tx_lens in tx_lengths.into_iter() {
             let ns_id = NamespaceId::random(rng);
             for len in tx_lens {
