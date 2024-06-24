@@ -267,7 +267,7 @@ impl EncodeBytes for Payload {
 
 /// Byte length of a block payload, which includes all namespaces but *not* the
 /// namespace table.
-pub(in crate::block) struct PayloadByteLen(usize);
+pub struct PayloadByteLen(usize);
 
 impl PayloadByteLen {
     /// Extract payload byte length from a [`VidCommon`] and construct a new [`Self`] from it.

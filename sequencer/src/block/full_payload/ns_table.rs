@@ -215,6 +215,38 @@ impl NsTable {
         self.len().in_bounds(index)
     }
 
+    /// Are the bytes of this [`NsTable`] uncorrupted?
+    ///
+    /// # Checks
+    /// 1. Byte length must hold a whole number of entries.
+    /// 2. All namespace IDs and offsets must increase monotonically. Offsets
+    ///    must be nonzero.
+    /// 3. Header consistent with byte length (obsolete after
+    ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>)
+    /// 4. Final offset must equal `payload_byte_len` (obsolete after
+    ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>)
+    pub fn validate(
+        &self,
+        payload_byte_len: &PayloadByteLen,
+    ) -> Result<(), NsTableValidationError> {
+        use NsTableValidationError::*;
+
+        // conditions 1-3
+        self.validate_deserialization_invariants()?;
+
+        // condition 4
+        let len = self.len().0;
+        if len > 0 {
+            let final_ns_index = NsIndex(len - 1);
+            let final_offset = self.read_ns_offset_unchecked(&final_ns_index);
+            if final_offset != payload_byte_len.as_usize() {
+                return Err(InvalidFinalOffset);
+            }
+        }
+
+        Ok(())
+    }
+
     // CRATE-VISIBLE HELPERS START HERE
 
     /// Read subslice range for the `index`th namespace from the namespace
@@ -255,14 +287,11 @@ impl NsTable {
         usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.bytes[start..start + NS_OFFSET_BYTE_LEN])
     }
 
-    /// Are the bytes of this [`NsTable`] uncorrupted?
+    /// Helper for [`NsTable::validate`], used in our custom [`serde`]
+    /// implementation.
     ///
-    /// # Checks
-    /// 1. Byte length must hold a whole number of entries.
-    /// 2. All namespace IDs and offsets must increase monotonically. Offsets
-    ///    must be nonzero.
-    /// 3. Header consistent with byte length (obsolete after
-    ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>)
+    /// Checks conditions 1-3 of [`NsTable::validate`]. Those conditions can be
+    /// checked by looking only at the contents of the [`NsTable`].
     fn validate_deserialization_invariants(&self) -> Result<(), NsTableValidationError> {
         use NsTableValidationError::*;
 
@@ -334,6 +363,7 @@ pub enum NsTableValidationError {
     InvalidByteLen,
     NonIncreasingEntries,
     InvalidHeader, // TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+    InvalidFinalOffset, // TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
 }
 
 pub struct NsTableBuilder {
