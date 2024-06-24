@@ -230,23 +230,6 @@ fn store_in_marketplace_state() {
     unimplemented!();
 }
 
-enum ExecutionResult<T, E, K> {
-    Ok(T),
-    Err(E, K),
-}
-
-// enum ExecutionResult {
-//     Bid(String),
-// }
-
-/// A solution to one auction of sequencing rights for namespaces
-struct AuctionResultTx {
-    auction: AuctionId,
-    nonce: Nonce,
-    winners: Vec<BidTx>,
-    signature: Signature,
-}
-
 // Seems like sequencer could just check for refund flags on events so
 // we probably don't need an explicit transaction type.
 struct BidRefundTx {
