@@ -8,16 +8,16 @@ use serde::{Deserialize, Serialize};
 /// A header is like a block with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Header {
-    pub(super) chain_config: ResolvableChainConfig,
-    pub(super) height: u64,
-    pub(super) timestamp: u64,
-    pub(super) l1_head: u64,
-    pub(super) l1_finalized: Option<L1BlockInfo>,
-    pub(super) payload_commitment: VidCommitment,
-    pub(super) builder_commitment: BuilderCommitment,
-    pub(super) ns_table: NameSpaceTable<TxTableEntryWord>,
-    pub(super) block_merkle_tree_root: BlockMerkleCommitment,
-    pub(super) fee_merkle_tree_root: FeeMerkleCommitment,
-    pub(super) fee_info: FeeInfo,
-    pub(super) builder_signature: Option<BuilderSignature>,
+    pub(crate) chain_config: ResolvableChainConfig,
+    pub(crate) height: u64,
+    pub(crate) timestamp: u64,
+    pub(crate) l1_head: u64,
+    pub(crate) l1_finalized: Option<L1BlockInfo>,
+    pub(crate) payload_commitment: VidCommitment,
+    pub(crate) builder_commitment: BuilderCommitment,
+    pub(crate) ns_table: NameSpaceTable<TxTableEntryWord>,
+    pub(crate) block_merkle_tree_root: BlockMerkleCommitment,
+    pub(crate) fee_merkle_tree_root: FeeMerkleCommitment,
+    pub(crate) fee_info: FeeInfo,
+    pub(crate) builder_signature: Option<BuilderSignature>,
 }

@@ -1,6 +1,6 @@
 use crate::{
     api::data_source::CatchupDataSource, catchup::SqlStateCatchup, eth_signature_key::EthKeyPair,
-    ChainConfig, Header, Leaf, NodeState, SeqTypes,
+    ChainConfig, Leaf, SeqTypes,
 };
 use anyhow::{anyhow, bail, ensure, Context};
 use ark_serialize::{

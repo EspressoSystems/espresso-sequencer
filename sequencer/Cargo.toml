@@ -103,6 +103,8 @@ typenum = { version = "1.15.0", default-features = false, features = [
 url = { workspace = true }
 vbs = { workspace = true }
 zeroize = { workspace = true }
+espresso-types = { path = "../types" }
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]
+

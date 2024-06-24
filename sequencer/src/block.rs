@@ -1,4 +1,4 @@
-use crate::{BlockBuildingSnafu, NodeState, Transaction};
+use crate::{BlockBuildingSnafu, Transaction};
 use committable::{Commitment, Committable};
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::{BlockPayload, EncodeBytes};

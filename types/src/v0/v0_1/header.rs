@@ -1,6 +1,5 @@
 use super::{
-    BlockMerkleCommitment, BuilderSignature, FeeInfo, FeeMerkleCommitment, L1BlockInfo,
-    NameSpaceTable, ResolvableChainConfig, TxTableEntryWord,
+    block::{NameSpaceTable, TxTableEntryWord}, BlockMerkleCommitment, BuilderSignature, FeeInfo, FeeMerkleCommitment, L1BlockInfo, ResolvableChainConfig
 };
 use ethers::prelude::Signature;
 use hotshot_types::{utils::BuilderCommitment, vid::VidCommitment};

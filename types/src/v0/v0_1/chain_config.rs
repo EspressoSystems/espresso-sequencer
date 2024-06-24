@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 #[derive(Default, Hash, Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, From, Into)]
-pub struct ChainId(U256);
+pub struct ChainId(pub U256);
 
 /// Global variables for an Espresso blockchain.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -22,5 +22,5 @@ pub struct ChainConfig {
 
 #[derive(Clone, Debug, Copy, PartialEq, Deserialize, Serialize, Eq, Hash)]
 pub struct ResolvableChainConfig {
-    chain_config: Either<ChainConfig, Commitment<ChainConfig>>,
+    pub chain_config: Either<ChainConfig, Commitment<ChainConfig>>,
 }

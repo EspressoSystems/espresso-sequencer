@@ -43,7 +43,7 @@ pub struct FeeInfo {
     Into,
 )]
 #[display(fmt = "{_0}")]
-pub struct FeeAmount(U256);
+pub struct FeeAmount(pub(crate) U256);
 
 // New Type for `Address` in order to implement `CanonicalSerialize` and
 // `CanonicalDeserialize`
@@ -64,4 +64,4 @@ pub struct FeeAmount(U256);
     Into,
 )]
 #[display(fmt = "{_0:x}")]
-pub struct FeeAccount(Address);
+pub struct FeeAccount(pub(crate) Address);

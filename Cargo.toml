@@ -120,3 +120,5 @@ zeroize = "1.7"
 committable = "0.2"
 portpicker = "0.1.1"
 pretty_assertions = "1.4"
+
+espresso-types = { version = "0.1.0", path = "types" }

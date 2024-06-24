@@ -1,4 +1,7 @@
+// use crate::SeqTypes;
+
 use super::{FeeAccount, FeeAmount, FeeInfo};
+use crate::{eth_signature_key::EthKeyPair, SeqTypes};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
@@ -20,6 +23,22 @@ impl FeeInfo {
             amount: amount.into(),
         }
     }
+    /// The minimum fee paid by the given builder account for a proposed block.
+    // TODO this function should take the block size as an input, we need to get this information
+    // from HotShot.
+    pub fn base_fee(account: FeeAccount) -> Self {
+        Self {
+            account,
+            amount: FeeAmount::default(),
+        }
+    }
+
+    pub fn genesis() -> Self {
+        Self {
+            account: Default::default(),
+            amount: Default::default(),
+        }
+    }
 
     pub fn account(&self) -> FeeAccount {
         self.account
@@ -29,7 +48,6 @@ impl FeeInfo {
         self.amount
     }
 }
-
 impl From<BuilderFee<SeqTypes>> for FeeInfo {
     fn from(fee: BuilderFee<SeqTypes>) -> Self {
         Self {

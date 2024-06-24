@@ -1,6 +1,12 @@
 use derive_more::From;
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot::traits::election::static_committee::GeneralStaticCommittee;
+use hotshot_types::{
+    data::ViewNumber,
+    signature_key::BLSPubKey,
+    traits::{node_implementation::NodeType, signature_key::SignatureKey},
+};
 use serde::{Deserialize, Serialize};
+use snafu::Snafu;
 
 mod impls;
 
@@ -61,9 +67,28 @@ reexport_unchanged_types!(
     FeeMerkleTree,
     L1BlockInfo,
     ResolvableChainConfig,
-    NameSpaceTable,
-    TxTableEntryWord
+    NsTable,
+    TxTableEntryWord,
+    ValidatedState,
+    NodeState,
+    L1Client,
+    FeeAccountProof,
+    AccountQueryData,
+    L1Snapshot,
+    Transaction,
+    NamespaceId,
+    TxTableEntry,
+    TxTable,
+    TxIndex,
+    NamespaceInfo
 );
+
+pub use crate::v0_1::NameSpaceTable;
+pub use crate::v0_1::Payload;
+pub use crate::v0_1::StateCatchup;
+pub use crate::v0_1::Table;
+pub use crate::v0_1::TableWordTraits;
+pub use crate::v0_1::TxIterator;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, From)]
 pub enum Header {
@@ -86,4 +111,33 @@ impl NodeType for SeqTypes {
     type ValidatedState = ValidatedState;
     type Membership = GeneralStaticCommittee<Self, PubKey>;
     type BuilderSignatureKey = FeeAccount;
+}
+
+pub type PubKey = BLSPubKey;
+pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
+
+// move
+#[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
+pub enum Error {
+    // TODO: Can we nest these errors in a `ValidationError` to group them?
+
+    // Parent state commitment of block doesn't match current state commitment
+    IncorrectParent,
+
+    // New view number isn't strictly after current view
+    IncorrectView,
+
+    // Genesis block either has zero or more than one transaction
+    GenesisWrongSize,
+
+    // Genesis transaction not present in genesis block
+    MissingGenesis,
+
+    // Genesis transaction in non-genesis block
+    UnexpectedGenesis,
+
+    // Merkle tree error
+    MerkleTreeError { error: String },
+
+    BlockBuilding,
 }
