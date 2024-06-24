@@ -105,7 +105,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                 let event = event.as_ref();
                 let event_view = match dependency_type {
                     ProposalDependency::Qc => {
-                        if let HotShotEvent::UpdateHighQc(qc) = event {
+                        if let HotShotEvent::HighQcUpdated(qc) = event {
                             qc.view_number() + 1
                         } else {
                             return false;
@@ -229,7 +229,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             HotShotEvent::VidDisperseSend(_, _) => {
                 vid_share_dependency.mark_as_completed(event);
             }
-            HotShotEvent::UpdateHighQc(_) => {
+            HotShotEvent::HighQcUpdated(_) => {
                 qc_dependency.mark_as_completed(event);
             }
             _ => {}
@@ -454,6 +454,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                     warn!("Failed to store High QC of QC we formed; error = {:?}", e);
                 }
 
+                broadcast_event(
+                    HotShotEvent::HighQcUpdated(qc.clone()).into(),
+                    &event_sender,
+                )
+                .await;
+            }
+            HotShotEvent::HighQcUpdated(qc) => {
                 let view_number = qc.view_number() + 1;
                 self.create_dependency_task_if_new(
                     view_number,

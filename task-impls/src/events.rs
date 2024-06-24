@@ -194,6 +194,9 @@ pub enum HotShotEvent<TYPES: NodeType> {
 
     /// A new high_qc has been reached by this node.
     UpdateHighQc(QuorumCertificate<TYPES>),
+
+    /// A new high_qc has been updated in `Consensus`.
+    HighQcUpdated(QuorumCertificate<TYPES>),
 }
 
 impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
@@ -428,6 +431,9 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
             }
             HotShotEvent::UpdateHighQc(cert) => {
                 write!(f, "UpdateHighQc(view_number={:?})", cert.view_number())
+            }
+            HotShotEvent::HighQcUpdated(cert) => {
+                write!(f, "HighQcUpdated(view_number={:?})", cert.view_number())
             }
         }
     }

@@ -121,8 +121,10 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
         Expectations::from_outputs(vec![]),
         Expectations::from_outputs(all_predicates![
             exact(UpdateHighQc(genesis_cert.clone())),
+            exact(HighQcUpdated(genesis_cert.clone())),
             quorum_proposal_send(),
         ]),
+
     ];
 
     let quorum_proposal_task_state =
@@ -272,19 +274,26 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
     ];
 
     let expectations = vec![
-        Expectations::from_outputs(all_predicates![exact(UpdateHighQc(genesis_cert.clone()))]),
-        Expectations::from_outputs(all_predicates![exact(UpdateHighQc(
-            proposals[1].data.justify_qc.clone(),
-        ))]),
+        Expectations::from_outputs(all_predicates![
+            exact(UpdateHighQc(genesis_cert.clone())),
+            exact(HighQcUpdated(genesis_cert.clone())),
+        ]),
+        Expectations::from_outputs(all_predicates![
+            exact(UpdateHighQc(proposals[1].data.justify_qc.clone())),
+            exact(HighQcUpdated(proposals[1].data.justify_qc.clone())),
+        ]),
         Expectations::from_outputs(all_predicates![
             exact(UpdateHighQc(proposals[2].data.justify_qc.clone())),
+            exact(HighQcUpdated(proposals[2].data.justify_qc.clone())),
             quorum_proposal_send(),
         ]),
-        Expectations::from_outputs(all_predicates![exact(UpdateHighQc(
-            proposals[3].data.justify_qc.clone(),
-        ))]),
+        Expectations::from_outputs(all_predicates![
+            exact(UpdateHighQc(proposals[3].data.justify_qc.clone())),
+            exact(HighQcUpdated(proposals[3].data.justify_qc.clone())),
+        ]),
         Expectations::from_outputs(all_predicates![
             exact(UpdateHighQc(proposals[4].data.justify_qc.clone())),
+            exact(HighQcUpdated(proposals[4].data.justify_qc.clone())),
         ]),
     ];
 
@@ -592,19 +601,26 @@ async fn test_quorum_proposal_task_liveness_check() {
     ];
 
     let expectations = vec![
-        Expectations::from_outputs(vec![exact(UpdateHighQc(genesis_cert.clone()))]),
-        Expectations::from_outputs(vec![exact(UpdateHighQc(
-            proposals[1].data.justify_qc.clone(),
-        ))]),
+        Expectations::from_outputs(all_predicates![
+            exact(UpdateHighQc(genesis_cert.clone())),
+            exact(HighQcUpdated(genesis_cert.clone())),
+        ]),
+        Expectations::from_outputs(all_predicates![
+            exact(UpdateHighQc(proposals[1].data.justify_qc.clone())),
+            exact(HighQcUpdated(proposals[1].data.justify_qc.clone())),
+        ]),
         Expectations::from_outputs(all_predicates![
             exact(UpdateHighQc(proposals[2].data.justify_qc.clone())),
+            exact(HighQcUpdated(proposals[2].data.justify_qc.clone())),
             quorum_proposal_send(),
         ]),
-        Expectations::from_outputs(vec![exact(UpdateHighQc(
-            proposals[3].data.justify_qc.clone(),
-        ))]),
-        Expectations::from_outputs(vec![
+        Expectations::from_outputs(all_predicates![
+            exact(UpdateHighQc(proposals[3].data.justify_qc.clone())),
+            exact(HighQcUpdated(proposals[3].data.justify_qc.clone())),
+        ]),
+        Expectations::from_outputs(all_predicates![
             exact(UpdateHighQc(proposals[4].data.justify_qc.clone())),
+            exact(HighQcUpdated(proposals[4].data.justify_qc.clone())),
         ]),
     ];
 
