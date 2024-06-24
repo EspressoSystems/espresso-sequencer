@@ -15,8 +15,8 @@ members = [
   "contracts/rust/gen-vk-contract",
   "hotshot-state-prover",
   "sequencer",
-  "utils",
   "types",
+  "utils",
 ]
 
 [workspace.dependencies]
