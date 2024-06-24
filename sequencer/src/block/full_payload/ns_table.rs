@@ -411,7 +411,7 @@ impl NsTableBuilder {
 }
 
 /// Index for an entry in a ns table.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Display, Eq, Hash, PartialEq)]
 pub struct NsIndex(usize);
 bytes_serde_impl!(NsIndex, to_bytes, [u8; NUM_NSS_BYTE_LEN], from_bytes);
 
