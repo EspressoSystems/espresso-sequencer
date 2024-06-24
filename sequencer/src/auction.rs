@@ -149,11 +149,11 @@ impl Default for BidTxBody {
         let message = ";)";
         let mut commitment = [0u8; 32];
         commitment[..message.len()].copy_from_slice(message.as_bytes());
-        let (account, key) = FeeAccount::generated_from_seed_indexed([0; 32], 0);
+        let key = FeeAccount::test_key_pair();
         let nsid = NamespaceId::from(999);
         Self {
             url: Url::from_str("htts://sequencer:3939/request_budle").unwrap(),
-            account,
+            account: key.fee_account(),
             public_key: SequencerKey,
             gas_price: FeeAmount::default(),
             bid_amount: FeeAmount::default(),
@@ -276,8 +276,8 @@ mod test {
     }
     #[test]
     fn test_sign_and_verify_mock_bid() {
-        let account = FeeAccount::default();
-        let key = FeeAccount::generated_from_seed_indexed([0; 32], 0).1;
+        let key = FeeAccount::test_key_pair();
+        let account = key.fee_account();
         let bidtx = BidTx::mock(account, key);
         bidtx.verify().unwrap();
     }
