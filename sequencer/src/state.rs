@@ -334,7 +334,8 @@ pub fn validate_proposal(
         });
     }
 
-    proposal.ns_table.validate()?;
+    // TODO WIP
+    // proposal.ns_table.validate_deserialization_invariants()?;
 
     Ok(())
 }

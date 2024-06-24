@@ -149,7 +149,7 @@ where
 
 fn expect_valid(ns_table: &NsTable) {
     // `validate` should succeed
-    ns_table.validate().unwrap();
+    ns_table.validate_deserialization_invariants().unwrap();
 
     // serde round-trip should succeed
     let serde_bytes = bincode::serialize(ns_table).unwrap();
@@ -161,7 +161,10 @@ fn expect_invalid(ns_table: &NsTable, err: NsTableValidationError) {
     use serde::de::Error;
 
     // `validate` should fail
-    assert_eq!(ns_table.validate().unwrap_err(), err);
+    assert_eq!(
+        ns_table.validate_deserialization_invariants().unwrap_err(),
+        err
+    );
 
     // serde round-trip should fail
     //

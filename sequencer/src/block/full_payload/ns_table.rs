@@ -144,7 +144,9 @@ impl<'de> Deserialize<'de> for NsTable {
         D: Deserializer<'de>,
     {
         let unchecked = NsTable::deserialize(deserializer)?;
-        unchecked.validate().map_err(de::Error::custom)?;
+        unchecked
+            .validate_deserialization_invariants()
+            .map_err(de::Error::custom)?;
         Ok(unchecked)
     }
 }
@@ -213,6 +215,46 @@ impl NsTable {
         self.len().in_bounds(index)
     }
 
+    // CRATE-VISIBLE HELPERS START HERE
+
+    /// Read subslice range for the `index`th namespace from the namespace
+    /// table.
+    pub(in crate::block) fn ns_range(
+        &self,
+        index: &NsIndex,
+        payload_byte_len: &PayloadByteLen,
+    ) -> NsPayloadRange {
+        let end = self
+            .read_ns_offset_unchecked(index)
+            .min(payload_byte_len.as_usize());
+        let start = if index.0 == 0 {
+            0
+        } else {
+            self.read_ns_offset_unchecked(&NsIndex(index.0 - 1))
+        }
+        .min(end);
+        NsPayloadRange::new(start, end)
+    }
+
+    // PRIVATE HELPERS START HERE
+
+    /// Read the number of namespaces declared in the namespace table. THIS
+    /// QUANTITY IS NEVER USED. Instead use [`NsTable::len`].
+    ///
+    /// TODO Delete this method after
+    /// <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>
+    fn read_num_nss(&self) -> usize {
+        let num_nss_byte_len = NUM_NSS_BYTE_LEN.min(self.bytes.len());
+        usize_from_bytes::<NUM_NSS_BYTE_LEN>(&self.bytes[..num_nss_byte_len])
+    }
+
+    /// Read the namespace offset from the `index`th entry from the namespace table.
+    fn read_ns_offset_unchecked(&self, index: &NsIndex) -> usize {
+        let start =
+            index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
+        usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.bytes[start..start + NS_OFFSET_BYTE_LEN])
+    }
+
     /// Are the bytes of this [`NsTable`] uncorrupted?
     ///
     /// # Checks
@@ -221,7 +263,7 @@ impl NsTable {
     ///    must be nonzero.
     /// 3. Header consistent with byte length (obsolete after
     ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>)
-    pub fn validate(&self) -> Result<(), NsTableValidationError> {
+    fn validate_deserialization_invariants(&self) -> Result<(), NsTableValidationError> {
         use NsTableValidationError::*;
 
         // Byte length for a table with `x` entries must be exactly
@@ -265,46 +307,6 @@ impl NsTable {
         }
 
         Ok(())
-    }
-
-    // CRATE-VISIBLE HELPERS START HERE
-
-    /// Read subslice range for the `index`th namespace from the namespace
-    /// table.
-    pub(in crate::block) fn ns_range(
-        &self,
-        index: &NsIndex,
-        payload_byte_len: &PayloadByteLen,
-    ) -> NsPayloadRange {
-        let end = self
-            .read_ns_offset_unchecked(index)
-            .min(payload_byte_len.as_usize());
-        let start = if index.0 == 0 {
-            0
-        } else {
-            self.read_ns_offset_unchecked(&NsIndex(index.0 - 1))
-        }
-        .min(end);
-        NsPayloadRange::new(start, end)
-    }
-
-    // PRIVATE HELPERS START HERE
-
-    /// Read the number of namespaces declared in the namespace table. THIS
-    /// QUANTITY IS NEVER USED. Instead use [`NsTable::len`].
-    ///
-    /// TODO Delete this method after
-    /// <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>
-    fn read_num_nss(&self) -> usize {
-        let num_nss_byte_len = NUM_NSS_BYTE_LEN.min(self.bytes.len());
-        usize_from_bytes::<NUM_NSS_BYTE_LEN>(&self.bytes[..num_nss_byte_len])
-    }
-
-    /// Read the namespace offset from the `index`th entry from the namespace table.
-    fn read_ns_offset_unchecked(&self, index: &NsIndex) -> usize {
-        let start =
-            index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
-        usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.bytes[start..start + NS_OFFSET_BYTE_LEN])
     }
 }
 
