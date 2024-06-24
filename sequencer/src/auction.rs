@@ -200,7 +200,7 @@ impl BidTx {
         self.verify()
             .map_err(|e| (e, FullNetworkTx::Bid(self.clone())))?;
 
-        // self.charge().map_err;
+        // TODO do we still do this in JIT auction?
         store_in_marketplace_state();
 
         // TODO what do we return in good result?
@@ -221,21 +221,13 @@ impl BidTx {
     }
 }
 
+// TODO I'm not sure how phases will work in JIT
 pub fn get_phase() -> AuctionPhaseKind {
     AuctionPhaseKind::Bid
 }
 
 fn store_in_marketplace_state() {
     unimplemented!();
-}
-
-// Seems like sequencer could just check for refund flags on events so
-// we probably don't need an explicit transaction type.
-struct BidRefundTx {
-    nonce: Nonce,
-    // I don't think we need the list b/c we have them in state
-    // txns_to_refund: Vec<BidTx>,
-    signature: Signature,
 }
 
 /// Nonce for special (auction) transactions
