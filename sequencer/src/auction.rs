@@ -1,11 +1,10 @@
 use crate::{
-    eth_signature_key::EthKeyPair,
+    eth_signature_key::{EthKeyPair, SigningError},
     state::{FeeAccount, FeeAmount},
     NamespaceId, ValidatedState,
 };
 use committable::{Commitment, Committable};
 use ethers::types::Signature;
-use hotshot::types::SignatureKey;
 use hotshot_types::{data::ViewNumber, traits::signature_key::BuilderSignatureKey};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -78,7 +77,6 @@ pub enum FullNetworkTx {
 
 impl FullNetworkTx {
     pub fn execute(&self, state: &ValidatedState) -> Result<(), (ExecutionError, FullNetworkTx)> {
-        dbg!("execute");
         match self {
             Self::Bid(bid) => bid.execute(state),
         }
@@ -141,6 +139,13 @@ impl Committable for BidTxBody {
                 &bincode::serialize(&self.bundle.as_slice()).unwrap(),
             );
         comm.finalize()
+    }
+}
+
+impl BidTxBody {
+    /// Sign Tx
+    fn sign(&self, key: &EthKeyPair) -> Result<Signature, SigningError> {
+        FeeAccount::sign_builder_message(key, self.commit().as_ref())
     }
 }
 
@@ -248,25 +253,23 @@ mod test {
     impl BidTx {
         fn mock(key: EthKeyPair) -> Self {
             let body = BidTxBody::default();
-            let commitment = body.commit();
-            let signature = FeeAccount::sign_builder_message(&key, commitment.as_ref()).unwrap();
+            let signature = body.sign(&key).unwrap();
             Self { signature, body }
         }
     }
 
     #[test]
     fn test_default_bidtx_body() {
-        let message = ";)";
-        let mut commitment = [0u8; 32];
-        commitment[..message.len()].copy_from_slice(message.as_bytes());
         let bid = BidTxBody::default();
         dbg!(&bid);
     }
+
     #[test]
     fn test_mock_full_network_txs() {
         let x = mock_full_network_txs();
         dbg!(&x);
     }
+
     #[test]
     fn test_sign_and_verify_mock_bid() {
         let key = FeeAccount::test_key_pair();
