@@ -421,7 +421,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return stateUpdateBlockNumbers.length;
     }
 
-    /// @notice get the HotShot commitment at the specified block height
+    /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at
+    /// the provided height
     /// @param hotShotBlockHeight hotShotBlockHeight
     function getHotShotCommitment(uint256 hotShotBlockHeight)
         public
@@ -433,6 +434,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert InvalidHotShotBlockForCommitmentCheck();
         }
         for (uint256 i = 0; i < commitmentsHeight; i++) {
+            // The first commitment greater than the provided height is the root of the tree
+            // that leaf at that HotShot height
             if (hotShotCommitments[i].blockHeight > hotShotBlockHeight) {
                 return hotShotCommitments[i];
             }
