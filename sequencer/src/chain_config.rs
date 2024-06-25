@@ -110,6 +110,9 @@ pub struct ChainConfig {
     /// regardless of whether or not their is a `fee_contract` deployed. Once deployed, the fee
     /// contract can decide what to do with tokens locked in this account in Espresso.
     pub fee_recipient: FeeAccount,
+
+    /// Account that receives sequencing bids.
+    pub bid_recipient: FeeAccount,
 }
 
 impl Default for ChainConfig {
@@ -120,6 +123,7 @@ impl Default for ChainConfig {
             base_fee: 0.into(),
             fee_contract: None,
             fee_recipient: Default::default(),
+            bid_recipient: Default::default(),
         }
     }
 }

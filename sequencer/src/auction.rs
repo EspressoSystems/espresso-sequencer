@@ -1,6 +1,6 @@
 use crate::{
     eth_signature_key::{EthKeyPair, SigningError},
-    state::{FeeAccount, FeeAmount},
+    state::{FeeAccount, FeeAmount, FeeError, FeeInfo},
     NamespaceId, ValidatedState,
 };
 use committable::{Commitment, Committable};
@@ -12,6 +12,7 @@ use std::{
     num::NonZeroU64,
     str::FromStr,
 };
+use thiserror::Error;
 use url::Url;
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, Hash)]
@@ -76,7 +77,10 @@ pub enum FullNetworkTx {
 }
 
 impl FullNetworkTx {
-    pub fn execute(&self, state: &ValidatedState) -> Result<(), (ExecutionError, FullNetworkTx)> {
+    pub fn execute(
+        &self,
+        state: &mut ValidatedState,
+    ) -> Result<(), (ExecutionError, FullNetworkTx)> {
         match self {
             Self::Bid(bid) => bid.execute(state),
         }
@@ -84,14 +88,14 @@ impl FullNetworkTx {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, Hash)]
-struct BidTx {
+pub struct BidTx {
     body: BidTxBody,
     signature: Signature,
 }
 
 /// A transaction to bid for the sequencing rights of a namespace
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, Hash)]
-struct BidTxBody {
+pub struct BidTxBody {
     /// Account responsible for the signature
     account: FeeAccount,
     /// Fee to be sequenced in the network.  Different than the bid_amount fee
@@ -110,14 +114,6 @@ struct BidTxBody {
     slot: Slot,
     /// The set of namespace ids the sequencer is bidding for
     bundle: Vec<NamespaceId>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, Hash)]
-struct ShortBidTx {
-    signature: Signature,
-    /// Account responsible for the signature
-    account: FeeAccount,
-    url: Url,
 }
 
 // TODO consider a committable derive macro
@@ -144,8 +140,16 @@ impl Committable for BidTxBody {
 
 impl BidTxBody {
     /// Sign Tx
-    fn sign(&self, key: &EthKeyPair) -> Result<Signature, SigningError> {
+    pub fn sign(&self, key: &EthKeyPair) -> Result<Signature, SigningError> {
         FeeAccount::sign_builder_message(key, self.commit().as_ref())
+    }
+    /// Get account responsible for bid
+    pub fn account(&self) -> FeeAccount {
+        self.account
+    }
+    /// Get amount of bid
+    pub fn amount(&self) -> FeeAmount {
+        self.bid_amount
     }
 }
 
@@ -174,10 +178,20 @@ impl Default for BidTx {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, Hash)]
+#[derive(Error, Debug, Eq, PartialEq)]
 pub enum ExecutionError {
+    #[error("Invalid Signature")]
     InvalidSignature,
+    #[error("Invalid Phase")]
     InvalidPhase,
+    #[error("FeeError: {0}")]
+    FeeError(FeeError),
+}
+
+impl From<FeeError> for ExecutionError {
+    fn from(e: FeeError) -> Self {
+        Self::FeeError(e)
+    }
 }
 
 // TODO consider moving common functionality to trait.
@@ -185,12 +199,15 @@ impl BidTx {
     /// Executes `BidTx`.
     /// * verify signature
     /// * charge fee
-    /// * store state
+    /// * store state (maybe not for JIT)
     // The rational behind the `Err` is to provide not only what
     // failed, but for which varient. The entire Tx is probably
     // overkill, but we can narrow down how much we want to know about
     // Failed Tx in the future. Maybe we just want its name.
-    pub fn execute(&self, state: &ValidatedState) -> Result<(), (ExecutionError, FullNetworkTx)> {
+    pub fn execute(
+        &self,
+        state: &mut ValidatedState,
+    ) -> Result<(), (ExecutionError, FullNetworkTx)> {
         if get_phase() != AuctionPhaseKind::Bid {
             return Err((
                 ExecutionError::InvalidPhase,
@@ -200,13 +217,26 @@ impl BidTx {
         self.verify()
             .map_err(|e| (e, FullNetworkTx::Bid(self.clone())))?;
 
+        // TODO review when this actually occurs in JIT auction
+        // charge the bid
+        self.charge(state)
+            .map_err(|e| (e, FullNetworkTx::Bid(self.clone())))?;
+
         // TODO do we still do this in JIT auction?
         store_in_marketplace_state();
 
         // TODO what do we return in good result?
         Ok(())
     }
-    // fn charge(&self) {}
+    /// Charge Bid. Only winning bids are charged in JIT (I think).
+    fn charge(&self, state: &mut ValidatedState) -> Result<(), ExecutionError> {
+        // TODO can we assume validated_state.chain_config has been resolved at this point?
+        let chain_config = state.chain_config.resolve().unwrap();
+        let recipient = chain_config.bid_recipient;
+        state
+            .charge_fee(FeeInfo::from(self.clone()), recipient)
+            .map_err(|e| e.into())
+    }
     /// Cryptographic signature verification
     fn verify(&self) -> Result<(), ExecutionError> {
         if !self
@@ -218,6 +248,9 @@ impl BidTx {
         };
 
         Ok(())
+    }
+    pub fn body(&self) -> BidTxBody {
+        self.body.clone()
     }
 }
 
@@ -267,5 +300,13 @@ mod test {
         let key = FeeAccount::test_key_pair();
         let bidtx = BidTx::mock(key);
         bidtx.verify().unwrap();
+    }
+
+    #[test]
+    fn test_charge_mock_bid() {
+        let mut state = ValidatedState::default();
+        let key = FeeAccount::test_key_pair();
+        let bidtx = BidTx::mock(key);
+        bidtx.charge(&mut state).unwrap();
     }
 }
