@@ -18,13 +18,13 @@ pub struct NsProof {
 }
 
 /// Byte lengths for the different items that could appear in a namespace table.
-pub(crate) const NUM_NSS_BYTE_LEN: usize = 4;
-pub(crate) const NS_OFFSET_BYTE_LEN: usize = 4;
+pub const NUM_NSS_BYTE_LEN: usize = 4;
+pub const NS_OFFSET_BYTE_LEN: usize = 4;
 
 // TODO prefer [`NS_ID_BYTE_LEN`] set to `8` because [`NamespaceId`] is a `u64`
 // but we need to maintain serialization compatibility.
 // https://github.com/EspressoSystems/espresso-sequencer/issues/1574
-pub(crate) const NS_ID_BYTE_LEN: usize = 4;
+pub const NS_ID_BYTE_LEN: usize = 4;
 
 /// Raw binary data for a namespace table.
 ///
@@ -150,7 +150,7 @@ pub struct NsIndex(pub(crate) usize);
 pub struct NumNss(pub(crate) usize);
 
 /// Return type for [`Payload::ns_iter`].
-pub(crate) struct NsIter(pub(crate) Range<usize>);
+pub struct NsIter(pub(crate) Range<usize>);
 
 /// Raw payload data for an entire block.
 ///
@@ -185,7 +185,7 @@ pub struct Payload {
 
 /// Byte length of a block payload, which includes all namespaces but *not* the
 /// namespace table.
-pub(crate) struct PayloadByteLen(pub(crate) usize);
+pub struct PayloadByteLen(pub(crate) usize);
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Index {
@@ -202,7 +202,7 @@ pub struct Iter<'a> {
 
 /// Index range for a namespace payload inside a block payload.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct NsPayloadRange(pub(crate) Range<usize>);
+pub struct NsPayloadRange(pub(crate) Range<usize>);
 
 /// Raw binary data for a single namespace's payload.
 ///
@@ -210,12 +210,12 @@ pub(crate) struct NsPayloadRange(pub(crate) Range<usize>);
 ///
 /// See module-level documentation [`types`](super::types) for a full
 /// specification of the binary format of a namespace.
-pub(crate) struct NsPayload(pub(crate) [u8]);
+pub struct NsPayload(pub(crate) [u8]);
 
 #[repr(transparent)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(transparent)]
-pub(crate) struct NsPayloadOwned(#[serde(with = "base64_bytes")] pub(crate) Vec<u8>);
+pub struct NsPayloadOwned(#[serde(with = "base64_bytes")] pub(crate) Vec<u8>);
 
 /// Proof of correctness for transaction bytes in a block.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -309,7 +309,7 @@ pub struct TxPayloadRange(pub(crate) Range<usize>);
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct TxIndex(pub(crate) usize);
 
-pub(crate) struct TxIter(pub(crate) Range<usize>);
+pub struct TxIter(pub(crate) Range<usize>);
 
 /// Build an individual namespace payload one transaction at a time.
 ///
@@ -317,7 +317,7 @@ pub(crate) struct TxIter(pub(crate) Range<usize>);
 /// when you're done. The returned bytes include a well-formed tx table and all
 /// tx payloads.
 #[derive(Default)]
-pub(crate) struct NsPayloadBuilder {
+pub struct NsPayloadBuilder {
     pub(crate) tx_table_entries: Vec<u8>,
     pub(crate) tx_bodies: Vec<u8>,
 }

@@ -1,4 +1,5 @@
-use crate::{v0_1::BlockSize, ChainConfig, ChainId, ResolvableChainConfig};
+use crate::BlockSize;
+use crate::{ChainConfig, ChainId, ResolvableChainConfig};
 use bytesize::ByteSize;
 use committable::{Commitment, Committable};
 use derive_more::From;

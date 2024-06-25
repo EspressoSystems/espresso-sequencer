@@ -78,7 +78,7 @@ pub struct FeeAccountProof {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub(crate) enum FeeMerkleProof {
+pub enum FeeMerkleProof {
     Presence(<FeeMerkleTree as MerkleTreeScheme>::MembershipProof),
     Absence(<FeeMerkleTree as UniversalMerkleTreeScheme>::NonMembershipProof),
 }

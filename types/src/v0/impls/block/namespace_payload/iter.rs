@@ -1,4 +1,4 @@
-use crate::v0_1::{Index, Iter, NsIndex, NsIter, Payload, TxIndex};
+use crate::{Index, Iter, NsIndex, NsIter, Payload, TxIndex};
 
 impl Index {
     pub fn ns(&self) -> &NsIndex {

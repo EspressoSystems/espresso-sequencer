@@ -1,11 +1,19 @@
 use vbs::version::Version;
 
-// Re-export types which haven't changed since the last minor vresion.
+// Re-export types which haven't changed since the last minor version.
 pub use super::v0_1::{
-    AccountQueryData, BlockMerkleCommitment, BlockMerkleTree, BuilderSignature, ChainConfig,
-    ChainId, FeeAccount, FeeAccountProof, FeeAmount, FeeInfo, FeeMerkleCommitment, FeeMerkleTree,
-    L1BlockInfo, L1Client, L1Snapshot, NamespaceId, NodeState, NsTable, Payload,
-    ResolvableChainConfig, StateCatchup, Transaction, ValidatedState,
+    AccountQueryData, BlockMerkleCommitment, BlockMerkleTree, BlockSize, BuilderSignature,
+    BuilderValidationError, ChainConfig, ChainId, Delta, FeeAccount, FeeAccountProof, FeeAmount,
+    FeeError, FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree, FromNsPayloadBytes,
+    GenesisHeader, Index, Iter, L1BlockInfo, L1Client, L1Snapshot, NamespaceId, NodeState, NsIndex,
+    NsIter, NsPayload, NsPayloadBuilder, NsPayloadByteLen, NsPayloadBytesRange, NsPayloadOwned,
+    NsPayloadRange, NsProof, NsTable, NsTableBuilder, NsTableValidationError, NumNss, NumTxs,
+    NumTxsRange, NumTxsUnchecked, Payload, PayloadByteLen, ProposalValidationError,
+    ResolvableChainConfig, StateCatchup, StateValidationError, Timestamp, Transaction, TxIndex,
+    TxIter, TxPayload, TxPayloadRange, TxProof, TxTableEntries, TxTableEntriesRange, Upgrade,
+    UpgradeType, ValidatedState, BACKOFF_FACTOR, BACKOFF_JITTER, BLOCK_MERKLE_TREE_HEIGHT,
+    FEE_MERKLE_TREE_HEIGHT, MAX_RETRY_DELAY, MIN_RETRY_DELAY, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
+    NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
 
 pub const VERSION: Version = Version { major: 0, minor: 1 };

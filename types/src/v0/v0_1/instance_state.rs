@@ -90,11 +90,11 @@ pub enum UpgradeType {
     ChainConfig { chain_config: ChainConfig },
 }
 
-const MIN_RETRY_DELAY: Duration = Duration::from_millis(500);
-const MAX_RETRY_DELAY: Duration = Duration::from_secs(5);
-const BACKOFF_FACTOR: u32 = 2;
+pub const MIN_RETRY_DELAY: Duration = Duration::from_millis(500);
+pub const MAX_RETRY_DELAY: Duration = Duration::from_secs(5);
+pub const BACKOFF_FACTOR: u32 = 2;
 // Exponential backoff jitter as a fraction of the backoff delay, (numerator, denominator).
-const BACKOFF_JITTER: (u64, u64) = (1, 10);
+pub const BACKOFF_JITTER: (u64, u64) = (1, 10);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Upgrade {

@@ -4,10 +4,7 @@ use hotshot_types::{constants::Base, traits::states::InstanceState};
 
 use vbs::version::{StaticVersionType, Version};
 
-use crate::{
-    v0_1::{StateCatchup, Upgrade},
-    ChainConfig, L1Client, NodeState, ValidatedState,
-};
+use crate::{traits::StateCatchup, ChainConfig, L1Client, NodeState, Upgrade, ValidatedState};
 
 impl NodeState {
     pub fn new(

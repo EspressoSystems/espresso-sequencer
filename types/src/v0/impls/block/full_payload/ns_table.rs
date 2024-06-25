@@ -12,14 +12,15 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::sync::Arc;
 
 use crate::{
+    constants::{NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN},
     v0::impls::block::uint_bytes::{
         bytes_serde_impl, u32_from_bytes, u32_to_bytes, usize_from_bytes, usize_to_bytes,
     },
-    v0_1::{
-        NsIndex, NsIter, NsPayloadRange, NsTableBuilder, NsTableValidationError, NumNss,
-        PayloadByteLen, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
-    },
     NamespaceId, NsTable,
+    {
+        NsIndex, NsIter, NsPayloadRange, NsTableBuilder, NsTableValidationError, NumNss,
+        PayloadByteLen,
+    },
 };
 
 // Boilerplate: `#[serde(remote = "Self")]` allows invariant checking on
@@ -215,6 +216,8 @@ impl Committable for NsTable {
 }
 
 impl NsTableBuilder {
+    // >>>> change
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         // pre-allocate space for the ns table header
         Self {

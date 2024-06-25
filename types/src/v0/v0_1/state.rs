@@ -1,6 +1,6 @@
 use crate::ResolvableChainConfig;
 
-use super::{block::NsTableValidationError, BlockSize, FeeAccount, FeeAmount};
+use super::{BlockSize, FeeAccount, FeeAmount, NsTableValidationError};
 
 use jf_merkle_tree::{
     prelude::{LightWeightSHA3MerkleTree, Sha3Digest, Sha3Node},
@@ -29,7 +29,7 @@ pub const FEE_MERKLE_TREE_HEIGHT: usize = 20;
 /// This enum is not used in code but functions as an index of
 /// possible validation errors.
 #[allow(dead_code)]
-enum StateValidationError {
+pub enum StateValidationError {
     ProposalValidation(ProposalValidationError),
     BuilderValidation(BuilderValidationError),
     Fee(FeeError),

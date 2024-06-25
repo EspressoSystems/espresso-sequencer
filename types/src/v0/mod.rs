@@ -7,7 +7,6 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use v0_1::Payload;
 
 mod impls;
 
@@ -56,25 +55,63 @@ macro_rules! reexport_unchanged_types {
     }
 }
 reexport_unchanged_types!(
+    AccountQueryData,
     BlockMerkleCommitment,
     BlockMerkleTree,
     BuilderSignature,
+    BuilderValidationError,
     ChainConfig,
     ChainId,
+    Delta,
     FeeAccount,
+    FeeAccountProof,
     FeeAmount,
+    FeeError,
     FeeInfo,
     FeeMerkleCommitment,
+    FeeMerkleProof,
     FeeMerkleTree,
+    GenesisHeader,
+    Index,
+    Iter,
     L1BlockInfo,
-    ResolvableChainConfig,
-    NsTable,
-    ValidatedState,
-    NodeState,
     L1Client,
     L1Snapshot,
-    Transaction,
     NamespaceId,
+    NodeState,
+    NsIndex,
+    NsIter,
+    NsPayload,
+    NsPayloadBuilder,
+    NsPayloadByteLen,
+    NsPayloadOwned,
+    NsPayloadRange,
+    NsProof,
+    NsTable,
+    NsTableBuilder,
+    NsTableValidationError,
+    NumNss,
+    NumTxs,
+    NumTxsRange,
+    NumTxsUnchecked,
+    Payload,
+    PayloadByteLen,
+    ProposalValidationError,
+    ResolvableChainConfig,
+    StateValidationError,
+    Timestamp,
+    Transaction,
+    TxIndex,
+    TxIter,
+    TxPayload,
+    TxPayloadRange,
+    TxProof,
+    TxTableEntries,
+    TxTableEntriesRange,
+    Upgrade,
+    UpgradeType,
+    ValidatedState,
+    BlockSize
 );
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, From)]
@@ -127,4 +164,16 @@ pub enum Error {
     MerkleTreeError { error: String },
 
     BlockBuilding,
+}
+
+pub mod constants {
+    pub use crate::v0_1::{
+        BACKOFF_FACTOR, BACKOFF_JITTER, BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT,
+        MAX_RETRY_DELAY, MIN_RETRY_DELAY, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
+        NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
+    };
+}
+
+pub mod traits {
+    pub use crate::v0_1::{FromNsPayloadBytes, NsPayloadBytesRange, StateCatchup};
 }

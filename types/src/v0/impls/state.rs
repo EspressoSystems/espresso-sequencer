@@ -1,13 +1,13 @@
 use std::ops::Add;
 
-use crate::v0_1::{
-    BuilderValidationError, Delta, FeeError, NsTableValidationError, ProposalValidationError,
-    UpgradeType, BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT,
-};
 use crate::{
-    v0_1::ValidatedState, BlockMerkleTree, ChainConfig, FeeAccount, FeeAmount, FeeMerkleTree,
+    constants::{BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT},
+    BlockMerkleTree, BuilderValidationError, ChainConfig, Delta, FeeAccount, FeeAmount, FeeError,
+    FeeInfo, FeeMerkleTree, NodeState, NsTableValidationError, ProposalValidationError,
+    ResolvableChainConfig, UpgradeType, ValidatedState,
 };
-use crate::{FeeInfo, Header, Leaf, NodeState, ResolvableChainConfig, SeqTypes};
+
+use crate::{Header, Leaf, SeqTypes};
 
 use committable::Committable;
 use ethers::types::Address;
@@ -300,7 +300,7 @@ impl ValidatedState {
         validated_state.apply_upgrade(instance, version);
 
         let chain_config = validated_state
-            .get_chain_config(instance, &proposed_header.chain_config())
+            .get_chain_config(instance, proposed_header.chain_config())
             .await?;
 
         if Some(chain_config) != validated_state.chain_config.resolve() {

@@ -1,11 +1,10 @@
+use crate::{v0_1, v0_2, Header, Leaf, SeqTypes};
 use crate::{
-    v0_1::UpgradeType, ChainConfig, L1Snapshot, Leaf, NodeState, NsTable, SeqTypes, ValidatedState,
+    BlockMerkleCommitment, BuilderSignature, ChainConfig, FeeInfo, FeeMerkleCommitment,
+    L1BlockInfo, L1Snapshot, NodeState, NsTable, ResolvableChainConfig, UpgradeType,
+    ValidatedState,
 };
 
-use super::{
-    v0_1, v0_2, BlockMerkleCommitment, BuilderSignature, FeeInfo, FeeMerkleCommitment, Header,
-    L1BlockInfo, ResolvableChainConfig,
-};
 use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
@@ -567,7 +566,7 @@ impl BlockHeader<SeqTypes> for Header {
     fn metadata(
         &self,
     ) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata {
-        &self.ns_table()
+        self.ns_table()
     }
 
     /// Commit over fee_amount, payload_commitment and metadata

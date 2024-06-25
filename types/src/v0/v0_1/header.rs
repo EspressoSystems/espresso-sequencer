@@ -1,4 +1,4 @@
-use crate::v0_1::block::NsTable;
+use crate::NsTable;
 
 use super::{
     BlockMerkleCommitment, BuilderSignature, FeeInfo, FeeMerkleCommitment, L1BlockInfo,

@@ -1,10 +1,9 @@
 // use crate::SeqTypes;
 
-use super::{FeeAccount, FeeAmount, FeeInfo};
+use crate::{eth_signature_key::EthKeyPair, SeqTypes};
 use crate::{
-    eth_signature_key::EthKeyPair,
-    v0_1::{AccountQueryData, FeeAccountProof, FeeMerkleProof},
-    FeeMerkleCommitment, FeeMerkleTree, SeqTypes,
+    AccountQueryData, FeeAccount, FeeAccountProof, FeeAmount, FeeInfo, FeeMerkleCommitment,
+    FeeMerkleProof, FeeMerkleTree,
 };
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{

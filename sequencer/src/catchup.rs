@@ -19,11 +19,11 @@ use tide_disco::error::ServerError;
 use url::Url;
 use vbs::version::StaticVersionType;
 
-const MIN_RETRY_DELAY: Duration = Duration::from_millis(500);
-const MAX_RETRY_DELAY: Duration = Duration::from_secs(5);
-const BACKOFF_FACTOR: u32 = 2;
+pub const MIN_RETRY_DELAY: Duration = Duration::from_millis(500);
+pub const MAX_RETRY_DELAY: Duration = Duration::from_secs(5);
+pub const BACKOFF_FACTOR: u32 = 2;
 // Exponential backoff jitter as a fraction of the backoff delay, (numerator, denominator).
-const BACKOFF_JITTER: (u64, u64) = (1, 10);
+pub const BACKOFF_JITTER: (u64, u64) = (1, 10);
 
 #[must_use]
 fn backoff(delay: Duration) -> Duration {

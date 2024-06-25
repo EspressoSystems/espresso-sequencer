@@ -1,4 +1,4 @@
-use crate::v0_1::PayloadByteLen;
+use crate::PayloadByteLen;
 use hotshot_types::{
     traits::EncodeBytes,
     vid::{vid_scheme, VidCommitment, VidCommon, VidSchemeType},
@@ -9,8 +9,7 @@ use jf_vid::{
 };
 
 use crate::{
-    v0_1::{NsIndex, NsProof, Payload},
-    NamespaceId, NsTable, Transaction,
+    NamespaceId, NsTable, Transaction, {NsIndex, NsProof, Payload},
 };
 
 impl NsProof {

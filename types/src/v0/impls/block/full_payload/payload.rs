@@ -11,11 +11,9 @@ use sha2::Digest;
 use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 
 use crate::{
-    v0_1::{
-        Index, Iter, NsIndex, NsPayload, NsPayloadBuilder, NsPayloadRange, NsTableBuilder, Payload,
-        PayloadByteLen, TxProof,
-    },
-    ChainConfig, NamespaceId, NodeState, NsTable, SeqTypes, Transaction, ValidatedState,
+    ChainConfig, Index, Iter, NamespaceId, NodeState, NsIndex, NsPayload, NsPayloadBuilder,
+    NsPayloadRange, NsTable, NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction,
+    TxProof, ValidatedState,
 };
 
 impl Payload {
@@ -241,6 +239,7 @@ impl PayloadByteLen {
         Self(usize::try_from(VidSchemeType::get_payload_byte_len(common)).unwrap())
     }
 
+    #[allow(clippy::result_unit_err)]
     /// Is the payload byte length declared in a [`VidCommon`] equal [`Self`]?
     pub fn is_consistent(&self, common: &VidCommon) -> Result<(), ()> {
         // failure to convert to usize implies that `common` cannot be

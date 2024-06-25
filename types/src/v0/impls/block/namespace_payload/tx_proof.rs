@@ -8,7 +8,10 @@ use jf_vid::{
     VidScheme,
 };
 
-use crate::{v0_1::*, Transaction};
+use crate::{
+    Index, NsTable, NumTxs, NumTxsRange, Payload, PayloadByteLen, Transaction, TxPayloadRange,
+    TxProof, TxTableEntriesRange,
+};
 
 impl TxProof {
     /// Returns the [`Transaction`] indicated by `index`, along with a proof of
