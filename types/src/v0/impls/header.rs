@@ -215,7 +215,7 @@ impl Header {
 
         let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
 
-        Ok(Self::new(
+        Ok(Self::create(
             chain_config.commit().into(),
             height,
             timestamp,
@@ -523,7 +523,7 @@ impl BlockHeader<SeqTypes> for Header {
             Some((version, _)) => *version,
         };
 
-        Self::new(
+        Self::create(
             instance_state.chain_config.into(),
             0,
             instance_state.genesis_header.timestamp.unix_timestamp(),
