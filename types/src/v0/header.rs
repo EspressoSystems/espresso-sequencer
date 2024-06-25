@@ -1,4 +1,3 @@
-use derive_more::From;
 use hotshot_query_service::VidCommitment;
 use hotshot_types::utils::BuilderCommitment;
 use serde::{Deserialize, Serialize};
@@ -9,7 +8,7 @@ use crate::{
     L1BlockInfo, NsTable, ResolvableChainConfig,
 };
 
-#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, From)]
+#[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub enum Header {
     V1(v0_1::Header),
     V2(v0_2::Header),

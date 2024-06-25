@@ -18,9 +18,9 @@ use time::OffsetDateTime;
 use vbs::version::Version;
 
 use crate::{
-    v0_1, v0_3, BlockMerkleCommitment, BuilderSignature, ChainConfig, FeeInfo, FeeMerkleCommitment,
-    Header, L1BlockInfo, L1Snapshot, Leaf, NodeState, NsTable, ResolvableChainConfig, SeqTypes,
-    UpgradeType, ValidatedState,
+    v0_1, v0_2, v0_3, BlockMerkleCommitment, BuilderSignature, ChainConfig, FeeInfo,
+    FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NodeState, NsTable,
+    ResolvableChainConfig, SeqTypes, UpgradeType, ValidatedState,
 };
 
 impl Committable for Header {
@@ -91,8 +91,9 @@ impl Header {
         v: Version,
     ) -> Result<Self, D::Error> {
         match (v.major, v.minor) {
-            (0, 1) | (0, 2) => v0_1::Header::deserialize(d).map(Self::from),
-            (0, 3) => v0_3::Header::deserialize(d).map(Self::from),
+            (0, 1) => v0_1::Header::deserialize(d).map(Self::V1),
+            (0, 2) => v0_2::Header::deserialize(d).map(Self::V2),
+            (0, 3) => v0_3::Header::deserialize(d).map(Self::V3),
             _ => Err(D::Error::custom(format!("unsupported version {v}"))),
         }
     }

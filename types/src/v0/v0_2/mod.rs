@@ -5,10 +5,10 @@ pub use super::v0_1::{
     AccountQueryData, BlockMerkleCommitment, BlockMerkleTree, BlockSize, BuilderSignature,
     BuilderValidationError, ChainConfig, ChainId, Delta, FeeAccount, FeeAccountProof, FeeAmount,
     FeeError, FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree, FromNsPayloadBytes,
-    GenesisHeader, Index, Iter, L1BlockInfo, L1Client, L1Snapshot, NamespaceId, NodeState, NsIndex,
-    NsIter, NsPayload, NsPayloadBuilder, NsPayloadByteLen, NsPayloadBytesRange, NsPayloadOwned,
-    NsPayloadRange, NsProof, NsTable, NsTableBuilder, NsTableValidationError, NumNss, NumTxs,
-    NumTxsRange, NumTxsUnchecked, Payload, PayloadByteLen, ProposalValidationError,
+    GenesisHeader, Header, Index, Iter, L1BlockInfo, L1Client, L1Snapshot, NamespaceId, NodeState,
+    NsIndex, NsIter, NsPayload, NsPayloadBuilder, NsPayloadByteLen, NsPayloadBytesRange,
+    NsPayloadOwned, NsPayloadRange, NsProof, NsTable, NsTableBuilder, NsTableValidationError,
+    NumNss, NumTxs, NumTxsRange, NumTxsUnchecked, Payload, PayloadByteLen, ProposalValidationError,
     ResolvableChainConfig, StateCatchup, StateValidationError, Timestamp, Transaction, TxIndex,
     TxIter, TxPayload, TxPayloadRange, TxProof, TxTableEntries, TxTableEntriesRange, Upgrade,
     UpgradeType, ValidatedState, BACKOFF_FACTOR, BACKOFF_JITTER, BLOCK_MERKLE_TREE_HEIGHT,
@@ -17,7 +17,3 @@ pub use super::v0_1::{
 };
 
 pub const VERSION: Version = Version { major: 0, minor: 2 };
-
-mod header;
-
-pub use header::Header;
