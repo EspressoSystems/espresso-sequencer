@@ -8,10 +8,14 @@
 [zkVM] as ZK
 blk_cm_new --> EspCons
 "<b>STATE_SIGS</b>" --> EspCons
+"<b>STAKE_TABLE_ENTRIES</b>" --> EspCons
+"<b>STAKE_TABLE_OPENINGS</b>" --> EspCons
 BLOCK_NUMBER --> EspCons
 
 
+
 blk_cm_old --> CF
+blk_cm_old --> EspCons
 blk_cm_new --> CF
 "<b>PROOF_TXS_HISTORY</b>" --> CF
 "<b>ROLLUP_TXS</b>" --> CE

@@ -55,12 +55,12 @@ list of transactions.
 
 ## Rollup Contract
 
-Each zk rollup already has its own contract on the L1 (Ethereum) that allows the rollup to settle its state to the L1 via verification of a snark proof.
-The abstract version of this contract is sketched below. In addition to contract variables and a constructor, it
-contains a function `isEscapeHatchActivated` which allows to detect whether the Espresso consensus protocol is live or
-not. In case liveness is lost, the rollup can update its state without reading from the Espresso ledger by calling the
-function `updateStateDefaultSequencingMode`. Note that the Espresso state is read from the Espresso light client
-contract which is referenced by the rollup contract via the variable `lcContract`.
+Each zk rollup already has its own contract on the L1 (Ethereum) that allows the rollup to settle its state to the L1
+via verification of a snark proof. The abstract version of this contract is sketched below. In addition to contract
+variables and a constructor, it contains a function `isEscapeHatchActivated` which allows to detect whether the Espresso
+consensus protocol is live or not. In case liveness is lost, the rollup can update its state without reading from the
+Espresso ledger by calling the function `updateStateDefaultSequencingMode`. Note that the Espresso state is read from
+the Espresso light client contract which is referenced by the rollup contract via the variable `lcContract`.
 
 ```solidity
 // Abstract rollup contract
@@ -221,8 +221,14 @@ Filter_, and _COMMs Equivalence_. Private inputs of the circuit are written in b
 
 The circuit depicted in Figure 3 operates as follows:
 
-- The _Espresso Consensus_ gadget checks that the block commitment for Espresso block _BLOCK_NUMBER_ is `blk_cm`, using
-  the multi-signature _STATE_SIGS_. The other gadgets are the same as in Integration 1.
+- The _Espresso Consensus_ gadget checks that the block commitment for Espresso block `BLOCK_NUMBER` is `blk_cm`. To
+  achieve this goal, it is required to obtain the state of the stake table from the previous HotShot epoch. Assuming the
+  rollup state is updated at least once per epoch, the commitment `blk_cm_old` will be computed from such state. Hence,
+  the private input `STAKE_TABLE_ENTRIES`, containing the list of public keys with their respective stake, can be linked
+  to the commitment `blk_cm_old` via the private inputs `STAKE_TABLE_OPENINGS`. Finally, note that the first
+  `blk_cm_old` value needs to be read from the light client contract. Afterward, no dependency on the light client
+  contract is needed.
+- The other gadgets are the same as in Integration 1.
 
 The pseudocode of the rollup contract below shows that in the case we do not rely on the Espresso light client contract
 to fetch the Espresso state, the function `updateRollupState` requires additional inputs (compared to Integration 1)
