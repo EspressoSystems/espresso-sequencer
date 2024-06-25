@@ -39,7 +39,7 @@ impl Ord for Index {
 
 /// Cartesian product of [`NsIter`], [`TxIter`].
 pub struct Iter<'a> {
-    ns_iter: Peekable<NsIter<'a>>,
+    ns_iter: Peekable<NsIter>,
     tx_iter: Option<TxIter>,
     block: &'a Payload,
 }
@@ -47,7 +47,7 @@ pub struct Iter<'a> {
 impl<'a> Iter<'a> {
     pub fn new(block: &'a Payload) -> Self {
         Self {
-            ns_iter: NsIter::new(block.ns_table()).peekable(),
+            ns_iter: NsIter::new(&block.ns_table().len()).peekable(),
             tx_iter: None,
             block,
         }

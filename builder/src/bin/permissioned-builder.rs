@@ -10,6 +10,7 @@ use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
 use hotshot_types::traits::metrics::NoMetrics;
 use hotshot_types::traits::node_implementation::ConsensusTime;
+use libp2p::Multiaddr;
 use sequencer::persistence::no_storage::NoStorage;
 use sequencer::{eth_signature_key::EthKeyPair, Genesis};
 use sequencer::{L1Params, NetworkParams};
@@ -56,6 +57,18 @@ pub struct PermissionedBuilderOptions {
         default_value = "localhost:1769"
     )]
     pub libp2p_advertise_address: String,
+
+    /// A comma-separated list of Libp2p multiaddresses to use as bootstrap
+    /// nodes.
+    ///
+    /// Overrides those loaded from the `HotShot` config.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_BOOTSTRAP_NODES",
+        value_delimiter = ',',
+        num_args = 1..
+    )]
+    pub libp2p_bootstrap_nodes: Option<Vec<Multiaddr>>,
 
     /// URL of the Light Client State Relay Server
     #[clap(
@@ -141,9 +154,13 @@ pub struct PermissionedBuilderOptions {
     #[clap(short, long, env = "ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW")]
     pub view_number: u64,
 
-    /// BUILDER CHANNEL CAPACITY
-    #[clap(long, env = "ESPRESSO_BUILDER_CHANNEL_CAPACITY")]
-    pub channel_capacity: NonZeroUsize,
+    /// BUILDER TRANSACTIONS CHANNEL CAPACITY
+    #[clap(long, env = "ESPRESSO_BUILDER_TX_CHANNEL_CAPACITY")]
+    pub tx_channel_capacity: NonZeroUsize,
+
+    /// BUILDER HS EVENTS CHANNEL CAPACITY
+    #[clap(long, env = "ESPRESSO_BUILDER_EVENT_CHANNEL_CAPACITY")]
+    pub event_channel_capacity: NonZeroUsize,
 
     /// Url a sequencer can use to stream hotshot events
     #[clap(long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENTS_PROVIDER")]
@@ -243,6 +260,7 @@ async fn main() -> anyhow::Result<()> {
         cdn_endpoint: opt.cdn_endpoint,
         libp2p_advertise_address,
         libp2p_bind_address,
+        libp2p_bootstrap_nodes: opt.libp2p_bootstrap_nodes,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
         private_staking_key: private_staking_key.clone(),
@@ -271,7 +289,8 @@ async fn main() -> anyhow::Result<()> {
         builder_server_url.clone(),
         builder_key_pair,
         bootstrapped_view,
-        opt.channel_capacity,
+        opt.tx_channel_capacity,
+        opt.event_channel_capacity,
         sequencer_version,
         NoStorage,
         max_api_response_timeout_duration,

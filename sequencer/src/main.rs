@@ -77,6 +77,7 @@ where
         cdn_endpoint: opt.cdn_endpoint,
         libp2p_advertise_address,
         libp2p_bind_address,
+        libp2p_bootstrap_nodes: opt.libp2p_bootstrap_nodes,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
         private_staking_key,
@@ -194,7 +195,7 @@ mod test {
             accounts: Default::default(),
             l1_finalized: Default::default(),
             header: Default::default(),
-            network: Default::default(),
+            upgrades: Default::default(),
         };
         genesis.to_file(&genesis_file).unwrap();
 

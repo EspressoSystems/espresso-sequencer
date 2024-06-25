@@ -57,14 +57,14 @@ struct Args {
     )]
     eth_account_index: u32,
 
-    /// URL of the HotShot orchestrator.
+    /// URL of a sequencer node that is currently providing the HotShot config.
+    /// This is used to initialize the stake table.
     #[clap(
-        short,
         long,
-        env = "ESPRESSO_SEQUENCER_ORCHESTRATOR_URL",
-        default_value = "http://localhost:8080"
+        env = "ESPRESSO_SEQUENCER_URL",
+        default_value = "http://localhost:24000"
     )]
-    pub orchestrator_url: Url,
+    pub sequencer_url: Url,
 
     /// If daemon and provided, the service will run a basic HTTP server on the given port.
     ///
@@ -101,10 +101,10 @@ async fn main() {
     let provider = Provider::<Http>::try_from(args.l1_provider.to_string()).unwrap();
     let chain_id = provider.get_chainid().await.unwrap().as_u64();
     let config = StateProverConfig {
-        relay_server: args.relay_server.clone(),
+        relay_server: args.relay_server,
         update_interval: args.update_interval,
         retry_interval: args.retry_interval,
-        l1_provider: args.l1_provider.clone(),
+        l1_provider: args.l1_provider,
         light_client_address: args.light_client_address,
         eth_signing_key: MnemonicBuilder::<English>::default()
             .phrase(args.eth_mnemonic.as_str())
@@ -115,16 +115,20 @@ async fn main() {
             .with_chain_id(chain_id)
             .signer()
             .clone(),
-        orchestrator_url: args.orchestrator_url,
+        sequencer_url: args.sequencer_url,
         port: args.port,
         stake_table_capacity: args.stake_table_capacity,
     };
 
     if args.daemon {
         // Launching the prover service daemon
-        run_prover_service(config, SEQUENCER_VERSION).await;
+        if let Err(err) = run_prover_service(config, SEQUENCER_VERSION).await {
+            tracing::error!("Error running prover service: {:?}", err);
+        };
     } else {
         // Run light client state update once
-        run_prover_once(config, SEQUENCER_VERSION).await;
+        if let Err(err) = run_prover_once(config, SEQUENCER_VERSION).await {
+            tracing::error!("Error running prover once: {:?}", err);
+        };
     }
 }

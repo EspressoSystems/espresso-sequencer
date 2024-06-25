@@ -34,6 +34,7 @@ services:
     environment:
       - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
       - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_URL
       - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY
       - ESPRESSO_DEPLOYER_ACCOUNT_INDEX
       - RUST_LOG
@@ -42,7 +43,7 @@ services:
     depends_on:
       demo-l1-network:
         condition: service_healthy
-      orchestrator:
+      sequencer0:
         condition: service_healthy
       # Make sure this doesn't start until the other contracts have been deployed, since we use the same mnemonic.
       deploy-sequencer-contracts:
@@ -70,7 +71,7 @@ services:
     ports:
       - "$ESPRESSO_ORCHESTRATOR_PORT:$ESPRESSO_ORCHESTRATOR_PORT"
     environment:
-      - ESPRESSO_ORCHESTRATOR_BUILDER_URL=http://permissionless-builder:$ESPRESSO_BUILDER_SERVER_PORT
+      - ESPRESSO_ORCHESTRATOR_BUILDER_URLS=http://permissionless-builder:$ESPRESSO_BUILDER_SERVER_PORT
       - ESPRESSO_ORCHESTRATOR_PORT
       - ESPRESSO_ORCHESTRATOR_NUM_NODES
       - ESPRESSO_ORCHESTRATOR_START_DELAY
@@ -185,7 +186,7 @@ services:
     environment:
       - ESPRESSO_PROVER_SERVICE_PORT
       - ESPRESSO_STATE_RELAY_SERVER_URL
-      - ESPRESSO_SEQUENCER_ORCHESTRATOR_URL
+      - ESPRESSO_SEQUENCER_URL
       - ESPRESSO_STATE_PROVER_UPDATE_INTERVAL
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
@@ -199,7 +200,7 @@ services:
       - ASYNC_STD_THREAD_COUNT
       - RAYON_NUM_THREADS
     depends_on:
-      orchestrator:
+      sequencer0:
         condition: service_healthy
       state-relay-server:
         condition: service_healthy
@@ -270,7 +271,6 @@ services:
       - ESPRESSO_SEQUENCER_API_PEERS=http://sequencer2:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer2:$ESPRESSO_SEQUENCER_API_PORT
       - ESPRESSO_SEQUENCER_POSTGRES_HOST=sequencer-db-1
-      - ESPRESSO_SEQUENCER_POSTGRES_PORT=$ESPRESSO_SEQUENCER_DB_PORT
       - ESPRESSO_SEQUENCER_POSTGRES_USER=root
       - ESPRESSO_SEQUENCER_POSTGRES_PASSWORD=password
       - ESPRESSO_SEQUENCER_POSTGRES_DATABASE=sequencer
@@ -490,7 +490,8 @@ services:
       - ESPRESSO_BUILDER_ETH_ACCOUNT_INDEX
       - ESPRESSO_BUILDER_L1_PROVIDER
       - ESPRESSO_BUILDER_SERVER_PORT
-      - ESPRESSO_BUILDER_CHANNEL_CAPACITY
+      - ESPRESSO_BUILDER_TX_CHANNEL_CAPACITY
+      - ESPRESSO_BUILDER_EVENT_CHANNEL_CAPACITY
       - ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW
       - ESPRESSO_BUILDER_WEBSERVER_RESPONSE_TIMEOUT_DURATION
       - ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT
