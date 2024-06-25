@@ -27,7 +27,7 @@ struct SequencerKey;
 pub struct MarketplaceResults {
     /// Slot these results are for
     slot: Slot,
-    /// Bids that did not win, intially all bids are added to this,
+    /// Bids that did not win, initially all bids are added to this,
     /// and then the winning bids are removed
     pending_bids: Vec<BidTx>,
     /// Map of winning sequencer public keys to the bundle of namespaces they bid for
@@ -73,6 +73,8 @@ enum AuctionPhaseKind {
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Deserialize, Serialize, Hash)]
 pub struct Slot(u64);
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, Hash)]
+/// Wrapper enum for Full Network Transactions. Each transaction type
+/// will be a variant of this enum.
 pub enum FullNetworkTx {
     Bid(BidTx),
 }
@@ -200,7 +202,7 @@ impl BidTx {
     /// * charge fee
     /// * store state (maybe not for JIT)
     // The rational behind the `Err` is to provide not only what
-    // failed, but for which varient. The entire Tx is probably
+    // failed, but for which variant. The entire Tx is probably
     // overkill, but we can narrow down how much we want to know about
     // Failed Tx in the future. Maybe we just want its name.
     pub fn execute(
@@ -230,7 +232,7 @@ impl BidTx {
     /// Charge Bid. Only winning bids are charged in JIT (I think).
     fn charge(&self, state: &mut ValidatedState) -> Result<(), ExecutionError> {
         // As the code is currently organized, I think chain_config
-        // will always be resolved here. But lets guard against the
+        // will always be resolved here. But let's guard against the
         // error in case code is shifted around in the future.
         if let Some(chain_config) = state.chain_config.resolve() {
             let recipient = chain_config.bid_recipient;
