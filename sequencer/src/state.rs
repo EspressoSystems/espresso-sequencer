@@ -1,10 +1,9 @@
 use crate::{
     api::data_source::CatchupDataSource,
     block::{NsTableValidationError, PayloadByteLen},
-    auction::{ExecutionError, FullNetworkTx},
+    auction::{BidTx, ExecutionError, FullNetworkTx},
     catchup::SqlStateCatchup,
-    chain_config::BlockSize,
-    chain_config::ResolvableChainConfig,
+    chain_config::{BlockSize, ResolvableChainConfig},
     eth_signature_key::EthKeyPair,
     genesis::UpgradeType,
     persistence::ChainConfigPersistence,
@@ -58,8 +57,8 @@ use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Duration;
-use std::{sync::Arc};
 use std::{collections::HashSet, ops::Add, str::FromStr};
 use thiserror::Error;
 use vbs::version::Version;
@@ -778,25 +777,10 @@ impl ValidatedState {
         let mut validated_state =
             apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
 
-        // TODO we will need something similar to `charge_fee` but
-        // that charges `BidTx` to the account. We will also validate
-        // against bid phase time constraints.
-        //
-        // According to discussion we may receive multiple bids per
-        // header (up to configurable maximum), so this will likely be
-        // represented as `Vec<BidTx>` where `BidTx` holds account and
-        // amount.
-        //
-        // Note that different from `charge_fee` fee for the bid (sent
-        // to fee_recipient) which the bid itself will be held in an
-        // escrow account.
-        // charge_bids(&mut validated_state, bids_vec, fee_recipient, escrow_account);
+        // TODO I guess we will need deltas for this?
+        apply_full_transactions(&mut validated_state, proposed_header.get_full_network_txs())
+            .map_err(|e| anyhow::anyhow!("Error: {e:?}"))?;
 
-        // or possibly we will call `charge_fee` twice, once as here
-        // and the 2nd will have escrow_account in recipient place
-
-        // but where does the escrow account information come from?
-        // headers? state?
         charge_fee(
             &mut validated_state,
             &mut delta,
@@ -971,16 +955,6 @@ impl HotShotState<SeqTypes> for ValidatedState {
             tracing::info!("validated and applied new header");
         }
 
-        if let Err((err, kind)) = apply_full_transactions(
-            &validated_state,
-            instance.chain_config,
-            proposed_header.get_full_network_txs(),
-        ) {
-            tracing::error!("Invalid Tx Error: {err:?}, kind: {kind:?}");
-            // TODO review spec for conditions of BlockError
-            return Err(BlockError::InvalidBlockHeader);
-        }
-
         Ok((validated_state, delta))
     }
     /// Construct the state with the given block header.
@@ -1015,13 +989,10 @@ impl HotShotState<SeqTypes> for ValidatedState {
 }
 
 fn apply_full_transactions(
-    validated_state: &ValidatedState,
-    chain_config: ChainConfig,
+    validated_state: &mut ValidatedState,
     full_network_txs: Vec<FullNetworkTx>,
 ) -> Result<(), (ExecutionError, FullNetworkTx)> {
     dbg!(&full_network_txs);
-    // proposed_header
-    //     .get_full_network_txs()
     full_network_txs
         .iter()
         .try_for_each(|tx| tx.execute(validated_state))
@@ -1145,6 +1116,16 @@ impl From<DepositFilter> for FeeInfo {
         Self {
             amount: item.amount.into(),
             account: item.user.into(),
+        }
+    }
+}
+
+impl From<BidTx> for FeeInfo {
+    fn from(bid: BidTx) -> Self {
+        let bid = bid.body();
+        Self {
+            amount: bid.amount(),
+            account: bid.account(),
         }
     }
 }
@@ -1690,9 +1671,9 @@ mod test {
 
     #[test]
     fn test_apply_full_tx() {
-        let state = ValidatedState::default();
+        let mut state = ValidatedState::default();
         let txs = mock_full_network_txs();
-        let (err, bid) = apply_full_transactions(&state, ChainConfig::default(), txs).unwrap_err();
+        let (err, bid) = apply_full_transactions(&mut state, txs).unwrap_err();
         assert_eq!(ExecutionError::InvalidSignature, err);
     }
 

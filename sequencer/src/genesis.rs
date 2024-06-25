@@ -276,6 +276,7 @@ mod test {
                 max_block_size: 30000.into(),
                 base_fee: 1.into(),
                 fee_recipient: FeeAccount::default(),
+                bid_recipient: FeeAccount::default(),
                 fee_contract: Some(Address::default())
             }
         );
@@ -340,6 +341,7 @@ mod test {
                 max_block_size: 30000.into(),
                 base_fee: 1.into(),
                 fee_recipient: FeeAccount::default(),
+                bid_recipient: FeeAccount::default(),
                 fee_contract: None,
             }
         );
