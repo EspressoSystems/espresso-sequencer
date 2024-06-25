@@ -3,9 +3,11 @@ use crate::{
         full_payload::ns_table::{NsIndex, NsTable, NsTableBuilder},
         namespace_payload::{Index, Iter, NsPayload, NsPayloadBuilder, NsPayloadRange, TxProof},
     },
-    NamespaceId, NodeState, SeqTypes, Transaction, ValidatedState,
+    ChainConfig, NamespaceId, NodeState, SeqTypes, Transaction, ValidatedState,
 };
+
 use async_trait::async_trait;
+use committable::Committable;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{
     traits::{BlockPayload, EncodeBytes},
@@ -15,7 +17,7 @@ use hotshot_types::{
 use jf_vid::VidScheme;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use std::{collections::HashMap, fmt::Display, sync::Arc};
+use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 
 /// Raw payload data for an entire block.
 ///
@@ -39,8 +41,11 @@ use std::{collections::HashMap, fmt::Display, sync::Arc};
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Payload {
     // Concatenated payload bytes for each namespace
+    //
+    // TODO want to rename thisfield to `ns_payloads`, but can't due to
+    // serialization compatibility.
     #[serde(with = "base64_bytes")]
-    ns_payloads: Vec<u8>,
+    raw_payload: Vec<u8>,
 
     ns_table: NsTable,
 }
@@ -61,7 +66,7 @@ impl Payload {
     // CRATE-VISIBLE HELPERS START HERE
 
     pub(in crate::block) fn read_ns_payload(&self, range: &NsPayloadRange) -> &NsPayload {
-        NsPayload::from_bytes_slice(&self.ns_payloads[range.as_block_range()])
+        NsPayload::from_bytes_slice(&self.raw_payload[range.as_block_range()])
     }
 
     /// Convenience wrapper for [`Self::read_ns_payload`].
@@ -73,7 +78,7 @@ impl Payload {
     }
 
     pub(in crate::block) fn byte_len(&self) -> PayloadByteLen {
-        PayloadByteLen(self.ns_payloads.len())
+        PayloadByteLen(self.raw_payload.len())
     }
 
     // PRIVATE HELPERS START HERE
@@ -81,27 +86,27 @@ impl Payload {
     /// Need a sync version of [`BlockPayload::from_transactions`] in order to impl [`BlockPayload::empty`].
     fn from_transactions_sync(
         transactions: impl IntoIterator<Item = <Self as BlockPayload<SeqTypes>>::Transaction> + Send,
-        _validated_state: &<Self as BlockPayload<SeqTypes>>::ValidatedState,
-        instance_state: &<Self as BlockPayload<SeqTypes>>::Instance,
+        chain_config: ChainConfig,
+        _instance_state: &<Self as BlockPayload<SeqTypes>>::Instance,
     ) -> Result<
         (Self, <Self as BlockPayload<SeqTypes>>::Metadata),
         <Self as BlockPayload<SeqTypes>>::Error,
     > {
         // accounting for block byte length limit
-        let max_block_byte_len: usize = u64::from(instance_state.chain_config.max_block_size)
+        let max_block_byte_len: usize = u64::from(chain_config.max_block_size)
             .try_into()
             .map_err(|_| <Self as BlockPayload<SeqTypes>>::Error::BlockBuilding)?;
-        let mut block_byte_len = NsTableBuilder::fixed_overhead_byte_len();
+        let mut block_byte_len = NsTableBuilder::header_byte_len();
 
         // add each tx to its namespace
-        let mut ns_builders = HashMap::<NamespaceId, NsPayloadBuilder>::new();
+        let mut ns_builders = BTreeMap::<NamespaceId, NsPayloadBuilder>::new();
         for tx in transactions.into_iter() {
             // accounting for block byte length limit
-            block_byte_len += tx.payload().len() + NsPayloadBuilder::tx_overhead_byte_len();
+            block_byte_len += tx.payload().len() + NsPayloadBuilder::tx_table_entry_byte_len();
             if !ns_builders.contains_key(&tx.namespace()) {
                 // each new namespace adds overhead
-                block_byte_len += NsTableBuilder::ns_overhead_byte_len()
-                    + NsPayloadBuilder::fixed_overhead_byte_len();
+                block_byte_len +=
+                    NsTableBuilder::entry_byte_len() + NsPayloadBuilder::tx_table_header_byte_len();
             }
             if block_byte_len > max_block_byte_len {
                 tracing::warn!("transactions truncated to fit in maximum block byte length {max_block_byte_len}");
@@ -123,7 +128,7 @@ impl Payload {
         let metadata = ns_table.clone();
         Ok((
             Self {
-                ns_payloads: payload,
+                raw_payload: payload,
                 ns_table,
             },
             metadata,
@@ -146,22 +151,39 @@ impl BlockPayload<SeqTypes> for Payload {
         validated_state: &Self::ValidatedState,
         instance_state: &Self::Instance,
     ) -> Result<(Self, Self::Metadata), Self::Error> {
-        Self::from_transactions_sync(transactions, validated_state, instance_state)
+        let validated_state_cf = validated_state.chain_config;
+        let instance_state_cf = instance_state.chain_config;
+
+        let chain_config = if validated_state_cf.commit() == instance_state_cf.commit() {
+            instance_state_cf
+        } else {
+            match validated_state_cf.resolve() {
+                Some(cf) => cf,
+                None => {
+                    instance_state
+                        .peers
+                        .as_ref()
+                        .fetch_chain_config(validated_state_cf.commit())
+                        .await
+                }
+            }
+        };
+
+        Self::from_transactions_sync(transactions, chain_config, instance_state)
     }
 
     // TODO avoid cloning the entire payload here?
     fn from_bytes(block_payload_bytes: &[u8], ns_table: &Self::Metadata) -> Self {
         Self {
-            ns_payloads: block_payload_bytes.to_vec(),
+            raw_payload: block_payload_bytes.to_vec(),
             ns_table: ns_table.clone(),
         }
     }
 
     fn empty() -> (Self, Self::Metadata) {
-        let payload =
-            Self::from_transactions_sync(vec![], &Default::default(), &Default::default())
-                .unwrap()
-                .0;
+        let payload = Self::from_transactions_sync(vec![], Default::default(), &Default::default())
+            .unwrap()
+            .0;
         let ns_table = payload.ns_table().clone();
         (payload, ns_table)
     }
@@ -176,10 +198,10 @@ impl BlockPayload<SeqTypes> for Payload {
         let metadata_bytes = metadata.encode();
 
         let mut digest = sha2::Sha256::new();
-        digest.update((self.ns_payloads.len() as u64).to_le_bytes());
+        digest.update((self.raw_payload.len() as u64).to_le_bytes());
         digest.update((ns_table_bytes.len() as u64).to_le_bytes());
         digest.update((metadata_bytes.len() as u64).to_le_bytes()); // https://github.com/EspressoSystems/espresso-sequencer/issues/1576
-        digest.update(&self.ns_payloads);
+        digest.update(&self.raw_payload);
         digest.update(ns_table_bytes);
         digest.update(metadata_bytes); // https://github.com/EspressoSystems/espresso-sequencer/issues/1576
         BuilderCommitment::from_raw_digest(digest.finalize())
@@ -223,7 +245,7 @@ impl QueryablePayload<SeqTypes> for Payload {
         // trait to add a `VidCommon` arg. In the meantime tests fail if I leave
         // it `todo!()`, so this hack allows tests to pass.
         let common = hotshot_types::vid::vid_scheme(10)
-            .disperse(&self.ns_payloads)
+            .disperse(&self.raw_payload)
             .unwrap()
             .common;
 
@@ -239,7 +261,7 @@ impl Display for Payload {
 
 impl EncodeBytes for Payload {
     fn encode(&self) -> Arc<[u8]> {
-        Arc::from(self.ns_payloads.as_ref())
+        Arc::from(self.raw_payload.as_ref())
     }
 }
 

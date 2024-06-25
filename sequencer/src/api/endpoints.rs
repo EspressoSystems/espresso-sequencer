@@ -258,6 +258,19 @@ where
                 .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
         }
         .boxed()
+    })?
+    .get("chainconfig", |req, state| {
+        async move {
+            let commitment = req
+                .blob_param("commitment")
+                .map_err(Error::from_request_error)?;
+
+            state
+                .get_chain_config(commitment)
+                .await
+                .map_err(|err| Error::catch_all(StatusCode::NOT_FOUND, format!("{err:#}")))
+        }
+        .boxed()
     })?;
 
     Ok(api)
