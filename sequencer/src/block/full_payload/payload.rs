@@ -281,8 +281,16 @@ impl PayloadByteLen {
     pub fn is_consistent(&self, common: &VidCommon) -> bool {
         // failure to convert to usize implies that `common` cannot be
         // consistent with `self`.
-        let expected = usize::try_from(VidSchemeType::get_payload_byte_len(common))
-            .expect("u32 should convert to usize");
+        let expected = match usize::try_from(VidSchemeType::get_payload_byte_len(common)) {
+            Ok(n) => n,
+            Err(_) => {
+                tracing::warn!(
+                    "VidCommon byte len u32 {} should convert to usize",
+                    VidSchemeType::get_payload_byte_len(common)
+                );
+                return false;
+            }
+        };
 
         self.0 == expected
     }
