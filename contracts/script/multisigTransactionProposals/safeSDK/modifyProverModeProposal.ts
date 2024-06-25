@@ -63,12 +63,12 @@ function processCommandLineArguments(): string {
   const args = process.argv.slice(2); // Remove the first two args (node command and script name)
   let command: string;
   if (args.length === 0) {
-    console.log("No arguments provided.");
-    throw new Error(`No arguments provided, either ${SET_PROVER_CMD} or ${DISABLE_PROVER_CMD}`);
+    console.log("No commands provided.");
+    throw new Error(`No commands provided, either ${SET_PROVER_CMD} or ${DISABLE_PROVER_CMD}`);
   } else {
     command = args[0];
     if (command != SET_PROVER_CMD && command != DISABLE_PROVER_CMD) {
-      throw new Error(`Unrecognized argument ${command} provided, either ${SET_PROVER_CMD} or ${DISABLE_PROVER_CMD}`);
+      throw new Error(`Unrecognized command ${command} provided, either ${SET_PROVER_CMD} or ${DISABLE_PROVER_CMD}`);
     }
   }
   return command;
