@@ -4,6 +4,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::{sleep, spawn};
 use clap::Parser;
 use committable::{Commitment, Committable};
+use csv::Writer;
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
 use futures::{
     channel::mpsc::{self, Sender},
@@ -20,6 +21,7 @@ use sequencer::{
 };
 use std::{
     collections::HashMap,
+    fs::OpenOptions,
     time::{Duration, Instant},
 };
 use surf_disco::{Client, Url};
@@ -180,6 +182,12 @@ async fn main() {
     let mut pending = HashMap::new();
     let mut total_latency = Duration::default();
     let mut total_transactions = 0;
+    let mut num_successful_commits = 0;
+    let mut benchmark_total_latency = Duration::default();
+    let mut benchmark_minimum_latency = Duration::default();
+    let mut benchmark_maximum_latency = Duration::default();
+    let mut benchmark_total_transactions = 0;
+    let mut benchmark_finish = false;
     while let Some(block) = blocks.next().await {
         let block: BlockQueryData<SeqTypes> = match block {
             Ok(block) => block,
@@ -190,6 +198,7 @@ async fn main() {
         };
         let received_at = Instant::now();
         tracing::debug!("got block {}", block.height());
+        num_successful_commits += 1;
 
         // Get all transactions which were submitted before this block.
         while let Ok(Some(tx)) = receiver.try_next() {
@@ -208,7 +217,58 @@ async fn main() {
                 total_latency += latency;
                 total_transactions += 1;
                 tracing::info!("average latency: {:?}", total_latency / total_transactions);
+
+                if !benchmark_finish && (20..=120).contains(&num_successful_commits) {
+                    benchmark_minimum_latency = if total_transactions == 0 {
+                        latency
+                    } else {
+                        std::cmp::min(benchmark_minimum_latency, latency)
+                    };
+                    benchmark_maximum_latency = if total_transactions == 0 {
+                        latency
+                    } else {
+                        std::cmp::max(benchmark_maximum_latency, latency)
+                    };
+
+                    benchmark_total_latency += latency;
+                    benchmark_total_transactions += 1;
+                }
             }
+        }
+
+        if !benchmark_finish && num_successful_commits > 120 {
+            let benchmark_average_latency = benchmark_total_latency / benchmark_total_transactions;
+            // Open the CSV file in append mode
+            let results_csv_file = OpenOptions::new()
+                .create(true)
+                .append(true) // Open in append mode
+                .open("scripts/benchmarks_results/results.csv")
+                .unwrap();
+            // Open a file for writing
+            let mut wtr = Writer::from_writer(results_csv_file);
+            if opt.use_public_mempool() {
+                let _ = wtr.write_record([
+                    "public_pool_avg_latency_in_sec",
+                    "minimum_latency_in_sec",
+                    "maximum_latency_in_sec",
+                ]);
+            } else {
+                let _ = wtr.write_record([
+                    "private_pool_avg_latency_in_sec",
+                    "minimum_latency_in_sec",
+                    "maximum_latency_in_sec",
+                ]);
+            }
+            let _ = wtr.write_record(&[
+                benchmark_average_latency.as_secs().to_string(),
+                benchmark_minimum_latency.as_secs().to_string(),
+                benchmark_maximum_latency.as_secs().to_string(),
+            ]);
+            let _ = wtr.flush();
+            println!(
+                "Latency results successfully saved in scripts/benchmarks_results/results.csv"
+            );
+            benchmark_finish = true;
         }
 
         // If a lot of transactions are pending, it might indicate the sequencer is struggling to
@@ -295,7 +355,6 @@ async fn submit_transactions<Ver: StaticVersionType>(
             } {
                 tracing::error!("failed to submit batch of {txns_batch_count} transactions: {err}");
             } else {
-                println!("submitted batch of {txns_batch_count} transactions");
                 tracing::info!("submitted batch of {txns_batch_count} transactions");
                 let submitted_at = Instant::now();
                 for hash in hashes.iter() {

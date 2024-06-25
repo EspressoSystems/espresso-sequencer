@@ -107,23 +107,11 @@ pub struct Transaction {
     namespace: NamespaceId,
     #[serde(with = "base64_bytes")]
     payload: Vec<u8>,
-    #[cfg(feature = "benchmarking")]
-    has_timestamp: bool,
 }
 
 impl Transaction {
-    #[cfg(not(feature = "benchmarking"))]
     pub fn new(namespace: NamespaceId, payload: Vec<u8>) -> Self {
         Self { namespace, payload }
-    }
-
-    #[cfg(feature = "benchmarking")]
-    pub fn new(namespace: NamespaceId, payload: Vec<u8>, has_timestamp: bool) -> Self {
-        Self {
-            namespace,
-            payload,
-            has_timestamp,
-        }
     }
 
     pub fn namespace(&self) -> NamespaceId {

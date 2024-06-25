@@ -260,7 +260,6 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             tracing::error!("Cannot get info from orchestrator client");
         }
         tracing::warn!("starting consensus");
-        let start = Instant::now();
         self.handle.read().await.hotshot.start_consensus().await;
 
         // number of rounds for warm up, which will not be counted in for benchmarking phase
@@ -271,6 +270,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         let mut total_transactions_committed = 0;
         let mut total_throughput = 0;
         let node_index: u64 = self.node_state().node_id;
+        let mut start: Instant = Instant::now(); // will be re-assign once has_started turned to true
+        let mut has_started: bool = false;
         loop {
             match event_stream.next().await {
                 None => {
@@ -293,21 +294,20 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
                                 // only count in the info after warm up
                                 if num_successful_commits >= start_rounds {
+                                    if !has_started {
+                                        start = Instant::now();
+                                        has_started = true;
+                                    }
+
                                     // iterate all the decided transactions
-                                    // Sishan TODO: to calculate latency
                                     if let Some(block_payload) = &leaf.block_payload() {
                                         for tx in block_payload
                                             .transactions(leaf.block_header().metadata())
                                         {
                                             let payload_length = tx.into_payload().len();
-                                            // Transaction = NamespaceId(u64) + payload(Vec<u8>) + has_timestamp(bool)
-                                            println!(
-                                                "Transaction Structure size = {:?}",
-                                                std::mem::size_of::<Transaction>()
-                                            );
+                                            // Transaction = NamespaceId(u64) + payload(Vec<u8>)
                                             let tx_sz = payload_length * std::mem::size_of::<u8>() // size of payload
                                                 + std::mem::size_of::<u64>() // size of the namespace
-                                                + std::mem::size_of::<bool>() // size of has_timestamp
                                                 + std::mem::size_of::<Transaction>(); // size of the struct wrapper
                                             total_throughput += tx_sz;
                                         }
@@ -331,9 +331,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                 let bench_results = if total_transactions_committed != 0 {
                                     let throughput_bytes_per_sec = (total_throughput as u64)
                                         / std::cmp::max(total_time_elapsed.as_secs(), 1u64);
-                                    // Sishan TODO: for latency
                                     BenchResults {
-                                        avg_latency_in_sec: 0,
+                                        avg_latency_in_sec: 0, // latency will be reported in another struct
                                         num_latency: 1,
                                         minimum_latency_in_sec: 0,
                                         maximum_latency_in_sec: 0,
@@ -348,7 +347,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                 } else {
                                     BenchResults::default()
                                 };
-                                println!("[{node_index}]: {total_transactions_committed} committed in {total_time_elapsed:?}, total number of views = {total_num_views}.");
+                                println!("[{node_index}]: {total_transactions_committed} committed from round {start_rounds} to {end_rounds} in {total_time_elapsed:?}, total number of views = {total_num_views}.");
                                 if let Some(orchestrator_client) = &self.wait_for_orchestrator {
                                     orchestrator_client.post_bench_results(bench_results).await;
                                 }
