@@ -153,7 +153,7 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (NetworkConfig<TYPES:
         )
         .arg(
             Arg::new("commit_sha")
-                .short('h')
+                .short('o')
                 .long("commit_sha")
                 .value_name("SHA")
                 .help("Sets the commit sha to output in the results")
