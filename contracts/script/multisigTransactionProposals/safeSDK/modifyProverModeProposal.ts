@@ -34,7 +34,7 @@ async function main() {
     const safeSdk = await Safe.create({ ethAdapter, safeAddress });
     const orchestratorSignerAddress = await orchestratorSigner.getAddress();
 
-    if (command == SET_PROVER_CMD) {
+    if (command === SET_PROVER_CMD) {
       console.log(`${command}`);
       const permissionedProverAddress = getEnvVar("APPROVED_PROVER_ADDRESS");
       isValidEthereumAddress(permissionedProverAddress);
@@ -46,7 +46,7 @@ async function main() {
         safeAddress,
         permissionedProverAddress,
       );
-    } else if (command == DISABLE_PROVER_CMD) {
+    } else if (command === DISABLE_PROVER_CMD) {
       console.log(`${command}`);
       await proposeDisableProverTransaction(safeSdk, safeService, orchestratorSignerAddress, safeAddress);
     }
