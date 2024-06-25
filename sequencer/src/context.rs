@@ -9,24 +9,30 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::{election::static_committee::GeneralStaticCommittee, BlockPayload},
-    types::{Event, EventType, SystemContextHandle},
+    traits::election::static_committee::GeneralStaticCommittee,
+    types::{Event, SystemContextHandle},
     Memberships, Networks, SystemContext,
 };
-use hotshot_orchestrator::client::{BenchResults, OrchestratorClient};
+use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
-    traits::{
-        block_contents::BlockHeader, election::Membership, metrics::Metrics,
-        node_implementation::ConsensusTime,
-    },
+    traits::{election::Membership, metrics::Metrics},
     HotShotConfig,
 };
-use std::{fmt::Display, time::Instant};
+use std::fmt::Display;
 use url::Url;
 use vbs::version::StaticVersionType;
+
+#[cfg(feature = "benchmarking")]
+use hotshot::{traits::BlockPayload, types::EventType};
+#[cfg(feature = "benchmarking")]
+use hotshot_orchestrator::{client::BenchResults, config::NetworkConfig};
+#[cfg(feature = "benchmarking")]
+use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::ConsensusTime};
+#[cfg(feature = "benchmarking")]
+use std::time::Instant;
 
 use crate::{
     network, persistence::SequencerPersistence, state_signature::StateSigner,
@@ -252,116 +258,126 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             orchestrator_client
                 .wait_for_all_nodes_ready(self.node_state.node_id)
                 .await;
-            // Sishan: uncomment after ORCHESTRATOR_DEFAULT_NUM_ROUNDS in HotShot is updated to 100.
-            // let network_config: NetworkConfig<PubKey> =
-            //     orchestrator_client.get_config_after_collection().await;
-            // rounds = network_config.rounds;
+            #[cfg(feature = "benchmarking")]
+            {
+                let network_config: NetworkConfig<PubKey> =
+                    orchestrator_client.get_config_after_collection().await;
+                // Sishan: change to useful parameter once Hotshot updated to 0.5.60
+                let _rounds = network_config.rounds;
+            }
         } else {
             tracing::error!("Cannot get info from orchestrator client");
         }
         tracing::warn!("starting consensus");
         self.handle.read().await.hotshot.start_consensus().await;
 
-        // number of rounds for warm up, which will not be counted in for benchmarking phase
-        let start_rounds: usize = 20;
-        let end_rounds: usize = 120;
-        let mut event_stream = self.event_stream().await;
-        let mut num_successful_commits = 0;
-        let mut total_transactions_committed = 0;
-        let mut total_throughput = 0;
-        let node_index: u64 = self.node_state().node_id;
-        let mut start: Instant = Instant::now(); // will be re-assign once has_started turned to true
-        let mut has_started: bool = false;
-        loop {
-            match event_stream.next().await {
-                None => {
-                    panic!("Error! Event stream completed before consensus ended.");
-                }
-                Some(Event { event, .. }) => {
-                    match event {
-                        EventType::Error { error } => {
-                            tracing::error!("Error in consensus: {:?}", error);
-                        }
-                        EventType::Decide {
-                            leaf_chain,
-                            qc: _,
-                            block_size,
-                        } => {
-                            if let Some(leaf_info) = leaf_chain.first() {
-                                let leaf = &leaf_info.leaf;
-                                tracing::info!("Decide event for leaf: {}", *leaf.view_number());
-                                num_successful_commits += leaf_chain.len();
+        #[cfg(feature = "benchmarking")]
+        {
+            // number of rounds for warm up, which will not be counted in for benchmarking phase
+            let start_rounds: usize = 20;
+            let end_rounds: usize = 120;
+            let mut event_stream = self.event_stream().await;
+            let mut num_successful_commits = 0;
+            let mut total_transactions_committed = 0;
+            let mut total_throughput = 0;
+            let node_index: u64 = self.node_state().node_id;
+            let mut start: Instant = Instant::now(); // will be re-assign once has_started turned to true
+            let mut has_started: bool = false;
+            loop {
+                match event_stream.next().await {
+                    None => {
+                        panic!("Error! Event stream completed before consensus ended.");
+                    }
+                    Some(Event { event, .. }) => {
+                        match event {
+                            EventType::Error { error } => {
+                                tracing::error!("Error in consensus: {:?}", error);
+                            }
+                            EventType::Decide {
+                                leaf_chain,
+                                qc: _,
+                                block_size,
+                            } => {
+                                if let Some(leaf_info) = leaf_chain.first() {
+                                    let leaf = &leaf_info.leaf;
+                                    tracing::info!(
+                                        "Decide event for leaf: {}",
+                                        *leaf.view_number()
+                                    );
+                                    num_successful_commits += leaf_chain.len();
 
-                                // only count in the info after warm up
-                                if num_successful_commits >= start_rounds {
-                                    if !has_started {
-                                        start = Instant::now();
-                                        has_started = true;
-                                    }
+                                    // only count in the info after warm up
+                                    if num_successful_commits >= start_rounds {
+                                        if !has_started {
+                                            start = Instant::now();
+                                            has_started = true;
+                                        }
 
-                                    // iterate all the decided transactions
-                                    if let Some(block_payload) = &leaf.block_payload() {
-                                        for tx in block_payload
-                                            .transactions(leaf.block_header().metadata())
-                                        {
-                                            let payload_length = tx.into_payload().len();
-                                            // Transaction = NamespaceId(u64) + payload(Vec<u8>)
-                                            let tx_sz = payload_length * std::mem::size_of::<u8>() // size of payload
-                                                + std::mem::size_of::<u64>() // size of the namespace
-                                                + std::mem::size_of::<Transaction>(); // size of the struct wrapper
-                                            total_throughput += tx_sz;
+                                        // iterate all the decided transactions
+                                        if let Some(block_payload) = &leaf.block_payload() {
+                                            for tx in block_payload
+                                                .transactions(leaf.block_header().metadata())
+                                            {
+                                                let payload_length = tx.into_payload().len();
+                                                // Transaction = NamespaceId(u64) + payload(Vec<u8>)
+                                                let tx_sz = payload_length * std::mem::size_of::<u8>() // size of payload
+                                                    + std::mem::size_of::<u64>() // size of the namespace
+                                                    + std::mem::size_of::<Transaction>(); // size of the struct wrapper
+                                                total_throughput += tx_sz;
+                                            }
                                         }
                                     }
                                 }
-                            }
 
-                            if num_successful_commits >= start_rounds {
-                                if let Some(size) = block_size {
-                                    total_transactions_committed += size;
-                                }
-                            }
-
-                            if num_successful_commits >= end_rounds {
-                                let total_time_elapsed = start.elapsed(); // in seconds
-                                let consensus_lock = self.handle.read().await.hotshot.consensus();
-                                let consensus = consensus_lock.read().await;
-                                let total_num_views =
-                                    usize::try_from(consensus.locked_view().u64()).unwrap();
-                                let failed_num_views = total_num_views - num_successful_commits;
-                                let bench_results = if total_transactions_committed != 0 {
-                                    let throughput_bytes_per_sec = (total_throughput as u64)
-                                        / std::cmp::max(total_time_elapsed.as_secs(), 1u64);
-                                    BenchResults {
-                                        avg_latency_in_sec: 0, // latency will be reported in another struct
-                                        num_latency: 1,
-                                        minimum_latency_in_sec: 0,
-                                        maximum_latency_in_sec: 0,
-                                        throughput_bytes_per_sec,
-                                        total_transactions_committed,
-                                        transaction_size_in_bytes: (total_throughput as u64)
-                                            / total_transactions_committed, // refer to `submit-transactions.rs` for the range of transaction size
-                                        total_time_elapsed_in_sec: total_time_elapsed.as_secs(),
-                                        total_num_views,
-                                        failed_num_views,
+                                if num_successful_commits >= start_rounds {
+                                    if let Some(size) = block_size {
+                                        total_transactions_committed += size;
                                     }
-                                } else {
-                                    BenchResults::default()
-                                };
-                                println!("[{node_index}]: {total_transactions_committed} committed from round {start_rounds} to {end_rounds} in {total_time_elapsed:?}, total number of views = {total_num_views}.");
-                                if let Some(orchestrator_client) = &self.wait_for_orchestrator {
-                                    orchestrator_client.post_bench_results(bench_results).await;
                                 }
-                                break;
-                            }
 
-                            if leaf_chain.len() > 1 {
-                                tracing::warn!(
-                                    "Leaf chain is greater than 1 with len {}",
-                                    leaf_chain.len()
-                                );
+                                if num_successful_commits >= end_rounds {
+                                    let total_time_elapsed = start.elapsed(); // in seconds
+                                    let consensus_lock =
+                                        self.handle.read().await.hotshot.consensus();
+                                    let consensus = consensus_lock.read().await;
+                                    let total_num_views =
+                                        usize::try_from(consensus.locked_view().u64()).unwrap();
+                                    let failed_num_views = total_num_views - num_successful_commits;
+                                    let bench_results = if total_transactions_committed != 0 {
+                                        let throughput_bytes_per_sec = (total_throughput as u64)
+                                            / std::cmp::max(total_time_elapsed.as_secs(), 1u64);
+                                        BenchResults {
+                                            avg_latency_in_sec: 0, // latency will be reported in another struct
+                                            num_latency: 1,
+                                            minimum_latency_in_sec: 0,
+                                            maximum_latency_in_sec: 0,
+                                            throughput_bytes_per_sec,
+                                            total_transactions_committed,
+                                            transaction_size_in_bytes: (total_throughput as u64)
+                                                / total_transactions_committed, // refer to `submit-transactions.rs` for the range of transaction size
+                                            total_time_elapsed_in_sec: total_time_elapsed.as_secs(),
+                                            total_num_views,
+                                            failed_num_views,
+                                        }
+                                    } else {
+                                        BenchResults::default()
+                                    };
+                                    println!("[{node_index}]: {total_transactions_committed} committed from round {start_rounds} to {end_rounds} in {total_time_elapsed:?}, total number of views = {total_num_views}.");
+                                    if let Some(orchestrator_client) = &self.wait_for_orchestrator {
+                                        orchestrator_client.post_bench_results(bench_results).await;
+                                    }
+                                    break;
+                                }
+
+                                if leaf_chain.len() > 1 {
+                                    tracing::warn!(
+                                        "Leaf chain is greater than 1 with len {}",
+                                        leaf_chain.len()
+                                    );
+                                }
                             }
+                            _ => {} // mostly DA proposal
                         }
-                        _ => {} // mostly DA proposal
                     }
                 }
             }

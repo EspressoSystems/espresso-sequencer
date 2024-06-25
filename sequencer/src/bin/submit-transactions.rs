@@ -4,7 +4,6 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::{sleep, spawn};
 use clap::Parser;
 use committable::{Commitment, Committable};
-use csv::Writer;
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
 use futures::{
     channel::mpsc::{self, Sender},
@@ -21,12 +20,16 @@ use sequencer::{
 };
 use std::{
     collections::HashMap,
-    fs::OpenOptions,
     time::{Duration, Instant},
 };
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
 use vbs::version::StaticVersionType;
+
+#[cfg(feature = "benchmarking")]
+use csv::Writer;
+#[cfg(feature = "benchmarking")]
+use std::fs::OpenOptions;
 
 /// Submit random transactions to an Espresso Sequencer.
 #[derive(Clone, Debug, Parser)]
@@ -182,12 +185,21 @@ async fn main() {
     let mut pending = HashMap::new();
     let mut total_latency = Duration::default();
     let mut total_transactions = 0;
+
+    // Keep track of the latency after warm up for benchmarking
+    #[cfg(feature = "benchmarking")]
     let mut num_successful_commits = 0;
+    #[cfg(feature = "benchmarking")]
     let mut benchmark_total_latency = Duration::default();
+    #[cfg(feature = "benchmarking")]
     let mut benchmark_minimum_latency = Duration::default();
+    #[cfg(feature = "benchmarking")]
     let mut benchmark_maximum_latency = Duration::default();
+    #[cfg(feature = "benchmarking")]
     let mut benchmark_total_transactions = 0;
+    #[cfg(feature = "benchmarking")]
     let mut benchmark_finish = false;
+
     while let Some(block) = blocks.next().await {
         let block: BlockQueryData<SeqTypes> = match block {
             Ok(block) => block,
@@ -198,7 +210,10 @@ async fn main() {
         };
         let received_at = Instant::now();
         tracing::debug!("got block {}", block.height());
-        num_successful_commits += 1;
+        #[cfg(feature = "benchmarking")]
+        {
+            num_successful_commits += 1;
+        }
 
         // Get all transactions which were submitted before this block.
         while let Ok(Some(tx)) = receiver.try_next() {
@@ -217,25 +232,28 @@ async fn main() {
                 total_latency += latency;
                 total_transactions += 1;
                 tracing::info!("average latency: {:?}", total_latency / total_transactions);
+                #[cfg(feature = "benchmarking")]
+                {
+                    if !benchmark_finish && (20..=120).contains(&num_successful_commits) {
+                        benchmark_minimum_latency = if total_transactions == 0 {
+                            latency
+                        } else {
+                            std::cmp::min(benchmark_minimum_latency, latency)
+                        };
+                        benchmark_maximum_latency = if total_transactions == 0 {
+                            latency
+                        } else {
+                            std::cmp::max(benchmark_maximum_latency, latency)
+                        };
 
-                if !benchmark_finish && (20..=120).contains(&num_successful_commits) {
-                    benchmark_minimum_latency = if total_transactions == 0 {
-                        latency
-                    } else {
-                        std::cmp::min(benchmark_minimum_latency, latency)
-                    };
-                    benchmark_maximum_latency = if total_transactions == 0 {
-                        latency
-                    } else {
-                        std::cmp::max(benchmark_maximum_latency, latency)
-                    };
-
-                    benchmark_total_latency += latency;
-                    benchmark_total_transactions += 1;
+                        benchmark_total_latency += latency;
+                        benchmark_total_transactions += 1;
+                    }
                 }
             }
         }
 
+        #[cfg(feature = "benchmarking")]
         if !benchmark_finish && num_successful_commits > 120 {
             let benchmark_average_latency = benchmark_total_latency / benchmark_total_transactions;
             // Open the CSV file in append mode
