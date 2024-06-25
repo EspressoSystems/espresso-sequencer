@@ -117,7 +117,12 @@ library PolynomialEval {
         BN254.ScalarField zeta,
         BN254.ScalarField vanishEval
     ) internal view returns (BN254.ScalarField res) {
+        if (BN254.ScalarField.unwrap(zeta) == 1) {
+            // when zeta is first element in the eval domain
+            return BN254.ScalarField.wrap(1);
+        }
         if (BN254.ScalarField.unwrap(vanishEval) == 0) {
+            // else, if zeta is other elements in the eval domain
             return BN254.ScalarField.wrap(0);
         }
 
