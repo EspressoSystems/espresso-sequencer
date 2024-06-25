@@ -474,23 +474,19 @@ pub fn gen_plonk_proof_for_test(
     let mut proofs = vec![];
     let mut extra_msgs = vec![];
 
-    circuits
-        .iter()
-        .zip(prove_keys.iter())
-        .enumerate()
-        .for_each(|(_, (cs, pk))| {
-            let extra_msg = Some(vec![]); // We set extra_msg="" for the contract tests to pass
-            proofs.push(
-                PlonkKzgSnark::<Bn254>::prove::<_, _, SolidityTranscript>(
-                    rng,
-                    cs,
-                    pk,
-                    extra_msg.clone(),
-                )
-                .unwrap(),
-            );
-            extra_msgs.push(extra_msg);
-        });
+    circuits.iter().zip(prove_keys.iter()).for_each(|(cs, pk)| {
+        let extra_msg = Some(vec![]); // We set extra_msg="" for the contract tests to pass
+        proofs.push(
+            PlonkKzgSnark::<Bn254>::prove::<_, _, SolidityTranscript>(
+                rng,
+                cs,
+                pk,
+                extra_msg.clone(),
+            )
+            .unwrap(),
+        );
+        extra_msgs.push(extra_msg);
+    });
 
     let public_inputs: Vec<Vec<F>> = circuits
         .iter()
