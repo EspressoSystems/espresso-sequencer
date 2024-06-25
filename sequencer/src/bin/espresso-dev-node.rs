@@ -17,11 +17,12 @@ use portpicker::pick_unused_port;
 use sequencer::{
     api::{
         options,
-        test_helpers::{TestNetwork, STAKE_TABLE_CAPACITY_FOR_TEST},
+        test_helpers::{TestNetwork, TestNetworkConfigBuilder, STAKE_TABLE_CAPACITY_FOR_TEST},
     },
+    catchup::mock::MockStateCatchup,
     persistence,
     state_signature::relay_server::run_relay_server,
-    testing::TestConfig,
+    testing::TestConfigBuilder,
 };
 use sequencer_utils::{
     deployer::{deploy, Contract, Contracts},
@@ -103,16 +104,19 @@ async fn main() -> anyhow::Result<()> {
         .parse()
         .unwrap();
 
-    let mut config = TestConfig::default_with_l1(url.clone());
-    config.builder_port = cli_params.builder_port;
-    config.state_relay_url = Some(relay_server_url.clone());
+    let network_config = TestConfigBuilder::default()
+        .builder_port(cli_params.builder_port)
+        .state_relay_url(relay_server_url.clone())
+        .l1_url(url.clone())
+        .build();
+    let config = TestNetworkConfigBuilder::default()
+        .api_config(api_options)
+        .persistences([persistence::no_storage::Options; 2])
+        .catchups(std::array::from_fn(|_| MockStateCatchup::default()))
+        .network_config(network_config)
+        .build();
 
-    let network = TestNetwork::new_with_config(
-        api_options,
-        [persistence::no_storage::Options; TestConfig::NUM_NODES],
-        config,
-    )
-    .await;
+    let network = TestNetwork::new(config).await;
 
     let config = network.cfg.hotshot_config();
     tracing::info!("Hotshot config {config:?}");
