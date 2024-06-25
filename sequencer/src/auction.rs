@@ -16,6 +16,7 @@ use thiserror::Error;
 use url::Url;
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, Hash)]
+// This is here to fill in for something I don't understand yet.
 struct SequencerKey;
 
 // for MVP-0(-1) (JIT)
@@ -104,7 +105,7 @@ pub struct BidTxBody {
     /// The bid amount designated in Wei.  This is different than
     /// the sequencing fee (gas price) for this transaction
     bid_amount: FeeAmount,
-    // TODO What is the correct type?
+    // TODO What is the correct type? What do we use this for?
     /// The public key of this sequencer
     public_key: SequencerKey,
     /// The URL the HotShot leader will use to request a bundle
@@ -139,7 +140,7 @@ impl BidTxBody {
     pub fn sign(&self, key: &EthKeyPair) -> Result<Signature, SigningError> {
         FeeAccount::sign_builder_message(key, self.commit().as_ref())
     }
-    /// Get account responsible for bid
+    /// Get account submitting the bid
     pub fn account(&self) -> FeeAccount {
         self.account
     }
@@ -167,9 +168,8 @@ impl Default for BidTxBody {
 impl Default for BidTx {
     fn default() -> Self {
         let body = BidTxBody::default();
-        let commitment = body.commit();
         let key = FeeAccount::test_key_pair();
-        let signature = FeeAccount::sign_builder_message(&key, commitment.as_ref()).unwrap();
+        let signature = FeeAccount::sign_builder_message(&key, body.commit().as_ref()).unwrap();
         Self { signature, body }
     }
 }
