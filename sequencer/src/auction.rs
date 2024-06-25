@@ -179,6 +179,7 @@ impl Default for BidTx {
 }
 
 #[derive(Error, Debug, Eq, PartialEq)]
+/// Failure cases of transaction execution
 pub enum ExecutionError {
     #[error("Invalid Signature")]
     InvalidSignature,
@@ -186,6 +187,8 @@ pub enum ExecutionError {
     InvalidPhase,
     #[error("FeeError: {0}")]
     FeeError(FeeError),
+    #[error("Could not resolve ChainConfig")]
+    UnresolvableChainConfig,
 }
 
 impl From<FeeError> for ExecutionError {
@@ -230,27 +233,29 @@ impl BidTx {
     }
     /// Charge Bid. Only winning bids are charged in JIT (I think).
     fn charge(&self, state: &mut ValidatedState) -> Result<(), ExecutionError> {
-        // TODO can we assume validated_state.chain_config has been resolved at this point?
-        let chain_config = state.chain_config.resolve().unwrap();
-        let recipient = chain_config.bid_recipient;
-        state
-            .charge_fee(FeeInfo::from(self.clone()), recipient)
-            .map_err(|e| e.into())
+        // As the code is currently organized, I think chain_config
+        // will always be resolved here. But lets guard against the
+        // error in case code is shifted around in the future.
+        if let Some(chain_config) = state.chain_config.resolve() {
+            let recipient = chain_config.bid_recipient;
+            state
+                .charge_fee(FeeInfo::from(self.clone()), recipient)
+                .map_err(ExecutionError::from)
+        } else {
+            Err(ExecutionError::UnresolvableChainConfig)
+        }
     }
     /// Cryptographic signature verification
     fn verify(&self) -> Result<(), ExecutionError> {
-        if !self
-            .body
+        self.body
             .account
             .validate_builder_signature(&self.signature, self.body.commit().as_ref())
-        {
-            return Err(ExecutionError::InvalidSignature);
-        };
-
-        Ok(())
+            .then_some(())
+            .ok_or(ExecutionError::InvalidSignature)
     }
-    pub fn body(&self) -> BidTxBody {
-        self.body.clone()
+    /// Return the body of the transaction
+    pub fn body(self) -> BidTxBody {
+        self.body
     }
 }
 
