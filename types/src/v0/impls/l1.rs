@@ -10,7 +10,6 @@ use futures::{
     join,
     stream::{self, StreamExt},
 };
-use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::{cmp::min, sync::Arc, time::Duration};
 use url::Url;

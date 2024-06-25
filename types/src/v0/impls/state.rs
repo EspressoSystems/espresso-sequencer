@@ -1,47 +1,34 @@
-use std::collections::HashSet;
 use std::ops::Add;
 
 use crate::v0_1::{
-    BuilderValidationError, Delta, FeeAccountProof, FeeError, NsTableValidationError,
-    ProposalValidationError, UpgradeType,
+    BuilderValidationError, Delta, FeeError, NsTableValidationError, ProposalValidationError,
+    UpgradeType, BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT,
 };
 use crate::{
     v0_1::ValidatedState, BlockMerkleTree, ChainConfig, FeeAccount, FeeAmount, FeeMerkleTree,
 };
 use crate::{FeeInfo, Header, Leaf, NodeState, ResolvableChainConfig, SeqTypes};
-use anyhow::ensure;
-use anyhow::{anyhow, Context};
-use ark_serialize::CanonicalSerialize;
-use committable::{Commitment, Committable, RawCommitmentBuilder};
+
+use committable::Committable;
 use ethers::types::Address;
-use hotshot_query_service::availability::LeafQueryData;
-use hotshot_types::data::{BlockError, ViewNumber};
-use hotshot_types::traits::block_contents::BlockHeader;
-use hotshot_types::traits::node_implementation::ConsensusTime;
-use hotshot_types::traits::signature_key::BuilderSignatureKey;
-use hotshot_types::traits::states::StateDelta;
-use hotshot_types::traits::ValidatedState as HotShotState;
-use hotshot_types::vid::{VidCommon, VidSchemeType};
 use hotshot_types::{
-    traits::block_contents::BuilderFee, utils::BuilderCommitment, vid::VidCommitment,
+    data::{BlockError, ViewNumber},
+    traits::{
+        block_contents::BlockHeader, node_implementation::ConsensusTime,
+        signature_key::BuilderSignatureKey, states::StateDelta, ValidatedState as HotShotState,
+    },
+    vid::{VidCommon, VidSchemeType},
 };
+
 use itertools::Itertools;
 use jf_merkle_tree::MerkleTreeError;
 use jf_merkle_tree::{
-    prelude::{LightWeightSHA3MerkleTree, MerkleProof, Sha3Digest, Sha3Node},
-    universal_merkle_tree::UniversalMerkleTree,
-    AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme,
-    LookupResult, MerkleCommitment, MerkleTreeScheme, PersistentUniversalMerkleTreeScheme,
-    ToTraversalPath, UniversalMerkleTreeScheme,
+    AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme, LookupResult, MerkleCommitment,
+    MerkleTreeScheme, PersistentUniversalMerkleTreeScheme, UniversalMerkleTreeScheme,
 };
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
-use serde::{de::Deserializer, ser::Serializer, Deserialize, Serialize};
 use vbs::version::Version;
-
-// todo: move
-const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
-const FEE_MERKLE_TREE_HEIGHT: usize = 20;
 
 impl StateDelta for Delta {}
 

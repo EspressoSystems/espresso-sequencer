@@ -6,16 +6,18 @@
 //! See [`NsTable`] for a full specification of the binary format of a namespace
 //! table.
 use committable::{Commitment, Committable, RawCommitmentBuilder};
-use derive_more::Display;
+
 use hotshot_types::traits::EncodeBytes;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::{ops::Range, sync::Arc};
-use thiserror::Error;
+use std::sync::Arc;
 
 use crate::{
-    v0::impls::block::uint_bytes::{bytes_serde_impl, u32_from_bytes, u32_to_bytes, usize_from_bytes, usize_to_bytes},
+    v0::impls::block::uint_bytes::{
+        bytes_serde_impl, u32_from_bytes, u32_to_bytes, usize_from_bytes, usize_to_bytes,
+    },
     v0_1::{
-        NsIndex, NsIter, NsPayloadRange, NsTableBuilder, NsTableValidationError, NumNss, PayloadByteLen, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN
+        NsIndex, NsIter, NsPayloadRange, NsTableBuilder, NsTableValidationError, NumNss,
+        PayloadByteLen, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
     },
     NamespaceId, NsTable,
 };

@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 use crate::{
     v0_1::{
         FromNsPayloadBytes, NsPayload, NsPayloadByteLen, NsPayloadBytesRange, NumTxs, NumTxsRange,

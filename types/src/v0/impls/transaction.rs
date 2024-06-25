@@ -1,13 +1,8 @@
 use crate::{NamespaceId, Transaction};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use committable::{Commitment, Committable};
-use derive_more::{Display, From, Into};
-use hotshot::rand;
-use hotshot::rand::Rng;
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
-use jf_merkle_tree::namespaced_merkle_tree::{Namespace, Namespaced};
 use serde::de::Error;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer};
 
 impl From<u32> for NamespaceId {
     fn from(value: u32) -> Self {

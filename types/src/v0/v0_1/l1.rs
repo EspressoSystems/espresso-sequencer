@@ -1,10 +1,9 @@
-use committable::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::{
     prelude::{H256, U256},
     providers::{Http, Provider},
 };
 use serde::{Deserialize, Serialize};
-use std::{cmp::Ordering, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {

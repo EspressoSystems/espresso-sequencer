@@ -1,15 +1,12 @@
-use std::sync::Arc;
-
 use crate::{
-    v0_1::UpgradeType, BlockMerkleTree, ChainConfig, FeeMerkleTree, L1Snapshot, Leaf, NodeState,
-    NsTable, SeqTypes, ValidatedState,
+    v0_1::UpgradeType, ChainConfig, L1Snapshot, Leaf, NodeState, NsTable, SeqTypes, ValidatedState,
 };
 
 use super::{
     v0_1, v0_2, BlockMerkleCommitment, BuilderSignature, FeeInfo, FeeMerkleCommitment, Header,
     L1BlockInfo, ResolvableChainConfig,
 };
-use anyhow::{bail, ensure, Context};
+use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
@@ -17,7 +14,7 @@ use hotshot_types::{
         block_contents::{BlockHeader, BuilderFee},
         node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
-        BlockPayload, EncodeBytes, ValidatedState as _,
+        BlockPayload, ValidatedState as _,
     },
     utils::BuilderCommitment,
     vid::{VidCommitment, VidCommon},

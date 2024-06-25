@@ -12,7 +12,6 @@ use ark_serialize::{
 };
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::DepositFilter;
-use derive_more::{Add, Display, From, Into, Mul, Sub};
 use ethers::{
     prelude::{Address, U256},
     utils::{parse_units, ParseUnits},
@@ -20,13 +19,13 @@ use ethers::{
 use hotshot_query_service::explorer::MonetaryValue;
 use hotshot_types::traits::block_contents::BuilderFee;
 use jf_merkle_tree::{
-    ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme, LookupResult, MerkleCommitment, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme
+    ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme, LookupResult,
+    MerkleCommitment, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
 };
 use num_traits::CheckedSub;
 use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
-use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 impl FeeInfo {
     pub fn new(account: impl Into<FeeAccount>, amount: impl Into<FeeAmount>) -> Self {
@@ -271,6 +270,7 @@ impl ToTraversalPath<256> for FeeAccount {
     }
 }
 
+#[allow(dead_code)]
 impl FeeAccountProof {
     pub(crate) fn presence(
         pos: FeeAccount,

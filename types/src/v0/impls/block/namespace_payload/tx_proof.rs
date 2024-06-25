@@ -1,13 +1,12 @@
 use hotshot_query_service::{VidCommitment, VidCommon};
 use hotshot_types::{
     traits::EncodeBytes,
-    vid::{vid_scheme, SmallRangeProofType, VidSchemeType},
+    vid::{vid_scheme, VidSchemeType},
 };
 use jf_vid::{
     payload_prover::{PayloadProver, Statement},
     VidScheme,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{v0_1::*, Transaction};
 

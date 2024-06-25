@@ -1,13 +1,12 @@
 use crate::{v0_1::BlockSize, ChainConfig, ChainId, ResolvableChainConfig};
 use bytesize::ByteSize;
 use committable::{Commitment, Committable};
-use derive_more::{Deref, Display, From, Into};
-use ethers::types::{Address, U256};
+use derive_more::From;
+use ethers::types::U256;
 use itertools::Either;
 use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
-use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::str::FromStr;
 

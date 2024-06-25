@@ -1,28 +1,13 @@
-use crate::NamespaceId;
-use core::fmt;
-use hotshot_types::traits::EncodeBytes;
 use serde::{Deserialize, Serialize};
-use std::{iter::Peekable, mem::size_of};
+use std::iter::Peekable;
 
-use derive_more::{Display, From, Into};
-use std::marker::PhantomData;
+use derive_more::Display;
 use std::ops::Range;
-use std::sync::Arc;
 use thiserror::Error;
 
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use derivative::Derivative;
-use hotshot::traits::BlockPayload;
-use hotshot_types::vid::{
-    vid_scheme, LargeRangeProofType, SmallRangeProofType, VidCommitment, VidCommon, VidSchemeType,
-};
-use jf_vid::{
-    payload_prover::{PayloadProver, Statement},
-    VidScheme,
-};
-use num_traits::PrimInt;
+use hotshot_types::vid::{LargeRangeProofType, SmallRangeProofType};
+
 use std::default::Default;
-use trait_set::trait_set;
 
 /// Proof of correctness for namespace payload bytes in a block.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -322,7 +307,7 @@ pub struct TxPayloadRange(pub(crate) Range<usize>);
 
 /// Index for an entry in a tx table.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub(crate) struct TxIndex(pub(crate) usize);
+pub struct TxIndex(pub(crate) usize);
 
 pub(crate) struct TxIter(pub(crate) Range<usize>);
 

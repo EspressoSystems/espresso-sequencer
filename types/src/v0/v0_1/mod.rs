@@ -22,6 +22,7 @@ pub use instance_state::{NodeState, StateCatchup, *};
 pub use l1::{L1BlockInfo, L1Snapshot, *};
 pub use signature::BuilderSignature;
 pub use state::{
-    BlockMerkleCommitment, BlockMerkleTree, FeeMerkleCommitment, FeeMerkleTree, ValidatedState, *,
+    BlockMerkleCommitment, BlockMerkleTree, FeeMerkleCommitment, FeeMerkleTree, ValidatedState,
+    BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT, *,
 };
 pub use transaction::{NamespaceId, Transaction};

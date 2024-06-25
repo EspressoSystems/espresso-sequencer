@@ -1,13 +1,12 @@
 use crate::v0_1::PayloadByteLen;
 use hotshot_types::{
     traits::EncodeBytes,
-    vid::{vid_scheme, LargeRangeProofType, VidCommitment, VidCommon, VidSchemeType},
+    vid::{vid_scheme, VidCommitment, VidCommon, VidSchemeType},
 };
 use jf_vid::{
     payload_prover::{PayloadProver, Statement},
     VidScheme,
 };
-use serde::{Deserialize, Serialize};
 
 use crate::{
     v0_1::{NsIndex, NsProof, Payload},

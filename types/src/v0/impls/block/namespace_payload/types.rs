@@ -104,7 +104,11 @@
 //! It is possible that a `tx_table` table could indicate two distinct
 //! transactions whose byte ranges overlap, though no "honestly-prepared"
 //! `tx_table` would do this.
-use crate::{v0::impls::block::{bytes_serde_impl, usize_from_bytes, usize_to_bytes}, v0_1::*, Transaction};
+use crate::{
+    v0::impls::block::{bytes_serde_impl, usize_from_bytes, usize_to_bytes},
+    v0_1::*,
+    Transaction,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::ops::Range;
 

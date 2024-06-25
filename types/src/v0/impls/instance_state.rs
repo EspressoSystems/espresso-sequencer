@@ -1,33 +1,7 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    str::FromStr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::BTreeMap, sync::Arc};
 
-use committable::{Commitment, Committable, RawCommitmentBuilder};
-use ethers::providers::{Http, Provider};
-use hotshot_types::{
-    consensus::CommitmentMap,
-    constants::Base,
-    data::{DaProposal, VidDisperseShare, ViewNumber},
-    event::HotShotAction,
-    light_client::{StateKeyPair, StateSignKey},
-    message::Proposal,
-    signature_key::{BLSPrivKey, BLSPubKey},
-    simple_certificate::QuorumCertificate,
-    traits::{
-        metrics::Metrics,
-        network::ConnectedNetwork,
-        node_implementation::{NodeImplementation, NodeType},
-        states::InstanceState,
-        storage::Storage,
-    },
-    utils::{BuilderCommitment, View},
-    ValidatorConfig,
-};
+use hotshot_types::{constants::Base, traits::states::InstanceState};
 
-use url::Url;
 use vbs::version::{StaticVersionType, Version};
 
 use crate::{
@@ -107,10 +81,15 @@ impl InstanceState for NodeState {}
 
 #[cfg(any(test, feature = "testing"))]
 pub mod mock {
-    use crate::{v0_1::{AccountQueryData, FeeAccountProof}, BlockMerkleTree, FeeAccount, FeeMerkleCommitment};
+    use crate::{
+        v0_1::{AccountQueryData, FeeAccountProof},
+        BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
+    };
 
     use super::*;
     use async_trait::async_trait;
+    use committable::Commitment;
+    use hotshot_types::data::ViewNumber;
     use jf_merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
     use std::collections::HashMap;
 

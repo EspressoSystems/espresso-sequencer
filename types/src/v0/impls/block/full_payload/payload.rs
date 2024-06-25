@@ -7,7 +7,6 @@ use hotshot_types::{
     vid::{VidCommon, VidSchemeType},
 };
 use jf_vid::VidScheme;
-use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 

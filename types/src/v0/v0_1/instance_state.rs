@@ -2,27 +2,23 @@ use std::cmp::min;
 use std::collections::BTreeMap;
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{bail, Context};
+use anyhow::Context;
 use async_std::task::sleep;
 use async_trait::async_trait;
 use committable::Commitment;
 use derive_more::From;
-use ethers::providers::{Http, Provider};
-use ethers::types::{Address, U256};
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
-use jf_merkle_tree::UniversalMerkleTreeScheme;
-use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
+
+use hotshot_types::data::ViewNumber;
 use rand::Rng;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use time::format_description::well_known::Rfc3339 as TimestampFormat;
 use time::OffsetDateTime;
 
-use vbs::version::{StaticVersionType, Version};
+use vbs::version::Version;
 
 use crate::{
-    BlockMerkleTree, ChainConfig, FeeAccount, FeeMerkleCommitment, FeeMerkleTree, L1BlockInfo,
-    ValidatedState,
+    BlockMerkleTree, ChainConfig, FeeAccount, FeeMerkleCommitment, L1BlockInfo, ValidatedState,
 };
 
 use super::l1::L1Client;
@@ -30,7 +26,6 @@ use super::AccountQueryData;
 
 use derive_more::{Display, Into};
 use sequencer_utils::{impl_serde_from_string_or_integer, ser::FromStringOrInteger};
-use std::{collections::HashMap, path::Path};
 
 /// Information about the genesis state which feeds into the genesis block header.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]

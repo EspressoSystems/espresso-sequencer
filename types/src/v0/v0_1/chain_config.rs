@@ -1,12 +1,9 @@
-use committable::{Commitment, Committable};
+use committable::Commitment;
 use derive_more::{Deref, Display, From, Into};
 use ethers::types::{Address, U256};
 use itertools::Either;
-use sequencer_utils::{
-    impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
-};
+
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 
 use crate::{FeeAccount, FeeAmount};
 

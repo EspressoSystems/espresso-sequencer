@@ -1,13 +1,11 @@
 use crate::ResolvableChainConfig;
 
 use super::{block::NsTableValidationError, BlockSize, FeeAccount, FeeAmount};
-use anyhow::{ensure, Context};
-use ethers::types::{Address, U256};
+
 use jf_merkle_tree::{
     prelude::{LightWeightSHA3MerkleTree, Sha3Digest, Sha3Node},
     universal_merkle_tree::UniversalMerkleTree,
-    ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme, LookupResult,
-    MerkleCommitment, MerkleTreeError, MerkleTreeScheme, UniversalMerkleTreeScheme,
+    MerkleTreeError, MerkleTreeScheme,
 };
 use serde::{Deserialize, Serialize};
 
@@ -20,49 +18,13 @@ pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitme
 pub type FeeMerkleTree = UniversalMerkleTree<FeeAmount, Sha3Digest, FeeAccount, 256, Sha3Node>;
 pub type FeeMerkleCommitment = <FeeMerkleTree as MerkleTreeScheme>::Commitment;
 
-use ark_serialize::{
-    CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
-};
-use async_std::stream::StreamExt;
-use async_std::sync::RwLock;
-use committable::{Commitment, Committable, RawCommitmentBuilder};
-use contract_bindings::fee_contract::DepositFilter;
 use core::fmt::Debug;
-use derive_more::{Add, Display, From, Into, Mul, Sub};
-use ethers::utils::{parse_units, ParseUnits};
-use futures::future::Future;
-use hotshot::traits::ValidatedState as HotShotState;
-use hotshot_query_service::{
-    availability::{AvailabilityDataSource, LeafQueryData},
-    data_source::VersionedDataSource,
-    explorer::MonetaryValue,
-    merklized_state::{MerklizedState, MerklizedStateHeightPersistence, UpdateStateData},
-    types::HeightIndexed,
-};
-use hotshot_types::{
-    data::{BlockError, ViewNumber},
-    traits::{
-        block_contents::{BlockHeader, BuilderFee},
-        node_implementation::ConsensusTime,
-        signature_key::BuilderSignatureKey,
-        states::StateDelta,
-    },
-    vid::{VidCommon, VidSchemeType},
-};
-use itertools::Itertools;
-use jf_vid::VidScheme;
-use num_traits::CheckedSub;
-use sequencer_utils::{
-    impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
-};
-use std::sync::Arc;
-use std::time::Duration;
-use std::{collections::HashSet, ops::Add, str::FromStr};
-use thiserror::Error;
-use vbs::version::Version;
 
-const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
-const FEE_MERKLE_TREE_HEIGHT: usize = 20;
+use std::collections::HashSet;
+use thiserror::Error;
+
+pub const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
+pub const FEE_MERKLE_TREE_HEIGHT: usize = 20;
 
 /// This enum is not used in code but functions as an index of
 /// possible validation errors.
