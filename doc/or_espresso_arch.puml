@@ -78,7 +78,7 @@ note right of link
      back if challenged.
    * staked: a large amount of stake has been placed
      on a proposed state which will be lost if it is
-     rolled back, providing relatively fast
+     rolled back, providing a relatively fast
      cryptoeconomic finality.
    * finalized: the full challenge period (often 1 week)
      has passed, and the state has not been successfully
