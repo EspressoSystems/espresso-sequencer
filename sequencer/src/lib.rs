@@ -475,18 +475,12 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         };
 
         // Combine the CDN and P2P networks
-        (
-            Arc::from(CombinedNetworks::new(
-                cdn_network.clone(),
-                p2p_network.clone(),
-                Duration::from_secs(1),
-            )),
-            Arc::from(CombinedNetworks::new(
-                cdn_network,
-                p2p_network,
-                Duration::from_secs(1),
-            )),
-        )
+        let network = Arc::from(CombinedNetworks::new(
+            cdn_network.clone(),
+            p2p_network.clone(),
+            Duration::from_secs(1),
+        ));
+        (Arc::clone(&network), network)
     };
 
     // Wait for the CDN network to be ready if we're not using the P2P network
