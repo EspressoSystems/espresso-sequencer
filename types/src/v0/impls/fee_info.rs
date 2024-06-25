@@ -1,21 +1,33 @@
 // use crate::SeqTypes;
 
 use super::{FeeAccount, FeeAmount, FeeInfo};
-use crate::{eth_signature_key::EthKeyPair, SeqTypes};
+use crate::{
+    eth_signature_key::EthKeyPair,
+    v0_1::{AccountQueryData, FeeAccountProof, FeeMerkleProof},
+    FeeMerkleCommitment, FeeMerkleTree, SeqTypes,
+};
+use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
 };
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::DepositFilter;
 use derive_more::{Add, Display, From, Into, Mul, Sub};
-use ethers::prelude::{Address, U256};
+use ethers::{
+    prelude::{Address, U256},
+    utils::{parse_units, ParseUnits},
+};
+use hotshot_query_service::explorer::MonetaryValue;
 use hotshot_types::traits::block_contents::BuilderFee;
-use jf_merkle_tree::ToTraversalPath;
+use jf_merkle_tree::{
+    ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme, LookupResult, MerkleCommitment, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme
+};
 use num_traits::CheckedSub;
-use sequencer_utils::impl_to_fixed_bytes;
+use sequencer_utils::{
+    impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
+};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-
 impl FeeInfo {
     pub fn new(account: impl Into<FeeAccount>, amount: impl Into<FeeAmount>) -> Self {
         Self {
@@ -48,6 +60,7 @@ impl FeeInfo {
         self.amount
     }
 }
+
 impl From<BuilderFee<SeqTypes>> for FeeInfo {
     fn from(fee: BuilderFee<SeqTypes>) -> Self {
         Self {
@@ -78,6 +91,7 @@ impl Committable for FeeInfo {
     }
 }
 
+impl_serde_from_string_or_integer!(FeeAmount);
 impl_to_fixed_bytes!(FeeAmount, U256);
 
 impl From<u64> for FeeAmount {
@@ -86,9 +100,15 @@ impl From<u64> for FeeAmount {
     }
 }
 
+impl From<FeeAmount> for MonetaryValue {
+    fn from(value: FeeAmount) -> Self {
+        MonetaryValue::eth(value.0.as_u128() as i128)
+    }
+}
+
 impl CheckedSub for FeeAmount {
     fn checked_sub(&self, v: &Self) -> Option<Self> {
-        self.0.checked_sub(v.0).map(FeeAmount::from)
+        self.0.checked_sub(v.0).map(FeeAmount)
     }
 }
 
@@ -100,6 +120,44 @@ impl FromStr for FeeAmount {
     }
 }
 
+impl FromStringOrInteger for FeeAmount {
+    type Binary = U256;
+    type Integer = u64;
+
+    fn from_binary(b: Self::Binary) -> anyhow::Result<Self> {
+        Ok(Self(b))
+    }
+
+    fn from_integer(i: Self::Integer) -> anyhow::Result<Self> {
+        Ok(i.into())
+    }
+
+    fn from_string(s: String) -> anyhow::Result<Self> {
+        // For backwards compatibility, we have an ad hoc parser for WEI amounts represented as hex
+        // strings.
+        if let Some(s) = s.strip_prefix("0x") {
+            return Ok(Self(s.parse()?));
+        }
+
+        // Strip an optional non-numeric suffix, which will be interpreted as a unit.
+        let (base, unit) = s
+            .split_once(char::is_whitespace)
+            .unwrap_or((s.as_str(), "wei"));
+        match parse_units(base, unit)? {
+            ParseUnits::U256(n) => Ok(Self(n)),
+            ParseUnits::I256(_) => bail!("amount cannot be negative"),
+        }
+    }
+
+    fn to_binary(&self) -> anyhow::Result<Self::Binary> {
+        Ok(self.0)
+    }
+
+    fn to_string(&self) -> anyhow::Result<String> {
+        Ok(format!("{self}"))
+    }
+}
+
 impl FeeAmount {
     pub fn as_u64(&self) -> Option<u64> {
         if self.0 <= u64::MAX.into() {
@@ -107,6 +165,27 @@ impl FeeAmount {
         } else {
             None
         }
+    }
+}
+impl FeeAccount {
+    /// Return inner `Address`
+    pub fn address(&self) -> Address {
+        self.0
+    }
+    /// Return byte slice representation of inner `Address` type
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+    /// Return array containing underlying bytes of inner `Address` type
+    pub fn to_fixed_bytes(self) -> [u8; 20] {
+        self.0.to_fixed_bytes()
+    }
+    pub fn test_key_pair() -> EthKeyPair {
+        EthKeyPair::from_mnemonic(
+            "test test test test test test test test test test test junk",
+            0u32,
+        )
+        .unwrap()
     }
 }
 
@@ -192,24 +271,92 @@ impl ToTraversalPath<256> for FeeAccount {
     }
 }
 
-impl FeeAccount {
-    /// Return inner `Address`
-    pub fn address(&self) -> Address {
-        self.0
+impl FeeAccountProof {
+    pub(crate) fn presence(
+        pos: FeeAccount,
+        proof: <FeeMerkleTree as MerkleTreeScheme>::MembershipProof,
+    ) -> Self {
+        Self {
+            account: pos.into(),
+            proof: FeeMerkleProof::Presence(proof),
+        }
     }
-    /// Return byte slice representation of inner `Address` type
-    pub fn as_bytes(&self) -> &[u8] {
-        self.0.as_bytes()
+
+    pub(crate) fn absence(
+        pos: FeeAccount,
+        proof: <FeeMerkleTree as UniversalMerkleTreeScheme>::NonMembershipProof,
+    ) -> Self {
+        Self {
+            account: pos.into(),
+            proof: FeeMerkleProof::Absence(proof),
+        }
     }
-    /// Return array containing underlying bytes of inner `Address` type
-    pub fn to_fixed_bytes(self) -> [u8; 20] {
-        self.0.to_fixed_bytes()
+
+    pub fn prove(tree: &FeeMerkleTree, account: Address) -> Option<(Self, U256)> {
+        match tree.universal_lookup(FeeAccount(account)) {
+            LookupResult::Ok(balance, proof) => Some((
+                Self {
+                    account,
+                    proof: FeeMerkleProof::Presence(proof),
+                },
+                balance.0,
+            )),
+            LookupResult::NotFound(proof) => Some((
+                Self {
+                    account,
+                    proof: FeeMerkleProof::Absence(proof),
+                },
+                0.into(),
+            )),
+            LookupResult::NotInMemory => None,
+        }
     }
-    pub fn test_key_pair() -> EthKeyPair {
-        EthKeyPair::from_mnemonic(
-            "test test test test test test test test test test test junk",
-            0u32,
-        )
-        .unwrap()
+
+    pub fn verify(&self, comm: &FeeMerkleCommitment) -> anyhow::Result<U256> {
+        match &self.proof {
+            FeeMerkleProof::Presence(proof) => {
+                ensure!(
+                    FeeMerkleTree::verify(comm.digest(), FeeAccount(self.account), proof)?.is_ok(),
+                    "invalid proof"
+                );
+                Ok(proof
+                    .elem()
+                    .context("presence proof is missing account balance")?
+                    .0)
+            }
+            FeeMerkleProof::Absence(proof) => {
+                let tree = FeeMerkleTree::from_commitment(comm);
+                ensure!(
+                    tree.non_membership_verify(FeeAccount(self.account), proof)?,
+                    "invalid proof"
+                );
+                Ok(0.into())
+            }
+        }
+    }
+
+    pub fn remember(&self, tree: &mut FeeMerkleTree) -> anyhow::Result<()> {
+        match &self.proof {
+            FeeMerkleProof::Presence(proof) => {
+                tree.remember(
+                    FeeAccount(self.account),
+                    proof
+                        .elem()
+                        .context("presence proof is missing account balance")?,
+                    proof,
+                )?;
+                Ok(())
+            }
+            FeeMerkleProof::Absence(proof) => {
+                tree.non_membership_remember(FeeAccount(self.account), proof)?;
+                Ok(())
+            }
+        }
+    }
+}
+
+impl From<(FeeAccountProof, U256)> for AccountQueryData {
+    fn from((proof, balance): (FeeAccountProof, U256)) -> Self {
+        Self { balance, proof }
     }
 }

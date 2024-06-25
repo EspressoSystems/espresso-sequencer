@@ -1,11 +1,13 @@
-use super::{FeeAccount, FeeAmount};
+use crate::ResolvableChainConfig;
+
+use super::{block::NsTableValidationError, BlockSize, FeeAccount, FeeAmount};
 use anyhow::{ensure, Context};
 use ethers::types::{Address, U256};
 use jf_merkle_tree::{
     prelude::{LightWeightSHA3MerkleTree, Sha3Digest, Sha3Node},
     universal_merkle_tree::UniversalMerkleTree,
     ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme, LookupResult,
-    MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
+    MerkleCommitment, MerkleTreeError, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
 use serde::{Deserialize, Serialize};
 
@@ -18,122 +20,130 @@ pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitme
 pub type FeeMerkleTree = UniversalMerkleTree<FeeAmount, Sha3Digest, FeeAccount, 256, Sha3Node>;
 pub type FeeMerkleCommitment = <FeeMerkleTree as MerkleTreeScheme>::Commitment;
 
+use ark_serialize::{
+    CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
+};
+use async_std::stream::StreamExt;
+use async_std::sync::RwLock;
+use committable::{Commitment, Committable, RawCommitmentBuilder};
+use contract_bindings::fee_contract::DepositFilter;
+use core::fmt::Debug;
+use derive_more::{Add, Display, From, Into, Mul, Sub};
+use ethers::utils::{parse_units, ParseUnits};
+use futures::future::Future;
+use hotshot::traits::ValidatedState as HotShotState;
+use hotshot_query_service::{
+    availability::{AvailabilityDataSource, LeafQueryData},
+    data_source::VersionedDataSource,
+    explorer::MonetaryValue,
+    merklized_state::{MerklizedState, MerklizedStateHeightPersistence, UpdateStateData},
+    types::HeightIndexed,
+};
+use hotshot_types::{
+    data::{BlockError, ViewNumber},
+    traits::{
+        block_contents::{BlockHeader, BuilderFee},
+        node_implementation::ConsensusTime,
+        signature_key::BuilderSignatureKey,
+        states::StateDelta,
+    },
+    vid::{VidCommon, VidSchemeType},
+};
+use itertools::Itertools;
+use jf_vid::VidScheme;
+use num_traits::CheckedSub;
+use sequencer_utils::{
+    impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
+};
+use std::sync::Arc;
+use std::time::Duration;
+use std::{collections::HashSet, ops::Add, str::FromStr};
+use thiserror::Error;
+use vbs::version::Version;
+
+const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
+const FEE_MERKLE_TREE_HEIGHT: usize = 20;
+
+/// This enum is not used in code but functions as an index of
+/// possible validation errors.
+#[allow(dead_code)]
+enum StateValidationError {
+    ProposalValidation(ProposalValidationError),
+    BuilderValidation(BuilderValidationError),
+    Fee(FeeError),
+}
+
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ValidatedState {
     /// Frontier of Block Merkle Tree
     pub block_merkle_tree: BlockMerkleTree,
     /// Fee Merkle Tree
     pub fee_merkle_tree: FeeMerkleTree,
+    pub chain_config: ResolvableChainConfig,
 }
 
-/// A proof of the balance of an account in the fee ledger.
-///
-/// If the account of interest does not exist in the fee state, this is a Merkle non-membership
-/// proof, and the balance is implicitly zero. Otherwise, this is a normal Merkle membership proof.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct FeeAccountProof {
-    pub account: Address,
-    pub proof: FeeMerkleProof,
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub struct Delta {
+    pub fees_delta: HashSet<FeeAccount>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-enum FeeMerkleProof {
-    Presence(<FeeMerkleTree as MerkleTreeScheme>::MembershipProof),
-    Absence(<FeeMerkleTree as UniversalMerkleTreeScheme>::NonMembershipProof),
+/// Possible proposal validation failures
+#[derive(Error, Debug, Eq, PartialEq)]
+pub enum ProposalValidationError {
+    #[error("Invalid ChainConfig: expected={expected}, proposal={proposal}")]
+    InvalidChainConfig { expected: String, proposal: String },
+
+    #[error(
+        "Invalid Payload Size: (max_block_size={max_block_size}, proposed_block_size={block_size})"
+    )]
+    MaxBlockSizeExceeded {
+        max_block_size: BlockSize,
+        block_size: BlockSize,
+    },
+    #[error("Insufficient Fee: block_size={max_block_size}, base_fee={base_fee}, proposed_fee={proposed_fee}")]
+    InsufficientFee {
+        max_block_size: BlockSize,
+        base_fee: FeeAmount,
+        proposed_fee: FeeAmount,
+    },
+    #[error("Invalid Height: parent_height={parent_height}, proposal_height={proposal_height}")]
+    InvalidHeight {
+        parent_height: u64,
+        proposal_height: u64,
+    },
+    #[error("Invalid Block Root Error: expected={expected_root}, proposal={proposal_root}")]
+    InvalidBlockRoot {
+        expected_root: BlockMerkleCommitment,
+        proposal_root: BlockMerkleCommitment,
+    },
+    #[error("Invalid Fee Root Error: expected={expected_root}, proposal={proposal_root}")]
+    InvalidFeeRoot {
+        expected_root: FeeMerkleCommitment,
+        proposal_root: FeeMerkleCommitment,
+    },
+    #[error("Invalid namespace table: {err}")]
+    InvalidNsTable { err: NsTableValidationError },
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AccountQueryData {
-    pub balance: U256,
-    pub proof: FeeAccountProof,
+/// Possible charge fee failures
+#[derive(Error, Debug, Eq, PartialEq)]
+pub enum FeeError {
+    #[error("Insuficcient Funds: have {balance:?}, required {amount:?}")]
+    InsufficientFunds {
+        balance: Option<FeeAmount>,
+        amount: FeeAmount,
+    },
+    #[error("Merkle Tree Error: {0}")]
+    MerkleTreeError(MerkleTreeError),
 }
 
-impl From<(FeeAccountProof, U256)> for AccountQueryData {
-    fn from((proof, balance): (FeeAccountProof, U256)) -> Self {
-        Self { balance, proof }
-    }
-}
-
-impl FeeAccountProof {
-    pub(crate) fn presence(
-        pos: FeeAccount,
-        proof: <FeeMerkleTree as MerkleTreeScheme>::MembershipProof,
-    ) -> Self {
-        Self {
-            account: pos.into(),
-            proof: FeeMerkleProof::Presence(proof),
-        }
-    }
-
-    pub(crate) fn absence(
-        pos: FeeAccount,
-        proof: <FeeMerkleTree as UniversalMerkleTreeScheme>::NonMembershipProof,
-    ) -> Self {
-        Self {
-            account: pos.into(),
-            proof: FeeMerkleProof::Absence(proof),
-        }
-    }
-
-    pub fn prove(tree: &FeeMerkleTree, account: Address) -> Option<(Self, U256)> {
-        match tree.universal_lookup(FeeAccount(account)) {
-            LookupResult::Ok(balance, proof) => Some((
-                Self {
-                    account,
-                    proof: FeeMerkleProof::Presence(proof),
-                },
-                balance.0,
-            )),
-            LookupResult::NotFound(proof) => Some((
-                Self {
-                    account,
-                    proof: FeeMerkleProof::Absence(proof),
-                },
-                0.into(),
-            )),
-            LookupResult::NotInMemory => None,
-        }
-    }
-
-    pub fn verify(&self, comm: &FeeMerkleCommitment) -> anyhow::Result<U256> {
-        match &self.proof {
-            FeeMerkleProof::Presence(proof) => {
-                ensure!(
-                    FeeMerkleTree::verify(comm.digest(), FeeAccount(self.account), proof)?.is_ok(),
-                    "invalid proof"
-                );
-                Ok(proof
-                    .elem()
-                    .context("presence proof is missing account balance")?
-                    .0)
-            }
-            FeeMerkleProof::Absence(proof) => {
-                let tree = FeeMerkleTree::from_commitment(comm);
-                ensure!(
-                    tree.non_membership_verify(FeeAccount(self.account), proof)?,
-                    "invalid proof"
-                );
-                Ok(0.into())
-            }
-        }
-    }
-
-    pub fn remember(&self, tree: &mut FeeMerkleTree) -> anyhow::Result<()> {
-        match &self.proof {
-            FeeMerkleProof::Presence(proof) => {
-                tree.remember(
-                    FeeAccount(self.account),
-                    proof
-                        .elem()
-                        .context("presence proof is missing account balance")?,
-                    proof,
-                )?;
-                Ok(())
-            }
-            FeeMerkleProof::Absence(proof) => {
-                tree.non_membership_remember(FeeAccount(self.account), proof)?;
-                Ok(())
-            }
-        }
-    }
+/// Possible builder validation failures
+#[derive(Error, Debug, Eq, PartialEq)]
+pub enum BuilderValidationError {
+    #[error("Builder signature not found")]
+    SignatureNotFound,
+    #[error("Fee amount out of range: {0}")]
+    FeeAmountOutOfRange(FeeAmount),
+    #[error("Invalid Builder Signature")]
+    InvalidBuilderSignature,
 }

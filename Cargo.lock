@@ -2893,6 +2893,52 @@ version = "0.4.1"
 source = "git+https://github.com/espressosystems/espresso-systems-common?tag=0.4.1#2e889e878866c2a5cce1daaab947f7c93d5811ae"
 
 [[package]]
+name = "espresso-types"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ark-serialize",
+ "async-compatibility-layer",
+ "async-once-cell",
+ "async-std",
+ "async-trait",
+ "base64-bytes",
+ "bincode",
+ "blake3",
+ "bytesize",
+ "committable",
+ "contract-bindings",
+ "derivative",
+ "derive_more",
+ "ethers",
+ "fluent-asserter",
+ "futures",
+ "hotshot",
+ "hotshot-query-service",
+ "hotshot-types",
+ "itertools 0.12.1",
+ "jf-merkle-tree",
+ "jf-utils",
+ "jf-vid",
+ "num-traits",
+ "paste",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rand_distr",
+ "sequencer-utils",
+ "serde",
+ "sha2 0.10.8",
+ "snafu 0.8.3",
+ "static_assertions",
+ "thiserror",
+ "time 0.3.36",
+ "tracing",
+ "trait-set",
+ "url",
+ "vbs",
+]
+
+[[package]]
 name = "etcetera"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

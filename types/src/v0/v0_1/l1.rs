@@ -1,7 +1,10 @@
 use committable::{Commitment, Committable, RawCommitmentBuilder};
-use ethers::prelude::{H256, U256};
+use ethers::{
+    prelude::{H256, U256},
+    providers::{Http, Provider},
+};
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
+use std::{cmp::Ordering, sync::Arc, time::Duration};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
@@ -29,4 +32,14 @@ pub struct L1Snapshot {
     /// genesis of the L1, and the L1 has yet to finalize a block. In all other cases it will be
     /// `Some`.
     pub finalized: Option<L1BlockInfo>,
+}
+
+#[derive(Clone, Debug)]
+/// An Http Provider and configuration to interact with the L1.
+pub struct L1Client {
+    pub retry_delay: Duration,
+    /// `Provider` from `ethers-provider`.
+    pub provider: Arc<Provider<Http>>,
+    /// Maximum number of L1 blocks that can be scanned for events in a single query.
+    pub events_max_block_range: u64,
 }

@@ -1,19 +1,18 @@
 use std::sync::Arc;
 
 use crate::{
-    BlockMerkleTree, ChainConfig, FeeMerkleTree, L1Snapshot, NodeState, NsTable, SeqTypes,
-    ValidatedState,
+    v0_1::UpgradeType, BlockMerkleTree, ChainConfig, FeeMerkleTree, L1Snapshot, Leaf, NodeState,
+    NsTable, SeqTypes, ValidatedState,
 };
 
 use super::{
     v0_1, v0_2, BlockMerkleCommitment, BuilderSignature, FeeInfo, FeeMerkleCommitment, Header,
-    L1BlockInfo, NameSpaceTable, ResolvableChainConfig, TxTableEntryWord,
+    L1BlockInfo, ResolvableChainConfig,
 };
-use anyhow::{ensure, Context};
+use anyhow::{bail, ensure, Context};
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
-    data::Leaf,
     traits::{
         block_contents::{BlockHeader, BuilderFee},
         node_implementation::NodeType,
@@ -29,18 +28,6 @@ use snafu::Snafu;
 use time::OffsetDateTime;
 use vbs::version::Version;
 
-impl Committable for NameSpaceTable<TxTableEntryWord> {
-    fn commit(&self) -> Commitment<Self> {
-        RawCommitmentBuilder::new(&Self::tag())
-            .var_size_bytes(&vec![])
-            .finalize()
-    }
-
-    fn tag() -> String {
-        "NSTABLE".into()
-    }
-}
-
 impl Committable for Header {
     fn commit(&self) -> Commitment<Self> {
         let mut bmt_bytes = vec![];
@@ -52,15 +39,17 @@ impl Committable for Header {
             .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
             .unwrap();
 
+        //
+
         let mut c = RawCommitmentBuilder::new(&Self::tag());
-        // if self.version() > v0_1::VERSION {
-        //     // The original commitment scheme (from version 0.1) did not include the version in the
-        //     // commitment. We respect this for backwards compatibility, but for all future versions,
-        //     // we want to include it.
-        //     c = c
-        //         .u32_field("version_major", self.version().major)
-        //         .u32_field("version_minor", self.version().minor);
-        // }
+        if self.version() > v0_1::VERSION {
+            // The original commitment scheme (from version 0.1) did not include the version in the
+            // commitment. We respect this for backwards compatibility, but for all future versions,
+            // we want to include it.
+            c = c
+                .u64_field("version_major", self.version().major.into())
+                .u64_field("version_minor", self.version().minor.into());
+        }
         c = c
             .field("chain_config", self.chain_config().commit())
             .u64_field("height", self.height())
@@ -82,6 +71,8 @@ impl Committable for Header {
         // }
         c.finalize()
     }
+
+    //
 
     fn tag() -> String {
         // We use the tag "BLOCK" since blocks are identified by the hash of their header. This will
@@ -132,6 +123,160 @@ macro_rules! field {
             Self::V2(data) => &data.$name,
         }
     };
+}
+
+impl Header {
+    #[allow(clippy::too_many_arguments)]
+    fn from_info(
+        payload_commitment: VidCommitment,
+        builder_commitment: BuilderCommitment,
+        ns_table: NsTable,
+        parent_leaf: &Leaf,
+        mut l1: L1Snapshot,
+        l1_deposits: &[FeeInfo],
+        builder_fee: BuilderFee<SeqTypes>,
+        mut timestamp: u64,
+        mut state: ValidatedState,
+        chain_config: ChainConfig,
+        version: Version,
+    ) -> anyhow::Result<Self> {
+        let Version { major, minor } = version;
+        ensure!(major == 0, "Invalid major version {major}");
+
+        // Increment height.
+        let parent_header = parent_leaf.block_header();
+        let height = parent_header.height() + 1;
+
+        // Ensure the timestamp does not decrease. We can trust `parent.timestamp` because `parent`
+        // has already been voted on by consensus. If our timestamp is behind, either f + 1 nodes
+        // are lying about the current time, or our clock is just lagging.
+        if timestamp < parent_header.timestamp() {
+            tracing::warn!(
+                "Espresso timestamp {timestamp} behind parent {}, local clock may be out of sync",
+                parent_header.timestamp()
+            );
+            timestamp = parent_header.timestamp();
+        }
+
+        // Ensure the L1 block references don't decrease. Again, we can trust `parent.l1_*` are
+        // accurate.
+        if l1.head < parent_header.l1_head() {
+            tracing::warn!(
+                "L1 head {} behind parent {}, L1 client may be lagging",
+                l1.head,
+                parent_header.l1_head()
+            );
+            l1.head = parent_header.l1_head();
+        }
+        if l1.finalized < parent_header.l1_finalized() {
+            tracing::warn!(
+                "L1 finalized {:?} behind parent {:?}, L1 client may be lagging",
+                l1.finalized,
+                parent_header.l1_finalized()
+            );
+            l1.finalized = parent_header.l1_finalized();
+        }
+
+        // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
+        // only happen if our clock is badly out of sync with L1.
+        if let Some(l1_block) = &l1.finalized {
+            let l1_timestamp = l1_block.timestamp.as_u64();
+            if timestamp < l1_timestamp {
+                tracing::warn!("Espresso timestamp {timestamp} behind L1 timestamp {l1_timestamp}, local clock may be out of sync");
+                timestamp = l1_timestamp;
+            }
+        }
+
+        state
+            .block_merkle_tree
+            .push(parent_header.commit().as_ref())
+            .context("missing blocks frontier")?;
+        let block_merkle_tree_root = state.block_merkle_tree.commitment();
+
+        // Insert the new L1 deposits
+        for fee_info in l1_deposits {
+            state
+                .insert_fee_deposit(*fee_info)
+                .context(format!("missing fee account {}", fee_info.account()))?;
+        }
+
+        // Charge the builder fee.
+        ensure!(
+            builder_fee.fee_account.validate_fee_signature(
+                &builder_fee.fee_signature,
+                builder_fee.fee_amount,
+                &ns_table,
+                &payload_commitment,
+            ),
+            "invalid builder signature"
+        );
+        let builder_signature = Some(builder_fee.fee_signature);
+        let fee_info = builder_fee.into();
+        state
+            .charge_fee(fee_info, chain_config.fee_recipient)
+            .context(format!("invalid builder fee {fee_info:?}"))?;
+
+        let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
+
+        // TODO: >>>>>>>>
+        let header = match minor {
+            0 => Self::V1(v0_1::Header {
+                chain_config: chain_config.commit().into(),
+                height,
+                timestamp,
+                l1_head: l1.head,
+                l1_finalized: l1.finalized,
+                payload_commitment,
+                builder_commitment,
+                ns_table,
+                fee_merkle_tree_root,
+                block_merkle_tree_root,
+                fee_info,
+                builder_signature,
+            }),
+            _ => Self::V2(v0_2::Header {
+                chain_config: chain_config.commit().into(),
+                height,
+                timestamp,
+                l1_head: l1.head,
+                l1_finalized: l1.finalized,
+                payload_commitment,
+                builder_commitment,
+                ns_table,
+                fee_merkle_tree_root,
+                block_merkle_tree_root,
+                fee_info,
+                builder_signature,
+            }),
+        };
+
+        Ok(header)
+    }
+
+    async fn get_chain_config(
+        validated_state: &ValidatedState,
+        instance_state: &NodeState,
+    ) -> ChainConfig {
+        let validated_cf = validated_state.chain_config;
+        let instance_cf = instance_state.chain_config;
+
+        if validated_cf.commit() == instance_cf.commit() {
+            return instance_cf;
+        }
+
+        match validated_cf.resolve() {
+            Some(cf) => cf,
+            None => {
+                tracing::info!("fetching chain config {} from peers", validated_cf.commit());
+
+                instance_state
+                    .peers
+                    .as_ref()
+                    .fetch_chain_config(validated_cf.commit())
+                    .await
+            }
+        }
+    }
 }
 
 impl Header {
@@ -202,7 +347,7 @@ impl Header {
         field!(self.builder_commitment)
     }
 
-    pub fn ns_table(&self) -> &NameSpaceTable<TxTableEntryWord> {
+    pub fn ns_table(&self) -> &NsTable {
         field!(self.ns_table)
     }
 
@@ -234,136 +379,6 @@ impl Header {
     }
 }
 
-impl Header {
-    #[allow(clippy::too_many_arguments)]
-    pub fn from_info(
-        payload_commitment: VidCommitment,
-        builder_commitment: BuilderCommitment,
-        ns_table: NsTable,
-        parent_leaf: &Leaf<SeqTypes>,
-        mut l1: L1Snapshot,
-        l1_deposits: &[FeeInfo],
-        builder_fee: BuilderFee<SeqTypes>,
-        mut timestamp: u64,
-        mut state: ValidatedState,
-        chain_config: ChainConfig,
-        version: Version,
-    ) -> anyhow::Result<Self> {
-        // Increment height.
-        let parent_header = parent_leaf.block_header();
-        let height = parent_header.height() + 1;
-
-        // Ensure the timestamp does not decrease. We can trust `parent.timestamp` because `parent`
-        // has already been voted on by consensus. If our timestamp is behind, either f + 1 nodes
-        // are lying about the current time, or our clock is just lagging.
-        if timestamp < parent_header.timestamp() {
-            tracing::warn!(
-                "Espresso timestamp {timestamp} behind parent {}, local clock may be out of sync",
-                parent_header.timestamp()
-            );
-            timestamp = parent_header.timestamp();
-        }
-
-        // Ensure the L1 block references don't decrease. Again, we can trust `parent.l1_*` are
-        // accurate.
-        if l1.head < parent_header.l1_head() {
-            tracing::warn!(
-                "L1 head {} behind parent {}, L1 client may be lagging",
-                l1.head,
-                parent_header.l1_head()
-            );
-            l1.head = parent_header.l1_head();
-        }
-        if l1.finalized < parent_header.l1_finalized() {
-            tracing::warn!(
-                "L1 finalized {:?} behind parent {:?}, L1 client may be lagging",
-                l1.finalized,
-                parent_header.l1_finalized()
-            );
-            l1.finalized = parent_header.l1_finalized();
-        }
-
-        // Enforce that the sequencer block timestamp is not behind the L1 block timestamp. This can
-        // only happen if our clock is badly out of sync with L1.
-        if let Some(l1_block) = &l1.finalized {
-            let l1_timestamp = l1_block.timestamp.as_u64();
-            if timestamp < l1_timestamp {
-                tracing::warn!("Espresso timestamp {timestamp} behind L1 timestamp {l1_timestamp}, local clock may be out of sync");
-                timestamp = l1_timestamp;
-            }
-        }
-
-        let commit = parent_header.commit();
-
-        state
-            .block_merkle_tree
-            .push(commit.as_ref())
-            .context("missing blocks frontier")?;
-        let block_merkle_tree_root = state.block_merkle_tree.commitment();
-
-        // Insert the new L1 deposits
-        for fee_info in l1_deposits {
-            state
-                .insert_fee_deposit(*fee_info)
-                .context(format!("missing fee account {}", fee_info.account()))?;
-        }
-
-        // Charge the builder fee.
-        ensure!(
-            builder_fee.fee_account.validate_fee_signature(
-                &builder_fee.fee_signature,
-                builder_fee.fee_amount,
-                &ns_table,
-                &payload_commitment,
-            ),
-            "invalid builder signature"
-        );
-        let builder_signature = Some(builder_fee.fee_signature);
-        let fee_info = builder_fee.into();
-        state
-            .charge_fee(fee_info, chain_config.fee_recipient)
-            .context(format!("invalid builder fee {fee_info:?}"))?;
-
-        let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
-
-        // macro?
-
-        let header = if version.minor == 0 {
-            Self::V1(crate::v0_1::Header {
-                chain_config: chain_config.commit().into(),
-                height,
-                timestamp,
-                l1_head: l1.head,
-                l1_finalized: l1.finalized,
-                payload_commitment,
-                builder_commitment,
-                ns_table,
-                fee_merkle_tree_root,
-                block_merkle_tree_root,
-                fee_info,
-                builder_signature,
-            })
-        } else {
-            Self::V2(crate::v0_2::Header {
-                chain_config: chain_config.commit().into(),
-                height,
-                timestamp,
-                l1_head: l1.head,
-                l1_finalized: l1.finalized,
-                payload_commitment,
-                builder_commitment,
-                ns_table,
-                fee_merkle_tree_root,
-                block_merkle_tree_root,
-                fee_info,
-                builder_signature,
-            })
-        };
-
-        Ok(header)
-    }
-}
-
 #[derive(Debug, Snafu)]
 #[snafu(display("Invalid Block Header {msg}"))]
 pub struct InvalidBlockHeader {
@@ -384,34 +399,49 @@ impl From<anyhow::Error> for InvalidBlockHeader {
 impl BlockHeader<SeqTypes> for Header {
     type Error = InvalidBlockHeader;
 
-    // #[tracing::instrument(
-    //     skip_all,
-    //     fields(
-    //         node_id = instance_state.node_id,
-    //         view = ?parent_leaf.view_number(),
-    //         height = parent_leaf.block_header().height,
-    //     ),
-    // )]
+    #[tracing::instrument(
+        skip_all,
+        fields(
+            node_id = instance_state.node_id,
+            view = ?parent_leaf.view_number(),
+            height = parent_leaf.block_header().height(),
+        ),
+    )]
 
     async fn new(
         parent_state: &ValidatedState,
         instance_state: &NodeState,
-        parent_leaf: &Leaf<SeqTypes>,
+        parent_leaf: &Leaf,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+        metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: BuilderFee<SeqTypes>,
         _vid_common: VidCommon,
         version: Version,
     ) -> Result<Self, Self::Error> {
-        let chain_config = instance_state.chain_config;
         let height = parent_leaf.height();
         let view = parent_leaf.view_number();
 
         let mut validated_state = parent_state.clone();
 
+        let chain_config = if version > instance_state.current_version {
+            match instance_state
+                .upgrades
+                .get(&version)
+                .map(|upgrade| match upgrade.upgrade_type {
+                    UpgradeType::ChainConfig { chain_config } => chain_config,
+                }) {
+                Some(cf) => cf,
+                None => Header::get_chain_config(&validated_state, instance_state).await,
+            }
+        } else {
+            Header::get_chain_config(&validated_state, instance_state).await
+        };
+
+        validated_state.chain_config = chain_config.into();
+
         // Fetch the latest L1 snapshot.
-        let l1_snapshot = instance_state.l1_client().snapshot().await;
+        let l1_snapshot = instance_state.l1_client.snapshot().await;
         // Fetch the new L1 deposits between parent and current finalized L1 block.
         let l1_deposits = if let (Some(addr), Some(block_info)) =
             (chain_config.fee_contract, l1_snapshot.finalized)
@@ -497,22 +527,28 @@ impl BlockHeader<SeqTypes> for Header {
         instance_state: &NodeState,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
-        ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata,
+        ns_table: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
     ) -> Self {
         let ValidatedState {
             fee_merkle_tree,
             block_merkle_tree,
+            ..
         } = ValidatedState::genesis(instance_state).0;
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
 
-        // todo::??
         Self::V2(v0_2::Header {
+            // The genesis header needs to be completely deterministic, so we can't sample real
+            // timestamps or L1 values.
             chain_config: instance_state.chain_config.into(),
             height: 0,
-            timestamp: 0,
-            l1_head: 0,
+            timestamp: instance_state.genesis_header.timestamp.unix_timestamp(),
             l1_finalized: instance_state.l1_genesis,
+            // Make sure the L1 head is not behind the finalized block.
+            l1_head: instance_state
+                .l1_genesis
+                .map(|block| block.number)
+                .unwrap_or_default(),
             payload_commitment,
             builder_commitment,
             ns_table,
@@ -531,7 +567,9 @@ impl BlockHeader<SeqTypes> for Header {
         self.payload_commitment()
     }
 
-    fn metadata(&self) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload>::Metadata {
+    fn metadata(
+        &self,
+    ) -> &<<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata {
         &self.ns_table()
     }
 

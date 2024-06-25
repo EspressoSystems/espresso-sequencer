@@ -24,7 +24,6 @@ pub struct Transaction {
     Clone,
     Copy,
     Serialize,
-    Deserialize,
     Debug,
     Display,
     PartialEq,
@@ -39,4 +38,4 @@ pub struct Transaction {
     Ord,
 )]
 #[display(fmt = "{_0}")]
-pub struct NamespaceId(pub(crate)  u64);
+pub struct NamespaceId(pub(crate) u64);

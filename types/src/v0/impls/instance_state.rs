@@ -1,9 +1,15 @@
-use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use ethers::providers::{Http, Provider};
 use hotshot_types::{
     consensus::CommitmentMap,
+    constants::Base,
     data::{DaProposal, VidDisperseShare, ViewNumber},
     event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
@@ -22,8 +28,12 @@ use hotshot_types::{
 };
 
 use url::Url;
+use vbs::version::{StaticVersionType, Version};
 
-use crate::{ChainConfig, L1Client, NodeState, StateCatchup, ValidatedState};
+use crate::{
+    v0_1::{StateCatchup, Upgrade},
+    ChainConfig, L1Client, NodeState, ValidatedState,
+};
 
 impl NodeState {
     pub fn new(
@@ -37,25 +47,25 @@ impl NodeState {
             chain_config,
             l1_client,
             peers: Arc::new(catchup),
-            genesis_state: Default::default(),
+            genesis_header: Default::default(),
+            genesis_state: ValidatedState {
+                chain_config: chain_config.into(),
+                ..Default::default()
+            },
             l1_genesis: None,
+            upgrades: Default::default(),
+            current_version: Base::VERSION,
         }
     }
 
     #[cfg(any(test, feature = "testing"))]
     pub fn mock() -> Self {
-        use mock::MockStateCatchup;
-
         Self::new(
             0,
             ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
-            MockStateCatchup::default(),
+            mock::MockStateCatchup::default(),
         )
-    }
-
-    pub fn chain_config(&self) -> &ChainConfig {
-        &self.chain_config
     }
 
     pub fn with_l1(mut self, l1_client: L1Client) -> Self {
@@ -73,8 +83,9 @@ impl NodeState {
         self
     }
 
-    pub(crate) fn l1_client(&self) -> &L1Client {
-        &self.l1_client
+    pub fn with_upgrades(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
+        self.upgrades = upgrades;
+        self
     }
 }
 
@@ -83,18 +94,10 @@ impl NodeState {
 #[cfg(any(test, feature = "testing"))]
 impl Default for NodeState {
     fn default() -> Self {
-        let provider = Arc::new(Provider::new(Http::new(
-            Url::from_str("http://localhost:3331").unwrap(),
-        )));
-
         Self::new(
             1u64,
             ChainConfig::default(),
-            L1Client {
-                retry_delay: Duration::from_secs(1),
-                provider,
-                events_max_block_range: 10000,
-            },
+            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
             mock::MockStateCatchup::default(),
         )
     }
@@ -102,14 +105,11 @@ impl Default for NodeState {
 
 impl InstanceState for NodeState {}
 
-// move
-
 #[cfg(any(test, feature = "testing"))]
 pub mod mock {
-    use crate::{AccountQueryData, BlockMerkleTree, FeeAccount, FeeAccountProof};
+    use crate::{v0_1::{AccountQueryData, FeeAccountProof}, BlockMerkleTree, FeeAccount, FeeMerkleCommitment};
 
     use super::*;
-    use crate::FeeMerkleCommitment;
     use async_trait::async_trait;
     use jf_merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
     use std::collections::HashMap;
@@ -166,6 +166,13 @@ pub mod mock {
                 .expect("Proof verifies");
 
             Ok(())
+        }
+
+        async fn try_fetch_chain_config(
+            &self,
+            _commitment: Commitment<ChainConfig>,
+        ) -> anyhow::Result<ChainConfig> {
+            Ok(ChainConfig::default())
         }
     }
 }

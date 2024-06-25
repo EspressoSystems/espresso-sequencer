@@ -7,6 +7,7 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use v0_1::Payload;
 
 mod impls;
 
@@ -68,27 +69,13 @@ reexport_unchanged_types!(
     L1BlockInfo,
     ResolvableChainConfig,
     NsTable,
-    TxTableEntryWord,
     ValidatedState,
     NodeState,
     L1Client,
-    FeeAccountProof,
-    AccountQueryData,
     L1Snapshot,
     Transaction,
     NamespaceId,
-    TxTableEntry,
-    TxTable,
-    TxIndex,
-    NamespaceInfo
 );
-
-pub use crate::v0_1::NameSpaceTable;
-pub use crate::v0_1::Payload;
-pub use crate::v0_1::StateCatchup;
-pub use crate::v0_1::Table;
-pub use crate::v0_1::TableWordTraits;
-pub use crate::v0_1::TxIterator;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq, From)]
 pub enum Header {
@@ -104,7 +91,7 @@ pub struct SeqTypes;
 impl NodeType for SeqTypes {
     type Time = ViewNumber;
     type BlockHeader = Header;
-    type BlockPayload = Payload<TxTableEntryWord>;
+    type BlockPayload = Payload;
     type SignatureKey = PubKey;
     type Transaction = Transaction;
     type InstanceState = NodeState;
@@ -113,10 +100,10 @@ impl NodeType for SeqTypes {
     type BuilderSignatureKey = FeeAccount;
 }
 
+pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
 pub type PubKey = BLSPubKey;
 pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
-// move
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 pub enum Error {
     // TODO: Can we nest these errors in a `ValidationError` to group them?
