@@ -224,7 +224,7 @@ impl BidTx {
             .map_err(|e| (e, FullNetworkTx::Bid(self.clone())))?;
 
         // TODO do we still do this in JIT auction?
-        store_in_marketplace_state();
+        // store_in_marketplace_state();
 
         // TODO what do we return in good result?
         Ok(())
@@ -269,33 +269,22 @@ fn store_in_marketplace_state() {
 /// Nonce for special (auction) transactions
 struct Nonce(u64);
 
-pub fn mock_full_network_txs() -> Vec<FullNetworkTx> {
-    let x = FullNetworkTx::Bid(BidTx::default());
-    dbg!(&x);
-    vec![x]
+pub fn mock_full_network_txs(key: Option<EthKeyPair>) -> Vec<FullNetworkTx> {
+    // if no key is supplied, use `test_key_pair`. Since default `BidTxBody` is
+    // signed with `test_key_pair`, it will verify successfully
+    let key = key.unwrap_or_else(FeeAccount::test_key_pair);
+    vec![FullNetworkTx::Bid(BidTx::mock(key))]
 }
 
 mod test {
     use super::*;
 
     impl BidTx {
-        fn mock(key: EthKeyPair) -> Self {
+        pub fn mock(key: EthKeyPair) -> Self {
             let body = BidTxBody::default();
             let signature = body.sign(&key).unwrap();
             Self { signature, body }
         }
-    }
-
-    #[test]
-    fn test_default_bidtx_body() {
-        let bid = BidTxBody::default();
-        dbg!(&bid);
-    }
-
-    #[test]
-    fn test_mock_full_network_txs() {
-        let x = mock_full_network_txs();
-        dbg!(&x);
     }
 
     #[test]
