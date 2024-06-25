@@ -18,7 +18,7 @@ use time::OffsetDateTime;
 use vbs::version::Version;
 
 use crate::{
-    v0_1, v0_2, BlockMerkleCommitment, BuilderSignature, ChainConfig, FeeInfo, FeeMerkleCommitment,
+    v0_1, v0_3, BlockMerkleCommitment, BuilderSignature, ChainConfig, FeeInfo, FeeMerkleCommitment,
     Header, L1BlockInfo, L1Snapshot, Leaf, NodeState, NsTable, ResolvableChainConfig, SeqTypes,
     UpgradeType, ValidatedState,
 };
@@ -60,10 +60,6 @@ impl Committable for Header {
             .var_size_field("fee_merkle_tree_root", &fmt_bytes)
             .field("fee_info", self.fee_info().commit());
 
-        // if self.version() > v0_1::VERSION {
-        //     // Added in 0.2.
-        //     c = c.fixed_size_field("fee_recipient", self.fee_recipient().to_fixed_bytes());
-        // }
         c.finalize()
     }
 
@@ -86,6 +82,7 @@ impl Header {
         match self {
             Self::V1(data) => data.serialize(s),
             Self::V2(data) => data.serialize(s),
+            Self::V3(data) => data.serialize(s),
         }
     }
 
@@ -94,8 +91,8 @@ impl Header {
         v: Version,
     ) -> Result<Self, D::Error> {
         match (v.major, v.minor) {
-            (0, 1) => v0_1::Header::deserialize(d).map(Self::from),
-            (0, 2) => v0_2::Header::deserialize(d).map(Self::from),
+            (0, 1) | (0, 2) => v0_1::Header::deserialize(d).map(Self::from),
+            (0, 3) => v0_3::Header::deserialize(d).map(Self::from),
             _ => Err(D::Error::custom(format!("unsupported version {v}"))),
         }
     }
@@ -103,7 +100,8 @@ impl Header {
     pub fn version(&self) -> Version {
         match self {
             Self::V1(_) => Version { major: 0, minor: 1 },
-            Self::V2(_) => Version { major: 0, minor: 1 },
+            Self::V2(_) => Version { major: 0, minor: 2 },
+            Self::V3(_) => Version { major: 0, minor: 3 },
         }
     }
 }
@@ -116,6 +114,7 @@ macro_rules! field {
         match $obj {
             Self::V1(data) => &data.$name,
             Self::V2(data) => &data.$name,
+            Self::V3(data) => &data.$name,
         }
     };
 }
@@ -135,8 +134,11 @@ impl Header {
         chain_config: ChainConfig,
         version: Version,
     ) -> anyhow::Result<Self> {
-        let Version { major, minor } = version;
-        ensure!(major == 0, "Invalid major version {major}");
+        ensure!(
+            version.major == 0,
+            "Invalid major version {}",
+            version.major
+        );
 
         // Increment height.
         let parent_header = parent_leaf.block_header();
@@ -213,39 +215,21 @@ impl Header {
 
         let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
 
-        // TODO: >>>>>>>>
-        let header = match minor {
-            0 => Self::V1(v0_1::Header {
-                chain_config: chain_config.commit().into(),
-                height,
-                timestamp,
-                l1_head: l1.head,
-                l1_finalized: l1.finalized,
-                payload_commitment,
-                builder_commitment,
-                ns_table,
-                fee_merkle_tree_root,
-                block_merkle_tree_root,
-                fee_info,
-                builder_signature,
-            }),
-            _ => Self::V2(v0_2::Header {
-                chain_config: chain_config.commit().into(),
-                height,
-                timestamp,
-                l1_head: l1.head,
-                l1_finalized: l1.finalized,
-                payload_commitment,
-                builder_commitment,
-                ns_table,
-                fee_merkle_tree_root,
-                block_merkle_tree_root,
-                fee_info,
-                builder_signature,
-            }),
-        };
-
-        Ok(header)
+        Ok(Self::new(
+            chain_config.commit().into(),
+            height,
+            timestamp,
+            l1.head,
+            l1.finalized,
+            payload_commitment,
+            builder_commitment,
+            ns_table,
+            fee_merkle_tree_root,
+            block_merkle_tree_root,
+            fee_info,
+            builder_signature,
+            version,
+        ))
     }
 
     async fn get_chain_config(
@@ -532,26 +516,31 @@ impl BlockHeader<SeqTypes> for Header {
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
 
-        Self::V2(v0_2::Header {
-            // The genesis header needs to be completely deterministic, so we can't sample real
-            // timestamps or L1 values.
-            chain_config: instance_state.chain_config.into(),
-            height: 0,
-            timestamp: instance_state.genesis_header.timestamp.unix_timestamp(),
-            l1_finalized: instance_state.l1_genesis,
-            // Make sure the L1 head is not behind the finalized block.
-            l1_head: instance_state
+        let upgrades = instance_state.upgrades.last_key_value();
+
+        let version = match upgrades {
+            None => Version { major: 0, minor: 1 },
+            Some((version, _)) => *version,
+        };
+
+        Self::new(
+            instance_state.chain_config.into(),
+            0,
+            instance_state.genesis_header.timestamp.unix_timestamp(),
+            instance_state
                 .l1_genesis
                 .map(|block| block.number)
                 .unwrap_or_default(),
+            instance_state.l1_genesis,
             payload_commitment,
-            builder_commitment,
-            ns_table,
-            block_merkle_tree_root,
+            builder_commitment.clone(),
+            ns_table.clone(),
             fee_merkle_tree_root,
-            fee_info: FeeInfo::genesis(),
-            builder_signature: None,
-        })
+            block_merkle_tree_root,
+            FeeInfo::genesis(),
+            None,
+            version,
+        )
     }
 
     fn block_number(&self) -> u64 {
