@@ -476,8 +476,8 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
         // Combine the CDN and P2P networks
         let network = Arc::from(CombinedNetworks::new(
-            cdn_network.clone(),
-            p2p_network.clone(),
+            cdn_network,
+            p2p_network,
             Duration::from_secs(1),
         ));
         (Arc::clone(&network), network)
