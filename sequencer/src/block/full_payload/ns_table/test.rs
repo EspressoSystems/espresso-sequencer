@@ -3,10 +3,14 @@ use super::{
     NUM_NSS_BYTE_LEN,
 };
 use crate::{
-    block::uint_bytes::{u32_max_from_byte_len, usize_max_from_byte_len, usize_to_bytes},
-    NamespaceId,
+    block::{
+        test::ValidTest,
+        uint_bytes::{u32_max_from_byte_len, usize_max_from_byte_len, usize_to_bytes},
+    },
+    NamespaceId, Payload,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use hotshot::traits::BlockPayload;
 use rand::{Rng, RngCore};
 use NsTableValidationError::*;
 
@@ -22,7 +26,7 @@ fn random_valid() {
 }
 
 #[test]
-fn byte_len() {
+fn ns_table_byte_len() {
     setup_logging();
     setup_backtrace();
     let mut rng = jf_utils::test_rng();
@@ -55,6 +59,48 @@ fn byte_len() {
         }
         expect_invalid(ns_table, InvalidHeader);
     }
+}
+
+#[async_std::test]
+async fn payload_byte_len() {
+    setup_logging();
+    setup_backtrace();
+    let test_case = vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]];
+    let mut rng = jf_utils::test_rng();
+    let test = ValidTest::from_tx_lengths(test_case, &mut rng);
+    let mut block =
+        Payload::from_transactions(test.all_txs(), &Default::default(), &Default::default())
+            .await
+            .unwrap()
+            .0;
+    let payload_byte_len = block.byte_len();
+    let final_offset = block
+        .ns_table()
+        .read_ns_offset_unchecked(&block.ns_table().iter().last().unwrap());
+
+    // final offset matches payload byte len
+    block.ns_table().validate(&payload_byte_len).unwrap();
+
+    // Helper closure fn: modify the final offset of `block`'s namespace table
+    // by adding `diff` to it. Assert failure.
+    let mut modify_final_offset = |diff: isize| {
+        let ns_table_byte_len = block.ns_table().bytes.len();
+        let old_final_offset: isize = final_offset.try_into().unwrap();
+        let new_final_offset: usize = (old_final_offset + diff).try_into().unwrap();
+
+        block.ns_table_mut().bytes[ns_table_byte_len - NS_OFFSET_BYTE_LEN..]
+            .copy_from_slice(&usize_to_bytes::<NS_OFFSET_BYTE_LEN>(new_final_offset));
+        assert_eq!(
+            block.ns_table().validate(&payload_byte_len).unwrap_err(),
+            InvalidFinalOffset
+        );
+    };
+
+    // final offset exceeds payload byte len
+    modify_final_offset(1);
+
+    // final offset less than payload byte len
+    modify_final_offset(-1);
 }
 
 #[test]

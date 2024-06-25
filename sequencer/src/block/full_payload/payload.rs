@@ -302,3 +302,10 @@ impl hotshot_types::traits::block_contents::TestableBlock<SeqTypes> for Payload 
         self.len(&self.ns_table) as u64
     }
 }
+
+#[cfg(any(test, feature = "testing"))]
+impl Payload {
+    pub fn ns_table_mut(&mut self) -> &mut NsTable {
+        &mut self.ns_table
+    }
+}
