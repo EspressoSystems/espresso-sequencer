@@ -129,11 +129,7 @@ impl Committable for BidTxBody {
             .fixed_size_field("bid_amount", &self.bid_amount.to_fixed_bytes())
             .var_size_field("url", self.url.as_str().as_ref())
             .u64_field("slot", self.slot.0)
-            .var_size_field(
-                "bundle",
-                // TODO what is the correct way to serialize `Vec<NamespaceId>`
-                &bincode::serialize(&self.bundle.as_slice()).unwrap(),
-            );
+            .var_size_field("bundle", &bincode::serialize(&self.bundle).unwrap());
         comm.finalize()
     }
 }
