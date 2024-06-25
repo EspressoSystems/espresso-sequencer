@@ -1,8 +1,9 @@
 //! Serialization (and deserialization) of primitive unsigned integer types to
 //! (and from) an arbitrary fixed-length byte array.
 //!
-use paste::paste;
 use std::mem::size_of;
+
+use paste::paste;
 
 // Use an ugly macro because it's difficult or impossible to be generic over
 // primitive types such as `usize`, `u64`.
@@ -107,9 +108,10 @@ pub(super) use bytes_serde_impl;
 
 #[cfg(test)]
 mod test {
+    use std::mem::size_of;
+
     use fluent_asserter::prelude::*;
     use paste::paste;
-    use std::mem::size_of;
 
     macro_rules! uint_bytes_test_impl {
             ($T:ty) => {

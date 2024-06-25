@@ -1,14 +1,5 @@
 use std::ops::Add;
 
-use crate::{
-    constants::{BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT},
-    BlockMerkleTree, BuilderValidationError, ChainConfig, Delta, FeeAccount, FeeAmount, FeeError,
-    FeeInfo, FeeMerkleTree, NodeState, NsTableValidationError, ProposalValidationError,
-    ResolvableChainConfig, UpgradeType, ValidatedState,
-};
-
-use crate::{Header, Leaf, SeqTypes};
-
 use committable::Committable;
 use ethers::types::Address;
 use hotshot_types::{
@@ -19,16 +10,22 @@ use hotshot_types::{
     },
     vid::{VidCommon, VidSchemeType},
 };
-
 use itertools::Itertools;
-use jf_merkle_tree::MerkleTreeError;
 use jf_merkle_tree::{
     AppendableMerkleTreeScheme, ForgetableMerkleTreeScheme, LookupResult, MerkleCommitment,
-    MerkleTreeScheme, PersistentUniversalMerkleTreeScheme, UniversalMerkleTreeScheme,
+    MerkleTreeError, MerkleTreeScheme, PersistentUniversalMerkleTreeScheme,
+    UniversalMerkleTreeScheme,
 };
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
 use vbs::version::Version;
+
+use crate::{
+    constants::{BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT},
+    BlockMerkleTree, BuilderValidationError, ChainConfig, Delta, FeeAccount, FeeAmount, FeeError,
+    FeeInfo, FeeMerkleTree, Header, Leaf, NodeState, NsTableValidationError,
+    ProposalValidationError, ResolvableChainConfig, SeqTypes, UpgradeType, ValidatedState,
+};
 
 impl StateDelta for Delta {}
 

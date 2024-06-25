@@ -1,18 +1,21 @@
-use crate::{FeeInfo, L1Client, L1Snapshot};
+use std::{
+    cmp::{min, Ordering},
+    sync::Arc,
+    time::Duration,
+};
 
-use super::L1BlockInfo;
 use async_std::task::sleep;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use contract_bindings::fee_contract::FeeContract;
-use ethers::prelude::*;
-use ethers::prelude::{H256, U256};
+use ethers::prelude::{H256, U256, *};
 use futures::{
     join,
     stream::{self, StreamExt},
 };
-use std::cmp::Ordering;
-use std::{cmp::min, sync::Arc, time::Duration};
 use url::Url;
+
+use super::L1BlockInfo;
+use crate::{FeeInfo, L1Client, L1Snapshot};
 
 impl PartialOrd for L1BlockInfo {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {

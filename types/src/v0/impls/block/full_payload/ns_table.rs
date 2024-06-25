@@ -5,22 +5,19 @@
 //!
 //! See [`NsTable`] for a full specification of the binary format of a namespace
 //! table.
-use committable::{Commitment, Committable, RawCommitmentBuilder};
+use std::sync::Arc;
 
+use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::traits::EncodeBytes;
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-use std::sync::Arc;
 
 use crate::{
     constants::{NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN},
     v0::impls::block::uint_bytes::{
         bytes_serde_impl, u32_from_bytes, u32_to_bytes, usize_from_bytes, usize_to_bytes,
     },
-    NamespaceId, NsTable,
-    {
-        NsIndex, NsIter, NsPayloadRange, NsTableBuilder, NsTableValidationError, NumNss,
-        PayloadByteLen,
-    },
+    NamespaceId, NsIndex, NsIter, NsPayloadRange, NsTable, NsTableBuilder, NsTableValidationError,
+    NumNss, PayloadByteLen,
 };
 
 // Boilerplate: `#[serde(remote = "Self")]` allows invariant checking on

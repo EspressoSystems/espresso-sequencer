@@ -1,3 +1,5 @@
+use std::{collections::BTreeMap, fmt::Display, sync::Arc};
+
 use async_trait::async_trait;
 use committable::Committable;
 use hotshot_query_service::availability::QueryablePayload;
@@ -8,7 +10,6 @@ use hotshot_types::{
 };
 use jf_vid::VidScheme;
 use sha2::Digest;
-use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 
 use crate::{
     ChainConfig, Index, Iter, NamespaceId, NodeState, NsIndex, NsPayload, NsPayloadBuilder,

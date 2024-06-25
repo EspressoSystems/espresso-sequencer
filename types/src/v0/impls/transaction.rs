@@ -1,8 +1,8 @@
-use crate::{NamespaceId, Transaction};
 use committable::{Commitment, Committable};
 use hotshot_types::traits::block_contents::Transaction as HotShotTransaction;
-use serde::de::Error;
-use serde::{Deserialize, Deserializer};
+use serde::{de::Error, Deserialize, Deserializer};
+
+use crate::{NamespaceId, Transaction};
 
 impl From<u32> for NamespaceId {
     fn from(value: u32) -> Self {

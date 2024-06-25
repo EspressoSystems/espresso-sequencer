@@ -1,10 +1,3 @@
-use crate::{v0_1, v0_2, Header, Leaf, SeqTypes};
-use crate::{
-    BlockMerkleCommitment, BuilderSignature, ChainConfig, FeeInfo, FeeMerkleCommitment,
-    L1BlockInfo, L1Snapshot, NodeState, NsTable, ResolvableChainConfig, UpgradeType,
-    ValidatedState,
-};
-
 use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
@@ -23,6 +16,12 @@ use serde::{de::Deserializer, ser::Serializer, Deserialize, Serialize};
 use snafu::Snafu;
 use time::OffsetDateTime;
 use vbs::version::Version;
+
+use crate::{
+    v0_1, v0_2, BlockMerkleCommitment, BuilderSignature, ChainConfig, FeeInfo, FeeMerkleCommitment,
+    Header, L1BlockInfo, L1Snapshot, Leaf, NodeState, NsTable, ResolvableChainConfig, SeqTypes,
+    UpgradeType, ValidatedState,
+};
 
 impl Committable for Header {
     fn commit(&self) -> Commitment<Self> {

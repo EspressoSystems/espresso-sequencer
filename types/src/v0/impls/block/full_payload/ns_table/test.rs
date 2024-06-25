@@ -1,15 +1,17 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use rand::{Rng, RngCore};
 
-use crate::v0::impls::block::uint_bytes::{
-    u32_max_from_byte_len, usize_max_from_byte_len, usize_to_bytes,
+use crate::{
+    v0::impls::block::uint_bytes::{
+        u32_max_from_byte_len, usize_max_from_byte_len, usize_to_bytes,
+    },
+    v0_1::{
+        NsTableBuilder,
+        NsTableValidationError::{self, *},
+        NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
+    },
+    NamespaceId, NsTable,
 };
-use crate::v0_1::{
-    NsTableBuilder,
-    NsTableValidationError::{self, *},
-    NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
-};
-use crate::{NamespaceId, NsTable};
 
 #[test]
 fn random_valid() {

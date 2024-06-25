@@ -104,15 +104,17 @@
 //! It is possible that a `tx_table` table could indicate two distinct
 //! transactions whose byte ranges overlap, though no "honestly-prepared"
 //! `tx_table` would do this.
-use crate::v0::impls::block::{bytes_serde_impl, usize_from_bytes, usize_to_bytes};
+use std::ops::Range;
+
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 use crate::{
     constants::{NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
     traits::{FromNsPayloadBytes, NsPayloadBytesRange},
+    v0::impls::block::{bytes_serde_impl, usize_from_bytes, usize_to_bytes},
     NsPayloadBuilder, NsPayloadByteLen, NumTxs, NumTxsRange, NumTxsUnchecked, Transaction, TxIndex,
     TxIter, TxPayload, TxPayloadRange, TxTableEntries, TxTableEntriesRange,
 };
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::ops::Range;
 
 impl NumTxs {
     /// Returns the minimum of:

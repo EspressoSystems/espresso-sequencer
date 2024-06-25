@@ -1,5 +1,5 @@
-use crate::BlockSize;
-use crate::{ChainConfig, ChainId, ResolvableChainConfig};
+use std::str::FromStr;
+
 use bytesize::ByteSize;
 use committable::{Commitment, Committable};
 use derive_more::From;
@@ -9,7 +9,8 @@ use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
 use snafu::Snafu;
-use std::str::FromStr;
+
+use crate::{BlockSize, ChainConfig, ChainId, ResolvableChainConfig};
 
 impl_serde_from_string_or_integer!(ChainId);
 impl_to_fixed_bytes!(ChainId, U256);

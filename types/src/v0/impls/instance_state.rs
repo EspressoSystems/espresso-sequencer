@@ -1,7 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use hotshot_types::{constants::Base, traits::states::InstanceState};
-
 use vbs::version::{StaticVersionType, Version};
 
 use crate::{traits::StateCatchup, ChainConfig, L1Client, NodeState, Upgrade, ValidatedState};
@@ -78,17 +77,18 @@ impl InstanceState for NodeState {}
 
 #[cfg(any(test, feature = "testing"))]
 pub mod mock {
-    use crate::{
-        v0_1::{AccountQueryData, FeeAccountProof},
-        BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
-    };
+    use std::collections::HashMap;
 
-    use super::*;
     use async_trait::async_trait;
     use committable::Commitment;
     use hotshot_types::data::ViewNumber;
     use jf_merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeScheme};
-    use std::collections::HashMap;
+
+    use super::*;
+    use crate::{
+        v0_1::{AccountQueryData, FeeAccountProof},
+        BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
+    };
 
     #[derive(Debug, Clone, Default)]
     pub struct MockStateCatchup {

@@ -87,8 +87,7 @@ impl NsPayload {
 /// an unsized type and its owned counterpart (like `str` and `String`) in safe
 /// Rust? - Stack Overflow](https://stackoverflow.com/q/64977525)
 mod ns_payload_owned {
-    use std::borrow::Borrow;
-    use std::ops::Deref;
+    use std::{borrow::Borrow, ops::Deref};
 
     use crate::v0_1::{NsPayload, NsPayloadOwned};
 

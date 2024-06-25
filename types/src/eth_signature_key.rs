@@ -1,4 +1,8 @@
-use crate::FeeAccount;
+use std::{
+    fmt::{Display, Formatter},
+    hash::Hash,
+};
+
 use ethers::{
     core::k256::ecdsa::{SigningKey, VerifyingKey},
     signers::{
@@ -11,10 +15,8 @@ use ethers::{
 use hotshot_types::traits::signature_key::BuilderSignatureKey;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::{
-    fmt::{Display, Formatter},
-    hash::Hash,
-};
+
+use crate::FeeAccount;
 
 // Newtype because type doesn't implement Hash, Display, SerDe, Ord, PartialOrd
 #[derive(PartialEq, Eq, Clone)]
@@ -143,8 +145,9 @@ impl BuilderSignatureKey for FeeAccount {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use hotshot_types::traits::signature_key::BuilderSignatureKey;
+
+    use super::*;
 
     impl EthKeyPair {
         pub fn for_test() -> Self {
