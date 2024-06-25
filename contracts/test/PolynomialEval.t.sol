@@ -145,4 +145,30 @@ contract PolynomialEval_evalDataGen_Test is Test {
             );
         }
     }
+
+    /// @dev Test edge cases when zeta is one of the elements in the evaluation domain.
+    function test_evaluatePiPolyForDomainElements() external view {
+        uint256 size = 2 ** 5;
+        Poly.EvalDomain memory domain = Poly.newEvalDomain(size);
+
+        uint256[] memory elements = Poly.domainElements(domain, size);
+        uint256 piLen = 10;
+        uint256[] memory publicInputs = new uint256[](piLen);
+        // arbitrarily pick public input length = 10, and fill in arbitrary values
+        for (uint256 i = 0; i < piLen; i++) {
+            publicInputs[i] = 2 ** i;
+        }
+
+        for (uint256 i = 0; i < size; i++) {
+            uint256 zeta = elements[i];
+            uint256 vanishEval = Poly.evaluateVanishingPoly(domain, zeta);
+            if (i < piLen) {
+                assertEq(
+                    Poly.evaluatePiPoly(domain, publicInputs, zeta, vanishEval), publicInputs[i]
+                );
+            } else {
+                assertEq(Poly.evaluatePiPoly(domain, publicInputs, zeta, vanishEval), 0);
+            }
+        }
+    }
 }
