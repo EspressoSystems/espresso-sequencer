@@ -40,7 +40,6 @@ use hotshot_orchestrator::{
     client::{BenchResults, OrchestratorClient, ValidatorArgs},
     config::{
         BuilderType, CombinedNetworkConfig, NetworkConfig, NetworkConfigFile, NetworkConfigSource,
-        WebServerConfig,
     },
 };
 use hotshot_testing::block_builder::{
@@ -168,22 +167,6 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (NetworkConfig<TYPES:
                 .required(false),
         )
         .arg(
-            Arg::new("webserver_url")
-                .short('w')
-                .long("webserver_url")
-                .value_name("URL")
-                .help("Sets the url of the webserver")
-                .required(false),
-        )
-        .arg(
-            Arg::new("da_webserver_url")
-                .short('a')
-                .long("da_webserver_url")
-                .value_name("URL")
-                .help("Sets the url of the da webserver")
-                .required(false),
-        )
-        .arg(
             Arg::new("fixed_leader_for_gpuvid")
                 .short('f')
                 .long("fixed_leader_for_gpuvid")
@@ -253,20 +236,6 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (NetworkConfig<TYPES:
     }
     if let Some(orchestrator_url_string) = matches.get_one::<String>("orchestrator_url") {
         orchestrator_url = Url::parse(orchestrator_url_string).unwrap();
-    }
-    if let Some(webserver_url_string) = matches.get_one::<String>("webserver_url") {
-        let updated_web_server_config = WebServerConfig {
-            url: Url::parse(webserver_url_string).unwrap(),
-            wait_between_polls: config.web_server_config.unwrap().wait_between_polls,
-        };
-        config.web_server_config = Some(updated_web_server_config);
-    }
-    if let Some(da_webserver_url_string) = matches.get_one::<String>("da_webserver_url") {
-        let updated_da_web_server_config = WebServerConfig {
-            url: Url::parse(da_webserver_url_string).unwrap(),
-            wait_between_polls: config.da_web_server_config.unwrap().wait_between_polls,
-        };
-        config.da_web_server_config = Some(updated_da_web_server_config);
     }
     if let Some(builder_type) = matches.get_one::<BuilderType>("builder") {
         config.builder = *builder_type;

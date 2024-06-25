@@ -76,24 +76,9 @@ txn_in_block = 100
 blocks_per_second = 1
 txn_size = { start = 20, end = 100 }
 
-[web_server_config]
-url = "http://localhost:9000"
-
-[da_web_server_config]
-url = "http://localhost:9001"
-
 [combined_network_config.delay_duration]
 secs = 1
 nanos = 0
-
-[web_server_config.wait_between_polls]
-secs = 0
-nanos = 10_000_000
-
-[da_web_server_config.wait_between_polls]
-secs = 0
-nanos = 10_000_000
-
 
 [config.view_sync_timeout]
 secs = 2
@@ -103,8 +88,6 @@ nanos = 0
 secs = 0
 nanos = 200_000_000
 
-# TODO (Keyao) Clean up configuration parameters.
-# <https://github.com/EspressoSystems/HotShot/issues/1823>
 [config.builder_timeout]
 secs = 10
 nanos = 0

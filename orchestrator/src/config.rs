@@ -191,10 +191,6 @@ pub struct NetworkConfig<KEY: SignatureKey> {
     pub libp2p_config: Option<Libp2pConfig>,
     /// the hotshot config
     pub config: HotShotConfig<KEY>,
-    /// the webserver config
-    pub web_server_config: Option<WebServerConfig>,
-    /// the data availability web server config
-    pub da_web_server_config: Option<WebServerConfig>,
     /// The address for the Push CDN's "marshal", A.K.A. load balancer
     pub cdn_marshal_address: Option<String>,
     /// combined network config
@@ -426,8 +422,6 @@ impl<K: SignatureKey> Default for NetworkConfig<K> {
             config: HotShotConfigFile::default().into(),
             start_delay_seconds: 60,
             key_type_name: std::any::type_name::<K>().to_string(),
-            web_server_config: None,
-            da_web_server_config: None,
             cdn_marshal_address: None,
             combined_network_config: None,
             next_view_timeout: 10,
@@ -481,12 +475,6 @@ pub struct NetworkConfigFile<KEY: SignatureKey> {
     /// The address of the Push CDN's "marshal", A.K.A. load balancer
     #[serde(default)]
     pub cdn_marshal_address: Option<String>,
-    /// the webserver config
-    #[serde(default)]
-    pub web_server_config: Option<WebServerConfig>,
-    /// the data availability web server config
-    #[serde(default)]
-    pub da_web_server_config: Option<WebServerConfig>,
     /// combined network config
     #[serde(default)]
     pub combined_network_config: Option<CombinedNetworkConfig>,
@@ -534,8 +522,6 @@ impl<K: SignatureKey> From<NetworkConfigFile<K>> for NetworkConfig<K> {
             key_type_name: std::any::type_name::<K>().to_string(),
             start_delay_seconds: val.start_delay_seconds,
             cdn_marshal_address: val.cdn_marshal_address,
-            web_server_config: val.web_server_config,
-            da_web_server_config: val.da_web_server_config,
             combined_network_config: val.combined_network_config,
             commit_sha: String::new(),
             builder: val.builder,
@@ -713,7 +699,7 @@ impl<KEY: SignatureKey> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY> {
     }
 }
 /// default number of rounds to run
-pub const ORCHESTRATOR_DEFAULT_NUM_ROUNDS: usize = 10;
+pub const ORCHESTRATOR_DEFAULT_NUM_ROUNDS: usize = 100;
 /// default number of transactions per round
 pub const ORCHESTRATOR_DEFAULT_TRANSACTIONS_PER_ROUND: usize = 10;
 /// default size of transactions
