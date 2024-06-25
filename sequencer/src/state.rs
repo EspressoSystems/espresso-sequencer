@@ -1,8 +1,13 @@
 use crate::{
-    api::data_source::CatchupDataSource, block::NsTableValidationError, catchup::SqlStateCatchup,
-    chain_config::BlockSize, chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair,
-    genesis::UpgradeType, persistence::ChainConfigPersistence, ChainConfig, Header, Leaf,
-    NodeState, SeqTypes,
+    api::data_source::CatchupDataSource,
+    auction::{BidTx, ExecutionError, FullNetworkTx},
+    block::NsTableValidationError,
+    catchup::SqlStateCatchup,
+    chain_config::{BlockSize, ResolvableChainConfig},
+    eth_signature_key::EthKeyPair,
+    genesis::UpgradeType,
+    persistence::ChainConfigPersistence,
+    ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
@@ -77,6 +82,9 @@ pub struct ValidatedState {
     /// Fee Merkle Tree
     pub fee_merkle_tree: FeeMerkleTree,
     pub chain_config: ResolvableChainConfig,
+    // TODO
+    // /// Map of Marketplace Results.
+    // slot_map: HashMap<Slot, MarketplaceResults>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -767,6 +775,10 @@ impl ValidatedState {
         let mut validated_state =
             apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
 
+        // TODO I guess we will need deltas for this?
+        apply_full_transactions(&mut validated_state, proposed_header.get_full_network_txs())
+            .map_err(|e| anyhow::anyhow!("Error: {e:?}"))?;
+
         charge_fee(
             &mut validated_state,
             &mut delta,
@@ -940,6 +952,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         if parent_leaf.view_number().u64() % 10 == 0 {
             tracing::info!("validated and applied new header");
         }
+
         Ok((validated_state, delta))
     }
     /// Construct the state with the given block header.
@@ -971,6 +984,16 @@ impl HotShotState<SeqTypes> for ValidatedState {
     fn genesis(instance: &Self::Instance) -> (Self, Self::Delta) {
         (instance.genesis_state.clone(), Delta::default())
     }
+}
+
+fn apply_full_transactions(
+    validated_state: &mut ValidatedState,
+    full_network_txs: Vec<FullNetworkTx>,
+) -> Result<(), (ExecutionError, FullNetworkTx)> {
+    dbg!(&full_network_txs);
+    full_network_txs
+        .iter()
+        .try_for_each(|tx| tx.execute(validated_state))
 }
 
 // Required for TestableState
@@ -1091,6 +1114,16 @@ impl From<DepositFilter> for FeeInfo {
         Self {
             amount: item.amount.into(),
             account: item.user.into(),
+        }
+    }
+}
+
+impl From<BidTx> for FeeInfo {
+    fn from(bid: BidTx) -> Self {
+        let bid = bid.body();
+        Self {
+            amount: bid.amount(),
+            account: bid.account(),
         }
     }
 }
@@ -1467,6 +1500,8 @@ impl FeeAccountProof {
 
 #[cfg(test)]
 mod test {
+    use crate::auction::mock_full_network_txs;
+
     use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use hotshot_types::vid::vid_scheme;
@@ -1630,6 +1665,20 @@ mod test {
             FeeError::MerkleTreeError(MerkleTreeError::ForgottenLeaf),
             state.charge_fee(fee_info, dst).unwrap_err()
         );
+    }
+
+    #[test]
+    fn test_apply_full_tx() {
+        let mut state = ValidatedState::default();
+        let txs = mock_full_network_txs(None);
+        // default key can be verified. The same signed by mock tx
+        apply_full_transactions(&mut state, txs).unwrap();
+
+        // should be a different key than that generated in the mock
+        let key = FeeAccount::generated_from_seed_indexed([1; 32], 0).1;
+        let invalid = mock_full_network_txs(Some(key));
+        let (err, _) = apply_full_transactions(&mut state, invalid).unwrap_err();
+        assert_eq!(ExecutionError::InvalidSignature, err);
     }
 
     #[test]
