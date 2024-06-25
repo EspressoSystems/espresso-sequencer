@@ -767,6 +767,19 @@ impl ValidatedState {
         let mut validated_state =
             apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
 
+        // TODO we will need something similar to `charge_fee` but
+        // that charges `BidTx` to the account. We will also validate
+        // against bid phase time constraints.
+        //
+        // According to discussion we may receive multiple bids per
+        // header (up to configurable maximum), so this will likely be
+        // represented as `Vec<BidTx>` where `BidTx` holds account and
+        // amount.
+        //
+        // Note that different from `charge_fee` fee for the bid (sent
+        // to fee_recipient) whilch the bid itself will be held in an
+        // escrow account.
+        // charge_bids(&mut validated_state, bids_vec, fee_recipient, escrow_account);
         charge_fee(
             &mut validated_state,
             &mut delta,
