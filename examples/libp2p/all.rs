@@ -1,4 +1,4 @@
-//! A example program using libp2p
+//! An example program using libp2p
 /// types used for this example
 pub mod types;
 

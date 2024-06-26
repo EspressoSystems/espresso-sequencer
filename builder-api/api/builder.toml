@@ -74,7 +74,7 @@ Returns application-specific block header type
 [route.builder_address]
 PATH = ["builderaddress"]
 DOC = """
-Get the builder address.
+Get the builder's address.
 
 Returns the builder's public key
 """

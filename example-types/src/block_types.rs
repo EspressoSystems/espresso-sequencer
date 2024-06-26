@@ -44,7 +44,7 @@ impl TryFrom<Vec<u8>> for TestTransaction {
 }
 
 impl TestTransaction {
-    /// Construct new transaction
+    /// Construct a new transaction
     ///
     /// # Panics
     /// If `bytes.len()` > `u32::MAX`

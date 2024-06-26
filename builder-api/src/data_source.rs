@@ -40,7 +40,7 @@ pub trait BuilderDataSource<TYPES: NodeType> {
         signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
     ) -> Result<AvailableBlockHeaderInput<TYPES>, BuildError>;
 
-    /// To get the builder address
+    /// To get the builder's address
     async fn builder_address(&self) -> Result<TYPES::BuilderSignatureKey, BuildError>;
 }
 

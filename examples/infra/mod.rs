@@ -100,7 +100,7 @@ pub fn read_orchestrator_init_config<TYPES: NodeType>() -> (NetworkConfig<TYPES:
     // assign default setting
     let mut orchestrator_url = Url::parse("http://localhost:4444").unwrap();
     let mut args = ConfigArgs::default();
-    // start reading from command line
+    // start reading from the command line
     let matches = Command::new("orchestrator")
         .arg(
             Arg::new("config_file")

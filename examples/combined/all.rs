@@ -1,4 +1,4 @@
-//! A example program using both the web server and libp2p
+//! An example program using both the web server and libp2p
 /// types used for this example
 pub mod types;
 
