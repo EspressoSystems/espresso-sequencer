@@ -272,7 +272,7 @@ impl ToTraversalPath<256> for FeeAccount {
 
 #[allow(dead_code)]
 impl FeeAccountProof {
-    pub(crate) fn presence(
+    pub fn presence(
         pos: FeeAccount,
         proof: <FeeMerkleTree as MerkleTreeScheme>::MembershipProof,
     ) -> Self {
@@ -282,7 +282,7 @@ impl FeeAccountProof {
         }
     }
 
-    pub(crate) fn absence(
+    pub fn absence(
         pos: FeeAccount,
         proof: <FeeMerkleTree as UniversalMerkleTreeScheme>::NonMembershipProof,
     ) -> Self {

@@ -3,10 +3,10 @@
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{sync::Arc, task::sleep};
 use clap::Parser;
+use espresso_types::{Header, L1BlockInfo};
 use ethers::prelude::*;
 use futures::future::join_all;
 use itertools::Itertools;
-use sequencer::{Header, L1BlockInfo};
 use std::cmp::max;
 use std::process::exit;
 use std::time::Duration;
@@ -76,31 +76,31 @@ async fn verify_header<Ver: StaticVersionType>(
 
     let mut ok = true;
 
-    if !opt.no_timestamps && header.timestamp < parent.timestamp {
+    if !opt.no_timestamps && header.timestamp() < parent.timestamp() {
         tracing::error!(
             "header {height} has decreasing timestamp: {} -> {}",
-            parent.timestamp,
-            header.timestamp
+            parent.timestamp(),
+            header.timestamp()
         );
         ok = false;
     }
-    if !opt.no_l1_heads && header.l1_head < parent.l1_head {
+    if !opt.no_l1_heads && header.l1_head() < parent.l1_head() {
         tracing::error!(
             "header {height} has decreasing L1 head: {} -> {}",
-            parent.l1_head,
-            header.l1_head
+            parent.l1_head(),
+            header.l1_head()
         );
         ok = false;
     }
-    if !opt.no_l1_finalized && header.l1_finalized < parent.l1_finalized {
+    if !opt.no_l1_finalized && header.l1_finalized() < parent.l1_finalized() {
         tracing::error!(
             "header {height} has decreasing L1 finalized: {:?} -> {:?}",
-            parent.l1_finalized,
-            header.l1_finalized
+            parent.l1_finalized(),
+            header.l1_finalized()
         );
         ok = false;
 
-        if let (Some(l1), Some(l1_finalized)) = (l1, &header.l1_finalized) {
+        if let (Some(l1), Some(l1_finalized)) = (l1, &header.l1_finalized()) {
             let l1_block = get_l1_block(l1, l1_finalized.number).await;
             if *l1_finalized != l1_block {
                 tracing::error!(

@@ -7,9 +7,9 @@ use std::{sync::Arc, time::Duration};
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct L1BlockInfo {
-    pub(crate) number: u64,
-    pub(crate) timestamp: U256,
-    pub(crate) hash: H256,
+    pub number: u64,
+    pub timestamp: U256,
+    pub hash: H256,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Hash, PartialEq, Eq)]

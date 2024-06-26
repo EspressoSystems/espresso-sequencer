@@ -1,5 +1,6 @@
 //! Sequencer-specific API endpoint handlers.
 
+use espresso_types::NsProof;
 use serde::de::Error as _;
 use std::{
     collections::{BTreeSet, HashMap},
@@ -13,12 +14,12 @@ use super::{
     },
     StorageState,
 };
-use crate::{
-    block::NsProof, network, persistence::SequencerPersistence, NamespaceId, SeqTypes, Transaction,
-};
+use crate::{network, SeqTypes, SequencerPersistence};
 use anyhow::Result;
 use async_std::sync::{Arc, RwLock};
 use committable::Committable;
+use espresso_types::NamespaceId;
+use espresso_types::Transaction;
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},

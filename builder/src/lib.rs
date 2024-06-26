@@ -1,4 +1,7 @@
 #![allow(unused_imports)]
+use espresso_types::traits::PersistenceOptions;
+use espresso_types::traits::SequencerPersistence;
+use espresso_types::SeqTypes;
 use ethers::{
     core::k256::ecdsa::SigningKey,
     signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
@@ -17,10 +20,14 @@ use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
     config::NetworkConfig,
 };
+use hotshot_types::event::LeafInfo;
+use hotshot_types::traits::block_contents::{
+    vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
+};
+use hotshot_types::utils::BuilderCommitment;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     constants::Base,
-    event::Event,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{election::Membership, metrics::Metrics},
@@ -45,13 +52,9 @@ use sequencer::state_signature::StakeTableCommitmentType;
 use sequencer::{
     catchup::StatePeers,
     context::{Consensus, SequencerContext},
-    l1_client::L1Client,
     network,
-    persistence::SequencerPersistence,
-    state::FeeAccount,
-    state::ValidatedState,
     state_signature::{static_stake_table_commitment, StateSigner},
-    L1Params, NetworkParams, Node, NodeState, PrivKey, PubKey, SeqTypes,
+    L1Params, NetworkParams, Node,
 };
 use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
@@ -94,6 +97,10 @@ pub mod testing {
     use super::*;
     use committable::Committable;
     use core::num;
+    use espresso_types::{
+        ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey, PubKey, Transaction,
+        ValidatedState,
+    };
     use ethers::{
         types::spoof::State,
         utils::{Anvil, AnvilInstance},
@@ -140,11 +147,7 @@ pub mod testing {
             node_implementation::ConsensusTime,
         },
     };
-    use sequencer::{
-        catchup::StateCatchup, eth_signature_key::EthKeyPair, persistence::PersistenceOptions,
-        state_signature::StateSignatureMemStorage, ChainConfig,
-    };
-    use sequencer::{Event, Transaction};
+    use sequencer::state_signature::StateSignatureMemStorage;
     use std::{collections::HashSet, num::NonZeroUsize, time::Duration};
 
     use crate::non_permissioned::BuilderConfig;
@@ -660,21 +663,17 @@ mod test {
 
     use async_std::stream::IntoStream;
     use clap::builder;
+    use espresso_types::{Header, NodeState, Payload, ValidatedState};
     use ethers::providers::Quorum;
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
 
     use hotshot_builder_api::block_info::AvailableBlockData;
     use hotshot_builder_core::service::GlobalState;
-    use hotshot_types::event::LeafInfo;
-    use hotshot_types::traits::block_contents::{
-        vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
-    };
-    use hotshot_types::utils::BuilderCommitment;
-    use sequencer::block::Payload;
+
+    use sequencer::empty_builder_commitment;
     use sequencer::persistence::no_storage::{self, NoStorage};
     use sequencer::persistence::sql;
-    use sequencer::{empty_builder_commitment, Header};
     use testing::{wait_for_decide_on_handle, HotShotTestConfig};
 
     use es_version::SequencerVersion;
@@ -738,18 +737,18 @@ mod test {
             // the fields which should be monotonic are.
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
                 let header = leaf.block_header().clone();
-                if header.height == 0 {
+                if header.height() == 0 {
                     parent = header;
                     continue;
                 }
-                assert_eq!(header.height, parent.height + 1);
-                assert!(header.timestamp >= parent.timestamp);
-                assert!(header.l1_head >= parent.l1_head);
-                assert!(header.l1_finalized >= parent.l1_finalized);
+                assert_eq!(header.height(), parent.height() + 1);
+                assert!(header.timestamp() >= parent.timestamp());
+                assert!(header.l1_head() >= parent.l1_head());
+                assert!(header.l1_finalized() >= parent.l1_finalized());
                 parent = header;
             }
 
-            if parent.height >= success_height {
+            if parent.height() >= success_height {
                 break;
             }
         }

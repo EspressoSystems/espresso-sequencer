@@ -1,9 +1,12 @@
 //! Mock implementation of persistence, for testing.
 #![cfg(any(test, feature = "testing"))]
 
-use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Leaf, SeqTypes, ViewNumber};
+use crate::{SeqTypes, ViewNumber};
 use async_trait::async_trait;
+use espresso_types::{
+    traits::{PersistenceOptions, SequencerPersistence},
+    Leaf, NetworkConfig,
+};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, VidDisperseShare},

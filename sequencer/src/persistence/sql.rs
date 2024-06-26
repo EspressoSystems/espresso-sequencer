@@ -1,9 +1,4 @@
-use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{
-    catchup::{SqlStateCatchup, StateCatchup},
-    options::parse_duration,
-    Leaf, SeqTypes, ViewNumber,
-};
+use crate::{catchup::SqlStateCatchup, options::parse_duration, SeqTypes, ViewNumber};
 use anyhow::Context;
 use async_std::{
     stream::StreamExt,
@@ -12,6 +7,9 @@ use async_std::{
 use async_trait::async_trait;
 use clap::Parser;
 use derivative::Derivative;
+use espresso_types::traits::SequencerPersistence;
+use espresso_types::traits::StateCatchup;
+use espresso_types::{traits::PersistenceOptions, Leaf, NetworkConfig};
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_query_service::data_source::{
     storage::{

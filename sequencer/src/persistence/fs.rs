@@ -1,9 +1,9 @@
-use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Leaf, SeqTypes, ViewNumber};
+use crate::ViewNumber;
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use clap::Parser;
-
+use espresso_types::traits::{PersistenceOptions, SequencerPersistence};
+use espresso_types::{Leaf, NetworkConfig, SeqTypes};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, VidDisperseShare},

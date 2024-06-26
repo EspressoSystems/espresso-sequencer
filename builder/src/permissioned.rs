@@ -48,6 +48,10 @@ use async_std::{
     sync::Arc,
     task::{spawn, JoinHandle},
 };
+use espresso_types::{
+    eth_signature_key::EthKeyPair, traits::SequencerPersistence, L1Client, NodeState, Payload,
+    PubKey, SeqTypes, ValidatedState,
+};
 use hotshot::traits::BlockPayload;
 use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
@@ -69,18 +73,12 @@ use jf_signature::bls_over_bn254::VerKey;
 use sequencer::{
     catchup::{mock::MockStateCatchup, StatePeers},
     context::{Consensus, SequencerContext},
-    eth_signature_key::EthKeyPair,
     genesis::L1Finalized,
-    l1_client::L1Client,
     network,
     network::libp2p::split_off_peer_id,
-    persistence::SequencerPersistence,
-    state::FeeAccount,
-    state::ValidatedState,
     state_signature::StakeTableCommitmentType,
     state_signature::{static_stake_table_commitment, StateSigner},
-    ChainConfig, Genesis, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey,
-    SeqTypes,
+    Genesis, L1Params, NetworkParams, Node,
 };
 use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
@@ -556,6 +554,7 @@ mod test {
     use async_lock::RwLock;
     use async_std::task;
     use es_version::SequencerVersion;
+    use espresso_types::{FeeAccount, NamespaceId, Transaction};
     use hotshot_builder_api::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
@@ -578,10 +577,7 @@ mod test {
             signature_key::SignatureKey,
         },
     };
-    use sequencer::{
-        persistence::no_storage::{self, NoStorage},
-        NamespaceId, Payload, Transaction,
-    };
+    use sequencer::persistence::no_storage::{self, NoStorage};
     use std::time::Duration;
     use surf_disco::Client;
 
@@ -726,7 +722,7 @@ mod test {
             }
         }
 
-        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3]);
+        let txn = Transaction::new(NamespaceId::from(1_u32), vec![1, 2, 3]);
         match builder_client
             .post::<()>("txn_submit/submit")
             .body_json(&txn)

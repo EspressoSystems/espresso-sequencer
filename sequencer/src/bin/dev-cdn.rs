@@ -10,13 +10,13 @@ use cdn_broker::{Broker, Config as BrokerConfig};
 use cdn_marshal::{Config as MarshalConfig, Marshal};
 use clap::Parser;
 
+use espresso_types::SeqTypes;
 use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::traits::signature_key::SignatureKey;
 use portpicker::pick_unused_port;
 use rand::rngs::StdRng;
 use rand::{RngCore, SeedableRng};
 use sequencer::network::cdn::{TestingDef, WrappedSignatureKey};
-use sequencer::SeqTypes;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]

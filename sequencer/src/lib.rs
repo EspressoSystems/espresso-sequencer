@@ -1,11 +1,8 @@
 pub mod api;
-pub mod block;
 pub mod catchup;
-mod chain_config;
 pub mod context;
-pub mod eth_signature_key;
 pub mod genesis;
-mod header;
+
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
@@ -15,36 +12,30 @@ mod reference_tests;
 
 use anyhow::Context;
 use async_std::sync::RwLock;
-use async_trait::async_trait;
-use catchup::{StateCatchup, StatePeers};
+use catchup::StatePeers;
 use context::SequencerContext;
+use espresso_types::traits::PersistenceOptions;
+use espresso_types::{L1Client, NodeState, SeqTypes, ValidatedState};
 use ethers::types::U256;
 #[cfg(feature = "libp2p")]
 use futures::FutureExt;
-use genesis::{GenesisHeader, L1Finalized, Upgrade};
+use genesis::L1Finalized;
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
-use l1_client::L1Client;
-
 use libp2p::Multiaddr;
 use network::libp2p::split_off_peer_id;
-use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
-pub mod l1_client;
 pub mod persistence;
 pub mod state;
-pub mod transaction;
 
 use derivative::Derivative;
+use espresso_types::traits::SequencerPersistence;
 use hotshot::{
-    traits::{
-        election::static_committee::GeneralStaticCommittee,
-        implementations::{
-            derive_libp2p_peer_id, CdnMetricsValue, KeyPair, MemoryNetwork, PushCdnNetwork, Topic,
-            WrappedSignatureKey,
-        },
+    traits::implementations::{
+        derive_libp2p_peer_id, CdnMetricsValue, KeyPair, MemoryNetwork, PushCdnNetwork, Topic,
+        WrappedSignatureKey,
     },
     types::SignatureKey,
     Networks,
@@ -54,30 +45,22 @@ use hotshot_orchestrator::{
     config::NetworkConfig,
 };
 use hotshot_types::{
-    consensus::CommitmentMap,
-    constants::Base,
-    data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
-    event::HotShotAction,
+    data::ViewNumber,
     light_client::{StateKeyPair, StateSignKey},
-    message::Proposal,
     signature_key::{BLSPrivKey, BLSPubKey},
-    simple_certificate::QuorumCertificate,
     traits::{
         metrics::Metrics,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
         signature_key::{BuilderSignatureKey, StakeTableEntryType},
-        states::InstanceState,
-        storage::Storage,
     },
-    utils::{BuilderCommitment, View},
+    utils::BuilderCommitment,
     ValidatorConfig,
 };
-use persistence::{PersistenceOptions, SequencerPersistence};
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
+
 use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc};
-use vbs::version::{StaticVersionType, Version};
+use vbs::version::StaticVersionType;
 
 #[cfg(feature = "libp2p")]
 use std::time::Duration;
@@ -85,14 +68,9 @@ use std::time::Duration;
 #[cfg(feature = "libp2p")]
 use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
 
-pub use block::Payload;
-pub use chain_config::ChainConfig;
 pub use genesis::Genesis;
-pub use header::Header;
-pub use l1_client::L1BlockInfo;
+
 pub use options::Options;
-pub use state::ValidatedState;
-pub use transaction::{NamespaceId, Transaction};
 pub mod network;
 
 /// The Sequencer node is generic over the hotshot CommChannel.
@@ -115,182 +93,10 @@ impl<N: network::Type, P: SequencerPersistence> Clone for Node<N, P> {
     }
 }
 
-#[derive(
-    Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,
-)]
-pub struct SeqTypes;
-
-pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
-pub type Event = hotshot::types::Event<SeqTypes>;
-
-pub type PubKey = BLSPubKey;
-pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
-
 impl<N: network::Type, P: SequencerPersistence> NodeImplementation<SeqTypes> for Node<N, P> {
     type QuorumNetwork = N::QuorumChannel;
     type DaNetwork = N::DAChannel;
     type Storage = Arc<RwLock<P>>;
-}
-
-#[async_trait]
-impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
-    async fn append_vid(
-        &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        self.write().await.append_vid(proposal).await
-    }
-
-    async fn append_da(
-        &self,
-        proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        self.write().await.append_da(proposal).await
-    }
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
-        self.write().await.record_action(view, action).await
-    }
-    async fn update_high_qc(&self, _high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    async fn update_undecided_state(
-        &self,
-        leaves: CommitmentMap<Leaf>,
-        state: BTreeMap<ViewNumber, View<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        self.write()
-            .await
-            .update_undecided_state(leaves, state)
-            .await
-    }
-
-    async fn append_proposal(
-        &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        self.write().await.append_quorum_proposal(proposal).await
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct NodeState {
-    pub node_id: u64,
-    pub chain_config: ChainConfig,
-    pub l1_client: L1Client,
-    pub peers: Arc<dyn StateCatchup>,
-    pub genesis_header: GenesisHeader,
-    pub genesis_state: ValidatedState,
-    pub l1_genesis: Option<L1BlockInfo>,
-    pub upgrades: BTreeMap<Version, Upgrade>,
-    pub current_version: Version,
-}
-
-impl NodeState {
-    pub fn new(
-        node_id: u64,
-        chain_config: ChainConfig,
-        l1_client: L1Client,
-        catchup: impl StateCatchup + 'static,
-    ) -> Self {
-        Self {
-            node_id,
-            chain_config,
-            l1_client,
-            peers: Arc::new(catchup),
-            genesis_header: Default::default(),
-            genesis_state: ValidatedState {
-                chain_config: chain_config.into(),
-                ..Default::default()
-            },
-            l1_genesis: None,
-            upgrades: Default::default(),
-            current_version: Base::VERSION,
-        }
-    }
-
-    #[cfg(any(test, feature = "testing"))]
-    pub fn mock() -> Self {
-        Self::new(
-            0,
-            ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
-            catchup::mock::MockStateCatchup::default(),
-        )
-    }
-
-    pub fn with_l1(mut self, l1_client: L1Client) -> Self {
-        self.l1_client = l1_client;
-        self
-    }
-
-    pub fn with_genesis(mut self, state: ValidatedState) -> Self {
-        self.genesis_state = state;
-        self
-    }
-
-    pub fn with_chain_config(mut self, cfg: ChainConfig) -> Self {
-        self.chain_config = cfg;
-        self
-    }
-
-    pub fn with_upgrades(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
-        self.upgrades = upgrades;
-        self
-    }
-}
-
-// This allows us to turn on `Default` on InstanceState trait
-// which is used in `HotShot` by `TestBuilderImplementation`.
-#[cfg(any(test, feature = "testing"))]
-impl Default for NodeState {
-    fn default() -> Self {
-        Self::new(
-            1u64,
-            ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
-            catchup::mock::MockStateCatchup::default(),
-        )
-    }
-}
-
-impl InstanceState for NodeState {}
-
-impl NodeType for SeqTypes {
-    type Time = ViewNumber;
-    type BlockHeader = Header;
-    type BlockPayload = Payload;
-    type SignatureKey = PubKey;
-    type Transaction = Transaction;
-    type InstanceState = NodeState;
-    type ValidatedState = ValidatedState;
-    type Membership = GeneralStaticCommittee<Self, PubKey>;
-    type BuilderSignatureKey = FeeAccount;
-}
-
-#[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
-pub enum Error {
-    // TODO: Can we nest these errors in a `ValidationError` to group them?
-
-    // Parent state commitment of block doesn't match current state commitment
-    IncorrectParent,
-
-    // New view number isn't strictly after current view
-    IncorrectView,
-
-    // Genesis block either has zero or more than one transaction
-    GenesisWrongSize,
-
-    // Genesis transaction not present in genesis block
-    MissingGenesis,
-
-    // Genesis transaction in non-genesis block
-    UnexpectedGenesis,
-
-    // Merkle tree error
-    MerkleTreeError { error: String },
-
-    BlockBuilding,
 }
 
 #[derive(Clone, Debug)]
@@ -564,16 +370,19 @@ pub mod testing {
     use super::*;
     use crate::{
         catchup::mock::MockStateCatchup,
-        eth_signature_key::EthKeyPair,
         persistence::no_storage::{self, NoStorage},
     };
     use api::test_helpers::TestNetworkUpgrades;
     use committable::Committable;
+    use espresso_types::{
+        eth_signature_key::EthKeyPair, v0_3::StateCatchup, ChainConfig, Event, FeeAccount, PubKey,
+        SeqTypes, Transaction, Upgrade,
+    };
     use futures::{
         future::join_all,
         stream::{Stream, StreamExt},
     };
-    use genesis::Upgrade;
+
     use hotshot::traits::{
         implementations::{MasterMap, MemoryNetwork},
         BlockPayload,
@@ -885,6 +694,7 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
     use es_version::SequencerVersion;
+    use espresso_types::{Header, NamespaceId, Payload, Transaction};
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
     use hotshot_types::{
@@ -924,7 +734,7 @@ mod test {
         }
 
         // Submit target transaction to handle
-        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3]);
+        let txn = Transaction::new(NamespaceId::from(1_u32), vec![1, 2, 3]);
         handles[0]
             .submit_transaction(txn.clone())
             .await
@@ -994,18 +804,18 @@ mod test {
             // the fields which should be monotonic are.
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
                 let header = leaf.block_header().clone();
-                if header.height == 0 {
+                if header.height() == 0 {
                     parent = header;
                     continue;
                 }
-                assert_eq!(header.height, parent.height + 1);
-                assert!(header.timestamp >= parent.timestamp);
-                assert!(header.l1_head >= parent.l1_head);
-                assert!(header.l1_finalized >= parent.l1_finalized);
+                assert_eq!(header.height(), parent.height() + 1);
+                assert!(header.timestamp() >= parent.timestamp());
+                assert!(header.l1_head() >= parent.l1_head());
+                assert!(header.l1_finalized() >= parent.l1_finalized());
                 parent = header;
             }
 
-            if parent.height >= success_height {
+            if parent.height() >= success_height {
                 break;
             }
         }

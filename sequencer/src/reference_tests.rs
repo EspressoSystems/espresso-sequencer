@@ -21,13 +21,13 @@
 //! constant in this module with the "actual" value that can be found in the logs of the failing
 //! test.
 
-use crate::{
-    block::NsTable, state::FeeInfo, ChainConfig, FeeAccount, Header, L1BlockInfo, Payload,
-    Transaction, ValidatedState,
-};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
 use es_version::SequencerVersion;
+use espresso_types::{
+    ChainConfig, FeeAccount, FeeInfo, Header, L1BlockInfo, NsTable, Payload, Transaction,
+    ValidatedState,
+};
 use hotshot_types::traits::{
     block_contents::vid_commitment, signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
 };
@@ -38,7 +38,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use std::{fmt::Debug, path::Path, str::FromStr};
 use tagged_base64::TaggedBase64;
-use vbs::BinarySerializer;
+use vbs::{version::Version, BinarySerializer};
 
 type Serializer = vbs::Serializer<SequencerVersion>;
 
@@ -110,27 +110,28 @@ async fn reference_header() -> Header {
 
     let state = ValidatedState::default();
 
-    Header {
-        height: 42,
-        timestamp: 789,
-        l1_head: 124,
-        l1_finalized: Some(reference_l1_block()),
+    Header::create(
+        reference_chain_config().into(),
+        42,
+        789,
+        124,
+        Some(reference_l1_block()),
         payload_commitment,
         builder_commitment,
         ns_table,
-        block_merkle_tree_root: state.block_merkle_tree.commitment(),
-        fee_merkle_tree_root: state.fee_merkle_tree.commitment(),
+        state.fee_merkle_tree.commitment(),
+        state.block_merkle_tree.commitment(),
         fee_info,
-        chain_config: reference_chain_config().into(),
-        builder_signature: Some(builder_signature),
-    }
+        Some(builder_signature),
+        Version { major: 0, minor: 1 },
+    )
 }
 
 const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~mHlaknD1qKCz0UBtV2GpnqfO6gFqF5yN-9qkmLMRG3rp";
 
 fn reference_transaction() -> Transaction {
     let payload: [u8; 1024] = std::array::from_fn(|i| (i % (u8::MAX as usize)) as u8);
-    Transaction::new(12648430.into(), payload.to_vec())
+    Transaction::new(12648430_u32.into(), payload.to_vec())
 }
 
 const REFERENCE_TRANSACTION_COMMITMENT: &str = "TX~jmYCutMVgguprgpZHywPwkehwXfibQx951gh4LSLmfwp";

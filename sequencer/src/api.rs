@@ -1,10 +1,7 @@
 use self::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
 use crate::{
-    network,
-    persistence::{ChainConfigPersistence, SequencerPersistence},
-    state::{BlockMerkleTree, FeeAccountProof},
-    state_signature::StateSigner,
-    ChainConfig, NamespaceId, Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
+    network, persistence::ChainConfigPersistence, state_signature::StateSigner, Node, SeqTypes,
+    SequencerContext,
 };
 use anyhow::{bail, Context};
 use async_once_cell::Lazy;
@@ -13,7 +10,12 @@ use async_trait::async_trait;
 use committable::Commitment;
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
-use ethers::prelude::{Address, U256};
+use espresso_types::traits::PersistenceOptions;
+use espresso_types::traits::SequencerPersistence;
+use espresso_types::PubKey;
+use espresso_types::{AccountQueryData, BlockMerkleTree, ChainConfig, Transaction};
+use espresso_types::{FeeAccountProof, NodeState};
+use ethers::prelude::Address;
 use futures::{
     future::{BoxFuture, Future, FutureExt},
     stream::{BoxStream, Stream},
@@ -24,7 +26,6 @@ use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody, HotShotConfig};
 use jf_merkle_tree::MerkleTreeScheme;
-use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use vbs::version::StaticVersionType;
 
@@ -36,18 +37,6 @@ pub mod sql;
 mod update;
 
 pub use options::Options;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AccountQueryData {
-    pub balance: U256,
-    pub proof: FeeAccountProof,
-}
-
-impl From<(FeeAccountProof, U256)> for AccountQueryData {
-    fn from((proof, balance): (FeeAccountProof, U256)) -> Self {
-        Self { balance, proof }
-    }
-}
 
 pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
 
@@ -351,16 +340,16 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
 pub mod test_helpers {
     use super::*;
     use crate::{
-        catchup::{mock::MockStateCatchup, StateCatchup},
-        genesis::Upgrade,
-        persistence::{no_storage, PersistenceOptions, SequencerPersistence},
-        state::{BlockMerkleTree, ValidatedState},
+        catchup::mock::MockStateCatchup,
+        persistence::no_storage,
         testing::{run_test_builder, wait_for_decide_on_handle, TestConfig},
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use committable::Committable;
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
+    use espresso_types::traits::SequencerPersistence;
+    use espresso_types::{v0_3::StateCatchup, NamespaceId, Upgrade, ValidatedState};
     use ethers::{prelude::Address, utils::Anvil};
     use futures::{
         future::{join_all, FutureExt},
@@ -610,7 +599,7 @@ pub mod test_helpers {
         setup_logging();
         setup_backtrace();
 
-        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3, 4]);
+        let txn = Transaction::new(NamespaceId::from(1_u32), vec![1, 2, 3, 4]);
 
         let port = pick_unused_port().expect("No ports free");
 
@@ -720,7 +709,7 @@ pub mod test_helpers {
             {
                 if leaf_chain
                     .iter()
-                    .any(|LeafInfo { leaf, .. }| leaf.block_header().height > 2)
+                    .any(|LeafInfo { leaf, .. }| leaf.block_header().height() > 2)
                 {
                     break;
                 }
@@ -790,13 +779,13 @@ mod api_tests {
     use crate::{
         persistence::no_storage,
         testing::{wait_for_decide_on_handle, TestConfig},
-        Header, NamespaceId,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
     use es_version::SequencerVersion;
+    use espresso_types::{Header, NamespaceId};
     use ethers::utils::Anvil;
     use futures::stream::StreamExt;
     use hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
@@ -832,7 +821,7 @@ mod api_tests {
         setup_backtrace();
 
         // Arbitrary transaction, arbitrary namespace ID
-        let ns_id = NamespaceId::from(42);
+        let ns_id = NamespaceId::from(42_u32);
         let txn = Transaction::new(ns_id, vec![1, 2, 3, 4]);
 
         // Start query service.
@@ -901,14 +890,14 @@ mod api_tests {
 
                 ns_proof
                     .verify(
-                        &header.ns_table,
-                        &header.payload_commitment,
+                        &header.ns_table(),
+                        &header.payload_commitment(),
                         vid_common.common(),
                     )
                     .unwrap();
             } else {
                 // Namespace proof should be present if ns_id exists in ns_table
-                assert!(header.ns_table.find_ns_id(&ns_id).is_none());
+                assert!(header.ns_table().find_ns_id(&ns_id).is_none());
                 assert!(ns_query_res.transactions.is_empty());
             }
 
@@ -1000,16 +989,14 @@ mod test {
     use super::*;
     use crate::{
         catchup::{mock::MockStateCatchup, StatePeers},
-        genesis::{Upgrade, UpgradeType},
         persistence::no_storage,
-        state::{FeeAccount, FeeAmount, ValidatedState},
         testing::TestConfig,
-        Header,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use committable::{Commitment, Committable};
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
+    use espresso_types::{FeeAccount, FeeAmount, Header, Upgrade, UpgradeType, ValidatedState};
     use ethers::utils::Anvil;
     use futures::future::{self, join_all};
     use futures::stream::{StreamExt, TryStreamExt};

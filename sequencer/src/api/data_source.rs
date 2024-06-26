@@ -7,12 +7,14 @@ use super::{
 };
 use crate::{
     network,
-    persistence::{self, SequencerPersistence},
-    ChainConfig, PubKey, SeqTypes, Transaction,
+    persistence::{self},
+    SeqTypes,
 };
 use anyhow::bail;
 use async_trait::async_trait;
 use committable::Commitment;
+use espresso_types::{traits::PersistenceOptions, ChainConfig, Transaction};
+use espresso_types::{traits::SequencerPersistence, PubKey};
 use ethers::prelude::Address;
 use futures::future::Future;
 use hotshot_query_service::{
@@ -32,7 +34,7 @@ use tide_disco::Url;
 use vbs::version::StaticVersionType;
 use vec1::Vec1;
 
-pub trait DataSourceOptions: persistence::PersistenceOptions {
+pub trait DataSourceOptions: PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
 
     fn enable_query_module(&self, opt: Options, query: Query) -> Options;

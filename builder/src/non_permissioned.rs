@@ -7,6 +7,10 @@ use async_compatibility_layer::{
     channel::{unbounded, UnboundedReceiver, UnboundedSender},
 };
 use async_std::sync::{Arc, RwLock};
+use espresso_types::{
+    eth_signature_key::EthKeyPair, ChainConfig, L1Client, NodeState, Payload, SeqTypes,
+    ValidatedState,
+};
 use ethers::{
     core::k256::ecdsa::SigningKey,
     signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
@@ -36,10 +40,7 @@ use hotshot_types::{
     },
     utils::BuilderCommitment,
 };
-use sequencer::{
-    catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, ChainConfig, L1Params,
-    NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes, ValidatedState,
-};
+use sequencer::{catchup::StatePeers, L1Params, NetworkParams};
 
 use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -228,6 +229,7 @@ mod test {
     use async_lock::RwLock;
     use async_std::task;
     use es_version::SequencerVersion;
+    use espresso_types::{FeeAccount, NamespaceId, Transaction};
     use hotshot_builder_api::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
@@ -247,14 +249,7 @@ mod test {
         node_implementation::NodeType,
     };
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-    use sequencer::{
-        persistence::{
-            no_storage::{self, NoStorage},
-            PersistenceOptions,
-        },
-        state::FeeAccount,
-        NamespaceId, Payload, Transaction,
-    };
+    use sequencer::persistence::no_storage::{self, NoStorage};
     use std::time::Duration;
     use surf_disco::Client;
 
@@ -413,7 +408,7 @@ mod test {
             }
         }
 
-        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3]);
+        let txn = Transaction::new(NamespaceId::from(1_u32), vec![1, 2, 3]);
         match builder_client
             .post::<()>("txn_submit/submit")
             .body_json(&txn)

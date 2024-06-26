@@ -1,8 +1,9 @@
 //! Update loop for query API state.
 
 use super::{data_source::SequencerDataSource, StorageState};
-use crate::{network, persistence::SequencerPersistence, SeqTypes};
+use crate::{network, SeqTypes};
 use async_std::sync::{Arc, RwLock};
+use espresso_types::traits::SequencerPersistence;
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;
 use hotshot_query_service::data_source::{UpdateDataSource, VersionedDataSource};

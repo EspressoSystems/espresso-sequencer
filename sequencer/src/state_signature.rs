@@ -1,9 +1,10 @@
 //! Utilities for generating and storing the most recent light client state signatures.
 
-use crate::{Leaf, SeqTypes, StateKeyPair};
+use crate::{SeqTypes, StateKeyPair};
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
 use async_std::sync::RwLock;
+use espresso_types::Leaf;
 use hotshot::types::{Event, EventType};
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::light_client::{
@@ -151,12 +152,12 @@ fn form_light_client_state(
     let header = leaf.block_header();
     let mut block_comm_root_bytes = vec![];
     header
-        .block_merkle_tree_root
+        .block_merkle_tree_root()
         .serialize_compressed(&mut block_comm_root_bytes)?;
 
     let mut fee_ledger_comm_bytes = vec![];
     header
-        .fee_merkle_tree_root
+        .fee_merkle_tree_root()
         .serialize_compressed(&mut fee_ledger_comm_bytes)?;
     Ok(LightClientState {
         view_number: leaf.view_number().u64() as usize,

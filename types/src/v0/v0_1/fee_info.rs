@@ -26,7 +26,7 @@ use crate::FeeMerkleTree;
     Into,
 )]
 #[display(fmt = "{_0}")]
-pub struct FeeAmount(pub(crate) U256);
+pub struct FeeAmount(pub U256);
 
 // New Type for `Address` in order to implement `CanonicalSerialize` and
 // `CanonicalDeserialize`
@@ -47,7 +47,7 @@ pub struct FeeAmount(pub(crate) U256);
     Into,
 )]
 #[display(fmt = "{_0:x}")]
-pub struct FeeAccount(pub(crate) Address);
+pub struct FeeAccount(pub Address);
 
 #[derive(
     Hash,
@@ -63,8 +63,8 @@ pub struct FeeAccount(pub(crate) Address);
 )]
 /// `FeeInfo` holds data related to builder fees.
 pub struct FeeInfo {
-    pub(crate) account: FeeAccount,
-    pub(crate) amount: FeeAmount,
+    pub account: FeeAccount,
+    pub amount: FeeAmount,
 }
 
 /// A proof of the balance of an account in the fee ledger.
@@ -73,8 +73,8 @@ pub struct FeeInfo {
 /// proof, and the balance is implicitly zero. Otherwise, this is a normal Merkle membership proof.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FeeAccountProof {
-    pub(crate) account: Address,
-    pub(crate) proof: FeeMerkleProof,
+    pub account: Address,
+    pub proof: FeeMerkleProof,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -59,6 +59,7 @@ derivative = "2.2"
 derive_more = { workspace = true }
 dotenvy = { workspace = true }
 es-version = { workspace = true }
+espresso-types = { path = "../types", features = ["testing"] }
 ethers = { workspace = true }
 ethers-contract-derive = "2.0.10"
 futures = { workspace = true }

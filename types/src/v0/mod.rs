@@ -10,6 +10,8 @@ use snafu::Snafu;
 mod header;
 mod impls;
 
+pub use impls::validate_proposal;
+
 pub use header::Header;
 
 // This is the single source of truth for minor versions supported by this major version.
@@ -113,7 +115,7 @@ reexport_unchanged_types!(
     Upgrade,
     UpgradeType,
     ValidatedState,
-    BlockSize
+    BlockSize,
 );
 
 #[derive(
@@ -134,8 +136,12 @@ impl NodeType for SeqTypes {
 }
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
+pub type Event = hotshot::types::Event<SeqTypes>;
+
 pub type PubKey = BLSPubKey;
 pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
+
+pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey>;
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 pub enum Error {
@@ -171,5 +177,8 @@ pub mod constants {
 }
 
 pub mod traits {
-    pub use crate::v0_1::{FromNsPayloadBytes, NsPayloadBytesRange, StateCatchup};
+    pub use crate::v0_1::{
+        FromNsPayloadBytes, NsPayloadBytesRange, PersistenceOptions, SequencerPersistence,
+        StateCatchup,
+    };
 }

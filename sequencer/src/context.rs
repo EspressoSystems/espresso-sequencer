@@ -4,6 +4,8 @@ use async_std::{
     task::{spawn, JoinHandle},
 };
 use derivative::Derivative;
+use espresso_types::traits::SequencerPersistence;
+use espresso_types::{NodeState, PubKey, Transaction, ValidatedState};
 use futures::{
     future::{join_all, Future},
     stream::{Stream, StreamExt},
@@ -25,10 +27,7 @@ use std::fmt::Display;
 use url::Url;
 use vbs::version::StaticVersionType;
 
-use crate::{
-    network, persistence::SequencerPersistence, state_signature::StateSigner,
-    static_stake_table_commitment, Node, NodeState, PubKey, SeqTypes, Transaction, ValidatedState,
-};
+use crate::{network, state_signature::StateSigner, static_stake_table_commitment, Node, SeqTypes};
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 /// The consensus handle
 pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>>;

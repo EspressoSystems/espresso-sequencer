@@ -7,12 +7,12 @@ use crate::{
         sql::{sql_param, transaction, Options},
         ChainConfigPersistence,
     },
-    state::{BlockMerkleTree, FeeAccountProof, FeeMerkleTree},
-    ChainConfig, SeqTypes,
+    SeqTypes,
 };
 use anyhow::{bail, Context};
 use async_trait::async_trait;
 use committable::Commitment;
+use espresso_types::{BlockMerkleTree, ChainConfig, FeeAccountProof, FeeMerkleTree};
 use ethers::prelude::Address;
 use futures::FutureExt;
 use hotshot_query_service::{

@@ -165,13 +165,13 @@ mod test {
     use super::*;
     use async_std::task::spawn;
     use es_version::SequencerVersion;
+    use espresso_types::PubKey;
     use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey};
     use portpicker::pick_unused_port;
     use sequencer::{
         api::options::{Http, Status},
         genesis::StakeTableConfig,
         persistence::fs,
-        PubKey,
     };
     use std::time::Duration;
     use surf_disco::{error::ClientError, Client, Url};

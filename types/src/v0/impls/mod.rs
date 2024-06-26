@@ -1,4 +1,4 @@
-use super::*;
+pub use super::*;
 
 mod block;
 mod chain_config;
@@ -8,3 +8,5 @@ mod instance_state;
 mod l1;
 mod state;
 mod transaction;
+
+pub use state::validate_proposal;

@@ -5,6 +5,7 @@ use async_std::task::{sleep, spawn};
 use clap::Parser;
 use committable::{Commitment, Committable};
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
+use espresso_types::{SeqTypes, Transaction};
 use futures::{
     channel::mpsc::{self, Sender},
     sink::SinkExt,
@@ -14,10 +15,7 @@ use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, 
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
-use sequencer::{
-    options::{parse_duration, parse_size},
-    SeqTypes, Transaction,
-};
+use sequencer::options::{parse_duration, parse_size};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},

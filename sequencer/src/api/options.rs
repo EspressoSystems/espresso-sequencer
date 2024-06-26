@@ -11,13 +11,13 @@ use super::{
 };
 use crate::{
     context::{SequencerContext, TaskList},
-    network,
-    persistence::{self, SequencerPersistence},
-    state::{update_state_storage_loop, BlockMerkleTree, FeeMerkleTree},
+    network, persistence,
+    state::update_state_storage_loop,
 };
 use anyhow::bail;
 use async_std::sync::{Arc, RwLock};
 use clap::Parser;
+use espresso_types::{traits::SequencerPersistence, BlockMerkleTree, FeeMerkleTree};
 use futures::{
     channel::oneshot,
     future::{BoxFuture, Future, FutureExt},
