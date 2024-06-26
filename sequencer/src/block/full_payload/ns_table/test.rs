@@ -101,6 +101,28 @@ async fn payload_byte_len() {
 
     // final offset less than payload byte len
     modify_final_offset(-1);
+
+    // zero-length payload
+    let empty_block = Payload::from_transactions([], &Default::default(), &Default::default())
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(empty_block.ns_table().len().0, 0);
+    assert_eq!(
+        empty_block.ns_table().bytes,
+        usize_to_bytes::<NUM_NSS_BYTE_LEN>(0)
+    );
+    empty_block
+        .ns_table()
+        .validate(&empty_block.byte_len())
+        .unwrap();
+
+    // empty namespace table with nonempty payload
+    *block.ns_table_mut() = empty_block.ns_table().clone();
+    assert_eq!(
+        block.ns_table().validate(&payload_byte_len).unwrap_err(),
+        ExpectNonemptyNsTable
+    );
 }
 
 #[test]

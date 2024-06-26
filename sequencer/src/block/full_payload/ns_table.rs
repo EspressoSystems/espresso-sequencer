@@ -221,10 +221,11 @@ impl NsTable {
     /// 1. Byte length must hold a whole number of entries.
     /// 2. All namespace IDs and offsets must increase monotonically. Offsets
     ///    must be nonzero.
-    /// 3. Header consistent with byte length (obsolete after
-    ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>)
-    /// 4. Final offset must equal `payload_byte_len` (obsolete after
-    ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>)
+    /// 3. Header consistent with byte length. (Obsolete after
+    ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>.)
+    /// 4. Final offset must equal `payload_byte_len`. (Obsolete after
+    ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>.)
+    ///    If the namespace table is empty then `payload_byte_len` must be 0.
     pub fn validate(
         &self,
         payload_byte_len: &PayloadByteLen,
@@ -242,6 +243,8 @@ impl NsTable {
             if final_offset != payload_byte_len.as_usize() {
                 return Err(InvalidFinalOffset);
             }
+        } else if payload_byte_len.as_usize() != 0 {
+            return Err(ExpectNonemptyNsTable);
         }
 
         Ok(())
@@ -372,6 +375,7 @@ pub enum NsTableValidationError {
     NonIncreasingEntries,
     InvalidHeader, // TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
     InvalidFinalOffset, // TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+    ExpectNonemptyNsTable,
 }
 
 pub struct NsTableBuilder {
