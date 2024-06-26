@@ -1,23 +1,23 @@
-use crate::api::{data_source::CatchupDataSource, BlocksFrontier};
+use std::{fmt::Debug, sync::Arc};
+
 use anyhow::{bail, Context};
 use async_std::sync::RwLock;
 use async_trait::async_trait;
 use committable::Commitment;
 use derive_more::From;
-use espresso_types::traits::PersistenceOptions;
 use espresso_types::{
-    v0_3::StateCatchup, AccountQueryData, BlockMerkleTree, ChainConfig, FeeAccount,
-    FeeMerkleCommitment,
+    traits::PersistenceOptions, v0_3::StateCatchup, AccountQueryData, BlockMerkleTree, ChainConfig,
+    FeeAccount, FeeMerkleCommitment,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
-
 use serde::de::DeserializeOwned;
-use std::{fmt::Debug, sync::Arc};
 use surf_disco::Request;
 use tide_disco::error::ServerError;
 use url::Url;
 use vbs::version::StaticVersionType;
+
+use crate::api::{data_source::CatchupDataSource, BlocksFrontier};
 
 // This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.
@@ -221,11 +221,12 @@ where
 
 #[cfg(any(test, feature = "testing"))]
 pub mod mock {
-    use super::*;
+    use std::collections::HashMap;
 
     use espresso_types::{FeeAccountProof, ValidatedState};
     use jf_merkle_tree::MerkleTreeScheme;
-    use std::collections::HashMap;
+
+    use super::*;
 
     #[derive(Debug, Clone, Default)]
     pub struct MockStateCatchup {

@@ -14,10 +14,11 @@
 //! If this test is failing and you did not intend to change the consensus API, figure out what
 //! code changed caused the serialization change and revert it.
 
+use std::path::Path;
+
 use committable::Committable;
 use es_version::SequencerVersion;
-use espresso_types::PubKey;
-use espresso_types::{Leaf, NodeState, ValidatedState};
+use espresso_types::{Leaf, NodeState, PubKey, ValidatedState};
 use hotshot::traits::election::static_committee::GeneralStaticCommittee;
 use hotshot_types::{
     data::{
@@ -45,7 +46,6 @@ use hotshot_types::{
 use jf_vid::VidScheme;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
-use std::path::Path;
 use vbs::{version::Version, BinarySerializer};
 
 type Serializer = vbs::Serializer<SequencerVersion>;

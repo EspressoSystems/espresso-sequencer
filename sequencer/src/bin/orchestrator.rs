@@ -1,16 +1,21 @@
+use std::{
+    fmt::{self, Display, Formatter},
+    num::{NonZeroUsize, ParseIntError},
+    str::FromStr,
+    time::Duration,
+};
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use derive_more::From;
 use espresso_types::PubKey;
 use ethers::utils::hex::{self, FromHexError};
-use hotshot_orchestrator::config::Libp2pConfig;
-use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
+use hotshot_orchestrator::{
+    config::{Libp2pConfig, NetworkConfig},
+    run_orchestrator,
+};
 use sequencer::options::parse_duration;
 use snafu::Snafu;
-use std::fmt::{self, Display, Formatter};
-use std::num::{NonZeroUsize, ParseIntError};
-use std::str::FromStr;
-use std::time::Duration;
 use url::Url;
 use vec1::Vec1;
 

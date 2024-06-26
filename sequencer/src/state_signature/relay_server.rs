@@ -1,4 +1,8 @@
-use super::{LightClientState, StateSignatureRequestBody};
+use std::{
+    collections::{BTreeSet, HashMap},
+    path::PathBuf,
+};
+
 use async_compatibility_layer::channel::OneShotReceiver;
 use async_std::sync::RwLock;
 use clap::Args;
@@ -9,10 +13,6 @@ use hotshot_types::light_client::{
     StateSignature, StateSignatureScheme, StateSignaturesBundle, StateVerKey,
 };
 use jf_signature::SignatureScheme;
-use std::{
-    collections::{BTreeSet, HashMap},
-    path::PathBuf,
-};
 use tide_disco::{
     api::ApiError,
     error::ServerError,
@@ -21,6 +21,8 @@ use tide_disco::{
 };
 use url::Url;
 use vbs::version::StaticVersionType;
+
+use super::{LightClientState, StateSignatureRequestBody};
 
 /// State that checks the light client state update and the signature collection
 #[derive(Default)]

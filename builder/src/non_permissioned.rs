@@ -1,3 +1,5 @@
+use std::{num::NonZeroUsize, time::Duration};
+
 use anyhow::Context;
 use async_broadcast::{
     broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender, TryRecvError,
@@ -30,7 +32,10 @@ use hotshot_builder_core::{
         ReceivedTransaction,
     },
 };
-
+use hotshot_events_service::{
+    events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
+    events_source::{BuilderEvent, EventConsumer, EventsStreamer},
+};
 use hotshot_types::{
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
@@ -41,18 +46,12 @@ use hotshot_types::{
     utils::BuilderCommitment,
 };
 use sequencer::{catchup::StatePeers, L1Params, NetworkParams};
-
-use hotshot_events_service::{
-    events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
-    events_source::{BuilderEvent, EventConsumer, EventsStreamer},
-};
-
-use crate::run_builder_api_service;
-use std::{num::NonZeroUsize, time::Duration};
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::StaticVersionType;
+
+use crate::run_builder_api_service;
 
 #[derive(Clone, Debug)]
 pub struct BuilderConfig {
@@ -220,12 +219,12 @@ impl BuilderConfig {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::testing::{
-        hotshot_builder_url, HotShotTestConfig, NonPermissionedBuilderTestConfig,
+    use std::time::Duration;
+
+    use async_compatibility_layer::{
+        art::{async_sleep, async_spawn},
+        logging::{setup_backtrace, setup_logging},
     };
-    use async_compatibility_layer::art::{async_sleep, async_spawn};
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_lock::RwLock;
     use async_std::task;
     use es_version::SequencerVersion;
@@ -234,24 +233,33 @@ mod test {
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
-    use hotshot_builder_core::builder_state::BuilderProgress;
-    use hotshot_builder_core::service::{
-        run_non_permissioned_standalone_builder_service,
-        run_permissioned_standalone_builder_service,
+    use hotshot_builder_core::{
+        builder_state::BuilderProgress,
+        service::{
+            run_non_permissioned_standalone_builder_service,
+            run_permissioned_standalone_builder_service,
+        },
     };
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
-    use hotshot_types::constants::Base;
-    use hotshot_types::traits::{
-        block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
-        node_implementation::NodeType,
+    use hotshot_types::{
+        constants::Base,
+        signature_key::BLSPubKey,
+        traits::{
+            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+            node_implementation::NodeType,
+            signature_key::SignatureKey,
+        },
     };
-    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use sequencer::persistence::no_storage::{self, NoStorage};
-    use std::time::Duration;
     use surf_disco::Client;
+
+    use super::*;
+    use crate::testing::{
+        hotshot_builder_url, HotShotTestConfig, NonPermissionedBuilderTestConfig,
+    };
 
     /// Test the non-permissioned builder core
     /// It creates a memory hotshot network and launches the hotshot event streaming api

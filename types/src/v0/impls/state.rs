@@ -857,14 +857,14 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 
 #[cfg(test)]
 mod test {
-    use crate::{BlockSize, FeeAccountProof, FeeMerkleProof};
-
-    use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::types::U256;
     use hotshot_types::vid::vid_scheme;
     use jf_vid::VidScheme;
     use sequencer_utils::ser::FromStringOrInteger;
+
+    use super::*;
+    use crate::{BlockSize, FeeAccountProof, FeeMerkleProof};
 
     #[test]
     fn test_fee_proofs() {

@@ -12,6 +12,15 @@
 //! provides a healthcheck endpoint as well as a prometheus endpoint which provides metrics like the
 //! count of various types of actions performed and the number of open streams.
 
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap},
+    fmt::Debug,
+    pin::Pin,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use anyhow::{bail, ensure, Context};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{
@@ -39,14 +48,6 @@ use jf_merkle_tree::{
 use rand::{seq::SliceRandom, RngCore};
 use sequencer::{api::endpoints::NamespaceProofQueryData, options::parse_duration};
 use serde::de::DeserializeOwned;
-use std::{
-    borrow::Cow,
-    collections::{BTreeMap, HashMap},
-    fmt::Debug,
-    pin::Pin,
-    sync::Arc,
-    time::{Duration, Instant},
-};
 use strum::{EnumDiscriminants, VariantArray};
 use surf_disco::{error::ClientError, socket, Error, StatusCode, Url};
 use tide_disco::{error::ServerError, App};
@@ -1046,7 +1047,7 @@ impl ResourceManager<BlockQueryData<SeqTypes>> {
                 .proof
                 .unwrap()
                 .verify(
-                    &header.ns_table(),
+                    header.ns_table(),
                     &header.payload_commitment(),
                     vid_common.common()
                 )

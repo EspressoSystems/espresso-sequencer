@@ -10,9 +10,8 @@ use snafu::Snafu;
 mod header;
 mod impls;
 
-pub use impls::validate_proposal;
-
 pub use header::Header;
+pub use impls::validate_proposal;
 
 // This is the single source of truth for minor versions supported by this major version.
 //

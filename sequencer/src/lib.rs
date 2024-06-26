@@ -14,15 +14,12 @@ use anyhow::Context;
 use async_std::sync::RwLock;
 use catchup::StatePeers;
 use context::SequencerContext;
-use espresso_types::traits::PersistenceOptions;
-use espresso_types::{L1Client, NodeState, SeqTypes, ValidatedState};
+use espresso_types::{traits::PersistenceOptions, L1Client, NodeState, SeqTypes, ValidatedState};
 use ethers::types::U256;
 #[cfg(feature = "libp2p")]
 use futures::FutureExt;
 use genesis::L1Finalized;
-
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
-
 use libp2p::Multiaddr;
 use network::libp2p::split_off_peer_id;
 use state_signature::static_stake_table_commitment;
@@ -30,8 +27,15 @@ use url::Url;
 pub mod persistence;
 pub mod state;
 
+#[cfg(feature = "libp2p")]
+use std::time::Duration;
+use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc};
+
 use derivative::Derivative;
 use espresso_types::traits::SequencerPersistence;
+pub use genesis::Genesis;
+#[cfg(feature = "libp2p")]
+use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
 use hotshot::{
     traits::implementations::{
         derive_libp2p_peer_id, CdnMetricsValue, KeyPair, MemoryNetwork, PushCdnNetwork, Topic,
@@ -57,20 +61,9 @@ use hotshot_types::{
     utils::BuilderCommitment,
     ValidatorConfig,
 };
-use serde::{Deserialize, Serialize};
-
-use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc};
-use vbs::version::StaticVersionType;
-
-#[cfg(feature = "libp2p")]
-use std::time::Duration;
-
-#[cfg(feature = "libp2p")]
-use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
-
-pub use genesis::Genesis;
-
 pub use options::Options;
+use serde::{Deserialize, Serialize};
+use vbs::version::StaticVersionType;
 pub mod network;
 
 /// The Sequencer node is generic over the hotshot CommChannel.
@@ -367,11 +360,8 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use super::*;
-    use crate::{
-        catchup::mock::MockStateCatchup,
-        persistence::no_storage::{self, NoStorage},
-    };
+    use std::time::Duration;
+
     use api::test_helpers::TestNetworkUpgrades;
     use committable::Committable;
     use espresso_types::{
@@ -382,12 +372,13 @@ pub mod testing {
         future::join_all,
         stream::{Stream, StreamExt},
     };
-
-    use hotshot::traits::{
-        implementations::{MasterMap, MemoryNetwork},
-        BlockPayload,
+    use hotshot::{
+        traits::{
+            implementations::{MasterMap, MemoryNetwork},
+            BlockPayload,
+        },
+        types::EventType::Decide,
     };
-    use hotshot::types::EventType::Decide;
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
@@ -399,8 +390,13 @@ pub mod testing {
         ExecutionType, HotShotConfig, PeerConfig,
     };
     use portpicker::pick_unused_port;
-    use std::time::Duration;
     use vbs::version::Version;
+
+    use super::*;
+    use crate::{
+        catchup::mock::MockStateCatchup,
+        persistence::no_storage::{self, NoStorage},
+    };
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
@@ -688,11 +684,7 @@ pub mod testing {
 #[cfg(test)]
 mod test {
 
-    use self::testing::run_test_builder;
-
-    use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-
     use es_version::SequencerVersion;
     use espresso_types::{Header, NamespaceId, Payload, Transaction};
     use futures::StreamExt;
@@ -705,6 +697,9 @@ mod test {
     };
     use sequencer_utils::AnvilOptions;
     use testing::{wait_for_decide_on_handle, TestConfig};
+
+    use self::testing::run_test_builder;
+    use super::*;
 
     #[async_std::test]
     async fn test_skeleton_instantiation() {

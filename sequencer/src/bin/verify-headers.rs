@@ -1,5 +1,7 @@
 //! Utility program to verify properties of headers sequenced by HotShot.
 
+use std::{cmp::max, process::exit, time::Duration};
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{sync::Arc, task::sleep};
 use clap::Parser;
@@ -7,9 +9,6 @@ use espresso_types::{Header, L1BlockInfo};
 use ethers::prelude::*;
 use futures::future::join_all;
 use itertools::Itertools;
-use std::cmp::max;
-use std::process::exit;
-use std::time::Duration;
 use surf_disco::Url;
 use vbs::version::StaticVersionType;
 

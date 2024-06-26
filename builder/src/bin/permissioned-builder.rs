@@ -1,3 +1,8 @@
+use std::{
+    collections::HashMap, net::ToSocketAddrs, num::NonZeroUsize, path::PathBuf, str::FromStr,
+    time::Duration,
+};
+
 use anyhow::{bail, Context};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use builder::permissioned::init_node;
@@ -6,19 +11,15 @@ use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
 use espresso_types::eth_signature_key::EthKeyPair;
 use ethers::types::Address;
-use hotshot_types::data::ViewNumber;
-use hotshot_types::light_client::StateSignKey;
-use hotshot_types::signature_key::BLSPrivKey;
-use hotshot_types::traits::metrics::NoMetrics;
-use hotshot_types::traits::node_implementation::ConsensusTime;
+use hotshot_types::{
+    data::ViewNumber,
+    light_client::StateSignKey,
+    signature_key::BLSPrivKey,
+    traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
+};
 use libp2p::Multiaddr;
-use sequencer::persistence::no_storage::NoStorage;
-use sequencer::Genesis;
-use sequencer::{L1Params, NetworkParams};
+use sequencer::{persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams};
 use snafu::Snafu;
-use std::net::ToSocketAddrs;
-use std::num::NonZeroUsize;
-use std::{collections::HashMap, path::PathBuf, str::FromStr, time::Duration};
 use url::Url;
 
 #[derive(Parser, Clone, Debug)]

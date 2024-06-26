@@ -1,5 +1,10 @@
 //! Utility program to submit random transactions to an Espresso Sequencer.
 
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::{sleep, spawn};
 use clap::Parser;
@@ -16,10 +21,6 @@ use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
 use sequencer::options::{parse_duration, parse_size};
-use std::{
-    collections::HashMap,
-    time::{Duration, Instant},
-};
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
 use vbs::version::StaticVersionType;

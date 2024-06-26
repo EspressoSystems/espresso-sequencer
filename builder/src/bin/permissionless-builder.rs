@@ -1,3 +1,5 @@
+use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, time::Duration};
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
@@ -5,12 +7,9 @@ use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
 use espresso_types::eth_signature_key::EthKeyPair;
 use hotshot::traits::ValidatedState;
-use hotshot_types::data::ViewNumber;
-use hotshot_types::traits::node_implementation::ConsensusTime;
+use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use sequencer::{Genesis, L1Params};
 use snafu::Snafu;
-use std::num::NonZeroUsize;
-use std::{path::PathBuf, str::FromStr, time::Duration};
 use url::Url;
 
 #[derive(Parser, Clone, Debug)]

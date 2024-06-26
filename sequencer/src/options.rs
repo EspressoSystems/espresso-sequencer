@@ -1,15 +1,4 @@
-use crate::{api, persistence};
-use anyhow::{bail, Context};
-use bytesize::ByteSize;
-use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
-use cld::ClDuration;
 use core::fmt::Display;
-use derivative::Derivative;
-use derive_more::From;
-use hotshot_types::light_client::StateSignKey;
-use hotshot_types::signature_key::BLSPrivKey;
-use libp2p::Multiaddr;
-use snafu::Snafu;
 use std::{
     collections::{HashMap, HashSet},
     iter::once,
@@ -17,7 +6,19 @@ use std::{
     str::FromStr,
     time::Duration,
 };
+
+use anyhow::{bail, Context};
+use bytesize::ByteSize;
+use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
+use cld::ClDuration;
+use derivative::Derivative;
+use derive_more::From;
+use hotshot_types::{light_client::StateSignKey, signature_key::BLSPrivKey};
+use libp2p::Multiaddr;
+use snafu::Snafu;
 use url::Url;
+
+use crate::{api, persistence};
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
 // can be added, in any combination, to the service. These include, for example, the API server.

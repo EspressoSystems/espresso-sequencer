@@ -1,5 +1,27 @@
 //! Sequencer-specific API options and initialization.
 
+use anyhow::bail;
+use async_std::sync::{Arc, RwLock};
+use clap::Parser;
+use espresso_types::{traits::SequencerPersistence, BlockMerkleTree, FeeMerkleTree};
+use futures::{
+    channel::oneshot,
+    future::{BoxFuture, Future, FutureExt},
+};
+use hotshot_events_service::events::Error as EventStreamingError;
+use hotshot_query_service::{
+    data_source::{ExtensibleDataSource, MetricsDataSource},
+    status::{self, UpdateStatusData},
+    Error,
+};
+use hotshot_types::traits::metrics::{Metrics, NoMetrics};
+use tide_disco::{
+    listener::RateLimitListener,
+    method::{ReadState, WriteState},
+    App, Url,
+};
+use vbs::version::StaticVersionType;
+
 use super::{
     data_source::{
         provider, CatchupDataSource, HotShotConfigDataSource, SequencerDataSource,
@@ -14,28 +36,6 @@ use crate::{
     network, persistence,
     state::update_state_storage_loop,
 };
-use anyhow::bail;
-use async_std::sync::{Arc, RwLock};
-use clap::Parser;
-use espresso_types::{traits::SequencerPersistence, BlockMerkleTree, FeeMerkleTree};
-use futures::{
-    channel::oneshot,
-    future::{BoxFuture, Future, FutureExt},
-};
-use hotshot_query_service::{
-    data_source::{ExtensibleDataSource, MetricsDataSource},
-    status::{self, UpdateStatusData},
-    Error,
-};
-use hotshot_types::traits::metrics::{Metrics, NoMetrics};
-use tide_disco::{
-    listener::RateLimitListener,
-    method::{ReadState, WriteState},
-    App, Url,
-};
-use vbs::version::StaticVersionType;
-
-use hotshot_events_service::events::Error as EventStreamingError;
 
 #[derive(Clone, Debug)]
 pub struct Options {

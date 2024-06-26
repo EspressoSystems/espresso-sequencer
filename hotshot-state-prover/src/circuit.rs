@@ -372,20 +372,20 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{build, GenericLightClientState};
-    use crate::test_utils::{key_pairs_for_testing, stake_table_for_testing};
     use ark_ed_on_bn254::EdwardsConfig as Config;
     use ethers::types::U256;
     use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
     use jf_crhf::CRHF;
+    use jf_relation::Circuit;
     use jf_rescue::crhf::VariableLengthRescueCRHF;
     use jf_signature::{
         schnorr::{SchnorrSignatureScheme, Signature},
         SignatureScheme,
     };
-
-    use jf_relation::Circuit;
     use jf_utils::test_rng;
+
+    use super::{build, GenericLightClientState};
+    use crate::test_utils::{key_pairs_for_testing, stake_table_for_testing};
 
     type F = ark_ed_on_bn254::Fq;
     const ST_CAPACITY: usize = 20;

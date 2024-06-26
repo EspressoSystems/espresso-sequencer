@@ -1,9 +1,17 @@
-use crate::ViewNumber;
+use std::{
+    collections::BTreeMap,
+    fs::{self, File, OpenOptions},
+    io::{Read, Seek, SeekFrom, Write},
+    path::{Path, PathBuf},
+};
+
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use clap::Parser;
-use espresso_types::traits::{PersistenceOptions, SequencerPersistence};
-use espresso_types::{Leaf, NetworkConfig, SeqTypes};
+use espresso_types::{
+    traits::{PersistenceOptions, SequencerPersistence},
+    Leaf, NetworkConfig, SeqTypes,
+};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, VidDisperseShare},
@@ -14,12 +22,8 @@ use hotshot_types::{
     utils::View,
     vote::HasViewNumber,
 };
-use std::{
-    collections::BTreeMap,
-    fs::{self, File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
-    path::{Path, PathBuf},
-};
+
+use crate::ViewNumber;
 
 /// Options for file system backed persistence.
 #[derive(Parser, Clone, Debug)]
@@ -496,9 +500,9 @@ impl SequencerPersistence for Persistence {
 
 #[cfg(test)]
 mod testing {
-    use super::super::testing::TestablePersistence;
-    use super::*;
     use tempfile::TempDir;
+
+    use super::{super::testing::TestablePersistence, *};
 
     #[async_trait]
     impl TestablePersistence for Persistence {
@@ -516,9 +520,7 @@ mod testing {
 
 #[cfg(test)]
 mod generic_tests {
-    use super::super::persistence_tests;
-    use super::Persistence;
-
+    use super::{super::persistence_tests, Persistence};
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;

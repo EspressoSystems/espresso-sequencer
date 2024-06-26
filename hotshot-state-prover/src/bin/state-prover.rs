@@ -1,14 +1,17 @@
+use std::{str::FromStr as _, time::Duration};
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
-use ethers::providers::{Http, Middleware, Provider};
-use ethers::signers::{coins_bip39::English, MnemonicBuilder, Signer};
-use ethers::types::Address;
+use ethers::{
+    providers::{Http, Middleware, Provider},
+    signers::{coins_bip39::English, MnemonicBuilder, Signer},
+    types::Address,
+};
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
 use snafu::Snafu;
-use std::{str::FromStr as _, time::Duration};
 use url::Url;
 
 #[derive(Parser)]

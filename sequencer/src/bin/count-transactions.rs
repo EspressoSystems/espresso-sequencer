@@ -1,5 +1,7 @@
 //! Utility program to count transactions sequenced by HotShot.
 
+use std::{cmp::max, collections::HashSet, time::Duration};
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::sleep;
 use clap::Parser;
@@ -8,9 +10,6 @@ use es_version::SequencerVersion;
 use espresso_types::SeqTypes;
 use futures::future::join_all;
 use hotshot_query_service::availability::BlockQueryData;
-use std::cmp::max;
-use std::collections::HashSet;
-use std::time::Duration;
 use surf_disco::Url;
 
 /// Utility program to count transactions sequenced by HotShot.

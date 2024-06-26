@@ -1,3 +1,5 @@
+use std::{error::Error, time::Duration};
+
 use anyhow::anyhow;
 use async_std::{sync::Arc, task::sleep};
 use async_trait::async_trait;
@@ -13,8 +15,6 @@ use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
 use sequencer_utils::{commitment_to_u256, contract_send, init_signer, Signer};
-use std::error::Error;
-use std::time::Duration;
 use surf_disco::Url;
 use vbs::version::StaticVersionType;
 
@@ -275,7 +275,6 @@ fn build_sequence_batches_txn<M: ethers::prelude::Middleware>(
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
     use committable::Committable;
@@ -284,9 +283,10 @@ mod test {
     use ethers::{abi::AbiDecode, providers::Middleware};
     use futures::FutureExt;
     use hotshot_types::simple_certificate::QuorumCertificate;
-    use sequencer_utils::test_utils::TestL1System;
-    use sequencer_utils::AnvilOptions;
+    use sequencer_utils::{test_utils::TestL1System, AnvilOptions};
     use surf_disco::{Error, StatusCode};
+
+    use super::*;
 
     const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 

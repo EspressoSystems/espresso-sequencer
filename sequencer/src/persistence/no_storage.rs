@@ -1,7 +1,8 @@
 //! Mock implementation of persistence, for testing.
 #![cfg(any(test, feature = "testing"))]
 
-use crate::{SeqTypes, ViewNumber};
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
 use espresso_types::{
     traits::{PersistenceOptions, SequencerPersistence},
@@ -15,7 +16,8 @@ use hotshot_types::{
     simple_certificate::QuorumCertificate,
     utils::View,
 };
-use std::collections::BTreeMap;
+
+use crate::{SeqTypes, ViewNumber};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Options;

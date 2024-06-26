@@ -1,10 +1,11 @@
-use anyhow::Context;
-use espresso_types::{ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade};
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
     path::Path,
 };
+
+use anyhow::Context;
+use espresso_types::{ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade};
+use serde::{Deserialize, Serialize};
 use vbs::version::Version;
 
 /// Initial configuration of an Espresso stake table.
@@ -48,13 +49,14 @@ pub struct Genesis {
 
 mod upgrade_serialization {
 
+    use std::{collections::BTreeMap, fmt};
+
     use espresso_types::{Upgrade, UpgradeType};
-    use serde::ser::SerializeSeq;
     use serde::{
         de::{SeqAccess, Visitor},
+        ser::SerializeSeq,
         Deserialize, Deserializer, Serializer,
     };
-    use std::{collections::BTreeMap, fmt};
     use vbs::version::Version;
 
     pub fn serialize<S>(map: &BTreeMap<Version, Upgrade>, serializer: S) -> Result<S::Ok, S::Error>
@@ -146,12 +148,12 @@ impl Genesis {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
     use espresso_types::{L1BlockInfo, Timestamp};
     use ethers::prelude::{Address, H160, H256};
     use sequencer_utils::ser::FromStringOrInteger;
     use toml::toml;
+
+    use super::*;
 
     #[test]
     fn test_genesis_from_toml_with_optional_fields() {

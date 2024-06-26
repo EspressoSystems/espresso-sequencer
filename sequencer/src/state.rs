@@ -3,9 +3,10 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::{bail, ensure, Context};
 use async_std::{stream::StreamExt, sync::RwLock};
-use espresso_types::{BlockMerkleTree, Delta, NodeState, SeqTypes, ValidatedState};
-use espresso_types::{ChainConfig, FeeAccount, FeeMerkleTree};
-
+use espresso_types::{
+    BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeMerkleTree, NodeState, SeqTypes,
+    ValidatedState,
+};
 use futures::future::Future;
 use hotshot::traits::ValidatedState as HotShotState;
 use hotshot_query_service::{
@@ -15,7 +16,6 @@ use hotshot_query_service::{
     types::HeightIndexed,
 };
 use jf_merkle_tree::{LookupResult, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme};
-
 use vbs::version::Version;
 
 use crate::{

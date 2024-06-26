@@ -1,8 +1,7 @@
 use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
-use hotshot_query_service::availability::QueryableHeader;
-use hotshot_query_service::explorer::ExplorerHeader;
+use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BuilderFee},

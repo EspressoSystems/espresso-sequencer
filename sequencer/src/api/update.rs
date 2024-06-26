@@ -1,13 +1,14 @@
 //! Update loop for query API state.
 
-use super::{data_source::SequencerDataSource, StorageState};
-use crate::{network, SeqTypes};
 use async_std::sync::{Arc, RwLock};
 use espresso_types::traits::SequencerPersistence;
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;
 use hotshot_query_service::data_source::{UpdateDataSource, VersionedDataSource};
 use vbs::version::StaticVersionType;
+
+use super::{data_source::SequencerDataSource, StorageState};
+use crate::{network, SeqTypes};
 
 pub(super) async fn update_loop<N, P, D, Ver: StaticVersionType>(
     state: Arc<RwLock<StorageState<N, P, D, Ver>>>,

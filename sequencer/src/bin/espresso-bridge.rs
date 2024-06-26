@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::{bail, ensure, Context};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{sync::Arc, task::sleep};
@@ -15,8 +17,6 @@ use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Node},
     MerkleTreeScheme,
 };
-
-use std::time::Duration;
 use surf_disco::{error::ClientError, Url};
 
 type EspressoClient = surf_disco::Client<ClientError, SequencerVersion>;

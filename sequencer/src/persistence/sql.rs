@@ -1,4 +1,5 @@
-use crate::{catchup::SqlStateCatchup, options::parse_duration, SeqTypes, ViewNumber};
+use std::{collections::BTreeMap, time::Duration};
+
 use anyhow::Context;
 use async_std::{
     stream::StreamExt,
@@ -7,9 +8,10 @@ use async_std::{
 use async_trait::async_trait;
 use clap::Parser;
 use derivative::Derivative;
-use espresso_types::traits::SequencerPersistence;
-use espresso_types::traits::StateCatchup;
-use espresso_types::{traits::PersistenceOptions, Leaf, NetworkConfig};
+use espresso_types::{
+    traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
+    Leaf, NetworkConfig,
+};
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_query_service::data_source::{
     storage::{
@@ -28,7 +30,8 @@ use hotshot_types::{
     utils::View,
     vote::HasViewNumber,
 };
-use std::{collections::BTreeMap, time::Duration};
+
+use crate::{catchup::SqlStateCatchup, options::parse_duration, SeqTypes, ViewNumber};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Derivative, Default)]

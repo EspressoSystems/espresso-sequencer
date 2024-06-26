@@ -1,8 +1,5 @@
-use self::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
-use crate::{
-    network, persistence::ChainConfigPersistence, state_signature::StateSigner, Node, SeqTypes,
-    SequencerContext,
-};
+use std::pin::Pin;
+
 use anyhow::{bail, Context};
 use async_once_cell::Lazy;
 use async_std::sync::{Arc, RwLock};
@@ -10,11 +7,11 @@ use async_trait::async_trait;
 use committable::Commitment;
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
-use espresso_types::traits::PersistenceOptions;
-use espresso_types::traits::SequencerPersistence;
-use espresso_types::PubKey;
-use espresso_types::{AccountQueryData, BlockMerkleTree, ChainConfig, Transaction};
-use espresso_types::{FeeAccountProof, NodeState};
+use espresso_types::{
+    traits::{PersistenceOptions, SequencerPersistence},
+    AccountQueryData, BlockMerkleTree, ChainConfig, FeeAccountProof, NodeState, PubKey,
+    Transaction,
+};
 use ethers::prelude::Address;
 use futures::{
     future::{BoxFuture, Future, FutureExt},
@@ -26,8 +23,13 @@ use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody, HotShotConfig};
 use jf_merkle_tree::MerkleTreeScheme;
-use std::pin::Pin;
 use vbs::version::StaticVersionType;
+
+use self::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
+use crate::{
+    network, persistence::ChainConfigPersistence, state_signature::StateSigner, Node, SeqTypes,
+    SequencerContext,
+};
 
 pub mod data_source;
 pub mod endpoints;
@@ -338,25 +340,21 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
 
 #[cfg(any(test, feature = "testing"))]
 pub mod test_helpers {
-    use super::*;
-    use crate::{
-        catchup::mock::MockStateCatchup,
-        persistence::no_storage,
-        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig},
-    };
+    use std::{collections::BTreeMap, time::Duration};
+
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use committable::Committable;
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
-    use espresso_types::traits::SequencerPersistence;
-    use espresso_types::{v0_3::StateCatchup, NamespaceId, Upgrade, ValidatedState};
+    use espresso_types::{
+        traits::SequencerPersistence, v0_3::StateCatchup, NamespaceId, Upgrade, ValidatedState,
+    };
     use ethers::{prelude::Address, utils::Anvil};
     use futures::{
         future::{join_all, FutureExt},
         stream::StreamExt,
     };
     use hotshot::types::{Event, EventType};
-
     use hotshot_contract_adapter::light_client::ParsedLightClientState;
     use hotshot_types::{
         event::LeafInfo,
@@ -365,11 +363,17 @@ pub mod test_helpers {
     use itertools::izip;
     use jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
-    use std::{collections::BTreeMap, time::Duration};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
     use url::Url;
     use vbs::version::Version;
+
+    use super::*;
+    use crate::{
+        catchup::mock::MockStateCatchup,
+        persistence::no_storage,
+        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig},
+    };
 
     pub const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
@@ -773,13 +777,6 @@ pub mod test_helpers {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod api_tests {
-    use self::options::HotshotEvents;
-
-    use super::*;
-    use crate::{
-        persistence::no_storage,
-        testing::{wait_for_decide_on_handle, TestConfig},
-    };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
@@ -796,6 +793,13 @@ mod api_tests {
         TestNetwork,
     };
     use tide_disco::error::ServerError;
+
+    use self::options::HotshotEvents;
+    use super::*;
+    use crate::{
+        persistence::no_storage,
+        testing::{wait_for_decide_on_handle, TestConfig},
+    };
 
     #[async_std::test]
     pub(crate) async fn submit_test_with_query_module<D: TestableSequencerDataSource>() {
@@ -890,7 +894,7 @@ mod api_tests {
 
                 ns_proof
                     .verify(
-                        &header.ns_table(),
+                        header.ns_table(),
                         &header.payload_commitment(),
                         vid_common.common(),
                     )
@@ -983,23 +987,18 @@ mod api_tests {
 
 #[cfg(test)]
 mod test {
-    use self::{
-        data_source::testing::TestableSequencerDataSource, sql::DataSource as SqlDataSource,
-    };
-    use super::*;
-    use crate::{
-        catchup::{mock::MockStateCatchup, StatePeers},
-        persistence::no_storage,
-        testing::TestConfig,
-    };
+    use std::time::Duration;
+
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use committable::{Commitment, Committable};
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
     use espresso_types::{FeeAccount, FeeAmount, Header, Upgrade, UpgradeType, ValidatedState};
     use ethers::utils::Anvil;
-    use futures::future::{self, join_all};
-    use futures::stream::{StreamExt, TryStreamExt};
+    use futures::{
+        future::{self, join_all},
+        stream::{StreamExt, TryStreamExt},
+    };
     use hotshot::types::EventType;
     use hotshot_query_service::{
         availability::{BlockQueryData, LeafQueryData},
@@ -1011,7 +1010,6 @@ mod test {
     };
     use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     use portpicker::pick_unused_port;
-    use std::time::Duration;
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
@@ -1019,6 +1017,16 @@ mod test {
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     use vbs::version::Version;
+
+    use self::{
+        data_source::testing::TestableSequencerDataSource, sql::DataSource as SqlDataSource,
+    };
+    use super::*;
+    use crate::{
+        catchup::{mock::MockStateCatchup, StatePeers},
+        persistence::no_storage,
+        testing::TestConfig,
+    };
 
     #[async_std::test]
     async fn test_healthcheck() {

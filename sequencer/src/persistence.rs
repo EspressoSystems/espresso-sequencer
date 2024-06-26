@@ -47,29 +47,22 @@ mod persistence_tests {
 
     use std::collections::BTreeMap;
 
-    use super::*;
-
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-
     use committable::Committable;
-    use espresso_types::Leaf;
-    use espresso_types::NodeState;
-    use espresso_types::PubKey;
-    use espresso_types::SeqTypes;
-    use espresso_types::ValidatedState;
-    use hotshot::types::BLSPubKey;
-    use hotshot::types::SignatureKey;
-    use hotshot_types::data::DaProposal;
-    use hotshot_types::data::QuorumProposal;
-    use hotshot_types::data::VidDisperseShare;
-    use hotshot_types::data::ViewNumber;
-    use hotshot_types::message::Proposal;
-    use hotshot_types::simple_certificate::QuorumCertificate;
-    use hotshot_types::traits::node_implementation::ConsensusTime;
-    use hotshot_types::traits::EncodeBytes;
-    use hotshot_types::{event::HotShotAction, vid::vid_scheme};
+    use espresso_types::{Leaf, NodeState, PubKey, SeqTypes, ValidatedState};
+    use hotshot::types::{BLSPubKey, SignatureKey};
+    use hotshot_types::{
+        data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
+        event::HotShotAction,
+        message::Proposal,
+        simple_certificate::QuorumCertificate,
+        traits::{node_implementation::ConsensusTime, EncodeBytes},
+        vid::vid_scheme,
+    };
     use jf_vid::VidScheme;
     use testing::TestablePersistence;
+
+    use super::*;
 
     #[async_std::test]
     pub async fn test_anchor_leaf<P: TestablePersistence>() {

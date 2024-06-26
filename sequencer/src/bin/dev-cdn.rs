@@ -5,17 +5,13 @@ use std::path::Path;
 
 use anyhow::Result;
 use async_compatibility_layer::art::async_spawn;
-use cdn_broker::reexports::crypto::signature::KeyPair;
-use cdn_broker::{Broker, Config as BrokerConfig};
+use cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config as BrokerConfig};
 use cdn_marshal::{Config as MarshalConfig, Marshal};
 use clap::Parser;
-
 use espresso_types::SeqTypes;
-use hotshot_types::traits::node_implementation::NodeType;
-use hotshot_types::traits::signature_key::SignatureKey;
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use portpicker::pick_unused_port;
-use rand::rngs::StdRng;
-use rand::{RngCore, SeedableRng};
+use rand::{rngs::StdRng, RngCore, SeedableRng};
 use sequencer::network::cdn::{TestingDef, WrappedSignatureKey};
 
 #[derive(Parser, Debug)]

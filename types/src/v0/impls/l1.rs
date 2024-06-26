@@ -254,15 +254,14 @@ async fn get_finalized_block<P: JsonRpcClient>(
 #[cfg(test)]
 mod test {
 
-    use crate::NodeState;
-
-    use super::*;
+    use std::ops::Add;
 
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use contract_bindings::fee_contract::FeeContract;
-
     use ethers::utils::{parse_ether, Anvil};
-    use std::ops::Add;
+
+    use super::*;
+    use crate::NodeState;
 
     #[async_std::test]
     async fn test_l1_block_fetching() -> anyhow::Result<()> {

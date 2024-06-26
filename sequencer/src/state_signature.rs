@@ -1,18 +1,19 @@
 //! Utilities for generating and storing the most recent light client state signatures.
 
-use crate::{SeqTypes, StateKeyPair};
+use std::collections::{HashMap, VecDeque};
+
 use ark_ff::PrimeField;
 use ark_serialize::CanonicalSerialize;
 use async_std::sync::RwLock;
 use espresso_types::Leaf;
 use hotshot::types::{Event, EventType};
 use hotshot_stake_table::vec_based::StakeTable;
-use hotshot_types::light_client::{
-    CircuitField, LightClientState, StateSignatureRequestBody, StateVerKey,
-};
 use hotshot_types::{
     event::LeafInfo,
-    light_client::{StateSignature, StateSignatureScheme},
+    light_client::{
+        CircuitField, LightClientState, StateSignature, StateSignatureRequestBody,
+        StateSignatureScheme, StateVerKey,
+    },
     signature_key::BLSPubKey,
     traits::{
         node_implementation::ConsensusTime,
@@ -22,13 +23,13 @@ use hotshot_types::{
     PeerConfig,
 };
 use jf_crhf::CRHF;
-use jf_rescue::crhf::VariableLengthRescueCRHF;
-use jf_rescue::RescueError;
+use jf_rescue::{crhf::VariableLengthRescueCRHF, RescueError};
 use jf_signature::SignatureScheme;
-use std::collections::{HashMap, VecDeque};
 use surf_disco::{Client, Url};
 use tide_disco::error::ServerError;
 use vbs::version::StaticVersionType;
+
+use crate::{SeqTypes, StateKeyPair};
 
 /// A relay server that's collecting and serving the light client state signatures
 pub mod relay_server;

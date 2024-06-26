@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::bail;
 use clap::Parser;
 use espresso_types::{PrivKey, PubKey};
@@ -6,7 +8,6 @@ use hotshot_types::{
     light_client::{StateKeyPair, StateSignKey},
     traits::signature_key::SignatureKey,
 };
-use std::str::FromStr;
 
 #[derive(Clone, Debug)]
 enum PrivateKey {
