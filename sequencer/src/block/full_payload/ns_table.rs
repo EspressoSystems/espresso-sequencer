@@ -144,7 +144,9 @@ impl<'de> Deserialize<'de> for NsTable {
         D: Deserializer<'de>,
     {
         let unchecked = NsTable::deserialize(deserializer)?;
-        unchecked.validate().map_err(de::Error::custom)?;
+        unchecked
+            .validate_deserialization_invariants()
+            .map_err(de::Error::custom)?;
         Ok(unchecked)
     }
 }
@@ -219,49 +221,30 @@ impl NsTable {
     /// 1. Byte length must hold a whole number of entries.
     /// 2. All namespace IDs and offsets must increase monotonically. Offsets
     ///    must be nonzero.
-    /// 3. Header consistent with byte length (obsolete after
-    ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>)
-    pub fn validate(&self) -> Result<(), NsTableValidationError> {
+    /// 3. Header consistent with byte length. (Obsolete after
+    ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>.)
+    /// 4. Final offset must equal `payload_byte_len`. (Obsolete after
+    ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>.)
+    ///    If the namespace table is empty then `payload_byte_len` must be 0.
+    pub fn validate(
+        &self,
+        payload_byte_len: &PayloadByteLen,
+    ) -> Result<(), NsTableValidationError> {
         use NsTableValidationError::*;
 
-        // Byte length for a table with `x` entries must be exactly
-        // `x * NsTableBuilder::entry_byte_len() + NsTableBuilder::header_byte_len()`
-        if self.bytes.len() < NsTableBuilder::header_byte_len()
-            || (self.bytes.len() - NsTableBuilder::header_byte_len())
-                % NsTableBuilder::entry_byte_len()
-                != 0
-        {
-            return Err(InvalidByteLen);
-        }
+        // conditions 1-3
+        self.validate_deserialization_invariants()?;
 
-        // Header must declare the correct number of namespaces
-        //
-        // TODO this check obsolete after
-        // https://github.com/EspressoSystems/espresso-sequencer/issues/1604
-        if self.len().0 != self.read_num_nss() {
-            return Err(InvalidHeader);
-        }
-
-        // Namespace IDs and offsets must increase monotonically. Offsets must
-        // be nonzero.
-        {
-            let (mut prev_ns_id, mut prev_offset) = (None, 0);
-            for (ns_id, offset) in self.iter().map(|i| {
-                (
-                    self.read_ns_id_unchecked(&i),
-                    self.read_ns_offset_unchecked(&i),
-                )
-            }) {
-                if let Some(prev_ns_id) = prev_ns_id {
-                    if ns_id <= prev_ns_id {
-                        return Err(NonIncreasingEntries);
-                    }
-                }
-                if offset <= prev_offset {
-                    return Err(NonIncreasingEntries);
-                }
-                (prev_ns_id, prev_offset) = (Some(ns_id), offset);
+        // condition 4
+        let len = self.len().0;
+        if len > 0 {
+            let final_ns_index = NsIndex(len - 1);
+            let final_offset = self.read_ns_offset_unchecked(&final_ns_index);
+            if final_offset != payload_byte_len.as_usize() {
+                return Err(InvalidFinalOffset);
             }
+        } else if payload_byte_len.as_usize() != 0 {
+            return Err(ExpectNonemptyNsTable);
         }
 
         Ok(())
@@ -306,6 +289,65 @@ impl NsTable {
             index.0 * (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
         usize_from_bytes::<NS_OFFSET_BYTE_LEN>(&self.bytes[start..start + NS_OFFSET_BYTE_LEN])
     }
+
+    /// Helper for [`NsTable::validate`], used in our custom [`serde`]
+    /// implementation.
+    ///
+    /// Checks conditions 1-3 of [`NsTable::validate`]. Those conditions can be
+    /// checked by looking only at the contents of the [`NsTable`].
+    fn validate_deserialization_invariants(&self) -> Result<(), NsTableValidationError> {
+        use NsTableValidationError::*;
+
+        // Byte length for a table with `x` entries must be exactly `x *
+        // NsTableBuilder::entry_byte_len() +
+        // NsTableBuilder::header_byte_len()`.
+        //
+        // Explanation for the following `if` condition:
+        //
+        // The above condition is equivalent to `[byte length] -
+        // header_byte_len` equals 0 modulo `entry_byte_len`. In order to
+        // compute `[byte length] - header_byte_len` we must first check that
+        // `[byte length]` is not exceeded by `header_byte_len`
+        if self.bytes.len() < NsTableBuilder::header_byte_len()
+            || (self.bytes.len() - NsTableBuilder::header_byte_len())
+                % NsTableBuilder::entry_byte_len()
+                != 0
+        {
+            return Err(InvalidByteLen);
+        }
+
+        // Header must declare the correct number of namespaces
+        //
+        // TODO this check obsolete after
+        // https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+        if self.len().0 != self.read_num_nss() {
+            return Err(InvalidHeader);
+        }
+
+        // Namespace IDs and offsets must increase monotonically. Offsets must
+        // be nonzero.
+        {
+            let (mut prev_ns_id, mut prev_offset) = (None, 0);
+            for (ns_id, offset) in self.iter().map(|i| {
+                (
+                    self.read_ns_id_unchecked(&i),
+                    self.read_ns_offset_unchecked(&i),
+                )
+            }) {
+                if let Some(prev_ns_id) = prev_ns_id {
+                    if ns_id <= prev_ns_id {
+                        return Err(NonIncreasingEntries);
+                    }
+                }
+                if offset <= prev_offset {
+                    return Err(NonIncreasingEntries);
+                }
+                (prev_ns_id, prev_offset) = (Some(ns_id), offset);
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl EncodeBytes for NsTable {
@@ -332,6 +374,8 @@ pub enum NsTableValidationError {
     InvalidByteLen,
     NonIncreasingEntries,
     InvalidHeader, // TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+    InvalidFinalOffset, // TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+    ExpectNonemptyNsTable,
 }
 
 pub struct NsTableBuilder {
@@ -379,7 +423,7 @@ impl NsTableBuilder {
 }
 
 /// Index for an entry in a ns table.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Display, Eq, Hash, PartialEq)]
 pub struct NsIndex(usize);
 bytes_serde_impl!(NsIndex, to_bytes, [u8; NUM_NSS_BYTE_LEN], from_bytes);
 

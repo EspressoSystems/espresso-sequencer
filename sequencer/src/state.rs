@@ -1,8 +1,13 @@
 use crate::{
-    api::data_source::CatchupDataSource, block::NsTableValidationError, catchup::SqlStateCatchup,
-    chain_config::BlockSize, chain_config::ResolvableChainConfig, eth_signature_key::EthKeyPair,
-    genesis::UpgradeType, persistence::ChainConfigPersistence, ChainConfig, Header, Leaf,
-    NodeState, SeqTypes,
+    api::data_source::CatchupDataSource,
+    block::{NsTableValidationError, PayloadByteLen},
+    catchup::SqlStateCatchup,
+    chain_config::BlockSize,
+    chain_config::ResolvableChainConfig,
+    eth_signature_key::EthKeyPair,
+    genesis::UpgradeType,
+    persistence::ChainConfigPersistence,
+    ChainConfig, Header, Leaf, NodeState, SeqTypes,
 };
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
@@ -334,7 +339,9 @@ pub fn validate_proposal(
         });
     }
 
-    proposal.ns_table.validate()?;
+    proposal
+        .ns_table
+        .validate(&PayloadByteLen::from_vid_common(vid_common))?;
 
     Ok(())
 }

@@ -8,6 +8,7 @@ use crate::{
 
 use async_trait::async_trait;
 use committable::Committable;
+use derive_more::Display;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{
     traits::{BlockPayload, EncodeBytes},
@@ -17,7 +18,7 @@ use hotshot_types::{
 use jf_vid::VidScheme;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use std::{collections::BTreeMap, fmt::Display, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 
 /// Raw payload data for an entire block.
 ///
@@ -253,7 +254,7 @@ impl QueryablePayload<SeqTypes> for Payload {
     }
 }
 
-impl Display for Payload {
+impl std::fmt::Display for Payload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:#?}")
     }
@@ -267,7 +268,8 @@ impl EncodeBytes for Payload {
 
 /// Byte length of a block payload, which includes all namespaces but *not* the
 /// namespace table.
-pub(in crate::block) struct PayloadByteLen(usize);
+#[derive(Clone, Debug, Display, Eq, Hash, PartialEq)]
+pub struct PayloadByteLen(usize);
 
 impl PayloadByteLen {
     /// Extract payload byte length from a [`VidCommon`] and construct a new [`Self`] from it.
@@ -276,13 +278,21 @@ impl PayloadByteLen {
     }
 
     /// Is the payload byte length declared in a [`VidCommon`] equal [`Self`]?
-    pub fn is_consistent(&self, common: &VidCommon) -> Result<(), ()> {
+    pub fn is_consistent(&self, common: &VidCommon) -> bool {
         // failure to convert to usize implies that `common` cannot be
         // consistent with `self`.
-        let expected =
-            usize::try_from(VidSchemeType::get_payload_byte_len(common)).map_err(|_| ())?;
+        let expected = match usize::try_from(VidSchemeType::get_payload_byte_len(common)) {
+            Ok(n) => n,
+            Err(_) => {
+                tracing::warn!(
+                    "VidCommon byte len u32 {} should convert to usize",
+                    VidSchemeType::get_payload_byte_len(common)
+                );
+                return false;
+            }
+        };
 
-        (self.0 == expected).then_some(()).ok_or(())
+        self.0 == expected
     }
 
     pub(in crate::block::full_payload) fn as_usize(&self) -> usize {
@@ -298,5 +308,12 @@ impl hotshot_types::traits::block_contents::TestableBlock<SeqTypes> for Payload 
 
     fn txn_count(&self) -> u64 {
         self.len(&self.ns_table) as u64
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl Payload {
+    pub fn ns_table_mut(&mut self) -> &mut NsTable {
+        &mut self.ns_table
     }
 }
