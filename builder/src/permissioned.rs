@@ -276,7 +276,10 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         genesis_header: genesis.header,
         genesis_state: genesis_state.clone(),
         l1_genesis,
-        peers: Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
+        peers: Arc::new(StatePeers::<Ver>::from_urls(
+            network_params.state_peers,
+            network_params.catchup_backoff,
+        )),
         node_id: node_index,
         upgrades: Default::default(),
         current_version: Ver::VERSION,

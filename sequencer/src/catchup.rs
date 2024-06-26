@@ -1,5 +1,6 @@
 use crate::{
     api::{data_source::CatchupDataSource, AccountQueryData, BlocksFrontier},
+    options::{parse_duration, Ratio},
     persistence::PersistenceOptions,
     state::{BlockMerkleTree, FeeAccount, FeeMerkleCommitment},
     ChainConfig,
@@ -7,8 +8,9 @@ use crate::{
 use anyhow::{bail, Context};
 use async_std::{sync::RwLock, task::sleep};
 use async_trait::async_trait;
+use clap::Parser;
 use committable::Commitment;
-use derive_more::From;
+use futures::future::{BoxFuture, FutureExt, TryFutureExt};
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
 use rand::Rng;
@@ -19,33 +21,92 @@ use tide_disco::error::ServerError;
 use url::Url;
 use vbs::version::StaticVersionType;
 
-const MIN_RETRY_DELAY: Duration = Duration::from_millis(500);
-const MAX_RETRY_DELAY: Duration = Duration::from_secs(5);
-const BACKOFF_FACTOR: u32 = 2;
-// Exponential backoff jitter as a fraction of the backoff delay, (numerator, denominator).
-const BACKOFF_JITTER: (u64, u64) = (1, 10);
+#[derive(Clone, Copy, Debug, Parser, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackoffParams {
+    /// Exponential backoff exponent.
+    #[clap(
+        long = "catchup-backoff-factor",
+        env = "ESPRESSO_SEQUENCER_CATCHUP_BACKOFF_FACTOR",
+        default_value = "4"
+    )]
+    factor: u32,
 
-#[must_use]
-fn backoff(delay: Duration) -> Duration {
-    if delay >= MAX_RETRY_DELAY {
-        return MAX_RETRY_DELAY;
+    /// Exponential backoff base delay.
+    #[clap(
+        long = "catchup-base-retry-delay",
+        env = "ESPRESSO_SEQUENCER_CATCHUP_BASE_RETRY_DELAY",
+        default_value = "20ms",
+        value_parser = parse_duration
+    )]
+    base: Duration,
+
+    /// Exponential max delay.
+    #[clap(
+        long = "catchup-max-retry-delay",
+        env = "ESPRESSO_SEQUENCER_CATCHUP_MAX_RETRY_DELAY",
+        default_value = "5s",
+        value_parser = parse_duration
+    )]
+    max: Duration,
+
+    /// Exponential backoff jitter as a ratio of the backoff delay, numerator:denominator.
+    #[clap(
+        long = "catchup-backoff-jitter",
+        env = "ESPRESSO_SEQUENCER_CATCHUP_BACKOFF_JITTER",
+        default_value = "1:10"
+    )]
+    jitter: Ratio,
+}
+
+impl Default for BackoffParams {
+    fn default() -> Self {
+        Self::parse_from(std::iter::empty::<String>())
+    }
+}
+
+impl BackoffParams {
+    async fn retry<S, T>(
+        &self,
+        mut state: S,
+        f: impl for<'a> Fn(&'a mut S) -> BoxFuture<'a, anyhow::Result<T>>,
+    ) -> T {
+        let mut delay = self.base;
+        loop {
+            match f(&mut state).await {
+                Ok(res) => break res,
+                Err(err) => {
+                    tracing::warn!(
+                        "Retryable operation failed, will retry after {delay:?}: {err:#}"
+                    );
+                    sleep(delay).await;
+                    delay = self.backoff(delay);
+                }
+            }
+        }
     }
 
-    let mut rng = rand::thread_rng();
+    #[must_use]
+    fn backoff(&self, delay: Duration) -> Duration {
+        if delay >= self.max {
+            return self.max;
+        }
 
-    // Increase the backoff by the backoff factor.
-    let ms = (delay * BACKOFF_FACTOR).as_millis() as u64;
+        let mut rng = rand::thread_rng();
 
-    // Sample a random jitter factor in the range [0, BACKOFF_JITTER.0 / BACKOFF_JITTER.1].
-    let jitter_num = rng.gen_range(0..BACKOFF_JITTER.0);
-    let jitter_den = BACKOFF_JITTER.1;
+        // Increase the backoff by the backoff factor.
+        let ms = (delay * self.factor).as_millis() as u64;
 
-    // Increase the delay by the jitter factor.
-    let jitter = ms * jitter_num / jitter_den;
-    let delay = Duration::from_millis(ms + jitter);
+        // Sample a random jitter factor in the range [0, self.jitter].
+        let jitter_num = rng.gen_range(0..self.jitter.numerator);
+        let jitter_den = self.jitter.denominator;
 
-    // Bound the delay by the maximum.
-    min(delay, MAX_RETRY_DELAY)
+        // Increase the delay by the jitter factor.
+        let jitter = ms * jitter_num / jitter_den;
+        let delay = Duration::from_millis(ms + jitter);
+
+        // Bound the delay by the maximum.
+        min(delay, self.max)
+    }
 }
 
 // This newtype is probably not worth having. It's only used to be able to log
@@ -90,21 +151,15 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
     ) -> anyhow::Result<Vec<AccountQueryData>> {
         let mut ret = vec![];
         for account in accounts {
-            // Retry until we succeed.
-            let mut delay = MIN_RETRY_DELAY;
-            let account = loop {
-                match self
-                    .try_fetch_account(height, view, fee_merkle_tree_root, account)
-                    .await
-                {
-                    Ok(account) => break account,
-                    Err(err) => {
-                        tracing::warn!(%account, ?delay, "Could not fetch account, retrying: {err:#}");
-                        sleep(delay).await;
-                        delay = backoff(delay);
-                    }
-                }
-            };
+            let account = self
+                .backoff()
+                .retry(self, |provider| {
+                    provider
+                        .try_fetch_account(height, view, fee_merkle_tree_root, account)
+                        .map_err(|err| err.context("fetching account {account}"))
+                        .boxed()
+                })
+                .await;
             ret.push(account);
         }
         Ok(ret)
@@ -125,22 +180,13 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
-        // Retry until we succeed.
-        let mut delay = MIN_RETRY_DELAY;
-        loop {
-            match self.try_remember_blocks_merkle_tree(height, view, mt).await {
-                Ok(()) => break,
-                Err(err) => {
-                    tracing::warn!(
-                        ?delay,
-                        "Could not fetch frontier from any peer, retrying: {err:#}"
-                    );
-                    sleep(delay).await;
-                    delay = backoff(delay);
-                }
-            }
-        }
-
+        self.backoff()
+            .retry(mt, |mt| {
+                self.try_remember_blocks_merkle_tree(height, view, mt)
+                    .map_err(|err| err.context("fetching frontier"))
+                    .boxed()
+            })
+            .await;
         Ok(())
     }
 
@@ -150,23 +196,17 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
     ) -> anyhow::Result<ChainConfig>;
 
     async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
-        // Retry until we succeed.
-        let mut delay = MIN_RETRY_DELAY;
-
-        loop {
-            match self.try_fetch_chain_config(commitment).await {
-                Ok(cf) => return cf,
-                Err(err) => {
-                    tracing::warn!(
-                        ?delay,
-                        "Could not fetch chain config from any peer, retrying: {err:#}"
-                    );
-                    sleep(delay).await;
-                    delay = backoff(delay);
-                }
-            }
-        }
+        self.backoff()
+            .retry(self, |provider| {
+                provider
+                    .try_fetch_chain_config(commitment)
+                    .map_err(|err| err.context("fetching chain config"))
+                    .boxed()
+            })
+            .await
     }
+
+    fn backoff(&self) -> &BackoffParams;
 }
 
 /// A catchup implementation that falls back to a remote provider, but prefers a local provider when
@@ -175,7 +215,7 @@ pub(crate) async fn local_and_remote(
     local_opt: impl PersistenceOptions,
     remote: impl StateCatchup + 'static,
 ) -> Arc<dyn StateCatchup> {
-    match local_opt.create_catchup_provider().await {
+    match local_opt.create_catchup_provider(*remote.backoff()).await {
         Ok(local) => Arc::new(vec![local, Arc::new(remote)]),
         Err(err) => {
             tracing::warn!("not using local catchup: {err:#}");
@@ -187,16 +227,18 @@ pub(crate) async fn local_and_remote(
 #[derive(Debug, Clone, Default)]
 pub struct StatePeers<Ver: StaticVersionType> {
     clients: Vec<Client<ServerError, Ver>>,
+    backoff: BackoffParams,
 }
 
 impl<Ver: StaticVersionType> StatePeers<Ver> {
-    pub fn from_urls(urls: Vec<Url>) -> Self {
+    pub fn from_urls(urls: Vec<Url>, backoff: BackoffParams) -> Self {
         if urls.is_empty() {
             panic!("Cannot create StatePeers with no peers");
         }
 
         Self {
             clients: urls.into_iter().map(Client::new).collect(),
+            backoff,
         }
     }
 }
@@ -289,11 +331,22 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
         }
         bail!("Could not fetch chain config from any peer");
     }
+
+    fn backoff(&self) -> &BackoffParams {
+        &self.backoff
+    }
 }
 
-#[derive(Debug, From)]
+#[derive(Debug)]
 pub(crate) struct SqlStateCatchup<T> {
     db: Arc<RwLock<T>>,
+    backoff: BackoffParams,
+}
+
+impl<T> SqlStateCatchup<T> {
+    pub(crate) fn new(db: Arc<RwLock<T>>, backoff: BackoffParams) -> Self {
+        Self { db, backoff }
+    }
 }
 
 #[async_trait]
@@ -345,6 +398,10 @@ where
         commitment: Commitment<ChainConfig>,
     ) -> anyhow::Result<ChainConfig> {
         self.db.read().await.get_chain_config(commitment).await
+    }
+
+    fn backoff(&self) -> &BackoffParams {
+        &self.backoff
     }
 }
 
@@ -404,6 +461,10 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
     async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
         (**self).fetch_chain_config(commitment).await
     }
+
+    fn backoff(&self) -> &BackoffParams {
+        (**self).backoff()
+    }
 }
 
 #[async_trait]
@@ -461,6 +522,10 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
 
     async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
         (**self).fetch_chain_config(commitment).await
+    }
+
+    fn backoff(&self) -> &BackoffParams {
+        (**self).backoff()
     }
 }
 
@@ -527,6 +592,14 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
 
         bail!("could not fetch chain config from any provider");
     }
+
+    fn backoff(&self) -> &BackoffParams {
+        // Use whichever provider's backoff is most conservative.
+        self.iter()
+            .map(|p| p.backoff())
+            .max()
+            .expect("provider list not empty")
+    }
 }
 
 #[cfg(any(test, feature = "testing"))]
@@ -538,12 +611,14 @@ pub mod mock {
 
     #[derive(Debug, Clone, Default)]
     pub struct MockStateCatchup {
+        backoff: BackoffParams,
         state: HashMap<ViewNumber, Arc<ValidatedState>>,
     }
 
     impl FromIterator<(ViewNumber, Arc<ValidatedState>)> for MockStateCatchup {
         fn from_iter<I: IntoIterator<Item = (ViewNumber, Arc<ValidatedState>)>>(iter: I) -> Self {
             Self {
+                backoff: Default::default(),
                 state: iter.into_iter().collect(),
             }
         }
@@ -595,6 +670,10 @@ pub mod mock {
             _commitment: Commitment<ChainConfig>,
         ) -> anyhow::Result<ChainConfig> {
             Ok(ChainConfig::default())
+        }
+
+        fn backoff(&self) -> &BackoffParams {
+            &self.backoff
         }
     }
 }
