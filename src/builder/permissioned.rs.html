@@ -738,12 +738,6 @@
 <a href="#738" id="738">738</a>
 <a href="#739" id="739">739</a>
 <a href="#740" id="740">740</a>
-<a href="#741" id="741">741</a>
-<a href="#742" id="742">742</a>
-<a href="#743" id="743">743</a>
-<a href="#744" id="744">744</a>
-<a href="#745" id="745">745</a>
-<a href="#746" id="746">746</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -980,18 +974,12 @@
     <span class="comment">// Combine the communication channels
     </span><span class="attr">#[cfg(feature = <span class="string">"libp2p"</span>)]
     </span><span class="kw">let </span>(da_network, quorum_network) = {
-        (
-            Arc::from(CombinedNetworks::new(
-                cdn_network.clone(),
-                p2p_network.clone(),
-                Duration::from_secs(<span class="number">1</span>),
-            )),
-            Arc::from(CombinedNetworks::new(
-                cdn_network,
-                p2p_network,
-                Duration::from_secs(<span class="number">1</span>),
-            )),
-        )
+        <span class="kw">let </span>network = Arc::new(CombinedNetworks::new(
+            cdn_network,
+            p2p_network,
+            Duration::from_secs(<span class="number">1</span>),
+        ));
+        (Arc::clone(<span class="kw-2">&amp;</span>network), network)
     };
 
     <span class="attr">#[cfg(not(feature = <span class="string">"libp2p"</span>))]
