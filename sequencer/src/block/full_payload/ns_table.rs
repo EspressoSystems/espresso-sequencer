@@ -295,8 +295,16 @@ impl NsTable {
     fn validate_deserialization_invariants(&self) -> Result<(), NsTableValidationError> {
         use NsTableValidationError::*;
 
-        // Byte length for a table with `x` entries must be exactly
-        // `x * NsTableBuilder::entry_byte_len() + NsTableBuilder::header_byte_len()`
+        // Byte length for a table with `x` entries must be exactly `x *
+        // NsTableBuilder::entry_byte_len() +
+        // NsTableBuilder::header_byte_len()`.
+        //
+        // Explanation for the following `if` condition:
+        //
+        // The above condition is equivalent to `[byte length] -
+        // header_byte_len` equals 0 modulo `entry_byte_len`. In order to
+        // compute `[byte length] - header_byte_len` we must first check that
+        // `[byte length]` is not exceeded by `header_byte_len`
         if self.bytes.len() < NsTableBuilder::header_byte_len()
             || (self.bytes.len() - NsTableBuilder::header_byte_len())
                 % NsTableBuilder::entry_byte_len()
