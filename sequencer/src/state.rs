@@ -1673,10 +1673,11 @@ mod test {
     fn test_apply_full_tx() {
         let mut state = ValidatedState::default();
         let txs = mock_full_network_txs(None);
-        // default key can be verified. The same signed by mock tx
+        // Default key can be verified b/c it is the same that signs the mock tx
         apply_full_transactions(&mut state, txs).unwrap();
 
-        // should be a different key than that generated in the mock
+        // Tx will be invalid if it is signed by a different key than
+        // set in `account` field.
         let key = FeeAccount::generated_from_seed_indexed([1; 32], 0).1;
         let invalid = mock_full_network_txs(Some(key));
         let (err, _) = apply_full_transactions(&mut state, invalid).unwrap_err();
