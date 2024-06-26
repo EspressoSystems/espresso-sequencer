@@ -282,6 +282,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             loop {
                 match event_stream.next().await {
                     None => {
+                        break;
                         // panic!("Error! Event stream completed before consensus ended.");
                     }
                     Some(Event { event, .. }) => {
@@ -365,12 +366,12 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                 //                             break;
                                 // }
 
-                                if leaf_chain.len() > 1 {
-                                    tracing::warn!(
-                                        "Leaf chain is greater than 1 with len {}",
-                                        leaf_chain.len()
-                                    );
-                                }
+                                // if leaf_chain.len() > 1 {
+                                //     tracing::warn!(
+                                //         "Leaf chain is greater than 1 with len {}",
+                                //         leaf_chain.len()
+                                //     );
+                                // }
                             }
                             _ => {} // mostly DA proposal
                         }
