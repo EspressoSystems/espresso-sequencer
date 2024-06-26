@@ -162,6 +162,14 @@
 <a href="#162" id="162">162</a>
 <a href="#163" id="163">163</a>
 <a href="#164" id="164">164</a>
+<a href="#165" id="165">165</a>
+<a href="#166" id="166">166</a>
+<a href="#167" id="167">167</a>
+<a href="#168" id="168">168</a>
+<a href="#169" id="169">169</a>
+<a href="#170" id="170">170</a>
+<a href="#171" id="171">171</a>
+<a href="#172" id="172">172</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
     block::{
         full_payload::{NsIndex, NsTable, Payload, PayloadByteLen},
@@ -201,8 +209,16 @@
     /// endpoint API at [`endpoints`](crate::api::endpoints), which is a hassle.
     </span><span class="kw">pub fn </span>new(payload: <span class="kw-2">&amp;</span>Payload, index: <span class="kw-2">&amp;</span>NsIndex, common: <span class="kw-2">&amp;</span>VidCommon) -&gt; <span class="prelude-ty">Option</span>&lt;NsProof&gt; {
         <span class="kw">let </span>payload_byte_len = payload.byte_len();
-        payload_byte_len.is_consistent(common).ok()<span class="question-mark">?</span>;
+        <span class="kw">if </span>!payload_byte_len.is_consistent(common) {
+            <span class="macro">tracing::warn!</span>(
+                <span class="string">"payload byte len {} inconsistent with common {}"</span>,
+                payload_byte_len,
+                VidSchemeType::get_payload_byte_len(common)
+            );
+            <span class="kw">return </span><span class="prelude-val">None</span>; <span class="comment">// error: payload byte len inconsistent with common
+        </span>}
         <span class="kw">if </span>!payload.ns_table().in_bounds(index) {
+            <span class="macro">tracing::warn!</span>(<span class="string">"ns_index {:?} out of bounds"</span>, index);
             <span class="kw">return </span><span class="prelude-val">None</span>; <span class="comment">// error: index out of bounds
         </span>}
         <span class="kw">let </span>ns_payload_range = payload.ns_table().ns_range(index, <span class="kw-2">&amp;</span>payload_byte_len);

@@ -253,6 +253,13 @@
 <a href="#253" id="253">253</a>
 <a href="#254" id="254">254</a>
 <a href="#255" id="255">255</a>
+<a href="#256" id="256">256</a>
+<a href="#257" id="257">257</a>
+<a href="#258" id="258">258</a>
+<a href="#259" id="259">259</a>
+<a href="#260" id="260">260</a>
+<a href="#261" id="261">261</a>
+<a href="#262" id="262">262</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
     block::{
         full_payload::{
@@ -309,7 +316,14 @@
         common: <span class="kw-2">&amp;</span>VidCommon,
     ) -&gt; <span class="prelude-ty">Option</span>&lt;(Transaction, <span class="self">Self</span>)&gt; {
         <span class="kw">let </span>payload_byte_len = payload.byte_len();
-        payload_byte_len.is_consistent(common).ok()<span class="question-mark">?</span>;
+        <span class="kw">if </span>!payload_byte_len.is_consistent(common) {
+            <span class="macro">tracing::warn!</span>(
+                <span class="string">"payload byte len {} inconsistent with common {}"</span>,
+                payload_byte_len,
+                VidSchemeType::get_payload_byte_len(common)
+            );
+            <span class="kw">return </span><span class="prelude-val">None</span>; <span class="comment">// error: payload byte len inconsistent with common
+        </span>}
         <span class="kw">if </span>!payload.ns_table().in_bounds(index.ns()) {
             <span class="macro">tracing::warn!</span>(<span class="string">"ns_index {:?} out of bounds"</span>, index.ns());
             <span class="kw">return </span><span class="prelude-val">None</span>; <span class="comment">// error: ns index out of bounds

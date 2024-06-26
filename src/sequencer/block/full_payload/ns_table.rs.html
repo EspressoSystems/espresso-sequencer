@@ -421,6 +421,50 @@
 <a href="#421" id="421">421</a>
 <a href="#422" id="422">422</a>
 <a href="#423" id="423">423</a>
+<a href="#424" id="424">424</a>
+<a href="#425" id="425">425</a>
+<a href="#426" id="426">426</a>
+<a href="#427" id="427">427</a>
+<a href="#428" id="428">428</a>
+<a href="#429" id="429">429</a>
+<a href="#430" id="430">430</a>
+<a href="#431" id="431">431</a>
+<a href="#432" id="432">432</a>
+<a href="#433" id="433">433</a>
+<a href="#434" id="434">434</a>
+<a href="#435" id="435">435</a>
+<a href="#436" id="436">436</a>
+<a href="#437" id="437">437</a>
+<a href="#438" id="438">438</a>
+<a href="#439" id="439">439</a>
+<a href="#440" id="440">440</a>
+<a href="#441" id="441">441</a>
+<a href="#442" id="442">442</a>
+<a href="#443" id="443">443</a>
+<a href="#444" id="444">444</a>
+<a href="#445" id="445">445</a>
+<a href="#446" id="446">446</a>
+<a href="#447" id="447">447</a>
+<a href="#448" id="448">448</a>
+<a href="#449" id="449">449</a>
+<a href="#450" id="450">450</a>
+<a href="#451" id="451">451</a>
+<a href="#452" id="452">452</a>
+<a href="#453" id="453">453</a>
+<a href="#454" id="454">454</a>
+<a href="#455" id="455">455</a>
+<a href="#456" id="456">456</a>
+<a href="#457" id="457">457</a>
+<a href="#458" id="458">458</a>
+<a href="#459" id="459">459</a>
+<a href="#460" id="460">460</a>
+<a href="#461" id="461">461</a>
+<a href="#462" id="462">462</a>
+<a href="#463" id="463">463</a>
+<a href="#464" id="464">464</a>
+<a href="#465" id="465">465</a>
+<a href="#466" id="466">466</a>
+<a href="#467" id="467">467</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Types related to a namespace table.
 //!
 //! All code that needs to know the binary format of a namespace table is
@@ -567,7 +611,9 @@
         </span>D: Deserializer&lt;<span class="lifetime">'de</span>&gt;,
     {
         <span class="kw">let </span>unchecked = NsTable::deserialize(deserializer)<span class="question-mark">?</span>;
-        unchecked.validate().map_err(de::Error::custom)<span class="question-mark">?</span>;
+        unchecked
+            .validate_deserialization_invariants()
+            .map_err(de::Error::custom)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(unchecked)
     }
 }
@@ -642,49 +688,30 @@
     /// 1. Byte length must hold a whole number of entries.
     /// 2. All namespace IDs and offsets must increase monotonically. Offsets
     ///    must be nonzero.
-    /// 3. Header consistent with byte length (obsolete after
-    ///    &lt;https://github.com/EspressoSystems/espresso-sequencer/issues/1604&gt;)
-    </span><span class="kw">pub fn </span>validate(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), NsTableValidationError&gt; {
+    /// 3. Header consistent with byte length. (Obsolete after
+    ///    &lt;https://github.com/EspressoSystems/espresso-sequencer/issues/1604&gt;.)
+    /// 4. Final offset must equal `payload_byte_len`. (Obsolete after
+    ///    &lt;https://github.com/EspressoSystems/espresso-sequencer/issues/1604&gt;.)
+    ///    If the namespace table is empty then `payload_byte_len` must be 0.
+    </span><span class="kw">pub fn </span>validate(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        payload_byte_len: <span class="kw-2">&amp;</span>PayloadByteLen,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), NsTableValidationError&gt; {
         <span class="kw">use </span>NsTableValidationError::<span class="kw-2">*</span>;
 
-        <span class="comment">// Byte length for a table with `x` entries must be exactly
-        // `x * NsTableBuilder::entry_byte_len() + NsTableBuilder::header_byte_len()`
-        </span><span class="kw">if </span><span class="self">self</span>.bytes.len() &lt; NsTableBuilder::header_byte_len()
-            || (<span class="self">self</span>.bytes.len() - NsTableBuilder::header_byte_len())
-                % NsTableBuilder::entry_byte_len()
-                != <span class="number">0
-        </span>{
-            <span class="kw">return </span><span class="prelude-val">Err</span>(InvalidByteLen);
-        }
+        <span class="comment">// conditions 1-3
+        </span><span class="self">self</span>.validate_deserialization_invariants()<span class="question-mark">?</span>;
 
-        <span class="comment">// Header must declare the correct number of namespaces
-        //
-        // TODO this check obsolete after
-        // https://github.com/EspressoSystems/espresso-sequencer/issues/1604
-        </span><span class="kw">if </span><span class="self">self</span>.len().<span class="number">0 </span>!= <span class="self">self</span>.read_num_nss() {
-            <span class="kw">return </span><span class="prelude-val">Err</span>(InvalidHeader);
-        }
-
-        <span class="comment">// Namespace IDs and offsets must increase monotonically. Offsets must
-        // be nonzero.
-        </span>{
-            <span class="kw">let </span>(<span class="kw-2">mut </span>prev_ns_id, <span class="kw-2">mut </span>prev_offset) = (<span class="prelude-val">None</span>, <span class="number">0</span>);
-            <span class="kw">for </span>(ns_id, offset) <span class="kw">in </span><span class="self">self</span>.iter().map(|i| {
-                (
-                    <span class="self">self</span>.read_ns_id_unchecked(<span class="kw-2">&amp;</span>i),
-                    <span class="self">self</span>.read_ns_offset_unchecked(<span class="kw-2">&amp;</span>i),
-                )
-            }) {
-                <span class="kw">if let </span><span class="prelude-val">Some</span>(prev_ns_id) = prev_ns_id {
-                    <span class="kw">if </span>ns_id &lt;= prev_ns_id {
-                        <span class="kw">return </span><span class="prelude-val">Err</span>(NonIncreasingEntries);
-                    }
-                }
-                <span class="kw">if </span>offset &lt;= prev_offset {
-                    <span class="kw">return </span><span class="prelude-val">Err</span>(NonIncreasingEntries);
-                }
-                (prev_ns_id, prev_offset) = (<span class="prelude-val">Some</span>(ns_id), offset);
+        <span class="comment">// condition 4
+        </span><span class="kw">let </span>len = <span class="self">self</span>.len().<span class="number">0</span>;
+        <span class="kw">if </span>len &gt; <span class="number">0 </span>{
+            <span class="kw">let </span>final_ns_index = NsIndex(len - <span class="number">1</span>);
+            <span class="kw">let </span>final_offset = <span class="self">self</span>.read_ns_offset_unchecked(<span class="kw-2">&amp;</span>final_ns_index);
+            <span class="kw">if </span>final_offset != payload_byte_len.as_usize() {
+                <span class="kw">return </span><span class="prelude-val">Err</span>(InvalidFinalOffset);
             }
+        } <span class="kw">else if </span>payload_byte_len.as_usize() != <span class="number">0 </span>{
+            <span class="kw">return </span><span class="prelude-val">Err</span>(ExpectNonemptyNsTable);
         }
 
         <span class="prelude-val">Ok</span>(())
@@ -729,6 +756,65 @@
             index.<span class="number">0 </span>* (NS_ID_BYTE_LEN + NS_OFFSET_BYTE_LEN) + NUM_NSS_BYTE_LEN + NS_ID_BYTE_LEN;
         usize_from_bytes::&lt;NS_OFFSET_BYTE_LEN&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>.bytes[start..start + NS_OFFSET_BYTE_LEN])
     }
+
+    <span class="doccomment">/// Helper for [`NsTable::validate`], used in our custom [`serde`]
+    /// implementation.
+    ///
+    /// Checks conditions 1-3 of [`NsTable::validate`]. Those conditions can be
+    /// checked by looking only at the contents of the [`NsTable`].
+    </span><span class="kw">fn </span>validate_deserialization_invariants(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), NsTableValidationError&gt; {
+        <span class="kw">use </span>NsTableValidationError::<span class="kw-2">*</span>;
+
+        <span class="comment">// Byte length for a table with `x` entries must be exactly `x *
+        // NsTableBuilder::entry_byte_len() +
+        // NsTableBuilder::header_byte_len()`.
+        //
+        // Explanation for the following `if` condition:
+        //
+        // The above condition is equivalent to `[byte length] -
+        // header_byte_len` equals 0 modulo `entry_byte_len`. In order to
+        // compute `[byte length] - header_byte_len` we must first check that
+        // `[byte length]` is not exceeded by `header_byte_len`
+        </span><span class="kw">if </span><span class="self">self</span>.bytes.len() &lt; NsTableBuilder::header_byte_len()
+            || (<span class="self">self</span>.bytes.len() - NsTableBuilder::header_byte_len())
+                % NsTableBuilder::entry_byte_len()
+                != <span class="number">0
+        </span>{
+            <span class="kw">return </span><span class="prelude-val">Err</span>(InvalidByteLen);
+        }
+
+        <span class="comment">// Header must declare the correct number of namespaces
+        //
+        // TODO this check obsolete after
+        // https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+        </span><span class="kw">if </span><span class="self">self</span>.len().<span class="number">0 </span>!= <span class="self">self</span>.read_num_nss() {
+            <span class="kw">return </span><span class="prelude-val">Err</span>(InvalidHeader);
+        }
+
+        <span class="comment">// Namespace IDs and offsets must increase monotonically. Offsets must
+        // be nonzero.
+        </span>{
+            <span class="kw">let </span>(<span class="kw-2">mut </span>prev_ns_id, <span class="kw-2">mut </span>prev_offset) = (<span class="prelude-val">None</span>, <span class="number">0</span>);
+            <span class="kw">for </span>(ns_id, offset) <span class="kw">in </span><span class="self">self</span>.iter().map(|i| {
+                (
+                    <span class="self">self</span>.read_ns_id_unchecked(<span class="kw-2">&amp;</span>i),
+                    <span class="self">self</span>.read_ns_offset_unchecked(<span class="kw-2">&amp;</span>i),
+                )
+            }) {
+                <span class="kw">if let </span><span class="prelude-val">Some</span>(prev_ns_id) = prev_ns_id {
+                    <span class="kw">if </span>ns_id &lt;= prev_ns_id {
+                        <span class="kw">return </span><span class="prelude-val">Err</span>(NonIncreasingEntries);
+                    }
+                }
+                <span class="kw">if </span>offset &lt;= prev_offset {
+                    <span class="kw">return </span><span class="prelude-val">Err</span>(NonIncreasingEntries);
+                }
+                (prev_ns_id, prev_offset) = (<span class="prelude-val">Some</span>(ns_id), offset);
+            }
+        }
+
+        <span class="prelude-val">Ok</span>(())
+    }
 }
 
 <span class="kw">impl </span>EncodeBytes <span class="kw">for </span>NsTable {
@@ -755,7 +841,9 @@
     InvalidByteLen,
     NonIncreasingEntries,
     InvalidHeader, <span class="comment">// TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
-</span>}
+    </span>InvalidFinalOffset, <span class="comment">// TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+    </span>ExpectNonemptyNsTable,
+}
 
 <span class="kw">pub struct </span>NsTableBuilder {
     bytes: Vec&lt;u8&gt;,
@@ -802,7 +890,7 @@
 }
 
 <span class="doccomment">/// Index for an entry in a ns table.
-</span><span class="attr">#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+</span><span class="attr">#[derive(Clone, Debug, Display, Eq, Hash, PartialEq)]
 </span><span class="kw">pub struct </span>NsIndex(usize);
 <span class="macro">bytes_serde_impl!</span>(NsIndex, to_bytes, [u8; NUM_NSS_BYTE_LEN], from_bytes);
 

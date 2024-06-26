@@ -300,6 +300,23 @@
 <a href="#300" id="300">300</a>
 <a href="#301" id="301">301</a>
 <a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+<a href="#313" id="313">313</a>
+<a href="#314" id="314">314</a>
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
     block::{
         full_payload::ns_table::{NsIndex, NsTable, NsTableBuilder},
@@ -310,6 +327,7 @@
 
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::Committable;
+<span class="kw">use </span>derive_more::Display;
 <span class="kw">use </span>hotshot_query_service::availability::QueryablePayload;
 <span class="kw">use </span>hotshot_types::{
     traits::{BlockPayload, EncodeBytes},
@@ -319,7 +337,7 @@
 <span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>sha2::Digest;
-<span class="kw">use </span>std::{collections::BTreeMap, fmt::Display, sync::Arc};
+<span class="kw">use </span>std::{collections::BTreeMap, sync::Arc};
 
 <span class="doccomment">/// Raw payload data for an entire block.
 ///
@@ -555,7 +573,7 @@
     }
 }
 
-<span class="kw">impl </span>Display <span class="kw">for </span>Payload {
+<span class="kw">impl </span>std::fmt::Display <span class="kw">for </span>Payload {
     <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>std::fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; std::fmt::Result {
         <span class="macro">write!</span>(f, <span class="string">"{self:#?}"</span>)
     }
@@ -569,7 +587,8 @@
 
 <span class="doccomment">/// Byte length of a block payload, which includes all namespaces but *not* the
 /// namespace table.
-</span><span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::block) <span class="kw">struct </span>PayloadByteLen(usize);
+</span><span class="attr">#[derive(Clone, Debug, Display, Eq, Hash, PartialEq)]
+</span><span class="kw">pub struct </span>PayloadByteLen(usize);
 
 <span class="kw">impl </span>PayloadByteLen {
     <span class="doccomment">/// Extract payload byte length from a [`VidCommon`] and construct a new [`Self`] from it.
@@ -578,13 +597,21 @@
     }
 
     <span class="doccomment">/// Is the payload byte length declared in a [`VidCommon`] equal [`Self`]?
-    </span><span class="kw">pub fn </span>is_consistent(<span class="kw-2">&amp;</span><span class="self">self</span>, common: <span class="kw-2">&amp;</span>VidCommon) -&gt; <span class="prelude-ty">Result</span>&lt;(), ()&gt; {
+    </span><span class="kw">pub fn </span>is_consistent(<span class="kw-2">&amp;</span><span class="self">self</span>, common: <span class="kw-2">&amp;</span>VidCommon) -&gt; bool {
         <span class="comment">// failure to convert to usize implies that `common` cannot be
         // consistent with `self`.
-        </span><span class="kw">let </span>expected =
-            usize::try_from(VidSchemeType::get_payload_byte_len(common)).map_err(|<span class="kw">_</span>| ())<span class="question-mark">?</span>;
+        </span><span class="kw">let </span>expected = <span class="kw">match </span>usize::try_from(VidSchemeType::get_payload_byte_len(common)) {
+            <span class="prelude-val">Ok</span>(n) =&gt; n,
+            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+                <span class="macro">tracing::warn!</span>(
+                    <span class="string">"VidCommon byte len u32 {} should convert to usize"</span>,
+                    VidSchemeType::get_payload_byte_len(common)
+                );
+                <span class="kw">return </span><span class="bool-val">false</span>;
+            }
+        };
 
-        (<span class="self">self</span>.<span class="number">0 </span>== expected).then_some(()).ok_or(())
+        <span class="self">self</span>.<span class="number">0 </span>== expected
     }
 
     <span class="kw">pub</span>(<span class="kw">in </span><span class="kw">crate</span>::block::full_payload) <span class="kw">fn </span>as_usize(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
@@ -600,6 +627,13 @@
 
     <span class="kw">fn </span>txn_count(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u64 {
         <span class="self">self</span>.len(<span class="kw-2">&amp;</span><span class="self">self</span>.ns_table) <span class="kw">as </span>u64
+    }
+}
+
+<span class="attr">#[cfg(any(test, feature = <span class="string">"testing"</span>))]
+</span><span class="kw">impl </span>Payload {
+    <span class="kw">pub fn </span>ns_table_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;mut </span>NsTable {
+        <span class="kw-2">&amp;mut </span><span class="self">self</span>.ns_table
     }
 }
 </code></pre></div></section></main></body></html>
