@@ -640,9 +640,9 @@ pub mod testing {
         pub fn build(mut self) -> TestConfig<NUM_NODES> {
             if let Some(upgrades) = &self.upgrades {
                 self.config.start_proposing_view = upgrades.start_proposing_view;
-                self.config.stop_proposing_view = upgrades.start_proposing_view;
+                self.config.stop_proposing_view = upgrades.stop_proposing_view;
                 self.config.start_voting_view = upgrades.start_voting_view;
-                self.config.stop_voting_view = upgrades.stop_proposing_view;
+                self.config.stop_voting_view = upgrades.stop_voting_view;
             }
 
             TestConfig {
