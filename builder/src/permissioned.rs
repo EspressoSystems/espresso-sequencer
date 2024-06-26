@@ -150,6 +150,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
         advertise_address: Some(network_params.libp2p_advertise_address),
+        builder_address: None,
         network_config_file: None,
     };
     let orchestrator_client = OrchestratorClient::new(validator_args);

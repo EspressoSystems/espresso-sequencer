@@ -348,6 +348,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
         advertise_address: Some(network_params.libp2p_advertise_address),
+        builder_address: None,
         network_config_file: None,
     };
     let orchestrator_client = OrchestratorClient::new(validator_args);
@@ -581,7 +582,7 @@ pub mod testing {
     use hotshot::types::EventType::Decide;
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_testing::block_builder::{
-        BuilderTask, SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
+        BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
     use hotshot_types::{
         event::LeafInfo,
@@ -592,21 +593,18 @@ pub mod testing {
     use portpicker::pick_unused_port;
     use std::time::Duration;
     use vbs::version::Version;
+    use std::collections::HashMap;
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
-    pub async fn run_test_builder(port: Option<u16>) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
-        let builder_config = if let Some(port) = port {
-            SimpleBuilderConfig { port }
-        } else {
-            SimpleBuilderConfig::default()
-        };
-        <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
+    pub async fn run_test_builder(url: Url, port: Option<u16>) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
+        (<SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
             TestConfig::NUM_NODES,
-            builder_config,
-            Default::default(),
+            url.clone(),
+            (),
+            HashMap::new(),
         )
-        .await
+        .await, url)
     }
 
     #[derive(Clone)]
@@ -906,7 +904,7 @@ mod test {
         let url = anvil.url();
         let mut config = TestConfig::default_with_l1(url);
 
-        let (builder_task, builder_url) = run_test_builder(None).await;
+        let (builder_task, builder_url) = run_test_builder(url, None).await;
 
         config.set_builder_urls(vec1::vec1![builder_url]);
 

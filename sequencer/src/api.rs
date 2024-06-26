@@ -430,7 +430,7 @@ pub mod test_helpers {
             catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
             mut network_config: TestConfig,
         ) -> Self {
-            let (builder_task, builder_url) = run_test_builder(network_config.builder_port).await;
+            let (builder_task, builder_url) = run_test_builder(network_config.url.clone(), network_config.builder_port).await;
             network_config.set_builder_urls(vec1::vec1![builder_url]);
 
             let mut nodes = join_all(izip!(state, persistence, catchup).enumerate().map(

@@ -559,7 +559,7 @@ checksum = "7378575ff571966e99a744addeff0bff98b8ada0dedf1956d59e634db95eaac1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
  "synstructure 0.13.1",
 ]
 
@@ -571,7 +571,7 @@ checksum = "7b18050c2cd6fe86c3a76584ef5e0baf286d038cda203eb6223df2cc413565f7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -912,7 +912,7 @@ checksum = "16e62a023e7c117e27523144c5d2459f4397fcc3cab0085af8e2224f643a0193"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -942,7 +942,7 @@ checksum = "c6fa2087f2753a7da8cc1c0dbfcf89579dd57458e36769de5ac750b4671737ca"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -1045,7 +1045,7 @@ checksum = "3c87f3f15e7794432337fc718554eaa4dc8f04c9677a950ffe366f20a162ae42"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -1062,7 +1062,7 @@ checksum = "edf3ee19dbc0a46d740f6f0926bde8c50f02bdbc7b536842da28f6ac56513a8b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -1218,9 +1218,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf4b9d6a944f767f8e5e0db018570623c85f3d925ac718db4e06d0187adb21c1"
+checksum = "b048fb63fd8b5923fc5aa7b340d8e156aec7ec02f0c78fa8a6ddc2613f6f71de"
 dependencies = [
  "serde",
 ]
@@ -1499,9 +1499,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.99"
+version = "1.0.101"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96c51067fd44124faa7f870b4b1c969379ad32b2ba805aa959430ceaa384f695"
+checksum = "ac367972e516d45567c7eafc73d24e1c193dcf200a8d94e9db7b3d38b349572d"
 dependencies = [
  "jobserver",
  "libc",
@@ -1514,7 +1514,31 @@ version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.3.12#7bf490b34fb5b996d7e98d3d4be6d88028a076ac"
 dependencies = [
  "async-std",
- "cdn-proto",
+ "cdn-proto 0.1.0",
+ "clap",
+ "console-subscriber 0.3.0",
+ "dashmap 5.5.3",
+ "derivative",
+ "jf-signature",
+ "lazy_static",
+ "local-ip-address",
+ "parking_lot",
+ "portpicker",
+ "prometheus",
+ "rand 0.8.5",
+ "rkyv",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.18",
+]
+
+[[package]]
+name = "cdn-broker"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0#fdcf88863147173fb270e830abbbb24308268087"
+dependencies = [
+ "async-std",
+ "cdn-proto 0.4.0",
  "clap",
  "console-subscriber 0.3.0",
  "dashmap 5.5.3",
@@ -1534,11 +1558,11 @@ dependencies = [
 
 [[package]]
 name = "cdn-client"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.3.12#7bf490b34fb5b996d7e98d3d4be6d88028a076ac"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0#fdcf88863147173fb270e830abbbb24308268087"
 dependencies = [
  "async-std",
- "cdn-proto",
+ "cdn-proto 0.4.0",
  "clap",
  "jf-signature",
  "rand 0.8.5",
@@ -1553,7 +1577,21 @@ version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.3.12#7bf490b34fb5b996d7e98d3d4be6d88028a076ac"
 dependencies = [
  "async-std",
- "cdn-proto",
+ "cdn-proto 0.1.0",
+ "clap",
+ "jf-signature",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.18",
+]
+
+[[package]]
+name = "cdn-marshal"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0#fdcf88863147173fb270e830abbbb24308268087"
+dependencies = [
+ "async-std",
+ "cdn-proto 0.4.0",
  "clap",
  "jf-signature",
  "tokio",
@@ -1565,6 +1603,40 @@ dependencies = [
 name = "cdn-proto"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.3.12#7bf490b34fb5b996d7e98d3d4be6d88028a076ac"
+dependencies = [
+ "anyhow",
+ "ark-serialize",
+ "async-trait",
+ "capnp",
+ "capnpc",
+ "derivative",
+ "jf-signature",
+ "kanal",
+ "lazy_static",
+ "mnemonic",
+ "num_enum",
+ "pem 3.0.4",
+ "prometheus",
+ "quinn",
+ "rand 0.8.5",
+ "rcgen 0.13.1",
+ "redis",
+ "rkyv",
+ "rustls 0.23.10",
+ "rustls-pki-types",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "tokio-rustls 0.26.0",
+ "tracing",
+ "url",
+ "warp",
+]
+
+[[package]]
+name = "cdn-proto"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0#fdcf88863147173fb270e830abbbb24308268087"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -1691,7 +1763,7 @@ dependencies = [
  "heck 0.5.0",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -2291,7 +2363,7 @@ checksum = "f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -2333,7 +2405,7 @@ dependencies = [
  "itertools 0.12.1",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
  "synstructure 0.13.1",
 ]
 
@@ -2358,7 +2430,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "strsim",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -2369,7 +2441,7 @@ checksum = "733cabb43482b1a1b53eee8583c2b9e8684d592215ea83efd305dd31bc2f0178"
 dependencies = [
  "darling_core",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -2387,9 +2459,9 @@ dependencies = [
 
 [[package]]
 name = "dashmap"
-version = "6.0.0"
+version = "6.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23fadfd577acfd4485fb258011b0fd080882ea83359b6fd41304900b94ccf487"
+checksum = "804c8821570c3f8b70230c2ba75ffa5c0f9a4189b9a432b6656c536712acae28"
 dependencies = [
  "cfg-if",
  "crossbeam-utils",
@@ -2479,7 +2551,7 @@ checksum = "67e77553c4162a157adbf834ebae5b415acbecbeafc7a74b0e886657506a7611"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -2500,7 +2572,7 @@ dependencies = [
  "darling",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -2510,7 +2582,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "206868b8242f27cecce124c19fd88157fbd0dd334df2587f36417bafbc85097b"
 dependencies = [
  "derive_builder_core",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -2523,7 +2595,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustc_version 0.4.0",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -2660,7 +2732,7 @@ checksum = "97369cbbc041bc366949bc74d34658d6cda5621039731c6310521892a3a20ae0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -2760,9 +2832,9 @@ checksum = "bbbaaaf38131deb9ca518a274a45bfdb8771f139517b073b16c2d3d32ae5037b"
 
 [[package]]
 name = "either"
-version = "1.12.0"
+version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3dca9240753cf90908d7e4aac30f630662b02aebaa1b58a3cadabdb23385b58b"
+checksum = "60b1af1c220855b6ceac025d3f6ecdd2b7c4894bfe9cd9bda4fbb4bc7c0d4cf0"
 dependencies = [
  "serde",
 ]
@@ -2837,7 +2909,7 @@ dependencies = [
  "heck 0.4.1",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -3053,7 +3125,7 @@ dependencies = [
  "reqwest 0.11.27",
  "serde",
  "serde_json",
- "syn 2.0.67",
+ "syn 2.0.68",
  "toml",
  "walkdir",
 ]
@@ -3071,7 +3143,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde_json",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -3097,7 +3169,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum",
- "syn 2.0.67",
+ "syn 2.0.68",
  "tempfile",
  "thiserror",
  "tiny-keccak",
@@ -3544,7 +3616,7 @@ checksum = "87750cf4b7a4c0625b1529e4c543c2182106e4dedc60a2a6455e00d212c489ac"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -4023,8 +4095,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot"
-version = "0.5.58"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
+version = "0.5.59"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#77fb7be62f4b0123badac3c39f80ba088282a19f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4035,13 +4107,13 @@ dependencies = [
  "bimap",
  "bincode",
  "blake3",
- "cdn-broker",
+ "cdn-broker 0.4.0",
  "cdn-client",
- "cdn-marshal",
+ "cdn-marshal 0.4.0",
  "chrono",
  "committable",
  "custom_debug 0.5.1",
- "dashmap 6.0.0",
+ "dashmap 6.0.1",
  "derive_more",
  "either",
  "ethereum-types",
@@ -4070,7 +4142,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#77fb7be62f4b0123badac3c39f80ba088282a19f"
 dependencies = [
  "async-trait",
  "clap",
@@ -4089,7 +4161,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.26"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=rc-0.1.29#2f5d1b7bb17bb667cf34df804b95a2816aea6dd2"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=daily-build#7b1912ae687ce5e9dff5ce3ce0851ef955eaebef"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4142,7 +4214,7 @@ dependencies = [
 [[package]]
 name = "hotshot-events-service"
 version = "0.1.27"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=rc-0.1.29#0aa74a42b4bae9dc11011684e7a10346590fa068"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=daily-build#c884467c80ee80381ec6252a3e1036a1e6f26aa7"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4166,8 +4238,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-example-types"
-version = "0.5.58"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
+version = "0.5.59"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#77fb7be62f4b0123badac3c39f80ba088282a19f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4197,19 +4269,19 @@ dependencies = [
 
 [[package]]
 name = "hotshot-macros"
-version = "0.5.58"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
+version = "0.5.59"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#77fb7be62f4b0123badac3c39f80ba088282a19f"
 dependencies = [
  "derive_builder",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
 name = "hotshot-orchestrator"
-version = "0.5.58"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
+version = "0.5.59"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#77fb7be62f4b0123badac3c39f80ba088282a19f"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4239,7 +4311,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.39"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=rc-0.1.41#bd03a5d909e8705f6038f2066a7633732c653219"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=daily-build#842fdbad48021b87cc9d057cfd132ecd2d362fe7"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4293,8 +4365,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-stake-table"
-version = "0.5.58"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
+version = "0.5.59"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#77fb7be62f4b0123badac3c39f80ba088282a19f"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4365,8 +4437,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task"
-version = "0.5.58"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
+version = "0.5.59"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#77fb7be62f4b0123badac3c39f80ba088282a19f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4380,8 +4452,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task-impls"
-version = "0.5.58"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
+version = "0.5.59"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#77fb7be62f4b0123badac3c39f80ba088282a19f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4391,7 +4463,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "bitvec",
- "cdn-proto",
+ "cdn-proto 0.4.0",
  "chrono",
  "committable",
  "either",
@@ -4415,8 +4487,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-testing"
-version = "0.5.58"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
+version = "0.5.59"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#77fb7be62f4b0123badac3c39f80ba088282a19f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4458,7 +4530,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#77fb7be62f4b0123badac3c39f80ba088282a19f"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -4476,7 +4548,7 @@ dependencies = [
  "bincode",
  "bitvec",
  "blake3",
- "cdn-proto",
+ "cdn-proto 0.4.0",
  "committable",
  "custom_debug 0.5.1",
  "derivative",
@@ -5401,11 +5473,11 @@ dependencies = [
 
 [[package]]
 name = "lazy_static"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
+checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 dependencies = [
- "spin 0.5.2",
+ "spin 0.9.8",
 ]
 
 [[package]]
@@ -5738,8 +5810,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-networking"
-version = "0.5.58"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.59#b9329c30b25dcbda5018a36ee06ee4294111778f"
+version = "0.5.59"
+source = "git+https://github.com/EspressoSystems/hotshot?branch=main#77fb7be62f4b0123badac3c39f80ba088282a19f"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -5972,7 +6044,7 @@ dependencies = [
  "heck 0.5.0",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -6080,7 +6152,7 @@ version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0ff37bd590ca25063e35af745c343cb7a0271906fb7b37e4813e8f79f00268d"
 dependencies = [
- "bitflags 2.5.0",
+ "bitflags 2.6.0",
  "libc",
 ]
 
@@ -6283,7 +6355,7 @@ dependencies = [
  "proc-macro-error",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -6726,7 +6798,7 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -6799,7 +6871,7 @@ version = "0.10.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95a0481286a310808298130d22dd1fef0fa571e05a8f44ec801801e84b216b1f"
 dependencies = [
- "bitflags 2.5.0",
+ "bitflags 2.6.0",
  "cfg-if",
  "foreign-types",
  "libc",
@@ -6816,7 +6888,7 @@ checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -7036,7 +7108,7 @@ dependencies = [
  "pest_meta",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -7100,7 +7172,7 @@ dependencies = [
  "phf_shared 0.11.2",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -7138,7 +7210,7 @@ checksum = "2f38a4412a78282e09a2cf38d195ea5420d15ba0602cb375210efbc877243965"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -7358,7 +7430,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5f12335488a2f3b0a83b14edad48dca9879ce89b2edd10e80237e4e852dd645e"
 dependencies = [
  "proc-macro2",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -7457,16 +7529,16 @@ checksum = "440f724eba9f6996b75d63681b0a92b06947f1457076d503a4d2e2c8f56442b8"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
 name = "proptest"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31b476131c3c86cb68032fdc5cb6d5a1045e3e42d96b69fa599fd77701e1f5bf"
+checksum = "b4c2511913b88df1637da85cc8d96ec8e43a3f8bb8ccb71ee1ac240d6f3df58d"
 dependencies = [
- "bitflags 2.5.0",
+ "bitflags 2.6.0",
  "lazy_static",
  "num-traits",
  "rand 0.8.5",
@@ -7496,7 +7568,7 @@ dependencies = [
  "itertools 0.12.1",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -7813,7 +7885,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c82cf8cff14456045f55ec4241383baeff27af886adb72ffb2162f99911de0fd"
 dependencies = [
- "bitflags 2.5.0",
+ "bitflags 2.6.0",
 ]
 
 [[package]]
@@ -7869,7 +7941,7 @@ dependencies = [
  "quote",
  "refinery-core",
  "regex",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -8083,7 +8155,7 @@ dependencies = [
  "rkyv_derive",
  "seahash",
  "tinyvec",
- "uuid 1.8.0",
+ "uuid 1.9.1",
 ]
 
 [[package]]
@@ -8126,7 +8198,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b91f7eff05f748767f183df4320a63d6936e9c6107d97c9e6bdd9784f4289c94"
 dependencies = [
  "base64 0.21.7",
- "bitflags 2.5.0",
+ "bitflags 2.6.0",
  "serde",
  "serde_derive",
 ]
@@ -8258,7 +8330,7 @@ version = "0.38.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70dc5ec042f7a43c4a73241207cecc9873a06d45debb38b329f8541d85c2730f"
 dependencies = [
- "bitflags 2.5.0",
+ "bitflags 2.6.0",
  "errno",
  "libc",
  "linux-raw-sys 0.4.14",
@@ -8508,7 +8580,7 @@ version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c627723fd09706bacdb5cf41499e95098555af3c3c29d014dc3c458ef6be11c0"
 dependencies = [
- "bitflags 2.5.0",
+ "bitflags 2.6.0",
  "core-foundation",
  "core-foundation-sys",
  "libc",
@@ -8581,8 +8653,8 @@ dependencies = [
  "bincode",
  "blake3",
  "bytesize",
- "cdn-broker",
- "cdn-marshal",
+ "cdn-broker 0.1.0",
+ "cdn-marshal 0.1.0",
  "clap",
  "cld",
  "committable",
@@ -8696,9 +8768,9 @@ dependencies = [
 
 [[package]]
 name = "serde_bytes"
-version = "0.11.14"
+version = "0.11.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b8497c313fd43ab992087548117643f6fcd935cbf36f176ffda0aacf9591734"
+checksum = "387cc504cb06bb40a96c8e04e951fe01854cf6bc921053c954e4a606d9675c6a"
 dependencies = [
  "serde",
 ]
@@ -8711,7 +8783,7 @@ checksum = "500cbc0ebeb6f46627f50f3f5811ccf6bf00643be300b4c3eabc0ef55dc5b5ba"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -8725,9 +8797,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.117"
+version = "1.0.118"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "455182ea6142b14f93f4bc5320a2b31c1f266b66a4a5c858b013302a5d8cbfc3"
+checksum = "d947f6b3163d8857ea16c4fa0dd4840d52f3041039a85decd46867eb1abef2e4"
 dependencies = [
  "itoa",
  "ryu",
@@ -8793,7 +8865,7 @@ dependencies = [
  "darling",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -9062,7 +9134,7 @@ dependencies = [
  "heck 0.5.0",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -9284,7 +9356,7 @@ checksum = "1ed31390216d20e538e447a7a9b959e06ed9fc51c37b514b46eb758016ecd418"
 dependencies = [
  "atoi",
  "base64 0.21.7",
- "bitflags 2.5.0",
+ "bitflags 2.6.0",
  "byteorder",
  "bytes 1.6.0",
  "crc",
@@ -9327,7 +9399,7 @@ checksum = "7c824eb80b894f926f89a0b9da0c7f435d27cdd35b8c655b114e58223918577e"
 dependencies = [
  "atoi",
  "base64 0.21.7",
- "bitflags 2.5.0",
+ "bitflags 2.6.0",
  "byteorder",
  "crc",
  "dotenvy",
@@ -9478,9 +9550,9 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "strum"
-version = "0.26.2"
+version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d8cec3501a5194c432b2b7976db6b7d10ec95c253208b45f83f7136aa985e29"
+checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
 dependencies = [
  "strum_macros",
 ]
@@ -9495,14 +9567,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustversion",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
 name = "subtle"
-version = "2.6.0"
+version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d0208408ba0c3df17ed26eb06992cb1a1268d41b2c0e12e65203fbe3972cee5"
+checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "surf"
@@ -9657,9 +9729,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.67"
+version = "2.0.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff8655ed1d86f3af4ee3fd3263786bc14245ad17c4c7e85ba7187fb3ae028c90"
+checksum = "901fa70d88b9d6c98022e23b4136f9f3e54e4662c3bc1bd1d84a42a9a0f0c1e9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9698,7 +9770,7 @@ checksum = "c8af7666ab7b6390ab78131fb5b0fce11d6b7a6951602017c35fa82800708971"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -9794,7 +9866,7 @@ checksum = "46c3384250002a6d5af4d114f2845d37b57521033f30d5c3f46c4d70e1197533"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -9990,9 +10062,9 @@ dependencies = [
 
 [[package]]
 name = "tinyvec"
-version = "1.6.0"
+version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87cc5ceb3875bb20c2890005a4e226a4651264a5c75edb2421b52861a0a0cb50"
+checksum = "c55115c6fbe2d2bef26eb09ad74bde02d8255476fc0c7b515ef09fbb35742d82"
 dependencies = [
  "tinyvec_macros",
 ]
@@ -10041,7 +10113,7 @@ checksum = "5f5ae998a069d4b5aba8ee9dad856af7d520c3699e6159b185c2acd48155d39a"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -10302,7 +10374,7 @@ checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -10417,7 +10489,7 @@ checksum = "70977707304198400eb4835a78f6a9f928bf41bba420deb8fdb175cd965d77a7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -10664,9 +10736,9 @@ dependencies = [
 
 [[package]]
 name = "uuid"
-version = "1.8.0"
+version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a183cf7feeba97b4dd1c0d46788634f6221d87fa961b305bed08c851829efcc0"
+checksum = "5de17fd2f7da591098415cff336e12965a28061ddace43b59cb3c430179c9439"
 
 [[package]]
 name = "valuable"
@@ -10855,7 +10927,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
  "wasm-bindgen-shared",
 ]
 
@@ -10889,7 +10961,7 @@ checksum = "e94f17b526d0a461a191c78ea52bbce64071ed5c04c9ffe424dcb38f74171bb7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -11352,7 +11424,7 @@ checksum = "15e934569e47891f7d9411f1a451d947a60e000ab3bd24fbb970f000387d1b3b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
@@ -11372,7 +11444,7 @@ checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.67",
+ "syn 2.0.68",
 ]
 
 [[package]]
