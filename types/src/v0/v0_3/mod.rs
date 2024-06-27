@@ -19,5 +19,6 @@ pub use super::v0_1::{
 pub const VERSION: Version = Version { major: 0, minor: 3 };
 
 mod header;
+mod state;
 
 pub use header::Header;
