@@ -199,7 +199,6 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
                 // The task hasn't been cancelled, the primary probably failed.
                 // Increment the primary fail counter and send the message.
                 debug!("Sending on secondary after delay, message possibly has not reached recipient on primary");
-                primary_fail_counter.fetch_add(1, Ordering::Relaxed);
                 secondary_future.await
             });
             Ok(())
