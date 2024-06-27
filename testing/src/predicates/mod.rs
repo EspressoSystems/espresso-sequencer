@@ -1,5 +1,10 @@
 pub mod event;
-pub mod upgrade;
+#[cfg(not(feature = "dependency-tasks"))]
+pub mod upgrade_with_consensus;
+#[cfg(feature = "dependency-tasks")]
+pub mod upgrade_with_proposal;
+#[cfg(feature = "dependency-tasks")]
+pub mod upgrade_with_vote;
 
 use async_trait::async_trait;
 

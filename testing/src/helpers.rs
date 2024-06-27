@@ -234,6 +234,17 @@ pub fn da_payload_commitment(
     vid_commitment(&encoded_transactions, quorum_membership.total_nodes())
 }
 
+pub fn build_payload_commitment(
+    membership: &<TestTypes as NodeType>::Membership,
+    view: ViewNumber,
+) -> <VidSchemeType as VidScheme>::Commit {
+    // Make some empty encoded transactions, we just care about having a commitment handy for the
+    // later calls. We need the VID commitment to be able to propose later.
+    let mut vid = vid_scheme_from_view_number::<TestTypes>(membership, view);
+    let encoded_transactions = Vec::new();
+    vid.commit_only(&encoded_transactions).unwrap()
+}
+
 /// TODO: <https://github.com/EspressoSystems/HotShot/issues/2821>
 #[allow(clippy::type_complexity)]
 pub fn build_vid_proposal(

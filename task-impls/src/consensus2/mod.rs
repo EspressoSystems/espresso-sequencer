@@ -10,7 +10,7 @@ use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::Consensus,
     event::Event,
-    simple_certificate::{QuorumCertificate, TimeoutCertificate},
+    simple_certificate::{QuorumCertificate, TimeoutCertificate, UpgradeCertificate},
     simple_vote::{QuorumVote, TimeoutVote},
     traits::{
         node_implementation::{NodeImplementation, NodeType},
@@ -20,6 +20,7 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::instrument;
+use vbs::version::Version;
 
 use self::handlers::{
     handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
@@ -89,6 +90,12 @@ pub struct Consensus2TaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// The node's id
     pub id: u64,
+
+    /// Globally shared reference to the current network version.
+    pub version: Arc<RwLock<Version>>,
+
+    /// An upgrade certificate that has been decided on, if any.
+    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
 }
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Consensus2TaskState<TYPES, I> {
     /// Handles a consensus event received on the event stream

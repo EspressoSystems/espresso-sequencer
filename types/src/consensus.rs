@@ -15,7 +15,7 @@ use crate::{
     data::{Leaf, QuorumProposal, VidDisperse, VidDisperseShare},
     error::HotShotError,
     message::Proposal,
-    simple_certificate::{DaCertificate, QuorumCertificate, UpgradeCertificate},
+    simple_certificate::{DaCertificate, QuorumCertificate},
     traits::{
         block_contents::BuilderFee,
         metrics::{Counter, Gauge, Histogram, Metrics, NoMetrics},
@@ -83,17 +83,6 @@ pub struct Consensus<TYPES: NodeType> {
 
     /// A reference to the metrics trait
     pub metrics: Arc<ConsensusMetricsValue>,
-
-    /// The most recent upgrade certificate this node formed.
-    /// Note: this is ONLY for certificates that have been formed internally,
-    /// so that we can propose with them.
-    ///
-    /// Certificates received from other nodes will get reattached regardless of this fields,
-    /// since they will be present in the leaf we propose off of.
-    dontuse_formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
-
-    /// most recent decided upgrade certificate
-    dontuse_decided_upgrade_cert: Option<UpgradeCertificate<TYPES>>,
 }
 
 /// Contains several `ConsensusMetrics` that we're interested in from the consensus interfaces
@@ -189,8 +178,6 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             saved_payloads,
             high_qc,
             metrics,
-            dontuse_decided_upgrade_cert: None,
-            dontuse_formed_upgrade_certificate: None,
         }
     }
 
@@ -383,11 +370,6 @@ impl<TYPES: NodeType> Consensus<TYPES> {
     /// Add a new entry to the da_certs map.
     pub fn update_saved_da_certs(&mut self, view_number: TYPES::Time, cert: DaCertificate<TYPES>) {
         self.saved_da_certs.insert(view_number, cert);
-    }
-
-    /// Update the most recent decided upgrade certificate.
-    pub fn update_dontuse_decided_upgrade_cert(&mut self, cert: Option<UpgradeCertificate<TYPES>>) {
-        self.dontuse_decided_upgrade_cert = cert;
     }
 
     /// gather information from the parent chain of leaves

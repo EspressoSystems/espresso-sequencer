@@ -16,6 +16,7 @@ use hotshot_types::{
     consensus::{CommitmentAndMetadata, Consensus},
     data::{Leaf, QuorumProposal, VidDisperse, ViewChangeEvidence},
     message::Proposal,
+    simple_certificate::UpgradeCertificate,
     traits::{
         block_contents::BlockHeader, node_implementation::NodeType, signature_key::SignatureKey,
     },
@@ -83,8 +84,19 @@ pub struct ProposalDependencyHandle<TYPES: NodeType> {
     /// Shared consensus task state
     pub consensus: Arc<RwLock<Consensus<TYPES>>>,
 
-    /// The current version of consensus
-    pub version: Version,
+    /// Globally shared reference to the current network version.
+    pub version: Arc<RwLock<Version>>,
+
+    /// The most recent upgrade certificate this node formed.
+    /// Note: this is ONLY for certificates that have been formed internally,
+    /// so that we can propose with them.
+    ///
+    /// Certificates received from other nodes will get reattached regardless of this fields,
+    /// since they will be present in the leaf we propose off of.
+    pub formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
+
+    /// An upgrade certificate that has been decided on, if any.
+    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
 }
 
 impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
@@ -96,6 +108,8 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
         commitment_and_metadata: CommitmentAndMetadata<TYPES>,
         vid_share: Proposal<TYPES, VidDisperse<TYPES>>,
         view_change_evidence: Option<ViewChangeEvidence<TYPES>>,
+        formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
+        decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     ) -> Result<()> {
         let (parent_leaf, state) = parent_leaf_and_state(
             self.view_number,
@@ -104,6 +118,34 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
             Arc::clone(&self.consensus),
         )
         .await?;
+
+        // In order of priority, we should try to attach:
+        //   - the parent certificate if it exists, or
+        //   - our own certificate that we formed.
+        // In either case, we need to ensure that the certificate is still relevant.
+        //
+        // Note: once we reach a point of potentially propose with our formed upgrade certificate,
+        // we will ALWAYS drop it. If we cannot immediately use it for whatever reason, we choose
+        // to discard it.
+        //
+        // It is possible that multiple nodes form separate upgrade certificates for the some
+        // upgrade if we are not careful about voting. But this shouldn't bother us: the first
+        // leader to propose is the one whose certificate will be used. And if that fails to reach
+        // a decide for whatever reason, we may lose our own certificate, but something will likely
+        // have gone wrong there anyway.
+        let mut upgrade_certificate = parent_leaf
+            .upgrade_certificate()
+            .or(formed_upgrade_certificate);
+
+        if let Some(cert) = upgrade_certificate.clone() {
+            if cert
+                .is_relevant(self.view_number, Arc::clone(&decided_upgrade_certificate))
+                .await
+                .is_err()
+            {
+                upgrade_certificate = None;
+            }
+        }
 
         let proposal_certificate = view_change_evidence
             .as_ref()
@@ -124,7 +166,7 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
             commitment_and_metadata.metadata,
             commitment_and_metadata.fee,
             vid_share.data.common.clone(),
-            self.version,
+            *self.version.read().await,
         )
         .await
         .context("Failed to construct block header")?;
@@ -134,7 +176,7 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
             view_number: self.view_number,
             justify_qc: self.consensus.read().await.high_qc().clone(),
             proposal_certificate,
-            upgrade_certificate: None,
+            upgrade_certificate,
         };
 
         let proposed_leaf = Leaf::from_quorum_proposal(&proposal);
@@ -272,6 +314,8 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
                 commit_and_metadata.unwrap(),
                 vid_share.unwrap(),
                 proposal_cert,
+                self.formed_upgrade_certificate.clone(),
+                Arc::clone(&self.decided_upgrade_certificate),
             )
             .await
         {

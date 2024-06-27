@@ -227,7 +227,7 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
         proposal.clone(),
         parent_leaf,
         Arc::clone(&task_state.consensus),
-        None,
+        Arc::clone(&task_state.decided_upgrade_certificate),
         Arc::clone(&task_state.quorum_membership),
         view_leader_key,
         event_sender.clone(),

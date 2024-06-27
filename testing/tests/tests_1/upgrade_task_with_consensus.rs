@@ -1,3 +1,5 @@
+#![cfg(not(feature = "dependency-tasks"))]
+
 // TODO: Remove after integration of dependency-tasks
 #![allow(unused_imports)]
 
@@ -12,11 +14,11 @@ use hotshot_example_types::{
 };
 use hotshot_macros::test_scripts;
 use hotshot_task_impls::{
-    consensus::ConsensusTaskState, events::HotShotEvent::*, upgrade::UpgradeTaskState,
+    consensus::ConsensusTaskState, events::HotShotEvent::*, upgrade::UpgradeTaskState
 };
 use hotshot_testing::{
     helpers::{build_fake_view_with_leaf, vid_share},
-    predicates::{event::*, upgrade::*},
+    predicates::{event::*, upgrade_with_consensus::*},
     script::{Expectations, TaskScript},
     view_generator::TestViewGenerator,
 };
@@ -28,11 +30,10 @@ use hotshot_types::{
 };
 use vbs::version::Version;
 
-#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 /// Tests that we correctly update our internal consensus state when reaching a decided upgrade certificate.
-async fn test_consensus_task_upgrade() {
+async fn test_upgrade_task_vote() {
     use hotshot_testing::helpers::build_system_handle;
 
     async_compatibility_layer::logging::setup_logging();
@@ -181,14 +182,13 @@ async fn test_consensus_task_upgrade() {
     test_scripts![inputs, consensus_script].await;
 }
 
-#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(
     async_executor_impl = "tokio",
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 /// Test that we correctly form and include an `UpgradeCertificate` when receiving votes.
-async fn test_upgrade_and_consensus_task() {
+async fn test_upgrade_task_propose() {
     use std::sync::Arc;
 
     use hotshot_testing::helpers::build_system_handle;
@@ -336,7 +336,6 @@ async fn test_upgrade_and_consensus_task() {
     test_scripts![inputs, consensus_script, upgrade_script].await;
 }
 
-#[cfg(not(feature = "dependency-tasks"))]
 #[cfg_attr(
     async_executor_impl = "tokio",
     tokio::test(flavor = "multi_thread", worker_threads = 2)
@@ -348,7 +347,7 @@ async fn test_upgrade_and_consensus_task() {
 ///   - we correctly vote affirmatively on a QuorumProposal with a null block payload in view 5
 ///   - we correctly propose with a null block payload in view 6, even if we have indications to do otherwise (via SendPayloadCommitmentAndMetadata, VID etc).
 ///   - we correctly reject a QuorumProposal with a non-null block payload in view 7.
-async fn test_upgrade_and_consensus_task_blank_blocks() {
+async fn test_upgrade_task_blank_blocks() {
     use hotshot_testing::helpers::build_system_handle;
 
     async_compatibility_layer::logging::setup_logging();

@@ -19,7 +19,7 @@ use hotshot_testing::{
     all_predicates,
     helpers::{
         build_fake_view_with_leaf, build_system_handle,
-        vid_scheme_from_view_number,
+        build_payload_commitment
     },
     predicates::{
         event::{all_predicates, exact, quorum_proposal_send},
@@ -34,27 +34,14 @@ use hotshot_types::{
     simple_vote::{TimeoutData, ViewSyncFinalizeData},
     traits::{
         election::Membership,
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime},
     },
     utils::BuilderCommitment,
-    vid::VidSchemeType,
     vote::HasViewNumber,
 };
-use jf_vid::VidScheme;
 use sha2::Digest;
 
 const TIMEOUT: Duration = Duration::from_millis(35);
-
-fn make_payload_commitment(
-    membership: &<TestTypes as NodeType>::Membership,
-    view: ViewNumber,
-) -> <VidSchemeType as VidScheme>::Commit {
-    // Make some empty encoded transactions, we just care about having a commitment handy for the
-    // later calls. We need the VID commitment to be able to propose later.
-    let mut vid = vid_scheme_from_view_number::<TestTypes>(membership, view);
-    let encoded_transactions = Vec::new();
-    vid.commit_only(&encoded_transactions).unwrap()
-}
 
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
@@ -70,7 +57,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-    let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(node_id));
+    let payload_commitment = build_payload_commitment(&quorum_membership, ViewNumber::new(node_id));
 
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
 
@@ -195,7 +182,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
         random![
             QcFormed(either::Left(genesis_cert.clone())),
             SendPayloadCommitmentAndMetadata(
-                make_payload_commitment(&quorum_membership, ViewNumber::new(1)),
+                build_payload_commitment(&quorum_membership, ViewNumber::new(1)),
                 builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(1),
@@ -211,7 +198,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             QcFormed(either::Left(proposals[1].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
-                make_payload_commitment(&quorum_membership, ViewNumber::new(2)),
+                build_payload_commitment(&quorum_membership, ViewNumber::new(2)),
                 builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(2),
@@ -227,7 +214,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             QuorumProposalRecv(proposals[1].clone(), leaders[1]),
             QcFormed(either::Left(proposals[2].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
-                make_payload_commitment(&quorum_membership, ViewNumber::new(3)),
+                build_payload_commitment(&quorum_membership, ViewNumber::new(3)),
                 builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(3),
@@ -243,7 +230,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             QuorumProposalRecv(proposals[2].clone(), leaders[2]),
             QcFormed(either::Left(proposals[3].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
-                make_payload_commitment(&quorum_membership, ViewNumber::new(4)),
+                build_payload_commitment(&quorum_membership, ViewNumber::new(4)),
                 builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(4),
@@ -259,7 +246,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             QuorumProposalRecv(proposals[3].clone(), leaders[3]),
             QcFormed(either::Left(proposals[4].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
-                make_payload_commitment(&quorum_membership, ViewNumber::new(5)),
+                build_payload_commitment(&quorum_membership, ViewNumber::new(5)),
                 builder_commitment,
                 TestMetadata,
                 ViewNumber::new(5),
@@ -321,7 +308,7 @@ async fn test_quorum_proposal_task_qc_timeout() {
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-    let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(node_id));
+    let payload_commitment = build_payload_commitment(&quorum_membership, ViewNumber::new(node_id));
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
 
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
@@ -400,7 +387,7 @@ async fn test_quorum_proposal_task_view_sync() {
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
-    let payload_commitment = make_payload_commitment(&quorum_membership, ViewNumber::new(node_id));
+    let payload_commitment = build_payload_commitment(&quorum_membership, ViewNumber::new(node_id));
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
 
     let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
@@ -521,7 +508,7 @@ async fn test_quorum_proposal_task_liveness_check() {
         random![
             QcFormed(either::Left(genesis_cert.clone())),
             SendPayloadCommitmentAndMetadata(
-                make_payload_commitment(&quorum_membership, ViewNumber::new(1)),
+                build_payload_commitment(&quorum_membership, ViewNumber::new(1)),
                 builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(1),
@@ -537,7 +524,7 @@ async fn test_quorum_proposal_task_liveness_check() {
             QuorumProposalRecv(proposals[0].clone(), leaders[0]),
             QcFormed(either::Left(proposals[1].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
-                make_payload_commitment(&quorum_membership, ViewNumber::new(2)),
+                build_payload_commitment(&quorum_membership, ViewNumber::new(2)),
                 builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(2),
@@ -553,7 +540,7 @@ async fn test_quorum_proposal_task_liveness_check() {
             QuorumProposalRecv(proposals[1].clone(), leaders[1]),
             QcFormed(either::Left(proposals[2].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
-                make_payload_commitment(&quorum_membership, ViewNumber::new(3)),
+                build_payload_commitment(&quorum_membership, ViewNumber::new(3)),
                 builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(3),
@@ -570,7 +557,7 @@ async fn test_quorum_proposal_task_liveness_check() {
             QuorumProposalRecv(proposals[2].clone(), leaders[2]),
             QcFormed(either::Left(proposals[3].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
-                make_payload_commitment(&quorum_membership, ViewNumber::new(4)),
+                build_payload_commitment(&quorum_membership, ViewNumber::new(4)),
                 builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(4),
@@ -586,7 +573,7 @@ async fn test_quorum_proposal_task_liveness_check() {
             QuorumProposalRecv(proposals[3].clone(), leaders[3]),
             QcFormed(either::Left(proposals[4].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
-                make_payload_commitment(&quorum_membership, ViewNumber::new(5)),
+                build_payload_commitment(&quorum_membership, ViewNumber::new(5)),
                 builder_commitment,
                 TestMetadata,
                 ViewNumber::new(5),

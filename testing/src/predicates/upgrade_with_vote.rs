@@ -1,13 +1,14 @@
+#![cfg(feature = "dependency-tasks")]
+
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
-use hotshot_task_impls::consensus::ConsensusTaskState;
+use hotshot_task_impls::quorum_vote::QuorumVoteTaskState;
 use hotshot_types::simple_certificate::UpgradeCertificate;
 
 use crate::predicates::{Predicate, PredicateResult};
-
-type ConsensusTaskTestState = ConsensusTaskState<TestTypes, MemoryImpl>;
+type QuorumVoteTaskTestState = QuorumVoteTaskState<TestTypes, MemoryImpl>;
 
 type UpgradeCertCallback =
     Arc<dyn Fn(Arc<Option<UpgradeCertificate<TestTypes>>>) -> bool + Send + Sync>;
@@ -23,10 +24,11 @@ impl std::fmt::Debug for UpgradeCertPredicate {
     }
 }
 
+#[cfg(feature = "dependency-tasks")]
 #[async_trait]
-impl Predicate<ConsensusTaskTestState> for UpgradeCertPredicate {
-    async fn evaluate(&self, input: &ConsensusTaskTestState) -> PredicateResult {
-        let upgrade_cert = input.decided_upgrade_cert.clone();
+impl Predicate<QuorumVoteTaskTestState> for UpgradeCertPredicate {
+    async fn evaluate(&self, input: &QuorumVoteTaskTestState) -> PredicateResult {
+        let upgrade_cert = input.decided_upgrade_certificate.read().await.clone();
         PredicateResult::from((self.check)(upgrade_cert.into()))
     }
 

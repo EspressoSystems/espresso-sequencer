@@ -4,9 +4,11 @@ use std::{
     fmt::{self, Debug, Display, Formatter},
     hash::Hash,
     marker::PhantomData,
+    sync::Arc,
 };
 
 use anyhow::{ensure, Result};
+use async_lock::RwLock;
 use committable::{Commitment, Committable};
 use ethereum_types::U256;
 use serde::{Deserialize, Serialize};
@@ -152,12 +154,14 @@ impl<TYPES: NodeType> Display for QuorumCertificate<TYPES> {
 }
 
 impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
+    // TODO: Replace this function with `is_relevant` after the following issue is done:
+    // https://github.com/EspressoSystems/HotShot/issues/3357.
     /// Determines whether or not a certificate is relevant (i.e. we still have time to reach a
     /// decide)
     ///
     /// # Errors
     /// Returns an error when the certificate is no longer relevant
-    pub fn is_relevant(
+    pub fn temp_is_relevant(
         &self,
         view_number: TYPES::Time,
         decided_upgrade_certificate: Option<Self>,
@@ -165,6 +169,28 @@ impl<TYPES: NodeType> UpgradeCertificate<TYPES> {
         ensure!(
             self.data.decide_by >= view_number
                 || decided_upgrade_certificate.is_some_and(|cert| cert == *self),
+            "Upgrade certificate is no longer relevant."
+        );
+
+        Ok(())
+    }
+
+    /// Determines whether or not a certificate is relevant (i.e. we still have time to reach a
+    /// decide)
+    ///
+    /// # Errors
+    /// Returns an error when the certificate is no longer relevant
+    pub async fn is_relevant(
+        &self,
+        view_number: TYPES::Time,
+        decided_upgrade_certificate: Arc<RwLock<Option<Self>>>,
+    ) -> Result<()> {
+        let decided_upgrade_certificate_read = decided_upgrade_certificate.read().await;
+        ensure!(
+            self.data.decide_by >= view_number
+                || decided_upgrade_certificate_read
+                    .clone()
+                    .is_some_and(|cert| cert == *self),
             "Upgrade certificate is no longer relevant."
         );
 

@@ -49,6 +49,15 @@ impl<TYPES: NodeType, S> Expectations<TYPES, S> {
             task_state_asserts: vec![],
         }
     }
+    pub fn from_outputs_and_task_states(
+        output_asserts: Vec<Box<dyn Predicate<Arc<HotShotEvent<TYPES>>>>>,
+        task_state_asserts: Vec<Box<dyn Predicate<S>>>,
+    ) -> Self {
+        Self {
+            output_asserts,
+            task_state_asserts,
+        }
+    }
 }
 
 pub fn panic_extra_output_in_script<S>(stage_number: usize, script_name: String, output: &S)
