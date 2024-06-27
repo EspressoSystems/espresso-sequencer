@@ -7,6 +7,9 @@ import { getEnvVar, createSafeTransactionData, validateEthereumAddress } from ".
 const SET_PROVER_CMD = "setProver";
 const DISABLE_PROVER_CMD = "disableProver";
 
+// declaring the type returned by the createTransaction method in the safe package locally (since the return type isn't exposed) so that if it's updated, it's reflected here too
+type LocalSafeTransaction = Awaited<ReturnType<Safe["createTransaction"]>>;
+
 async function main() {
   dotenv.config();
 
@@ -92,7 +95,7 @@ export async function proposeSetProverTransaction(
   // Prepare the transaction data to set the permissioned prover
   let data = createPermissionedProverTxData(proverAddress);
 
-  const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_ADDRESS");
+  const contractAddress = getEnvVar("LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS");
   validateEthereumAddress(contractAddress);
 
   // Create the Safe Transaction Object
@@ -144,7 +147,7 @@ export async function proposeDisableProverTransaction(
   // Prepare the transaction data to disable permissioned prover mode
   let data = createDisablePermissionedProverTxData();
 
-  const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_ADDRESS");
+  const contractAddress = getEnvVar("LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS");
   validateEthereumAddress(contractAddress);
 
   // Create the Safe Transaction Object
@@ -193,7 +196,7 @@ async function createSafeTransaction(
   contractAddress: string,
   data: string,
   value: string,
-): Promise<any> {
+): Promise<LocalSafeTransaction> {
   // Prepare the safe transaction data with the contract address, data, and value
   let safeTransactionData = createSafeTransactionData(contractAddress, data, value);
 
