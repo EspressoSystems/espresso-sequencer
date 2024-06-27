@@ -165,12 +165,12 @@ async fn enforce_max_block_size() {
 }
 
 // TODO lots of infra here that could be reused in other tests.
-struct ValidTest {
+pub struct ValidTest {
     nss: HashMap<NamespaceId, Vec<Transaction>>,
 }
 
 impl ValidTest {
-    fn from_tx_lengths<R>(tx_lengths: Vec<Vec<usize>>, rng: &mut R) -> Self
+    pub fn from_tx_lengths<R>(tx_lengths: Vec<Vec<usize>>, rng: &mut R) -> Self
     where
         R: RngCore,
     {
@@ -185,7 +185,7 @@ impl ValidTest {
         Self { nss }
     }
 
-    fn many_from_tx_lengths<R>(test_cases: Vec<Vec<Vec<usize>>>, rng: &mut R) -> Vec<Self>
+    pub fn many_from_tx_lengths<R>(test_cases: Vec<Vec<Vec<usize>>>, rng: &mut R) -> Vec<Self>
     where
         R: RngCore,
     {
@@ -195,7 +195,7 @@ impl ValidTest {
             .collect()
     }
 
-    fn all_txs(&self) -> Vec<Transaction> {
+    pub fn all_txs(&self) -> Vec<Transaction> {
         self.nss.iter().flat_map(|(_, txs)| txs.clone()).collect()
     }
 }

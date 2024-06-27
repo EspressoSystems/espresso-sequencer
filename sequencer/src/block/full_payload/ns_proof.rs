@@ -37,8 +37,16 @@ impl NsProof {
     /// endpoint API at [`endpoints`](crate::api::endpoints), which is a hassle.
     pub fn new(payload: &Payload, index: &NsIndex, common: &VidCommon) -> Option<NsProof> {
         let payload_byte_len = payload.byte_len();
-        payload_byte_len.is_consistent(common).ok()?;
+        if !payload_byte_len.is_consistent(common) {
+            tracing::warn!(
+                "payload byte len {} inconsistent with common {}",
+                payload_byte_len,
+                VidSchemeType::get_payload_byte_len(common)
+            );
+            return None; // error: payload byte len inconsistent with common
+        }
         if !payload.ns_table().in_bounds(index) {
+            tracing::warn!("ns_index {:?} out of bounds", index);
             return None; // error: index out of bounds
         }
         let ns_payload_range = payload.ns_table().ns_range(index, &payload_byte_len);

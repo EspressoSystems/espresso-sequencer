@@ -60,6 +60,7 @@ use hotshot_builder_core::{
     service::{
         run_non_permissioned_standalone_builder_service,
         run_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
+        ReceivedTransaction,
     },
 };
 use hotshot_state_prover;
@@ -136,7 +137,8 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     hotshot_builder_api_url: Url,
     eth_key_pair: EthKeyPair,
     bootstrapped_view: ViewNumber,
-    channel_capacity: NonZeroUsize,
+    tx_channel_capacity: NonZeroUsize,
+    event_channel_capacity: NonZeroUsize,
     bind_version: Ver,
     persistence: P,
     max_api_timeout_duration: Duration,
@@ -232,18 +234,12 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Combine the communication channels
     #[cfg(feature = "libp2p")]
     let (da_network, quorum_network) = {
-        (
-            Arc::from(CombinedNetworks::new(
-                cdn_network.clone(),
-                p2p_network.clone(),
-                Duration::from_secs(1),
-            )),
-            Arc::from(CombinedNetworks::new(
-                cdn_network,
-                p2p_network,
-                Duration::from_secs(1),
-            )),
-        )
+        let network = Arc::new(CombinedNetworks::new(
+            cdn_network,
+            p2p_network,
+            Duration::from_secs(1),
+        ));
+        (Arc::clone(&network), network)
     };
 
     #[cfg(not(feature = "libp2p"))]
@@ -309,7 +305,8 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         node_index,
         eth_key_pair,
         bootstrapped_view,
-        channel_capacity,
+        tx_channel_capacity,
+        event_channel_capacity,
         instance_state,
         genesis_state,
         hotshot_builder_api_url,
@@ -407,7 +404,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         node_index: u64,
         eth_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
-        channel_capacity: NonZeroUsize,
+        tx_channel_capacity: NonZeroUsize,
+        event_channel_capacity: NonZeroUsize,
         instance_state: NodeState,
         validated_state: ValidatedState,
         hotshot_builder_api_url: Url,
@@ -416,20 +414,25 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         maximize_txns_count_timeout_duration: Duration,
     ) -> anyhow::Result<Self> {
         // tx channel
-        let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (mut tx_sender, tx_receiver) =
+            broadcast::<Arc<ReceivedTransaction<SeqTypes>>>(tx_channel_capacity.get());
+        tx_sender.set_overflow(true);
 
         // da channel
-        let (da_sender, da_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (da_sender, da_receiver) =
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // qc channel
-        let (qc_sender, qc_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (qc_sender, qc_receiver) =
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // decide channel
         let (decide_sender, decide_receiver) =
-            broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // builder api request channel
-        let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (req_sender, req_receiver) =
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         let (genesis_payload, genesis_ns_table) =
             Payload::from_transactions([], &validated_state, &instance_state)
@@ -465,11 +468,12 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 leaf_commit: fake_commitment(),
                 builder_commitment,
             },
-            tx_receiver,
             decide_receiver,
             da_receiver,
             qc_receiver,
             req_receiver,
+            tx_receiver,
+            Vec::new() /* tx_queue */,
             global_state_clone,
             NonZeroUsize::new(1).unwrap(),
             maximize_txns_count_timeout_duration,

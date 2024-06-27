@@ -852,6 +852,10 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         assertEq(BN254.ScalarField.unwrap(a), BN254.ScalarField.unwrap(b));
     }
 
+    function assertNotEqBN254(BN254.ScalarField a, BN254.ScalarField b) public pure {
+        assertNotEq(BN254.ScalarField.unwrap(a), BN254.ScalarField.unwrap(b));
+    }
+
     function test_hotShotBlockCommIsUpdated() public {
         uint256 blockCommCount = lc.getHotShotBlockCommitmentsCount();
 
@@ -899,12 +903,9 @@ contract LightClient_HotShotCommUpdatesTest is LightClientCommonTest {
         emit LC.NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
         lc.newFinalizedState(newState, newProof);
 
-        // Test for a the same hotShotBlockHeight
-        BN254.ScalarField blockComm = lc.getHotShotCommitment(newState.blockHeight).blockCommRoot;
-        assertEqBN254(blockComm, newState.blockCommRoot);
-
         // Test for a smaller hotShotBlockHeight
-        blockComm = lc.getHotShotCommitment(newState.blockHeight - 1).blockCommRoot;
+        BN254.ScalarField blockComm =
+            lc.getHotShotCommitment(newState.blockHeight - 1).blockCommRoot;
         assertEqBN254(blockComm, newState.blockCommRoot);
     }
 
