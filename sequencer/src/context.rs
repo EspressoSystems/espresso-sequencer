@@ -253,11 +253,17 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     /// Start participating in consensus.
     pub async fn start_consensus(&self) {
+        #[cfg(feature = "benchmarking")]
+        let mut has_orchestrator_client = false;
         if let Some(orchestrator_client) = &self.wait_for_orchestrator {
             tracing::warn!("waiting for orchestrated start");
             orchestrator_client
                 .wait_for_all_nodes_ready(self.node_state.node_id)
                 .await;
+            #[cfg(feature = "benchmarking")]
+            {
+                has_orchestrator_client = true;
+            }
         } else {
             tracing::error!("Cannot get info from orchestrator client");
         }
@@ -265,12 +271,10 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         self.handle.read().await.hotshot.start_consensus().await;
 
         #[cfg(feature = "benchmarking")]
-        #[allow(unused_variables)]
-        {
+        if has_orchestrator_client {
             // start_round is the number of rounds for warm up, which will not be counted in for benchmarking phase
-            // change to larger number like start_round = 20 & end_round = 120 when doing real benchmarking
-            let start_round: usize = 0;
-            let end_round: usize = 0;
+            let start_round: usize = 20;
+            let end_round: usize = 120;
             let mut event_stream = self.event_stream().await;
             let mut num_successful_commits = 0;
             let mut total_transactions_committed = 0;
@@ -342,7 +346,8 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                         let throughput_bytes_per_sec = (total_throughput as u64)
                                             / std::cmp::max(total_time_elapsed.as_secs(), 1u64);
                                         BenchResults {
-                                            avg_latency_in_sec: 0, // latency will be reported in another struct
+                                            // latency will be reported in another struct
+                                            avg_latency_in_sec: 0,
                                             num_latency: 1,
                                             minimum_latency_in_sec: 0,
                                             maximum_latency_in_sec: 0,
