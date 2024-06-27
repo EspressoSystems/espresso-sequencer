@@ -9,6 +9,7 @@ use hotshot_types::{
     traits::node_implementation::NodeType,
 };
 use serde::{Deserialize, Serialize};
+use vbs::version::StaticVersion;
 
 use crate::{
     auction_results_provider_types::TestAuctionResultsProvider,
@@ -34,6 +35,12 @@ use crate::{
 /// to select our traits
 pub struct TestTypes;
 impl NodeType for TestTypes {
+    type Base = StaticVersion<0, 1>;
+    type Upgrade = StaticVersion<0, 2>;
+    const UPGRADE_HASH: [u8; 32] = [
+        1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+        0, 0,
+    ];
     type Time = ViewNumber;
     type BlockHeader = TestBlockHeader;
     type BlockPayload = TestBlockPayload;

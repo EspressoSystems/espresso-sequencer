@@ -16,7 +16,6 @@ use vbs::{
 };
 
 use crate::{
-    constants::{Base, Upgrade},
     data::{DaProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare},
     simple_certificate::{
         DaCertificate, UpgradeCertificate, ViewSyncCommitCertificate2,
@@ -66,23 +65,24 @@ where
         let version = match upgrade_certificate {
             Some(ref cert) => {
                 if view >= cert.data.new_version_first_view
-                    && cert.data.new_version == Upgrade::VERSION
+                    && cert.data.new_version == TYPES::Upgrade::VERSION
                 {
-                    Upgrade::VERSION
+                    TYPES::Upgrade::VERSION
                 } else if view >= cert.data.new_version_first_view
-                    && cert.data.new_version != Upgrade::VERSION
+                    && cert.data.new_version != TYPES::Upgrade::VERSION
                 {
                     bail!("The network has upgraded to a new version that we do not support!");
                 } else {
-                    Base::VERSION
+                    TYPES::Base::VERSION
                 }
             }
-            None => Base::VERSION,
+            None => TYPES::Base::VERSION,
         };
 
         let serialized_message = match version {
-            Base::VERSION => Serializer::<Base>::serialize(&self),
-            Upgrade::VERSION => Serializer::<Upgrade>::serialize(&self),
+            // Associated constants cannot be used in pattern matches, so we do this trick instead.
+            v if v == TYPES::Base::VERSION => Serializer::<TYPES::Base>::serialize(&self),
+            v if v == TYPES::Upgrade::VERSION => Serializer::<TYPES::Upgrade>::serialize(&self),
             _ => {
                 bail!("Attempted to serialize with an incompatible version. This should be impossible.");
             }
@@ -105,8 +105,8 @@ where
             .0;
 
         let deserialized_message: Self = match version {
-            Base::VERSION => Serializer::<Base>::deserialize(message),
-            Upgrade::VERSION => Serializer::<Upgrade>::deserialize(message),
+            v if v == TYPES::Base::VERSION => Serializer::<TYPES::Base>::deserialize(message),
+            v if v == TYPES::Upgrade::VERSION => Serializer::<TYPES::Upgrade>::deserialize(message),
             _ => {
                 bail!("Cannot deserialize message!");
             }
@@ -118,18 +118,18 @@ where
         let expected_version = match upgrade_certificate {
             Some(ref cert) => {
                 if view >= cert.data.new_version_first_view
-                    && cert.data.new_version == Upgrade::VERSION
+                    && cert.data.new_version == TYPES::Upgrade::VERSION
                 {
-                    Upgrade::VERSION
+                    TYPES::Upgrade::VERSION
                 } else if view >= cert.data.new_version_first_view
-                    && cert.data.new_version != Upgrade::VERSION
+                    && cert.data.new_version != TYPES::Upgrade::VERSION
                 {
                     bail!("The network has upgraded to a new version that we do not support!");
                 } else {
-                    Base::VERSION
+                    TYPES::Base::VERSION
                 }
             }
-            None => Base::VERSION,
+            None => TYPES::Base::VERSION,
         };
 
         ensure!(

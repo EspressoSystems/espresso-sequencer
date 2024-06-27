@@ -17,16 +17,6 @@ pub const COMBINED_NETWORK_MIN_PRIMARY_FAILURES: u64 = 5;
 /// the number of messages to send over the secondary network without delay before re-attempting the (presumed down) primary network
 pub const COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL: u64 = 50;
 
-/// Base protocol version, set to 0.1
-pub type Base = StaticVersion<0, 1>;
-/// Upgraded protocol version, set to 0.2
-pub type Upgrade = StaticVersion<0, 2>;
-
-/// Hash for the upgrade from version 0.1 to version 0.2.
-pub const UPGRADE_HASH: [u8; 32] = [
-    1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-];
-
 /// Default channel size for consensus event sharing
 pub const EVENT_CHANNEL_SIZE: usize = 100_000;
 

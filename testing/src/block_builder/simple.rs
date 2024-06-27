@@ -24,7 +24,6 @@ use hotshot_builder_api::{
     data_source::BuilderDataSource,
 };
 use hotshot_types::{
-    constants::Base,
     traits::{
         block_contents::BlockHeader, node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
@@ -238,16 +237,17 @@ impl<TYPES: NodeType> SimpleBuilderSource<TYPES> {
     where
         <TYPES as NodeType>::InstanceState: Default,
     {
-        let builder_api =
-            hotshot_builder_api::builder::define_api::<SimpleBuilderSource<TYPES>, TYPES, Base>(
-                &Options::default(),
-            )
-            .expect("Failed to construct the builder API");
+        let builder_api = hotshot_builder_api::builder::define_api::<
+            SimpleBuilderSource<TYPES>,
+            TYPES,
+            TYPES::Base,
+        >(&Options::default())
+        .expect("Failed to construct the builder API");
         let mut app: App<SimpleBuilderSource<TYPES>, Error> = App::with_state(self);
-        app.register_module::<Error, Base>("block_info", builder_api)
+        app.register_module::<Error, TYPES::Base>("block_info", builder_api)
             .expect("Failed to register the builder API");
 
-        async_spawn(app.serve(url, Base::instance()));
+        async_spawn(app.serve(url, TYPES::Base::instance()));
     }
 }
 

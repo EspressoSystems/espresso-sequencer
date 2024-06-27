@@ -18,7 +18,6 @@ use hotshot_types::traits::{
     consensus_api::ConsensusApi,
     node_implementation::{ConsensusTime, NodeImplementation, NodeType},
 };
-use vbs::version::StaticVersionType;
 
 use crate::types::SystemContextHandle;
 
@@ -163,12 +162,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>, Ver: StaticVersionType>
-    CreateTaskState<TYPES, I> for TransactionTaskState<TYPES, I, Ver>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
+    for TransactionTaskState<TYPES, I>
 {
-    async fn create_from(
-        handle: &SystemContextHandle<TYPES, I>,
-    ) -> TransactionTaskState<TYPES, I, Ver> {
+    async fn create_from(handle: &SystemContextHandle<TYPES, I>) -> TransactionTaskState<TYPES, I> {
         TransactionTaskState {
             builder_timeout: handle.builder_timeout(),
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),

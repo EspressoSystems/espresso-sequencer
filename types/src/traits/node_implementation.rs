@@ -14,6 +14,7 @@ use std::{
 use async_trait::async_trait;
 use committable::Committable;
 use serde::{Deserialize, Serialize};
+use vbs::version::StaticVersionType;
 
 use super::{
     auction_results_provider::AuctionResultsProvider,
@@ -191,6 +192,15 @@ pub trait NodeType:
     + Sync
     + 'static
 {
+    /// The base version of HotShot this node is instantiated with.
+    type Base: StaticVersionType;
+
+    /// The version of HotShot this node may be upgraded to. Set equal to `Base` to disable upgrades.
+    type Upgrade: StaticVersionType;
+
+    /// The hash for the upgrade.
+    const UPGRADE_HASH: [u8; 32];
+
     /// The time type that this hotshot setup is using.
     ///
     /// This should be the same `Time` that `ValidatedState::Time` is using.

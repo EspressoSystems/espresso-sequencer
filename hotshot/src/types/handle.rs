@@ -10,12 +10,11 @@ use async_std::task::JoinHandle;
 use futures::Stream;
 use hotshot_task::task::{ConsensusTaskRegistry, NetworkTaskRegistry, Task, TaskState};
 use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event};
-use hotshot_types::traits::network::ConnectedNetwork;
 use hotshot_types::{
     consensus::Consensus,
     data::Leaf,
     error::HotShotError,
-    traits::{election::Membership, node_implementation::NodeType},
+    traits::{election::Membership, network::ConnectedNetwork, node_implementation::NodeType},
 };
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;

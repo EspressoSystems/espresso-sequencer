@@ -16,19 +16,19 @@ use hotshot_example_types::{
     storage_types::TestStorage,
     auction_results_provider_types::TestAuctionResultsProvider,
 };
-use hotshot_types::traits::network::BroadcastDelay;
 use hotshot_types::{
     data::ViewNumber,
     message::{DataMessage, Message, MessageKind, VersionedMessage},
     signature_key::{BLSPubKey, BuilderKey},
     traits::{
-        network::{ConnectedNetwork, TestableNetworkingImplementation},
+        network::{BroadcastDelay, ConnectedNetwork, TestableNetworkingImplementation},
         node_implementation::{ConsensusTime, NodeType},
     },
 };
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use serde::{Deserialize, Serialize};
 use tracing::{instrument, trace};
+use vbs::version::StaticVersion;
 
 #[derive(
     Copy,
@@ -46,6 +46,9 @@ use tracing::{instrument, trace};
 pub struct Test;
 
 impl NodeType for Test {
+    type Base = StaticVersion<0, 1>;
+    type Upgrade = StaticVersion<0, 2>;
+    const UPGRADE_HASH: [u8; 32] = [1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,];
     type Time = ViewNumber;
     type BlockHeader = TestBlockHeader;
     type BlockPayload = TestBlockPayload;

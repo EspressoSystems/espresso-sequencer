@@ -35,7 +35,7 @@ use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event, network
 pub use hotshot_types::error::HotShotError;
 use hotshot_types::{
     consensus::{Consensus, ConsensusMetricsValue, View, ViewInner},
-    constants::{Base, EVENT_CHANNEL_SIZE, EXTERNAL_EVENT_CHANNEL_SIZE},
+    constants::{EVENT_CHANNEL_SIZE, EXTERNAL_EVENT_CHANNEL_SIZE},
     data::{Leaf, QuorumProposal},
     event::{EventType, LeafInfo},
     message::{DataMessage, Message, MessageKind, Proposal, VersionedMessage},
@@ -258,7 +258,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         );
 
         let consensus = Arc::new(RwLock::new(consensus));
-        let version = Arc::new(RwLock::new(Base::VERSION));
+        let version = Arc::new(RwLock::new(TYPES::Base::VERSION));
 
         // This makes it so we won't block on broadcasting if there is not a receiver
         // Our own copy of the receiver is inactive so it doesn't count.
@@ -613,7 +613,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         )
         .await;
         add_network_event_task(&mut handle, network, vid_membership, network::vid_filter).await;
-        add_consensus_tasks::<TYPES, I, Base>(&mut handle).await;
+        add_consensus_tasks::<TYPES, I>(&mut handle).await;
         handle
     }
 }

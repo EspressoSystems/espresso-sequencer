@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use committable::Committable;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
-    constants::{Base, Upgrade, UPGRADE_HASH},
     data::UpgradeProposal,
     event::{Event, EventType},
     message::Proposal,
@@ -92,9 +91,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
                 }
 
                 // If the proposal does not match our upgrade target, we immediately exit.
-                if proposal.data.upgrade_proposal.new_version_hash != UPGRADE_HASH
-                    || proposal.data.upgrade_proposal.old_version != Base::VERSION
-                    || proposal.data.upgrade_proposal.new_version != Upgrade::VERSION
+                if proposal.data.upgrade_proposal.new_version_hash != TYPES::UPGRADE_HASH
+                    || proposal.data.upgrade_proposal.old_version != TYPES::Base::VERSION
+                    || proposal.data.upgrade_proposal.new_version != TYPES::Upgrade::VERSION
                 {
                     return None;
                 }
@@ -228,9 +227,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
                     && self.quorum_membership.leader(view + 5) == self.public_key
                 {
                     let upgrade_proposal_data = UpgradeProposalData {
-                        old_version: Base::VERSION,
-                        new_version: Upgrade::VERSION,
-                        new_version_hash: UPGRADE_HASH.to_vec(),
+                        old_version: TYPES::Base::VERSION,
+                        new_version: TYPES::Upgrade::VERSION,
+                        new_version_hash: TYPES::UPGRADE_HASH.to_vec(),
                         // We schedule the upgrade to begin 15 views in the future
                         old_version_last_view: TYPES::Time::new(*view + 15),
                         // and end 20 views in the future

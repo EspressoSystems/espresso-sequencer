@@ -10,13 +10,10 @@ use hotshot_builder_api::{
     builder::{Error, Options},
     data_source::BuilderDataSource,
 };
-use hotshot_types::{
-    constants::Base,
-    traits::{
-        block_contents::{precompute_vid_commitment, EncodeBytes},
-        node_implementation::NodeType,
-        signature_key::BuilderSignatureKey,
-    },
+use hotshot_types::traits::{
+    block_contents::{precompute_vid_commitment, EncodeBytes},
+    node_implementation::NodeType,
+    signature_key::BuilderSignatureKey,
 };
 use tide_disco::{method::ReadState, App, Url};
 use vbs::version::StaticVersionType;
@@ -75,14 +72,15 @@ pub fn run_builder_source<TYPES, Source>(
 {
     async_spawn(async move {
         let start_builder = |url: Url, source: Source| -> _ {
-            let builder_api = hotshot_builder_api::builder::define_api::<Source, TYPES, Base>(
-                &Options::default(),
-            )
-            .expect("Failed to construct the builder API");
+            let builder_api =
+                hotshot_builder_api::builder::define_api::<Source, TYPES, TYPES::Base>(
+                    &Options::default(),
+                )
+                .expect("Failed to construct the builder API");
             let mut app: App<Source, Error> = App::with_state(source);
             app.register_module("block_info", builder_api)
                 .expect("Failed to register the builder API");
-            async_spawn(app.serve(url, Base::instance()))
+            async_spawn(app.serve(url, TYPES::Base::instance()))
         };
 
         let mut handle = Some(start_builder(url.clone(), source.clone()));
