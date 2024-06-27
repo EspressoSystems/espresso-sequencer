@@ -9,6 +9,7 @@ edition = "2021"
 default = ["libp2p"]
 testing = ["hotshot-testing"]
 libp2p = []
+benchmarking = []
 
 [[bin]]
 name = "espresso-dev-node"
@@ -55,6 +56,7 @@ clap = { workspace = true }
 cld = { workspace = true }
 committable = "0.2"
 contract-bindings = { path = "../contract-bindings" }
+csv = "1"
 derivative = "2.2"
 derive_more = { workspace = true }
 dotenvy = { workspace = true }

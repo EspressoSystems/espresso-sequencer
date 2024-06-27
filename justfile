@@ -11,6 +11,10 @@ demo-native:
     cargo build --release
     scripts/demo-native
 
+demo-native-benchmark:
+    cargo build --release --features benchmarking
+    scripts/demo-native
+
 down *args:
     docker compose down {{args}}
 

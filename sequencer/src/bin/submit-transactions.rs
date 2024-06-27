@@ -26,6 +26,11 @@ use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
 use vbs::version::StaticVersionType;
 
+#[cfg(feature = "benchmarking")]
+use csv::Writer;
+#[cfg(feature = "benchmarking")]
+use std::fs::OpenOptions;
+
 /// Submit random transactions to an Espresso Sequencer.
 #[derive(Clone, Debug, Parser)]
 struct Options {
@@ -180,6 +185,25 @@ async fn main() {
     let mut pending = HashMap::new();
     let mut total_latency = Duration::default();
     let mut total_transactions = 0;
+
+    // Keep track of the latency after warm up for benchmarking
+    #[cfg(feature = "benchmarking")]
+    let mut num_successful_commits = 0;
+    #[cfg(feature = "benchmarking")]
+    let start_round = 20;
+    #[cfg(feature = "benchmarking")]
+    let end_round = 120;
+    #[cfg(feature = "benchmarking")]
+    let mut benchmark_total_latency = Duration::default();
+    #[cfg(feature = "benchmarking")]
+    let mut benchmark_minimum_latency = Duration::default();
+    #[cfg(feature = "benchmarking")]
+    let mut benchmark_maximum_latency = Duration::default();
+    #[cfg(feature = "benchmarking")]
+    let mut benchmark_total_transactions = 0;
+    #[cfg(feature = "benchmarking")]
+    let mut benchmark_finish = false;
+
     while let Some(block) = blocks.next().await {
         let block: BlockQueryData<SeqTypes> = match block {
             Ok(block) => block,
@@ -190,6 +214,10 @@ async fn main() {
         };
         let received_at = Instant::now();
         tracing::debug!("got block {}", block.height());
+        #[cfg(feature = "benchmarking")]
+        {
+            num_successful_commits += 1;
+        }
 
         // Get all transactions which were submitted before this block.
         while let Ok(Some(tx)) = receiver.try_next() {
@@ -208,7 +236,63 @@ async fn main() {
                 total_latency += latency;
                 total_transactions += 1;
                 tracing::info!("average latency: {:?}", total_latency / total_transactions);
+                #[cfg(feature = "benchmarking")]
+                {
+                    if !benchmark_finish
+                        && (start_round..=end_round).contains(&num_successful_commits)
+                    {
+                        benchmark_minimum_latency = if total_transactions == 0 {
+                            latency
+                        } else {
+                            std::cmp::min(benchmark_minimum_latency, latency)
+                        };
+                        benchmark_maximum_latency = if total_transactions == 0 {
+                            latency
+                        } else {
+                            std::cmp::max(benchmark_maximum_latency, latency)
+                        };
+
+                        benchmark_total_latency += latency;
+                        benchmark_total_transactions += 1;
+                    }
+                }
             }
+        }
+
+        #[cfg(feature = "benchmarking")]
+        if !benchmark_finish && num_successful_commits > end_round {
+            let benchmark_average_latency = benchmark_total_latency / benchmark_total_transactions;
+            // Open the CSV file in append mode
+            let results_csv_file = OpenOptions::new()
+                .create(true)
+                .append(true) // Open in append mode
+                .open("scripts/benchmarks_results/results.csv")
+                .unwrap();
+            // Open a file for writing
+            let mut wtr = Writer::from_writer(results_csv_file);
+            if opt.use_public_mempool() {
+                let _ = wtr.write_record([
+                    "public_pool_avg_latency_in_sec",
+                    "minimum_latency_in_sec",
+                    "maximum_latency_in_sec",
+                ]);
+            } else {
+                let _ = wtr.write_record([
+                    "private_pool_avg_latency_in_sec",
+                    "minimum_latency_in_sec",
+                    "maximum_latency_in_sec",
+                ]);
+            }
+            let _ = wtr.write_record(&[
+                benchmark_average_latency.as_secs().to_string(),
+                benchmark_minimum_latency.as_secs().to_string(),
+                benchmark_maximum_latency.as_secs().to_string(),
+            ]);
+            let _ = wtr.flush();
+            println!(
+                "Latency results successfully saved in scripts/benchmarks_results/results.csv"
+            );
+            benchmark_finish = true;
         }
 
         // If a lot of transactions are pending, it might indicate the sequencer is struggling to
