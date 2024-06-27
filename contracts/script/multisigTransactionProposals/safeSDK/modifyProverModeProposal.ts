@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { EthersAdapter } from "@safe-global/protocol-kit";
 import SafeApiKit from "@safe-global/api-kit";
 import Safe from "@safe-global/protocol-kit";
-import { getEnvVar, createSafeTransactionData, isValidEthereumAddress } from "./utils";
+import { getEnvVar, createSafeTransactionData, validateEthereumAddress } from "./utils";
 const SET_PROVER_CMD = "setProver";
 const DISABLE_PROVER_CMD = "disableProver";
 
@@ -30,14 +30,14 @@ async function main() {
     const chainId = await ethAdapter.getChainId();
     const safeService = new SafeApiKit({ chainId });
     const safeAddress = getEnvVar("SAFE_MULTISIG_ADDRESS");
-    isValidEthereumAddress(safeAddress);
+    validateEthereumAddress(safeAddress);
     const safeSdk = await Safe.create({ ethAdapter, safeAddress });
     const orchestratorSignerAddress = await orchestratorSigner.getAddress();
 
     if (command === SET_PROVER_CMD) {
       console.log(`${command}`);
       const permissionedProverAddress = getEnvVar("APPROVED_PROVER_ADDRESS");
-      isValidEthereumAddress(permissionedProverAddress);
+      validateEthereumAddress(permissionedProverAddress);
 
       await proposeSetProverTransaction(
         safeSdk,
@@ -93,7 +93,7 @@ export async function proposeSetProverTransaction(
   let data = createPermissionedProverTxData(proverAddress);
 
   const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_ADDRESS");
-  isValidEthereumAddress(contractAddress);
+  validateEthereumAddress(contractAddress);
 
   // Create the Safe Transaction Object
   const safeTransaction = await createSafeTransaction(safeSDK, contractAddress, data, "0");
@@ -145,7 +145,7 @@ export async function proposeDisableProverTransaction(
   let data = createDisablePermissionedProverTxData();
 
   const contractAddress = getEnvVar("LIGHT_CLIENT_CONTRACT_ADDRESS");
-  isValidEthereumAddress(contractAddress);
+  validateEthereumAddress(contractAddress);
 
   // Create the Safe Transaction Object
   const safeTransaction = await createSafeTransaction(safeSDK, contractAddress, data, "0");
