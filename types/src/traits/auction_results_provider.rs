@@ -1,10 +1,11 @@
 //! This module defines the interaction layer with the Solver via the [`AuctionResultsProvider`] trait,
 //! which handles connecting to, and fetching the allocation results from, the Solver.
 
-use super::node_implementation::NodeType;
 use anyhow::Result;
 use async_trait::async_trait;
 use url::Url;
+
+use super::node_implementation::NodeType;
 
 /// This trait guarantees that a particular type has a url associated with it. This trait
 /// essentially ensures that the results returned by the [`AuctionResultsProvider`] trait includes a URL
