@@ -190,6 +190,10 @@ async fn main() {
     #[cfg(feature = "benchmarking")]
     let mut num_successful_commits = 0;
     #[cfg(feature = "benchmarking")]
+    let start_round = 20;
+    #[cfg(feature = "benchmarking")]
+    let end_round = 120;
+    #[cfg(feature = "benchmarking")]
     let mut benchmark_total_latency = Duration::default();
     #[cfg(feature = "benchmarking")]
     let mut benchmark_minimum_latency = Duration::default();
@@ -234,7 +238,9 @@ async fn main() {
                 tracing::info!("average latency: {:?}", total_latency / total_transactions);
                 #[cfg(feature = "benchmarking")]
                 {
-                    if !benchmark_finish && (20..=120).contains(&num_successful_commits) {
+                    if !benchmark_finish
+                        && (start_round..=end_round).contains(&num_successful_commits)
+                    {
                         benchmark_minimum_latency = if total_transactions == 0 {
                             latency
                         } else {
@@ -254,7 +260,7 @@ async fn main() {
         }
 
         #[cfg(feature = "benchmarking")]
-        if !benchmark_finish && num_successful_commits > 120 {
+        if !benchmark_finish && num_successful_commits > end_round {
             let benchmark_average_latency = benchmark_total_latency / benchmark_total_transactions;
             // Open the CSV file in append mode
             let results_csv_file = OpenOptions::new()

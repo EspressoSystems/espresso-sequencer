@@ -267,10 +267,10 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         #[cfg(feature = "benchmarking")]
         #[allow(unused_variables)]
         {
-            // start_rounds is the number of rounds for warm up, which will not be counted in for benchmarking phase
-            // change to larger number like start_rounds = 20 & end_rounds = 120 when doing real benchmarking
-            let start_rounds: usize = 0;
-            let end_rounds: usize = 0;
+            // start_round is the number of rounds for warm up, which will not be counted in for benchmarking phase
+            // change to larger number like start_round = 20 & end_round = 120 when doing real benchmarking
+            let start_round: usize = 0;
+            let end_round: usize = 0;
             let mut event_stream = self.event_stream().await;
             let mut num_successful_commits = 0;
             let mut total_transactions_committed = 0;
@@ -302,7 +302,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                     num_successful_commits += leaf_chain.len();
 
                                     // only count in the info after warm up
-                                    if num_successful_commits >= start_rounds {
+                                    if num_successful_commits >= start_round {
                                         if !has_started {
                                             start = Instant::now();
                                             has_started = true;
@@ -324,13 +324,13 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                     }
                                 }
 
-                                if num_successful_commits >= start_rounds {
+                                if num_successful_commits >= start_round {
                                     if let Some(size) = block_size {
                                         total_transactions_committed += size;
                                     }
                                 }
 
-                                if num_successful_commits >= end_rounds {
+                                if num_successful_commits >= end_round {
                                     let total_time_elapsed = start.elapsed(); // in seconds
                                     let consensus_lock =
                                         self.handle.read().await.hotshot.consensus();
@@ -357,7 +357,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                                     } else {
                                         BenchResults::default()
                                     };
-                                    tracing::info!("[{node_index}]: {total_transactions_committed} committed from round {start_rounds} to {end_rounds} in {total_time_elapsed:?}, total number of views = {total_num_views}.");
+                                    tracing::info!("[{node_index}]: {total_transactions_committed} committed from round {start_round} to {end_round} in {total_time_elapsed:?}, total number of views = {total_num_views}.");
                                     if let Some(orchestrator_client) = &self.wait_for_orchestrator {
                                         orchestrator_client.post_bench_results(bench_results).await;
                                     }
