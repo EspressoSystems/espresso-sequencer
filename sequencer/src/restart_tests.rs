@@ -13,6 +13,7 @@ use futures::{
     future::{join_all, try_join_all, BoxFuture, FutureExt},
     stream::{BoxStream, StreamExt},
 };
+use hotshot::traits::implementations::derive_libp2p_peer_id;
 use hotshot_orchestrator::{
     config::{Libp2pConfig, NetworkConfig},
     run_orchestrator,
@@ -36,10 +37,10 @@ use sequencer_utils::test_utils::setup_test;
 use std::{path::Path, time::Duration};
 use tempfile::TempDir;
 
-async fn test_restart_helper(network: (usize, usize), restart: (usize, usize)) {
+async fn test_restart_helper(network: (usize, usize), restart: (usize, usize), cdn: bool) {
     setup_test();
 
-    let mut network = TestNetwork::new(network.0, network.1).await;
+    let mut network = TestNetwork::new(network.0, network.1, cdn).await;
 
     // Let the network get going.
     network.check_progress().await;
@@ -48,52 +49,131 @@ async fn test_restart_helper(network: (usize, usize), restart: (usize, usize)) {
 }
 
 #[async_std::test]
-async fn test_restart_1_da() {
-    test_restart_helper((2, 3), (1, 0)).await;
+async fn test_restart_1_da_with_cdn() {
+    test_restart_helper((2, 3), (1, 0), true).await;
 }
 
 #[async_std::test]
-async fn test_restart_1_regular() {
-    test_restart_helper((2, 3), (0, 1)).await;
+async fn test_restart_1_regular_with_cdn() {
+    test_restart_helper((2, 3), (0, 1), true).await;
 }
 
 #[async_std::test]
-async fn test_restart_f() {
-    test_restart_helper((4, 6), (1, 2)).await;
+async fn test_restart_f_with_cdn() {
+    test_restart_helper((4, 6), (1, 2), true).await;
 }
 
 #[async_std::test]
-async fn test_restart_f_minus_1() {
-    test_restart_helper((4, 6), (1, 1)).await;
-}
-
-#[ignore]
-#[async_std::test]
-async fn test_restart_f_plus_1() {
-    test_restart_helper((4, 6), (1, 3)).await;
+async fn test_restart_f_minus_1_with_cdn() {
+    test_restart_helper((4, 6), (1, 1), true).await;
 }
 
 #[ignore]
 #[async_std::test]
-async fn test_restart_2f() {
-    test_restart_helper((4, 6), (1, 5)).await;
+async fn test_restart_f_plus_1_with_cdn() {
+    test_restart_helper((4, 6), (1, 3), true).await;
 }
 
 #[ignore]
 #[async_std::test]
-async fn test_restart_2f_minus_1() {
-    test_restart_helper((4, 6), (1, 4)).await;
+async fn test_restart_2f_with_cdn() {
+    test_restart_helper((4, 6), (1, 5), true).await;
 }
 
 #[ignore]
 #[async_std::test]
-async fn test_restart_2f_plus_1() {
-    test_restart_helper((4, 6), (2, 5)).await;
+async fn test_restart_2f_minus_1_with_cdn() {
+    test_restart_helper((4, 6), (1, 4), true).await;
+}
+
+#[ignore]
+#[async_std::test]
+async fn test_restart_2f_plus_1_with_cdn() {
+    test_restart_helper((4, 6), (2, 5), true).await;
 }
 
 #[async_std::test]
-async fn test_restart_all() {
-    test_restart_helper((2, 8), (2, 8)).await;
+async fn test_restart_all_with_cdn() {
+    test_restart_helper((2, 8), (2, 8), true).await;
+}
+
+#[async_std::test]
+async fn test_restart_1_da_without_cdn() {
+    test_restart_helper((2, 3), (1, 0), false).await;
+}
+
+#[async_std::test]
+async fn test_restart_1_regular_without_cdn() {
+    test_restart_helper((2, 3), (0, 1), false).await;
+}
+
+#[async_std::test]
+async fn test_restart_f_without_cdn() {
+    test_restart_helper((4, 6), (1, 2), false).await;
+}
+
+#[async_std::test]
+async fn test_restart_f_minus_1_without_cdn() {
+    test_restart_helper((4, 6), (1, 1), false).await;
+}
+
+#[ignore]
+#[async_std::test]
+async fn test_restart_f_plus_1_without_cdn() {
+    test_restart_helper((4, 6), (1, 3), false).await;
+}
+
+#[ignore]
+#[async_std::test]
+async fn test_restart_2f_without_cdn() {
+    test_restart_helper((4, 6), (1, 5), false).await;
+}
+
+#[ignore]
+#[async_std::test]
+async fn test_restart_2f_minus_1_without_cdn() {
+    test_restart_helper((4, 6), (1, 4), false).await;
+}
+
+#[ignore]
+#[async_std::test]
+async fn test_restart_2f_plus_1_without_cdn() {
+    test_restart_helper((4, 6), (2, 5), false).await;
+}
+
+#[async_std::test]
+async fn test_restart_all_without_cdn() {
+    test_restart_helper((2, 8), (2, 8), false).await;
+}
+
+#[derive(Clone, Copy, Debug)]
+struct NetworkParams<'a> {
+    genesis_file: &'a Path,
+    orchestrator_port: u16,
+    cdn_port: u16,
+    l1_provider: &'a str,
+    peer_ports: &'a [u16],
+}
+
+#[derive(Clone, Debug)]
+struct NodeParams {
+    api_port: u16,
+    libp2p_port: u16,
+    staking_key: PrivKey,
+    state_key: StateKeyPair,
+    is_da: bool,
+}
+
+impl NodeParams {
+    fn new(i: u64, is_da: bool) -> Self {
+        Self {
+            api_port: pick_unused_port().unwrap(),
+            libp2p_port: pick_unused_port().unwrap(),
+            staking_key: PubKey::generated_from_seed_indexed([0; 32], i).1,
+            state_key: StateKeyPair::generate_from_seed_indexed([0; 32], i),
+            is_da,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -112,75 +192,53 @@ struct TestNode<S: TestableSequencerDataSource> {
 }
 
 impl<S: TestableSequencerDataSource> TestNode<S> {
-    fn keygen(i: u64) -> (PrivKey, StateKeyPair) {
-        (
-            PubKey::generated_from_seed_indexed([0; 32], i).1,
-            StateKeyPair::generate_from_seed_indexed([0; 32], i),
-        )
-    }
-
     #[tracing::instrument]
-    async fn new(
-        i: u64,
-        genesis_file: &Path,
-        sequencer_ports: &[u16],
-        orchestrator_port: u16,
-        cdn_port: u16,
-        l1_provider: &str,
-        is_da: bool,
-    ) -> Self {
-        let (staking_key, state_key) = Self::keygen(i);
-        tracing::info!(
-            staking_key = %PubKey::from_private(&staking_key),
-            state_key = %state_key.ver_key(),
-            "creating node",
-        );
+    async fn new(network: NetworkParams<'_>, node: &NodeParams) -> Self {
+        tracing::info!(?network, ?node, "creating node",);
 
         let storage = S::create_storage().await;
-        let port = sequencer_ports[i as usize];
-
         let mut modules = Modules {
-            http: Some(Http::with_port(port)),
+            http: Some(Http::with_port(node.api_port)),
             status: Some(Default::default()),
             catchup: Some(Default::default()),
             ..Default::default()
         };
-        if is_da {
+        if node.is_da {
             modules.query = Some(Default::default());
             modules.state = Some(Default::default());
         }
 
-        let libp2p_port = pick_unused_port().unwrap();
         let mut opt = Options::parse_from([
             "sequencer",
             "--private-staking-key",
-            &staking_key.to_string(),
+            &node.staking_key.to_string(),
             "--private-state-key",
-            &state_key.sign_key_ref().to_string(),
+            &node.state_key.sign_key_ref().to_string(),
             "--genesis-file",
-            &genesis_file.display().to_string(),
+            &network.genesis_file.display().to_string(),
             "--orchestrator-url",
-            &format!("http://localhost:{orchestrator_port}"),
+            &format!("http://localhost:{}", network.orchestrator_port),
             "--libp2p-bind-address",
-            &format!("127.0.0.1:{libp2p_port}"),
+            &format!("0.0.0.0:{}", node.libp2p_port),
             "--libp2p-advertise-address",
-            &format!("127.0.0.1:{libp2p_port}"),
+            &format!("127.0.0.1:{}", node.libp2p_port),
             "--cdn-endpoint",
-            &format!("127.0.0.1:{cdn_port}"),
+            &format!("127.0.0.1:{}", network.cdn_port),
             "--state-peers",
-            &sequencer_ports
+            &network
+                .peer_ports
                 .iter()
                 .map(|port| format!("http://127.0.0.1:{port}"))
                 .join(","),
             "--l1-provider-url",
-            l1_provider,
+            network.l1_provider,
         ]);
-        opt.is_da = is_da;
+        opt.is_da = node.is_da;
         Self {
             storage,
             modules,
             opt,
-            num_nodes: sequencer_ports.len(),
+            num_nodes: network.peer_ports.len(),
             context: None,
         }
     }
@@ -327,7 +385,7 @@ impl Drop for TestNetwork {
 }
 
 impl TestNetwork {
-    async fn new(da_nodes: usize, regular_nodes: usize) -> Self {
+    async fn new(da_nodes: usize, regular_nodes: usize, cdn: bool) -> Self {
         let tmp = TempDir::new().unwrap();
         let genesis_file = tmp.path().join("genesis.toml");
         let genesis = Genesis {
@@ -339,48 +397,52 @@ impl TestNetwork {
             upgrades: Default::default(),
         };
         genesis.to_file(&genesis_file).unwrap();
+
+        let node_params = (0..da_nodes + regular_nodes)
+            .map(|i| NodeParams::new(i as u64, i < da_nodes))
+            .collect::<Vec<_>>();
+
         let orchestrator_port = pick_unused_port().unwrap();
-        let orchestrator_task = Some(start_orchestrator(
-            orchestrator_port,
-            da_nodes + regular_nodes,
-        ));
+        let orchestrator_task = Some(start_orchestrator(orchestrator_port, &node_params));
 
         let cdn_dir = tmp.path().join("cdn");
         let cdn_port = pick_unused_port().unwrap();
-        let broker_task = Some(start_broker(&cdn_dir).await);
-        let marshal_task = Some(start_marshal(&cdn_dir, cdn_port).await);
+        let broker_task = if cdn {
+            Some(start_broker(&cdn_dir).await)
+        } else {
+            None
+        };
+        let marshal_task = if cdn {
+            Some(start_marshal(&cdn_dir, cdn_port).await)
+        } else {
+            None
+        };
 
         let anvil_port = pick_unused_port().unwrap();
         let anvil = Anvil::new().port(anvil_port).spawn();
         let anvil_endpoint = anvil.endpoint();
 
-        let ports = std::iter::from_fn(|| Some(pick_unused_port().unwrap()))
-            .take(da_nodes + regular_nodes)
+        let peer_ports = node_params
+            .iter()
+            .map(|node| node.api_port)
             .collect::<Vec<_>>();
+        let network_params = NetworkParams {
+            genesis_file: &genesis_file,
+            orchestrator_port,
+            cdn_port,
+            l1_provider: &anvil_endpoint,
+            peer_ports: &peer_ports,
+        };
+
         let mut network = Self {
-            da_nodes: join_all((0..da_nodes).map(|i| {
-                TestNode::new(
-                    i as u64,
-                    &genesis_file,
-                    &ports,
-                    orchestrator_port,
-                    cdn_port,
-                    &anvil_endpoint,
-                    true,
-                )
-            }))
+            da_nodes: join_all(
+                (0..da_nodes).map(|i| TestNode::new(network_params, &node_params[i])),
+            )
             .await,
-            regular_nodes: join_all((0..regular_nodes).map(|i| {
-                TestNode::new(
-                    (i + da_nodes) as u64,
-                    &genesis_file,
-                    &ports,
-                    orchestrator_port,
-                    cdn_port,
-                    &anvil_endpoint,
-                    false,
-                )
-            }))
+            regular_nodes: join_all(
+                (0..regular_nodes)
+                    .map(|i| TestNode::new(network_params, &node_params[i + da_nodes])),
+            )
             .await,
             tmp,
             orchestrator_task,
@@ -499,18 +561,31 @@ impl TestNetwork {
     }
 }
 
-fn start_orchestrator(port: u16, num_nodes: usize) -> JoinHandle<()> {
+fn start_orchestrator(port: u16, nodes: &[NodeParams]) -> JoinHandle<()> {
     // We don't run a builder in these tests, so use a very short timeout before nodes decide to
     // build an empty block on their own.
-    let builder_timeout = Duration::from_millis(100);
+    let builder_timeout = Duration::from_millis(10);
     // These tests frequently have nodes down and views failing, so we use a fairly short view
     // timeout.
     let view_timeout = Duration::from_secs(2);
 
+    let num_nodes = nodes.len();
+    let bootstrap_nodes = nodes
+        .iter()
+        .map(|node| {
+            let port = node.libp2p_port;
+            let peer_id = derive_libp2p_peer_id::<PubKey>(&node.staking_key).unwrap();
+            let addr = format!("/ip4/127.0.0.1/udp/{port}/quic-v1")
+                .parse()
+                .unwrap();
+            (peer_id, addr)
+        })
+        .collect();
+
     let mut config = NetworkConfig::<PubKey> {
         indexed_da: false,
         libp2p_config: Some(Libp2pConfig {
-            bootstrap_nodes: vec![],
+            bootstrap_nodes,
             node_index: 0,
             bootstrap_mesh_n_high: 4,
             bootstrap_mesh_n_low: 4,
