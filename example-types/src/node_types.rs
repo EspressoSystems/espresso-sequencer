@@ -11,6 +11,7 @@ use hotshot_types::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    auction_results_provider_types::TestAuctionResultsProvider,
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
@@ -70,19 +71,23 @@ pub type StaticMembership = StaticCommittee<TestTypes>;
 impl<TYPES: NodeType> NodeImplementation<TYPES> for PushCdnImpl {
     type Network = PushCdnNetwork<TYPES>;
     type Storage = TestStorage<TYPES>;
+    type AuctionResultsProvider = TestAuctionResultsProvider;
 }
 
 impl<TYPES: NodeType> NodeImplementation<TYPES> for MemoryImpl {
     type Network = MemoryNetwork<TYPES::SignatureKey>;
     type Storage = TestStorage<TYPES>;
+    type AuctionResultsProvider = TestAuctionResultsProvider;
 }
 
 impl<TYPES: NodeType> NodeImplementation<TYPES> for CombinedImpl {
     type Network = CombinedNetworks<TYPES>;
     type Storage = TestStorage<TYPES>;
+    type AuctionResultsProvider = TestAuctionResultsProvider;
 }
 
 impl<TYPES: NodeType> NodeImplementation<TYPES> for Libp2pImpl {
     type Network = Libp2pNetwork<TYPES::SignatureKey>;
     type Storage = TestStorage<TYPES>;
+    type AuctionResultsProvider = TestAuctionResultsProvider;
 }

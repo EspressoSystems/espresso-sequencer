@@ -14,6 +14,7 @@ use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
+    auction_results_provider_types::TestAuctionResultsProvider,
 };
 use hotshot_types::traits::network::BroadcastDelay;
 use hotshot_types::{
@@ -62,6 +63,7 @@ pub struct TestImpl {}
 impl NodeImplementation<Test> for TestImpl {
     type Network = MemoryNetwork<<Test as NodeType>::SignatureKey>;
     type Storage = TestStorage<Test>;
+    type AuctionResultsProvider = TestAuctionResultsProvider;
 }
 
 /// fake Eq

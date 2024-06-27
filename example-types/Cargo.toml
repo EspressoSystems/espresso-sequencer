@@ -34,6 +34,7 @@ bitvec = { workspace = true }
 ethereum-types = { workspace = true }
 hotshot-task = { path = "../task" }
 vbs = { workspace = true }
+url = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }

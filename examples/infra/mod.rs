@@ -30,6 +30,7 @@ use hotshot::{
     Memberships, SystemContext,
 };
 use hotshot_example_types::{
+    auction_results_provider_types::TestAuctionResultsProvider,
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     node_types::{Libp2pImpl, PushCdnImpl},
     state_types::TestInstanceState,
@@ -336,7 +337,12 @@ where
 pub trait RunDa<
     TYPES: NodeType<InstanceState = TestInstanceState>,
     NETWORK: ConnectedNetwork<TYPES::SignatureKey>,
-    NODE: NodeImplementation<TYPES, Network = NETWORK, Storage = TestStorage<TYPES>>,
+    NODE: NodeImplementation<
+        TYPES,
+        Network = NETWORK,
+        Storage = TestStorage<TYPES>,
+        AuctionResultsProvider = TestAuctionResultsProvider,
+    >,
 > where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
@@ -400,6 +406,7 @@ pub trait RunDa<
             initializer,
             ConsensusMetricsValue::default(),
             TestStorage::<TYPES>::default(),
+            TestAuctionResultsProvider::default(),
         )
         .await
         .expect("Could not init hotshot")
@@ -593,7 +600,12 @@ impl<
             BlockHeader = TestBlockHeader,
             InstanceState = TestInstanceState,
         >,
-        NODE: NodeImplementation<TYPES, Network = PushCdnNetwork<TYPES>, Storage = TestStorage<TYPES>>,
+        NODE: NodeImplementation<
+            TYPES,
+            Network = PushCdnNetwork<TYPES>,
+            Storage = TestStorage<TYPES>,
+            AuctionResultsProvider = TestAuctionResultsProvider,
+        >,
     > RunDa<TYPES, PushCdnNetwork<TYPES>, NODE> for PushCdnDaRun<TYPES>
 where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
@@ -669,6 +681,7 @@ impl<
             TYPES,
             Network = Libp2pNetwork<TYPES::SignatureKey>,
             Storage = TestStorage<TYPES>,
+            AuctionResultsProvider = TestAuctionResultsProvider,
         >,
     > RunDa<TYPES, Libp2pNetwork<TYPES::SignatureKey>, NODE> for Libp2pDaRun<TYPES>
 where
@@ -750,7 +763,12 @@ impl<
             BlockHeader = TestBlockHeader,
             InstanceState = TestInstanceState,
         >,
-        NODE: NodeImplementation<TYPES, Network = CombinedNetworks<TYPES>, Storage = TestStorage<TYPES>>,
+        NODE: NodeImplementation<
+            TYPES,
+            Network = CombinedNetworks<TYPES>,
+            Storage = TestStorage<TYPES>,
+            AuctionResultsProvider = TestAuctionResultsProvider,
+        >,
     > RunDa<TYPES, CombinedNetworks<TYPES>, NODE> for CombinedDaRun<TYPES>
 where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
@@ -815,7 +833,12 @@ pub async fn main_entry_point<
         InstanceState = TestInstanceState,
     >,
     NETWORK: ConnectedNetwork<TYPES::SignatureKey>,
-    NODE: NodeImplementation<TYPES, Network = NETWORK, Storage = TestStorage<TYPES>>,
+    NODE: NodeImplementation<
+        TYPES,
+        Network = NETWORK,
+        Storage = TestStorage<TYPES>,
+        AuctionResultsProvider = TestAuctionResultsProvider,
+    >,
     RUNDA: RunDa<TYPES, NETWORK, NODE>,
 >(
     args: ValidatorArgs,
