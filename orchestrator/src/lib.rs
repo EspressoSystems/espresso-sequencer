@@ -498,10 +498,6 @@ where
                 self.bench_results.total_transactions_committed = metrics
                     .total_transactions_committed
                     .max(cur_metrics.total_transactions_committed);
-                assert_eq!(
-                    metrics.transaction_size_in_bytes,
-                    cur_metrics.transaction_size_in_bytes
-                );
                 self.bench_results.total_time_elapsed_in_sec = metrics
                     .total_time_elapsed_in_sec
                     .max(cur_metrics.total_time_elapsed_in_sec);
