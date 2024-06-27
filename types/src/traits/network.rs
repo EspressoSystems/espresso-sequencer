@@ -383,7 +383,7 @@ where
         is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         secondary_network_delay: Duration,
-    ) -> AsyncGenerator<(Arc<Self>, Arc<Self>)>;
+    ) -> AsyncGenerator<Arc<Self>>;
 
     /// Get the number of messages in-flight.
     ///

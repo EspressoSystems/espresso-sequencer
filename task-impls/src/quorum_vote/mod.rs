@@ -366,11 +366,8 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Table for the in-progress dependency tasks.
     pub vote_dependencies: HashMap<TYPES::Time, JoinHandle<()>>,
 
-    /// Network for all nodes
-    pub quorum_network: Arc<I::QuorumNetwork>,
-
-    /// Network for DA committee
-    pub da_network: Arc<I::DaNetwork>,
+    /// The underlying network
+    pub network: Arc<I::Network>,
 
     /// Membership for Quorum certs/votes.
     pub quorum_membership: Arc<TYPES::Membership>,

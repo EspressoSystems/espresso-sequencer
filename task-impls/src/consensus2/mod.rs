@@ -43,11 +43,8 @@ pub struct Consensus2TaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Immutable instance state
     pub instance_state: Arc<TYPES::InstanceState>,
 
-    /// Network for all nodes
-    pub quorum_network: Arc<I::QuorumNetwork>,
-
-    /// Network for DA committee
-    pub da_network: Arc<I::DaNetwork>,
+    /// The underlying network
+    pub network: Arc<I::Network>,
 
     /// Membership for Timeout votes/certs
     pub timeout_membership: Arc<TYPES::Membership>,

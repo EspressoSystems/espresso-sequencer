@@ -55,8 +55,8 @@ pub struct QuorumProposalRecvTaskState<TYPES: NodeType, I: NodeImplementation<TY
     /// Timestamp this view starts at.
     pub cur_view_time: i64,
 
-    /// Network for all nodes
-    pub quorum_network: Arc<I::QuorumNetwork>,
+    /// The underlying network
+    pub network: Arc<I::Network>,
 
     /// Membership for Quorum Certs/votes
     pub quorum_membership: Arc<TYPES::Membership>,

@@ -61,7 +61,7 @@ impl<
     > TestTaskState for SpinningTask<TYPES, I>
 where
     I: TestableNodeImplementation<TYPES>,
-    I: NodeImplementation<TYPES, QuorumNetwork = N, DaNetwork = N, Storage = TestStorage<TYPES>>,
+    I: NodeImplementation<TYPES, Network = N, Storage = TestStorage<TYPES>>,
 {
     type Event = Event<TYPES>;
 
@@ -125,7 +125,7 @@ where
                                             );
                                         TestRunner::add_node_with_config(
                                             node_id,
-                                            node.networks.clone(),
+                                            node.network.clone(),
                                             memberships,
                                             initializer,
                                             config,
@@ -143,7 +143,7 @@ where
                                 // safety task.
                                 let node = Node {
                                     node_id,
-                                    networks: node.networks,
+                                    network: node.network,
                                     handle,
                                 };
                                 node.handle.hotshot.start_consensus().await;
@@ -160,15 +160,13 @@ where
                         UpDown::NetworkUp => {
                             if let Some(handle) = self.handles.write().await.get(idx) {
                                 tracing::error!("Node {} networks resuming", idx);
-                                handle.networks.0.resume();
-                                handle.networks.1.resume();
+                                handle.network.resume();
                             }
                         }
                         UpDown::NetworkDown => {
                             if let Some(handle) = self.handles.write().await.get(idx) {
                                 tracing::error!("Node {} networks pausing", idx);
-                                handle.networks.0.pause();
-                                handle.networks.1.pause();
+                                handle.network.pause();
                             }
                         }
                     }

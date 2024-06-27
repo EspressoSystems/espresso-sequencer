@@ -59,12 +59,8 @@ impl NodeType for Test {
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct TestImpl {}
 
-pub type DaNetwork = MemoryNetwork<<Test as NodeType>::SignatureKey>;
-pub type QuorumNetwork = MemoryNetwork<<Test as NodeType>::SignatureKey>;
-
 impl NodeImplementation<Test> for TestImpl {
-    type QuorumNetwork = QuorumNetwork;
-    type DaNetwork = DaNetwork;
+    type Network = MemoryNetwork<<Test as NodeType>::SignatureKey>;
     type Storage = TestStorage<Test>;
 }
 

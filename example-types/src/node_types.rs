@@ -68,25 +68,21 @@ pub struct CombinedImpl;
 pub type StaticMembership = StaticCommittee<TestTypes>;
 
 impl<TYPES: NodeType> NodeImplementation<TYPES> for PushCdnImpl {
-    type QuorumNetwork = PushCdnNetwork<TYPES>;
-    type DaNetwork = PushCdnNetwork<TYPES>;
+    type Network = PushCdnNetwork<TYPES>;
     type Storage = TestStorage<TYPES>;
 }
 
 impl<TYPES: NodeType> NodeImplementation<TYPES> for MemoryImpl {
-    type QuorumNetwork = MemoryNetwork<TYPES::SignatureKey>;
-    type DaNetwork = MemoryNetwork<TYPES::SignatureKey>;
+    type Network = MemoryNetwork<TYPES::SignatureKey>;
     type Storage = TestStorage<TYPES>;
 }
 
 impl<TYPES: NodeType> NodeImplementation<TYPES> for CombinedImpl {
-    type QuorumNetwork = CombinedNetworks<TYPES>;
-    type DaNetwork = CombinedNetworks<TYPES>;
+    type Network = CombinedNetworks<TYPES>;
     type Storage = TestStorage<TYPES>;
 }
 
 impl<TYPES: NodeType> NodeImplementation<TYPES> for Libp2pImpl {
-    type QuorumNetwork = Libp2pNetwork<TYPES::SignatureKey>;
-    type DaNetwork = Libp2pNetwork<TYPES::SignatureKey>;
+    type Network = Libp2pNetwork<TYPES::SignatureKey>;
     type Storage = TestStorage<TYPES>;
 }

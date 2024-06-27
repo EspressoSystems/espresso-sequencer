@@ -44,11 +44,8 @@ pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>
     /// Table for the in-progress proposal depdencey tasks.
     pub proposal_dependencies: HashMap<TYPES::Time, JoinHandle<()>>,
 
-    /// Network for all nodes
-    pub quorum_network: Arc<I::QuorumNetwork>,
-
-    /// Network for DA committee
-    pub da_network: Arc<I::DaNetwork>,
+    /// The underlying network
+    pub network: Arc<I::Network>,
 
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,

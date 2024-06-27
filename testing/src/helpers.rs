@@ -7,7 +7,7 @@ use committable::Committable;
 use ethereum_types::U256;
 use hotshot::{
     types::{BLSPubKey, SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, Networks, SystemContext,
+    HotShotInitializer, Memberships, SystemContext,
 };
 use hotshot_example_types::{
     block_types::TestTransaction,
@@ -50,7 +50,7 @@ pub async fn build_system_handle(
 
     let launcher = builder.gen_launcher::<TestTypes, MemoryImpl>(node_id);
 
-    let networks = (launcher.resource_generator.channel_generator)(node_id).await;
+    let network = (launcher.resource_generator.channel_generator)(node_id).await;
     let storage = (launcher.resource_generator.storage)(node_id);
     let config = launcher.resource_generator.config.clone();
 
@@ -63,12 +63,6 @@ pub async fn build_system_handle(
     let public_key = config.my_own_validator_config.public_key;
 
     let _known_nodes_without_stake = config.known_nodes_without_stake.clone();
-
-    let networks_bundle = Networks {
-        quorum_network: networks.0.clone(),
-        da_network: networks.1.clone(),
-        _pd: PhantomData,
-    };
 
     let memberships = Memberships {
         quorum_membership: <TestTypes as NodeType>::Membership::create_election(
@@ -99,7 +93,7 @@ pub async fn build_system_handle(
         node_id,
         config,
         memberships,
-        networks_bundle,
+        network,
         initializer,
         ConsensusMetricsValue::default(),
         storage,

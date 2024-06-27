@@ -17,7 +17,6 @@ pub mod tasks;
 
 use std::{
     collections::{BTreeMap, HashMap},
-    marker::PhantomData,
     num::NonZeroUsize,
     sync::Arc,
     time::Duration,
@@ -71,32 +70,6 @@ pub const H_512: usize = 64;
 /// Length, in bytes, of a 256 bit hash
 pub const H_256: usize = 32;
 
-/// Bundle of the networks used in consensus
-pub struct Networks<TYPES: NodeType, I: NodeImplementation<TYPES>> {
-    /// Network for reaching all nodes
-    pub quorum_network: Arc<I::QuorumNetwork>,
-
-    /// Network for reaching the DA committee
-    pub da_network: Arc<I::DaNetwork>,
-
-    /// Phantom for TYPES and I
-    pub _pd: PhantomData<(TYPES, I)>,
-}
-
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Networks<TYPES, I> {
-    /// wait for all networks to be ready
-    pub async fn wait_for_networks_ready(&self) {
-        self.quorum_network.wait_for_ready().await;
-        self.da_network.wait_for_ready().await;
-    }
-
-    /// shut down all networks
-    pub async fn shut_down_networks(&self) {
-        self.quorum_network.shut_down().await;
-        self.da_network.shut_down().await;
-    }
-}
-
 /// Bundle of all the memberships a consensus instance uses
 #[derive(Clone)]
 pub struct Memberships<TYPES: NodeType> {
@@ -121,8 +94,8 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Configuration items for this hotshot instance
     pub config: HotShotConfig<TYPES::SignatureKey>,
 
-    /// Networks used by the instance of hotshot
-    pub networks: Arc<Networks<TYPES, I>>,
+    /// The underlying network
+    pub network: Arc<I::Network>,
 
     /// Memberships used by consensus
     pub memberships: Arc<Memberships<TYPES>>,
@@ -174,7 +147,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Clone for SystemContext<TYPE
             public_key: self.public_key.clone(),
             private_key: self.private_key.clone(),
             config: self.config.clone(),
-            networks: Arc::clone(&self.networks),
+            network: Arc::clone(&self.network),
             memberships: Arc::clone(&self.memberships),
             metrics: Arc::clone(&self.metrics),
             consensus: Arc::clone(&self.consensus),
@@ -208,7 +181,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         nonce: u64,
         config: HotShotConfig<TYPES::SignatureKey>,
         memberships: Memberships<TYPES>,
-        networks: Networks<TYPES, I>,
+        network: Arc<I::Network>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
         storage: I::Storage,
@@ -295,7 +268,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             config,
             version,
             start_view: initializer.start_view,
-            networks: Arc::new(networks),
+            network,
             memberships: Arc::new(memberships),
             metrics: Arc::clone(&consensus_metrics),
             internal_event_stream: (internal_tx, internal_rx.deactivate()),
@@ -449,9 +422,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
                 // and will be updated to be part of SystemContext. I wanted to use associated
                 // constants in NodeType, but that seems to be unavailable in the current Rust.
                 api
-                    .networks
-                    .da_network
-                    .broadcast_message(
+                    .network.broadcast_message(
                         serialized_message,
                         da_membership.whole_committee(view_number),
                         BroadcastDelay::None,
@@ -535,7 +506,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         node_id: u64,
         config: HotShotConfig<TYPES::SignatureKey>,
         memberships: Memberships<TYPES>,
-        networks: Networks<TYPES, I>,
+        network: Arc<I::Network>,
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
         storage: I::Storage,
@@ -553,7 +524,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             node_id,
             config,
             memberships,
-            networks,
+            network,
             initializer,
             metrics,
             storage,
@@ -582,8 +553,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let output_event_stream = self.external_event_stream.clone();
         let internal_event_stream = self.internal_event_stream.clone();
 
-        let quorum_network = Arc::clone(&self.networks.quorum_network);
-        let da_network = Arc::clone(&self.networks.da_network);
+        let network = Arc::clone(&self.network);
         let quorum_membership = self.memberships.quorum_membership.clone();
         let da_membership = self.memberships.da_membership.clone();
         let vid_membership = self.memberships.vid_membership.clone();
@@ -598,49 +568,43 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             storage: Arc::clone(&self.storage),
         };
 
-        add_network_message_task(&mut handle, Arc::clone(&quorum_network)).await;
-        add_network_message_task(&mut handle, Arc::clone(&da_network)).await;
+        add_network_message_task(&mut handle, Arc::clone(&network)).await;
+        add_network_message_task(&mut handle, Arc::clone(&network)).await;
 
-        if let Some(request_receiver) = da_network.spawn_request_receiver_task().await {
+        if let Some(request_receiver) = network.spawn_request_receiver_task().await {
             add_request_network_task(&mut handle).await;
             add_response_task(&mut handle, request_receiver).await;
         }
 
         add_network_event_task(
             &mut handle,
-            Arc::clone(&quorum_network),
+            Arc::clone(&network),
             quorum_membership.clone(),
             network::quorum_filter,
         )
         .await;
         add_network_event_task(
             &mut handle,
-            Arc::clone(&quorum_network),
+            Arc::clone(&network),
             quorum_membership,
             network::upgrade_filter,
         )
         .await;
         add_network_event_task(
             &mut handle,
-            Arc::clone(&da_network),
+            Arc::clone(&network),
             da_membership,
             network::da_filter,
         )
         .await;
         add_network_event_task(
             &mut handle,
-            Arc::clone(&quorum_network),
+            Arc::clone(&network),
             view_sync_membership,
             network::view_sync_filter,
         )
         .await;
-        add_network_event_task(
-            &mut handle,
-            Arc::clone(&quorum_network),
-            vid_membership,
-            network::vid_filter,
-        )
-        .await;
+        add_network_event_task(&mut handle, network, vid_membership, network::vid_filter).await;
         add_consensus_tasks::<TYPES, I, Base>(&mut handle).await;
         handle
     }

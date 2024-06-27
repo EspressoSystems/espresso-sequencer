@@ -12,11 +12,8 @@ use hotshot_types::{
 
 use super::{test_builder::TestDescription, test_runner::TestRunner};
 
-/// convience type alias for the networks available
-pub type Networks<TYPES, I> = (
-    Arc<<I as NodeImplementation<TYPES>>::QuorumNetwork>,
-    Arc<<I as NodeImplementation<TYPES>>::QuorumNetwork>,
-);
+/// A type alias to help readability
+pub type Network<TYPES, I> = Arc<<I as NodeImplementation<TYPES>>::Network>;
 
 /// Wrapper for a function that takes a `node_id` and returns an instance of `T`.
 pub type Generator<T> = Box<dyn Fn(u64) -> T + 'static>;
@@ -24,7 +21,7 @@ pub type Generator<T> = Box<dyn Fn(u64) -> T + 'static>;
 /// generators for resources used by each node
 pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     /// generate channels
-    pub channel_generator: AsyncGenerator<Networks<TYPES, I>>,
+    pub channel_generator: AsyncGenerator<Network<TYPES, I>>,
     /// generate new storage for each node
     pub storage: Generator<TestStorage<TYPES>>,
     /// configuration used to generate each hotshot node

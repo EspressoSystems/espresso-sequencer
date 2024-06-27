@@ -173,14 +173,14 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
         _is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         _secondary_network_delay: Duration,
-    ) -> AsyncGenerator<(Arc<Self>, Arc<Self>)> {
+    ) -> AsyncGenerator<Arc<Self>> {
         let master: Arc<_> = MasterMap::new();
         // We assign known_nodes' public key and stake value rather than read from config file since it's a test
         Box::pin(move |node_id| {
             let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
             let pubkey = TYPES::SignatureKey::from_private(&privkey);
             let net = MemoryNetwork::new(pubkey, &master, reliability_config.clone());
-            Box::pin(async move { (net.clone().into(), net.into()) })
+            Box::pin(async move { net.into() })
         })
     }
 

@@ -44,8 +44,8 @@ pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// Membership for Quorum Certs/votes
     pub quorum_membership: Arc<TYPES::Membership>,
-    /// Network for all nodes
-    pub quorum_network: Arc<I::QuorumNetwork>,
+    /// The underlying network
+    pub network: Arc<I::Network>,
 
     /// The current vote collection task, if there is one.
     pub vote_collector:

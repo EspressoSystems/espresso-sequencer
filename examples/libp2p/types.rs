@@ -11,14 +11,11 @@ use crate::infra::Libp2pDaRun;
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
-/// convenience type alias
-pub type DaNetwork = Libp2pNetwork<<TestTypes as NodeType>::SignatureKey>;
-/// convenience type alias
-pub type QuorumNetwork = Libp2pNetwork<<TestTypes as NodeType>::SignatureKey>;
+/// Convenience type alias
+pub type Network = Libp2pNetwork<<TestTypes as NodeType>::SignatureKey>;
 
 impl NodeImplementation<TestTypes> for NodeImpl {
-    type QuorumNetwork = QuorumNetwork;
-    type DaNetwork = DaNetwork;
+    type Network = Network;
     type Storage = TestStorage<TestTypes>;
 }
 /// convenience type alias

@@ -82,11 +82,8 @@ pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// The commitment to the current block payload and its metadata submitted to DA.
     pub payload_commitment_and_metadata: Option<CommitmentAndMetadata<TYPES>>,
 
-    /// Network for all nodes
-    pub quorum_network: Arc<I::QuorumNetwork>,
-
-    /// Network for DA committee
-    pub da_network: Arc<I::DaNetwork>,
+    /// The underlying network
+    pub network: Arc<I::Network>,
 
     /// Membership for Timeout votes/certs
     pub timeout_membership: Arc<TYPES::Membership>,

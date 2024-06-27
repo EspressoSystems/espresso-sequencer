@@ -9,17 +9,10 @@ use crate::infra::PushCdnDaRun;
 pub struct NodeImpl {}
 
 /// Convenience type alias
-pub type DaNetwork = PushCdnNetwork<TestTypes>;
-/// Convenience type alias
-pub type VidNetwork = PushCdnNetwork<TestTypes>;
-/// Convenience type alias
-pub type QuorumNetwork = PushCdnNetwork<TestTypes>;
-/// Convenience type alias
-pub type ViewSyncNetwork = PushCdnNetwork<TestTypes>;
+pub type Network = PushCdnNetwork<TestTypes>;
 
 impl NodeImplementation<TestTypes> for NodeImpl {
-    type DaNetwork = DaNetwork;
-    type QuorumNetwork = QuorumNetwork;
+    type Network = Network;
     type Storage = TestStorage<TestTypes>;
 }
 

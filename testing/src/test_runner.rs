@@ -45,7 +45,7 @@ use crate::{
     block_builder::TestBuilderImplementation,
     completion_task::CompletionTaskDescription,
     spinning_task::{ChangeNode, SpinningTask, UpDown},
-    test_launcher::{Networks, TestLauncher},
+    test_launcher::{Network, TestLauncher},
     test_task::{TestResult, TestTask},
     txn_task::TxnTaskDescription,
     view_sync_task::ViewSyncTask,
@@ -61,7 +61,7 @@ impl<
     > TestRunner<TYPES, I, N>
 where
     I: TestableNodeImplementation<TYPES>,
-    I: NodeImplementation<TYPES, QuorumNetwork = N, DaNetwork = N, Storage = TestStorage<TYPES>>,
+    I: NodeImplementation<TYPES, Network = N, Storage = TestStorage<TYPES>>,
 {
     /// execute test
     ///
@@ -210,8 +210,7 @@ where
 
         // wait for networks to be ready
         for node in &*nodes {
-            node.networks.0.wait_for_ready().await;
-            node.networks.1.wait_for_ready().await;
+            node.network.wait_for_ready().await;
         }
 
         // Start hotshot
@@ -361,14 +360,12 @@ where
                 .try_into()
                 .expect("Non-empty by construction");
 
-            let networks = (self.launcher.resource_generator.channel_generator)(node_id).await;
+            let network = (self.launcher.resource_generator.channel_generator)(node_id).await;
             let storage = (self.launcher.resource_generator.storage)(node_id);
 
-            let network0 = networks.0.clone();
-            let network1 = networks.1.clone();
+            let network_clone = network.clone();
             let networks_ready_future = async move {
-                network0.wait_for_ready().await;
-                network1.wait_for_ready().await;
+                network_clone.wait_for_ready().await;
             };
 
             networks_ready.push(networks_ready_future);
@@ -377,7 +374,7 @@ where
                 self.late_start.insert(
                     node_id,
                     LateStartNode {
-                        networks,
+                        network,
                         context: Right((storage, memberships, config)),
                     },
                 );
@@ -394,7 +391,7 @@ where
                     ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1, is_da);
                 let hotshot = Self::add_node_with_config(
                     node_id,
-                    networks.clone(),
+                    network.clone(),
                     memberships,
                     initializer,
                     config,
@@ -406,12 +403,12 @@ where
                     self.late_start.insert(
                         node_id,
                         LateStartNode {
-                            networks,
+                            network,
                             context: Left(hotshot),
                         },
                     );
                 } else {
-                    uninitialized_nodes.push((node_id, networks, hotshot));
+                    uninitialized_nodes.push((node_id, network, hotshot));
                 }
             }
 
@@ -422,7 +419,7 @@ where
         join_all(networks_ready).await;
 
         // Then start the necessary tasks
-        for (node_id, networks, hotshot) in uninitialized_nodes {
+        for (node_id, network, hotshot) in uninitialized_nodes {
             let handle = hotshot.run_tasks().await;
 
             match node_id.cmp(&(config.da_staked_committee_size as u64 - 1)) {
@@ -442,7 +439,7 @@ where
 
             self.nodes.push(Node {
                 node_id,
-                networks,
+                network,
                 handle,
             });
         }
@@ -455,7 +452,7 @@ where
     /// if unable to initialize the node's `SystemContext` based on the config
     pub async fn add_node_with_config(
         node_id: u64,
-        networks: Networks<TYPES, I>,
+        network: Network<TYPES, I>,
         memberships: Memberships<TYPES>,
         initializer: HotShotInitializer<TYPES>,
         config: HotShotConfig<TYPES::SignatureKey>,
@@ -466,19 +463,13 @@ where
         let private_key = validator_config.private_key.clone();
         let public_key = validator_config.public_key.clone();
 
-        let network_bundle = hotshot::Networks {
-            quorum_network: networks.0.clone(),
-            da_network: networks.1.clone(),
-            _pd: PhantomData,
-        };
-
         SystemContext::new(
             public_key,
             private_key,
             node_id,
             config,
             memberships,
-            network_bundle,
+            network,
             initializer,
             ConsensusMetricsValue::default(),
             storage,
@@ -490,8 +481,8 @@ where
 pub struct Node<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     /// The node's unique identifier
     pub node_id: u64,
-    /// The underlying networks belonging to the node
-    pub networks: Networks<TYPES, I>,
+    /// The underlying network belonging to the node
+    pub network: Network<TYPES, I>,
     /// The handle to the node's internals
     pub handle: SystemContextHandle<TYPES, I>,
 }
@@ -508,8 +499,8 @@ pub type LateNodeContext<TYPES, I> = Either<
 
 /// A yet-to-be-started node that participates in tests
 pub struct LateStartNode<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
-    /// The underlying networks belonging to the node
-    pub networks: Networks<TYPES, I>,
+    /// The underlying network belonging to the node
+    pub network: Network<TYPES, I>,
     /// Either the context to which we will use to launch HotShot for initialized node when it's
     /// time, or the parameters that will be used to initialize the node and launch HotShot.
     pub context: LateNodeContext<TYPES, I>,

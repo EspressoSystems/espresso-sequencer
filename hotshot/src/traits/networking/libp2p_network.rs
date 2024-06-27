@@ -206,7 +206,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
         _is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         _secondary_network_delay: Duration,
-    ) -> AsyncGenerator<(Arc<Self>, Arc<Self>)> {
+    ) -> AsyncGenerator<Arc<Self>> {
         assert!(
             da_committee_size <= expected_node_count,
             "DA committee size must be less than or equal to total # nodes"
@@ -295,7 +295,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
                 let da = da_keys.clone();
                 let reliability_config_dup = reliability_config.clone();
                 Box::pin(async move {
-                    let net = Arc::new(
+                    Arc::new(
                         match Libp2pNetwork::new(
                             Libp2pMetricsValue::default(),
                             config,
@@ -315,8 +315,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
                                 panic!("Failed to create libp2p network: {err:?}");
                             }
                         },
-                    );
-                    (Arc::clone(&net), net)
+                    )
                 })
             }
         })

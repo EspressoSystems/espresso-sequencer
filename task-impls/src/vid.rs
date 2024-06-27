@@ -29,8 +29,8 @@ pub struct VidTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub cur_view: TYPES::Time,
     /// Reference to consensus. Leader will require a read lock on this.
     pub consensus: Arc<RwLock<Consensus<TYPES>>>,
-    /// Network for all nodes
-    pub network: Arc<I::QuorumNetwork>,
+    /// The underlying network
+    pub network: Arc<I::Network>,
     /// Membership for the quorum
     pub membership: Arc<TYPES::Membership>,
     /// This Nodes Public Key

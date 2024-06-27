@@ -11,18 +11,11 @@ use crate::infra::CombinedDaRun;
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct NodeImpl {}
 
-/// convenience type alias
-pub type DaNetwork = CombinedNetworks<TestTypes>;
-/// convenience type alias
-pub type VidNetwork = CombinedNetworks<TestTypes>;
-/// convenience type alias
-pub type QuorumNetwork = CombinedNetworks<TestTypes>;
-/// convenience type alias
-pub type ViewSyncNetwork = CombinedNetworks<TestTypes>;
+/// Convenience type alias
+pub type Network = CombinedNetworks<TestTypes>;
 
 impl NodeImplementation<TestTypes> for NodeImpl {
-    type QuorumNetwork = QuorumNetwork;
-    type DaNetwork = DaNetwork;
+    type Network = Network;
     type Storage = TestStorage<TestTypes>;
 }
 /// convenience type alias

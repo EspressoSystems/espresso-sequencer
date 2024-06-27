@@ -10,6 +10,7 @@ use async_std::task::JoinHandle;
 use futures::Stream;
 use hotshot_task::task::{ConsensusTaskRegistry, NetworkTaskRegistry, Task, TaskState};
 use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event};
+use hotshot_types::traits::network::ConnectedNetwork;
 use hotshot_types::{
     consensus::Consensus,
     data::Leaf,
@@ -146,12 +147,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         self.hotshot.consensus()
     }
 
-    /// Block the underlying quorum (and DA) networking interfaces until node is
-    /// successfully initialized into the networks.
-    pub async fn wait_for_networks_ready(&self) {
-        self.hotshot.networks.wait_for_networks_ready().await;
-    }
-
     /// Shut down the the inner hotshot and wait until all background threads are closed.
     pub async fn shut_down(&mut self) {
         // this is required because `SystemContextHandle` holds an inactive receiver and
@@ -166,8 +161,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         tracing::error!("Shutting down network tasks!");
         self.network_registry.shutdown().await;
 
-        tracing::error!("Shutting down networks!");
-        self.hotshot.networks.shut_down_networks().await;
+        tracing::error!("Shutting down the network!");
+        self.hotshot.network.shut_down().await;
 
         tracing::error!("Shutting down consensus!");
         self.consensus_registry.shutdown().await;

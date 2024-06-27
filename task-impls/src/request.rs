@@ -50,7 +50,8 @@ pub const REQUEST_TIMEOUT: Duration = Duration::from_millis(500);
 /// shares.
 pub struct NetworkRequestState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Network to send requests over
-    pub network: Arc<I::QuorumNetwork>,
+    /// The underlying network
+    pub network: Arc<I::Network>,
     /// Consensus shared state so we can check if we've gotten the information
     /// before sending a request
     pub state: Arc<RwLock<Consensus<TYPES>>>,
@@ -248,8 +249,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
 /// a request.  If at any point the requested info is seen in the data stores or
 /// the view has moved beyond the view we are requesting, the task will completed.
 struct DelayedRequester<TYPES: NodeType, I: NodeImplementation<TYPES>> {
-    /// Network to send requests
-    network: Arc<I::QuorumNetwork>,
+    /// The underlying network to send requests on
+    pub network: Arc<I::Network>,
     /// Shared state to check if the data go populated
     state: Arc<RwLock<Consensus<TYPES>>>,
     /// Channel to send the event when we receive a response
@@ -265,8 +266,8 @@ struct DelayedRequester<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 /// A task the requests some data immediately from one peer
 
 struct ProposalRequester<TYPES: NodeType, I: NodeImplementation<TYPES>> {
-    /// Network to send requests
-    network: Arc<I::QuorumNetwork>,
+    /// The underlying network to send requests on
+    pub network: Arc<I::Network>,
     /// Channel to send the event when we receive a response
     sender: Sender<Option<Proposal<TYPES, QuorumProposal<TYPES>>>>,
     /// Leader for the view of the request

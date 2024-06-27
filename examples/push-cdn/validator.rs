@@ -5,7 +5,7 @@ use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
 use tracing::{debug, instrument};
 
-use crate::types::{DaNetwork, NodeImpl, QuorumNetwork, ThisRun};
+use crate::types::{Network, NodeImpl, ThisRun};
 
 /// types used for this example
 pub mod types;
@@ -22,5 +22,5 @@ async fn main() {
     setup_backtrace();
     let args = ValidatorArgs::parse();
     debug!("connecting to orchestrator at {:?}", args.url);
-    infra::main_entry_point::<TestTypes, DaNetwork, QuorumNetwork, NodeImpl, ThisRun>(args).await;
+    infra::main_entry_point::<TestTypes, Network, NodeImpl, ThisRun>(args).await;
 }

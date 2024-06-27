@@ -64,8 +64,8 @@ pub struct ViewSyncTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub current_view: TYPES::Time,
     /// View HotShot wishes to be in
     pub next_view: TYPES::Time,
-    /// Network for all nodes
-    pub network: Arc<I::QuorumNetwork>,
+    /// The underlying network
+    pub network: Arc<I::Network>,
     /// Membership for the quorum
     pub membership: Arc<TYPES::Membership>,
     /// This Nodes Public Key
@@ -135,8 +135,8 @@ pub struct ViewSyncReplicaTaskState<TYPES: NodeType, I: NodeImplementation<TYPES
     /// Our node id; for logging
     pub id: u64,
 
-    /// Network for all nodes
-    pub network: Arc<I::QuorumNetwork>,
+    /// The underlying network
+    pub network: Arc<I::Network>,
     /// Membership for the quorum
     pub membership: Arc<TYPES::Membership>,
     /// This Nodes Public Key

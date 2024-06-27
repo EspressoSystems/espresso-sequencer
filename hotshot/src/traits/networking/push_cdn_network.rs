@@ -264,7 +264,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
         _is_da: bool,
         _reliability_config: Option<Box<dyn NetworkReliability>>,
         _secondary_network_delay: Duration,
-    ) -> AsyncGenerator<(Arc<Self>, Arc<Self>)> {
+    ) -> AsyncGenerator<Arc<Self>> {
         // The configuration we are using for testing is 2 brokers & 1 marshal
 
         // A keypair shared between brokers
@@ -404,14 +404,12 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
                     };
 
                     // Create our client
-                    let client = Arc::new(PushCdnNetwork {
+                    Arc::new(PushCdnNetwork {
                         client: Client::new(client_config),
                         metrics: Arc::new(CdnMetricsValue::default()),
                         #[cfg(feature = "hotshot-testing")]
                         is_paused: Arc::from(AtomicBool::new(false)),
-                    });
-
-                    (Arc::clone(&client), client)
+                    })
                 })
             }
         })
