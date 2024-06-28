@@ -266,6 +266,7 @@ async fn main() -> anyhow::Result<()> {
         private_staking_key: private_staking_key.clone(),
         private_state_key,
         state_peers: opt.state_peers,
+        catchup_backoff: Default::default(),
     };
 
     let sequencer_version = SEQUENCER_VERSION;

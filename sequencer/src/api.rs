@@ -1208,9 +1208,10 @@ mod test {
             .api_config(Options::with_port(port).catchup(Default::default()))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .catchups(std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
             }))
             .build();
         let mut network = TestNetwork::new(config).await;
@@ -1251,9 +1252,10 @@ mod test {
                 1,
                 ValidatedState::default(),
                 no_storage::Options,
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()]),
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                ),
                 &NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
                 SEQUENCER_VERSION,
@@ -1314,9 +1316,10 @@ mod test {
             .api_config(Options::with_port(port).catchup(Default::default()))
             .states(states)
             .catchups(std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
             }))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
@@ -1392,9 +1395,10 @@ mod test {
             )
             .states(states)
             .catchups(std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
             }))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
@@ -1470,9 +1474,10 @@ mod test {
                 .status(Default::default()),
             )
             .catchups(std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
             }))
             .network_config(
                 TestConfigBuilder::default()
@@ -1628,9 +1633,10 @@ mod test {
                 // Catchup using node 0 as a peer. Node 0 was running the archival state service
                 // before the restart, so it should be able to resume without catching up by loading
                 // state from storage.
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
             }))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
