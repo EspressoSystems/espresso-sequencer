@@ -112,7 +112,9 @@ mod test {
         data_source::ExtensibleDataSource,
         task::BackgroundTask,
         testing::{
-            consensus::{MockDataSource, MockNetwork}, mocks::MockBase, setup_test, sleep
+            consensus::{MockDataSource, MockNetwork},
+            mocks::MockBase,
+            setup_test, sleep,
         },
         Error,
     };

@@ -43,11 +43,11 @@ use hotshot_types::{
     traits::{election::Membership, signature_key::SignatureKey as _},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
-use reqwest::Url;
 use std::fmt::Display;
 use std::num::NonZeroUsize;
 use std::time::Duration;
 use tracing::{info_span, Instrument};
+use url::Url;
 
 struct MockNode<D: DataSourceLifeCycle> {
     hotshot: SystemContextHandle<MockTypes, MockNodeImpl>,

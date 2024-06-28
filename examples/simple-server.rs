@@ -48,6 +48,7 @@ use hotshot_types::{
     traits::election::Membership, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::{num::NonZeroUsize, time::Duration};
+use url::Url;
 use vbs::version::StaticVersionType;
 
 const NUM_NODES: usize = 2;

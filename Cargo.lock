@@ -3350,6 +3350,7 @@ dependencies = [
  "tracing",
  "trait-variant",
  "typenum",
+ "url",
  "vbs",
  "vec1",
 ]

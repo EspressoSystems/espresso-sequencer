@@ -213,8 +213,9 @@ mod test {
         );
 
         // Start a client.
-        let client =
-            Client::<Error, MockBase>::new(format!("http://localhost:{}/node", port).parse().unwrap());
+        let client = Client::<Error, MockBase>::new(
+            format!("http://localhost:{}/node", port).parse().unwrap(),
+        );
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
         // Wait until a few blocks have been sequenced.
@@ -407,8 +408,9 @@ mod test {
             app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
         );
 
-        let client =
-            Client::<Error, MockBase>::new(format!("http://localhost:{}/node", port).parse().unwrap());
+        let client = Client::<Error, MockBase>::new(
+            format!("http://localhost:{}/node", port).parse().unwrap(),
+        );
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
         assert_eq!(client.get::<u64>("ext").send().await.unwrap(), 0);
