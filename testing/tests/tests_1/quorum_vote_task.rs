@@ -1,4 +1,6 @@
 #![allow(clippy::panic)]
+#![cfg(feature = "dependency-tasks")]
+
 use futures::StreamExt;
 use hotshot::tasks::task_state::CreateTaskState;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};

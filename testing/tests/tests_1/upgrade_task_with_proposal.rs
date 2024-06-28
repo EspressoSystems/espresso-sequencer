@@ -16,7 +16,7 @@ use sha2::Digest;
 use hotshot_macros::{test_scripts, run_test};
 use hotshot_task_impls::{
     quorum_proposal::QuorumProposalTaskState,
-    consensus::ConsensusTaskState, consensus2::Consensus2TaskState, events::HotShotEvent::*, upgrade::UpgradeTaskState
+    consensus2::Consensus2TaskState, events::HotShotEvent::*, upgrade::UpgradeTaskState
 };
 use hotshot_testing::{
     helpers::{build_fake_view_with_leaf, vid_share,build_payload_commitment},

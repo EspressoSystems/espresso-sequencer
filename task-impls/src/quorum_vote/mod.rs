@@ -1,3 +1,5 @@
+#![cfg(feature = "dependency-tasks")]
+
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{bail, ensure, Context, Result};
@@ -38,9 +40,8 @@ use tracing::{debug, error, info, instrument, trace, warn};
 use vbs::version::Version;
 
 use crate::{
-    consensus::helpers::fetch_proposal,
     events::HotShotEvent,
-    helpers::{broadcast_event, cancel_task},
+    helpers::{broadcast_event, cancel_task, fetch_proposal},
     quorum_vote::handlers::handle_quorum_proposal_validated,
 };
 

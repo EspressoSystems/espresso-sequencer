@@ -1,6 +1,7 @@
 #![cfg(not(feature = "dependency-tasks"))]
 
 // TODO: Remove after integration of dependency-tasks
+#![cfg(not(feature = "dependency-tasks"))]
 #![allow(unused_imports)]
 
 use std::time::Duration;

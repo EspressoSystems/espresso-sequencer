@@ -1,3 +1,5 @@
+#![cfg(feature = "dependency-tasks")]
+
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -13,9 +15,8 @@ use tracing::debug;
 
 use super::QuorumVoteTaskState;
 use crate::{
-    consensus::helpers::{decide_from_proposal, LeafChainTraversalOutcome},
     events::HotShotEvent,
-    helpers::broadcast_event,
+    helpers::{broadcast_event, decide_from_proposal, LeafChainTraversalOutcome},
 };
 
 /// Handles the `QuorumProposalValidated` event.

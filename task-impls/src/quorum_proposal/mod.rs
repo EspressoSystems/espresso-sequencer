@@ -1,3 +1,5 @@
+#![cfg(feature = "dependency-tasks")]
+
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Result;
@@ -29,13 +31,13 @@ use tokio::task::JoinHandle;
 use tracing::{debug, instrument, warn};
 use vbs::version::Version;
 
-use self::dependency_handle::{ProposalDependency, ProposalDependencyHandle};
+use self::handlers::{ProposalDependency, ProposalDependencyHandle};
 use crate::{
     events::HotShotEvent,
     helpers::{broadcast_event, cancel_task},
 };
 
-mod dependency_handle;
+mod handlers;
 
 /// The state for the quorum proposal task.
 pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {

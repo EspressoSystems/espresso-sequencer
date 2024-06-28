@@ -1,5 +1,6 @@
 // TODO: Remove after integration
 #![allow(unused_imports)]
+#![cfg(feature = "dependency-tasks")]
 
 use futures::StreamExt;
 use hotshot::tasks::task_state::CreateTaskState;

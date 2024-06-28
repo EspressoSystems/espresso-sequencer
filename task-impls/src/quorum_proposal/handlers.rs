@@ -1,6 +1,8 @@
 //! This module holds the dependency task for the QuorumProposalTask. It is spawned whenever an event that could
 //! initiate a proposal occurs.
 
+#![cfg(feature = "dependency-tasks")]
+
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 use anyhow::{ensure, Context, Result};
@@ -25,9 +27,8 @@ use tracing::{debug, error};
 use vbs::version::Version;
 
 use crate::{
-    consensus::helpers::{fetch_proposal, parent_leaf_and_state},
     events::HotShotEvent,
-    helpers::broadcast_event,
+    helpers::{broadcast_event, fetch_proposal, parent_leaf_and_state},
 };
 
 /// Proposal dependency types. These types represent events that precipitate a proposal.

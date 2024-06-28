@@ -5,14 +5,19 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::Utc;
+#[cfg(not(feature = "dependency-tasks"))]
+use hotshot_task_impls::consensus::ConsensusTaskState;
 #[cfg(feature = "rewind")]
 use hotshot_task_impls::rewind::RewindTaskState;
 use hotshot_task_impls::{
-    builder::BuilderClient, consensus::ConsensusTaskState, consensus2::Consensus2TaskState,
-    da::DaTaskState, quorum_proposal::QuorumProposalTaskState,
+    builder::BuilderClient, da::DaTaskState, request::NetworkRequestState,
+    transactions::TransactionTaskState, upgrade::UpgradeTaskState, vid::VidTaskState,
+    view_sync::ViewSyncTaskState,
+};
+#[cfg(feature = "dependency-tasks")]
+use hotshot_task_impls::{
+    consensus2::Consensus2TaskState, quorum_proposal::QuorumProposalTaskState,
     quorum_proposal_recv::QuorumProposalRecvTaskState, quorum_vote::QuorumVoteTaskState,
-    request::NetworkRequestState, transactions::TransactionTaskState, upgrade::UpgradeTaskState,
-    vid::VidTaskState, view_sync::ViewSyncTaskState,
 };
 use hotshot_types::traits::{
     consensus_api::ConsensusApi,
@@ -198,6 +203,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
     }
 }
 
+#[cfg(not(feature = "dependency-tasks"))]
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
     for ConsensusTaskState<TYPES, I>
@@ -237,6 +243,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
     }
 }
 
+#[cfg(feature = "dependency-tasks")]
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
     for QuorumVoteTaskState<TYPES, I>
@@ -263,6 +270,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
     }
 }
 
+#[cfg(feature = "dependency-tasks")]
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
     for QuorumProposalTaskState<TYPES, I>
@@ -296,6 +304,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
     }
 }
 
+#[cfg(feature = "dependency-tasks")]
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
     for QuorumProposalRecvTaskState<TYPES, I>
@@ -330,6 +339,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
     }
 }
 
+#[cfg(feature = "dependency-tasks")]
 #[async_trait]
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
     for Consensus2TaskState<TYPES, I>
