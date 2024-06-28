@@ -1627,6 +1627,12 @@
 <a href="#1627" id="1627">1627</a>
 <a href="#1628" id="1628">1628</a>
 <a href="#1629" id="1629">1629</a>
+<a href="#1630" id="1630">1630</a>
+<a href="#1631" id="1631">1631</a>
+<a href="#1632" id="1632">1632</a>
+<a href="#1633" id="1633">1633</a>
+<a href="#1634" id="1634">1634</a>
+<a href="#1635" id="1635">1635</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="self">self</span>::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
 <span class="kw">use crate</span>::{
     network,
@@ -2795,9 +2801,10 @@
             Default::default(),
             [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|<span class="kw">_</span>| {
-                StatePeers::&lt;SequencerVersion&gt;::from_urls(<span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>)
-                    .parse()
-                    .unwrap()])
+                StatePeers::&lt;SequencerVersion&gt;::from_urls(
+                    <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>,).parse().unwrap()],
+                    Default::default(),
+                )
             }),
             l1,
             <span class="prelude-val">None</span>,
@@ -2841,9 +2848,10 @@
                 <span class="number">1</span>,
                 ValidatedState::default(),
                 no_storage::Options,
-                StatePeers::&lt;SequencerVersion&gt;::from_urls(<span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>)
-                    .parse()
-                    .unwrap()]),
+                StatePeers::&lt;SequencerVersion&gt;::from_urls(
+                    <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
+                    Default::default(),
+                ),
                 <span class="kw-2">&amp;</span>NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
                 SEQUENCER_VERSION,
@@ -2905,9 +2913,10 @@
             states,
             [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|<span class="kw">_</span>| {
-                StatePeers::&lt;SequencerVersion&gt;::from_urls(<span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>)
-                    .parse()
-                    .unwrap()])
+                StatePeers::&lt;SequencerVersion&gt;::from_urls(
+                    <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
+                    Default::default(),
+                )
             }),
             l1,
             <span class="prelude-val">None</span>,
@@ -2981,9 +2990,10 @@
             states,
             [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|<span class="kw">_</span>| {
-                StatePeers::&lt;SequencerVersion&gt;::from_urls(<span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>)
-                    .parse()
-                    .unwrap()])
+                StatePeers::&lt;SequencerVersion&gt;::from_urls(
+                    <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
+                    Default::default(),
+                )
             }),
             l1,
             <span class="prelude-val">None</span>,
@@ -3058,9 +3068,10 @@
             Default::default(),
             [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|<span class="kw">_</span>| {
-                StatePeers::&lt;SequencerVersion&gt;::from_urls(<span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>)
-                    .parse()
-                    .unwrap()])
+                StatePeers::&lt;SequencerVersion&gt;::from_urls(
+                    <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
+                    Default::default(),
+                )
             }),
             l1,
             <span class="prelude-val">Some</span>(upgrades),
@@ -3212,9 +3223,10 @@
                 <span class="comment">// Catchup using node 0 as a peer. Node 0 was running the archival state service
                 // before the restart, so it should be able to resume without catching up by loading
                 // state from storage.
-                </span>StatePeers::&lt;SequencerVersion&gt;::from_urls(<span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>)
-                    .parse()
-                    .unwrap()])
+                </span>StatePeers::&lt;SequencerVersion&gt;::from_urls(
+                    <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
+                    Default::default(),
+                )
             }),
             l1,
             <span class="prelude-val">None</span>,

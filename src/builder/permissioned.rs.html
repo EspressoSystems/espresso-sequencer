@@ -738,6 +738,9 @@
 <a href="#738" id="738">738</a>
 <a href="#739" id="739">739</a>
 <a href="#740" id="740">740</a>
+<a href="#741" id="741">741</a>
+<a href="#742" id="742">742</a>
+<a href="#743" id="743">743</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -1016,7 +1019,10 @@
         genesis_header: genesis.header,
         genesis_state: genesis_state.clone(),
         l1_genesis,
-        peers: Arc::new(StatePeers::&lt;Ver&gt;::from_urls(network_params.state_peers)),
+        peers: Arc::new(StatePeers::&lt;Ver&gt;::from_urls(
+            network_params.state_peers,
+            network_params.catchup_backoff,
+        )),
         node_id: node_index,
         upgrades: Default::default(),
         current_version: Ver::VERSION,

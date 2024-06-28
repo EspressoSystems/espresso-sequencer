@@ -1005,6 +1005,11 @@
 <a href="#1005" id="1005">1005</a>
 <a href="#1006" id="1006">1006</a>
 <a href="#1007" id="1007">1007</a>
+<a href="#1008" id="1008">1008</a>
+<a href="#1009" id="1009">1009</a>
+<a href="#1010" id="1010">1010</a>
+<a href="#1011" id="1011">1011</a>
+<a href="#1012" id="1012">1012</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>block;
 <span class="kw">pub mod </span>catchup;
@@ -1032,7 +1037,8 @@
 
 <span class="comment">// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
-</span><span class="kw">use </span>l1_client::L1Client;
+</span><span class="kw">use </span>catchup::BackoffParams;
+<span class="kw">use </span>l1_client::L1Client;
 
 <span class="kw">use </span>libp2p::Multiaddr;
 <span class="kw">use </span>network::libp2p::split_off_peer_id;
@@ -1309,6 +1315,7 @@
     <span class="kw">pub </span>private_staking_key: BLSPrivKey,
     <span class="kw">pub </span>private_state_key: StateSignKey,
     <span class="kw">pub </span>state_peers: Vec&lt;Url&gt;,
+    <span class="kw">pub </span>catchup_backoff: BackoffParams,
 
     <span class="doccomment">/// The address to send to other Libp2p nodes to contact us
     </span><span class="kw">pub </span>libp2p_advertise_address: SocketAddr,
@@ -1531,7 +1538,10 @@
         l1_genesis,
         peers: catchup::local_and_remote(
             persistence_opt,
-            StatePeers::&lt;Ver&gt;::from_urls(network_params.state_peers),
+            StatePeers::&lt;Ver&gt;::from_urls(
+                network_params.state_peers,
+                network_params.catchup_backoff,
+            ),
         )
         .<span class="kw">await</span>,
         node_id: node_index,

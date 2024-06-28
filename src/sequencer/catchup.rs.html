@@ -598,8 +598,88 @@
 <a href="#598" id="598">598</a>
 <a href="#599" id="599">599</a>
 <a href="#600" id="600">600</a>
+<a href="#601" id="601">601</a>
+<a href="#602" id="602">602</a>
+<a href="#603" id="603">603</a>
+<a href="#604" id="604">604</a>
+<a href="#605" id="605">605</a>
+<a href="#606" id="606">606</a>
+<a href="#607" id="607">607</a>
+<a href="#608" id="608">608</a>
+<a href="#609" id="609">609</a>
+<a href="#610" id="610">610</a>
+<a href="#611" id="611">611</a>
+<a href="#612" id="612">612</a>
+<a href="#613" id="613">613</a>
+<a href="#614" id="614">614</a>
+<a href="#615" id="615">615</a>
+<a href="#616" id="616">616</a>
+<a href="#617" id="617">617</a>
+<a href="#618" id="618">618</a>
+<a href="#619" id="619">619</a>
+<a href="#620" id="620">620</a>
+<a href="#621" id="621">621</a>
+<a href="#622" id="622">622</a>
+<a href="#623" id="623">623</a>
+<a href="#624" id="624">624</a>
+<a href="#625" id="625">625</a>
+<a href="#626" id="626">626</a>
+<a href="#627" id="627">627</a>
+<a href="#628" id="628">628</a>
+<a href="#629" id="629">629</a>
+<a href="#630" id="630">630</a>
+<a href="#631" id="631">631</a>
+<a href="#632" id="632">632</a>
+<a href="#633" id="633">633</a>
+<a href="#634" id="634">634</a>
+<a href="#635" id="635">635</a>
+<a href="#636" id="636">636</a>
+<a href="#637" id="637">637</a>
+<a href="#638" id="638">638</a>
+<a href="#639" id="639">639</a>
+<a href="#640" id="640">640</a>
+<a href="#641" id="641">641</a>
+<a href="#642" id="642">642</a>
+<a href="#643" id="643">643</a>
+<a href="#644" id="644">644</a>
+<a href="#645" id="645">645</a>
+<a href="#646" id="646">646</a>
+<a href="#647" id="647">647</a>
+<a href="#648" id="648">648</a>
+<a href="#649" id="649">649</a>
+<a href="#650" id="650">650</a>
+<a href="#651" id="651">651</a>
+<a href="#652" id="652">652</a>
+<a href="#653" id="653">653</a>
+<a href="#654" id="654">654</a>
+<a href="#655" id="655">655</a>
+<a href="#656" id="656">656</a>
+<a href="#657" id="657">657</a>
+<a href="#658" id="658">658</a>
+<a href="#659" id="659">659</a>
+<a href="#660" id="660">660</a>
+<a href="#661" id="661">661</a>
+<a href="#662" id="662">662</a>
+<a href="#663" id="663">663</a>
+<a href="#664" id="664">664</a>
+<a href="#665" id="665">665</a>
+<a href="#666" id="666">666</a>
+<a href="#667" id="667">667</a>
+<a href="#668" id="668">668</a>
+<a href="#669" id="669">669</a>
+<a href="#670" id="670">670</a>
+<a href="#671" id="671">671</a>
+<a href="#672" id="672">672</a>
+<a href="#673" id="673">673</a>
+<a href="#674" id="674">674</a>
+<a href="#675" id="675">675</a>
+<a href="#676" id="676">676</a>
+<a href="#677" id="677">677</a>
+<a href="#678" id="678">678</a>
+<a href="#679" id="679">679</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
     api::{data_source::CatchupDataSource, AccountQueryData, BlocksFrontier},
+    options::{parse_duration, Ratio},
     persistence::PersistenceOptions,
     state::{BlockMerkleTree, FeeAccount, FeeMerkleCommitment},
     ChainConfig,
@@ -607,8 +687,9 @@
 <span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>async_std::{sync::RwLock, task::sleep};
 <span class="kw">use </span>async_trait::async_trait;
+<span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>committable::Commitment;
-<span class="kw">use </span>derive_more::From;
+<span class="kw">use </span>futures::future::{BoxFuture, FutureExt, TryFutureExt};
 <span class="kw">use </span>hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime <span class="kw">as _</span>};
 <span class="kw">use </span>jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
 <span class="kw">use </span>rand::Rng;
@@ -619,33 +700,92 @@
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
-<span class="kw">const </span>MIN_RETRY_DELAY: Duration = Duration::from_millis(<span class="number">500</span>);
-<span class="kw">const </span>MAX_RETRY_DELAY: Duration = Duration::from_secs(<span class="number">5</span>);
-<span class="kw">const </span>BACKOFF_FACTOR: u32 = <span class="number">2</span>;
-<span class="comment">// Exponential backoff jitter as a fraction of the backoff delay, (numerator, denominator).
-</span><span class="kw">const </span>BACKOFF_JITTER: (u64, u64) = (<span class="number">1</span>, <span class="number">10</span>);
+<span class="attr">#[derive(Clone, Copy, Debug, Parser, PartialEq, Eq, PartialOrd, Ord)]
+</span><span class="kw">pub struct </span>BackoffParams {
+    <span class="doccomment">/// Exponential backoff exponent.
+    </span><span class="attr">#[clap(
+        long = <span class="string">"catchup-backoff-factor"</span>,
+        env = <span class="string">"ESPRESSO_SEQUENCER_CATCHUP_BACKOFF_FACTOR"</span>,
+        default_value = <span class="string">"4"
+    </span>)]
+    </span>factor: u32,
 
-<span class="attr">#[must_use]
-</span><span class="kw">fn </span>backoff(delay: Duration) -&gt; Duration {
-    <span class="kw">if </span>delay &gt;= MAX_RETRY_DELAY {
-        <span class="kw">return </span>MAX_RETRY_DELAY;
+    <span class="doccomment">/// Exponential backoff base delay.
+    </span><span class="attr">#[clap(
+        long = <span class="string">"catchup-base-retry-delay"</span>,
+        env = <span class="string">"ESPRESSO_SEQUENCER_CATCHUP_BASE_RETRY_DELAY"</span>,
+        default_value = <span class="string">"20ms"</span>,
+        value_parser = parse_duration
+    )]
+    </span>base: Duration,
+
+    <span class="doccomment">/// Exponential max delay.
+    </span><span class="attr">#[clap(
+        long = <span class="string">"catchup-max-retry-delay"</span>,
+        env = <span class="string">"ESPRESSO_SEQUENCER_CATCHUP_MAX_RETRY_DELAY"</span>,
+        default_value = <span class="string">"5s"</span>,
+        value_parser = parse_duration
+    )]
+    </span>max: Duration,
+
+    <span class="doccomment">/// Exponential backoff jitter as a ratio of the backoff delay, numerator:denominator.
+    </span><span class="attr">#[clap(
+        long = <span class="string">"catchup-backoff-jitter"</span>,
+        env = <span class="string">"ESPRESSO_SEQUENCER_CATCHUP_BACKOFF_JITTER"</span>,
+        default_value = <span class="string">"1:10"
+    </span>)]
+    </span>jitter: Ratio,
+}
+
+<span class="kw">impl </span>Default <span class="kw">for </span>BackoffParams {
+    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+        <span class="self">Self</span>::parse_from(std::iter::empty::&lt;String&gt;())
+    }
+}
+
+<span class="kw">impl </span>BackoffParams {
+    <span class="kw">async fn </span>retry&lt;S, T&gt;(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        <span class="kw-2">mut </span>state: S,
+        f: <span class="kw">impl for</span>&lt;<span class="lifetime">'a</span>&gt; Fn(<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>S) -&gt; BoxFuture&lt;<span class="lifetime">'a</span>, anyhow::Result&lt;T&gt;&gt;,
+    ) -&gt; T {
+        <span class="kw">let </span><span class="kw-2">mut </span>delay = <span class="self">self</span>.base;
+        <span class="kw">loop </span>{
+            <span class="kw">match </span>f(<span class="kw-2">&amp;mut </span>state).<span class="kw">await </span>{
+                <span class="prelude-val">Ok</span>(res) =&gt; <span class="kw">break </span>res,
+                <span class="prelude-val">Err</span>(err) =&gt; {
+                    <span class="macro">tracing::warn!</span>(
+                        <span class="string">"Retryable operation failed, will retry after {delay:?}: {err:#}"
+                    </span>);
+                    sleep(delay).<span class="kw">await</span>;
+                    delay = <span class="self">self</span>.backoff(delay);
+                }
+            }
+        }
     }
 
-    <span class="kw">let </span><span class="kw-2">mut </span>rng = rand::thread_rng();
+    <span class="attr">#[must_use]
+    </span><span class="kw">fn </span>backoff(<span class="kw-2">&amp;</span><span class="self">self</span>, delay: Duration) -&gt; Duration {
+        <span class="kw">if </span>delay &gt;= <span class="self">self</span>.max {
+            <span class="kw">return </span><span class="self">self</span>.max;
+        }
 
-    <span class="comment">// Increase the backoff by the backoff factor.
-    </span><span class="kw">let </span>ms = (delay * BACKOFF_FACTOR).as_millis() <span class="kw">as </span>u64;
+        <span class="kw">let </span><span class="kw-2">mut </span>rng = rand::thread_rng();
 
-    <span class="comment">// Sample a random jitter factor in the range [0, BACKOFF_JITTER.0 / BACKOFF_JITTER.1].
-    </span><span class="kw">let </span>jitter_num = rng.gen_range(<span class="number">0</span>..BACKOFF_JITTER.<span class="number">0</span>);
-    <span class="kw">let </span>jitter_den = BACKOFF_JITTER.<span class="number">1</span>;
+        <span class="comment">// Increase the backoff by the backoff factor.
+        </span><span class="kw">let </span>ms = (delay * <span class="self">self</span>.factor).as_millis() <span class="kw">as </span>u64;
 
-    <span class="comment">// Increase the delay by the jitter factor.
-    </span><span class="kw">let </span>jitter = ms * jitter_num / jitter_den;
-    <span class="kw">let </span>delay = Duration::from_millis(ms + jitter);
+        <span class="comment">// Sample a random jitter factor in the range [0, self.jitter].
+        </span><span class="kw">let </span>jitter_num = rng.gen_range(<span class="number">0</span>..<span class="self">self</span>.jitter.numerator);
+        <span class="kw">let </span>jitter_den = <span class="self">self</span>.jitter.denominator;
 
-    <span class="comment">// Bound the delay by the maximum.
-    </span>min(delay, MAX_RETRY_DELAY)
+        <span class="comment">// Increase the delay by the jitter factor.
+        </span><span class="kw">let </span>jitter = ms * jitter_num / jitter_den;
+        <span class="kw">let </span>delay = Duration::from_millis(ms + jitter);
+
+        <span class="comment">// Bound the delay by the maximum.
+        </span>min(delay, <span class="self">self</span>.max)
+    }
 }
 
 <span class="comment">// This newtype is probably not worth having. It's only used to be able to log
@@ -690,21 +830,15 @@
     ) -&gt; anyhow::Result&lt;Vec&lt;AccountQueryData&gt;&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>ret = <span class="macro">vec!</span>[];
         <span class="kw">for </span>account <span class="kw">in </span>accounts {
-            <span class="comment">// Retry until we succeed.
-            </span><span class="kw">let </span><span class="kw-2">mut </span>delay = MIN_RETRY_DELAY;
-            <span class="kw">let </span>account = <span class="kw">loop </span>{
-                <span class="kw">match </span><span class="self">self
-                    </span>.try_fetch_account(height, view, fee_merkle_tree_root, account)
-                    .<span class="kw">await
-                </span>{
-                    <span class="prelude-val">Ok</span>(account) =&gt; <span class="kw">break </span>account,
-                    <span class="prelude-val">Err</span>(err) =&gt; {
-                        <span class="macro">tracing::warn!</span>(%account, <span class="question-mark">?</span>delay, <span class="string">"Could not fetch account, retrying: {err:#}"</span>);
-                        sleep(delay).<span class="kw">await</span>;
-                        delay = backoff(delay);
-                    }
-                }
-            };
+            <span class="kw">let </span>account = <span class="self">self
+                </span>.backoff()
+                .retry(<span class="self">self</span>, |provider| {
+                    provider
+                        .try_fetch_account(height, view, fee_merkle_tree_root, account)
+                        .map_err(|err| err.context(<span class="string">"fetching account {account}"</span>))
+                        .boxed()
+                })
+                .<span class="kw">await</span>;
             ret.push(account);
         }
         <span class="prelude-val">Ok</span>(ret)
@@ -725,22 +859,13 @@
         view: ViewNumber,
         mt: <span class="kw-2">&amp;mut </span>BlockMerkleTree,
     ) -&gt; anyhow::Result&lt;()&gt; {
-        <span class="comment">// Retry until we succeed.
-        </span><span class="kw">let </span><span class="kw-2">mut </span>delay = MIN_RETRY_DELAY;
-        <span class="kw">loop </span>{
-            <span class="kw">match </span><span class="self">self</span>.try_remember_blocks_merkle_tree(height, view, mt).<span class="kw">await </span>{
-                <span class="prelude-val">Ok</span>(()) =&gt; <span class="kw">break</span>,
-                <span class="prelude-val">Err</span>(err) =&gt; {
-                    <span class="macro">tracing::warn!</span>(
-                        <span class="question-mark">?</span>delay,
-                        <span class="string">"Could not fetch frontier from any peer, retrying: {err:#}"
-                    </span>);
-                    sleep(delay).<span class="kw">await</span>;
-                    delay = backoff(delay);
-                }
-            }
-        }
-
+        <span class="self">self</span>.backoff()
+            .retry(mt, |mt| {
+                <span class="self">self</span>.try_remember_blocks_merkle_tree(height, view, mt)
+                    .map_err(|err| err.context(<span class="string">"fetching frontier"</span>))
+                    .boxed()
+            })
+            .<span class="kw">await</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
@@ -750,23 +875,17 @@
     ) -&gt; anyhow::Result&lt;ChainConfig&gt;;
 
     <span class="kw">async fn </span>fetch_chain_config(<span class="kw-2">&amp;</span><span class="self">self</span>, commitment: Commitment&lt;ChainConfig&gt;) -&gt; ChainConfig {
-        <span class="comment">// Retry until we succeed.
-        </span><span class="kw">let </span><span class="kw-2">mut </span>delay = MIN_RETRY_DELAY;
+        <span class="self">self</span>.backoff()
+            .retry(<span class="self">self</span>, |provider| {
+                provider
+                    .try_fetch_chain_config(commitment)
+                    .map_err(|err| err.context(<span class="string">"fetching chain config"</span>))
+                    .boxed()
+            })
+            .<span class="kw">await
+    </span>}
 
-        <span class="kw">loop </span>{
-            <span class="kw">match </span><span class="self">self</span>.try_fetch_chain_config(commitment).<span class="kw">await </span>{
-                <span class="prelude-val">Ok</span>(cf) =&gt; <span class="kw">return </span>cf,
-                <span class="prelude-val">Err</span>(err) =&gt; {
-                    <span class="macro">tracing::warn!</span>(
-                        <span class="question-mark">?</span>delay,
-                        <span class="string">"Could not fetch chain config from any peer, retrying: {err:#}"
-                    </span>);
-                    sleep(delay).<span class="kw">await</span>;
-                    delay = backoff(delay);
-                }
-            }
-        }
-    }
+    <span class="kw">fn </span>backoff(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>BackoffParams;
 }
 
 <span class="doccomment">/// A catchup implementation that falls back to a remote provider, but prefers a local provider when
@@ -775,7 +894,7 @@
     local_opt: <span class="kw">impl </span>PersistenceOptions,
     remote: <span class="kw">impl </span>StateCatchup + <span class="lifetime">'static</span>,
 ) -&gt; Arc&lt;<span class="kw">dyn </span>StateCatchup&gt; {
-    <span class="kw">match </span>local_opt.create_catchup_provider().<span class="kw">await </span>{
+    <span class="kw">match </span>local_opt.create_catchup_provider(<span class="kw-2">*</span>remote.backoff()).<span class="kw">await </span>{
         <span class="prelude-val">Ok</span>(local) =&gt; Arc::new(<span class="macro">vec!</span>[local, Arc::new(remote)]),
         <span class="prelude-val">Err</span>(err) =&gt; {
             <span class="macro">tracing::warn!</span>(<span class="string">"not using local catchup: {err:#}"</span>);
@@ -787,16 +906,18 @@
 <span class="attr">#[derive(Debug, Clone, Default)]
 </span><span class="kw">pub struct </span>StatePeers&lt;Ver: StaticVersionType&gt; {
     clients: Vec&lt;Client&lt;ServerError, Ver&gt;&gt;,
+    backoff: BackoffParams,
 }
 
 <span class="kw">impl</span>&lt;Ver: StaticVersionType&gt; StatePeers&lt;Ver&gt; {
-    <span class="kw">pub fn </span>from_urls(urls: Vec&lt;Url&gt;) -&gt; <span class="self">Self </span>{
+    <span class="kw">pub fn </span>from_urls(urls: Vec&lt;Url&gt;, backoff: BackoffParams) -&gt; <span class="self">Self </span>{
         <span class="kw">if </span>urls.is_empty() {
             <span class="macro">panic!</span>(<span class="string">"Cannot create StatePeers with no peers"</span>);
         }
 
         <span class="self">Self </span>{
             clients: urls.into_iter().map(Client::new).collect(),
+            backoff,
         }
     }
 }
@@ -889,11 +1010,22 @@
         }
         <span class="macro">bail!</span>(<span class="string">"Could not fetch chain config from any peer"</span>);
     }
+
+    <span class="kw">fn </span>backoff(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>BackoffParams {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.backoff
+    }
 }
 
-<span class="attr">#[derive(Debug, From)]
+<span class="attr">#[derive(Debug)]
 </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>SqlStateCatchup&lt;T&gt; {
     db: Arc&lt;RwLock&lt;T&gt;&gt;,
+    backoff: BackoffParams,
+}
+
+<span class="kw">impl</span>&lt;T&gt; SqlStateCatchup&lt;T&gt; {
+    <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new(db: Arc&lt;RwLock&lt;T&gt;&gt;, backoff: BackoffParams) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{ db, backoff }
+    }
 }
 
 <span class="attr">#[async_trait]
@@ -946,6 +1078,10 @@
     ) -&gt; anyhow::Result&lt;ChainConfig&gt; {
         <span class="self">self</span>.db.read().<span class="kw">await</span>.get_chain_config(commitment).<span class="kw">await
     </span>}
+
+    <span class="kw">fn </span>backoff(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>BackoffParams {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.backoff
+    }
 }
 
 <span class="attr">#[async_trait]
@@ -1004,6 +1140,10 @@
     <span class="kw">async fn </span>fetch_chain_config(<span class="kw-2">&amp;</span><span class="self">self</span>, commitment: Commitment&lt;ChainConfig&gt;) -&gt; ChainConfig {
         (<span class="kw-2">**</span><span class="self">self</span>).fetch_chain_config(commitment).<span class="kw">await
     </span>}
+
+    <span class="kw">fn </span>backoff(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>BackoffParams {
+        (<span class="kw-2">**</span><span class="self">self</span>).backoff()
+    }
 }
 
 <span class="attr">#[async_trait]
@@ -1062,6 +1202,10 @@
     <span class="kw">async fn </span>fetch_chain_config(<span class="kw-2">&amp;</span><span class="self">self</span>, commitment: Commitment&lt;ChainConfig&gt;) -&gt; ChainConfig {
         (<span class="kw-2">**</span><span class="self">self</span>).fetch_chain_config(commitment).<span class="kw">await
     </span>}
+
+    <span class="kw">fn </span>backoff(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>BackoffParams {
+        (<span class="kw-2">**</span><span class="self">self</span>).backoff()
+    }
 }
 
 <span class="doccomment">/// Catchup from multiple providers tries each provider in a round robin fashion until it succeeds.
@@ -1127,6 +1271,14 @@
 
         <span class="macro">bail!</span>(<span class="string">"could not fetch chain config from any provider"</span>);
     }
+
+    <span class="kw">fn </span>backoff(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>BackoffParams {
+        <span class="comment">// Use whichever provider's backoff is most conservative.
+        </span><span class="self">self</span>.iter()
+            .map(|p| p.backoff())
+            .max()
+            .expect(<span class="string">"provider list not empty"</span>)
+    }
 }
 
 <span class="attr">#[cfg(any(test, feature = <span class="string">"testing"</span>))]
@@ -1138,12 +1290,14 @@
 
     <span class="attr">#[derive(Debug, Clone, Default)]
     </span><span class="kw">pub struct </span>MockStateCatchup {
+        backoff: BackoffParams,
         state: HashMap&lt;ViewNumber, Arc&lt;ValidatedState&gt;&gt;,
     }
 
     <span class="kw">impl </span>FromIterator&lt;(ViewNumber, Arc&lt;ValidatedState&gt;)&gt; <span class="kw">for </span>MockStateCatchup {
         <span class="kw">fn </span>from_iter&lt;I: IntoIterator&lt;Item = (ViewNumber, Arc&lt;ValidatedState&gt;)&gt;&gt;(iter: I) -&gt; <span class="self">Self </span>{
             <span class="self">Self </span>{
+                backoff: Default::default(),
                 state: iter.into_iter().collect(),
             }
         }
@@ -1195,6 +1349,10 @@
             _commitment: Commitment&lt;ChainConfig&gt;,
         ) -&gt; anyhow::Result&lt;ChainConfig&gt; {
             <span class="prelude-val">Ok</span>(ChainConfig::default())
+        }
+
+        <span class="kw">fn </span>backoff(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>BackoffParams {
+            <span class="kw-2">&amp;</span><span class="self">self</span>.backoff
         }
     }
 }

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BACKOFF_FACTOR","BACKOFF_JITTER","MAX_RETRY_DELAY","MIN_RETRY_DELAY"],"fn":["backoff","local_and_remote"],"mod":["mock"],"struct":["Client","SqlStateCatchup","StatePeers"],"trait":["StateCatchup"]};
+window.SIDEBAR_ITEMS = {"fn":["local_and_remote"],"mod":["mock"],"struct":["BackoffParams","Client","SqlStateCatchup","StatePeers"],"trait":["StateCatchup"]};

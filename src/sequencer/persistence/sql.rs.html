@@ -661,9 +661,13 @@
 <a href="#661" id="661">661</a>
 <a href="#662" id="662">662</a>
 <a href="#663" id="663">663</a>
+<a href="#664" id="664">664</a>
+<a href="#665" id="665">665</a>
+<a href="#666" id="666">666</a>
+<a href="#667" id="667">667</a>
 </pre></div><pre class="rust"><code><span class="kw">use super</span>::{NetworkConfig, PersistenceOptions, SequencerPersistence};
 <span class="kw">use crate</span>::{
-    catchup::{SqlStateCatchup, StateCatchup},
+    catchup::{BackoffParams, SqlStateCatchup, StateCatchup},
     options::parse_duration,
     Leaf, SeqTypes, ViewNumber,
 };
@@ -942,10 +946,14 @@
 
 <span class="attr">#[async_trait]
 </span><span class="kw">impl </span>SequencerPersistence <span class="kw">for </span>Persistence {
-    <span class="kw">fn </span>into_catchup_provider(<span class="self">self</span>) -&gt; anyhow::Result&lt;Arc&lt;<span class="kw">dyn </span>StateCatchup&gt;&gt; {
-        <span class="prelude-val">Ok</span>(Arc::new(SqlStateCatchup::from(Arc::new(RwLock::new(
-            <span class="self">self</span>.db,
-        )))))
+    <span class="kw">fn </span>into_catchup_provider(
+        <span class="self">self</span>,
+        backoff: BackoffParams,
+    ) -&gt; anyhow::Result&lt;Arc&lt;<span class="kw">dyn </span>StateCatchup&gt;&gt; {
+        <span class="prelude-val">Ok</span>(Arc::new(SqlStateCatchup::new(
+            Arc::new(RwLock::new(<span class="self">self</span>.db)),
+            backoff,
+        )))
     }
 
     <span class="kw">async fn </span>load_config(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;<span class="prelude-ty">Option</span>&lt;NetworkConfig&gt;&gt; {

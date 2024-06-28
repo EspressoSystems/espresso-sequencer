@@ -597,6 +597,13 @@
 <a href="#597" id="597">597</a>
 <a href="#598" id="598">598</a>
 <a href="#599" id="599">599</a>
+<a href="#600" id="600">600</a>
+<a href="#601" id="601">601</a>
+<a href="#602" id="602">602</a>
+<a href="#603" id="603">603</a>
+<a href="#604" id="604">604</a>
+<a href="#605" id="605">605</a>
+<a href="#606" id="606">606</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer node persistence.
 //!
 //! This module implements the persistence required for a sequencer node to rejoin the network and
@@ -608,7 +615,8 @@
 //! persistence which is _required_ to run a node.
 
 </span><span class="kw">use crate</span>::{
-    ChainConfig, Leaf, NodeState, PubKey, SeqTypes, StateCatchup, ValidatedState, ViewNumber,
+    catchup::BackoffParams, ChainConfig, Leaf, NodeState, PubKey, SeqTypes, StateCatchup,
+    ValidatedState, ViewNumber,
 };
 <span class="kw">use </span>anyhow::{bail, ensure, Context};
 <span class="kw">use </span>async_std::sync::Arc;
@@ -643,15 +651,21 @@
     <span class="kw">async fn </span>create(<span class="self">self</span>) -&gt; anyhow::Result&lt;<span class="self">Self</span>::Persistence&gt;;
     <span class="kw">async fn </span>reset(<span class="self">self</span>) -&gt; anyhow::Result&lt;()&gt;;
 
-    <span class="kw">async fn </span>create_catchup_provider(<span class="self">self</span>) -&gt; anyhow::Result&lt;Arc&lt;<span class="kw">dyn </span>StateCatchup&gt;&gt; {
-        <span class="self">self</span>.create().<span class="kw">await</span><span class="question-mark">?</span>.into_catchup_provider()
+    <span class="kw">async fn </span>create_catchup_provider(
+        <span class="self">self</span>,
+        backoff: BackoffParams,
+    ) -&gt; anyhow::Result&lt;Arc&lt;<span class="kw">dyn </span>StateCatchup&gt;&gt; {
+        <span class="self">self</span>.create().<span class="kw">await</span><span class="question-mark">?</span>.into_catchup_provider(backoff)
     }
 }
 
 <span class="attr">#[async_trait]
 </span><span class="kw">pub trait </span>SequencerPersistence: Sized + Send + Sync + <span class="lifetime">'static </span>{
     <span class="doccomment">/// Use this storage as a state catchup backend, if supported.
-    </span><span class="kw">fn </span>into_catchup_provider(<span class="self">self</span>) -&gt; anyhow::Result&lt;Arc&lt;<span class="kw">dyn </span>StateCatchup&gt;&gt; {
+    </span><span class="kw">fn </span>into_catchup_provider(
+        <span class="self">self</span>,
+        _backoff: BackoffParams,
+    ) -&gt; anyhow::Result&lt;Arc&lt;<span class="kw">dyn </span>StateCatchup&gt;&gt; {
         <span class="macro">bail!</span>(<span class="string">"state catchup is not implemented for this persistence type"</span>);
     }
 

@@ -2281,7 +2281,7 @@
     version: Version,
 ) -&gt; anyhow::Result&lt;()&gt; {
     <span class="kw">let </span><span class="kw-2">mut </span>instance = instance.<span class="kw">await</span>;
-    instance.peers = Arc::new(SqlStateCatchup::from(storage.clone()));
+    instance.peers = Arc::new(SqlStateCatchup::new(storage.clone(), Default::default()));
 
     <span class="comment">// get last saved merklized state
     </span><span class="kw">let </span>(last_height, parent_leaf, <span class="kw-2">mut </span>leaves) = {
