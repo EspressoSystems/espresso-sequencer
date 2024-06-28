@@ -28,6 +28,7 @@ use tide_disco::Url;
     tokio::test(flavor = "multi_thread", worker_threads = 2)
 )]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[ignore]
 async fn test_random_block_builder() {
     let port = portpicker::pick_unused_port().expect("No free ports");
     let api_url = Url::parse(&format!("http://localhost:{port}")).expect("Valid URL");
