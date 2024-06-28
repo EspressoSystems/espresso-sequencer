@@ -47,6 +47,7 @@ async fn main() -> Result<()> {
     let orchestrator_client = OrchestratorClient::new(ValidatorArgs {
         url: Url::from_str(&args.orchestrator_url).with_context(|| "Invalid URL")?,
         advertise_address: None,
+        builder_address: None,
         network_config_file: None,
     });
 
