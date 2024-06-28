@@ -25,7 +25,7 @@ use genesis::{GenesisHeader, L1Finalized, Upgrade};
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
-use catchup::BackoffParams;
+use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 use l1_client::L1Client;
 
 use libp2p::Multiaddr;
@@ -48,7 +48,6 @@ use hotshot::{
         },
     },
     types::SignatureKey,
-    Networks,
 };
 use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
@@ -56,7 +55,6 @@ use hotshot_orchestrator::{
 };
 use hotshot_types::{
     consensus::CommitmentMap,
-    constants::Base,
     data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
     event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
@@ -78,7 +76,7 @@ use persistence::{PersistenceOptions, SequencerPersistence};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc};
-use vbs::version::{StaticVersionType, Version};
+use vbs::version::{StaticVersion, StaticVersionType, Version};
 
 #[cfg(feature = "libp2p")]
 use std::time::Duration;
@@ -106,11 +104,11 @@ pub mod network;
     Eq(bound = ""),
     Hash(bound = "")
 )]
-pub struct Node<N: network::Type, P: SequencerPersistence>(PhantomData<fn(&N, &P)>);
+pub struct Node<N: ConnectedNetwork<PubKey>, P: SequencerPersistence>(PhantomData<fn(&N, &P)>);
 
 // Using derivative to derive Clone triggers the clippy lint
 // https://rust-lang.github.io/rust-clippy/master/index.html#/incorrect_clone_impl_on_copy_type
-impl<N: network::Type, P: SequencerPersistence> Clone for Node<N, P> {
+impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> Clone for Node<N, P> {
     fn clone(&self) -> Self {
         *self
     }
@@ -127,10 +125,12 @@ pub type Event = hotshot::types::Event<SeqTypes>;
 pub type PubKey = BLSPubKey;
 pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
-impl<N: network::Type, P: SequencerPersistence> NodeImplementation<SeqTypes> for Node<N, P> {
-    type QuorumNetwork = N::QuorumChannel;
-    type DaNetwork = N::DAChannel;
+impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> NodeImplementation<SeqTypes>
+    for Node<N, P>
+{
+    type Network = N;
     type Storage = Arc<RwLock<P>>;
+    type AuctionResultsProvider = TestAuctionResultsProvider;
 }
 
 #[async_trait]
@@ -206,7 +206,7 @@ impl NodeState {
             },
             l1_genesis: None,
             upgrades: Default::default(),
-            current_version: Base::VERSION,
+            current_version: <SeqTypes as NodeType>::Base::version(),
         }
     }
 
@@ -267,6 +267,12 @@ impl NodeType for SeqTypes {
     type ValidatedState = ValidatedState;
     type Membership = GeneralStaticCommittee<Self, PubKey>;
     type BuilderSignatureKey = FeeAccount;
+    type Base = StaticVersion<0, 1>;
+    type Upgrade = StaticVersion<0, 2>;
+    const UPGRADE_HASH: [u8; 32] = [
+        1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+        0, 0,
+    ];
 }
 
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
@@ -454,7 +460,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
-    let (da_network, quorum_network) = {
+    let network = {
         let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
             config.clone(),
             network_params.libp2p_bind_address,
@@ -478,28 +484,20 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         };
 
         // Combine the CDN and P2P networks
-        let network = Arc::from(CombinedNetworks::new(
+        Arc::from(CombinedNetworks::new(
             cdn_network,
             p2p_network,
             Duration::from_secs(1),
-        ));
-        (Arc::clone(&network), network)
+        ))
     };
 
     // Wait for the CDN network to be ready if we're not using the P2P network
     #[cfg(not(feature = "libp2p"))]
-    let (da_network, quorum_network) = {
+    let network = {
         tracing::warn!("Waiting for the CDN connection to be initialized");
         cdn_network.wait_for_ready().await;
         tracing::warn!("CDN connection initialized");
-        (Arc::from(cdn_network.clone()), Arc::from(cdn_network))
-    };
-
-    // Convert to the sequencer-compatible type
-    let networks = Networks {
-        da_network,
-        quorum_network,
-        _pd: Default::default(),
+        Arc::from(cdn_network)
     };
 
     let mut genesis_state = ValidatedState {
@@ -542,7 +540,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         config.config,
         instance_state,
         persistence,
-        networks,
+        network,
         Some(network_params.state_relay_server_url),
         metrics,
         genesis.stake_table.capacity,
@@ -590,20 +588,30 @@ pub mod testing {
         ExecutionType, HotShotConfig, PeerConfig,
     };
     use portpicker::pick_unused_port;
+    use std::collections::HashMap;
     use std::time::Duration;
     use vbs::version::Version;
-    use std::collections::HashMap;
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
-    pub async fn run_test_builder(url: Url, port: Option<u16>) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
-        (<SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
-            TestConfig::NUM_NODES,
-            url.clone(),
-            (),
-            HashMap::new(),
+    pub async fn run_test_builder(
+        mut url: Url,
+        port: Option<u16>,
+    ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
+        // If a port is not specified, choose a random one
+        let port = port.unwrap_or_else(|| pick_unused_port().expect("No available ports"));
+        url.set_port(Some(port)).expect("Failed to set port");
+
+        (
+            <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
+                TestConfig::NUM_NODES,
+                url.clone(),
+                (),
+                HashMap::new(),
+            )
+            .await,
+            url,
         )
-        .await, url)
     }
 
     #[derive(Clone)]
@@ -794,11 +802,6 @@ pub mod testing {
                 &self.master_map,
                 None,
             ));
-            let networks = Networks {
-                da_network: network.clone(),
-                quorum_network: network,
-                _pd: Default::default(),
-            };
 
             // Make sure the builder account is funded.
             let builder_account = Self::builder_key().fee_account();
@@ -823,7 +826,7 @@ pub mod testing {
                 config,
                 node_state,
                 persistence_opt.create().await.unwrap(),
-                networks,
+                network,
                 self.state_relay_url.clone(),
                 metrics,
                 stake_table_capacity,
@@ -901,7 +904,7 @@ mod test {
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();
-        let mut config = TestConfig::default_with_l1(url);
+        let mut config = TestConfig::default_with_l1(url.clone());
 
         let (builder_task, builder_url) = run_test_builder(url, None).await;
 
@@ -941,9 +944,9 @@ mod test {
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();
-        let mut config = TestConfig::default_with_l1(url);
+        let mut config = TestConfig::default_with_l1(url.clone());
 
-        let (builder_task, builder_url) = run_test_builder(None).await;
+        let (builder_task, builder_url) = run_test_builder(url, None).await;
 
         config.set_builder_urls(vec1::vec1![builder_url]);
         let handles = config.init_nodes(ver).await;

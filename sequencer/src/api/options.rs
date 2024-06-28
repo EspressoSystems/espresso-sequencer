@@ -11,9 +11,9 @@ use super::{
 };
 use crate::{
     context::{SequencerContext, TaskList},
-    network,
     persistence::{self, SequencerPersistence},
     state::{update_state_storage_loop, BlockMerkleTree, FeeMerkleTree},
+    PubKey,
 };
 use anyhow::bail;
 use async_std::sync::{Arc, RwLock};
@@ -27,7 +27,10 @@ use hotshot_query_service::{
     status::{self, UpdateStatusData},
     Error,
 };
-use hotshot_types::traits::metrics::{Metrics, NoMetrics};
+use hotshot_types::traits::{
+    metrics::{Metrics, NoMetrics},
+    network::ConnectedNetwork,
+};
 use tide_disco::{
     listener::RateLimitListener,
     method::{ReadState, WriteState},
@@ -148,7 +151,7 @@ impl Options {
         bind_version: Ver,
     ) -> anyhow::Result<SequencerContext<N, P, Ver>>
     where
-        N: network::Type,
+        N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
         F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, P, Ver>>,
     {
@@ -263,7 +266,7 @@ impl Options {
         App<Arc<RwLock<StorageState<N, P, D, Ver>>>, Error>,
     )>
     where
-        N: network::Type,
+        N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
         D: SequencerDataSource + CatchupDataSource + Send + Sync + 'static,
     {
@@ -304,7 +307,7 @@ impl Options {
         bind_version: Ver,
     ) -> anyhow::Result<Box<dyn Metrics>>
     where
-        N: network::Type,
+        N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
     {
         let ds = <fs::DataSource as SequencerDataSource>::create(
@@ -338,7 +341,7 @@ impl Options {
         bind_version: Ver,
     ) -> anyhow::Result<Box<dyn Metrics>>
     where
-        N: network::Type,
+        N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
     {
         let ds = sql::DataSource::create(
@@ -404,7 +407,7 @@ impl Options {
             + StateSignatureDataSource<N>
             + CatchupDataSource
             + HotShotConfigDataSource,
-        N: network::Type,
+        N: ConnectedNetwork<PubKey>,
     {
         let bind_version = Ver::instance();
         // Initialize submit API
@@ -442,7 +445,7 @@ impl Options {
         bind_version: Ver,
     ) -> anyhow::Result<()>
     where
-        N: network::Type,
+        N: ConnectedNetwork<PubKey>,
     {
         // Start the event streaming API server if it is enabled.
         // It runs to different port and app because State and Extensible Data source needs to support required
