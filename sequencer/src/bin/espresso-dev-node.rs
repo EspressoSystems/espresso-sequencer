@@ -108,7 +108,8 @@ async fn main() -> anyhow::Result<()> {
         .state_relay_url(relay_server_url.clone())
         .l1_url(url.clone())
         .build();
-    let config = TestNetworkConfigBuilder::<2, _, _>::default()
+    let config = TestNetworkConfigBuilder::default()
+        .num_nodes::<2>()
         .api_config(api_options)
         .network_config(network_config)
         .build();
