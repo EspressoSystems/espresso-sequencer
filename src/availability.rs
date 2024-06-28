@@ -453,7 +453,7 @@ mod test {
         task::BackgroundTask,
         testing::{
             consensus::{MockDataSource, MockNetwork, TestableDataSource},
-            mocks::{mock_transaction, MockHeader, MockPayload, MockTypes},
+            mocks::{mock_transaction, MockBase, MockHeader, MockPayload, MockTypes},
             setup_test,
         },
         types::HeightIndexed,
@@ -463,7 +463,6 @@ mod test {
     use committable::Committable;
     use futures::future::FutureExt;
     use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
-    use hotshot_types::constants::Base;
     use hotshot_types::data::Leaf;
     use portpicker::pick_unused_port;
     use std::time::Duration;
@@ -474,7 +473,7 @@ mod test {
 
     /// Get the current ledger height and a list of non-empty leaf/block pairs.
     async fn get_non_empty_blocks(
-        client: &Client<Error, Base>,
+        client: &Client<Error, MockBase>,
     ) -> (
         u64,
         Vec<(LeafQueryData<MockTypes>, BlockQueryData<MockTypes>)>,
@@ -507,7 +506,7 @@ mod test {
         unreachable!()
     }
 
-    async fn validate(client: &Client<Error, Base>, height: u64) {
+    async fn validate(client: &Client<Error, MockBase>, height: u64) {
         // Check the consistency of every block/leaf pair.
         for i in 0..height {
             // Limit the number of blocks we validate in order to
@@ -767,18 +766,18 @@ mod test {
                     fetch_timeout,
                     ..Default::default()
                 },
-                Base::instance(),
+                MockBase::instance(),
             )
             .unwrap(),
         )
         .unwrap();
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{}", port), Base::instance()),
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
         );
 
         // Start a client.
-        let client = Client::<Error, Base>::new(
+        let client = Client::<Error, MockBase>::new(
             format!("http://localhost:{}/availability", port)
                 .parse()
                 .unwrap(),
@@ -891,12 +890,12 @@ mod test {
         };
 
         let mut api =
-            define_api::<RwLock<ExtensibleDataSource<MockDataSource, u64>>, MockTypes, Base>(
+            define_api::<RwLock<ExtensibleDataSource<MockDataSource, u64>>, MockTypes, MockBase>(
                 &Options {
                     extensions: vec![extensions.into()],
                     ..Default::default()
                 },
-                Base::instance(),
+                MockBase::instance(),
             )
             .unwrap();
         api.get("get_ext", |_, state| {
@@ -918,10 +917,10 @@ mod test {
         let port = pick_unused_port().unwrap();
         let _server = BackgroundTask::spawn(
             "server",
-            app.serve(format!("0.0.0.0:{}", port), Base::instance()),
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
         );
 
-        let client = Client::<Error, Base>::new(
+        let client = Client::<Error, MockBase>::new(
             format!("http://localhost:{}/availability", port)
                 .parse()
                 .unwrap(),

@@ -66,7 +66,7 @@ type VidCommonProvider<Types> = Arc<dyn DebugProvider<Types, VidCommonRequest>>;
 /// Fetching from multiple query services, for resiliency.
 ///
 /// ```
-/// # use hotshot_types::constants::Base;
+/// # use hotshot_types::constants::MockBase;
 /// # use vbs::version::StaticVersionType;
 /// # use hotshot_types::traits::node_implementation::NodeType;
 /// # async fn doc<Types>() -> anyhow::Result<()>
@@ -75,8 +75,8 @@ type VidCommonProvider<Types> = Arc<dyn DebugProvider<Types, VidCommonRequest>>;
 /// # {
 /// use hotshot_query_service::fetching::provider::{AnyProvider, QueryServiceProvider};
 ///
-/// let qs1 = QueryServiceProvider::new("https://backup.query-service.1".parse()?, Base::instance());
-/// let qs2 = QueryServiceProvider::new("https://backup.query-service.2".parse()?, Base::instance());
+/// let qs1 = QueryServiceProvider::new("https://backup.query-service.1".parse()?, MockBase::instance());
+/// let qs2 = QueryServiceProvider::new("https://backup.query-service.2".parse()?, MockBase::instance());
 /// let provider = AnyProvider::<Types>::default()
 ///     .with_provider(qs1)
 ///     .with_provider(qs2);
@@ -207,14 +207,13 @@ mod test {
         task::BackgroundTask,
         testing::{
             consensus::{MockDataSource, MockNetwork},
-            mocks::MockTypes,
+            mocks::{MockBase, MockTypes},
             setup_test,
         },
         types::HeightIndexed,
         Error,
     };
     use futures::stream::StreamExt;
-    use hotshot_types::constants::Base;
     use portpicker::pick_unused_port;
     use tide_disco::App;
     use vbs::version::StaticVersionType;
@@ -233,12 +232,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
-            define_api(&Default::default(), Base::instance()).unwrap(),
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap();
         let _server = BackgroundTask::spawn(
             "server",
-            app.serve(format!("0.0.0.0:{port}"), Base::instance()),
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
         );
 
         // Start a data source which is not receiving events from consensus, only from a peer.
@@ -248,7 +247,7 @@ mod test {
                 .with_provider(NoFetching)
                 .with_provider(QueryServiceProvider::new(
                     format!("http://localhost:{port}").parse().unwrap(),
-                    Base::instance(),
+                    MockBase::instance(),
                 ));
         let mut data_source = db.config().connect(provider.clone()).await.unwrap();
 

@@ -398,19 +398,18 @@ mod test {
         availability,
         testing::{
             consensus::{MockNetwork, MockSqlDataSource},
-            mocks::{mock_transaction, MockTypes},
+            mocks::{mock_transaction, MockBase, MockTypes},
             setup_test,
         },
         Error,
     };
     use futures::StreamExt;
-    use hotshot_types::constants::Base;
     use portpicker::pick_unused_port;
     use std::{cmp::min, time::Duration};
     use surf_disco::Client;
     use tide_disco::App;
 
-    async fn validate(client: &Client<Error, Base>) {
+    async fn validate(client: &Client<Error, MockBase>) {
         let explorer_summary_response: ExplorerSummaryResponse<MockTypes> =
             client.get("explorer-summary").send().await.unwrap();
 
@@ -869,7 +868,7 @@ mod test {
         // Start the web server.
         let port = pick_unused_port().unwrap();
         let mut app = App::<_, Error>::with_state(network.data_source());
-        app.register_module("explorer", define_api(Base::instance()).unwrap())
+        app.register_module("explorer", define_api(MockBase::instance()).unwrap())
             .unwrap();
         app.register_module(
             "availability",
@@ -878,7 +877,7 @@ mod test {
                     fetch_timeout: Duration::from_secs(5),
                     ..Default::default()
                 },
-                Base::instance(),
+                MockBase::instance(),
             )
             .unwrap(),
         )
@@ -886,16 +885,16 @@ mod test {
 
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{}", port), Base::instance()),
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
         );
 
         // Start a client.
-        let availability_client = Client::<Error, Base>::new(
+        let availability_client = Client::<Error, MockBase>::new(
             format!("http://localhost:{}/availability", port)
                 .parse()
                 .unwrap(),
         );
-        let explorer_client = Client::<Error, Base>::new(
+        let explorer_client = Client::<Error, MockBase>::new(
             format!("http://localhost:{}/explorer", port)
                 .parse()
                 .unwrap(),

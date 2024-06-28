@@ -31,10 +31,11 @@ use hotshot::{
     types::{Event, SystemContextHandle},
     HotShotInitializer, Memberships, SystemContext,
 };
-use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
-use hotshot_testing::block_builder::{
-    SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
+use hotshot_example_types::{
+    auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
+    storage_types::TestStorage,
 };
+use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
@@ -42,6 +43,7 @@ use hotshot_types::{
     traits::{election::Membership, signature_key::SignatureKey as _},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
+use reqwest::Url;
 use std::fmt::Display;
 use std::num::NonZeroUsize;
 use std::time::Duration;
@@ -103,11 +105,19 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             view_sync_membership: membership.clone(),
         };
 
+        // Pick a random, unused port for the builder server
+        let builder_port = portpicker::pick_unused_port().expect("No ports available");
+
+        // Create the bind URL from the random port
+        let builder_url =
+            Url::parse(&format!("http://0.0.0.0:{builder_port}")).expect("Failed to parse URL");
+
         // Start the builder server
-        let (builder_task, builder_url) =
+        let builder_task =
             <SimpleBuilderImplementation as TestBuilderImplementation<MockTypes>>::start(
                 NUM_NODES,
-                SimpleBuilderConfig::default(),
+                builder_url.clone(),
+                (),
                 Default::default(),
             )
             .await;
@@ -186,6 +196,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                                 .unwrap(),
                             ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                             hs_storage,
+                            TestAuctionResultsProvider::default(),
                         )
                         .await
                         .unwrap()
