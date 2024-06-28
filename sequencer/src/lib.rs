@@ -22,6 +22,7 @@ use ethers::types::U256;
 #[cfg(feature = "libp2p")]
 use futures::FutureExt;
 use genesis::{GenesisHeader, L1Finalized, Upgrade};
+use crate::catchup::BackoffParams;
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
