@@ -29,7 +29,7 @@ use futures::{
 use hotshot::{
     traits::implementations::{MasterMap, MemoryNetwork},
     types::{Event, SystemContextHandle},
-    HotShotInitializer, Memberships, Networks, SystemContext,
+    HotShotInitializer, Memberships, SystemContext,
 };
 use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
 use hotshot_testing::block_builder::{
@@ -172,12 +172,6 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             None,
                         ));
 
-                        let networks = Networks {
-                            quorum_network: network.clone(),
-                            da_network: network,
-                            _pd: std::marker::PhantomData,
-                        };
-
                         let hs_storage: TestStorage<MockTypes> = TestStorage::default();
 
                         let hotshot = SystemContext::init(
@@ -186,7 +180,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             node_id as u64,
                             config,
                             memberships,
-                            networks,
+                            network,
                             HotShotInitializer::from_genesis(TestInstanceState {})
                                 .await
                                 .unwrap(),

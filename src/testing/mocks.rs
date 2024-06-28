@@ -145,8 +145,7 @@ pub type MockStorage = TestStorage<MockTypes>;
 pub struct MockNodeImpl;
 
 impl NodeImplementation<MockTypes> for MockNodeImpl {
-    type QuorumNetwork = MockNetwork;
-    type DaNetwork = MockNetwork;
+    type Network = MockNetwork;
     type Storage = MockStorage;
 }
 
