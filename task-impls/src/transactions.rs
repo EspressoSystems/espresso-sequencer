@@ -28,6 +28,7 @@ use hotshot_types::{
     utils::ViewInner,
     vid::VidCommitment,
 };
+
 use tracing::{debug, error, instrument, warn};
 
 use crate::{

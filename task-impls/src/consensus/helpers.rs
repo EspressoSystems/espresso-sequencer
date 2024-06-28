@@ -686,6 +686,7 @@ pub(crate) async fn fetch_proposal<TYPES: NodeType>(
     quorum_membership: Arc<TYPES::Membership>,
     consensus: Arc<RwLock<Consensus<TYPES>>>,
 ) -> Result<Leaf<TYPES>> {
+    tracing::debug!("Fetching proposal for view {:?}", view);
     let (tx, mut rx) = broadcast(1);
     let event = ProposalMissing {
         view,

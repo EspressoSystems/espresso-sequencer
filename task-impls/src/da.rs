@@ -219,14 +219,29 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
                     let consensus = Arc::clone(&self.consensus);
                     let membership = Arc::clone(&self.quorum_membership);
                     let pk = self.private_key.clone();
+                    let public_key = self.public_key.clone();
+                    let chan = event_stream.clone();
                     async_spawn(async move {
                         Consensus::calculate_and_update_vid(
-                            consensus,
+                            Arc::clone(&consensus),
                             view_number,
                             membership,
                             &pk,
                         )
                         .await;
+                        if let Some(Some(vid_share)) = consensus
+                            .read()
+                            .await
+                            .vid_shares()
+                            .get(&view_number)
+                            .map(|shares| shares.get(&public_key).cloned())
+                        {
+                            broadcast_event(
+                                Arc::new(HotShotEvent::VidShareRecv(vid_share.clone())),
+                                &chan,
+                            )
+                            .await;
+                        }
                     });
                 }
             }

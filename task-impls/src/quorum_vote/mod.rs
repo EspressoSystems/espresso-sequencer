@@ -34,7 +34,7 @@ use hotshot_types::{
 use jf_vid::VidScheme;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-use tracing::{debug, error, instrument, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 use vbs::version::Version;
 
 use crate::{
@@ -555,6 +555,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
     ) {
         match event.as_ref() {
             HotShotEvent::VoteNow(view, ..) => {
+                info!("Vote NOW for view {:?}", *view);
                 self.create_dependency_task_if_new(
                     *view,
                     event_receiver,
@@ -563,6 +564,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                 );
             }
             HotShotEvent::QuorumProposalValidated(proposal, _leaf) => {
+                trace!("Received Proposal for view {}", *proposal.view_number());
+
                 // Handle the event before creating the dependency task.
                 if let Err(e) =
                     handle_quorum_proposal_validated(proposal, &event_sender, self).await
