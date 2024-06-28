@@ -599,6 +599,14 @@ pub struct UpgradeConfig {
     pub start_voting_view: u64,
     /// View to stop voting on an upgrade. To prevent voting on an upgrade, set stop_voting_view <= start_voting_view.
     pub stop_voting_view: u64,
+    /// Unix time in seconds at which we start proposing an upgrade
+    pub start_proposing_time: u64,
+    /// Unix time in seconds at which we stop proposing an upgrade. To prevent proposing an upgrade, set stop_proposing_time <= start_proposing_time.
+    pub stop_proposing_time: u64,
+    /// Unix time in seconds at which we start voting on an upgrade
+    pub start_voting_time: u64,
+    /// Unix time in seconds at which we stop voting on an upgrade. To prevent voting on an upgrade, set stop_voting_time <= start_voting_time.
+    pub stop_voting_time: u64,
 }
 
 // Explicitly implementing `Default` for clarity.
@@ -610,6 +618,10 @@ impl Default for UpgradeConfig {
             stop_proposing_view: 0,
             start_voting_view: u64::MAX,
             stop_voting_view: 0,
+            start_proposing_time: u64::MAX,
+            stop_proposing_time: 0,
+            start_voting_time: u64::MAX,
+            stop_voting_time: 0,
         }
     }
 }
@@ -695,6 +707,10 @@ impl<KEY: SignatureKey> From<HotShotConfigFile<KEY>> for HotShotConfig<KEY> {
             stop_proposing_view: val.upgrade.stop_proposing_view,
             start_voting_view: val.upgrade.start_voting_view,
             stop_voting_view: val.upgrade.stop_voting_view,
+            start_proposing_time: val.upgrade.start_proposing_time,
+            stop_proposing_time: val.upgrade.stop_proposing_time,
+            start_voting_time: val.upgrade.start_voting_time,
+            stop_voting_time: val.upgrade.stop_voting_time,
         }
     }
 }

@@ -36,6 +36,18 @@ pub type WebServerVersion = StaticVersion<WEB_SERVER_MAJOR_VERSION, WEB_SERVER_M
 /// Constant for Web Server CDN Version
 pub const WEB_SERVER_VERSION: WebServerVersion = StaticVersion {};
 
+/// The offset for how far in the future we will send out a `QuorumProposal` with an `UpgradeCertificate` we form. This is also how far in advance of sending a `QuorumProposal` we begin collecting votes on an `UpgradeProposal`.
+pub const UPGRADE_PROPOSE_OFFSET: u64 = 5;
+
+/// The offset for how far in the future the upgrade certificate we attach should be decided on (or else discarded).
+pub const UPGRADE_DECIDE_BY_OFFSET: u64 = UPGRADE_PROPOSE_OFFSET + 5;
+
+/// The offset for how far in the future the upgrade actually begins.
+pub const UPGRADE_BEGIN_OFFSET: u64 = UPGRADE_DECIDE_BY_OFFSET + 5;
+
+/// The offset for how far in the future the upgrade ends.
+pub const UPGRADE_FINISH_OFFSET: u64 = UPGRADE_BEGIN_OFFSET + 5;
+
 /// For `STAKE_TABLE_CAPACITY=200`, the light client prover (a.k.a. `hotshot-state-prover`)
 /// would need to generate proof for a circuit of slightly below 2^20 gates.
 /// Thus we need to support this upperbounded degree in our Structured Reference String (SRS),

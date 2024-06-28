@@ -72,6 +72,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             stop_proposing_view: handle.hotshot.config.stop_proposing_view,
             start_voting_view: handle.hotshot.config.start_voting_view,
             stop_voting_view: handle.hotshot.config.stop_voting_view,
+            start_proposing_time: handle.hotshot.config.start_proposing_time,
+            stop_proposing_time: handle.hotshot.config.stop_proposing_time,
+            start_voting_time: handle.hotshot.config.start_voting_time,
+            stop_voting_time: handle.hotshot.config.stop_voting_time,
         };
 
         #[cfg(feature = "example-upgrade")]
@@ -88,6 +92,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             stop_proposing_view: 10,
             start_voting_view: 0,
             stop_voting_view: 20,
+            start_proposing_time: 0,
+            stop_proposing_time: u64::MAX,
+            start_voting_time: 0,
+            stop_voting_time: u64::MAX,
         };
     }
 }
