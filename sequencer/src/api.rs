@@ -413,16 +413,14 @@ pub mod test_helpers {
         network_config: Option<TestConfig<{ NUM_NODES }>>,
     }
 
-    impl<const NUM_NODES: usize, P, C> Default for TestNetworkConfigBuilder<{ NUM_NODES }, P, C>
-    where
-        P: PersistenceOptions,
-        C: StateCatchup + 'static,
+    impl<const NUM_NODES: usize> Default
+        for TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, MockStateCatchup>
     {
         fn default() -> Self {
-            Self {
+            TestNetworkConfigBuilder {
                 state: std::array::from_fn::<_, { NUM_NODES }, _>(|_| ValidatedState::default()),
-                persistence: None,
-                catchup: None,
+                persistence: Some([no_storage::Options; NUM_NODES]),
+                catchup: Some(std::array::from_fn(|_| MockStateCatchup::default())),
                 network_config: None,
                 api_config: None,
             }
@@ -439,9 +437,17 @@ pub mod test_helpers {
             self
         }
 
-        pub fn persistences(mut self, persistence: [P; NUM_NODES]) -> Self {
-            self.persistence = Some(persistence);
-            self
+        pub fn persistences<NP: PersistenceOptions>(
+            self,
+            persistence: [NP; NUM_NODES],
+        ) -> TestNetworkConfigBuilder<{ NUM_NODES }, NP, C> {
+            TestNetworkConfigBuilder {
+                state: self.state,
+                catchup: self.catchup,
+                network_config: self.network_config,
+                api_config: self.api_config,
+                persistence: Some(persistence),
+            }
         }
 
         pub fn api_config(mut self, api_config: Options) -> Self {
@@ -449,9 +455,17 @@ pub mod test_helpers {
             self
         }
 
-        pub fn catchups(mut self, catchup: [C; NUM_NODES]) -> Self {
-            self.catchup = Some(catchup);
-            self
+        pub fn catchups<NC: StateCatchup + 'static>(
+            self,
+            catchup: [NC; NUM_NODES],
+        ) -> TestNetworkConfigBuilder<{ NUM_NODES }, P, NC> {
+            TestNetworkConfigBuilder {
+                state: self.state,
+                catchup: Some(catchup),
+                network_config: self.network_config,
+                api_config: self.api_config,
+                persistence: self.persistence,
+            }
         }
 
         pub fn network_config(mut self, network_config: TestConfig<{ NUM_NODES }>) -> Self {
@@ -591,11 +605,9 @@ pub mod test_helpers {
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
-        let config = TestNetworkConfigBuilder::<5, _, MockStateCatchup>::default()
+        let config = TestNetworkConfigBuilder::<5, _, _>::default()
             .api_config(options)
-            .persistences([no_storage::Options; 5])
             .network_config(network_config)
-            .catchups(std::array::from_fn(|_| MockStateCatchup::default()))
             .build();
         let _network = TestNetwork::new(config).await;
         client.connect(None).await;
@@ -648,8 +660,6 @@ pub mod test_helpers {
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
         let config = TestNetworkConfigBuilder::<5, _, MockStateCatchup>::default()
             .api_config(options)
-            .persistences([no_storage::Options; 5])
-            .catchups(std::array::from_fn(|_| MockStateCatchup::default()))
             .network_config(network_config)
             .build();
         let network = TestNetwork::new(config).await;
@@ -686,9 +696,7 @@ pub mod test_helpers {
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
         let config = TestNetworkConfigBuilder::<5, _, MockStateCatchup>::default()
             .api_config(options)
-            .persistences([no_storage::Options; 5])
             .network_config(network_config)
-            .catchups(std::array::from_fn(|_| MockStateCatchup::default()))
             .build();
         let network = TestNetwork::new(config).await;
 
@@ -731,9 +739,7 @@ pub mod test_helpers {
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
         let config = TestNetworkConfigBuilder::<5, _, MockStateCatchup>::default()
             .api_config(options)
-            .persistences([no_storage::Options; 5])
             .network_config(network_config)
-            .catchups(std::array::from_fn(|_| MockStateCatchup::default()))
             .build();
         let network = TestNetwork::new(config).await;
         client.connect(None).await;
@@ -817,7 +823,6 @@ mod api_tests {
     use super::*;
     use crate::{
         catchup::mock::MockStateCatchup,
-        persistence::no_storage,
         testing::{wait_for_decide_on_handle, TestConfigBuilder},
         Header, NamespaceId,
     };
@@ -872,9 +877,7 @@ mod api_tests {
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
         let config = TestNetworkConfigBuilder::<5, _, MockStateCatchup>::default()
             .api_config(D::options(&storage, Options::with_port(port)).submit(Default::default()))
-            .persistences([no_storage::Options; 5])
             .network_config(network_config)
-            .catchups(std::array::from_fn(|_| MockStateCatchup::default()))
             .build();
         let network = TestNetwork::new(config).await;
         let mut events = network.server.event_stream().await;
@@ -991,9 +994,7 @@ mod api_tests {
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
         let config = TestNetworkConfigBuilder::<5, _, MockStateCatchup>::default()
             .api_config(options)
-            .persistences([no_storage::Options; 5])
             .network_config(network_config)
-            .catchups(std::array::from_fn(|_| MockStateCatchup::default()))
             .build();
         let _network = TestNetwork::new(config).await;
 
@@ -1078,9 +1079,7 @@ mod test {
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
         let config = TestNetworkConfigBuilder::<5, _, MockStateCatchup>::default()
             .api_config(options)
-            .persistences([no_storage::Options; 5])
             .network_config(network_config)
-            .catchups(std::array::from_fn(|_| MockStateCatchup::default()))
             .build();
         let _network = TestNetwork::new(config).await;
 
@@ -1129,9 +1128,7 @@ mod test {
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
         let config = TestNetworkConfigBuilder::<5, _, MockStateCatchup>::default()
             .api_config(options)
-            .persistences([no_storage::Options; 5])
             .network_config(network_config)
-            .catchups(std::array::from_fn(|_| MockStateCatchup::default()))
             .build();
         let mut network = TestNetwork::new(config).await;
         let url = format!("http://localhost:{port}").parse().unwrap();
@@ -1197,7 +1194,6 @@ mod test {
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<{ NUM_NODES }, _, _>::default()
             .api_config(Options::with_port(port).catchup(Default::default()))
-            .persistences([no_storage::Options; 5])
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .catchups(std::array::from_fn(|_| {
                 StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
@@ -1310,7 +1306,6 @@ mod test {
                     .parse()
                     .unwrap()])
             }))
-            .persistences([no_storage::Options; 5])
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
 
@@ -1388,7 +1383,6 @@ mod test {
                     .parse()
                     .unwrap()])
             }))
-            .persistences([no_storage::Options; NUM_NODES])
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
 
@@ -1549,7 +1543,6 @@ mod test {
                     .status(Default::default()),
             )
             .persistences(persistence)
-            .catchups(std::array::from_fn(|_| MockStateCatchup::default()))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
         let mut network = TestNetwork::new(config).await;

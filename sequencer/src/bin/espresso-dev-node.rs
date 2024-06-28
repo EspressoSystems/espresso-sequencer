@@ -19,7 +19,6 @@ use sequencer::{
         options,
         test_helpers::{TestNetwork, TestNetworkConfigBuilder, STAKE_TABLE_CAPACITY_FOR_TEST},
     },
-    catchup::mock::MockStateCatchup,
     persistence,
     state_signature::relay_server::run_relay_server,
     testing::TestConfigBuilder,
@@ -109,10 +108,8 @@ async fn main() -> anyhow::Result<()> {
         .state_relay_url(relay_server_url.clone())
         .l1_url(url.clone())
         .build();
-    let config = TestNetworkConfigBuilder::default()
+    let config = TestNetworkConfigBuilder::<2, _, _>::default()
         .api_config(api_options)
-        .persistences([persistence::no_storage::Options; 2])
-        .catchups(std::array::from_fn(|_| MockStateCatchup::default()))
         .network_config(network_config)
         .build();
 
