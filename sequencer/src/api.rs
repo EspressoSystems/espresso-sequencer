@@ -1166,9 +1166,10 @@ mod test {
             Default::default(),
             [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}",).parse().unwrap()],
+                    Default::default(),
+                )
             }),
             l1,
             None,
@@ -1212,9 +1213,10 @@ mod test {
                 1,
                 ValidatedState::default(),
                 no_storage::Options,
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()]),
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                ),
                 &NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
                 SEQUENCER_VERSION,
@@ -1276,9 +1278,10 @@ mod test {
             states,
             [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
             }),
             l1,
             None,
@@ -1352,9 +1355,10 @@ mod test {
             states,
             [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
             }),
             l1,
             None,
@@ -1429,9 +1433,10 @@ mod test {
             Default::default(),
             [no_storage::Options; TestConfig::NUM_NODES],
             std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
             }),
             l1,
             Some(upgrades),
@@ -1583,9 +1588,10 @@ mod test {
                 // Catchup using node 0 as a peer. Node 0 was running the archival state service
                 // before the restart, so it should be able to resume without catching up by loading
                 // state from storage.
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
             }),
             l1,
             None,

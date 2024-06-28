@@ -1,6 +1,6 @@
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
 use crate::{
-    catchup::{SqlStateCatchup, StateCatchup},
+    catchup::{BackoffParams, SqlStateCatchup, StateCatchup},
     options::parse_duration,
     Leaf, SeqTypes, ViewNumber,
 };
@@ -279,10 +279,14 @@ pub(crate) async fn transaction(
 
 #[async_trait]
 impl SequencerPersistence for Persistence {
-    fn into_catchup_provider(self) -> anyhow::Result<Arc<dyn StateCatchup>> {
-        Ok(Arc::new(SqlStateCatchup::from(Arc::new(RwLock::new(
-            self.db,
-        )))))
+    fn into_catchup_provider(
+        self,
+        backoff: BackoffParams,
+    ) -> anyhow::Result<Arc<dyn StateCatchup>> {
+        Ok(Arc::new(SqlStateCatchup::new(
+            Arc::new(RwLock::new(self.db)),
+            backoff,
+        )))
     }
 
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {

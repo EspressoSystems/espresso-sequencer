@@ -110,15 +110,6 @@ impl TxProof {
             TxPayloadRange::new(&payload_num_txs, &payload_tx_table_entries, &ns_byte_len);
         let payload_proof_tx = {
             let range = ns_range.block_range(&tx_payload_range);
-
-            tracing::info!(
-                "prove: (ns,tx) ({:?},{:?}), tx_payload_range {:?}, content {:?}",
-                index.ns(),
-                index.tx(),
-                range,
-                &payload_bytes[range.clone()]
-            );
-
             if range.is_empty() {
                 None
             } else {

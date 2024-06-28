@@ -589,7 +589,7 @@ pub(crate) async fn update_state_storage_loop(
     version: Version,
 ) -> anyhow::Result<()> {
     let mut instance = instance.await;
-    instance.peers = Arc::new(SqlStateCatchup::from(storage.clone()));
+    instance.peers = Arc::new(SqlStateCatchup::new(storage.clone(), Default::default()));
 
     // get last saved merklized state
     let (last_height, parent_leaf, mut leaves) = {
