@@ -39,7 +39,7 @@
 //! use async_std::{sync::{Arc, RwLock}, task::spawn};
 //! use futures::StreamExt;
 //! use vbs::version::StaticVersionType;
-//! use hotshot_types::constants::Base;
+//! use hotshot_types::constants::MockBase;
 //! use hotshot::SystemContext;
 //! use tide_disco::App;
 //!
@@ -56,11 +56,11 @@
 //! ).await.map_err(Error::internal)?.0;
 //!
 //! // Create API modules.
-//! let availability_api = availability::define_api(&Default::default(),  Base::instance())
+//! let availability_api = availability::define_api(&Default::default(),  MockBase::instance())
 //!     .map_err(Error::internal)?;
-//! let node_api = node::define_api(&Default::default(),  Base::instance())
+//! let node_api = node::define_api(&Default::default(),  MockBase::instance())
 //!     .map_err(Error::internal)?;
-//! let status_api = status::define_api(&Default::default(),  Base::instance())
+//! let status_api = status::define_api(&Default::default(),  MockBase::instance())
 //!     .map_err(Error::internal)?;
 //!
 //! // Create app. We wrap `data_source` into an `RwLock` so we can share it with the web server.
@@ -75,7 +75,7 @@
 //!     .map_err(Error::internal)?;
 //!
 //! // Serve app.
-//! spawn(app.serve("0.0.0.0:8080",  Base::instance()));
+//! spawn(app.serve("0.0.0.0:8080",  MockBase::instance()));
 //!
 //! // Update query data using HotShot events.
 //! let mut events = hotshot.event_stream();
@@ -98,7 +98,7 @@
 //! # use async_std::task::spawn;
 //! # use hotshot::types::SystemContextHandle;
 //! # use vbs::version::StaticVersionType;
-//! # use hotshot_types::constants::Base;
+//! # use hotshot_types::constants::MockBase;
 //! # use hotshot_query_service::{data_source::FileSystemDataSource, Error, Options};
 //! # use hotshot_query_service::fetching::provider::NoFetching;
 //! # use hotshot_query_service::testing::mocks::{MockNodeImpl, MockTypes};
@@ -107,7 +107,7 @@
 //! use hotshot_query_service::run_standalone_service;
 //!
 //! let data_source = FileSystemDataSource::create(storage_path, NoFetching).await.map_err(Error::internal)?;
-//! spawn(run_standalone_service(options, data_source, hotshot,  Base::instance()));
+//! spawn(run_standalone_service(options, data_source, hotshot,  MockBase::instance()));
 //! # Ok(())
 //! # }
 //! ```
@@ -179,7 +179,7 @@
 //! # use async_std::sync::RwLock;
 //! # use async_trait::async_trait;
 //! # use futures::FutureExt;
-//! # use hotshot_types::constants::Base;
+//! # use hotshot_types::constants::MockBase;
 //! # use hotshot_query_service::availability::{
 //! #   self, AvailabilityDataSource, FetchBlockSnafu, TransactionIndex,
 //! # };
@@ -566,12 +566,12 @@ mod test {
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
     use futures::future::{BoxFuture, FutureExt};
     use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
-    use hotshot_types::constants::Base;
     use portpicker::pick_unused_port;
     use std::ops::RangeBounds;
     use std::time::Duration;
     use surf_disco::Client;
     use tempfile::TempDir;
+    use testing::mocks::MockBase;
     use tide_disco::App;
     use toml::toml;
 
@@ -741,20 +741,20 @@ mod test {
         let mut app = App::<_, Error>::with_state(RwLock::new(state));
         app.register_module(
             "availability",
-            availability::define_api(&Default::default(), Base::instance()).unwrap(),
+            availability::define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap()
         .register_module(
             "node",
-            node::define_api(&Default::default(), Base::instance()).unwrap(),
+            node::define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap()
         .register_module(
             "status",
-            status::define_api(&Default::default(), Base::instance()).unwrap(),
+            status::define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap()
-        .module::<Error, Base>("mod", module_spec)
+        .module::<Error, MockBase>("mod", module_spec)
         .unwrap()
         .get("get_ext", |_, state| {
             async move { state.module_state.load_latest().map_err(Error::internal) }.boxed()
@@ -784,11 +784,11 @@ mod test {
         let port = pick_unused_port().unwrap();
         let _server = BackgroundTask::spawn(
             "server",
-            app.serve(format!("0.0.0.0:{}", port), Base::instance()),
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
         );
 
         let client =
-            Client::<Error, Base>::new(format!("http://localhost:{}", port).parse().unwrap());
+            Client::<Error, MockBase>::new(format!("http://localhost:{}", port).parse().unwrap());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
         client.post::<()>("mod/ext/42").send().await.unwrap();

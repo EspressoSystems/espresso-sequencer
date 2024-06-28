@@ -25,7 +25,10 @@ use hotshot::{
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, Networks, SystemContext,
 };
-use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
+use hotshot_example_types::{
+    auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
+    storage_types::TestStorage,
+};
 use hotshot_query_service::{
     data_source,
     fetching::provider::NoFetching,
@@ -170,13 +173,21 @@ async fn init_consensus(
         view_sync_membership: membership.clone(),
     };
 
+    // Pick a random, unused port for the builder server
+    let builder_port = portpicker::pick_unused_port().expect("No ports available");
+
+    let builder_url =
+        Url::parse(&format!("http://0.0.0.0:{builder_port}")).expect("Failed to parse URL");
+
     // Start the builder server
-    let (builder_task, builder_url) = <SimpleBuilderImplementation as TestBuilderImplementation<
-        MockTypes,
-    >>::start(
-        1, SimpleBuilderConfig::default(), Default::default()
-    )
-    .await;
+    let builder_task =
+        <SimpleBuilderImplementation as TestBuilderImplementation<MockTypes>>::start(
+            1,
+            builder_url.clone(),
+            (),
+            Default::default(),
+        )
+        .await;
 
     // Create the configuration
     let config = HotShotConfig {
@@ -255,6 +266,7 @@ async fn init_consensus(
                         .unwrap(),
                     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                     storage,
+                    TestAuctionResultsProvider::default(),
                 )
                 .await
                 .unwrap()

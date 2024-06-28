@@ -20,6 +20,7 @@ use hotshot::traits::{
     election::static_committee::GeneralStaticCommittee, implementations::MemoryNetwork,
     NodeImplementation,
 };
+use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 use hotshot_example_types::{
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::{TestInstanceState, TestValidatedState},
@@ -38,6 +39,7 @@ use jf_merkle_tree::{
 };
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
+use vbs::version::StaticVersion;
 
 pub type MockHeader = TestBlockHeader;
 pub type MockPayload = TestBlockPayload;
@@ -131,7 +133,16 @@ impl NodeType for MockTypes {
     type ValidatedState = TestValidatedState;
     type Membership = GeneralStaticCommittee<Self, BLSPubKey>;
     type BuilderSignatureKey = BLSPubKey;
+    type Base = StaticVersion<0, 1>;
+    type Upgrade = StaticVersion<0, 2>;
+    const UPGRADE_HASH: [u8; 32] = [
+        1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+        0, 0,
+    ];
 }
+
+/// A type alias for the mock base version
+pub type MockBase = <MockTypes as NodeType>::Base;
 
 pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;
 pub type MockQuorumProposal = QuorumProposal<MockTypes>;
@@ -147,6 +158,7 @@ pub struct MockNodeImpl;
 impl NodeImplementation<MockTypes> for MockNodeImpl {
     type Network = MockNetwork;
     type Storage = MockStorage;
+    type AuctionResultsProvider = TestAuctionResultsProvider;
 }
 
 pub type MockMerkleTree = UniversalMerkleTree<usize, Sha3Digest, usize, 8, Sha3Node>;

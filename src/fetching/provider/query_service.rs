@@ -173,7 +173,7 @@ mod test {
         task::BackgroundTask,
         testing::{
             consensus::{MockDataSource, MockNetwork},
-            mocks::{mock_transaction, MockTypes},
+            mocks::{mock_transaction, MockBase, MockTypes},
             setup_test, sleep,
         },
         types::HeightIndexed,
@@ -185,13 +185,12 @@ mod test {
         stream::StreamExt,
     };
     use generic_array::GenericArray;
-    use hotshot_types::constants::Base;
     use portpicker::pick_unused_port;
     use rand::RngCore;
     use std::{future::IntoFuture, time::Duration};
     use tide_disco::{error::ServerError, App};
 
-    type Provider = TestProvider<QueryServiceProvider<Base>>;
+    type Provider = TestProvider<QueryServiceProvider<MockBase>>;
 
     fn ignore<T>(_: T) {}
 
@@ -229,19 +228,19 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
-            define_api(&Default::default(), Base::instance()).unwrap(),
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap();
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{port}"), Base::instance()),
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
         );
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
-            Base::instance(),
+            MockBase::instance(),
         ));
         let mut data_source = data_source(&db, &provider).await;
 
@@ -456,19 +455,19 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
-            define_api(&Default::default(), Base::instance()).unwrap(),
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap();
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{port}"), Base::instance()),
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
         );
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
-            Base::instance(),
+            MockBase::instance(),
         ));
         let mut data_source = data_source(&db, &provider).await;
 
@@ -515,19 +514,19 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
-            define_api(&Default::default(), Base::instance()).unwrap(),
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap();
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{port}"), Base::instance()),
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
         );
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
-            Base::instance(),
+            MockBase::instance(),
         ));
         let mut data_source = data_source(&db, &provider).await;
 
@@ -578,19 +577,19 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
-            define_api(&Default::default(), Base::instance()).unwrap(),
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap();
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{port}"), Base::instance()),
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
         );
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
-            Base::instance(),
+            MockBase::instance(),
         ));
         let mut data_source = data_source(&db, &provider).await;
 
@@ -638,19 +637,19 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
-            define_api(&Default::default(), Base::instance()).unwrap(),
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap();
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{port}"), Base::instance()),
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
         );
 
         // Start a data source which is not receiving events from consensus, only from a peer.
         let db = TmpDb::init().await;
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
-            Base::instance(),
+            MockBase::instance(),
         ));
         let mut data_source = data_source(&db, &provider).await;
 
@@ -699,12 +698,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
-            define_api(&Default::default(), Base::instance()).unwrap(),
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap();
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{port}"), Base::instance()),
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
         );
 
         // Start a data source which is not receiving events from consensus. We don't give it a
@@ -769,19 +768,19 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
-            define_api(&Default::default(), Base::instance()).unwrap(),
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap();
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{port}"), Base::instance()),
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
         );
 
         // Start a data source which is not receiving events from consensus.
         let db = TmpDb::init().await;
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
-            Base::instance(),
+            MockBase::instance(),
         ));
         let mut data_source = builder(&db, &provider)
             .await
@@ -836,7 +835,7 @@ mod test {
     }
 
     async fn malicious_server(port: u16) {
-        let mut api = load_api::<(), ServerError, Base>(
+        let mut api = load_api::<(), ServerError, MockBase>(
             None::<std::path::PathBuf>,
             include_str!("../../../api/availability.toml"),
             vec![],
@@ -872,7 +871,7 @@ mod test {
 
         let mut app = App::<(), ServerError>::with_state(());
         app.register_module("availability", api).unwrap();
-        app.serve(format!("0.0.0.0:{port}"), Base::instance())
+        app.serve(format!("0.0.0.0:{port}"), MockBase::instance())
             .await
             .ok();
     }
@@ -886,7 +885,7 @@ mod test {
 
         let provider = QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
-            Base::instance(),
+            MockBase::instance(),
         );
         provider.client.connect(None).await;
 
@@ -917,12 +916,12 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "availability",
-            define_api(&Default::default(), Base::instance()).unwrap(),
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap();
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{port}"), Base::instance()),
+            app.serve(format!("0.0.0.0:{port}"), MockBase::instance()),
         );
 
         // Start a data source which is not receiving events from consensus, only from a peer. The
@@ -930,7 +929,7 @@ mod test {
         let db = TmpDb::init().await;
         let provider = Provider::new(QueryServiceProvider::new(
             format!("http://localhost:{port}").parse().unwrap(),
-            Base::instance(),
+            MockBase::instance(),
         ));
         let mut data_source = db
             .config()
