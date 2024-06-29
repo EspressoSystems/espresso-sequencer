@@ -109,7 +109,7 @@ async fn main() -> anyhow::Result<()> {
         .l1_url(url.clone())
         .build();
     const NUM_NODES: usize = 2;
-    let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes::<NUM_NODES>()
+    let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(api_options)
         .network_config(network_config)
         .build();

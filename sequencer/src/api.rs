@@ -428,11 +428,12 @@ pub mod test_helpers {
     impl<const NUM_NODES: usize>
         TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, MockStateCatchup>
     {
-        pub fn with_num_nodes<const N: usize>(
-        ) -> TestNetworkConfigBuilder<N, no_storage::Options, MockStateCatchup> {
+        pub fn with_num_nodes(
+        ) -> TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, MockStateCatchup>
+        {
             TestNetworkConfigBuilder {
                 state: std::array::from_fn(|_| ValidatedState::default()),
-                persistence: Some([no_storage::Options; N]),
+                persistence: Some([no_storage::Options; { NUM_NODES }]),
                 catchup: Some(std::array::from_fn(|_| MockStateCatchup::default())),
                 network_config: None,
                 api_config: None,
@@ -1204,7 +1205,7 @@ mod test {
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         const NUM_NODES: usize = 5;
-        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes::<NUM_NODES>()
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
             .api_config(Options::with_port(port).catchup(Default::default()))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .catchups(std::array::from_fn(|_| {
@@ -1384,7 +1385,7 @@ mod test {
         states[0] = state2;
 
         const NUM_NODES: usize = 5;
-        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes::<NUM_NODES>()
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
             .api_config(
                 Options::from(options::Http {
                     port,
@@ -1462,7 +1463,7 @@ mod test {
         };
 
         const NUM_NODES: usize = 5;
-        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes::<NUM_NODES>()
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
             .api_config(
                 Options::from(options::Http {
                     port,
