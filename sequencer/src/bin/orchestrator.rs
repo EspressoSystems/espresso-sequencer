@@ -4,19 +4,25 @@ use derive_more::From;
 use ethers::utils::hex::{self, FromHexError};
 use hotshot_orchestrator::config::Libp2pConfig;
 use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
-use sequencer::{options::parse_duration, PubKey};
+use sequencer::{
+    options::{parse_duration, Ratio},
+    PubKey,
+};
 use snafu::Snafu;
-use std::fmt::{self, Display, Formatter};
-use std::num::{NonZeroUsize, ParseIntError};
-use std::str::FromStr;
+use std::num::NonZeroUsize;
 use std::time::Duration;
 use url::Url;
+use vec1::Vec1;
 
 #[derive(Parser)]
 struct Args {
     /// Port to run the server on.
     #[clap(short, long, env = "ESPRESSO_ORCHESTRATOR_PORT")]
     port: u16,
+
+    /// Port to run the server on.
+    #[clap(short, long, env = "ESPRESSO_ORCHESTRATOR_MANUAL_START_PASSWORD")]
+    manual_start_password: Option<String>,
 
     /// Number of nodes in the network.
     #[clap(short, long, env = "ESPRESSO_ORCHESTRATOR_NUM_NODES")]
@@ -43,6 +49,14 @@ struct Args {
     )]
     timeout_ratio: Ratio,
 
+    /// The threshold
+    #[arg(
+        long,
+        env = "ESPRESSO_ORCHESTRATOR_START_THRESHOLD",
+        default_value = "8:10"
+    )]
+    start_threshold: Ratio,
+
     /// The delay a leader inserts before starting pre-commit.
     #[arg(
         long,
@@ -64,8 +78,8 @@ struct Args {
     keygen_seed: [u8; 32],
 
     /// HotShot builder URL
-    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_BUILDER_URL")]
-    builder_url: Url,
+    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_BUILDER_URLS", num_args = 1.., value_delimiter = ',')]
+    builder_urls: Vec<Url>,
 
     /// The maximum amount of time a leader can wait to get a block from a builder.
     ///
@@ -94,52 +108,6 @@ fn parse_seed(s: &str) -> Result<[u8; 32], ParseSeedError> {
         .map_err(|vec| ParseSeedError::WrongLength { length: vec.len() })
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Ratio {
-    numerator: u64,
-    denominator: u64,
-}
-
-impl From<Ratio> for (u64, u64) {
-    fn from(r: Ratio) -> Self {
-        (r.numerator, r.denominator)
-    }
-}
-
-impl Display for Ratio {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}:{}", self.numerator, self.denominator)
-    }
-}
-
-#[derive(Debug, Snafu)]
-enum ParseRatioError {
-    #[snafu(display("numerator and denominator must be separated by :"))]
-    MissingDelimiter,
-    InvalidNumerator {
-        err: ParseIntError,
-    },
-    InvalidDenominator {
-        err: ParseIntError,
-    },
-}
-
-impl FromStr for Ratio {
-    type Err = ParseRatioError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (num, den) = s.split_once(':').ok_or(ParseRatioError::MissingDelimiter)?;
-        Ok(Self {
-            numerator: num
-                .parse()
-                .map_err(|err| ParseRatioError::InvalidNumerator { err })?,
-            denominator: den
-                .parse()
-                .map_err(|err| ParseRatioError::InvalidDenominator { err })?,
-        })
-    }
-}
-
 #[async_std::main]
 async fn main() {
     setup_logging();
@@ -147,6 +115,8 @@ async fn main() {
     let args = Args::parse();
     let mut config = NetworkConfig::<PubKey> {
         start_delay_seconds: args.start_delay.as_secs(),
+        manual_start_password: args.manual_start_password,
+        indexed_da: false,
         ..Default::default()
     };
 
@@ -177,11 +147,12 @@ async fn main() {
     config.config.next_view_timeout = args.next_view_timeout.as_millis() as u64;
     config.libp2p_config = Some(libp2p_config);
     config.config.timeout_ratio = args.timeout_ratio.into();
+    config.config.start_threshold = args.start_threshold.into();
     config.config.round_start_delay = args.round_start_delay.as_millis() as u64;
     config.config.start_delay = args.start_delay.as_millis() as u64;
     config.config.da_staked_committee_size = args.num_nodes.get();
     config.config.da_non_staked_committee_size = 0;
-    config.config.builder_url = args.builder_url;
+    config.config.builder_urls = Vec1::try_from_vec(args.builder_urls).unwrap();
     config.config.builder_timeout = args.builder_timeout;
     run_orchestrator(
         config,

@@ -2,7 +2,8 @@
 
 use super::{
     data_source::{
-        provider, SequencerDataSource, StateDataSource, StateSignatureDataSource, SubmitDataSource,
+        provider, CatchupDataSource, HotShotConfigDataSource, SequencerDataSource,
+        StateSignatureDataSource, SubmitDataSource,
     },
     endpoints, fs, sql,
     update::update_loop,
@@ -19,7 +20,7 @@ use async_std::sync::{Arc, RwLock};
 use clap::Parser;
 use futures::{
     channel::oneshot,
-    future::{BoxFuture, FutureExt},
+    future::{BoxFuture, Future, FutureExt},
 };
 use hotshot_query_service::{
     data_source::{ExtensibleDataSource, MetricsDataSource},
@@ -28,6 +29,7 @@ use hotshot_query_service::{
 };
 use hotshot_types::traits::metrics::{Metrics, NoMetrics};
 use tide_disco::{
+    listener::RateLimitListener,
     method::{ReadState, WriteState},
     App, Url,
 };
@@ -42,8 +44,10 @@ pub struct Options {
     pub submit: Option<Submit>,
     pub status: Option<Status>,
     pub catchup: Option<Catchup>,
+    pub config: Option<Config>,
     pub state: Option<State>,
     pub hotshot_events: Option<HotshotEvents>,
+    pub explorer: Option<Explorer>,
     pub storage_fs: Option<persistence::fs::Options>,
     pub storage_sql: Option<persistence::sql::Options>,
 }
@@ -56,8 +60,10 @@ impl From<Http> for Options {
             submit: None,
             status: None,
             catchup: None,
+            config: None,
             state: None,
             hotshot_events: None,
+            explorer: None,
             storage_fs: None,
             storage_sql: None,
         }
@@ -65,6 +71,11 @@ impl From<Http> for Options {
 }
 
 impl Options {
+    /// Default options for running a web server on the given port.
+    pub fn with_port(port: u16) -> Self {
+        Http::with_port(port).into()
+    }
+
     /// Add a query API module backed by a Postgres database.
     pub fn query_sql(mut self, query: Query, storage: persistence::sql::Options) -> Self {
         self.query = Some(query);
@@ -97,6 +108,12 @@ impl Options {
         self
     }
 
+    /// Add a config API module.
+    pub fn config(mut self, opt: Config) -> Self {
+        self.config = Some(opt);
+        self
+    }
+
     /// Add a state API module.
     pub fn state(mut self, opt: State) -> Self {
         self.state = Some(opt);
@@ -106,6 +123,12 @@ impl Options {
     /// Add a Hotshot events streaming API module.
     pub fn hotshot_events(mut self, opt: HotshotEvents) -> Self {
         self.hotshot_events = Some(opt);
+        self
+    }
+
+    /// Add an explorer API module.
+    pub fn explorer(mut self, opt: Explorer) -> Self {
+        self.explorer = Some(opt);
         self
     }
 
@@ -164,7 +187,7 @@ impl Options {
                 )
                 .await?
             } else if let Some(opt) = self.storage_fs.take() {
-                self.init_with_query_module_fs::<N, P, fs::DataSource, Ver>(
+                self.init_with_query_module_fs::<N, P, Ver>(
                     query_opt,
                     opt,
                     state,
@@ -198,10 +221,7 @@ impl Options {
                 )?;
             }
 
-            tasks.spawn(
-                "API server",
-                app.serve(format!("0.0.0.0:{}", self.http.port), bind_version),
-            );
+            tasks.spawn("API server", self.listen(self.http.port, app, bind_version));
 
             metrics
         } else {
@@ -223,10 +243,7 @@ impl Options {
                 )?;
             }
 
-            tasks.spawn(
-                "API server",
-                app.serve(format!("0.0.0.0:{}", self.http.port), bind_version),
-            );
+            tasks.spawn("API server", self.listen(self.http.port, app, bind_version));
 
             Box::new(NoMetrics)
         };
@@ -248,7 +265,7 @@ impl Options {
     where
         N: network::Type,
         P: SequencerPersistence,
-        D: SequencerDataSource + Send + Sync + 'static,
+        D: SequencerDataSource + CatchupDataSource + Send + Sync + 'static,
     {
         let metrics = ds.populate_metrics();
         let ds: endpoints::AvailState<N, P, D, Ver> =
@@ -278,10 +295,10 @@ impl Options {
         Ok((metrics, ds, app))
     }
 
-    async fn init_with_query_module_fs<N, P, D, Ver: StaticVersionType + 'static>(
+    async fn init_with_query_module_fs<N, P, Ver: StaticVersionType + 'static>(
         &self,
         query_opt: Query,
-        mod_opt: D::Options,
+        mod_opt: persistence::fs::Options,
         state: ApiState<N, P, Ver>,
         tasks: &mut TaskList,
         bind_version: Ver,
@@ -289,9 +306,13 @@ impl Options {
     where
         N: network::Type,
         P: SequencerPersistence,
-        D: SequencerDataSource + Send + Sync + 'static,
     {
-        let ds = D::create(mod_opt, provider(query_opt.peers, bind_version), false).await?;
+        let ds = <fs::DataSource as SequencerDataSource>::create(
+            mod_opt,
+            provider(query_opt.peers, bind_version),
+            false,
+        )
+        .await?;
 
         let (metrics, _, app) = self
             .init_app_modules(ds, state.clone(), tasks, bind_version)
@@ -303,7 +324,7 @@ impl Options {
 
         tasks.spawn(
             "API server",
-            app.serve(format!("0.0.0.0:{}", self.http.port), Ver::instance()),
+            self.listen(self.http.port, app, Ver::instance()),
         );
         Ok(metrics)
     }
@@ -330,6 +351,10 @@ impl Options {
             .init_app_modules(ds, state.clone(), tasks, bind_version)
             .await?;
 
+        if self.explorer.is_some() {
+            app.register_module("explorer", endpoints::explorer(bind_version)?)?;
+        }
+
         if self.state.is_some() {
             // Initialize merklized state module for block merkle tree
             app.register_module(
@@ -346,7 +371,7 @@ impl Options {
             let get_node_state = async move { state.node_state().await.clone() };
             tasks.spawn(
                 "merklized state storage update loop",
-                update_state_storage_loop(ds, get_node_state),
+                update_state_storage_loop(ds, get_node_state, Ver::version()),
             );
         }
 
@@ -356,7 +381,7 @@ impl Options {
 
         tasks.spawn(
             "API server",
-            app.serve(format!("0.0.0.0:{}", self.http.port), Ver::instance()),
+            self.listen(self.http.port, app, Ver::instance()),
         );
         Ok(metrics)
     }
@@ -373,8 +398,12 @@ impl Options {
     where
         S: 'static + Send + Sync + ReadState + WriteState,
         P: SequencerPersistence,
-        S::State:
-            Send + Sync + SubmitDataSource<N, P> + StateSignatureDataSource<N> + StateDataSource,
+        S::State: Send
+            + Sync
+            + SubmitDataSource<N, P>
+            + StateSignatureDataSource<N>
+            + CatchupDataSource
+            + HotShotConfigDataSource,
         N: network::Type,
     {
         let bind_version = Ver::instance();
@@ -393,6 +422,10 @@ impl Options {
 
         let state_signature_api = endpoints::state_signature(bind_version)?;
         app.register_module("state-signature", state_signature_api)?;
+
+        if self.config.is_some() {
+            app.register_module("config", endpoints::config(bind_version)?)?;
+        }
 
         Ok(())
     }
@@ -427,16 +460,38 @@ impl Options {
 
         tasks.spawn(
             "Hotshot Events Streaming API server",
-            app.serve(
-                format!(
-                    "0.0.0.0:{}",
-                    self.hotshot_events.unwrap().events_service_port
-                ),
+            self.listen(
+                self.hotshot_events.unwrap().events_service_port,
+                app,
                 bind_version,
             ),
         );
 
         Ok(())
+    }
+
+    fn listen<S, E, Ver>(
+        &self,
+        port: u16,
+        app: App<S, E>,
+        bind_version: Ver,
+    ) -> impl Future<Output = anyhow::Result<()>>
+    where
+        S: Send + Sync + 'static,
+        E: Send + Sync + tide_disco::Error,
+        Ver: StaticVersionType + 'static,
+    {
+        let max_connections = self.http.max_connections;
+
+        async move {
+            if let Some(limit) = max_connections {
+                app.serve(RateLimitListener::with_port(port, limit), bind_version)
+                    .await?;
+            } else {
+                app.serve(format!("0.0.0.0:{}", port), bind_version).await?;
+            }
+            Ok(())
+        }
     }
 }
 
@@ -444,11 +499,29 @@ impl Options {
 ///
 /// The API automatically includes health and version endpoints. Additional API modules can be
 /// added by including the query-api or submit-api modules.
-#[derive(Parser, Clone, Debug)]
+#[derive(Parser, Clone, Copy, Debug)]
 pub struct Http {
     /// Port that the HTTP API will use.
     #[clap(long, env = "ESPRESSO_SEQUENCER_API_PORT")]
     pub port: u16,
+
+    /// Maximum number of concurrent HTTP connections the server will allow.
+    ///
+    /// Connections exceeding this will receive and immediate 429 response and be closed.
+    ///
+    /// Leave unset for no connection limit.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_CONNECTIONS")]
+    pub max_connections: Option<usize>,
+}
+
+impl Http {
+    /// Default options for running a web server on the given port.
+    pub fn with_port(port: u16) -> Self {
+        Self {
+            port,
+            max_connections: None,
+        }
+    }
 }
 
 /// Options for the submission API module.
@@ -462,6 +535,10 @@ pub struct Status;
 /// Options for the catchup API module.
 #[derive(Parser, Clone, Copy, Debug, Default)]
 pub struct Catchup;
+
+/// Options for the config API module.
+#[derive(Parser, Clone, Copy, Debug, Default)]
+pub struct Config;
 
 /// Options for the query API module.
 #[derive(Parser, Clone, Debug, Default)]
@@ -482,3 +559,7 @@ pub struct HotshotEvents {
     #[clap(long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT")]
     pub events_service_port: u16,
 }
+
+/// Options for the explorer API module.
+#[derive(Parser, Clone, Copy, Debug, Default)]
+pub struct Explorer;
