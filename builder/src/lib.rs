@@ -229,6 +229,10 @@ pub mod testing {
                 stop_proposing_view: 0,
                 start_voting_view: 0,
                 stop_voting_view: 0,
+                start_proposing_time: 0,
+                start_voting_time: 0,
+                stop_proposing_time: 0,
+                stop_voting_time: 0,
             };
 
             Self {

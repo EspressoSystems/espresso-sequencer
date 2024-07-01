@@ -524,14 +524,14 @@ pub mod test_helpers {
             cfg: TestNetworkConfig<{ NUM_NODES }, P, C>,
         ) -> Self {
             let mut cfg = cfg;
-            let (builder_task, builder_url) = run_test_builder::<{ NUM_NODES }>(
+            let builder_task = run_test_builder::<{ NUM_NODES }>(
                 cfg.network_config.url(),
                 cfg.network_config.builder_port(),
             )
             .await;
 
             cfg.network_config
-                .set_builder_urls(vec1::vec1![builder_url]);
+                .set_builder_urls(vec1::vec1![cfg.network_config.url()]);
 
             let mut nodes = join_all(
                 izip!(cfg.state, cfg.persistence, cfg.catchup)
