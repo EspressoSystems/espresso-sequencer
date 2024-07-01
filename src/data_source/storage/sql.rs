@@ -2993,6 +2993,7 @@ fn build_get_path_query(
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
+    use async_std::net::TcpStream;
     use std::{
         env,
         process::{Command, Stdio},
@@ -3145,6 +3146,16 @@ pub mod testing {
                 .is_err()
             {
                 tracing::warn!("database is not ready");
+                sleep(Duration::from_secs(1)).await;
+            }
+
+            // The above command ensures the database is ready inside the Docker container. However,
+            // on some systems, there is a slight delay before the port is exposed via host
+            // networking. We don't need to check again that the database is ready on the host (and
+            // maybe can't, because the host might not have pg_isready installed), but we can
+            // ensure the port is open by just establishing a TCP connection.
+            while let Err(err) = TcpStream::connect(format!("{}:{}", self.host, self.port)).await {
+                tracing::warn!("database is ready, but port is not available to host: {err:#}");
                 sleep(Duration::from_secs(1)).await;
             }
         }
