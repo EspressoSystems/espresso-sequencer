@@ -13,6 +13,7 @@ pub mod state_signature;
 mod message_compat_tests;
 mod reference_tests;
 
+use crate::catchup::BackoffParams;
 use anyhow::Context;
 use async_std::sync::RwLock;
 use async_trait::async_trait;
@@ -22,7 +23,6 @@ use ethers::types::U256;
 #[cfg(feature = "libp2p")]
 use futures::FutureExt;
 use genesis::{GenesisHeader, L1Finalized, Upgrade};
-use crate::catchup::BackoffParams;
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
@@ -596,17 +596,21 @@ pub mod testing {
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
     pub async fn run_test_builder<const NUM_NODES: usize>(
+        mut url: Url,
         port: Option<u16>,
     ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
-        let builder_config = if let Some(port) = port {
-            SimpleBuilderConfig { port }
-        } else {
-            SimpleBuilderConfig::default()
-        };
-        <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
-            NUM_NODES,
-            builder_config,
-            Default::default(),
+        let port = port.unwrap_or_else(|| pick_unused_port().expect("No available ports"));
+        url.set_port(Some(port)).expect("Failed to set port");
+
+        (
+            <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
+                NUM_NODES,
+                url.clone(),
+                (),
+                HashMap::new(),
+            )
+            .await,
+            url,
         )
     }
 
@@ -718,6 +722,10 @@ pub mod testing {
                 stop_proposing_view: 0,
                 start_voting_view: 0,
                 stop_voting_view: 0,
+                start_proposing_time: 0,
+                start_voting_time: 0,
+                stop_proposing_time: 0,
+                stop_voting_time: 0,
             };
 
             Self {
@@ -760,6 +768,10 @@ pub mod testing {
 
         pub fn builder_port(&self) -> Option<u16> {
             self.builder_port
+        }
+
+        pub fn url(&self) -> Url {
+            self.url.clone()
         }
 
         pub fn upgrades(&self) -> Option<TestNetworkUpgrades> {
