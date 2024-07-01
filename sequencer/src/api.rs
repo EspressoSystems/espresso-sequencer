@@ -525,7 +525,7 @@ pub mod test_helpers {
         ) -> Self {
             let mut cfg = cfg;
             let builder_task = run_test_builder::<{ NUM_NODES }>(
-                cfg.network_config.l1_url(),
+                cfg.network_config.builder_port(),
             )
             .await;
 

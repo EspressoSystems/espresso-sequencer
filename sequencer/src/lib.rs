@@ -596,8 +596,13 @@ pub mod testing {
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
     pub async fn run_test_builder<const NUM_NODES: usize>(
-        url: Url,
+        port: Option<u16>
     ) -> Box<dyn BuilderTask<SeqTypes>> {
+        let port = port.unwrap_or_else(|| pick_unused_port().expect("No ports available"));
+
+        // This should never fail.
+        let url: Url = format!("localhost:{port}").parse().expect("Failed to parse builder URL");
+
         <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
             NUM_NODES,
             url.clone(),
@@ -945,7 +950,7 @@ mod test {
             .l1_url(url.clone())
             .build();
 
-        let builder_task = run_test_builder::<NUM_NODES>(url.clone()).await;
+        let builder_task = run_test_builder::<NUM_NODES>(None).await;
 
         config.set_builder_urls(vec1::vec1![url]);
 
@@ -988,7 +993,7 @@ mod test {
             .l1_url(url.clone())
             .build();
 
-        let builder_task = run_test_builder::<NUM_NODES>(url.clone()).await;
+        let builder_task = run_test_builder::<NUM_NODES>(None).await;
 
         config.set_builder_urls(vec1::vec1![url]);
         let handles = config.init_nodes(ver).await;
