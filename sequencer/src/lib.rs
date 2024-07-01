@@ -597,7 +597,7 @@ pub mod testing {
 
     pub async fn run_test_builder<const NUM_NODES: usize>(
         port: Option<u16>,
-    ) -> Box<dyn BuilderTask<SeqTypes>> {
+    ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
         let port = port.unwrap_or_else(|| pick_unused_port().expect("No ports available"));
 
         // This should never fail.
@@ -605,13 +605,16 @@ pub mod testing {
             .parse()
             .expect("Failed to parse builder URL");
 
-        <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
-            NUM_NODES,
-            url.clone(),
-            (),
-            HashMap::new(),
+        (
+            <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
+                NUM_NODES,
+                url.clone(),
+                (),
+                HashMap::new(),
+            )
+            .await,
+            url
         )
-        .await
     }
 
     pub struct TestConfigBuilder<const NUM_NODES: usize> {
@@ -949,12 +952,12 @@ mod test {
         let url = anvil.url();
         const NUM_NODES: usize = 5;
         let mut config = TestConfigBuilder::<NUM_NODES>::default()
-            .l1_url(url.clone())
+            .l1_url(url)
             .build();
 
-        let builder_task = run_test_builder::<NUM_NODES>(None).await;
+        let (builder_task, builder_url) = run_test_builder::<NUM_NODES>(None).await;
 
-        config.set_builder_urls(vec1::vec1![url]);
+        config.set_builder_urls(vec1::vec1![builder_url]);
 
         let handles = config.init_nodes(ver).await;
 
@@ -992,12 +995,12 @@ mod test {
         let url = anvil.url();
         const NUM_NODES: usize = 5;
         let mut config = TestConfigBuilder::<NUM_NODES>::default()
-            .l1_url(url.clone())
+            .l1_url(url)
             .build();
 
-        let builder_task = run_test_builder::<NUM_NODES>(None).await;
+        let (builder_task, builder_url) = run_test_builder::<NUM_NODES>(None).await;
 
-        config.set_builder_urls(vec1::vec1![url]);
+        config.set_builder_urls(vec1::vec1![builder_url]);
         let handles = config.init_nodes(ver).await;
 
         let handle_0 = &handles[0];
