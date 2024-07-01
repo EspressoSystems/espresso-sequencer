@@ -83,6 +83,7 @@ where
         private_staking_key,
         private_state_key,
         state_peers: opt.state_peers,
+        catchup_backoff: opt.catchup_backoff,
     };
 
     // Initialize HotShot. If the user requested the HTTP module, we must initialize the handle in

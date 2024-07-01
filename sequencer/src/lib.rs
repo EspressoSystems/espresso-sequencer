@@ -25,6 +25,7 @@ use genesis::{GenesisHeader, L1Finalized, Upgrade};
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
+use catchup::BackoffParams;
 use l1_client::L1Client;
 
 use libp2p::Multiaddr;
@@ -302,6 +303,7 @@ pub struct NetworkParams {
     pub private_staking_key: BLSPrivKey,
     pub private_state_key: StateSignKey,
     pub state_peers: Vec<Url>,
+    pub catchup_backoff: BackoffParams,
 
     /// The address to send to other Libp2p nodes to contact us
     pub libp2p_advertise_address: SocketAddr,
@@ -524,7 +526,10 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         l1_genesis,
         peers: catchup::local_and_remote(
             persistence_opt,
-            StatePeers::<Ver>::from_urls(network_params.state_peers),
+            StatePeers::<Ver>::from_urls(
+                network_params.state_peers,
+                network_params.catchup_backoff,
+            ),
         )
         .await,
         node_id: node_index,
