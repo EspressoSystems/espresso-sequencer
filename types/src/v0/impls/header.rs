@@ -1216,7 +1216,7 @@ mod test_headers {
                 account: fee_account,
             },
             Default::default(),
-            Version { major: 0, minor: 1 },
+            Version { major: 0, minor: 2 },
         );
 
         let serialized = serde_json::to_string(&v2_header).unwrap();
