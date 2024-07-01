@@ -18,6 +18,8 @@ pkgs.mkShell (envVars // {
     protobuf # required by libp2p
 
     openssh
+
+    foundry-bin
   ];
   # Libraries essential to build the service binaries
   buildInputs = with pkgs; [
