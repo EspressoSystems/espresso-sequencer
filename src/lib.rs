@@ -34,12 +34,12 @@
 //!     node,
 //!     status::UpdateStatusData,
 //!     status, Error
+//!     testing::mocks::MockBase,
 //! };
 //!
 //! use async_std::{sync::{Arc, RwLock}, task::spawn};
 //! use futures::StreamExt;
 //! use vbs::version::StaticVersionType;
-//! use hotshot_types::constants::MockBase;
 //! use hotshot::SystemContext;
 //! use tide_disco::App;
 //!
