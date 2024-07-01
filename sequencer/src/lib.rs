@@ -596,12 +596,8 @@ pub mod testing {
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
     pub async fn run_test_builder<const NUM_NODES: usize>(
-        mut url: Url,
-        port: Option<u16>,
+        url: Url,
     ) -> Box<dyn BuilderTask<SeqTypes>> {
-        let port = port.unwrap_or_else(|| pick_unused_port().expect("No available ports"));
-        url.set_port(Some(port)).expect("Failed to set port");
-
         <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
             NUM_NODES,
             url.clone(),
@@ -616,7 +612,7 @@ pub mod testing {
         priv_keys: Vec<BLSPrivKey>,
         state_key_pairs: Vec<StateKeyPair>,
         master_map: Arc<MasterMap<PubKey>>,
-        url: Url,
+        l1_url: Url,
         state_relay_url: Option<Url>,
         builder_port: Option<u16>,
         upgrades: Option<TestNetworkUpgrades>,
@@ -633,8 +629,8 @@ pub mod testing {
             self
         }
 
-        pub fn l1_url(mut self, l1: Url) -> Self {
-            self.url = l1;
+        pub fn l1_url(mut self, l1_url: Url) -> Self {
+            self.l1_url = l1_url;
             self
         }
 
@@ -656,7 +652,7 @@ pub mod testing {
                 priv_keys: self.priv_keys,
                 state_key_pairs: self.state_key_pairs,
                 master_map: self.master_map,
-                url: self.url,
+                l1_url: self.l1_url,
                 state_relay_url: self.state_relay_url,
                 builder_port: self.builder_port,
                 upgrades: self.upgrades,
@@ -730,7 +726,7 @@ pub mod testing {
                 priv_keys,
                 state_key_pairs,
                 master_map,
-                url: "http://localhost:8545".parse().unwrap(),
+                l1_url: "http://localhost:8545".parse().unwrap(),
                 state_relay_url: None,
                 builder_port: None,
                 upgrades: None,
@@ -744,7 +740,7 @@ pub mod testing {
         priv_keys: Vec<BLSPrivKey>,
         state_key_pairs: Vec<StateKeyPair>,
         master_map: Arc<MasterMap<PubKey>>,
-        url: Url,
+        l1_url: Url,
         state_relay_url: Option<Url>,
         builder_port: Option<u16>,
         upgrades: Option<TestNetworkUpgrades>,
@@ -767,8 +763,8 @@ pub mod testing {
             self.builder_port
         }
 
-        pub fn url(&self) -> Url {
-            self.url.clone()
+        pub fn l1_url(&self) -> Url {
+            self.l1_url.clone()
         }
 
         pub fn upgrades(&self) -> Option<TestNetworkUpgrades> {
@@ -850,7 +846,7 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 ChainConfig::default(),
-                L1Client::new(self.url.clone(), 1000),
+                L1Client::new(self.l1_url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
             )
             .with_genesis(state)
@@ -949,7 +945,7 @@ mod test {
             .l1_url(url.clone())
             .build();
 
-        let builder_task = run_test_builder::<NUM_NODES>(url.clone(), None).await;
+        let builder_task = run_test_builder::<NUM_NODES>(url.clone()).await;
 
         config.set_builder_urls(vec1::vec1![url]);
 
@@ -992,7 +988,7 @@ mod test {
             .l1_url(url.clone())
             .build();
 
-        let builder_task = run_test_builder::<NUM_NODES>(url.clone(), None).await;
+        let builder_task = run_test_builder::<NUM_NODES>(url.clone()).await;
 
         config.set_builder_urls(vec1::vec1![url]);
         let handles = config.init_nodes(ver).await;
