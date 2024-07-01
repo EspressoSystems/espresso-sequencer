@@ -29,12 +29,13 @@ use futures::{
 use hotshot::{
     traits::implementations::{MasterMap, MemoryNetwork},
     types::{Event, SystemContextHandle},
-    HotShotInitializer, Memberships, Networks, SystemContext,
+    HotShotInitializer, Memberships, SystemContext,
 };
-use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
-use hotshot_testing::block_builder::{
-    SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
+use hotshot_example_types::{
+    auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
+    storage_types::TestStorage,
 };
+use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
@@ -46,6 +47,7 @@ use std::fmt::Display;
 use std::num::NonZeroUsize;
 use std::time::Duration;
 use tracing::{info_span, Instrument};
+use url::Url;
 
 struct MockNode<D: DataSourceLifeCycle> {
     hotshot: SystemContextHandle<MockTypes, MockNodeImpl>,
@@ -103,11 +105,19 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             view_sync_membership: membership.clone(),
         };
 
+        // Pick a random, unused port for the builder server
+        let builder_port = portpicker::pick_unused_port().expect("No ports available");
+
+        // Create the bind URL from the random port
+        let builder_url =
+            Url::parse(&format!("http://0.0.0.0:{builder_port}")).expect("Failed to parse URL");
+
         // Start the builder server
-        let (builder_task, builder_url) =
+        let builder_task =
             <SimpleBuilderImplementation as TestBuilderImplementation<MockTypes>>::start(
                 NUM_NODES,
-                SimpleBuilderConfig::default(),
+                builder_url.clone(),
+                (),
                 Default::default(),
             )
             .await;
@@ -140,6 +150,10 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             stop_proposing_view: 0,
             start_voting_view: 0,
             stop_voting_view: 0,
+            start_proposing_time: 0,
+            stop_proposing_time: 0,
+            start_voting_time: 0,
+            stop_voting_time: 0,
         };
         update_config(&mut config);
 
@@ -172,12 +186,6 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             None,
                         ));
 
-                        let networks = Networks {
-                            quorum_network: network.clone(),
-                            da_network: network,
-                            _pd: std::marker::PhantomData,
-                        };
-
                         let hs_storage: TestStorage<MockTypes> = TestStorage::default();
 
                         let hotshot = SystemContext::init(
@@ -186,12 +194,13 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             node_id as u64,
                             config,
                             memberships,
-                            networks,
+                            network,
                             HotShotInitializer::from_genesis(TestInstanceState {})
                                 .await
                                 .unwrap(),
                             ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                             hs_storage,
+                            TestAuctionResultsProvider::default(),
                         )
                         .await
                         .unwrap()

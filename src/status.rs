@@ -113,13 +113,13 @@ mod test {
         task::BackgroundTask,
         testing::{
             consensus::{MockDataSource, MockNetwork},
+            mocks::MockBase,
             setup_test, sleep,
         },
         Error,
     };
     use async_std::sync::RwLock;
     use futures::FutureExt;
-    use hotshot_types::constants::Base;
     use portpicker::pick_unused_port;
     use reqwest::redirect::Policy;
     use std::str::FromStr;
@@ -141,17 +141,17 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "status",
-            define_api(&Default::default(), Base::instance()).unwrap(),
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap();
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{}", port), Base::instance()),
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
         );
 
         // Start a client.
         let url = Url::from_str(&format!("http://localhost:{}/status", port)).unwrap();
-        let client = Client::<Error, Base>::new(url.clone());
+        let client = Client::<Error, MockBase>::new(url.clone());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
         // The block height is initially zero.
@@ -224,12 +224,12 @@ mod test {
             METHOD = "GET"
         };
 
-        let mut api = define_api::<RwLock<ExtensibleDataSource<MockDataSource, u64>>, Base>(
+        let mut api = define_api::<RwLock<ExtensibleDataSource<MockDataSource, u64>>, MockBase>(
             &Options {
                 extensions: vec![extensions.into()],
                 ..Default::default()
             },
-            Base::instance(),
+            MockBase::instance(),
         )
         .unwrap();
         api.get("get_ext", |_, state| {
@@ -251,10 +251,10 @@ mod test {
         let port = pick_unused_port().unwrap();
         let _server = BackgroundTask::spawn(
             "server",
-            app.serve(format!("0.0.0.0:{}", port), Base::instance()),
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
         );
 
-        let client = Client::<Error, Base>::new(
+        let client = Client::<Error, MockBase>::new(
             format!("http://localhost:{}/status", port).parse().unwrap(),
         );
         assert!(client.connect(Some(Duration::from_secs(60))).await);

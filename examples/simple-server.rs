@@ -23,9 +23,12 @@ use futures::future::{join_all, try_join_all};
 use hotshot::{
     traits::implementations::{MasterMap, MemoryNetwork},
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, Networks, SystemContext,
+    HotShotInitializer, Memberships, SystemContext,
 };
-use hotshot_example_types::{state_types::TestInstanceState, storage_types::TestStorage};
+use hotshot_example_types::{
+    auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
+    storage_types::TestStorage,
+};
 use hotshot_query_service::{
     data_source,
     fetching::provider::NoFetching,
@@ -33,18 +36,17 @@ use hotshot_query_service::{
     status::UpdateStatusData,
     testing::{
         consensus::DataSourceLifeCycle,
-        mocks::{MockMembership, MockNodeImpl, MockTypes},
+        mocks::{MockBase, MockMembership, MockNodeImpl, MockTypes},
     },
     Error,
 };
-use hotshot_testing::block_builder::{
-    SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
-};
+use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
 use hotshot_types::{
     consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
     traits::election::Membership, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::{num::NonZeroUsize, time::Duration};
+use url::Url;
 use vbs::version::StaticVersionType;
 
 const NUM_NODES: usize = 2;
@@ -115,7 +117,7 @@ async fn main() -> Result<(), Error> {
     let nodes = init_consensus(&data_sources).await;
 
     // Use version 0.1, for no particular reason
-    let bind_version: hotshot_types::constants::Base = hotshot_types::constants::Base::instance();
+    let bind_version = MockBase::instance();
 
     // Start the servers.
     try_join_all(
@@ -170,13 +172,21 @@ async fn init_consensus(
         view_sync_membership: membership.clone(),
     };
 
+    // Pick a random, unused port for the builder server
+    let builder_port = portpicker::pick_unused_port().expect("No ports available");
+
+    let builder_url =
+        Url::parse(&format!("http://0.0.0.0:{builder_port}")).expect("Failed to parse URL");
+
     // Start the builder server
-    let (builder_task, builder_url) = <SimpleBuilderImplementation as TestBuilderImplementation<
-        MockTypes,
-    >>::start(
-        1, SimpleBuilderConfig::default(), Default::default()
-    )
-    .await;
+    let builder_task =
+        <SimpleBuilderImplementation as TestBuilderImplementation<MockTypes>>::start(
+            1,
+            builder_url.clone(),
+            (),
+            Default::default(),
+        )
+        .await;
 
     // Create the configuration
     let config = HotShotConfig {
@@ -207,6 +217,10 @@ async fn init_consensus(
         stop_proposing_view: 0,
         start_voting_view: 0,
         stop_voting_view: 0,
+        start_proposing_time: 0,
+        stop_proposing_time: 0,
+        start_voting_time: 0,
+        stop_voting_time: 0,
     };
 
     let nodes = join_all(priv_keys.into_iter().zip(data_sources).enumerate().map(
@@ -235,11 +249,6 @@ async fn init_consensus(
                     &master_map.clone(),
                     None,
                 ));
-                let networks = Networks {
-                    quorum_network: network.clone(),
-                    da_network: network,
-                    _pd: Default::default(),
-                };
 
                 let storage: TestStorage<MockTypes> = TestStorage::default();
 
@@ -249,12 +258,13 @@ async fn init_consensus(
                     node_id as u64,
                     config,
                     memberships,
-                    networks,
+                    network,
                     HotShotInitializer::from_genesis(TestInstanceState {})
                         .await
                         .unwrap(),
                     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                     storage,
+                    TestAuctionResultsProvider::default(),
                 )
                 .await
                 .unwrap()

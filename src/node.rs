@@ -173,7 +173,7 @@ mod test {
         task::BackgroundTask,
         testing::{
             consensus::{MockDataSource, MockNetwork},
-            mocks::MockTypes,
+            mocks::{MockBase, MockTypes},
             setup_test,
         },
         Error, Header, VidShare,
@@ -181,7 +181,6 @@ mod test {
     use async_std::{sync::RwLock, task::sleep};
     use committable::Committable;
     use futures::{FutureExt, StreamExt};
-    use hotshot_types::constants::Base;
     use hotshot_types::event::EventType;
     use hotshot_types::event::LeafInfo;
     use portpicker::pick_unused_port;
@@ -205,17 +204,18 @@ mod test {
         let mut app = App::<_, Error>::with_state(network.data_source());
         app.register_module(
             "node",
-            define_api(&Default::default(), Base::instance()).unwrap(),
+            define_api(&Default::default(), MockBase::instance()).unwrap(),
         )
         .unwrap();
         network.spawn(
             "server",
-            app.serve(format!("0.0.0.0:{}", port), Base::instance()),
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
         );
 
         // Start a client.
-        let client =
-            Client::<Error, Base>::new(format!("http://localhost:{}/node", port).parse().unwrap());
+        let client = Client::<Error, MockBase>::new(
+            format!("http://localhost:{}/node", port).parse().unwrap(),
+        );
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
         // Wait until a few blocks have been sequenced.
@@ -378,12 +378,12 @@ mod test {
         };
 
         let mut api =
-            define_api::<RwLock<ExtensibleDataSource<MockDataSource, u64>>, MockTypes, Base>(
+            define_api::<RwLock<ExtensibleDataSource<MockDataSource, u64>>, MockTypes, MockBase>(
                 &Options {
                     extensions: vec![extensions.into()],
                     ..Default::default()
                 },
-                Base::instance(),
+                MockBase::instance(),
             )
             .unwrap();
         api.get("get_ext", |_, state| {
@@ -405,11 +405,12 @@ mod test {
         let port = pick_unused_port().unwrap();
         let _server = BackgroundTask::spawn(
             "server",
-            app.serve(format!("0.0.0.0:{}", port), Base::instance()),
+            app.serve(format!("0.0.0.0:{}", port), MockBase::instance()),
         );
 
-        let client =
-            Client::<Error, Base>::new(format!("http://localhost:{}/node", port).parse().unwrap());
+        let client = Client::<Error, MockBase>::new(
+            format!("http://localhost:{}/node", port).parse().unwrap(),
+        );
         assert!(client.connect(Some(Duration::from_secs(60))).await);
 
         assert_eq!(client.get::<u64>("ext").send().await.unwrap(), 0);

@@ -204,13 +204,12 @@ pub mod testing {
         status::StatusDataSource,
         testing::{
             consensus::{DataSourceLifeCycle, MockNetwork},
-            mocks::MockTypes,
+            mocks::{MockBase, MockTypes},
         },
         Error,
     };
     use futures::stream::{BoxStream, StreamExt};
     use hotshot::types::Event;
-    use hotshot_types::constants::Base;
     use portpicker::pick_unused_port;
     use std::{fmt::Display, time::Duration};
     use tide_disco::App;
@@ -232,7 +231,7 @@ pub mod testing {
 
     pub enum DataSource {
         Sql(SqlDataSource<MockTypes, NoFetching>),
-        NoStorage(FetchingDataSource<MockTypes, NoStorage, QueryServiceProvider<Base>>),
+        NoStorage(FetchingDataSource<MockTypes, NoStorage, QueryServiceProvider<MockBase>>),
     }
 
     #[async_trait]
@@ -268,7 +267,7 @@ pub mod testing {
                         format!("http://localhost:{fetch_from_port}")
                             .parse()
                             .unwrap(),
-                        Base::instance(),
+                        MockBase::instance(),
                     );
                     Self::NoStorage(
                         FetchingDataSource::builder(NoStorage, provider)
@@ -317,12 +316,12 @@ pub mod testing {
             let mut app = App::<_, Error>::with_state(api_data_source);
             app.register_module(
                 "availability",
-                define_api(&Default::default(), Base::instance()).unwrap(),
+                define_api(&Default::default(), MockBase::instance()).unwrap(),
             )
             .unwrap();
             network.spawn(
                 "server",
-                app.serve(format!("0.0.0.0:{fetch_from_port}"), Base::instance()),
+                app.serve(format!("0.0.0.0:{fetch_from_port}"), MockBase::instance()),
             );
         }
 
