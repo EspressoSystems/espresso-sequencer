@@ -3156,7 +3156,7 @@ pub mod testing {
             // ensure the port is open by just establishing a TCP connection.
             while let Err(err) = TcpStream::connect(format!("{}:{}", self.host, self.port)).await {
                 tracing::warn!("database is ready, but port is not available to host: {err:#}");
-                sleep(Duration::from_secs(1)).await;
+                sleep(Duration::from_millis(100)).await;
             }
         }
     }
