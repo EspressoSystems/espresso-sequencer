@@ -34,7 +34,7 @@ use hotshot_task_impls::{events::HotShotEvent, helpers::broadcast_event, network
 /// Reexport error type
 pub use hotshot_types::error::HotShotError;
 use hotshot_types::{
-    consensus::{Consensus, ConsensusMetricsValue, View, ViewInner},
+    consensus::{Consensus, ConsensusMetricsValue, OuterConsensus, View, ViewInner},
     constants::{EVENT_CHANNEL_SIZE, EXTERNAL_EVENT_CHANNEL_SIZE},
     data::{Leaf, QuorumProposal},
     event::{EventType, LeafInfo},
@@ -104,7 +104,7 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     metrics: Arc<ConsensusMetricsValue>,
 
     /// The hotstuff implementation
-    consensus: Arc<RwLock<Consensus<TYPES>>>,
+    consensus: OuterConsensus<TYPES>,
 
     /// Immutable instance state
     instance_state: Arc<TYPES::InstanceState>,
@@ -153,7 +153,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Clone for SystemContext<TYPE
             network: Arc::clone(&self.network),
             memberships: Arc::clone(&self.memberships),
             metrics: Arc::clone(&self.metrics),
-            consensus: Arc::clone(&self.consensus),
+            consensus: self.consensus.clone(),
             instance_state: Arc::clone(&self.instance_state),
             version: Arc::clone(&self.version),
             start_view: self.start_view,
@@ -266,7 +266,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         let inner: Arc<SystemContext<TYPES, I>> = Arc::new(SystemContext {
             id: nonce,
-            consensus,
+            consensus: OuterConsensus::new(consensus),
             instance_state: Arc::new(instance_state),
             public_key,
             private_key,
@@ -292,6 +292,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     ///
     /// # Panics
     /// Panics if sending genesis fails
+    #[instrument(skip_all, target = "SystemContext", fields(id = self.id))]
     pub async fn start_consensus(&self) {
         #[cfg(feature = "dependncy-tasks")]
         error!("HotShot is running with the dependency tasks feature enabled!!");
@@ -392,7 +393,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// # Errors
     ///
     /// Always returns Ok; does not return an error if the transaction couldn't be published to the network
-    #[instrument(skip(self), err)]
+    #[instrument(skip(self), err, target = "SystemContext", fields(id = self.id))]
     pub async fn publish_transaction_async(
         &self,
         transaction: TYPES::Transaction,
@@ -448,7 +449,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// Returns a copy of the consensus struct
     #[must_use]
     pub fn consensus(&self) -> Arc<RwLock<Consensus<TYPES>>> {
-        Arc::clone(&self.consensus)
+        Arc::clone(&self.consensus.inner_consensus)
     }
 
     /// Returns a copy of the instance state
@@ -459,6 +460,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// Returns a copy of the last decided leaf
     /// # Panics
     /// Panics if internal leaf for consensus is inconsistent
+    #[instrument(skip_all, target = "SystemContext", fields(id = self.id))]
     pub async fn decided_leaf(&self) -> Leaf<TYPES> {
         self.consensus.read().await.decided_leaf()
     }
@@ -469,6 +471,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// # Panics
     /// Panics if internal state for consensus is inconsistent
     #[must_use]
+    #[instrument(skip_all, target = "SystemContext", fields(id = self.id))]
     pub fn try_decided_leaf(&self) -> Option<Leaf<TYPES>> {
         self.consensus.try_read().map(|guard| guard.decided_leaf())
     }
@@ -477,6 +480,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     ///
     /// # Panics
     /// Panics if internal state for consensus is inconsistent
+    #[instrument(skip_all, target = "SystemContext", fields(id = self.id))]
     pub async fn decided_state(&self) -> Arc<TYPES::ValidatedState> {
         Arc::clone(&self.consensus.read().await.decided_state())
     }
@@ -488,6 +492,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// return [`None`] if the requested view has already been decided (but see
     /// [`decided_state`](Self::decided_state)) or if there is no path for the requested
     /// view to ever be decided.
+    #[instrument(skip_all, target = "SystemContext", fields(id = self.id))]
     pub async fn state(&self, view: TYPES::Time) -> Option<Arc<TYPES::ValidatedState>> {
         self.consensus.read().await.state(view).cloned()
     }

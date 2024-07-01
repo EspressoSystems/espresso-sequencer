@@ -6,7 +6,6 @@ use std::{
 use anyhow::{bail, Result};
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::async_sleep;
-use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::{stream::FuturesUnordered, StreamExt};
 use hotshot_builder_api::block_info::{
@@ -14,7 +13,7 @@ use hotshot_builder_api::block_info::{
 };
 use hotshot_task::task::TaskState;
 use hotshot_types::{
-    consensus::Consensus,
+    consensus::OuterConsensus,
     data::{null_block, Leaf},
     event::{Event, EventType},
     simple_certificate::UpgradeCertificate,
@@ -75,7 +74,7 @@ pub struct TransactionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub cur_view: TYPES::Time,
 
     /// Reference to consensus. Leader will require a read lock on this.
-    pub consensus: Arc<RwLock<Consensus<TYPES>>>,
+    pub consensus: OuterConsensus<TYPES>,
 
     /// The underlying network
     pub network: Arc<I::Network>,
@@ -100,7 +99,7 @@ pub struct TransactionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, I> {
     /// main task event handler
-    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction task", level = "error")]
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction task", level = "error", target = "TransactionTaskState")]
     pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
@@ -233,9 +232,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
     }
 
     /// Get last known builder commitment from consensus.
+    #[instrument(skip_all, target = "TransactionTaskState", fields(id = self.id, view = *self.cur_view))]
     async fn latest_known_vid_commitment(&self) -> (TYPES::Time, VidCommitment) {
         let consensus = self.consensus.read().await;
-
         let mut prev_view = TYPES::Time::new(self.cur_view.saturating_sub(1));
 
         // Search through all previous views...

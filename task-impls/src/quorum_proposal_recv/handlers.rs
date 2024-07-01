@@ -8,6 +8,7 @@ use async_broadcast::{broadcast, Sender};
 use async_lock::RwLockUpgradableReadGuard;
 use committable::Committable;
 use hotshot_types::{
+    consensus::OuterConsensus,
     data::{Leaf, QuorumProposal},
     message::Proposal,
     simple_certificate::QuorumCertificate,
@@ -20,7 +21,7 @@ use hotshot_types::{
     utils::{View, ViewInner},
     vote::{Certificate, HasViewNumber},
 };
-use tracing::{debug, error, warn};
+use tracing::{debug, error, instrument, warn};
 
 use super::QuorumProposalRecvTaskState;
 use crate::{
@@ -42,6 +43,7 @@ pub(crate) enum QuorumProposalValidity {
 }
 
 /// Update states in the event that the parent state is not found for a given `proposal`.
+#[instrument(skip_all)]
 async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
     event_sender: &Sender<Arc<HotShotEvent<TYPES>>>,
@@ -108,6 +110,7 @@ async fn validate_proposal_liveness<TYPES: NodeType, I: NodeImplementation<TYPES
 /// - The task is internally inconsistent.
 /// - The sequencer storage update fails.
 #[allow(clippy::too_many_lines)]
+#[instrument(skip_all)]
 pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
     sender: &TYPES::SignatureKey,
@@ -141,7 +144,7 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
         view_number,
         event_sender,
         task_state.timeout,
-        Arc::clone(&task_state.consensus),
+        OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
         &mut task_state.cur_view,
         &mut task_state.cur_view_time,
         &mut task_state.timeout_task,
@@ -169,7 +172,7 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
             justify_qc.view_number(),
             event_sender.clone(),
             Arc::clone(&task_state.quorum_membership),
-            Arc::clone(&task_state.consensus),
+            OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
         )
         .await
         .ok(),
@@ -224,13 +227,14 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
     validate_proposal_safety_and_liveness(
         proposal.clone(),
         parent_leaf,
-        Arc::clone(&task_state.consensus),
+        OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
         Arc::clone(&task_state.decided_upgrade_certificate),
         Arc::clone(&task_state.quorum_membership),
         view_leader_key,
         event_sender.clone(),
         sender,
         task_state.output_event_stream.clone(),
+        task_state.id,
     )
     .await?;
 

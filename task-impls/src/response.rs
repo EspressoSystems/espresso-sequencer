@@ -7,7 +7,7 @@ use async_std::task::JoinHandle;
 use futures::{channel::mpsc, FutureExt, StreamExt};
 use hotshot_task::dependency::{Dependency, EventDependency};
 use hotshot_types::{
-    consensus::{Consensus, LockedConsensusState},
+    consensus::{Consensus, LockedConsensusState, OuterConsensus},
     data::VidDisperseShare,
     message::{
         DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message, MessageKind, Proposal,
@@ -23,6 +23,7 @@ use hotshot_types::{
 use sha2::{Digest, Sha256};
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
+use tracing::instrument;
 
 use crate::events::HotShotEvent;
 
@@ -46,6 +47,8 @@ pub struct NetworkResponseState<TYPES: NodeType> {
     pub_key: TYPES::SignatureKey,
     /// This replicas private key
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+    /// The node's id
+    id: u64,
 }
 
 impl<TYPES: NodeType> NetworkResponseState<TYPES> {
@@ -56,6 +59,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
         quorum: Arc<TYPES::Membership>,
         pub_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+        id: u64,
     ) -> Self {
         Self {
             consensus,
@@ -63,6 +67,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
             quorum,
             pub_key,
             private_key,
+            id,
         }
     }
 
@@ -133,6 +138,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
     /// Get the VID share from consensus storage, or calculate it from the payload for
     /// the view, if we have the payload.  Stores all the shares calculated from the payload
     /// if the calculation was done
+    #[instrument(skip_all, target = "NetworkResponseState", fields(id = self.id))]
     async fn get_or_calc_vid_share(
         &self,
         view: TYPES::Time,
@@ -147,7 +153,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
             .is_some_and(|m| m.contains_key(key));
         if !contained {
             if Consensus::calculate_and_update_vid(
-                Arc::clone(&self.consensus),
+                OuterConsensus::new(Arc::clone(&self.consensus)),
                 view,
                 Arc::clone(&self.quorum),
                 &self.private_key,
@@ -158,7 +164,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
                 // Sleep in hope we receive txns in the meantime
                 async_sleep(TXNS_TIMEOUT).await;
                 Consensus::calculate_and_update_vid(
-                    Arc::clone(&self.consensus),
+                    OuterConsensus::new(Arc::clone(&self.consensus)),
                     view,
                     Arc::clone(&self.quorum),
                     &self.private_key,

@@ -15,7 +15,7 @@ use hotshot_task::{
     dependency_task::HandleDepOutput,
 };
 use hotshot_types::{
-    consensus::{CommitmentAndMetadata, Consensus},
+    consensus::{CommitmentAndMetadata, OuterConsensus},
     data::{Leaf, QuorumProposal, VidDisperse, ViewChangeEvidence},
     message::Proposal,
     simple_certificate::UpgradeCertificate,
@@ -23,7 +23,7 @@ use hotshot_types::{
         block_contents::BlockHeader, node_implementation::NodeType, signature_key::SignatureKey,
     },
 };
-use tracing::{debug, error};
+use tracing::{debug, error, instrument};
 use vbs::version::Version;
 
 use crate::{
@@ -83,7 +83,7 @@ pub struct ProposalDependencyHandle<TYPES: NodeType> {
     pub round_start_delay: u64,
 
     /// Shared consensus task state
-    pub consensus: Arc<RwLock<Consensus<TYPES>>>,
+    pub consensus: OuterConsensus<TYPES>,
 
     /// Globally shared reference to the current network version.
     pub version: Arc<RwLock<Version>>,
@@ -98,12 +98,16 @@ pub struct ProposalDependencyHandle<TYPES: NodeType> {
 
     /// An upgrade certificate that has been decided on, if any.
     pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
+
+    /// The node's id
+    pub id: u64,
 }
 
 impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
     /// Publishes a proposal given the [`CommitmentAndMetadata`], [`VidDisperse`]
     /// and high qc [`hotshot_types::simple_certificate::QuorumCertificate`],
     /// with optional [`ViewChangeEvidence`].
+    #[instrument(skip_all, target = "ProposalDependencyHandle", fields(id = self.id, view_number = *self.view_number, latest_proposed_view = *self.latest_proposed_view))]
     async fn publish_proposal(
         &self,
         commitment_and_metadata: CommitmentAndMetadata<TYPES>,
@@ -116,7 +120,7 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
             self.view_number,
             Arc::clone(&self.quorum_membership),
             self.public_key.clone(),
-            Arc::clone(&self.consensus),
+            OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
         )
         .await?;
 
@@ -233,7 +237,7 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
             // The proposal for the high qc view is missing, try to get it asynchronously
             let memberhsip = Arc::clone(&self.quorum_membership);
             let sender = self.sender.clone();
-            let consensus = Arc::clone(&self.consensus);
+            let consensus = OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus));
             async_spawn(async move {
                 fetch_proposal(high_qc_view_number, sender, memberhsip, consensus).await
             });

@@ -14,7 +14,7 @@ use hotshot_types::{
     },
     vote::HasViewNumber,
 };
-use tracing::{debug, warn};
+use tracing::{debug, instrument, warn};
 
 use super::Consensus2TaskState;
 use crate::{
@@ -117,6 +117,7 @@ pub(crate) async fn handle_timeout_vote_recv<TYPES: NodeType, I: NodeImplementat
 }
 
 /// Handle a `ViewChange` event.
+#[instrument(skip_all)]
 pub(crate) async fn handle_view_change<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     new_view_number: TYPES::Time,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
@@ -214,6 +215,7 @@ pub(crate) async fn handle_view_change<TYPES: NodeType, I: NodeImplementation<TY
 }
 
 /// Handle a `Timeout` event.
+#[instrument(skip_all)]
 pub(crate) async fn handle_timeout<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     view_number: TYPES::Time,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,

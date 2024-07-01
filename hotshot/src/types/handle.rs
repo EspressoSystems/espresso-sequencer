@@ -18,6 +18,7 @@ use hotshot_types::{
 };
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
+use tracing::instrument;
 
 use crate::{traits::NodeImplementation, types::Event, SystemContext};
 
@@ -191,6 +192,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
     }
 
     /// Wrapper to get the view number this node is on.
+    #[instrument(skip_all, target = "SystemContextHandle", fields(id = self.hotshot.id))]
     pub async fn cur_view(&self) -> TYPES::Time {
         self.hotshot.consensus.read().await.cur_view()
     }

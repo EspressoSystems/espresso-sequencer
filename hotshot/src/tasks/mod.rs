@@ -72,6 +72,7 @@ pub async fn add_response_task<TYPES: NodeType, I: NodeImplementation<TYPES>>(
         handle.hotshot.memberships.quorum_membership.clone().into(),
         handle.public_key().clone(),
         handle.private_key().clone(),
+        handle.hotshot.id,
     );
     handle.network_registry.register(run_response_task::<TYPES>(
         state,

@@ -15,7 +15,7 @@ use hotshot_task::{
     task::TaskState,
 };
 use hotshot_types::{
-    consensus::Consensus,
+    consensus::OuterConsensus,
     data::{Leaf, VidDisperseShare, ViewNumber},
     event::Event,
     message::Proposal,
@@ -69,7 +69,7 @@ struct VoteDependencyHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Private Key.
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// Reference to consensus. The replica will require a write lock on this.
-    consensus: Arc<RwLock<Consensus<TYPES>>>,
+    consensus: OuterConsensus<TYPES>,
     /// Immutable instance state
     instance_state: Arc<TYPES::InstanceState>,
     /// Membership for Quorum certs/votes.
@@ -90,6 +90,7 @@ struct VoteDependencyHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> VoteDependencyHandle<TYPES, I> {
     /// Updates the shared consensus state with the new voting data.
+    #[instrument(skip_all, target = "VoteDependencyHandle", fields(id = self.id, view = *self.view_number))]
     async fn update_shared_state(
         &self,
         proposed_leaf: &Leaf<TYPES>,
@@ -111,7 +112,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> VoteDependencyHand
                 justify_qc.view_number(),
                 self.sender.clone(),
                 Arc::clone(&self.quorum_membership),
-                Arc::clone(&self.consensus),
+                OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
             )
             .await
             .ok(),
@@ -359,7 +360,7 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
 
     /// Reference to consensus. The replica will require a write lock on this.
-    pub consensus: Arc<RwLock<Consensus<TYPES>>>,
+    pub consensus: OuterConsensus<TYPES>,
 
     /// Immutable instance state
     pub instance_state: Arc<TYPES::InstanceState>,
@@ -507,7 +508,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
             VoteDependencyHandle::<TYPES, I> {
                 public_key: self.public_key.clone(),
                 private_key: self.private_key.clone(),
-                consensus: Arc::clone(&self.consensus),
+                consensus: OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
                 instance_state: Arc::clone(&self.instance_state),
                 quorum_membership: Arc::clone(&self.quorum_membership),
                 storage: Arc::clone(&self.storage),
@@ -547,7 +548,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
     }
 
     /// Handle a vote dependent event received on the event stream
-    #[instrument(skip_all, fields(id = self.id, latest_voted_view = *self.latest_voted_view), name = "Quorum vote handle", level = "error")]
+    #[instrument(skip_all, fields(id = self.id, latest_voted_view = *self.latest_voted_view), name = "Quorum vote handle", level = "error", target = "QuorumVoteTaskState")]
     pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,

@@ -19,9 +19,12 @@ use hotshot_task_impls::{
     consensus2::Consensus2TaskState, quorum_proposal::QuorumProposalTaskState,
     quorum_proposal_recv::QuorumProposalRecvTaskState, quorum_vote::QuorumVoteTaskState,
 };
-use hotshot_types::traits::{
-    consensus_api::ConsensusApi,
-    node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+use hotshot_types::{
+    consensus::OuterConsensus,
+    traits::{
+        consensus_api::ConsensusApi,
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+    },
 };
 
 use crate::types::SystemContextHandle;
@@ -44,7 +47,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
     async fn create_from(handle: &SystemContextHandle<TYPES, I>) -> NetworkRequestState<TYPES, I> {
         NetworkRequestState {
             network: Arc::clone(&handle.hotshot.network),
-            state: handle.hotshot.consensus(),
+            state: OuterConsensus::new(handle.hotshot.consensus()),
             view: handle.cur_view().await,
             delay: handle.hotshot.config.data_request_delay,
             da_membership: handle.hotshot.memberships.da_membership.clone(),
@@ -111,7 +114,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
 {
     async fn create_from(handle: &SystemContextHandle<TYPES, I>) -> VidTaskState<TYPES, I> {
         VidTaskState {
-            consensus: handle.hotshot.consensus(),
+            consensus: OuterConsensus::new(handle.hotshot.consensus()),
             cur_view: handle.cur_view().await,
             vote_collector: None,
             network: Arc::clone(&handle.hotshot.network),
@@ -129,7 +132,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
 {
     async fn create_from(handle: &SystemContextHandle<TYPES, I>) -> DaTaskState<TYPES, I> {
         DaTaskState {
-            consensus: handle.hotshot.consensus(),
+            consensus: OuterConsensus::new(handle.hotshot.consensus()),
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),
             da_membership: handle.hotshot.memberships.da_membership.clone().into(),
             network: Arc::clone(&handle.hotshot.network),
@@ -182,7 +185,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
         TransactionTaskState {
             builder_timeout: handle.builder_timeout(),
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),
-            consensus: handle.hotshot.consensus(),
+            consensus: OuterConsensus::new(handle.hotshot.consensus()),
             cur_view: handle.cur_view().await,
             network: Arc::clone(&handle.hotshot.network),
             membership: handle.hotshot.memberships.quorum_membership.clone().into(),
@@ -213,7 +216,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
         let timeout_task = handle.spawn_initial_timeout_task();
 
         ConsensusTaskState {
-            consensus,
+            consensus: OuterConsensus::new(consensus),
             instance_state: handle.hotshot.instance_state(),
             timeout: handle.hotshot.config.next_view_timeout,
             round_start_delay: handle.hotshot.config.round_start_delay,
@@ -254,7 +257,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
         QuorumVoteTaskState {
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
-            consensus,
+            consensus: OuterConsensus::new(consensus),
             instance_state: handle.hotshot.instance_state(),
             latest_voted_view: handle.cur_view().await,
             vote_dependencies: HashMap::new(),
@@ -286,7 +289,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             proposal_dependencies: HashMap::new(),
             network: Arc::clone(&handle.hotshot.network),
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),
-            consensus,
+            consensus: OuterConsensus::new(consensus),
             instance_state: handle.hotshot.instance_state(),
             timeout_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
             quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
@@ -318,7 +321,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
         QuorumProposalRecvTaskState {
             public_key: handle.public_key().clone(),
             private_key: handle.private_key().clone(),
-            consensus,
+            consensus: OuterConsensus::new(consensus),
             cur_view: handle.cur_view().await,
             cur_view_time: Utc::now().timestamp(),
             network: Arc::clone(&handle.hotshot.network),
@@ -364,7 +367,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),
             timeout_task,
             timeout: handle.hotshot.config.next_view_timeout,
-            consensus,
+            consensus: OuterConsensus::new(consensus),
             last_decided_view: handle.cur_view().await,
             id: handle.hotshot.id,
             version: Arc::clone(&handle.hotshot.version),

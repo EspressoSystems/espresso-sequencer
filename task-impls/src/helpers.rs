@@ -4,16 +4,20 @@ use std::{
     sync::Arc,
 };
 
+use crate::{
+    events::{HotShotEvent, ProposalMissing},
+    request::REQUEST_TIMEOUT,
+};
 use anyhow::{bail, ensure, Context, Result};
 use async_broadcast::{broadcast, SendError, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn, async_timeout};
-use async_lock::{RwLock, RwLockUpgradableReadGuard};
+use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use chrono::Utc;
 use committable::{Commitment, Committable};
 use hotshot_types::{
-    consensus::Consensus,
+    consensus::{ConsensusUpgradableReadLockGuard, OuterConsensus},
     data::{Leaf, QuorumProposal, ViewChangeEvidence},
     event::{Event, EventType, LeafInfo},
     message::Proposal,
@@ -30,19 +34,14 @@ use hotshot_types::{
 };
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-use tracing::{debug, error, info, warn};
-
-use crate::{
-    events::{HotShotEvent, ProposalMissing},
-    request::REQUEST_TIMEOUT,
-};
+use tracing::{debug, error, info, instrument, warn};
 
 /// Trigger a request to the network for a proposal for a view and wait for the response
 pub(crate) async fn fetch_proposal<TYPES: NodeType>(
     view: TYPES::Time,
     event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     quorum_membership: Arc<TYPES::Membership>,
-    consensus: Arc<RwLock<Consensus<TYPES>>>,
+    consensus: OuterConsensus<TYPES>,
 ) -> Result<Leaf<TYPES>> {
     tracing::debug!("Fetching proposal for view {:?}", view);
     let (tx, mut rx) = broadcast(1);
@@ -162,7 +161,7 @@ impl<TYPES: NodeType + Default> Default for LeafChainTraversalOutcome<TYPES> {
 /// the anchor view will be set to view 6, with the locked view as view 7.
 pub async fn decide_from_proposal<TYPES: NodeType>(
     proposal: &QuorumProposal<TYPES>,
-    consensus: Arc<RwLock<Consensus<TYPES>>>,
+    consensus: OuterConsensus<TYPES>,
     existing_upgrade_cert: &Option<UpgradeCertificate<TYPES>>,
     public_key: &TYPES::SignatureKey,
 ) -> LeafChainTraversalOutcome<TYPES> {
@@ -282,7 +281,7 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType>(
     next_proposal_view_number: TYPES::Time,
     quorum_membership: Arc<TYPES::Membership>,
     public_key: TYPES::SignatureKey,
-    consensus: Arc<RwLock<Consensus<TYPES>>>,
+    consensus: OuterConsensus<TYPES>,
 ) -> Result<(Leaf<TYPES>, Arc<<TYPES as NodeType>::ValidatedState>)> {
     ensure!(
         quorum_membership.leader(next_proposal_view_number) == public_key,
@@ -351,7 +350,7 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType>(
 pub async fn temp_validate_proposal_safety_and_liveness<TYPES: NodeType>(
     proposal: Proposal<TYPES, QuorumProposal<TYPES>>,
     parent_leaf: Leaf<TYPES>,
-    consensus: Arc<RwLock<Consensus<TYPES>>>,
+    consensus: OuterConsensus<TYPES>,
     decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
     quorum_membership: Arc<TYPES::Membership>,
     view_leader_key: TYPES::SignatureKey,
@@ -487,16 +486,18 @@ pub async fn temp_validate_proposal_safety_and_liveness<TYPES: NodeType>(
 /// we merge the dependency tasks.
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_lines)]
+#[instrument(skip_all, fields(id = id, view = *proposal.data.view_number()))]
 pub async fn validate_proposal_safety_and_liveness<TYPES: NodeType>(
     proposal: Proposal<TYPES, QuorumProposal<TYPES>>,
     parent_leaf: Leaf<TYPES>,
-    consensus: Arc<RwLock<Consensus<TYPES>>>,
+    consensus: OuterConsensus<TYPES>,
     decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     quorum_membership: Arc<TYPES::Membership>,
     view_leader_key: TYPES::SignatureKey,
     event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     sender: TYPES::SignatureKey,
     event_sender: Sender<Event<TYPES>>,
+    id: u64,
 ) -> Result<()> {
     let view_number = proposal.data.view_number();
 
@@ -706,7 +707,7 @@ pub(crate) async fn update_view<TYPES: NodeType>(
     new_view: TYPES::Time,
     event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
     timeout: u64,
-    consensus: Arc<RwLock<Consensus<TYPES>>>,
+    consensus: OuterConsensus<TYPES>,
     cur_view: &mut TYPES::Time,
     cur_view_time: &mut i64,
     timeout_task: &mut JoinHandle<()>,
@@ -794,7 +795,7 @@ pub(crate) async fn update_view<TYPES: NodeType>(
                 - usize::try_from(consensus.last_decided_view().u64()).unwrap(),
         );
     }
-    let mut consensus = RwLockUpgradableReadGuard::upgrade(consensus).await;
+    let mut consensus = ConsensusUpgradableReadLockGuard::upgrade(consensus).await;
     if let Err(e) = consensus.update_view(new_view) {
         tracing::trace!("{e:?}");
     }

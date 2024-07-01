@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use futures::future::join_all;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
-    consensus::{CommitmentAndMetadata, Consensus},
+    consensus::{CommitmentAndMetadata, OuterConsensus},
     data::{QuorumProposal, VidDisperseShare, ViewChangeEvidence},
     event::{Event, EventType},
     message::Proposal,
@@ -59,7 +59,7 @@ pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Our Private Key
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// Reference to consensus. The replica will require a write lock on this.
-    pub consensus: Arc<RwLock<Consensus<TYPES>>>,
+    pub consensus: OuterConsensus<TYPES>,
     /// Immutable instance state
     pub instance_state: Arc<TYPES::InstanceState>,
     /// View timeout from config.
@@ -196,6 +196,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
     }
 
     /// Publishes a proposal
+    #[instrument(skip_all, target = "ConsensusTaskState", fields(id = self.id, view = *self.cur_view))]
     async fn publish_proposal(
         &mut self,
         view: TYPES::Time,
@@ -207,7 +208,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
             Arc::clone(&self.quorum_membership),
             self.public_key.clone(),
             self.private_key.clone(),
-            Arc::clone(&self.consensus),
+            OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
             self.round_start_delay,
             self.formed_upgrade_certificate.clone(),
             self.decided_upgrade_cert.clone(),
@@ -215,6 +216,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
             self.proposal_cert.clone(),
             Arc::clone(&self.instance_state),
             *self.version.read().await,
+            self.id,
         )
         .await?;
 
@@ -228,6 +230,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
 
     /// Spawn a vote task for the given view.  Will try to vote
     /// and emit a `QuorumVoteSend` event we should vote on the current proposal
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), target = "ConsensusTaskState")]
     async fn spawn_vote_task(
         &mut self,
         view: TYPES::Time,
@@ -242,12 +245,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
         let upgrade = self.decided_upgrade_cert.clone();
         let pub_key = self.public_key.clone();
         let priv_key = self.private_key.clone();
-        let consensus = Arc::clone(&self.consensus);
+        let consensus = OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus));
         let storage = Arc::clone(&self.storage);
         let quorum_mem = Arc::clone(&self.quorum_membership);
         let da_mem = Arc::clone(&self.da_membership);
         let instance_state = Arc::clone(&self.instance_state);
         let version = *self.version.read().await;
+        let id = self.id;
         let handle = async_spawn(async move {
             update_state_and_vote_if_able::<TYPES, I>(
                 view,
@@ -259,6 +263,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                 instance_state,
                 (priv_key, upgrade, da_mem, event_stream),
                 version,
+                id,
             )
             .await;
         });
@@ -266,7 +271,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
     }
 
     /// Handles a consensus event received on the event stream
-    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus replica task", level = "error")]
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Consensus replica task", level = "error", target = "ConsensusTaskState")]
     pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
@@ -525,7 +530,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                     new_view,
                     &event_stream,
                     self.timeout,
-                    Arc::clone(&self.consensus),
+                    OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
                     &mut self.cur_view,
                     &mut self.cur_view_time,
                     &mut self.timeout_task,
