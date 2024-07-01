@@ -1,0 +1,40 @@
+# Copyright (c) 2022 Espresso Systems (espressosys.com)
+# This file is part of the HotShot Query Service library.
+#
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU
+# General Public License as published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+# even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+# You should have received a copy of the GNU General Public License along with this program. If not,
+# see <https://www.gnu.org/licenses/>.
+
+[meta]
+FORMAT_VERSION = "0.1.0"
+NAME = "node-validator"
+DESCRIPTION = """
+HotShot chain state
+
+The availability API provides an objective view of the HotShot blockchain. It provides access only
+to normative data: that is, data which is agreed upon by all honest consensus nodes and which is
+immutable. This means access to core consensus data structures including leaves, blocks, and
+headers, where each query is pure and idempotent. This also means that it is possible for a client
+to verify all of the information provided by this API, by running a HotShot light client and
+downloading the appropriate evidence with each query.
+
+This API does not provide any queries which represent only the _current_ state of the chain or may
+change over time, and it does not provide information for which there is not (yet) agreement of a
+supermajority of consensus nodes. For information about the current dynamic state of consensus and
+uncommitted state, try the `status` API. For information about the chain which is tabulated by this
+specific node and not subject to full consensus agreement, try the `node` API.
+"""
+
+[route.details]
+PATH = ["details"]
+METHOD = "SOCKET"
+DOC = """
+Subscribe to a stream of blocks in the order they are sequenced, starting at `:height`.
+
+Opens a WebSockets connection and sends a stream of the same data type returned by `block/:height`.
+"""
