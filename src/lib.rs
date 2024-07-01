@@ -33,7 +33,7 @@
 //!     fetching::provider::NoFetching,
 //!     node,
 //!     status::UpdateStatusData,
-//!     status, Error
+//!     status, Error,
 //!     testing::mocks::MockBase,
 //! };
 //!
@@ -52,6 +52,7 @@
 //! let hotshot = SystemContext::<AppTypes, AppNodeImpl>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
 //!     ConsensusMetricsValue::new(&*data_source.populate_metrics()), panic!(),
+//!     panic!()
 //!     // Other fields omitted
 //! ).await.map_err(Error::internal)?.0;
 //!
@@ -98,10 +99,9 @@
 //! # use async_std::task::spawn;
 //! # use hotshot::types::SystemContextHandle;
 //! # use vbs::version::StaticVersionType;
-//! # use hotshot_types::constants::MockBase;
 //! # use hotshot_query_service::{data_source::FileSystemDataSource, Error, Options};
 //! # use hotshot_query_service::fetching::provider::NoFetching;
-//! # use hotshot_query_service::testing::mocks::{MockNodeImpl, MockTypes};
+//! # use hotshot_query_service::testing::mocks::{MockBase, MockNodeImpl, MockTypes};
 //! # use std::path::Path;
 //! # async fn doc(storage_path: &Path, options: Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
 //! use hotshot_query_service::run_standalone_service;
@@ -179,11 +179,11 @@
 //! # use async_std::sync::RwLock;
 //! # use async_trait::async_trait;
 //! # use futures::FutureExt;
-//! # use hotshot_types::constants::MockBase;
 //! # use hotshot_query_service::availability::{
 //! #   self, AvailabilityDataSource, FetchBlockSnafu, TransactionIndex,
 //! # };
 //! # use hotshot_query_service::testing::mocks::MockTypes as AppTypes;
+//! # use hotshot_query_service::testing::mocks::MockBase;
 //! # use hotshot_query_service::Error;
 //! # use snafu::ResultExt;
 //! # use tide_disco::{api::ApiError, method::ReadState, Api, App, StatusCode};
