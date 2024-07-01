@@ -1633,6 +1633,48 @@
 <a href="#1633" id="1633">1633</a>
 <a href="#1634" id="1634">1634</a>
 <a href="#1635" id="1635">1635</a>
+<a href="#1636" id="1636">1636</a>
+<a href="#1637" id="1637">1637</a>
+<a href="#1638" id="1638">1638</a>
+<a href="#1639" id="1639">1639</a>
+<a href="#1640" id="1640">1640</a>
+<a href="#1641" id="1641">1641</a>
+<a href="#1642" id="1642">1642</a>
+<a href="#1643" id="1643">1643</a>
+<a href="#1644" id="1644">1644</a>
+<a href="#1645" id="1645">1645</a>
+<a href="#1646" id="1646">1646</a>
+<a href="#1647" id="1647">1647</a>
+<a href="#1648" id="1648">1648</a>
+<a href="#1649" id="1649">1649</a>
+<a href="#1650" id="1650">1650</a>
+<a href="#1651" id="1651">1651</a>
+<a href="#1652" id="1652">1652</a>
+<a href="#1653" id="1653">1653</a>
+<a href="#1654" id="1654">1654</a>
+<a href="#1655" id="1655">1655</a>
+<a href="#1656" id="1656">1656</a>
+<a href="#1657" id="1657">1657</a>
+<a href="#1658" id="1658">1658</a>
+<a href="#1659" id="1659">1659</a>
+<a href="#1660" id="1660">1660</a>
+<a href="#1661" id="1661">1661</a>
+<a href="#1662" id="1662">1662</a>
+<a href="#1663" id="1663">1663</a>
+<a href="#1664" id="1664">1664</a>
+<a href="#1665" id="1665">1665</a>
+<a href="#1666" id="1666">1666</a>
+<a href="#1667" id="1667">1667</a>
+<a href="#1668" id="1668">1668</a>
+<a href="#1669" id="1669">1669</a>
+<a href="#1670" id="1670">1670</a>
+<a href="#1671" id="1671">1671</a>
+<a href="#1672" id="1672">1672</a>
+<a href="#1673" id="1673">1673</a>
+<a href="#1674" id="1674">1674</a>
+<a href="#1675" id="1675">1675</a>
+<a href="#1676" id="1676">1676</a>
+<a href="#1677" id="1677">1677</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="self">self</span>::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
 <span class="kw">use crate</span>::{
     network,
@@ -1988,9 +2030,9 @@
     <span class="kw">use crate</span>::{
         catchup::{mock::MockStateCatchup, StateCatchup},
         genesis::Upgrade,
-        persistence::{no_storage, PersistenceOptions, SequencerPersistence},
+        persistence::{no_storage, PersistenceOptions},
         state::{BlockMerkleTree, ValidatedState},
-        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig},
+        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig, TestConfigBuilder},
     };
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>async_std::task::sleep;
@@ -2014,15 +2056,123 @@
     <span class="kw">use </span>std::{collections::BTreeMap, time::Duration};
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>tide_disco::error::ServerError;
-    <span class="kw">use </span>url::Url;
     <span class="kw">use </span>vbs::version::Version;
 
     <span class="kw">pub const </span>STAKE_TABLE_CAPACITY_FOR_TEST: u64 = <span class="number">10</span>;
 
-    <span class="kw">pub struct </span>TestNetwork&lt;P: SequencerPersistence&gt; {
-        <span class="kw">pub </span>server: SequencerContext&lt;network::Memory, P, SequencerVersion&gt;,
-        <span class="kw">pub </span>peers: Vec&lt;SequencerContext&lt;network::Memory, P, SequencerVersion&gt;&gt;,
-        <span class="kw">pub </span>cfg: TestConfig,
+    <span class="kw">pub struct </span>TestNetwork&lt;P: PersistenceOptions, <span class="kw">const </span>NUM_NODES: usize&gt; {
+        <span class="kw">pub </span>server: SequencerContext&lt;network::Memory, P::Persistence, SequencerVersion&gt;,
+        <span class="kw">pub </span>peers: Vec&lt;SequencerContext&lt;network::Memory, P::Persistence, SequencerVersion&gt;&gt;,
+        <span class="kw">pub </span>cfg: TestConfig&lt;{ NUM_NODES }&gt;,
+    }
+
+    <span class="kw">pub struct </span>TestNetworkConfig&lt;<span class="kw">const </span>NUM_NODES: usize, P, C&gt;
+    <span class="kw">where
+        </span>P: PersistenceOptions,
+        C: StateCatchup + <span class="lifetime">'static</span>,
+    {
+        state: [ValidatedState; NUM_NODES],
+        persistence: [P; NUM_NODES],
+        catchup: [C; NUM_NODES],
+        network_config: TestConfig&lt;{ NUM_NODES }&gt;,
+        api_config: Options,
+    }
+
+    <span class="kw">pub struct </span>TestNetworkConfigBuilder&lt;<span class="kw">const </span>NUM_NODES: usize, P, C&gt;
+    <span class="kw">where
+        </span>P: PersistenceOptions,
+        C: StateCatchup + <span class="lifetime">'static</span>,
+    {
+        state: [ValidatedState; NUM_NODES],
+        persistence: <span class="prelude-ty">Option</span>&lt;[P; NUM_NODES]&gt;,
+        catchup: <span class="prelude-ty">Option</span>&lt;[C; NUM_NODES]&gt;,
+        api_config: <span class="prelude-ty">Option</span>&lt;Options&gt;,
+        network_config: <span class="prelude-ty">Option</span>&lt;TestConfig&lt;{ NUM_NODES }&gt;&gt;,
+    }
+
+    <span class="kw">impl </span>Default <span class="kw">for </span>TestNetworkConfigBuilder&lt;<span class="number">5</span>, no_storage::Options, MockStateCatchup&gt; {
+        <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+            TestNetworkConfigBuilder {
+                state: std::array::from_fn(|<span class="kw">_</span>| ValidatedState::default()),
+                persistence: <span class="prelude-val">Some</span>([no_storage::Options; <span class="number">5</span>]),
+                catchup: <span class="prelude-val">Some</span>(std::array::from_fn(|<span class="kw">_</span>| MockStateCatchup::default())),
+                network_config: <span class="prelude-val">None</span>,
+                api_config: <span class="prelude-val">None</span>,
+            }
+        }
+    }
+
+    <span class="kw">impl</span>&lt;<span class="kw">const </span>NUM_NODES: usize&gt;
+        TestNetworkConfigBuilder&lt;{ NUM_NODES }, no_storage::Options, MockStateCatchup&gt;
+    {
+        <span class="kw">pub fn </span>with_num_nodes(
+        ) -&gt; TestNetworkConfigBuilder&lt;{ NUM_NODES }, no_storage::Options, MockStateCatchup&gt;
+        {
+            TestNetworkConfigBuilder {
+                state: std::array::from_fn(|<span class="kw">_</span>| ValidatedState::default()),
+                persistence: <span class="prelude-val">Some</span>([no_storage::Options; { NUM_NODES }]),
+                catchup: <span class="prelude-val">Some</span>(std::array::from_fn(|<span class="kw">_</span>| MockStateCatchup::default())),
+                network_config: <span class="prelude-val">None</span>,
+                api_config: <span class="prelude-val">None</span>,
+            }
+        }
+    }
+
+    <span class="kw">impl</span>&lt;<span class="kw">const </span>NUM_NODES: usize, P, C&gt; TestNetworkConfigBuilder&lt;{ NUM_NODES }, P, C&gt;
+    <span class="kw">where
+        </span>P: PersistenceOptions,
+        C: StateCatchup + <span class="lifetime">'static</span>,
+    {
+        <span class="kw">pub fn </span>states(<span class="kw-2">mut </span><span class="self">self</span>, state: [ValidatedState; NUM_NODES]) -&gt; <span class="self">Self </span>{
+            <span class="self">self</span>.state = state;
+            <span class="self">self
+        </span>}
+
+        <span class="kw">pub fn </span>persistences&lt;NP: PersistenceOptions&gt;(
+            <span class="self">self</span>,
+            persistence: [NP; NUM_NODES],
+        ) -&gt; TestNetworkConfigBuilder&lt;{ NUM_NODES }, NP, C&gt; {
+            TestNetworkConfigBuilder {
+                state: <span class="self">self</span>.state,
+                catchup: <span class="self">self</span>.catchup,
+                network_config: <span class="self">self</span>.network_config,
+                api_config: <span class="self">self</span>.api_config,
+                persistence: <span class="prelude-val">Some</span>(persistence),
+            }
+        }
+
+        <span class="kw">pub fn </span>api_config(<span class="kw-2">mut </span><span class="self">self</span>, api_config: Options) -&gt; <span class="self">Self </span>{
+            <span class="self">self</span>.api_config = <span class="prelude-val">Some</span>(api_config);
+            <span class="self">self
+        </span>}
+
+        <span class="kw">pub fn </span>catchups&lt;NC: StateCatchup + <span class="lifetime">'static</span>&gt;(
+            <span class="self">self</span>,
+            catchup: [NC; NUM_NODES],
+        ) -&gt; TestNetworkConfigBuilder&lt;{ NUM_NODES }, P, NC&gt; {
+            TestNetworkConfigBuilder {
+                state: <span class="self">self</span>.state,
+                catchup: <span class="prelude-val">Some</span>(catchup),
+                network_config: <span class="self">self</span>.network_config,
+                api_config: <span class="self">self</span>.api_config,
+                persistence: <span class="self">self</span>.persistence,
+            }
+        }
+
+        <span class="kw">pub fn </span>network_config(<span class="kw-2">mut </span><span class="self">self</span>, network_config: TestConfig&lt;{ NUM_NODES }&gt;) -&gt; <span class="self">Self </span>{
+            <span class="self">self</span>.network_config = <span class="prelude-val">Some</span>(network_config);
+            <span class="self">self
+        </span>}
+
+        <span class="kw">pub fn </span>build(<span class="self">self</span>) -&gt; TestNetworkConfig&lt;{ NUM_NODES }, P, C&gt; {
+            TestNetworkConfig {
+                state: <span class="self">self</span>.state,
+                persistence: <span class="self">self</span>.persistence.unwrap(),
+                catchup: <span class="self">self</span>.catchup.unwrap(),
+                network_config: <span class="self">self</span>.network_config.unwrap(),
+                api_config: <span class="self">self</span>.api_config.unwrap(),
+            }
+        }
     }
 
     <span class="attr">#[derive(Clone, Debug)]
@@ -2034,85 +2184,64 @@
         <span class="kw">pub </span>stop_voting_view: u64,
     }
 
-    <span class="kw">impl</span>&lt;P: SequencerPersistence&gt; TestNetwork&lt;P&gt; {
-        <span class="kw">pub async fn </span>with_state(
-            api_config: Options,
-            state: [ValidatedState; TestConfig::NUM_NODES],
-            persistence: [<span class="kw">impl </span>PersistenceOptions&lt;Persistence = P&gt;; TestConfig::NUM_NODES],
-            catchup: [<span class="kw">impl </span>StateCatchup + <span class="lifetime">'static</span>; TestConfig::NUM_NODES],
-            l1: Url,
-            upgrades: <span class="prelude-ty">Option</span>&lt;TestNetworkUpgrades&gt;,
-            builder_port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
+    <span class="kw">impl</span>&lt;P: PersistenceOptions, <span class="kw">const </span>NUM_NODES: usize&gt; TestNetwork&lt;P, { NUM_NODES }&gt; {
+        <span class="kw">pub async fn </span>new&lt;C: StateCatchup + <span class="lifetime">'static</span>&gt;(
+            cfg: TestNetworkConfig&lt;{ NUM_NODES }, P, C&gt;,
         ) -&gt; <span class="self">Self </span>{
-            <span class="kw">let </span><span class="kw-2">mut </span>cfg = TestConfig::default_with_l1(l1);
-            cfg.builder_port = builder_port;
-            <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrades) = upgrades {
-                cfg.set_upgrade_parameters(
-                    upgrades.start_proposing_view,
-                    upgrades.stop_proposing_view,
-                    upgrades.start_voting_view,
-                    upgrades.stop_voting_view,
-                );
-            }
+            <span class="kw">let </span><span class="kw-2">mut </span>cfg = cfg;
+            <span class="kw">let </span>(builder_task, builder_url) =
+                run_test_builder::&lt;{ NUM_NODES }&gt;(cfg.network_config.builder_port()).<span class="kw">await</span>;
 
-            <span class="self">Self</span>::with_state_and_config(api_config, state, persistence, catchup, cfg).<span class="kw">await
-        </span>}
+            cfg.network_config
+                .set_builder_urls(<span class="macro">vec1::vec1!</span>[builder_url]);
 
-        <span class="kw">pub async fn </span>with_state_and_config(
-            api_config: Options,
-            state: [ValidatedState; TestConfig::NUM_NODES],
-            persistence: [<span class="kw">impl </span>PersistenceOptions&lt;Persistence = P&gt;; TestConfig::NUM_NODES],
-            catchup: [<span class="kw">impl </span>StateCatchup + <span class="lifetime">'static</span>; TestConfig::NUM_NODES],
-            <span class="kw-2">mut </span>network_config: TestConfig,
-        ) -&gt; <span class="self">Self </span>{
-            <span class="kw">let </span>(builder_task, builder_url) = run_test_builder(network_config.builder_port).<span class="kw">await</span>;
-            network_config.set_builder_urls(<span class="macro">vec1::vec1!</span>[builder_url]);
-
-            <span class="kw">let </span><span class="kw-2">mut </span>nodes = join_all(<span class="macro">izip!</span>(state, persistence, catchup).enumerate().map(
-                |(i, (state, persistence, catchup))| {
-                    <span class="kw">let </span>opt = api_config.clone();
-                    <span class="kw">let </span>cfg = <span class="kw-2">&amp;</span>network_config;
-                    <span class="kw">let </span>upgrades_map = cfg.upgrades.clone().map(|e| e.upgrades).unwrap_or_default();
-                    <span class="kw">async move </span>{
-                        <span class="kw">if </span>i == <span class="number">0 </span>{
-                            opt.serve(
-                                |metrics| {
-                                    <span class="kw">let </span>cfg = cfg.clone();
-                                    <span class="kw">async move </span>{
-                                        cfg.init_node(
-                                            <span class="number">0</span>,
-                                            state,
-                                            persistence,
-                                            catchup,
-                                            <span class="kw-2">&amp;*</span>metrics,
-                                            STAKE_TABLE_CAPACITY_FOR_TEST,
-                                            SEQUENCER_VERSION,
-                                            upgrades_map,
-                                        )
-                                        .<span class="kw">await
-                                    </span>}
-                                    .boxed()
-                                },
-                                SEQUENCER_VERSION,
-                            )
-                            .<span class="kw">await
-                            </span>.unwrap()
-                        } <span class="kw">else </span>{
-                            cfg.init_node(
-                                i,
-                                state,
-                                persistence,
-                                catchup,
-                                <span class="kw-2">&amp;</span>NoMetrics,
-                                STAKE_TABLE_CAPACITY_FOR_TEST,
-                                SEQUENCER_VERSION,
-                                upgrades_map,
-                            )
-                            .<span class="kw">await
-                        </span>}
-                    }
-                },
-            ))
+            <span class="kw">let </span><span class="kw-2">mut </span>nodes = join_all(
+                <span class="macro">izip!</span>(cfg.state, cfg.persistence, cfg.catchup)
+                    .enumerate()
+                    .map(|(i, (state, persistence, catchup))| {
+                        <span class="kw">let </span>opt = cfg.api_config.clone();
+                        <span class="kw">let </span>cfg = <span class="kw-2">&amp;</span>cfg.network_config;
+                        <span class="kw">let </span>upgrades_map = cfg.upgrades().map(|e| e.upgrades).unwrap_or_default();
+                        <span class="kw">async move </span>{
+                            <span class="kw">if </span>i == <span class="number">0 </span>{
+                                opt.serve(
+                                    |metrics| {
+                                        <span class="kw">let </span>cfg = cfg.clone();
+                                        <span class="kw">async move </span>{
+                                            cfg.init_node(
+                                                <span class="number">0</span>,
+                                                state,
+                                                persistence,
+                                                catchup,
+                                                <span class="kw-2">&amp;*</span>metrics,
+                                                STAKE_TABLE_CAPACITY_FOR_TEST,
+                                                SEQUENCER_VERSION,
+                                                upgrades_map,
+                                            )
+                                            .<span class="kw">await
+                                        </span>}
+                                        .boxed()
+                                    },
+                                    SEQUENCER_VERSION,
+                                )
+                                .<span class="kw">await
+                                </span>.unwrap()
+                            } <span class="kw">else </span>{
+                                cfg.init_node(
+                                    i,
+                                    state,
+                                    persistence,
+                                    catchup,
+                                    <span class="kw-2">&amp;</span>NoMetrics,
+                                    STAKE_TABLE_CAPACITY_FOR_TEST,
+                                    SEQUENCER_VERSION,
+                                    upgrades_map,
+                                )
+                                .<span class="kw">await
+                            </span>}
+                        }
+                    }),
+            )
             .<span class="kw">await</span>;
 
             <span class="kw">let </span>handle_0 = <span class="kw-2">&amp;</span>nodes[<span class="number">0</span>];
@@ -2130,44 +2259,9 @@
             <span class="self">Self </span>{
                 server,
                 peers,
-                cfg: network_config,
+                cfg: cfg.network_config,
             }
         }
-
-        <span class="kw">pub async fn </span>new_with_config(
-            api_config: Options,
-            persistence: [<span class="kw">impl </span>PersistenceOptions&lt;Persistence = P&gt;; TestConfig::NUM_NODES],
-            network_config: TestConfig,
-        ) -&gt; <span class="self">Self </span>{
-            <span class="self">Self</span>::with_state_and_config(
-                api_config,
-                Default::default(),
-                persistence,
-                std::array::from_fn(|<span class="kw">_</span>| MockStateCatchup::default()),
-                network_config,
-            )
-            .<span class="kw">await
-        </span>}
-
-        <span class="comment">// TODO: Remove this constructor and rename `new_with_config` to `new`.
-        // https://github.com/EspressoSystems/espresso-sequencer/issues/1603
-        </span><span class="kw">pub async fn </span>new(
-            api_config: Options,
-            persistence: [<span class="kw">impl </span>PersistenceOptions&lt;Persistence = P&gt;; TestConfig::NUM_NODES],
-            l1: Url,
-            builder_port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
-        ) -&gt; <span class="self">Self </span>{
-            <span class="self">Self</span>::with_state(
-                api_config,
-                Default::default(),
-                persistence,
-                std::array::from_fn(|<span class="kw">_</span>| MockStateCatchup::default()),
-                l1,
-                Default::default(),
-                builder_port,
-            )
-            .<span class="kw">await
-        </span>}
 
         <span class="kw">pub fn </span>light_client_genesis(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ParsedLightClientState {
             <span class="kw">let </span>st = <span class="self">self</span>.cfg.stake_table();
@@ -2201,13 +2295,12 @@
         <span class="kw">let </span>options = opt(Options::with_port(port).status(Default::default()));
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
-        <span class="kw">let </span>_network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+        <span class="kw">let </span>network_config = TestConfigBuilder::default().l1_url(l1).build();
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        <span class="kw">let </span>_network = TestNetwork::new(config).<span class="kw">await</span>;
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         <span class="comment">// The status API is well tested in the query service repo. Here we are just smoke testing
@@ -2255,13 +2348,12 @@
         <span class="kw">let </span>options = opt(Options::with_port(port).submit(Default::default()));
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
-        <span class="kw">let </span>network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+        <span class="kw">let </span>network_config = TestConfigBuilder::default().l1_url(l1).build();
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        <span class="kw">let </span>network = TestNetwork::new(config).<span class="kw">await</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream().<span class="kw">await</span>;
 
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
@@ -2292,13 +2384,12 @@
         <span class="kw">let </span>options = opt(Options::with_port(port));
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
-        <span class="kw">let </span>network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+        <span class="kw">let </span>network_config = TestConfigBuilder::default().l1_url(l1).build();
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        <span class="kw">let </span>network = TestNetwork::new(config).<span class="kw">await</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>height: u64;
         <span class="comment">// Wait for block &gt;=2 appears
@@ -2336,13 +2427,12 @@
         <span class="kw">let </span>options = opt(Options::with_port(port).catchup(Default::default()));
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
-        <span class="kw">let </span>network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+        <span class="kw">let </span>network_config = TestConfigBuilder::default().l1_url(l1).build();
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        <span class="kw">let </span>network = TestNetwork::new(config).<span class="kw">await</span>;
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         <span class="comment">// Wait for a few blocks to be decided.
@@ -2423,8 +2513,7 @@
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use crate</span>::{
-        persistence::no_storage,
-        testing::{wait_for_decide_on_handle, TestConfig},
+        testing::{wait_for_decide_on_handle, TestConfigBuilder},
         Header, NamespaceId,
     };
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -2439,7 +2528,7 @@
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork,
+        TestNetwork, TestNetworkConfigBuilder,
     };
     <span class="kw">use </span>tide_disco::error::ServerError;
 
@@ -2475,13 +2564,12 @@
         <span class="kw">let </span>storage = D::create_storage().<span class="kw">await</span>;
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
-        <span class="kw">let </span>network = TestNetwork::new(
-            D::options(<span class="kw-2">&amp;</span>storage, Options::with_port(port)).submit(Default::default()),
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+        <span class="kw">let </span>network_config = TestConfigBuilder::default().l1_url(l1).build();
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::default()
+            .api_config(D::options(<span class="kw-2">&amp;</span>storage, Options::with_port(port)).submit(Default::default()))
+            .network_config(network_config)
+            .build();
+        <span class="kw">let </span>network = TestNetwork::new(config).<span class="kw">await</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream().<span class="kw">await</span>;
 
         <span class="comment">// Connect client.
@@ -2593,13 +2681,12 @@
 
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
-        <span class="kw">let </span>_network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+        <span class="kw">let </span>network_config = TestConfigBuilder::default().l1_url(l1).build();
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        <span class="kw">let </span>_network = TestNetwork::new(config).<span class="kw">await</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>subscribed_events = client
             .socket(<span class="string">"hotshot-events/events"</span>)
@@ -2638,7 +2725,7 @@
         genesis::{Upgrade, UpgradeType},
         persistence::no_storage,
         state::{FeeAccount, FeeAmount, ValidatedState},
-        testing::TestConfig,
+        testing::{TestConfig, TestConfigBuilder},
         Header,
     };
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -2663,7 +2750,7 @@
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork, TestNetworkUpgrades,
+        TestNetwork, TestNetworkConfigBuilder, TestNetworkUpgrades,
     };
     <span class="kw">use </span>tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     <span class="kw">use </span>vbs::version::Version;
@@ -2679,13 +2766,12 @@
         <span class="kw">let </span>options = Options::with_port(port);
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
-        <span class="kw">let </span>_network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+        <span class="kw">let </span>network_config = TestConfigBuilder::default().l1_url(l1).build();
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::&lt;<span class="number">5</span>, <span class="kw">_</span>, MockStateCatchup&gt;::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        <span class="kw">let </span>_network = TestNetwork::new(config).<span class="kw">await</span>;
 
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
         <span class="kw">let </span>health = client.get::&lt;AppHealth&gt;(<span class="string">"healthcheck"</span>).send().<span class="kw">await</span>.unwrap();
@@ -2729,13 +2815,12 @@
 
         <span class="kw">let </span>anvil: ethers::utils::AnvilInstance = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
-        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+        <span class="kw">let </span>network_config = TestConfigBuilder::default().l1_url(l1).build();
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config).<span class="kw">await</span>;
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; = Client::new(url);
 
@@ -2772,7 +2857,7 @@
             <span class="macro">assert_eq!</span>(<span class="kw-2">*</span>path.elem().unwrap(), block.hash());
 
             <span class="macro">tracing::info!</span>(i, <span class="string">"get fee state"</span>);
-            <span class="kw">let </span>account = TestConfig::builder_key().fee_account();
+            <span class="kw">let </span>account = TestConfig::&lt;<span class="number">5</span>&gt;::builder_key().fee_account();
             <span class="kw">let </span>path = client
                 .get::&lt;MerkleProof&lt;FeeAmount, FeeAccount, Sha3Node, <span class="number">256</span>&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
                     <span class="string">"fee-state/{}/{}"</span>,
@@ -2796,21 +2881,18 @@
         </span><span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
-        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::with_state(
-            Options::with_port(port).catchup(Default::default()),
-            Default::default(),
-            [no_storage::Options; TestConfig::NUM_NODES],
-            std::array::from_fn(|<span class="kw">_</span>| {
+        <span class="kw">const </span>NUM_NODES: usize = <span class="number">5</span>;
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::&lt;NUM_NODES, <span class="kw">_</span>, <span class="kw">_</span>&gt;::with_num_nodes()
+            .api_config(Options::with_port(port).catchup(Default::default()))
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .catchups(std::array::from_fn(|<span class="kw">_</span>| {
                 StatePeers::&lt;SequencerVersion&gt;::from_urls(
-                    <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>,).parse().unwrap()],
+                    <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
                     Default::default(),
                 )
-            }),
-            l1,
-            <span class="prelude-val">None</span>,
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+            }))
+            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config).<span class="kw">await</span>;
 
         <span class="comment">// Wait for replica 0 to reach a (non-genesis) decide, before disconnecting it.
         </span><span class="kw">let </span><span class="kw-2">mut </span>events = network.peers[<span class="number">0</span>].event_stream().<span class="kw">await</span>;
@@ -2862,7 +2944,7 @@
 
         <span class="comment">// Wait for a (non-genesis) block proposed by each node, to prove that the lagging node has
         // caught up and all nodes are in sync.
-        </span><span class="kw">let </span><span class="kw-2">mut </span>proposers = [<span class="bool-val">false</span>; TestConfig::NUM_NODES];
+        </span><span class="kw">let </span><span class="kw-2">mut </span>proposers = [<span class="bool-val">false</span>; NUM_NODES];
         <span class="kw">loop </span>{
             <span class="kw">let </span>event = events.next().<span class="kw">await</span>.unwrap();
             <span class="kw">let </span>EventType::Decide { leaf_chain, .. } = event.event <span class="kw">else </span>{
@@ -2870,7 +2952,7 @@
             };
             <span class="kw">for </span>LeafInfo { leaf, .. } <span class="kw">in </span>leaf_chain.iter().rev() {
                 <span class="kw">let </span>height = leaf.height();
-                <span class="kw">let </span>leaf_builder = (leaf.view_number().u64() <span class="kw">as </span>usize) % TestConfig::NUM_NODES;
+                <span class="kw">let </span>leaf_builder = (leaf.view_number().u64() <span class="kw">as </span>usize) % NUM_NODES;
                 <span class="kw">if </span>height == <span class="number">0 </span>{
                     <span class="kw">continue</span>;
                 }
@@ -2908,21 +2990,19 @@
 
         <span class="kw">let </span>states = std::array::from_fn(|<span class="kw">_</span>| state.clone());
 
-        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::with_state(
-            Options::with_port(port).catchup(Default::default()),
-            states,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            std::array::from_fn(|<span class="kw">_</span>| {
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::default()
+            .api_config(Options::with_port(port).catchup(Default::default()))
+            .states(states)
+            .catchups(std::array::from_fn(|<span class="kw">_</span>| {
                 StatePeers::&lt;SequencerVersion&gt;::from_urls(
                     <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
                     Default::default(),
                 )
-            }),
-            l1,
-            <span class="prelude-val">None</span>,
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+            }))
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .build();
+
+        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config).<span class="kw">await</span>;
 
         <span class="comment">// Wait for few blocks to be decided.
         </span>network
@@ -2981,25 +3061,26 @@
         // all the other nodes should do a catchup to get the full chain config from peer 0
         </span>states[<span class="number">0</span>] = state2;
 
-        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::with_state(
-            Options::from(options::Http {
-                port,
-                max_connections: <span class="prelude-val">None</span>,
-            })
-            .catchup(Default::default()),
-            states,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            std::array::from_fn(|<span class="kw">_</span>| {
+        <span class="kw">const </span>NUM_NODES: usize = <span class="number">5</span>;
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::&lt;NUM_NODES, <span class="kw">_</span>, <span class="kw">_</span>&gt;::with_num_nodes()
+            .api_config(
+                Options::from(options::Http {
+                    port,
+                    max_connections: <span class="prelude-val">None</span>,
+                })
+                .catchup(Default::default()),
+            )
+            .states(states)
+            .catchups(std::array::from_fn(|<span class="kw">_</span>| {
                 StatePeers::&lt;SequencerVersion&gt;::from_urls(
                     <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
                     Default::default(),
                 )
-            }),
-            l1,
-            <span class="prelude-val">None</span>,
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+            }))
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .build();
+
+        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config).<span class="kw">await</span>;
 
         <span class="comment">// Wait for a few blocks to be decided.
         </span>network
@@ -3058,26 +3139,31 @@
             stop_voting_view,
         };
 
-        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::with_state(
-            Options::from(options::Http {
-                port,
-                max_connections: <span class="prelude-val">None</span>,
-            })
-            .catchup(Default::default())
-            .status(Default::default()),
-            Default::default(),
-            [no_storage::Options; TestConfig::NUM_NODES],
-            std::array::from_fn(|<span class="kw">_</span>| {
+        <span class="kw">const </span>NUM_NODES: usize = <span class="number">5</span>;
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::&lt;NUM_NODES, <span class="kw">_</span>, <span class="kw">_</span>&gt;::with_num_nodes()
+            .api_config(
+                Options::from(options::Http {
+                    port,
+                    max_connections: <span class="prelude-val">None</span>,
+                })
+                .catchup(Default::default())
+                .status(Default::default()),
+            )
+            .catchups(std::array::from_fn(|<span class="kw">_</span>| {
                 StatePeers::&lt;SequencerVersion&gt;::from_urls(
                     <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
                     Default::default(),
                 )
-            }),
-            l1,
-            <span class="prelude-val">Some</span>(upgrades),
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+            }))
+            .network_config(
+                TestConfigBuilder::default()
+                    .l1_url(l1)
+                    .upgrades(upgrades)
+                    .build(),
+            )
+            .build();
+
+        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config).<span class="kw">await</span>;
 
         <span class="kw">let </span><span class="kw-2">mut </span>events = network.server.event_stream().<span class="kw">await</span>;
         <span class="kw">loop </span>{
@@ -3131,10 +3217,10 @@
         setup_logging();
         setup_backtrace();
 
+        <span class="kw">const </span>NUM_NODES: usize = <span class="number">5</span>;
         <span class="comment">// Initialize nodes.
-        </span><span class="kw">let </span>storage =
-            join_all((<span class="number">0</span>..TestConfig::NUM_NODES).map(|<span class="kw">_</span>| SqlDataSource::create_storage())).<span class="kw">await</span>;
-        <span class="kw">let </span>persistence = storage
+        </span><span class="kw">let </span>storage = join_all((<span class="number">0</span>..NUM_NODES).map(|<span class="kw">_</span>| SqlDataSource::create_storage())).<span class="kw">await</span>;
+        <span class="kw">let </span>persistence: [<span class="kw">_</span>; NUM_NODES] = storage
             .iter()
             .map(&lt;SqlDataSource <span class="kw">as </span>TestableSequencerDataSource&gt;::persistence_options)
             .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
@@ -3143,18 +3229,17 @@
         <span class="kw">let </span>port = pick_unused_port().unwrap();
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
-        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::with_state(
-            SqlDataSource::options(<span class="kw-2">&amp;</span>storage[<span class="number">0</span>], Options::with_port(port))
-                .state(Default::default())
-                .status(Default::default()),
-            Default::default(),
-            persistence,
-            std::array::from_fn(|<span class="kw">_</span>| MockStateCatchup::default()),
-            l1,
-            <span class="prelude-val">None</span>,
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::default()
+            .api_config(
+                SqlDataSource::options(<span class="kw-2">&amp;</span>storage[<span class="number">0</span>], Options::with_port(port))
+                    .state(Default::default())
+                    .status(Default::default()),
+            )
+            .persistences(persistence)
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .build();
+        <span class="kw">let </span><span class="kw-2">mut </span>network = TestNetwork::new(config).<span class="kw">await</span>;
 
         <span class="comment">// Connect client.
         </span><span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; =
@@ -3208,18 +3293,19 @@
         </span><span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
-        <span class="kw">let </span>persistence = storage
+        <span class="kw">let </span>persistence: [<span class="kw">_</span>; NUM_NODES] = storage
             .iter()
             .map(&lt;SqlDataSource <span class="kw">as </span>TestableSequencerDataSource&gt;::persistence_options)
             .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
             .try_into()
             .unwrap();
-        <span class="kw">let </span>_network = TestNetwork::with_state(
-            SqlDataSource::options(<span class="kw-2">&amp;</span>storage[<span class="number">0</span>], Options::with_port(port))
-                .catchup(Default::default()),
-            Default::default(),
-            persistence,
-            std::array::from_fn(|<span class="kw">_</span>| {
+        <span class="kw">let </span>config = TestNetworkConfigBuilder::default()
+            .api_config(
+                SqlDataSource::options(<span class="kw-2">&amp;</span>storage[<span class="number">0</span>], Options::with_port(port))
+                    .catchup(Default::default()),
+            )
+            .persistences(persistence)
+            .catchups(std::array::from_fn(|<span class="kw">_</span>| {
                 <span class="comment">// Catchup using node 0 as a peer. Node 0 was running the archival state service
                 // before the restart, so it should be able to resume without catching up by loading
                 // state from storage.
@@ -3227,12 +3313,10 @@
                     <span class="macro">vec!</span>[<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap()],
                     Default::default(),
                 )
-            }),
-            l1,
-            <span class="prelude-val">None</span>,
-            <span class="prelude-val">None</span>,
-        )
-        .<span class="kw">await</span>;
+            }))
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .build();
+        <span class="kw">let </span>_network = TestNetwork::new(config).<span class="kw">await</span>;
         <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap());
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;

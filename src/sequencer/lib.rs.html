@@ -1010,6 +1010,49 @@
 <a href="#1010" id="1010">1010</a>
 <a href="#1011" id="1011">1011</a>
 <a href="#1012" id="1012">1012</a>
+<a href="#1013" id="1013">1013</a>
+<a href="#1014" id="1014">1014</a>
+<a href="#1015" id="1015">1015</a>
+<a href="#1016" id="1016">1016</a>
+<a href="#1017" id="1017">1017</a>
+<a href="#1018" id="1018">1018</a>
+<a href="#1019" id="1019">1019</a>
+<a href="#1020" id="1020">1020</a>
+<a href="#1021" id="1021">1021</a>
+<a href="#1022" id="1022">1022</a>
+<a href="#1023" id="1023">1023</a>
+<a href="#1024" id="1024">1024</a>
+<a href="#1025" id="1025">1025</a>
+<a href="#1026" id="1026">1026</a>
+<a href="#1027" id="1027">1027</a>
+<a href="#1028" id="1028">1028</a>
+<a href="#1029" id="1029">1029</a>
+<a href="#1030" id="1030">1030</a>
+<a href="#1031" id="1031">1031</a>
+<a href="#1032" id="1032">1032</a>
+<a href="#1033" id="1033">1033</a>
+<a href="#1034" id="1034">1034</a>
+<a href="#1035" id="1035">1035</a>
+<a href="#1036" id="1036">1036</a>
+<a href="#1037" id="1037">1037</a>
+<a href="#1038" id="1038">1038</a>
+<a href="#1039" id="1039">1039</a>
+<a href="#1040" id="1040">1040</a>
+<a href="#1041" id="1041">1041</a>
+<a href="#1042" id="1042">1042</a>
+<a href="#1043" id="1043">1043</a>
+<a href="#1044" id="1044">1044</a>
+<a href="#1045" id="1045">1045</a>
+<a href="#1046" id="1046">1046</a>
+<a href="#1047" id="1047">1047</a>
+<a href="#1048" id="1048">1048</a>
+<a href="#1049" id="1049">1049</a>
+<a href="#1050" id="1050">1050</a>
+<a href="#1051" id="1051">1051</a>
+<a href="#1052" id="1052">1052</a>
+<a href="#1053" id="1053">1053</a>
+<a href="#1054" id="1054">1054</a>
+<a href="#1055" id="1055">1055</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>block;
 <span class="kw">pub mod </span>catchup;
@@ -1606,35 +1649,78 @@
 
     <span class="kw">const </span>STAKE_TABLE_CAPACITY_FOR_TEST: u64 = <span class="number">10</span>;
 
-    <span class="kw">pub async fn </span>run_test_builder(port: <span class="prelude-ty">Option</span>&lt;u16&gt;) -&gt; (Box&lt;<span class="kw">dyn </span>BuilderTask&lt;SeqTypes&gt;&gt;, Url) {
+    <span class="kw">pub async fn </span>run_test_builder&lt;<span class="kw">const </span>NUM_NODES: usize&gt;(
+        port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
+    ) -&gt; (Box&lt;<span class="kw">dyn </span>BuilderTask&lt;SeqTypes&gt;&gt;, Url) {
         <span class="kw">let </span>builder_config = <span class="kw">if let </span><span class="prelude-val">Some</span>(port) = port {
             SimpleBuilderConfig { port }
         } <span class="kw">else </span>{
             SimpleBuilderConfig::default()
         };
         &lt;SimpleBuilderImplementation <span class="kw">as </span>TestBuilderImplementation&lt;SeqTypes&gt;&gt;::start(
-            TestConfig::NUM_NODES,
+            NUM_NODES,
             builder_config,
             Default::default(),
         )
         .<span class="kw">await
     </span>}
 
-    <span class="attr">#[derive(Clone)]
-    </span><span class="kw">pub struct </span>TestConfig {
+    <span class="kw">pub struct </span>TestConfigBuilder&lt;<span class="kw">const </span>NUM_NODES: usize&gt; {
         config: HotShotConfig&lt;PubKey&gt;,
-        <span class="kw">pub </span>priv_keys: Vec&lt;BLSPrivKey&gt;,
-        <span class="kw">pub </span>state_key_pairs: Vec&lt;StateKeyPair&gt;,
-        <span class="kw">pub </span>master_map: Arc&lt;MasterMap&lt;PubKey&gt;&gt;,
-        <span class="kw">pub </span>url: Url,
-        <span class="kw">pub </span>state_relay_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
-        <span class="kw">pub </span>builder_port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
-        <span class="kw">pub </span>upgrades: <span class="prelude-ty">Option</span>&lt;TestNetworkUpgrades&gt;,
+        priv_keys: Vec&lt;BLSPrivKey&gt;,
+        state_key_pairs: Vec&lt;StateKeyPair&gt;,
+        master_map: Arc&lt;MasterMap&lt;PubKey&gt;&gt;,
+        url: Url,
+        state_relay_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
+        builder_port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
+        upgrades: <span class="prelude-ty">Option</span>&lt;TestNetworkUpgrades&gt;,
     }
 
-    <span class="kw">impl </span>Default <span class="kw">for </span>TestConfig {
+    <span class="kw">impl</span>&lt;<span class="kw">const </span>NUM_NODES: usize&gt; TestConfigBuilder&lt;NUM_NODES&gt; {
+        <span class="kw">pub fn </span>builder_port(<span class="kw-2">mut </span><span class="self">self</span>, builder_port: <span class="prelude-ty">Option</span>&lt;u16&gt;) -&gt; <span class="self">Self </span>{
+            <span class="self">self</span>.builder_port = builder_port;
+            <span class="self">self
+        </span>}
+
+        <span class="kw">pub fn </span>state_relay_url(<span class="kw-2">mut </span><span class="self">self</span>, url: Url) -&gt; <span class="self">Self </span>{
+            <span class="self">self</span>.state_relay_url = <span class="prelude-val">Some</span>(url);
+            <span class="self">self
+        </span>}
+
+        <span class="kw">pub fn </span>l1_url(<span class="kw-2">mut </span><span class="self">self</span>, l1: Url) -&gt; <span class="self">Self </span>{
+            <span class="self">self</span>.url = l1;
+            <span class="self">self
+        </span>}
+
+        <span class="kw">pub fn </span>upgrades(<span class="kw-2">mut </span><span class="self">self</span>, upgrades: TestNetworkUpgrades) -&gt; <span class="self">Self </span>{
+            <span class="self">self</span>.upgrades = <span class="prelude-val">Some</span>(upgrades);
+            <span class="self">self
+        </span>}
+
+        <span class="kw">pub fn </span>build(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; TestConfig&lt;NUM_NODES&gt; {
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrades) = <span class="kw-2">&amp;</span><span class="self">self</span>.upgrades {
+                <span class="self">self</span>.config.start_proposing_view = upgrades.start_proposing_view;
+                <span class="self">self</span>.config.stop_proposing_view = upgrades.stop_proposing_view;
+                <span class="self">self</span>.config.start_voting_view = upgrades.start_voting_view;
+                <span class="self">self</span>.config.stop_voting_view = upgrades.stop_voting_view;
+            }
+
+            TestConfig {
+                config: <span class="self">self</span>.config,
+                priv_keys: <span class="self">self</span>.priv_keys,
+                state_key_pairs: <span class="self">self</span>.state_key_pairs,
+                master_map: <span class="self">self</span>.master_map,
+                url: <span class="self">self</span>.url,
+                state_relay_url: <span class="self">self</span>.state_relay_url,
+                builder_port: <span class="self">self</span>.builder_port,
+                upgrades: <span class="self">self</span>.upgrades,
+            }
+        }
+    }
+
+    <span class="kw">impl</span>&lt;<span class="kw">const </span>NUM_NODES: usize&gt; Default <span class="kw">for </span>TestConfigBuilder&lt;NUM_NODES&gt; {
         <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
-            <span class="kw">let </span>num_nodes = <span class="self">Self</span>::NUM_NODES;
+            <span class="kw">let </span>num_nodes = NUM_NODES;
 
             <span class="comment">// Generate keys for the nodes.
             </span><span class="kw">let </span>seed = [<span class="number">0</span>; <span class="number">32</span>];
@@ -1702,9 +1788,19 @@
         }
     }
 
-    <span class="kw">impl </span>TestConfig {
-        <span class="kw">pub const </span>NUM_NODES: usize = <span class="number">5</span>;
+    <span class="attr">#[derive(Clone)]
+    </span><span class="kw">pub struct </span>TestConfig&lt;<span class="kw">const </span>NUM_NODES: usize&gt; {
+        config: HotShotConfig&lt;PubKey&gt;,
+        priv_keys: Vec&lt;BLSPrivKey&gt;,
+        state_key_pairs: Vec&lt;StateKeyPair&gt;,
+        master_map: Arc&lt;MasterMap&lt;PubKey&gt;&gt;,
+        url: Url,
+        state_relay_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
+        builder_port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
+        upgrades: <span class="prelude-ty">Option</span>&lt;TestNetworkUpgrades&gt;,
+    }
 
+    <span class="kw">impl</span>&lt;<span class="kw">const </span>NUM_NODES: usize&gt; TestConfig&lt;NUM_NODES&gt; {
         <span class="kw">pub fn </span>num_nodes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
             <span class="self">self</span>.priv_keys.len()
         }
@@ -1717,28 +1813,12 @@
             <span class="self">self</span>.config.builder_urls = builder_urls;
         }
 
-        <span class="kw">pub fn </span>set_state_relay_url(<span class="kw-2">&amp;mut </span><span class="self">self</span>, url: Url) {
-            <span class="self">self</span>.state_relay_url = <span class="prelude-val">Some</span>(url);
+        <span class="kw">pub fn </span>builder_port(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;u16&gt; {
+            <span class="self">self</span>.builder_port
         }
 
-        <span class="kw">pub fn </span>default_with_l1(l1: Url) -&gt; <span class="self">Self </span>{
-            TestConfig {
-                url: l1,
-                ..Default::default()
-            }
-        }
-
-        <span class="kw">pub fn </span>set_upgrade_parameters(
-            <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-            start_proposing_view: u64,
-            stop_proposing_view: u64,
-            start_voting_view: u64,
-            stop_voting_view: u64,
-        ) {
-            <span class="self">self</span>.config.start_proposing_view = start_proposing_view;
-            <span class="self">self</span>.config.stop_proposing_view = stop_proposing_view;
-            <span class="self">self</span>.config.start_voting_view = start_voting_view;
-            <span class="self">self</span>.config.stop_voting_view = stop_voting_view;
+        <span class="kw">pub fn </span>upgrades(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;TestNetworkUpgrades&gt; {
+            <span class="self">self</span>.upgrades.clone()
         }
 
         <span class="kw">pub async fn </span>init_nodes&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
@@ -1905,7 +1985,7 @@
         },
     };
     <span class="kw">use </span>sequencer_utils::AnvilOptions;
-    <span class="kw">use </span>testing::{wait_for_decide_on_handle, TestConfig};
+    <span class="kw">use </span>testing::{wait_for_decide_on_handle, TestConfigBuilder};
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_skeleton_instantiation() {
@@ -1915,9 +1995,12 @@
         <span class="comment">// Assign `config` so it isn't dropped early.
         </span><span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
         <span class="kw">let </span>url = anvil.url();
-        <span class="kw">let </span><span class="kw-2">mut </span>config = TestConfig::default_with_l1(url);
+        <span class="kw">const </span>NUM_NODES: usize = <span class="number">5</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>config = TestConfigBuilder::&lt;NUM_NODES&gt;::default()
+            .l1_url(url)
+            .build();
 
-        <span class="kw">let </span>(builder_task, builder_url) = run_test_builder(<span class="prelude-val">None</span>).<span class="kw">await</span>;
+        <span class="kw">let </span>(builder_task, builder_url) = run_test_builder::&lt;NUM_NODES&gt;(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         config.set_builder_urls(<span class="macro">vec1::vec1!</span>[builder_url]);
 
@@ -1955,9 +2038,12 @@
         <span class="comment">// Assign `config` so it isn't dropped early.
         </span><span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
         <span class="kw">let </span>url = anvil.url();
-        <span class="kw">let </span><span class="kw-2">mut </span>config = TestConfig::default_with_l1(url);
+        <span class="kw">const </span>NUM_NODES: usize = <span class="number">5</span>;
+        <span class="kw">let </span><span class="kw-2">mut </span>config = TestConfigBuilder::&lt;NUM_NODES&gt;::default()
+            .l1_url(url)
+            .build();
 
-        <span class="kw">let </span>(builder_task, builder_url) = run_test_builder(<span class="prelude-val">None</span>).<span class="kw">await</span>;
+        <span class="kw">let </span>(builder_task, builder_url) = run_test_builder::&lt;NUM_NODES&gt;(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         config.set_builder_urls(<span class="macro">vec1::vec1!</span>[builder_url]);
         <span class="kw">let </span>handles = config.init_nodes(ver).<span class="kw">await</span>;

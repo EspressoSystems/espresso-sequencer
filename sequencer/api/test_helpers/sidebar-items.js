@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["STAKE_TABLE_CAPACITY_FOR_TEST"],"fn":["catchup_test_helper","state_signature_test_helper","status_test_helper","submit_test_helper"],"struct":["TestNetwork","TestNetworkUpgrades"]};
+window.SIDEBAR_ITEMS = {"constant":["STAKE_TABLE_CAPACITY_FOR_TEST"],"fn":["catchup_test_helper","state_signature_test_helper","status_test_helper","submit_test_helper"],"struct":["TestNetwork","TestNetworkConfig","TestNetworkConfigBuilder","TestNetworkUpgrades"]};

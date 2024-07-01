@@ -398,6 +398,8 @@
 <a href="#398" id="398">398</a>
 <a href="#399" id="399">399</a>
 <a href="#400" id="400">400</a>
+<a href="#401" id="401">401</a>
+<a href="#402" id="402">402</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{sync::Arc, time::Duration};
 
 <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -417,11 +419,11 @@
 <span class="kw">use </span>sequencer::{
     api::{
         options,
-        test_helpers::{TestNetwork, STAKE_TABLE_CAPACITY_FOR_TEST},
+        test_helpers::{TestNetwork, TestNetworkConfigBuilder, STAKE_TABLE_CAPACITY_FOR_TEST},
     },
     persistence,
     state_signature::relay_server::run_relay_server,
-    testing::TestConfig,
+    testing::TestConfigBuilder,
 };
 <span class="kw">use </span>sequencer_utils::{
     deployer::{deploy, Contract, Contracts},
@@ -503,16 +505,18 @@
         .parse()
         .unwrap();
 
-    <span class="kw">let </span><span class="kw-2">mut </span>config = TestConfig::default_with_l1(url.clone());
-    config.builder_port = cli_params.builder_port;
-    config.state_relay_url = <span class="prelude-val">Some</span>(relay_server_url.clone());
+    <span class="kw">let </span>network_config = TestConfigBuilder::default()
+        .builder_port(cli_params.builder_port)
+        .state_relay_url(relay_server_url.clone())
+        .l1_url(url.clone())
+        .build();
+    <span class="kw">const </span>NUM_NODES: usize = <span class="number">2</span>;
+    <span class="kw">let </span>config = TestNetworkConfigBuilder::&lt;NUM_NODES, <span class="kw">_</span>, <span class="kw">_</span>&gt;::with_num_nodes()
+        .api_config(api_options)
+        .network_config(network_config)
+        .build();
 
-    <span class="kw">let </span>network = TestNetwork::new_with_config(
-        api_options,
-        [persistence::no_storage::Options; TestConfig::NUM_NODES],
-        config,
-    )
-    .<span class="kw">await</span>;
+    <span class="kw">let </span>network = TestNetwork::new(config).<span class="kw">await</span>;
 
     <span class="kw">let </span>config = network.cfg.hotshot_config();
     <span class="macro">tracing::info!</span>(<span class="string">"Hotshot config {config:?}"</span>);
