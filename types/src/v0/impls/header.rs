@@ -385,9 +385,21 @@ impl Header {
     }
 
     /// Fee paid by the block builder
-    pub fn fee_info(&self) -> FeeInfo {
-        *field!(self.fee_info)
+    pub fn fee_info(&self) -> Vec<FeeInfo> {
+        match self {
+            Self::V1(fields) => vec![fields.fee_info],
+            Self::V2(fields) => vec![fields.fee_info],
+            Self::V3(fields) => fields.fee_info.clone(),
+        }
     }
+
+    // TODO from zulip
+    // If we care to avoid the clone, we can instead have it return an
+    // iterator (might have to be Box<dyn Iterator> though), or we can
+    // use serde from/try_into to convert from a single fee info to a
+    // singleton vec on deserialize, so that in memory both
+    // v0_1::Header and v0_2::Header have a Vec<FeeInfo> directly, and
+    // then you can just return a reference to it
 
     /// Account (etheruem address) of builder
     ///

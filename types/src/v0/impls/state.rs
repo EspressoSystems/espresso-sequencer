@@ -270,22 +270,57 @@ fn charge_fee(
 
 /// Validate builder account by verifying signature
 fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidationError> {
-    // Beware of Malice!
+    // verify signatures
+
+    // TODO Here `Header.builder_signature` is used as a placeholder.
+    // Before this is finalized we will need a signature per fee_info
+    // (I think).
     let signature = proposed_header
         .builder_signature()
         .ok_or(BuilderValidationError::SignatureNotFound)?;
-    let fee_amount = proposed_header.fee_info().amount().as_u64().ok_or(
-        BuilderValidationError::FeeAmountOutOfRange(proposed_header.fee_info().amount()),
-    )?;
 
-    // verify signature
-    if !proposed_header.fee_info().account.validate_fee_signature(
-        &signature,
-        fee_amount,
-        proposed_header.metadata(),
-        &proposed_header.payload_commitment(),
-    ) {
-        return Err(BuilderValidationError::InvalidBuilderSignature);
+    match proposed_header.version() {
+        Version { major, minor } if major >= 0 && minor >= 3 => {
+            // TODO since we are iterating, should we include account/amount in errors?
+            for fee_info in proposed_header.fee_info().clone() {
+                // check that amount fits in a u64
+                fee_info
+                    .amount
+                    .as_u64()
+                    .ok_or(BuilderValidationError::FeeAmountOutOfRange(fee_info.amount))?;
+
+                // verify signature
+                fee_info
+                    .account
+                    .validate_fee_signature(
+                        &signature,
+                        fee_info.amount.as_u64().unwrap(),
+                        proposed_header.metadata(),
+                        &proposed_header.payload_commitment(),
+                    )
+                    .then_some(())
+                    .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
+            }
+        }
+        _ => {
+            let signature = proposed_header
+                .builder_signature()
+                .ok_or(BuilderValidationError::SignatureNotFound)?;
+
+            let fee_amount = proposed_header.fee_info().amount().as_u64().ok_or(
+                BuilderValidationError::FeeAmountOutOfRange(proposed_header.fee_info.amount()),
+            )?;
+
+            // verify signature
+            if !proposed_header.fee_info().account.validate_fee_signature(
+                &signature,
+                fee_amount,
+                proposed_header.metadata(),
+                &proposed_header.payload_commitment(),
+            ) {
+                return Err(BuilderValidationError::InvalidBuilderSignature);
+            }
+        }
     }
 
     Ok(())
