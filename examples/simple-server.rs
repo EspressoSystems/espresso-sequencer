@@ -23,7 +23,7 @@ use futures::future::{join_all, try_join_all};
 use hotshot::{
     traits::implementations::{MasterMap, MemoryNetwork},
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, Networks, SystemContext,
+    HotShotInitializer, Memberships, SystemContext,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
@@ -36,12 +36,12 @@ use hotshot_query_service::{
     status::UpdateStatusData,
     testing::{
         consensus::DataSourceLifeCycle,
-        mocks::{MockMembership, MockNodeImpl, MockTypes},
+        mocks::{MockBase, MockMembership, MockNodeImpl, MockTypes},
     },
     Error,
 };
 use hotshot_testing::block_builder::{
-    SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
+    SimpleBuilderImplementation, TestBuilderImplementation,
 };
 use hotshot_types::{
     consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
@@ -119,7 +119,7 @@ async fn main() -> Result<(), Error> {
     let nodes = init_consensus(&data_sources).await;
 
     // Use version 0.1, for no particular reason
-    let bind_version: hotshot_types::constants::Base = hotshot_types::constants::Base::instance();
+    let bind_version = MockBase::instance();
 
     // Start the servers.
     try_join_all(
@@ -247,11 +247,6 @@ async fn init_consensus(
                     &master_map.clone(),
                     None,
                 ));
-                let networks = Networks {
-                    quorum_network: network.clone(),
-                    da_network: network,
-                    _pd: Default::default(),
-                };
 
                 let storage: TestStorage<MockTypes> = TestStorage::default();
 
@@ -261,7 +256,7 @@ async fn init_consensus(
                     node_id as u64,
                     config,
                     memberships,
-                    networks,
+                    network,
                     HotShotInitializer::from_genesis(TestInstanceState {})
                         .await
                         .unwrap(),
