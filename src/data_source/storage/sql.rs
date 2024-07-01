@@ -2993,6 +2993,8 @@ fn build_get_path_query(
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
+    use async_compatibility_layer::art::async_timeout;
+    use async_std::net::TcpStream;
     use std::{
         env,
         process::{Command, Stdio},
@@ -3115,37 +3117,65 @@ pub mod testing {
         }
 
         async fn wait_for_ready(&self) {
-            while Command::new("docker")
-                .args([
-                    "exec",
-                    &self.container_id,
-                    "pg_isready",
-                    "-h",
-                    "localhost",
-                    "-U",
-                    "postgres",
-                ])
-                .env("PGPASSWORD", "password")
-                // Null input so the command terminates as soon as it manages to connect.
-                .stdin(Stdio::null())
-                // Discard command output.
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                // We should ensure the exit status. A simple `unwrap`
-                // would panic on unrelated errors (such as network
-                // connection failures)
-                .and_then(|status| {
-                    status
-                        .success()
-                        .then_some(true)
-                        // Any ol' Error will do
-                        .ok_or(std::io::Error::from_raw_os_error(666))
-                })
-                .is_err()
+            let timeout = Duration::from_secs(
+                env::var("SQL_TMP_DB_CONNECT_TIMEOUT")
+                    .unwrap_or("60".to_string())
+                    .parse()
+                    .expect("SQL_TMP_DB_CONNECT_TIMEOUT must be an integer number of seconds"),
+            );
+
+            if let Err(err) = async_timeout(timeout, async {
+                while Command::new("docker")
+                    .args([
+                        "exec",
+                        &self.container_id,
+                        "pg_isready",
+                        "-h",
+                        "localhost",
+                        "-U",
+                        "postgres",
+                    ])
+                    .env("PGPASSWORD", "password")
+                    // Null input so the command terminates as soon as it manages to connect.
+                    .stdin(Stdio::null())
+                    // Discard command output.
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    // We should ensure the exit status. A simple `unwrap`
+                    // would panic on unrelated errors (such as network
+                    // connection failures)
+                    .and_then(|status| {
+                        status
+                            .success()
+                            .then_some(true)
+                            // Any ol' Error will do
+                            .ok_or(std::io::Error::from_raw_os_error(666))
+                    })
+                    .is_err()
+                {
+                    tracing::warn!("database is not ready");
+                    sleep(Duration::from_secs(1)).await;
+                }
+
+                // The above command ensures the database is ready inside the Docker container.
+                // However, on some systems, there is a slight delay before the port is exposed via
+                // host networking. We don't need to check again that the database is ready on the
+                // host (and maybe can't, because the host might not have pg_isready installed), but
+                // we can ensure the port is open by just establishing a TCP connection.
+                while let Err(err) =
+                    TcpStream::connect(format!("{}:{}", self.host, self.port)).await
+                {
+                    tracing::warn!("database is ready, but port is not available to host: {err:#}");
+                    sleep(Duration::from_millis(100)).await;
+                }
+            })
+            .await
             {
-                tracing::warn!("database is not ready");
-                sleep(Duration::from_secs(1)).await;
+                panic!(
+                    "failed to connect to TmpDb within configured timeout {timeout:?}: {err:#}\n{}",
+                    "Consider increasing the timeout by setting SQL_TMP_DB_CONNECT_TIMEOUT"
+                );
             }
         }
     }
