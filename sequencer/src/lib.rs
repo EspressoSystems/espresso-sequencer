@@ -613,7 +613,7 @@ pub mod testing {
                 HashMap::new(),
             )
             .await,
-            url
+            url,
         )
     }
 
