@@ -89,7 +89,7 @@ contract RollupContract {
     }
 
     /// Updates the state of the rollup if the Espresso finality gadget loses liveness.
-    function updateStateBackupSequencingMode(commTxsRollup, newVMState) virtual {
+    function updateStateBackupSequencingMode(commTxsRollup, newVMState,snarkProof) virtual {
       bytes[] publicInputs = [
         previousVMState,
         newVMState,
@@ -176,12 +176,12 @@ The circuit depicted in Figure 2 operates as follows:
   scheme used to represent each Espresso block.
 - The _COMMs Equivalence_ gadget checks that using the same rollup inputs _ROLLUP_TXS_, we obtain `cm_txs_history` using
   the Espresso commitment scheme for representing a set of transactions and the commitment `cm_txs_rollup` that is used
-  by _zkVM_ gadget. This gadget is required in order to ensure that the set of transactions fetched from the
-  Espresso blocks and represented as `cm_txs_history` is consistent with the set of transactions applied to the rollup
-  state and represented by the commitment `cm_txs_rollup`. Note that if both commitment schemes (used in Espresso and
-  the Rollup) were the same, this gadget would not be necessary. Thus, if updating the zkVM circuit is possible in
-  practice, by using the Espresso commitment scheme inside the zkVM gadget, one can remove the need for the _COMMs
-  Equivalence_ gadget.
+  by _zkVM_ gadget. This gadget is required in order to ensure that the set of transactions fetched from the Espresso
+  blocks and represented as `cm_txs_history` is consistent with the set of transactions applied to the rollup state and
+  represented by the commitment `cm_txs_rollup`. Note that if both commitment schemes (used in Espresso and the Rollup)
+  were the same, this gadget would not be necessary. Thus, if updating the zkVM circuit is possible in practice, by
+  using the Espresso commitment scheme inside the zkVM gadget, one can remove the need for the _COMMs Equivalence_
+  gadget.
 - The _zkVM_ gadget is the original gadget of the rollup circuit that proves a correct transition from state
   `cm_state_vm i` to the next state `cm_state_vm i+1` when applying the transactions represented by the commitment value
   `cm_txs_rollup`.
@@ -203,7 +203,7 @@ contract RollupContract1 is RollupContract {
 
         // Escape hatch is activated, switch to default sequencing mode
         if (isEscapeHatchActivated()){
-            this.updateStateBackupSequencingMode(commTxsRollup);
+            this.updateStateBackupSequencingMode(commTxsRollup,newVMState,snarkProof);
         } else { // No escape hatch, use the state of Espresso consensus
             lightClientState = lcContract.getFinalizedState();
             newEspressoState = lightClientState.blockCommRoot;
@@ -248,7 +248,7 @@ contract RollupContract2 is RollupContract {
 
     // Escape hatch is activated, switch to default sequencing mode
     if (isEscapeHatchActivated()){
-      this.updateStateBackupSequencingMode(commTxsRollup);
+      this.updateStateBackupSequencingMode(commTxsRollup,newVMState,snarkProof);
     } else { // No escape hatch, use the state of Espresso consensus
       this.updateStateFromEspresso(newEspressoState, blockNumberEspresso, commTxsRollup, newVMState, snarkProof);
     }
