@@ -11,10 +11,10 @@ use ethers::{
     prelude::{AbiError, EthAbiCodec, EthAbiType},
     types::{Bytes, H256, U256},
 };
-use jf_pcs::prelude::Commitment;
 use jf_plonk::proof_system::structs::{OpenKey, Proof, ProofEvaluations, VerifyingKey};
 use jf_plonk::testing_apis::Challenges;
 use jf_plonk::{constants::KECCAK256_STATE_SIZE, transcript::SolidityTranscript};
+use jf_primitives::pcs::prelude::Commitment;
 use num_bigint::BigUint;
 use num_traits::Num;
 

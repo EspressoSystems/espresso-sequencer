@@ -9,7 +9,7 @@ use std::process::Command;
 
 use hotshot_contract_adapter::jellyfish::ParsedVerifyingKey;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
-use jf_pcs::prelude::UnivariateUniversalParams;
+use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 
 fn main() {
     let srs = {

@@ -1,11 +1,11 @@
 //! A light client prover service
 
 use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
-use anyhow::{anyhow, Context, Result};
+use anyhow::anyhow;
 use async_std::{
     io,
     sync::Arc,
-    task::{sleep, spawn, spawn_blocking},
+    task::{sleep, spawn},
 };
 use contract_bindings::light_client::{LightClient, LightClientErrors};
 use displaydoc::Display;
@@ -20,8 +20,10 @@ use ethers::{
 use futures::FutureExt;
 use hotshot_contract_adapter::jellyfish::{u256_to_field, ParsedPlonkProof};
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
+use hotshot_orchestrator::OrchestratorVersion;
 use hotshot_stake_table::vec_based::config::FieldType;
 use hotshot_stake_table::vec_based::StakeTable;
+use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _};
 use hotshot_types::{
     light_client::{
@@ -30,13 +32,11 @@ use hotshot_types::{
     },
     traits::signature_key::StakeTableEntryType,
 };
-use hotshot_types::{signature_key::BLSPubKey, PeerConfig};
 
-use jf_pcs::prelude::UnivariateUniversalParams;
 use jf_plonk::errors::PlonkError;
+use jf_primitives::constants::CS_ID_SCHNORR;
+use jf_primitives::pcs::prelude::UnivariateUniversalParams;
 use jf_relation::Circuit as _;
-use jf_signature::constants::CS_ID_SCHNORR;
-use serde::Deserialize;
 use std::{
     iter,
     time::{Duration, Instant},
@@ -52,6 +52,8 @@ type F = ark_ed_on_bn254::Fq;
 /// A wallet with local signer and connected to network via http
 pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
 
+type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<BLSPubKey>;
+
 /// Configuration/Parameters used for hotshot state prover
 #[derive(Debug, Clone)]
 pub struct StateProverConfig {
@@ -59,29 +61,20 @@ pub struct StateProverConfig {
     pub relay_server: Url,
     /// Interval between light client state update
     pub update_interval: Duration,
-    /// Interval between retries if a state update fails
-    pub retry_interval: Duration,
     /// URL of layer 1 Ethereum JSON-RPC provider.
     pub l1_provider: Url,
     /// Address of LightClient contract on layer 1.
     pub light_client_address: Address,
     /// Transaction signing key for Ethereum
     pub eth_signing_key: SigningKey,
-    /// URL of a node that is currently providing the HotShot config.
-    /// This is used to initialize the stake table.
-    pub sequencer_url: Url,
+    /// Address off the hotshot orchestrator, used for stake table initialization.
+    pub orchestrator_url: Url,
     /// If daemon and provided, the service will run a basic HTTP server on the given port.
     ///
     /// The server provides healthcheck and version endpoints.
     pub port: Option<u16>,
     /// Stake table capacity for the prover circuit.
     pub stake_table_capacity: usize,
-}
-
-#[inline]
-/// A helper function to compute the quorum threshold given a total amount of stake.
-pub fn one_honest_threshold(total_stake: U256) -> U256 {
-    total_stake / 3 + 1
 }
 
 pub fn init_stake_table(
@@ -102,81 +95,67 @@ pub fn init_stake_table(
     Ok(st)
 }
 
-#[derive(Debug, Deserialize)]
-pub struct PublicHotShotConfig {
-    pub known_nodes_with_stake: Vec<PeerConfig<BLSPubKey>>,
-}
-
-/// Initialize the stake table from a sequencer node that
-/// is currently providing the HotShot config.
-///
-/// Does not error, runs until the stake table is provided.
-async fn init_stake_table_from_sequencer(
-    sequencer_url: &Url,
+async fn init_stake_table_from_orchestrator(
+    orchestrator_url: &Url,
     stake_table_capacity: usize,
-) -> Result<StakeTable<BLSPubKey, StateVerKey, CircuitField>> {
-    tracing::info!("Initializing stake table from node at {sequencer_url}");
-
-    // Construct the URL to fetch the network config
-    let config_url = sequencer_url
-        .join("/v0/config/hotshot")
-        .with_context(|| "Invalid URL")?;
-
-    // Request the configuration until it is successful
-    let network_config: PublicHotShotConfig = loop {
-        match reqwest::get(config_url.clone()).await {
-            Ok(resp) => match resp.json::<PublicHotShotConfig>().await {
-                Ok(config) => break config,
-                Err(e) => {
-                    tracing::error!("Failed to parse the network config: {e}");
-                    sleep(Duration::from_secs(5)).await;
+) -> StakeTable<BLSPubKey, StateVerKey, CircuitField> {
+    tracing::info!("Initializing stake table from HotShot orchestrator.");
+    let client = Client::<ServerError, OrchestratorVersion>::new(orchestrator_url.clone());
+    loop {
+        match client.get::<bool>("api/peer_pub_ready").send().await {
+            Ok(true) => {
+                match client
+                    .get::<NetworkConfig>("api/get_config_after_peer_collected")
+                    .send()
+                    .await
+                {
+                    Ok(config) => {
+                        let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(
+                            stake_table_capacity,
+                        );
+                        tracing::debug!("{}", config.config.known_nodes_with_stake.len());
+                        config
+                            .config
+                            .known_nodes_with_stake
+                            .into_iter()
+                            .for_each(|config| {
+                                st.register(
+                                    *config.stake_table_entry.get_key(),
+                                    config.stake_table_entry.get_stake(),
+                                    config.state_ver_key,
+                                )
+                                .expect("Key registration shouldn't fail.");
+                            });
+                        st.advance();
+                        st.advance();
+                        return st;
+                    }
+                    Err(e) => {
+                        tracing::warn!("Orchestrator error: {e}, retrying.");
+                    }
                 }
-            },
+            }
+            Ok(false) => {
+                tracing::info!("Peers' keys are not ready, retrying.");
+            }
             Err(e) => {
-                tracing::error!("Failed to fetch the network config: {e}");
-                sleep(Duration::from_secs(5)).await;
+                tracing::warn!("Orchestrator error {e}, retrying.");
             }
         }
-    };
-
-    // Create empty stake table
-    let mut st = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(stake_table_capacity);
-
-    // Populate the stake table
-    for node in network_config.known_nodes_with_stake.into_iter() {
-        st.register(
-            *node.stake_table_entry.key(),
-            node.stake_table_entry.stake(),
-            node.state_ver_key,
-        )
-        .expect("Key registration shouldn't fail.");
+        sleep(Duration::from_secs(2)).await;
     }
-
-    // Advance the stake table
-    st.advance();
-    st.advance();
-
-    Ok(st)
 }
 
 pub async fn light_client_genesis(
-    sequencer_url: &Url,
+    orchestrator_url: &Url,
     stake_table_capacity: usize,
 ) -> anyhow::Result<ParsedLightClientState> {
-    let st = init_stake_table_from_sequencer(sequencer_url, stake_table_capacity)
-        .await
-        .with_context(|| "Failed to initialize stake table")?;
-    light_client_genesis_from_stake_table(st)
-}
-
-#[inline]
-pub fn light_client_genesis_from_stake_table(
-    st: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
-) -> anyhow::Result<ParsedLightClientState> {
+    let st = init_stake_table_from_orchestrator(orchestrator_url, stake_table_capacity).await;
     let (bls_comm, schnorr_comm, stake_comm) = st
         .commitment(SnapshotVersion::LastEpochStart)
         .expect("Commitment computation shouldn't fail.");
-    let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
+    let threshold = st.total_stake(SnapshotVersion::LastEpochStart)? * 2 / 3;
+
     let pi = vec![
         u256_to_field(threshold),
         F::from(0_u64), // Arbitrary value for view number
@@ -295,14 +274,13 @@ pub async fn submit_state_and_proof(
 
 pub async fn sync_state<Ver: StaticVersionType>(
     st: &StakeTable<BLSPubKey, StateVerKey, CircuitField>,
-    proving_key: Arc<ProvingKey>,
+    proving_key: &ProvingKey,
     relay_server_client: &Client<ServerError, Ver>,
     config: &StateProverConfig,
 ) -> Result<(), ProverError> {
     tracing::info!("Start syncing light client state.");
 
     let bundle = fetch_latest_state(relay_server_client).await?;
-    tracing::info!("Bundle accumulated weight: {}", bundle.accumulated_weight);
     tracing::info!("Latest HotShot block height: {}", bundle.state.block_height);
     let old_state = read_contract_state(config).await?;
     tracing::info!(
@@ -316,7 +294,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
     tracing::debug!("Old state: {old_state:?}");
     tracing::debug!("New state: {:?}", bundle.state);
 
-    let threshold = one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart)?);
+    let threshold = st.total_stake(SnapshotVersion::LastEpochStart)? * 2 / 3;
     tracing::info!("Threshold before syncing state: {}", threshold);
     let entries = st
         .try_iter(SnapshotVersion::LastEpochStart)
@@ -344,22 +322,24 @@ pub async fn sync_state<Ver: StaticVersionType>(
         ));
     }
 
+    // TODO this assert fails. See https://github.com/EspressoSystems/espresso-sequencer/issues/1161
+    // assert_eq!(
+    //     bundle.state.stake_table_comm,
+    //     st.commitment(SnapshotVersion::LastEpochStart).unwrap()
+    // );
+
     tracing::info!("Collected latest state and signatures. Start generating SNARK proof.");
     let proof_gen_start = Instant::now();
-    let stake_table_capacity = config.stake_table_capacity;
-    let (proof, public_input) = spawn_blocking(move || {
-        generate_state_update_proof::<_, _, _, _>(
-            &mut ark_std::rand::thread_rng(),
-            &proving_key,
-            &entries,
-            signer_bit_vec,
-            signatures,
-            &bundle.state,
-            &threshold,
-            stake_table_capacity,
-        )
-    })
-    .await?;
+    let (proof, public_input) = generate_state_update_proof::<_, _, _, _>(
+        &mut ark_std::rand::thread_rng(),
+        proving_key,
+        &entries,
+        signer_bit_vec,
+        signatures,
+        &bundle.state,
+        &threshold,
+        config.stake_table_capacity,
+    )?;
     let proof_gen_elapsed = Instant::now().signed_duration_since(proof_gen_start);
     tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:.3}");
 
@@ -396,14 +376,11 @@ fn start_http_server<Ver: StaticVersionType + 'static>(
 pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
     config: StateProverConfig,
     bind_version: Ver,
-) -> Result<()> {
-    let stake_table_capacity = config.stake_table_capacity;
-    tracing::info!("Stake table capacity: {}", stake_table_capacity);
+) {
     // TODO(#1022): maintain the following stake table
     let st = Arc::new(
-        init_stake_table_from_sequencer(&config.sequencer_url, stake_table_capacity)
-            .await
-            .with_context(|| "Failed to initialize stake table")?,
+        init_stake_table_from_orchestrator(&config.orchestrator_url, config.stake_table_capacity)
+            .await,
     );
 
     tracing::info!("Light client address: {:?}", config.light_client_address);
@@ -417,41 +394,38 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
         }
     }
 
-    let proving_key =
-        spawn_blocking(move || Arc::new(load_proving_key(stake_table_capacity))).await;
+    let proving_key = async_std::task::block_on(async move {
+        Arc::new(load_proving_key(config.stake_table_capacity))
+    });
 
     let update_interval = config.update_interval;
-    let retry_interval = config.retry_interval;
     loop {
-        if let Err(err) = sync_state(&st, proving_key.clone(), &relay_server_client, &config).await
-        {
-            tracing::error!("Cannot sync the light client state, will retry: {}", err);
-            sleep(retry_interval).await;
-        } else {
-            tracing::info!("Sleeping for {:?}", update_interval);
-            sleep(update_interval).await;
-        }
+        let st = st.clone();
+        let proving_key = proving_key.clone();
+        let relay_server_client = relay_server_client.clone();
+        let config = config.clone();
+        // Use block_on to avoid blocking the async runtime with this computationally heavy task
+        async_std::task::block_on(async move {
+            if let Err(err) = sync_state(&st, &proving_key, &relay_server_client, &config).await {
+                tracing::error!("Cannot sync the light client state: {}", err);
+            }
+        });
+        tracing::info!("Sleeping for {:?}", update_interval);
+        sleep(update_interval).await;
     }
 }
 
 /// Run light client state prover once
-pub async fn run_prover_once<Ver: StaticVersionType>(
-    config: StateProverConfig,
-    _: Ver,
-) -> Result<()> {
-    let st = init_stake_table_from_sequencer(&config.sequencer_url, config.stake_table_capacity)
-        .await
-        .with_context(|| "Failed to initialize stake table")?;
-    let stake_table_capacity = config.stake_table_capacity;
-    let proving_key =
-        spawn_blocking(move || Arc::new(load_proving_key(stake_table_capacity))).await;
+pub async fn run_prover_once<Ver: StaticVersionType>(config: StateProverConfig, _: Ver) {
+    let st =
+        init_stake_table_from_orchestrator(&config.orchestrator_url, config.stake_table_capacity)
+            .await;
+    let proving_key = load_proving_key(config.stake_table_capacity);
     let relay_server_client = Client::<ServerError, Ver>::new(config.relay_server.clone());
 
-    sync_state(&st, proving_key, &relay_server_client, &config)
+    sync_state(&st, &proving_key, &relay_server_client, &config)
         .await
         .expect("Error syncing the light client state.");
-
-    Ok(())
 }
 
 #[derive(Debug, Display)]
@@ -510,13 +484,12 @@ mod test {
     };
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_types::light_client::StateSignKey;
-    use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
+    use jf_primitives::signatures::{SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
     use sequencer_utils::deployer;
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
     const BLOCKS_PER_EPOCH: u32 = 10;
-
     const NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / 2) as u32;
 
     /// Init a meaningful ledger state that prover can generate future valid proof.
@@ -651,11 +624,10 @@ mod test {
             Self {
                 relay_server: Url::parse("http://localhost").unwrap(),
                 update_interval: Duration::default(),
-                retry_interval: Duration::default(),
                 l1_provider: Url::parse("http://localhost").unwrap(),
                 light_client_address: Address::default(),
                 eth_signing_key: SigningKey::random(&mut test_rng()),
-                sequencer_url: Url::parse("http://localhost").unwrap(),
+                orchestrator_url: Url::parse("http://localhost").unwrap(),
                 port: None,
                 stake_table_capacity: 10,
             }
@@ -666,6 +638,7 @@ mod test {
     async fn test_read_contract_state() -> Result<()> {
         setup_logging();
         setup_backtrace();
+
         let anvil = Anvil::new().spawn();
         let dummy_genesis = ParsedLightClientState::dummy_genesis();
         let (_wallet, contract) = deploy_contract_for_test(&anvil, dummy_genesis.clone()).await?;

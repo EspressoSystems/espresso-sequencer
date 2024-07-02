@@ -2,17 +2,15 @@
 #![cfg(any(test, feature = "testing"))]
 
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Leaf, SeqTypes, ViewNumber};
+use crate::{Header, Leaf, SeqTypes, ValidatedState, ViewNumber};
+use anyhow::bail;
 use async_trait::async_trait;
 use hotshot_types::{
-    consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, VidDisperseShare},
+    data::{DAProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
-    utils::View,
 };
-use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Options;
@@ -65,16 +63,10 @@ impl SequencerPersistence for NoStorage {
         Ok(None)
     }
 
-    async fn load_undecided_state(
-        &self,
-    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
-        Ok(None)
-    }
-
     async fn load_da_proposal(
         &self,
         _view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
         Ok(None)
     }
 
@@ -82,13 +74,6 @@ impl SequencerPersistence for NoStorage {
         &self,
         _view: ViewNumber,
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
-        Ok(None)
-    }
-
-    async fn load_quorum_proposals(
-        &self,
-    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
-    {
         Ok(None)
     }
 
@@ -100,7 +85,7 @@ impl SequencerPersistence for NoStorage {
     }
     async fn append_da(
         &mut self,
-        _proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
+        _proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -111,17 +96,8 @@ impl SequencerPersistence for NoStorage {
     ) -> anyhow::Result<()> {
         Ok(())
     }
-    async fn update_undecided_state(
-        &mut self,
-        _leaves: CommitmentMap<Leaf>,
-        _state: BTreeMap<ViewNumber, View<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-    async fn append_quorum_proposal(
-        &mut self,
-        _proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        Ok(())
+
+    async fn load_validated_state(&self, _header: &Header) -> anyhow::Result<ValidatedState> {
+        bail!("state persistence not implemented");
     }
 }

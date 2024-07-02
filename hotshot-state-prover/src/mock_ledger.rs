@@ -16,31 +16,28 @@ use hotshot_contract_adapter::jellyfish::{field_to_u256, open_key, u256_to_field
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
 use hotshot_stake_table::vec_based::StakeTable;
 
-use crate::{
-    generate_state_update_proof, preprocess, service::one_honest_threshold, Proof, VerifyingKey,
-};
+use crate::{generate_state_update_proof, preprocess, Proof, VerifyingKey};
 use hotshot_types::traits::stake_table::StakeTableScheme;
 use hotshot_types::{
     light_client::{GenericLightClientState, GenericPublicInput, LightClientState},
     traits::stake_table::SnapshotVersion,
 };
 use itertools::izip;
-use jf_pcs::prelude::UnivariateUniversalParams;
 use jf_plonk::proof_system::{PlonkKzgSnark, UniversalSNARK};
 use jf_plonk::transcript::SolidityTranscript;
-use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
-use jf_signature::schnorr::Signature;
-use jf_signature::{
+use jf_primitives::pcs::prelude::UnivariateUniversalParams;
+use jf_primitives::signatures::schnorr::Signature;
+use jf_primitives::signatures::{
     bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey as BLSVerKey},
-    schnorr::SchnorrSignatureScheme,
-    SignatureScheme,
+    SchnorrSignatureScheme, SignatureScheme,
 };
+use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
 use jf_utils::test_rng;
 use std::collections::HashMap;
 
 type F = ark_ed_on_bn254::Fq;
-type SchnorrVerKey = jf_signature::schnorr::VerKey<EdwardsConfig>;
-type SchnorrSignKey = jf_signature::schnorr::SignKey<ark_ed_on_bn254::Fr>;
+type SchnorrVerKey = jf_primitives::signatures::schnorr::VerKey<EdwardsConfig>;
+type SchnorrSignKey = jf_primitives::signatures::schnorr::SignKey<ark_ed_on_bn254::Fr>;
 
 /// Stake table capacity used for testing
 pub const STAKE_TABLE_CAPACITY: usize = 10;
@@ -88,8 +85,7 @@ impl MockLedger {
             key_archive.insert(qc_keys[i], state_keys[i].0.clone());
         }
         let st = stake_table_for_testing(&qc_keys, &state_keys);
-        let threshold =
-            one_honest_threshold(st.total_stake(SnapshotVersion::LastEpochStart).unwrap());
+        let threshold = st.total_stake(SnapshotVersion::LastEpochStart).unwrap() * 2 / 3;
 
         // arbitrary commitment values as they don't affect logic being tested
         let block_comm_root = F::from(1234);
@@ -123,11 +119,12 @@ impl MockLedger {
         {
             self.epoch += 1;
             self.st.advance();
-            self.threshold = one_honest_threshold(
-                self.st
-                    .total_stake(SnapshotVersion::LastEpochStart)
-                    .unwrap(),
-            );
+            self.threshold = self
+                .st
+                .total_stake(SnapshotVersion::LastEpochStart)
+                .unwrap()
+                * 2
+                / 3;
         }
 
         let new_root = self.new_dummy_comm();

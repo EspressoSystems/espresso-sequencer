@@ -1,9 +1,6 @@
 default:
     just --list
 
-doc *args:
-    cargo doc --no-deps --document-private-items {{args}}
-
 demo *args:
     docker compose up {{args}}
 
@@ -32,9 +29,6 @@ anvil *args:
 test:
     cargo build --bin diff-test --release
     cargo test --release --all-features
-
-clippy:
-    cargo clippy --workspace --all-features --all-targets -- -D warnings
 
 # Helpful shortcuts for local development
 dev-orchestrator:

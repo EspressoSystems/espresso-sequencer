@@ -21,7 +21,6 @@ use tempfile::TempDir;
 use url::Url;
 
 pub mod deployer;
-pub mod ser;
 pub mod test_utils;
 
 pub type Signer = SignerMiddleware<Provider<Http>, LocalWallet>;
@@ -73,7 +72,22 @@ impl AnvilOptions {
         };
 
         // When we are running a local Anvil node, as in tests, some endpoints (e.g. eth_feeHistory)
-        // do not work until at least one block has been mined.
+        // do not work until at least one block has been mined. Send a transaction to force the
+        // mining of a block.
+        anvil
+            .provider()
+            .send_transaction(
+                TransactionRequest {
+                    to: Some(Address::zero().into()),
+                    ..Default::default()
+                },
+                None,
+            )
+            .await
+            .unwrap()
+            .await
+            .unwrap();
+
         while let Err(err) = anvil
             .provider()
             .fee_history(1, BlockNumber::Latest, &[])

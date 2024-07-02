@@ -10,4 +10,4 @@ ark-srs = { workspace = true }
 hotshot-contract-adapter = { path = "../adapter" }
 hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { path = "../../../hotshot-state-prover" }
-jf-pcs = { workspace = true }
+jf-primitives = { workspace = true }

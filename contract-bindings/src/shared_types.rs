@@ -53,23 +53,6 @@ pub struct PlonkProof {
     pub sigma_eval_3: ::ethers::core::types::U256,
     pub prod_perm_zeta_omega_eval: ::ethers::core::types::U256,
 }
-///`HotShotCommitment(uint64,uint256)`
-#[derive(
-    Clone,
-    ::ethers::contract::EthAbiType,
-    ::ethers::contract::EthAbiCodec,
-    serde::Serialize,
-    serde::Deserialize,
-    Default,
-    Debug,
-    PartialEq,
-    Eq,
-    Hash,
-)]
-pub struct HotShotCommitment {
-    pub block_height: u64,
-    pub block_comm_root: ::ethers::core::types::U256,
-}
 ///`LightClientState(uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256)`
 #[derive(
     Clone,

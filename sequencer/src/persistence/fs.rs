@@ -1,21 +1,18 @@
 use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Leaf, SeqTypes, ViewNumber};
-use anyhow::{anyhow, Context};
+use crate::{Header, Leaf, SeqTypes, ValidatedState, ViewNumber};
+use anyhow::{anyhow, bail, Context};
 use async_trait::async_trait;
 use clap::Parser;
 
 use hotshot_types::{
-    consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, VidDisperseShare},
+    data::{DAProposal, VidDisperseShare},
     event::HotShotAction,
     message::Proposal,
     simple_certificate::QuorumCertificate,
     traits::node_implementation::ConsensusTime,
-    utils::View,
     vote::HasViewNumber,
 };
 use std::{
-    collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
@@ -26,10 +23,7 @@ use std::{
 pub struct Options {
     /// Storage path for persistent data.
     #[clap(long, env = "ESPRESSO_SEQUENCER_STORAGE_PATH")]
-    path: PathBuf,
-
-    #[clap(long, env = "ESPRESSO_SEQUENCER_STORE_UNDECIDED_STATE", hide = true)]
-    store_undecided_state: bool,
+    pub path: PathBuf,
 }
 
 impl Default for Options {
@@ -38,28 +32,12 @@ impl Default for Options {
     }
 }
 
-impl Options {
-    pub fn new(path: PathBuf) -> Self {
-        Self {
-            path,
-            store_undecided_state: false,
-        }
-    }
-
-    pub(crate) fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
 #[async_trait]
 impl PersistenceOptions for Options {
     type Persistence = Persistence;
 
     async fn create(self) -> anyhow::Result<Persistence> {
-        Ok(Persistence {
-            path: self.path,
-            store_undecided_state: self.store_undecided_state,
-        })
+        Ok(Persistence(self.path))
     }
 
     async fn reset(self) -> anyhow::Result<()> {
@@ -69,38 +47,27 @@ impl PersistenceOptions for Options {
 
 /// File system backed persistence.
 #[derive(Clone, Debug)]
-pub struct Persistence {
-    path: PathBuf,
-    store_undecided_state: bool,
-}
+pub struct Persistence(PathBuf);
 
 impl Persistence {
     fn config_path(&self) -> PathBuf {
-        self.path.join("hotshot.cfg")
+        self.0.join("hotshot.cfg")
     }
 
     fn voted_view_path(&self) -> PathBuf {
-        self.path.join("highest_voted_view")
+        self.0.join("highest_voted_view")
     }
 
     fn anchor_leaf_path(&self) -> PathBuf {
-        self.path.join("anchor_leaf")
+        self.0.join("anchor_leaf")
     }
 
     fn vid_dir_path(&self) -> PathBuf {
-        self.path.join("vid")
+        self.0.join("vid")
     }
 
     fn da_dir_path(&self) -> PathBuf {
-        self.path.join("da")
-    }
-
-    fn undecided_state_path(&self) -> PathBuf {
-        self.path.join("undecided_state")
-    }
-
-    fn quorum_proposals_dir_path(&self) -> PathBuf {
-        self.path.join("quorum_proposals")
+        self.0.join("da")
     }
 
     /// Overwrite a file if a condition is met.
@@ -167,7 +134,7 @@ impl SequencerPersistence for Persistence {
     }
 
     async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()> {
-        let view_number = view.u64();
+        let view_number = view.get_u64();
 
         let delete_files = |dir_path: PathBuf| -> anyhow::Result<()> {
             if !dir_path.is_dir() {
@@ -191,8 +158,7 @@ impl SequencerPersistence for Persistence {
         };
 
         delete_files(self.da_dir_path())?;
-        delete_files(self.vid_dir_path())?;
-        delete_files(self.quorum_proposals_dir_path())
+        delete_files(self.vid_dir_path())
     }
 
     async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
@@ -225,10 +191,10 @@ impl SequencerPersistence for Persistence {
                 let mut height_bytes = [0; 8];
                 file.read_exact(&mut height_bytes).context("read height")?;
                 let height = u64::from_le_bytes(height_bytes);
-                if height >= leaf.height() {
+                if height >= leaf.get_height() {
                     tracing::warn!(
                         saved_height = height,
-                        new_height = leaf.height(),
+                        new_height = leaf.get_height(),
                         "not writing anchor leaf because saved leaf has newer height",
                     );
                     return Ok(false);
@@ -240,7 +206,7 @@ impl SequencerPersistence for Persistence {
             },
             |mut file| {
                 // Save the new leaf. First we write the height.
-                file.write_all(&leaf.height().to_le_bytes())
+                file.write_all(&leaf.get_height().to_le_bytes())
                     .context("write height")?;
                 // Now serialize and write out the actual leaf and its corresponding QC.
                 let bytes = bincode::serialize(&(leaf, qc)).context("serialize leaf")?;
@@ -268,24 +234,15 @@ impl SequencerPersistence for Persistence {
         Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
     }
 
-    async fn load_undecided_state(
-        &self,
-    ) -> anyhow::Result<Option<(CommitmentMap<Leaf>, BTreeMap<ViewNumber, View<SeqTypes>>)>> {
-        let path = self.undecided_state_path();
-        if !path.is_file() {
-            return Ok(None);
-        }
-        let bytes = fs::read(&path).context("read")?;
-        Ok(Some(bincode::deserialize(&bytes).context("deserialize")?))
-    }
-
     async fn load_da_proposal(
         &self,
         view: ViewNumber,
-    ) -> anyhow::Result<Option<Proposal<SeqTypes, DaProposal<SeqTypes>>>> {
+    ) -> anyhow::Result<Option<Proposal<SeqTypes, DAProposal<SeqTypes>>>> {
         let dir_path = self.da_dir_path();
 
-        let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
+        let file_path = dir_path
+            .join(view.get_u64().to_string())
+            .with_extension("txt");
 
         if !file_path.exists() {
             return Ok(None);
@@ -293,7 +250,7 @@ impl SequencerPersistence for Persistence {
 
         let da_bytes = fs::read(file_path)?;
 
-        let da_proposal: Proposal<SeqTypes, DaProposal<SeqTypes>> =
+        let da_proposal: Proposal<SeqTypes, DAProposal<SeqTypes>> =
             bincode::deserialize(&da_bytes)?;
         Ok(Some(da_proposal))
     }
@@ -304,7 +261,9 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<Option<Proposal<SeqTypes, VidDisperseShare<SeqTypes>>>> {
         let dir_path = self.vid_dir_path();
 
-        let file_path = dir_path.join(view.u64().to_string()).with_extension("txt");
+        let file_path = dir_path
+            .join(view.get_u64().to_string())
+            .with_extension("txt");
 
         if !file_path.exists() {
             return Ok(None);
@@ -320,7 +279,7 @@ impl SequencerPersistence for Persistence {
         &mut self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        let view_number = proposal.data.view_number().u64();
+        let view_number = proposal.data.get_view_number().get_u64();
         let dir_path = self.vid_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create vid dir")?;
@@ -343,9 +302,9 @@ impl SequencerPersistence for Persistence {
     }
     async fn append_da(
         &mut self,
-        proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
+        proposal: &Proposal<SeqTypes, DAProposal<SeqTypes>>,
     ) -> anyhow::Result<()> {
-        let view_number = proposal.data.view_number().u64();
+        let view_number = proposal.data.get_view_number().get_u64();
         let dir_path = self.da_dir_path();
 
         fs::create_dir_all(dir_path.clone()).context("failed to create da dir")?;
@@ -385,112 +344,14 @@ impl SequencerPersistence for Persistence {
                 Ok(saved_view < view)
             },
             |mut file| {
-                file.write_all(&view.u64().to_le_bytes())?;
+                file.write_all(&view.get_u64().to_le_bytes())?;
                 Ok(())
             },
         )
     }
-    async fn update_undecided_state(
-        &mut self,
-        leaves: CommitmentMap<Leaf>,
-        state: BTreeMap<ViewNumber, View<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        if !self.store_undecided_state {
-            return Ok(());
-        }
 
-        self.replace(
-            &self.undecided_state_path(),
-            |_| {
-                // Always overwrite the previous file.
-                Ok(true)
-            },
-            |mut file| {
-                let bytes =
-                    bincode::serialize(&(leaves, state)).context("serializing undecided state")?;
-                file.write_all(&bytes)?;
-                Ok(())
-            },
-        )
-    }
-    async fn append_quorum_proposal(
-        &mut self,
-        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        let view_number = proposal.data.view_number().u64();
-        let dir_path = self.quorum_proposals_dir_path();
-
-        fs::create_dir_all(dir_path.clone()).context("failed to create proposals dir")?;
-
-        let file_path = dir_path.join(view_number.to_string()).with_extension("txt");
-        self.replace(
-            &file_path,
-            |_| {
-                // Always overwrite the previous file
-                Ok(true)
-            },
-            |mut file| {
-                let proposal_bytes = bincode::serialize(&proposal).context("serialize proposal")?;
-
-                file.write_all(&proposal_bytes)?;
-                Ok(())
-            },
-        )
-    }
-    async fn load_quorum_proposals(
-        &self,
-    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
-    {
-        // First, get the proposal directory.
-        let dir_path = self.quorum_proposals_dir_path();
-
-        // Then, we want to get the entries in this directory since they'll be the
-        // key/value pairs for our map.
-        let files: Vec<fs::DirEntry> = fs::read_dir(dir_path.clone())?
-            .filter_map(|entry| {
-                entry
-                    .ok()
-                    .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
-            })
-            .collect();
-
-        // Do we have any entries?
-        if files.is_empty() {
-            // Don't bother continuing if we don't have any data.
-            return Ok(None);
-        }
-
-        // Read all of the files
-        let proposal_files = files
-            .into_iter()
-            .map(|entry| dir_path.join(entry.file_name()).with_extension("txt"));
-
-        let mut map = BTreeMap::new();
-        for file in proposal_files.into_iter() {
-            // This operation shouldn't fail, but we don't want to panic here if the filesystem
-            // somehow gets corrupted. We get the stem to remove the ".txt" from the end.
-            if let Some(file_name) = file.file_stem() {
-                // We need to convert the filename (which corresponds to the view)
-                let view_number = ViewNumber::new(
-                    file_name
-                        .to_string_lossy()
-                        .parse::<u64>()
-                        .context("convert file name to u64")?,
-                );
-
-                // Now, we'll try and load the proposal associated with this function.
-                let proposal_bytes = fs::read(file)?;
-
-                // Then, deserialize.
-                let proposal: Proposal<SeqTypes, QuorumProposal<SeqTypes>> =
-                    bincode::deserialize(&proposal_bytes)?;
-
-                // Push to the map and we're done.
-                map.insert(view_number, proposal);
-            }
-        }
-
-        Ok(Some(map))
+    async fn load_validated_state(&self, _header: &Header) -> anyhow::Result<ValidatedState> {
+        bail!("state persistence not implemented");
     }
 }
 
@@ -509,7 +370,7 @@ mod testing {
         }
 
         async fn connect(storage: &Self::Storage) -> Self {
-            Options::new(storage.path().into()).create().await.unwrap()
+            Persistence(storage.path().into())
         }
     }
 }

@@ -15,9 +15,8 @@ contract-bindings = { path = "../contract-bindings" }
 derive_more = { workspace = true }
 ethers = { workspace = true }
 futures = { workspace = true }
-hotshot-contract-adapter = { workspace = true }
+hotshot-contract-adapter ={ path = "../contracts/rust/adapter" }
 portpicker = { workspace = true }
-serde = { workspace = true }
 serde_json = "^1.0.113"
 surf = "2.3.2"
 tempfile = "3.9.0"
