@@ -147,11 +147,12 @@ impl BlockPayload<SeqTypes> for Payload {
         }
     }
 
-    // >>>>???
     fn empty() -> (Self, Self::Metadata) {
         let payload = Payload {
             raw_payload: Vec::new(),
-            ns_table: NsTable { bytes: Vec::new() },
+            ns_table: NsTable {
+                bytes: vec![0, 0, 0, 0],
+            },
         };
         let ns_table = payload.ns_table().clone();
         (payload, ns_table)
