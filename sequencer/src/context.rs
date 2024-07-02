@@ -348,6 +348,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
                                         let throughput_bytes_per_sec = (total_throughput as u64)
                                             / std::cmp::max(total_time_elapsed.as_secs(), 1u64);
                                         BenchResults {
+                                            partial_results: "Unset".to_string(),
                                             // latency will be reported in another struct
                                             avg_latency_in_sec: 0,
                                             num_latency: 1,
