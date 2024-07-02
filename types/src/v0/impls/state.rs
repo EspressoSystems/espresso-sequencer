@@ -265,24 +265,28 @@ fn charge_fee(
     Ok(())
 }
 
-/// Validate builder account by verifying signature
+/// Validate builder accounts by verifying signatures. All fees are
+/// verified against signature by index.
 fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidationError> {
-    // Beware of Malice!
-    let signature = proposed_header
-        .builder_signature()
-        .ok_or(BuilderValidationError::SignatureNotFound)?;
-    let fee_amount = proposed_header.fee_info().amount().as_u64().ok_or(
-        BuilderValidationError::FeeAmountOutOfRange(proposed_header.fee_info().amount()),
-    )?;
+    // TODO since we are iterating, should we include account/amount in errors?
+    for (fee_info, signature) in proposed_header
+        .fee_info()
+        .iter()
+        .zip(proposed_header.builder_signature())
+    {
+        // check that amount fits in a u64
+        fee_info
+            .amount
+            .as_u64()
+            .ok_or(BuilderValidationError::FeeAmountOutOfRange(fee_info.amount))?;
 
-    // verify signature
-    if !proposed_header.fee_info().account.validate_fee_signature(
-        &signature,
-        fee_amount,
-        proposed_header.metadata(),
-        &proposed_header.payload_commitment(),
-    ) {
-        return Err(BuilderValidationError::InvalidBuilderSignature);
+        // verify signature
+        fee_info
+            .account
+            // TODO remove metadata, payload from trait `validate_fee_signature`
+            .validate_fee_signature(&signature, fee_info.amount.as_u64().unwrap())
+            .then_some(())
+            .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
     }
 
     Ok(())
