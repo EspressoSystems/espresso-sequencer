@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 
 use committable::Commitment;
@@ -6,6 +7,7 @@ use hotshot_types::utils::BuilderCommitment;
 use itertools::Either;
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::Value;
 use vbs::version::Version;
 
 use crate::{
@@ -80,20 +82,51 @@ impl Serialize for Header {
     }
 }
 
+#[derive(Deserialize, Debug, PartialEq, Eq, Hash)]
+#[serde(field_identifier, rename_all = "snake_case")]
+pub enum StructFields {
+    Version,
+    Fields,
+    ChainConfig,
+    Height,
+    Timestamp,
+    L1Head,
+    L1Finalized,
+    PayloadCommitment,
+    BuilderCommitment,
+    NsTable,
+    BlockMerkleTreeRoot,
+    FeeMerkleTreeRoot,
+    FeeInfo,
+    BuilderSignature,
+}
+
+impl StructFields {
+    fn list() -> &'static [&'static str] {
+        &[
+            "chain_config",
+            "fields",
+            "height",
+            "timestamp",
+            "l1_head",
+            "l1_finalized",
+            "payload_commitment",
+            "builder_commitment",
+            "ns_table",
+            "block_merkle_tree_root",
+            "fee_merkle_tree_root",
+            "fee_info",
+            "builder_signature",
+        ]
+    }
+}
+
 impl<'de> Deserialize<'de> for Header {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         struct HeaderVisitor;
-
-        #[derive(Deserialize)]
-        #[serde(field_identifier, rename_all = "snake_case")]
-        enum StructFields {
-            Version,
-            Fields,
-            ChainConfig,
-        }
 
         impl<'de> Visitor<'de> for HeaderVisitor {
             type Value = Header;
@@ -107,7 +140,8 @@ impl<'de> Deserialize<'de> for Header {
                 V: SeqAccess<'de>,
             {
                 let chain_config_or_version: ResolvableChainConfigOrVersion =
-                    seq.next_element()?.unwrap();
+                    seq.next_element()?
+                        .ok_or_else(|| de::Error::missing_field("chain_config"))?;
 
                 match chain_config_or_version.chain_config {
                     // For v0.1, the first field in the sequence of fields is the first field of the struct, so we call a function to get the rest of
@@ -136,50 +170,54 @@ impl<'de> Deserialize<'de> for Header {
             where
                 V: MapAccess<'de>,
             {
-                // retrieving the first entry from the map, which could either be a
-                // `chain_config` (for v0.1 headers) or a `version` (for `VersionedHeader` structs).
-                let Some((_, chain_config_or_version)) =
-                    map.next_entry::<StructFields, ResolvableChainConfigOrVersion>()?
-                else {
-                    return Err(de::Error::missing_field("version"));
-                };
+                // remaining v1 header fields are inserted in the hashmap
+                let mut v1_hashmap: HashMap<StructFields, Value> = HashMap::new();
+                let mut chain_config_or_version = None;
+                let mut fields: Option<Value> = None;
+
+                while let Some(key) = map.next_key::<StructFields>()? {
+                    match key {
+                        StructFields::ChainConfig => {
+                            chain_config_or_version = Some(map.next_value()?)
+                        }
+                        StructFields::Version => chain_config_or_version = Some(map.next_value()?),
+                        StructFields::Fields => fields = Some(map.next_value()?),
+                        _ => {
+                            v1_hashmap.insert(key, map.next_value()?);
+                        }
+                    }
+                }
+
+                let chain_config_or_version: ResolvableChainConfigOrVersion =
+                    chain_config_or_version
+                        .ok_or_else(|| de::Error::missing_field("chain_config_or_version"))?;
 
                 // Match to determine the appropriate header version.
                 match chain_config_or_version.chain_config {
                     EitherOrVersion::Left(cfg) => Ok(Header::V1(
-                        v0_1::Header::deserialize_with_chain_config_map(cfg.into(), map)?,
+                        v0_1::Header::deserialize_with_chain_config_map::<V>(
+                            cfg.into(),
+                            v1_hashmap,
+                        )?,
                     )),
                     EitherOrVersion::Right(commit) => Ok(Header::V1(
-                        v0_1::Header::deserialize_with_chain_config_map(commit.into(), map)?,
+                        v0_1::Header::deserialize_with_chain_config_map::<V>(
+                            commit.into(),
+                            v1_hashmap,
+                        )?,
                     )),
                     EitherOrVersion::Version(Version { major: 0, minor: 2 }) => {
-                        Ok(Header::V2(map.next_entry::<StructFields, _>()?.unwrap().1))
+                        Ok(Header::V2(serde_json::from_value(fields.unwrap()).unwrap()))
                     }
                     EitherOrVersion::Version(Version { major: 0, minor: 3 }) => {
-                        Ok(Header::V3(map.next_entry::<StructFields, _>()?.unwrap().1))
+                        Ok(Header::V3(serde_json::from_value(fields.unwrap()).unwrap()))
                     }
                     _ => Err(serde::de::Error::custom("invalid version")),
                 }
             }
         }
 
-        const FIELDS: &[&str] = &[
-            "chain_config",
-            "fields",
-            "height",
-            "timestamp",
-            "l1_head",
-            "l1_finalized",
-            "payload_commitment",
-            "builder_commitment",
-            "ns_table",
-            "block_merkle_tree_root",
-            "fee_merkle_tree_root",
-            "fee_info",
-            "builder_signature",
-        ];
-
-        deserializer.deserialize_struct("Header", FIELDS, HeaderVisitor)
+        deserializer.deserialize_struct("Header", StructFields::list(), HeaderVisitor)
     }
 }
 

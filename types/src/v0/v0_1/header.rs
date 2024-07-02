@@ -1,4 +1,6 @@
-use crate::NsTable;
+use std::collections::HashMap;
+
+use crate::{v0::header::StructFields, NsTable};
 
 use super::{
     BlockMerkleCommitment, BuilderSignature, FeeInfo, FeeMerkleCommitment, L1BlockInfo,
@@ -9,6 +11,7 @@ use serde::{
     de::{self, MapAccess, SeqAccess},
     Deserialize, Serialize,
 };
+use serde_json::Value;
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Header {
@@ -31,6 +34,22 @@ macro_rules! element {
     ($seq:expr, $field:ident) => {
         $seq.next_element()?
             .ok_or_else(|| de::Error::missing_field(stringify!($field)))?
+    };
+}
+
+macro_rules! extract_field {
+    ($map:expr, $field:ident) => {
+        serde_json::from_value(
+            $map.get(&StructFields::$field)
+                .ok_or_else(|| {
+                    de::Error::custom(&format!(
+                        "missing field in hashmap :{:?}",
+                        StructFields::$field
+                    ))
+                })?
+                .clone(),
+        )
+        .map_err(de::Error::custom)?
     };
 }
 
@@ -72,84 +91,36 @@ impl Header {
 
     pub fn deserialize_with_chain_config_map<'de, M>(
         chain_config: ResolvableChainConfig,
-        mut map: M,
+        map: HashMap<StructFields, Value>,
     ) -> Result<Header, M::Error>
     where
         M: MapAccess<'de>,
     {
-        // defining an enum of all the fields that are expected in the struct
-        #[derive(Deserialize)]
-        #[serde(field_identifier, rename_all = "snake_case")]
-        enum ChainConfigFields {
-            Height,
-            Timestamp,
-            L1Head,
-            L1Finalized,
-            PayloadCommitment,
-            BuilderCommitment,
-            NsTable,
-            BlockMerkleTreeRoot,
-            FeeMerkleTreeRoot,
-            FeeInfo,
-            BuilderSignature,
-        }
-
-        let mut height = None;
-        let mut timestamp = None;
-        let mut l1_head = None;
-        let mut l1_finalized = None;
-        let mut payload_commitment = None;
-        let mut builder_commitment = None;
-        let mut ns_table = None;
-        let mut block_merkle_tree_root = None;
-        let mut fee_merkle_tree_root = None;
-        let mut fee_info = None;
-        let mut builder_signature = None;
-
-        // Iterate over the key-value pairs in the map. The order of fields in the JSON
-        // may not match the order in the struct, so we handle each field based on its key.
-        while let Some(key) = map.next_key()? {
-            match key {
-                ChainConfigFields::Height => height = Some(map.next_value()?),
-                ChainConfigFields::Timestamp => timestamp = Some(map.next_value()?),
-                ChainConfigFields::L1Head => l1_head = Some(map.next_value()?),
-                ChainConfigFields::L1Finalized => l1_finalized = map.next_value()?,
-                ChainConfigFields::PayloadCommitment => {
-                    payload_commitment = Some(map.next_value()?)
-                }
-                ChainConfigFields::BuilderCommitment => {
-                    builder_commitment = Some(map.next_value()?)
-                }
-                ChainConfigFields::NsTable => ns_table = Some(map.next_value()?),
-                ChainConfigFields::BlockMerkleTreeRoot => {
-                    block_merkle_tree_root = Some(map.next_value()?)
-                }
-                ChainConfigFields::FeeMerkleTreeRoot => {
-                    fee_merkle_tree_root = Some(map.next_value()?)
-                }
-                ChainConfigFields::FeeInfo => fee_info = Some(map.next_value()?),
-                ChainConfigFields::BuilderSignature => builder_signature = map.next_value()?,
-            }
-        }
+        let height = extract_field!(map, Height);
+        let timestamp = extract_field!(map, Timestamp);
+        let l1_head = extract_field!(map, L1Head);
+        let l1_finalized = extract_field!(map, L1Finalized);
+        let payload_commitment = extract_field!(map, PayloadCommitment);
+        let builder_commitment = extract_field!(map, BuilderCommitment);
+        let ns_table = extract_field!(map, NsTable);
+        let block_merkle_tree_root = extract_field!(map, BlockMerkleTreeRoot);
+        let fee_merkle_tree_root = extract_field!(map, FeeMerkleTreeRoot);
+        let fee_info = extract_field!(map, FeeInfo);
+        let builder_signature = extract_field!(map, BuilderSignature);
 
         // If any field is missing, we return an error indicating which field is missing.
-
         Ok(Self {
             chain_config,
-            height: height.ok_or_else(|| de::Error::missing_field("height"))?,
-            timestamp: timestamp.ok_or_else(|| de::Error::missing_field("timestamp"))?,
-            l1_head: l1_head.ok_or_else(|| de::Error::missing_field("l1_head"))?,
+            height,
+            timestamp,
+            l1_head,
             l1_finalized,
-            payload_commitment: payload_commitment
-                .ok_or_else(|| de::Error::missing_field("payload_commitment"))?,
-            builder_commitment: builder_commitment
-                .ok_or_else(|| de::Error::missing_field("builder_commitment"))?,
-            ns_table: ns_table.ok_or_else(|| de::Error::missing_field("ns_table"))?,
-            block_merkle_tree_root: block_merkle_tree_root
-                .ok_or_else(|| de::Error::missing_field("block_merkle_tree_root"))?,
-            fee_merkle_tree_root: fee_merkle_tree_root
-                .ok_or_else(|| de::Error::missing_field("fee_merkle_tree_root"))?,
-            fee_info: fee_info.ok_or_else(|| de::Error::missing_field("fee_info"))?,
+            payload_commitment,
+            builder_commitment,
+            ns_table,
+            block_merkle_tree_root,
+            fee_merkle_tree_root,
+            fee_info,
             builder_signature,
         })
     }
