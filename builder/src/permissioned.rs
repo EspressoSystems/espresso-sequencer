@@ -12,8 +12,8 @@ use hotshot::{
     traits::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
-            derive_libp2p_peer_id, CombinedNetworks, KeyPair, Libp2pNetwork,
-            NetworkingMetricsValue, PushCdnNetwork, WebServerNetwork, WrappedSignatureKey,
+            derive_libp2p_peer_id, CdnMetricsValue, CombinedNetworks, KeyPair, Libp2pNetwork,
+            PushCdnNetwork, Topic, WrappedSignatureKey,
         },
     },
     types::{SignatureKey, SystemContextHandle},
@@ -28,7 +28,7 @@ use hotshot_types::{
     event::Event,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
-    traits::{election::Membership, metrics::Metrics},
+    traits::{election::Membership, metrics::Metrics, EncodeBytes},
     utils::BuilderCommitment,
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
@@ -60,25 +60,27 @@ use hotshot_builder_core::{
     service::{
         run_non_permissioned_standalone_builder_service,
         run_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
+        ReceivedTransaction,
     },
 };
 use hotshot_state_prover;
-use jf_primitives::{
-    merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
-    signatures::bls_over_bn254::VerKey,
-};
-use sequencer::state_signature::StakeTableCommitmentType;
-use sequencer::{catchup::mock::MockStateCatchup, eth_signature_key::EthKeyPair, ChainConfig};
+use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
+use jf_signature::bls_over_bn254::VerKey;
 use sequencer::{
-    catchup::StatePeers,
+    catchup::{mock::MockStateCatchup, StatePeers},
     context::{Consensus, SequencerContext},
+    eth_signature_key::EthKeyPair,
+    genesis::L1Finalized,
     l1_client::L1Client,
     network,
+    network::libp2p::split_off_peer_id,
     persistence::SequencerPersistence,
     state::FeeAccount,
     state::ValidatedState,
+    state_signature::StakeTableCommitmentType,
     state_signature::{static_stake_table_commitment, StateSigner},
-    BuilderParams, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey, SeqTypes,
+    ChainConfig, Genesis, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey,
+    SeqTypes,
 };
 use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
@@ -87,7 +89,6 @@ use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::StaticVersionType;
 
 use hotshot_types::{
-    constants::{Version01, STATIC_VER_0_1},
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
@@ -109,7 +110,7 @@ pub struct BuilderContext<
     Ver: StaticVersionType + 'static,
 > {
     /// The consensus handle
-    pub hotshot_handle: Consensus<N, P>,
+    pub hotshot_handle: Arc<Consensus<N, P>>,
 
     /// Index of this sequencer node
     pub node_index: u64,
@@ -129,21 +130,21 @@ pub struct BuilderContext<
 
 #[allow(clippy::too_many_arguments)]
 pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
+    genesis: Genesis,
     network_params: NetworkParams,
     metrics: &dyn Metrics,
-    builder_params: BuilderParams,
     l1_params: L1Params,
     hotshot_builder_api_url: Url,
     eth_key_pair: EthKeyPair,
     bootstrapped_view: ViewNumber,
-    channel_capacity: NonZeroUsize,
+    tx_channel_capacity: NonZeroUsize,
+    event_channel_capacity: NonZeroUsize,
     bind_version: Ver,
     persistence: P,
     max_api_timeout_duration: Duration,
     buffered_view_num_count: usize,
     is_da: bool,
-    maximise_txns_count_timeout_duration: Duration,
-    base_fee: u64,
+    maximize_txns_count_timeout_duration: Duration,
 ) -> anyhow::Result<BuilderContext<network::Production, P, Ver>> {
     // Orchestrator client
     let validator_args = ValidatorArgs {
@@ -166,18 +167,35 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         derive_libp2p_peer_id::<<SeqTypes as NodeType>::SignatureKey>(&my_config.private_key)
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
-    let config = NetworkConfig::get_complete_config(
+    let mut config = NetworkConfig::get_complete_config(
         &orchestrator_client,
-        None,
         my_config.clone(),
         // Register in our Libp2p advertise address and public key so other nodes
         // can contact us on startup
         Some(network_params.libp2p_advertise_address),
         Some(libp2p_public_key),
-        false,
     )
     .await?
     .0;
+
+    // If the `Libp2p` bootstrap nodes were supplied via the command line, override those
+    // present in the config file.
+    if let Some(bootstrap_nodes) = network_params.libp2p_bootstrap_nodes {
+        if let Some(libp2p_config) = config.libp2p_config.as_mut() {
+            // If the libp2p configuration is present, we can override the bootstrap nodes.
+
+            // Split off the peer ID from the addresses
+            libp2p_config.bootstrap_nodes = bootstrap_nodes
+                .into_iter()
+                .map(split_off_peer_id)
+                .collect::<Result<Vec<_>, _>>()
+                .with_context(|| "Failed to parse peer ID from bootstrap node")?;
+        } else {
+            // If not, don't try launching with them. Eventually we may want to
+            // provide a default configuration here instead.
+            tracing::warn!("No libp2p configuration found, ignoring bootstrap nodes");
+        }
+    }
 
     tracing::info!(
     node_id = config.node_index,
@@ -190,11 +208,12 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Initialize the push CDN network (and perform the initial connection)
     let cdn_network = PushCdnNetwork::new(
         network_params.cdn_endpoint,
-        vec!["Global".into(), "DA".into()],
+        vec![Topic::Global, Topic::Da],
         KeyPair {
             public_key: WrappedSignatureKey(my_config.public_key),
             private_key: my_config.private_key.clone(),
         },
+        CdnMetricsValue::new(metrics),
     )
     .with_context(|| "Failed to create CDN network")?;
 
@@ -207,6 +226,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         // We need the private key so we can derive our Libp2p keypair
         // (using https://docs.rs/blake3/latest/blake3/fn.derive_key.html)
         &my_config.private_key,
+        hotshot::traits::implementations::Libp2pMetricsValue::new(metrics),
     )
     .await
     .with_context(|| "Failed to create libp2p network")?;
@@ -214,18 +234,12 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Combine the communication channels
     #[cfg(feature = "libp2p")]
     let (da_network, quorum_network) = {
-        (
-            Arc::from(CombinedNetworks::new(
-                cdn_network.clone(),
-                p2p_network.clone(),
-                Duration::from_secs(1),
-            )),
-            Arc::from(CombinedNetworks::new(
-                cdn_network,
-                p2p_network,
-                Duration::from_secs(1),
-            )),
-        )
+        let network = Arc::new(CombinedNetworks::new(
+            cdn_network,
+            p2p_network,
+            Duration::from_secs(1),
+        ));
+        (Arc::clone(&network), network)
     };
 
     #[cfg(not(feature = "libp2p"))]
@@ -238,25 +252,38 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         _pd: Default::default(),
     };
 
-    // The web server network doesn't have any metrics. By creating and dropping a
-    // `NetworkingMetricsValue`, we ensure the networking metrics are created, but just not
-    // populated, so that monitoring software built to work with network-related metrics doesn't
-    // crash horribly just because we're not using the P2P network yet.
-    let _ = NetworkingMetricsValue::new(metrics);
-
-    let mut genesis_state = ValidatedState::default();
-    for address in builder_params.prefunded_accounts {
-        tracing::warn!("Prefunding account {:?} for demo", address);
-        genesis_state.prefund_account(address.into(), U256::max_value().into());
+    let mut genesis_state = ValidatedState {
+        chain_config: genesis.chain_config.into(),
+        ..Default::default()
+    };
+    for (address, amount) in genesis.accounts {
+        tracing::warn!(%address, %amount, "Prefunding account for demo");
+        genesis_state.prefund_account(address, amount);
     }
 
-    let l1_client = L1Client::new(l1_params.url, Address::default());
+    let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
+    let l1_genesis = match genesis.l1_finalized {
+        Some(L1Finalized::Block(b)) => Some(b),
+        Some(L1Finalized::Number { number }) => {
+            Some(l1_client.wait_for_finalized_block(number).await)
+        }
+        None => None,
+    };
 
-    let instance_state = NodeState::new(
-        ChainConfig::default(),
+    let instance_state = NodeState {
+        chain_config: genesis.chain_config,
         l1_client,
-        Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
-    );
+        genesis_header: genesis.header,
+        genesis_state: genesis_state.clone(),
+        l1_genesis,
+        peers: Arc::new(StatePeers::<Ver>::from_urls(
+            network_params.state_peers,
+            network_params.catchup_backoff,
+        )),
+        node_id: node_index,
+        upgrades: Default::default(),
+        current_version: Ver::VERSION,
+    };
 
     let stake_table_commit =
         static_stake_table_commitment(&config.config.known_nodes_with_stake, STAKE_TABLE_CAPACITY);
@@ -276,18 +303,19 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     .await;
 
     let ctx = BuilderContext::init(
-        hotshot_handle,
+        Arc::new(hotshot_handle),
         state_signer,
         node_index,
         eth_key_pair,
         bootstrapped_view,
-        channel_capacity,
+        tx_channel_capacity,
+        event_channel_capacity,
         instance_state,
+        genesis_state,
         hotshot_builder_api_url,
         max_api_timeout_duration,
         buffered_view_num_count,
-        maximise_txns_count_timeout_duration,
-        base_fee,
+        maximize_txns_count_timeout_duration,
     )
     .await?;
 
@@ -348,7 +376,9 @@ pub async fn init_hotshot<
         config,
         memberships,
         networks,
-        HotShotInitializer::from_genesis(instance_state).unwrap(),
+        HotShotInitializer::from_genesis(instance_state)
+            .await
+            .unwrap(),
         ConsensusMetricsValue::new(metrics),
         da_storage,
     )
@@ -372,53 +402,57 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     /// Constructor
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
-        hotshot_handle: Consensus<N, P>,
+        hotshot_handle: Arc<Consensus<N, P>>,
         state_signer: StateSigner<Ver>,
         node_index: u64,
         eth_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
-        channel_capacity: NonZeroUsize,
+        tx_channel_capacity: NonZeroUsize,
+        event_channel_capacity: NonZeroUsize,
         instance_state: NodeState,
+        validated_state: ValidatedState,
         hotshot_builder_api_url: Url,
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
-        maximise_txns_count_timeout_duration: Duration,
-        base_fee: u64,
+        maximize_txns_count_timeout_duration: Duration,
     ) -> anyhow::Result<Self> {
         // tx channel
-        let (tx_sender, tx_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (mut tx_sender, tx_receiver) =
+            broadcast::<Arc<ReceivedTransaction<SeqTypes>>>(tx_channel_capacity.get());
+        tx_sender.set_overflow(true);
 
         // da channel
-        let (da_sender, da_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (da_sender, da_receiver) =
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // qc channel
-        let (qc_sender, qc_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (qc_sender, qc_receiver) =
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // decide channel
         let (decide_sender, decide_receiver) =
-            broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // builder api request channel
-        let (req_sender, req_receiver) = broadcast::<MessageType<SeqTypes>>(channel_capacity.get());
+        let (req_sender, req_receiver) =
+            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
-        // builder api response channel
-        let (res_sender, res_receiver) = unbounded();
         let (genesis_payload, genesis_ns_table) =
-            Payload::from_transactions([], Arc::new(instance_state.clone()))
+            Payload::from_transactions([], &validated_state, &instance_state)
+                .await
                 .expect("genesis payload construction failed");
+
         let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
+
         let vid_commitment = {
             // TODO we should not need to collect payload bytes just to compute vid_commitment
-            let payload_bytes = genesis_payload
-                .encode()
-                .expect("unable to encode genesis payload");
+            let payload_bytes = genesis_payload.encode();
             vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
         };
 
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
             req_sender,
-            res_receiver,
             tx_sender.clone(),
             vid_commitment,
             bootstrapped_view,
@@ -437,22 +471,26 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 leaf_commit: fake_commitment(),
                 builder_commitment,
             },
-            tx_receiver,
             decide_receiver,
             da_receiver,
             qc_receiver,
             req_receiver,
+            tx_receiver,
+            Vec::new() /* tx_queue */,
             global_state_clone,
-            res_sender,
             NonZeroUsize::new(1).unwrap(),
-            bootstrapped_view,
-            buffered_view_num_count as u64,
-            maximise_txns_count_timeout_duration,
-            base_fee,
+            maximize_txns_count_timeout_duration,
+            instance_state
+                .chain_config
+                .base_fee
+                .as_u64()
+                .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
+            Duration::from_secs(60),
+            Arc::new(validated_state),
         );
 
-        let hotshot_handle_clone = hotshot_handle.clone();
+        let hotshot_handle_clone = Arc::clone(&hotshot_handle);
         // spawn the builder service
         async_spawn(async move {
             run_permissioned_standalone_builder_service(
@@ -460,7 +498,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
                 da_sender,
                 qc_sender,
                 decide_sender,
-                hotshot_handle,
+                hotshot_handle_clone,
             )
             .await;
         });
@@ -477,12 +515,11 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             max_api_timeout_duration,
         );
 
-        let proxy_global_api_state = Arc::new(RwLock::new(proxy_global_state));
-
-        run_builder_api_service(hotshot_builder_api_url.clone(), proxy_global_api_state);
+        // start the builder api service
+        run_builder_api_service(hotshot_builder_api_url.clone(), proxy_global_state);
 
         let ctx = Self {
-            hotshot_handle: hotshot_handle_clone,
+            hotshot_handle: Arc::clone(&hotshot_handle),
             node_index,
             state_signer: Arc::new(state_signer),
             wait_for_orchestrator: None,
@@ -529,8 +566,8 @@ mod test {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
+    use hotshot_types::constants::Base;
     use hotshot_types::{
-        constants::{Version01, STATIC_VER_0_1},
         signature_key::BLSPubKey,
         traits::{
             block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
@@ -540,8 +577,7 @@ mod test {
     };
     use sequencer::{
         persistence::no_storage::{self, NoStorage},
-        transaction::Transaction,
-        Payload,
+        NamespaceId, Payload, Transaction,
     };
     use std::time::Duration;
     use surf_disco::Client;
@@ -568,11 +604,11 @@ mod test {
 
         let node_id = total_nodes - 1;
         // non-staking node handle
-        let hotshot_context_handle = handles[node_id].0.clone();
+        let hotshot_context_handle = Arc::clone(&handles[node_id].0);
         let state_signer = handles[node_id].1.take().unwrap();
 
         // builder api url
-        let hotshot_builder_api_url = hotshot_config.config.builder_url.clone();
+        let hotshot_builder_api_url = hotshot_config.config.builder_urls[0].clone();
         let builder_config = PermissionedBuilderTestConfig::init_permissioned_builder(
             hotshot_config,
             hotshot_context_handle,
@@ -585,7 +621,7 @@ mod test {
         let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
-        let builder_client = Client::<hotshot_builder_api::builder::Error, Version01>::new(
+        let builder_client = Client::<hotshot_builder_api::builder::Error, Base>::new(
             hotshot_builder_api_url.clone(),
         );
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
@@ -605,15 +641,16 @@ mod test {
         )
         .expect("Claim block signing failed");
 
+        let test_view_num = 0;
         // test getting available blocks
         tracing::info!(
-                "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+                "block_info/availableblocks/{parent_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
             );
         // sleep and wait for builder service to startup
         async_sleep(Duration::from_millis(3000)).await;
         let available_block_info = match builder_client
             .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
-                "block_info/availableblocks/{parent_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+                "block_info/availableblocks/{parent_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -640,7 +677,7 @@ mod test {
         // Test claiming blocks
         let _available_block_data = match builder_client
             .get::<AvailableBlockData<SeqTypes>>(&format!(
-                "block_info/claimblock/{builder_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+                "block_info/claimblock/{builder_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -657,7 +694,7 @@ mod test {
         // Test claiming block header input
         let _available_block_header = match builder_client
             .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
-                "block_info/claimheaderinput/{builder_commitment}/{hotshot_client_pub_key}/{encoded_signature}"
+                "block_info/claimheaderinput/{builder_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
             ))
             .send()
             .await
@@ -686,7 +723,7 @@ mod test {
             }
         }
 
-        let txn = Transaction::new(Default::default(), vec![1, 2, 3]);
+        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3]);
         match builder_client
             .post::<()>("txn_submit/submit")
             .body_json(&txn)

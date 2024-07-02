@@ -1,32 +1,71 @@
 #!/usr/bin/env bash
+set -eE
 
-set -e
+# Duplicate some debugging information to stdout in case the process exits
+trap 'error_handler "${LINENO}" "$BASH_COMMAND"' ERR INT
+error_handler() {
+  local lineno=$1
+  local msg=$2
+  echo "Failed at line $lineno: msg: $msg"
+}
 
 # load env vars in .env
 set -a; source .env; set +a;
 
-SEQUENCER_API=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+L1_PROVIDER=http://localhost:$ESPRESSO_SEQUENCER_L1_PORT
+SEQUENCER_API=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT
 LOAD_GENERATOR=http://localhost:$ESPRESSO_SUBMIT_TRANSACTIONS_PRIVATE_PORT
 SEQUENCER_BLOCKS_TIMEOUT=120
 
 # usage: wait_for timeout_in_secs name URL
 function wait_for() {
-	timeout=$1
-	what=$2
-	url=$3
-	start=$SECONDS
-	elapsed=0
-	echo "Checking if $what @ $url is available, timeout in $timeout seconds"
-	while ! curl -sL --fail "$url" > /dev/null; do
-		elapsed=$((SECONDS - start))
-		if [[ $elapsed -gt $timeout ]]; then
-			echo "Timeout waiting for $what @ $url"
-			exit 1
-		fi
-		echo "Waiting for $what @ $url, $elapsed of $timeout seconds elapsed"
-		sleep 1
-	done
-	echo "Endpoint $what @ $url is Ok, after $elapsed seconds"
+    timeout=$1
+    what=$2
+    url=$3
+    start=$SECONDS
+    elapsed=0
+    echo "Checking if $what @ $url is available, timeout in $timeout seconds"
+    while ! curl -sL --fail "$url" > /dev/null; do
+        elapsed=$((SECONDS - start))
+        if [[ $elapsed -gt $timeout ]]; then
+            echo "Timeout waiting for $what @ $url"
+            exit 1
+        fi
+        echo "Waiting for $what @ $url, $elapsed of $timeout seconds elapsed"
+        sleep 1
+    done
+    echo "Endpoint $what @ $url is Ok, after $elapsed seconds"
+}
+
+# usage: get_balance <address> <block>
+function get_balance() {
+    if which espresso-bridge > /dev/null 2>&1 ; then
+        # If the espresso-bridge program is built locally, use it.
+        (
+            unset MNEMONIC
+            RUST_LOG=off espresso-bridge balance -e $SEQUENCER_API -a $1 -b $2
+        )
+    else
+        # Otherwise, use Docker.
+        docker run --network="host" -e RUST_LOG=off ghcr.io/espressosystems/espresso-sequencer/bridge:main \
+            bridge balance -e $SEQUENCER_API -a $1 -b $2
+    fi
+}
+
+function last_light_client_update() {
+    curl -s "$L1_PROVIDER" \
+        -H "Content-Type: application/json" \
+        -d '{
+            "method": "eth_getLogs",
+            "params": [{
+                "fromBlock": "earliest",
+                "address": "'"$ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS"'"
+            }],
+            "id": 1,
+            "jsonrpc": "2.0"
+        }' \
+    | jq '.result | .[-1].blockNumber // "0x0"' \
+    | xargs printf "%d\n" # Convert from hex to decimal
 }
 
 # Wait for the load generator to start.
@@ -34,12 +73,21 @@ wait_for 300 "demo load generator" "$LOAD_GENERATOR/healthcheck"
 
 # Get the block height and number of transactions, wait some time, and check that these numbers have
 # both increased.
-block_height=`curl -sL $SEQUENCER_API/node/block-height`
-num_tx=`curl -sL $SEQUENCER_API/node/transactions/count`
+block_height=$(curl -sL $SEQUENCER_API/node/block-height)
+num_tx=$(curl -sL $SEQUENCER_API/node/transactions/count)
+# Get the balance of the builder and fee recipient accounts. The former should decrease over time
+# while the latter should increase.
+builder_balance=$(get_balance 0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f $block_height)
+recipient_balance=$(get_balance 0x0000000000000000000000000000000000000000 $block_height)
+# Get the last L1 block where the light client was updated. This should increase over time.
+light_client_updated=$(last_light_client_update)
 
 echo "Initial state:"
 echo "  block_height: $block_height"
 echo "  transactions: $num_tx"
+echo "  builder_balance: $builder_balance"
+echo "  recipient_balance: $recipient_balance"
+echo "  light_client_updated: $light_client_updated"
 
 # Bash magic to get the current time in seconds since start of this shell
 START=$SECONDS
@@ -47,31 +95,56 @@ START=$SECONDS
 # Check blocks and transactions are increasing
 # Every second until timeout after $TIMEOUT seconds
 while true; do
-	new_block_height=`curl -sL $SEQUENCER_API/node/block-height`
-	new_num_tx=`curl -sL $SEQUENCER_API/node/transactions/count`
-	if [[ $new_block_height -gt $block_height && $new_num_tx -gt $num_tx ]]; then
-		echo "Final state:"
-		echo "  block_height: $new_block_height"
-		echo "  transactions: $new_num_tx"
-		echo "Block height and transaction count are increasing. Great!"
-		break
-	fi
-	sleep 1
-	if [[ $((SECONDS - START)) -gt $SEQUENCER_BLOCKS_TIMEOUT ]]; then
-		echo "Timeout waiting for block height and transaction count to increase"
-		echo "Final state:"
-		echo "  block_height: $new_block_height"
-		echo "  transactions: $new_num_tx"
+    new_block_height=`curl -sL $SEQUENCER_API/node/block-height`
+    new_num_tx=`curl -sL $SEQUENCER_API/node/transactions/count`
+    new_light_client_updated=`last_light_client_update`
+    if [[ $new_block_height -gt $block_height && $new_num_tx -gt $num_tx && $new_light_client_updated -gt $light_client_updated ]]; then
+        new_builder_balance=`get_balance 0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f $new_block_height`
+        new_recipient_balance=`get_balance 0x0000000000000000000000000000000000000000 $new_block_height`
 
-		if ! [[ $new_block_height -gt $block_height ]]; then
-			echo "Block height is not increasing!"
-		fi
-		if ! [[ $new_num_tx -gt $num_tx ]]; then
-			echo "Transaction count is not increasing!"
-		fi
+        echo "Final state:"
+        echo "  block_height: $new_block_height"
+        echo "  transactions: $new_num_tx"
+        echo "  builder_balance: $new_builder_balance"
+        echo "  recipient_balance: $new_recipient_balance"
+        echo "  light_client_updated: $new_light_client_updated"
+        echo "Block height, transaction count, and light client updates are increasing. Great!"
 
-		exit 1
-	fi
+        if ! [[ $new_recipient_balance -gt $recipient_balance ]]; then
+            echo "Fee recipient balance is not increasing!"
+            exit 1
+        fi
+        if ! [[ $new_builder_balance -lt $builder_balance ]]; then
+            echo "Builder balance is not decreasing!"
+            exit 1
+        fi
+        if [[ $((builder_balance + recipient_balance)) != $((new_builder_balance + new_recipient_balance)) ]]; then
+            echo "Balance not conserved!"
+            exit 1
+        fi
+
+        break
+    fi
+    sleep 1
+    if [[ $((SECONDS - START)) -gt $SEQUENCER_BLOCKS_TIMEOUT ]]; then
+        echo "Timeout waiting for block height, transaction count, and light client updates to increase"
+        echo "Final state:"
+        echo "  block_height: $new_block_height"
+        echo "  transactions: $new_num_tx"
+        echo "  light_client_updated: $new_light_client_updated"
+
+        if ! [[ $new_block_height -gt $block_height ]]; then
+            echo "Block height is not increasing!"
+        fi
+        if ! [[ $new_num_tx -gt $num_tx ]]; then
+            echo "Transaction count is not increasing!"
+        fi
+        if ! [[ $new_light_client_updated -gt $light_client_updated ]]; then
+            echo "Light client is not being updated!"
+        fi
+
+        exit 1
+    fi
 done
 
 

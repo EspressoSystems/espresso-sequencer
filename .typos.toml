@@ -1,7 +1,7 @@
 [files]
 extend-exclude = [
+  "*.json",
   "doc/*.svg",
-  "geth-config/*.json",
   "contracts/lib",
   "contract-bindings",
 ]

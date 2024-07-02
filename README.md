@@ -1,6 +1,7 @@
 # Espresso Sequencer
 
 [![Build](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/build.yml)
+[![Docs](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/doc.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/doc.yml)
 [![Contracts](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/contracts.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/contracts.yml)
 [![Lint](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/lint.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/lint.yml)
 [![Audit](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/audit.yml/badge.svg)](https://github.com/EspressoSystems/espresso-sequencer/actions/workflows/audit.yml)
@@ -12,9 +13,37 @@ Consisting of a data availability solution and a decentralized network of nodes 
 rollups can leverage the Espresso Sequencer to give developers and end users fast confirmations, low (and fair) fees,
 and robust infrastructure.
 
-[Documentation](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme)
+[Official Documentation](https://docs.espressosys.com/sequencer/espresso-sequencer-architecture/readme)
+
+### Architecture
+
+This diagram below depicts a simplified view of the current architecture of the Espresso Sequencer. The diagram includes
+views of an Espresso Sequencer node, the Espresso Sequencer Network (nodes, CDN, builders, prover, state relay service),
+two rollups (one ZK rollup "Z", one optimistic rollup "O") that use the Espresso Sequencer for sequencing and some
+important L1 contracts.
+
+- Glossary
+  - Namespace: an identifier to distinguish rollups, akin to an Ethereum chain ID
+  - Rollup transaction: an transaction a user submits to a rollup, usually an EVM transaction
+  - Transaction: a transaction inside the Espresso Sequencer: a rollup transaction plus a namespace ID of the rollup
+  - Rollup block: a block in a rollup consisting only of transactions in this rollup
+  - Espresso block: a block produced by the Espresso sequencer containing transactions of multiple rollups
 
 ![Architecture diagram](./doc/architecture.svg)
+
+The sequence diagram below serves as a complement to the architecture diagram. The following interactions are depicted.
+
+1. Builders deposit funds into the fee contract on Ethereum Layer 1. These funds are later used to pay fees.
+2. Users submit transactions to the Submit APIs of sequencer nodes.
+3. The leader/proposer obtains a block from a builder.
+4. HotShot consensus creates new blocks containing sequenced rollup transactions.
+5. A rollup produces a rollup block with transactions sequenced by the Espresso sequencer.
+6. A proof for a HotShot state update is created and verified in the Light Client smart contract.
+7. A ZK rollup proves a correct state transaction by sending a proof to its rollup smart contract.
+8. A dispute is settled in an optimistic rollup. If necessary, the HotShot commitment is read from the Light Client
+   contract.
+
+![Sequence diagram](./doc/sequence-diagram.svg)
 
 # Running the demo
 
@@ -27,6 +56,16 @@ a dockerized Espresso Sequencer network with an example Layer 2 rollup applicati
 - Make sure [nix](https://nixos.org/download.html) is installed.
 - Activate the environment with `nix-shell`, or `nix develop`, or `direnv allow` if using [direnv](https://direnv.net/).
 - For installation without nix please see [ubuntu.md](./doc/ubuntu.md).
+
+## Documentation
+
+The rust code documentation can be found at
+[http://sequencer.docs.espressosys.com](http://sequencer.docs.espressosys.com). Please note the disclaimer about API
+stability at the end of the readme.
+
+To generate the documentation locally and view it in the browser, run
+
+    just doc --open
 
 ## Run the tests
 
