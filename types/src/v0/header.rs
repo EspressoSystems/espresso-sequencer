@@ -273,7 +273,7 @@ impl Header {
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
                 fee_info: vec![fee_info],
-                builder_signature,
+                builder_signature: vec![builder_signature],
             }),
             _ => panic!("invalid version: {version}"),
         }
