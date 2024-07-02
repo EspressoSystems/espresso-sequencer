@@ -15,7 +15,7 @@ in the `.env` file:
 - `SAFE_ORCHESTRATOR_PRIVATE_KEY`
 - `SAFE_MULTISIG_ADDRESS`
 - `APPROVED_PROVER_ADDRESS`
-- `LIGHT_CLIENT_CONTRACT_ADDRESS`
+- `LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS`
 
 Assuming you're in the root folder, run the following command:
 
@@ -39,7 +39,7 @@ in the `.env` file:
 - `SEPOLIA_RPC_URL`
 - `SAFE_ORCHESTRATOR_PRIVATE_KEY`
 - `SAFE_MULTISIG_ADDRESS`
-- `LIGHT_CLIENT_CONTRACT_ADDRESS`
+- `LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS`
 
 Assuming you're in the root folder, run the following command:
 
