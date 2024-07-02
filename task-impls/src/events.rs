@@ -1,10 +1,13 @@
-use std::{fmt::Display, sync::Arc};
+use std::fmt::Display;
 
 use async_broadcast::Sender;
 use either::Either;
 use hotshot_task::task::TaskEvent;
 use hotshot_types::{
-    data::{DaProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperse, VidDisperseShare},
+    data::{
+        DaProposal, Leaf, PackedBundle, QuorumProposal, UpgradeProposal, VidDisperse,
+        VidDisperseShare,
+    },
     message::Proposal,
     simple_certificate::{
         DaCertificate, QuorumCertificate, TimeoutCertificate, UpgradeCertificate,
@@ -16,7 +19,7 @@ use hotshot_types::{
     },
     traits::{block_contents::BuilderFee, node_implementation::NodeType, BlockPayload},
     utils::{BuilderCommitment, View},
-    vid::{VidCommitment, VidPrecomputeData},
+    vid::VidCommitment,
     vote::{HasViewNumber, VoteDependencyData},
 };
 use vbs::version::Version;
@@ -143,13 +146,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
         BuilderFee<TYPES>,
     ),
     /// Event when the transactions task has sequenced transactions. Contains the encoded transactions, the metadata, and the view number
-    BlockRecv(
-        Arc<[u8]>,
-        <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
-        TYPES::Time,
-        BuilderFee<TYPES>,
-        VidPrecomputeData,
-    ),
+    BlockRecv(PackedBundle<TYPES>),
     /// Event when the transactions task has a block formed
     BlockReady(VidDisperse<TYPES>, TYPES::Time),
     /// Event when consensus decided on a leaf
@@ -363,8 +360,8 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                     "SendPayloadCommitmentAndMetadata(view_number={view_number:?})"
                 )
             }
-            HotShotEvent::BlockRecv(_, _, view_number, ..) => {
-                write!(f, "BlockRecv(view_number={view_number:?})")
+            HotShotEvent::BlockRecv(packed_bundle) => {
+                write!(f, "BlockRecv(view_number={:?})", packed_bundle.view_number)
             }
             HotShotEvent::BlockReady(_, view_number) => {
                 write!(f, "BlockReady(view_number={view_number:?})")

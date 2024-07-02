@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::{Consensus, OuterConsensus, View},
-    data::DaProposal,
+    data::{DaProposal, PackedBundle},
     event::{Event, EventType},
     message::Proposal,
     simple_certificate::DaCertificate,
@@ -303,8 +303,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
 
                 return None;
             }
-            HotShotEvent::BlockRecv(encoded_transactions, metadata, view, _fee, _vid_precomp) => {
-                let view = *view;
+            HotShotEvent::BlockRecv(packed_bundle) => {
+                let PackedBundle::<TYPES> {
+                    encoded_transactions,
+                    metadata,
+                    view_number,
+                    ..
+                } = packed_bundle;
+                let view_number = *view_number;
 
                 // quick hash the encoded txns with sha256
                 let encoded_transactions_hash = Sha256::digest(encoded_transactions);
@@ -321,7 +327,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
                     encoded_transactions: Arc::clone(encoded_transactions),
                     metadata: metadata.clone(),
                     // Upon entering a new view we want to send a DA Proposal for the next view -> Is it always the case that this is cur_view + 1?
-                    view_number: view,
+                    view_number,
                 };
 
                 let message = Proposal {
