@@ -339,7 +339,7 @@ mod test {
         .expect("Claim block signing failed");
 
         // sleep and wait for builder service to startup
-        async_sleep(Duration::from_millis(3000)).await;
+        async_sleep(Duration::from_millis(500)).await;
 
         let test_view_num = 0;
 

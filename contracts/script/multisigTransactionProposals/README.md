@@ -15,12 +15,12 @@ in the `.env` file:
 - `SAFE_ORCHESTRATOR_PRIVATE_KEY`
 - `SAFE_MULTISIG_ADDRESS`
 - `APPROVED_PROVER_ADDRESS`
-- `LIGHT_CLIENT_CONTRACT_ADDRESS`
+- `LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS`
 
 Assuming you're in the root folder, run the following command:
 
 ```bash
-ts-node contracts/script/multisigTransactionProposals/safeSDK/setProverProposal.ts
+ts-node contracts/script/multisigTransactionProposals/safeSDK/modifyProverModeProposal.ts setProver
 ```
 
 Open the the URL shown in the console to sign the transaction in the Safe UI.
@@ -39,12 +39,12 @@ in the `.env` file:
 - `SEPOLIA_RPC_URL`
 - `SAFE_ORCHESTRATOR_PRIVATE_KEY`
 - `SAFE_MULTISIG_ADDRESS`
-- `LIGHT_CLIENT_CONTRACT_ADDRESS`
+- `LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS`
 
 Assuming you're in the root folder, run the following command:
 
 ```bash
-ts-node contracts/script/multisigTransactionProposals/safeSDK/disableProverProposal.ts
+ts-node contracts/script/multisigTransactionProposals/safeSDK/modifyProverModeProposal.ts disableProver
 ```
 
 Once successful, all signers will see a transaction request on the SAFE UI

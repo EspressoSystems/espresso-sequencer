@@ -161,7 +161,13 @@ impl SequencerPersistence for Persistence {
             return Ok(None);
         }
         tracing::info!("loading config from {}", path.display());
-        Ok(Some(NetworkConfig::from_file(path.display().to_string())?))
+
+        let bytes =
+            fs::read(&path).context(format!("unable to read config from {}", path.display()))?;
+        let json = serde_json::from_slice(&bytes).context("config file is not valid JSON")?;
+        let json = migrate_network_config(json).context("migration of network config failed")?;
+        let config = serde_json::from_value(json).context("malformed config file")?;
+        Ok(Some(config))
     }
 
     async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()> {
@@ -498,6 +504,60 @@ impl SequencerPersistence for Persistence {
     }
 }
 
+/// Update a `NetworkConfig` that may have originally been persisted with an old version.
+fn migrate_network_config(
+    mut network_config: serde_json::Value,
+) -> anyhow::Result<serde_json::Value> {
+    let config = network_config
+        .get_mut("config")
+        .context("missing field `config`")?
+        .as_object_mut()
+        .context("`config` must be an object")?;
+
+    if !config.contains_key("builder_urls") {
+        // When multi-builder support was added, the configuration field `builder_url: Url` was
+        // replaced by an array `builder_urls: Vec<Url>`. If the saved config has no `builder_urls`
+        // field, it is older than this change. Populate `builder_urls` with a singleton array
+        // formed from the old value of `builder_url`, and delete the no longer used `builder_url`.
+        let url = config
+            .remove("builder_url")
+            .context("missing field `builder_url`")?;
+        config.insert("builder_urls".into(), vec![url].into());
+    }
+
+    // HotShotConfig was upgraded to include parameters for proposing and voting on upgrades.
+    // Configs which were persisted before this upgrade may be missing these parameters. This
+    // migration initializes them with a default. By default, we use JS MAX_SAFE_INTEGER for the
+    // start parameters so that nodes will never do an upgrade, unless explicitly configured
+    // otherwise.
+    if !config.contains_key("start_proposing_view") {
+        config.insert("start_proposing_view".into(), 9007199254740991u64.into());
+    }
+    if !config.contains_key("stop_proposing_view") {
+        config.insert("stop_proposing_view".into(), 0.into());
+    }
+    if !config.contains_key("start_voting_view") {
+        config.insert("start_voting_view".into(), 9007199254740991u64.into());
+    }
+    if !config.contains_key("stop_voting_view") {
+        config.insert("stop_voting_view".into(), 0.into());
+    }
+    if !config.contains_key("start_proposing_time") {
+        config.insert("start_proposing_time".into(), 9007199254740991u64.into());
+    }
+    if !config.contains_key("stop_proposing_time") {
+        config.insert("stop_proposing_time".into(), 0.into());
+    }
+    if !config.contains_key("start_voting_time") {
+        config.insert("start_voting_time".into(), 9007199254740991u64.into());
+    }
+    if !config.contains_key("stop_voting_time") {
+        config.insert("stop_voting_time".into(), 0.into());
+    }
+
+    Ok(network_config)
+}
+
 #[cfg(test)]
 mod testing {
     use tempfile::TempDir;
@@ -526,4 +586,104 @@ mod generic_tests {
     use crate::*;
 
     instantiate_persistence_tests!(Persistence);
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_config_migrations_add_builder_urls() {
+        let before = json!({
+            "config": {
+                "builder_url": "https://test:8080",
+                "start_proposing_view": 1,
+                "stop_proposing_view": 2,
+                "start_voting_view": 1,
+                "stop_voting_view": 2,
+                "start_proposing_time": 1,
+                "stop_proposing_time": 2,
+                "start_voting_time": 1,
+                "stop_voting_time": 2
+            }
+        });
+        let after = json!({
+            "config": {
+                "builder_urls": ["https://test:8080"],
+                "start_proposing_view": 1,
+                "stop_proposing_view": 2,
+                "start_voting_view": 1,
+                "stop_voting_view": 2,
+                "start_proposing_time": 1,
+                "stop_proposing_time": 2,
+                "start_voting_time": 1,
+                "stop_voting_time": 2
+            }
+        });
+
+        assert_eq!(migrate_network_config(before).unwrap(), after);
+    }
+
+    #[test]
+    fn test_config_migrations_existing_builder_urls() {
+        let before = json!({
+            "config": {
+                "builder_urls": ["https://test:8080", "https://test:8081"],
+                "start_proposing_view": 1,
+                "stop_proposing_view": 2,
+                "start_voting_view": 1,
+                "stop_voting_view": 2,
+                "start_proposing_time": 1,
+                "stop_proposing_time": 2,
+                "start_voting_time": 1,
+                "stop_voting_time": 2
+            }
+        });
+
+        assert_eq!(migrate_network_config(before.clone()).unwrap(), before);
+    }
+
+    #[test]
+    fn test_config_migrations_add_upgrade_params() {
+        let before = json!({
+            "config": {
+                "builder_urls": ["https://test:8080", "https://test:8081"]
+            }
+        });
+        let after = json!({
+            "config": {
+                "builder_urls": ["https://test:8080", "https://test:8081"],
+                "start_proposing_view": 9007199254740991u64,
+                "stop_proposing_view": 0,
+                "start_voting_view": 9007199254740991u64,
+                "stop_voting_view": 0,
+                "start_proposing_time": 9007199254740991u64,
+                "stop_proposing_time": 0,
+                "start_voting_time": 9007199254740991u64,
+                "stop_voting_time": 0
+            }
+        });
+
+        assert_eq!(migrate_network_config(before).unwrap(), after);
+    }
+
+    #[test]
+    fn test_config_migrations_existing_upgrade_params() {
+        let before = json!({
+            "config": {
+                "builder_urls": ["https://test:8080", "https://test:8081"],
+                "start_proposing_view": 1,
+                "stop_proposing_view": 2,
+                "start_voting_view": 1,
+                "stop_voting_view": 2,
+                "start_proposing_time": 1,
+                "stop_proposing_time": 2,
+                "start_voting_time": 1,
+                "stop_voting_time": 2
+            }
+        });
+
+        assert_eq!(migrate_network_config(before.clone()).unwrap(), before);
+    }
 }
