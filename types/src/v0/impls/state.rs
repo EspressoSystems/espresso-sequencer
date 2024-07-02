@@ -341,11 +341,7 @@ impl ValidatedState {
         // in this block.
         let missing_accounts = self.forgotten_accounts(
             [
-                proposed_header
-                    .fee_info()
-                    .iter()
-                    .map(|entry| entry.account)
-                    .collect::<Vec<FeeAccount>>(),
+                proposed_header.fee_info().accounts(),
                 vec![chain_config.fee_recipient],
                 l1_deposits
                     .iter()
