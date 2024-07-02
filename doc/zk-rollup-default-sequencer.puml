@@ -1,0 +1,12 @@
+@startuml
+
+[zkVM] as ZK
+
+"cm_state_vm i" --> ZK
+"cm_state_vm i+1" --> ZK
+cm_txs_rollup --> ZK
+"<b>ROLLUP_TXS</b>" --> ZK
+ZK --> OUTPUT
+
+
+@enduml
