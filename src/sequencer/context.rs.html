@@ -361,6 +361,8 @@
 <a href="#361" id="361">361</a>
 <a href="#362" id="362">362</a>
 <a href="#363" id="363">363</a>
+<a href="#364" id="364">364</a>
+<a href="#365" id="365">365</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_std::{
     sync::{Arc, RwLock},
@@ -374,14 +376,15 @@
 <span class="kw">use </span>hotshot::{
     traits::election::static_committee::GeneralStaticCommittee,
     types::{Event, SystemContextHandle},
-    Memberships, Networks, SystemContext,
+    Memberships, SystemContext,
 };
+<span class="kw">use </span>hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 <span class="kw">use </span>hotshot_orchestrator::client::OrchestratorClient;
 <span class="kw">use </span>hotshot_query_service::Leaf;
 <span class="kw">use </span>hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
-    traits::{election::Membership, metrics::Metrics},
+    traits::{election::Membership, metrics::Metrics, network::ConnectedNetwork},
     HotShotConfig,
 };
 <span class="kw">use </span>std::fmt::Display;
@@ -389,8 +392,8 @@
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
 <span class="kw">use crate</span>::{
-    network, persistence::SequencerPersistence, state_signature::StateSigner,
-    static_stake_table_commitment, Node, NodeState, PubKey, SeqTypes, Transaction, ValidatedState,
+    persistence::SequencerPersistence, state_signature::StateSigner, static_stake_table_commitment,
+    Node, NodeState, PubKey, SeqTypes, Transaction, ValidatedState,
 };
 <span class="kw">use </span>hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 <span class="doccomment">/// The consensus handle
@@ -400,7 +403,7 @@
 </span><span class="attr">#[derive(Derivative)]
 #[derivative(Debug(bound = <span class="string">""</span>))]
 </span><span class="kw">pub struct </span>SequencerContext&lt;
-    N: network::Type,
+    N: ConnectedNetwork&lt;PubKey&gt;,
     P: SequencerPersistence,
     Ver: StaticVersionType + <span class="lifetime">'static</span>,
 &gt; {
@@ -426,7 +429,7 @@
     node_state: NodeState,
 }
 
-<span class="kw">impl</span>&lt;N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;
+<span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;
     SequencerContext&lt;N, P, Ver&gt;
 {
     <span class="attr">#[tracing::instrument(skip_all, fields(node_id = instance_state.node_id))]
@@ -435,7 +438,7 @@
         config: HotShotConfig&lt;PubKey&gt;,
         instance_state: NodeState,
         persistence: P,
-        networks: Networks&lt;SeqTypes, Node&lt;N, P&gt;&gt;,
+        network: Arc&lt;N&gt;,
         state_relay_server: <span class="prelude-ty">Option</span>&lt;Url&gt;,
         metrics: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Metrics,
         stake_table_capacity: u64,
@@ -494,10 +497,11 @@
             instance_state.node_id,
             config,
             memberships,
-            networks,
+            network,
             initializer,
             ConsensusMetricsValue::new(metrics),
             persistence.clone(),
+            TestAuctionResultsProvider::default(),
         )
         .<span class="kw">await</span><span class="question-mark">?
         </span>.<span class="number">0</span>;
@@ -647,7 +651,7 @@
     }
 }
 
-<span class="kw">impl</span>&lt;N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt; Drop
+<span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt; Drop
     <span class="kw">for </span>SequencerContext&lt;N, P, Ver&gt;
 {
     <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {

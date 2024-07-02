@@ -298,6 +298,17 @@
 <a href="#298" id="298">298</a>
 <a href="#299" id="299">299</a>
 <a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use super</span>::{
@@ -306,7 +317,6 @@
     sql, AccountQueryData, BlocksFrontier,
 };
 <span class="kw">use crate</span>::{
-    network,
     persistence::{<span class="self">self</span>, SequencerPersistence},
     ChainConfig, PubKey, SeqTypes, Transaction,
 };
@@ -323,8 +333,8 @@
     status::StatusDataSource,
 };
 <span class="kw">use </span>hotshot_types::{
-    data::ViewNumber, light_client::StateSignatureRequestBody, ExecutionType, HotShotConfig,
-    PeerConfig, ValidatorConfig,
+    data::ViewNumber, light_client::StateSignatureRequestBody, traits::network::ConnectedNetwork,
+    ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 
 <span class="kw">use </span>serde::Serialize;
@@ -389,7 +399,7 @@
     provider
 }
 
-<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait </span>SubmitDataSource&lt;N: network::Type, P: SequencerPersistence&gt; {
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait </span>SubmitDataSource&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence&gt; {
     <span class="kw">fn </span>submit(<span class="kw-2">&amp;</span><span class="self">self</span>, tx: Transaction) -&gt; <span class="kw">impl </span>Send + Future&lt;Output = anyhow::Result&lt;()&gt;&gt;;
 }
 
@@ -398,7 +408,7 @@
 }
 
 <span class="attr">#[async_trait]
-</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait </span>StateSignatureDataSource&lt;N: network::Type&gt; {
+</span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait </span>StateSignatureDataSource&lt;N: ConnectedNetwork&lt;PubKey&gt;&gt; {
     <span class="kw">async fn </span>get_state_signature(<span class="kw-2">&amp;</span><span class="self">self</span>, height: u64) -&gt; <span class="prelude-ty">Option</span>&lt;StateSignatureRequestBody&gt;;
 }
 
@@ -521,6 +531,10 @@
     <span class="kw">pub </span>stop_proposing_view: u64,
     <span class="kw">pub </span>start_voting_view: u64,
     <span class="kw">pub </span>stop_voting_view: u64,
+    <span class="kw">pub </span>start_proposing_time: u64,
+    <span class="kw">pub </span>stop_proposing_time: u64,
+    <span class="kw">pub </span>start_voting_time: u64,
+    <span class="kw">pub </span>stop_voting_time: u64,
 }
 
 <span class="kw">impl </span>From&lt;HotShotConfig&lt;PubKey&gt;&gt; <span class="kw">for </span>PublicHotShotConfig {
@@ -553,6 +567,10 @@
             stop_proposing_view,
             start_voting_view,
             stop_voting_view,
+            start_proposing_time,
+            stop_proposing_time,
+            start_voting_time,
+            stop_voting_time,
         } = v;
 
         <span class="self">Self </span>{
@@ -580,6 +598,10 @@
             stop_proposing_view,
             start_voting_view,
             stop_voting_view,
+            start_proposing_time,
+            stop_proposing_time,
+            start_voting_time,
+            stop_voting_time,
         }
     }
 }

@@ -1986,7 +1986,7 @@
             ns_table,
             builder_fee,
             vid_common.clone(),
-            hotshot_types::constants::Base::VERSION,
+            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::version(),
         )
         .<span class="kw">await
         </span>.unwrap();

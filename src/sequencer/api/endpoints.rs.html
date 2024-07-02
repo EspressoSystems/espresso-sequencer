@@ -344,6 +344,9 @@
 <a href="#344" id="344">344</a>
 <a href="#345" id="345">345</a>
 <a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a>
+<a href="#349" id="349">349</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer-specific API endpoint handlers.
 
 </span><span class="kw">use </span>serde::de::Error <span class="kw">as _</span>;
@@ -360,7 +363,7 @@
     StorageState,
 };
 <span class="kw">use crate</span>::{
-    block::NsProof, network, persistence::SequencerPersistence, NamespaceId, SeqTypes, Transaction,
+    block::NsProof, persistence::SequencerPersistence, NamespaceId, PubKey, SeqTypes, Transaction,
 };
 <span class="kw">use </span>anyhow::Result;
 <span class="kw">use </span>async_std::sync::{Arc, RwLock};
@@ -375,7 +378,10 @@
     },
     node, Error,
 };
-<span class="kw">use </span>hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+<span class="kw">use </span>hotshot_types::{
+    data::ViewNumber,
+    traits::{network::ConnectedNetwork, node_implementation::ConsensusTime},
+};
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>snafu::OptionExt;
 <span class="kw">use </span>tagged_base64::TaggedBase64;
@@ -400,7 +406,7 @@
     bind_version: Ver,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;AvailabilityApi&lt;N, P, D, Ver&gt;&gt;
 <span class="kw">where
-    </span>N: network::Type,
+    </span>N: ConnectedNetwork&lt;PubKey&gt;,
     D: SequencerDataSource + Send + Sync + <span class="lifetime">'static</span>,
     P: SequencerPersistence,
 {
@@ -473,7 +479,7 @@
     bind_version: Ver,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;ExplorerApi&lt;N, P, D, Ver&gt;&gt;
 <span class="kw">where
-    </span>N: network::Type,
+    </span>N: ConnectedNetwork&lt;PubKey&gt;,
     D: ExplorerStorage&lt;SeqTypes&gt; + Send + Sync + <span class="lifetime">'static</span>,
     P: SequencerPersistence,
 {
@@ -487,7 +493,7 @@
     bind_version: Ver,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;NodeApi&lt;N, P, D, Ver&gt;&gt;
 <span class="kw">where
-    </span>N: network::Type,
+    </span>N: ConnectedNetwork&lt;PubKey&gt;,
     D: SequencerDataSource + Send + Sync + <span class="lifetime">'static</span>,
     P: SequencerPersistence,
 {
@@ -499,7 +505,7 @@
 }
 <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>submit&lt;N, P, S, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;() -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;S, Error, Ver&gt;&gt;
 <span class="kw">where
-    </span>N: network::Type,
+    </span>N: ConnectedNetwork&lt;PubKey&gt;,
     S: <span class="lifetime">'static </span>+ Send + Sync + WriteState,
     P: SequencerPersistence,
     S::State: Send + Sync + SubmitDataSource&lt;N, P&gt;,
@@ -530,7 +536,7 @@
     <span class="kw">_</span>: Ver,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;Api&lt;S, Error, Ver&gt;&gt;
 <span class="kw">where
-    </span>N: network::Type,
+    </span>N: ConnectedNetwork&lt;PubKey&gt;,
     S: <span class="lifetime">'static </span>+ Send + Sync + ReadState,
     S::State: Send + Sync + StateSignatureDataSource&lt;N&gt;,
 {
@@ -627,7 +633,7 @@
     <span class="kw">_</span>: Ver,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;MerklizedStateApi&lt;N, P, D, Ver&gt;&gt;
 <span class="kw">where
-    </span>N: network::Type,
+    </span>N: ConnectedNetwork&lt;PubKey&gt;,
     D: MerklizedStateDataSource&lt;SeqTypes, S, ARITY&gt;
         + Send
         + Sync

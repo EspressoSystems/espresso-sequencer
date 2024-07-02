@@ -1053,6 +1053,20 @@
 <a href="#1053" id="1053">1053</a>
 <a href="#1054" id="1054">1054</a>
 <a href="#1055" id="1055">1055</a>
+<a href="#1056" id="1056">1056</a>
+<a href="#1057" id="1057">1057</a>
+<a href="#1058" id="1058">1058</a>
+<a href="#1059" id="1059">1059</a>
+<a href="#1060" id="1060">1060</a>
+<a href="#1061" id="1061">1061</a>
+<a href="#1062" id="1062">1062</a>
+<a href="#1063" id="1063">1063</a>
+<a href="#1064" id="1064">1064</a>
+<a href="#1065" id="1065">1065</a>
+<a href="#1066" id="1066">1066</a>
+<a href="#1067" id="1067">1067</a>
+<a href="#1068" id="1068">1068</a>
+<a href="#1069" id="1069">1069</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>block;
 <span class="kw">pub mod </span>catchup;
@@ -1068,6 +1082,7 @@
 <span class="kw">mod </span>message_compat_tests;
 <span class="kw">mod </span>reference_tests;
 
+<span class="kw">use </span><span class="kw">crate</span>::catchup::BackoffParams;
 <span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_std::sync::RwLock;
 <span class="kw">use </span>async_trait::async_trait;
@@ -1080,7 +1095,7 @@
 
 <span class="comment">// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
-</span><span class="kw">use </span>catchup::BackoffParams;
+</span><span class="kw">use </span>hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 <span class="kw">use </span>l1_client::L1Client;
 
 <span class="kw">use </span>libp2p::Multiaddr;
@@ -1103,7 +1118,6 @@
         },
     },
     types::SignatureKey,
-    Networks,
 };
 <span class="kw">use </span>hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
@@ -1111,7 +1125,6 @@
 };
 <span class="kw">use </span>hotshot_types::{
     consensus::CommitmentMap,
-    constants::Base,
     data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
     event::HotShotAction,
     light_client::{StateKeyPair, StateSignKey},
@@ -1133,7 +1146,7 @@
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>snafu::Snafu;
 <span class="kw">use </span>std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc};
-<span class="kw">use </span>vbs::version::{StaticVersionType, Version};
+<span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType, Version};
 
 <span class="attr">#[cfg(feature = <span class="string">"libp2p"</span>)]
 </span><span class="kw">use </span>std::time::Duration;
@@ -1161,11 +1174,11 @@
     Eq(bound = <span class="string">""</span>),
     Hash(bound = <span class="string">""</span>)
 )]
-</span><span class="kw">pub struct </span>Node&lt;N: network::Type, P: SequencerPersistence&gt;(PhantomData&lt;<span class="kw">fn</span>(<span class="kw-2">&amp;</span>N, <span class="kw-2">&amp;</span>P)&gt;);
+</span><span class="kw">pub struct </span>Node&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence&gt;(PhantomData&lt;<span class="kw">fn</span>(<span class="kw-2">&amp;</span>N, <span class="kw-2">&amp;</span>P)&gt;);
 
 <span class="comment">// Using derivative to derive Clone triggers the clippy lint
 // https://rust-lang.github.io/rust-clippy/master/index.html#/incorrect_clone_impl_on_copy_type
-</span><span class="kw">impl</span>&lt;N: network::Type, P: SequencerPersistence&gt; Clone <span class="kw">for </span>Node&lt;N, P&gt; {
+</span><span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence&gt; Clone <span class="kw">for </span>Node&lt;N, P&gt; {
     <span class="kw">fn </span>clone(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self </span>{
         <span class="kw-2">*</span><span class="self">self
     </span>}
@@ -1182,10 +1195,12 @@
 <span class="kw">pub type </span>PubKey = BLSPubKey;
 <span class="kw">pub type </span>PrivKey = &lt;PubKey <span class="kw">as </span>SignatureKey&gt;::PrivateKey;
 
-<span class="kw">impl</span>&lt;N: network::Type, P: SequencerPersistence&gt; NodeImplementation&lt;SeqTypes&gt; <span class="kw">for </span>Node&lt;N, P&gt; {
-    <span class="kw">type </span>QuorumNetwork = N::QuorumChannel;
-    <span class="kw">type </span>DaNetwork = N::DAChannel;
+<span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence&gt; NodeImplementation&lt;SeqTypes&gt;
+    <span class="kw">for </span>Node&lt;N, P&gt;
+{
+    <span class="kw">type </span>Network = N;
     <span class="kw">type </span>Storage = Arc&lt;RwLock&lt;P&gt;&gt;;
+    <span class="kw">type </span>AuctionResultsProvider = TestAuctionResultsProvider;
 }
 
 <span class="attr">#[async_trait]
@@ -1261,7 +1276,7 @@
             },
             l1_genesis: <span class="prelude-val">None</span>,
             upgrades: Default::default(),
-            current_version: Base::VERSION,
+            current_version: &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::version(),
         }
     }
 
@@ -1322,6 +1337,12 @@
     <span class="kw">type </span>ValidatedState = ValidatedState;
     <span class="kw">type </span>Membership = GeneralStaticCommittee&lt;<span class="self">Self</span>, PubKey&gt;;
     <span class="kw">type </span>BuilderSignatureKey = FeeAccount;
+    <span class="kw">type </span>Base = StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;;
+    <span class="kw">type </span>Upgrade = StaticVersion&lt;<span class="number">0</span>, <span class="number">2</span>&gt;;
+    <span class="kw">const </span>UPGRADE_HASH: [u8; <span class="number">32</span>] = [
+        <span class="number">1</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>,
+        <span class="number">0</span>, <span class="number">0</span>,
+    ];
 }
 
 <span class="attr">#[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
@@ -1405,6 +1426,7 @@
     </span><span class="kw">let </span>validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
         advertise_address: <span class="prelude-val">Some</span>(network_params.libp2p_advertise_address),
+        builder_address: <span class="prelude-val">None</span>,
         network_config_file: <span class="prelude-val">None</span>,
     };
     <span class="kw">let </span>orchestrator_client = OrchestratorClient::new(validator_args);
@@ -1508,7 +1530,7 @@
 
     <span class="comment">// Initialize the Libp2p network (if enabled)
     </span><span class="attr">#[cfg(feature = <span class="string">"libp2p"</span>)]
-    </span><span class="kw">let </span>(da_network, quorum_network) = {
+    </span><span class="kw">let </span>network = {
         <span class="kw">let </span>p2p_network = Libp2pNetwork::from_config::&lt;SeqTypes&gt;(
             config.clone(),
             network_params.libp2p_bind_address,
@@ -1532,28 +1554,20 @@
         };
 
         <span class="comment">// Combine the CDN and P2P networks
-        </span><span class="kw">let </span>network = Arc::from(CombinedNetworks::new(
+        </span>Arc::from(CombinedNetworks::new(
             cdn_network,
             p2p_network,
             Duration::from_secs(<span class="number">1</span>),
-        ));
-        (Arc::clone(<span class="kw-2">&amp;</span>network), network)
+        ))
     };
 
     <span class="comment">// Wait for the CDN network to be ready if we're not using the P2P network
     </span><span class="attr">#[cfg(not(feature = <span class="string">"libp2p"</span>))]
-    </span><span class="kw">let </span>(da_network, quorum_network) = {
+    </span><span class="kw">let </span>network = {
         <span class="macro">tracing::warn!</span>(<span class="string">"Waiting for the CDN connection to be initialized"</span>);
         cdn_network.wait_for_ready().<span class="kw">await</span>;
         <span class="macro">tracing::warn!</span>(<span class="string">"CDN connection initialized"</span>);
-        (Arc::from(cdn_network.clone()), Arc::from(cdn_network))
-    };
-
-    <span class="comment">// Convert to the sequencer-compatible type
-    </span><span class="kw">let </span>networks = Networks {
-        da_network,
-        quorum_network,
-        _pd: Default::default(),
+        Arc::from(cdn_network)
     };
 
     <span class="kw">let </span><span class="kw-2">mut </span>genesis_state = ValidatedState {
@@ -1596,7 +1610,7 @@
         config.config,
         instance_state,
         persistence,
-        networks,
+        network,
         <span class="prelude-val">Some</span>(network_params.state_relay_server_url),
         metrics,
         genesis.stake_table.capacity,
@@ -1635,7 +1649,7 @@
     <span class="kw">use </span>hotshot::types::EventType::Decide;
     <span class="kw">use </span>hotshot_stake_table::vec_based::StakeTable;
     <span class="kw">use </span>hotshot_testing::block_builder::{
-        BuilderTask, SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
+        BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
     <span class="kw">use </span>hotshot_types::{
         event::LeafInfo,
@@ -1644,6 +1658,7 @@
         ExecutionType, HotShotConfig, PeerConfig,
     };
     <span class="kw">use </span>portpicker::pick_unused_port;
+    <span class="kw">use </span>std::collections::HashMap;
     <span class="kw">use </span>std::time::Duration;
     <span class="kw">use </span>vbs::version::Version;
 
@@ -1652,25 +1667,31 @@
     <span class="kw">pub async fn </span>run_test_builder&lt;<span class="kw">const </span>NUM_NODES: usize&gt;(
         port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
     ) -&gt; (Box&lt;<span class="kw">dyn </span>BuilderTask&lt;SeqTypes&gt;&gt;, Url) {
-        <span class="kw">let </span>builder_config = <span class="kw">if let </span><span class="prelude-val">Some</span>(port) = port {
-            SimpleBuilderConfig { port }
-        } <span class="kw">else </span>{
-            SimpleBuilderConfig::default()
-        };
-        &lt;SimpleBuilderImplementation <span class="kw">as </span>TestBuilderImplementation&lt;SeqTypes&gt;&gt;::start(
-            NUM_NODES,
-            builder_config,
-            Default::default(),
+        <span class="kw">let </span>port = port.unwrap_or_else(|| pick_unused_port().expect(<span class="string">"No ports available"</span>));
+
+        <span class="comment">// This should never fail.
+        </span><span class="kw">let </span>url: Url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>)
+            .parse()
+            .expect(<span class="string">"Failed to parse builder URL"</span>);
+
+        (
+            &lt;SimpleBuilderImplementation <span class="kw">as </span>TestBuilderImplementation&lt;SeqTypes&gt;&gt;::start(
+                NUM_NODES,
+                url.clone(),
+                (),
+                HashMap::new(),
+            )
+            .<span class="kw">await</span>,
+            url,
         )
-        .<span class="kw">await
-    </span>}
+    }
 
     <span class="kw">pub struct </span>TestConfigBuilder&lt;<span class="kw">const </span>NUM_NODES: usize&gt; {
         config: HotShotConfig&lt;PubKey&gt;,
         priv_keys: Vec&lt;BLSPrivKey&gt;,
         state_key_pairs: Vec&lt;StateKeyPair&gt;,
         master_map: Arc&lt;MasterMap&lt;PubKey&gt;&gt;,
-        url: Url,
+        l1_url: Url,
         state_relay_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
         builder_port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
         upgrades: <span class="prelude-ty">Option</span>&lt;TestNetworkUpgrades&gt;,
@@ -1687,8 +1708,8 @@
             <span class="self">self
         </span>}
 
-        <span class="kw">pub fn </span>l1_url(<span class="kw-2">mut </span><span class="self">self</span>, l1: Url) -&gt; <span class="self">Self </span>{
-            <span class="self">self</span>.url = l1;
+        <span class="kw">pub fn </span>l1_url(<span class="kw-2">mut </span><span class="self">self</span>, l1_url: Url) -&gt; <span class="self">Self </span>{
+            <span class="self">self</span>.l1_url = l1_url;
             <span class="self">self
         </span>}
 
@@ -1703,6 +1724,10 @@
                 <span class="self">self</span>.config.stop_proposing_view = upgrades.stop_proposing_view;
                 <span class="self">self</span>.config.start_voting_view = upgrades.start_voting_view;
                 <span class="self">self</span>.config.stop_voting_view = upgrades.stop_voting_view;
+                <span class="self">self</span>.config.start_proposing_time = <span class="number">0</span>;
+                <span class="self">self</span>.config.stop_proposing_time = u64::MAX;
+                <span class="self">self</span>.config.start_voting_time = <span class="number">0</span>;
+                <span class="self">self</span>.config.stop_voting_time = u64::MAX;
             }
 
             TestConfig {
@@ -1710,7 +1735,7 @@
                 priv_keys: <span class="self">self</span>.priv_keys,
                 state_key_pairs: <span class="self">self</span>.state_key_pairs,
                 master_map: <span class="self">self</span>.master_map,
-                url: <span class="self">self</span>.url,
+                l1_url: <span class="self">self</span>.l1_url,
                 state_relay_url: <span class="self">self</span>.state_relay_url,
                 builder_port: <span class="self">self</span>.builder_port,
                 upgrades: <span class="self">self</span>.upgrades,
@@ -1773,6 +1798,10 @@
                 stop_proposing_view: <span class="number">0</span>,
                 start_voting_view: <span class="number">0</span>,
                 stop_voting_view: <span class="number">0</span>,
+                start_proposing_time: <span class="number">0</span>,
+                start_voting_time: <span class="number">0</span>,
+                stop_proposing_time: <span class="number">0</span>,
+                stop_voting_time: <span class="number">0</span>,
             };
 
             <span class="self">Self </span>{
@@ -1780,7 +1809,7 @@
                 priv_keys,
                 state_key_pairs,
                 master_map,
-                url: <span class="string">"http://localhost:8545"</span>.parse().unwrap(),
+                l1_url: <span class="string">"http://localhost:8545"</span>.parse().unwrap(),
                 state_relay_url: <span class="prelude-val">None</span>,
                 builder_port: <span class="prelude-val">None</span>,
                 upgrades: <span class="prelude-val">None</span>,
@@ -1794,7 +1823,7 @@
         priv_keys: Vec&lt;BLSPrivKey&gt;,
         state_key_pairs: Vec&lt;StateKeyPair&gt;,
         master_map: Arc&lt;MasterMap&lt;PubKey&gt;&gt;,
-        url: Url,
+        l1_url: Url,
         state_relay_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
         builder_port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
         upgrades: <span class="prelude-ty">Option</span>&lt;TestNetworkUpgrades&gt;,
@@ -1815,6 +1844,10 @@
 
         <span class="kw">pub fn </span>builder_port(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;u16&gt; {
             <span class="self">self</span>.builder_port
+        }
+
+        <span class="kw">pub fn </span>l1_url(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Url {
+            <span class="self">self</span>.l1_url.clone()
         }
 
         <span class="kw">pub fn </span>upgrades(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;TestNetworkUpgrades&gt; {
@@ -1888,11 +1921,6 @@
                 <span class="kw-2">&amp;</span><span class="self">self</span>.master_map,
                 <span class="prelude-val">None</span>,
             ));
-            <span class="kw">let </span>networks = Networks {
-                da_network: network.clone(),
-                quorum_network: network,
-                _pd: Default::default(),
-            };
 
             <span class="comment">// Make sure the builder account is funded.
             </span><span class="kw">let </span>builder_account = <span class="self">Self</span>::builder_key().fee_account();
@@ -1901,7 +1929,7 @@
             <span class="kw">let </span>node_state = NodeState::new(
                 i <span class="kw">as </span>u64,
                 ChainConfig::default(),
-                L1Client::new(<span class="self">self</span>.url.clone(), <span class="number">1000</span>),
+                L1Client::new(<span class="self">self</span>.l1_url.clone(), <span class="number">1000</span>),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).<span class="kw">await</span>,
             )
             .with_genesis(state)
@@ -1917,7 +1945,7 @@
                 config,
                 node_state,
                 persistence_opt.create().<span class="kw">await</span>.unwrap(),
-                networks,
+                network,
                 <span class="self">self</span>.state_relay_url.clone(),
                 metrics,
                 stake_table_capacity,

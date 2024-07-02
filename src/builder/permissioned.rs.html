@@ -734,13 +734,6 @@
 <a href="#734" id="734">734</a>
 <a href="#735" id="735">735</a>
 <a href="#736" id="736">736</a>
-<a href="#737" id="737">737</a>
-<a href="#738" id="738">738</a>
-<a href="#739" id="739">739</a>
-<a href="#740" id="740">740</a>
-<a href="#741" id="741">741</a>
-<a href="#742" id="742">742</a>
-<a href="#743" id="743">743</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -760,8 +753,9 @@
         },
     },
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, Networks, SystemContext,
+    HotShotInitializer, Memberships, SystemContext,
 };
+<span class="kw">use </span>hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 <span class="kw">use </span>hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
     config::NetworkConfig,
@@ -771,7 +765,7 @@
     event::Event,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
-    traits::{election::Membership, metrics::Metrics, EncodeBytes},
+    traits::{election::Membership, metrics::Metrics, network::ConnectedNetwork, EncodeBytes},
     utils::BuilderCommitment,
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
@@ -848,7 +842,7 @@
 <span class="kw">use </span>surf_disco::Client;
 
 <span class="kw">pub struct </span>BuilderContext&lt;
-    N: network::Type,
+    N: ConnectedNetwork&lt;PubKey&gt;,
     P: SequencerPersistence,
     Ver: StaticVersionType + <span class="lifetime">'static</span>,
 &gt; {
@@ -893,6 +887,7 @@
     </span><span class="kw">let </span>validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
         advertise_address: <span class="prelude-val">Some</span>(network_params.libp2p_advertise_address),
+        builder_address: <span class="prelude-val">None</span>,
         network_config_file: <span class="prelude-val">None</span>,
     };
     <span class="kw">let </span>orchestrator_client = OrchestratorClient::new(validator_args);
@@ -976,24 +971,14 @@
 
     <span class="comment">// Combine the communication channels
     </span><span class="attr">#[cfg(feature = <span class="string">"libp2p"</span>)]
-    </span><span class="kw">let </span>(da_network, quorum_network) = {
-        <span class="kw">let </span>network = Arc::new(CombinedNetworks::new(
-            cdn_network,
-            p2p_network,
-            Duration::from_secs(<span class="number">1</span>),
-        ));
-        (Arc::clone(<span class="kw-2">&amp;</span>network), network)
-    };
+    </span><span class="kw">let </span>network = Arc::new(CombinedNetworks::new(
+        cdn_network,
+        p2p_network,
+        Duration::from_secs(<span class="number">1</span>),
+    ));
 
     <span class="attr">#[cfg(not(feature = <span class="string">"libp2p"</span>))]
-    </span><span class="kw">let </span>(da_network, quorum_network) = { (Arc::from(cdn_network.clone()), Arc::from(cdn_network)) };
-
-    <span class="comment">// Convert to the sequencer-compatible type
-    </span><span class="kw">let </span>networks = Networks {
-        da_network,
-        quorum_network,
-        _pd: Default::default(),
-    };
+    </span><span class="kw">let </span>network = Arc::from(cdn_network.clone());
 
     <span class="kw">let </span><span class="kw-2">mut </span>genesis_state = ValidatedState {
         chain_config: genesis.chain_config.into(),
@@ -1035,7 +1020,7 @@
         config.config,
         <span class="prelude-val">None</span>,
         instance_state.clone(),
-        networks,
+        network,
         metrics,
         node_index,
         <span class="prelude-val">Some</span>(network_params.state_relay_server_url),
@@ -1067,7 +1052,7 @@
 
 <span class="attr">#[allow(clippy::too_many_arguments)]
 </span><span class="kw">pub async fn </span>init_hotshot&lt;
-    N: network::Type,
+    N: ConnectedNetwork&lt;PubKey&gt;,
     P: SequencerPersistence,
     Ver: StaticVersionType + <span class="lifetime">'static</span>,
 &gt;(
@@ -1076,7 +1061,7 @@
         Vec&lt;PeerConfig&lt;hotshot_state_prover::QCVerKey&gt;&gt;,
     &gt;,
     instance_state: NodeState,
-    networks: Networks&lt;SeqTypes, Node&lt;N, P&gt;&gt;,
+    networks: Arc&lt;N&gt;,
     metrics: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Metrics,
     node_id: u64,
     state_relay_server: <span class="prelude-ty">Option</span>&lt;Url&gt;,
@@ -1124,6 +1109,7 @@
             </span>.unwrap(),
         ConsensusMetricsValue::new(metrics),
         da_storage,
+        TestAuctionResultsProvider::default(),
     )
     .<span class="kw">await
     </span>.unwrap()
@@ -1139,7 +1125,7 @@
     (hotshot_handle, state_signer)
 }
 
-<span class="kw">impl</span>&lt;N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;
+<span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, P: SequencerPersistence, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;
     BuilderContext&lt;N, P, Ver&gt;
 {
     <span class="doccomment">/// Constructor
@@ -1309,7 +1295,6 @@
         events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
-    <span class="kw">use </span>hotshot_types::constants::Base;
     <span class="kw">use </span>hotshot_types::{
         signature_key::BLSPubKey,
         traits::{
@@ -1364,9 +1349,10 @@
         <span class="kw">let </span>builder_pub_key = builder_config.fee_account;
 
         <span class="comment">// Start a builder api client
-        </span><span class="kw">let </span>builder_client = Client::&lt;hotshot_builder_api::builder::Error, Base&gt;::new(
-            hotshot_builder_api_url.clone(),
-        );
+        </span><span class="kw">let </span>builder_client = Client::&lt;
+            hotshot_builder_api::builder::Error,
+            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base,
+        &gt;::new(hotshot_builder_api_url.clone());
         <span class="macro">assert!</span>(builder_client.connect(<span class="prelude-val">Some</span>(Duration::from_secs(<span class="number">60</span>))).<span class="kw">await</span>);
 
         <span class="kw">let </span>seed = [<span class="number">207_u8</span>; <span class="number">32</span>];

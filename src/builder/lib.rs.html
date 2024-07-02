@@ -755,6 +755,9 @@
 <a href="#755" id="755">755</a>
 <a href="#756" id="756">756</a>
 <a href="#757" id="757">757</a>
+<a href="#758" id="758">758</a>
+<a href="#759" id="759">759</a>
+<a href="#760" id="760">760</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
 </span><span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -768,7 +771,7 @@
 <span class="kw">use </span>hotshot::{
     traits::election::static_committee::GeneralStaticCommittee,
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, Networks, SystemContext,
+    HotShotInitializer, Memberships, SystemContext,
 };
 <span class="kw">use </span>hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
@@ -776,7 +779,6 @@
 };
 <span class="kw">use </span>hotshot_types::{
     consensus::ConsensusMetricsValue,
-    constants::Base,
     event::Event,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
@@ -794,7 +796,10 @@
 <span class="kw">use </span>hotshot_builder_api::builder::{
     BuildError, Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
 };
-<span class="kw">use </span>hotshot_builder_core::service::{GlobalState, ProxyGlobalState};
+<span class="kw">use </span>hotshot_builder_core::{
+    service::{GlobalState, ProxyGlobalState},
+    testing::basic_test::NodeType,
+};
 <span class="kw">use </span>jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 <span class="kw">use </span>jf_signature::bls_over_bn254::VerKey;
 <span class="kw">use </span>sequencer::catchup::mock::MockStateCatchup;
@@ -822,18 +827,20 @@
 <span class="comment">// It runs the api service for the builder
 </span><span class="kw">pub fn </span>run_builder_api_service(url: Url, source: ProxyGlobalState&lt;SeqTypes&gt;) {
     <span class="comment">// it is to serve hotshot
-    </span><span class="kw">let </span>builder_api =
-        hotshot_builder_api::builder::define_api::&lt;ProxyGlobalState&lt;SeqTypes&gt;, SeqTypes, Base&gt;(
-            <span class="kw-2">&amp;</span>HotshotBuilderApiOptions::default(),
-        )
-        .expect(<span class="string">"Failed to construct the builder APIs"</span>);
+    </span><span class="kw">let </span>builder_api = hotshot_builder_api::builder::define_api::&lt;
+        ProxyGlobalState&lt;SeqTypes&gt;,
+        SeqTypes,
+        &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base,
+    &gt;(<span class="kw-2">&amp;</span>HotshotBuilderApiOptions::default())
+    .expect(<span class="string">"Failed to construct the builder APIs"</span>);
 
     <span class="comment">// it enables external clients to submit txn to the builder's private mempool
-    </span><span class="kw">let </span>private_mempool_api =
-        hotshot_builder_api::builder::submit_api::&lt;ProxyGlobalState&lt;SeqTypes&gt;, SeqTypes, Base&gt;(
-            <span class="kw-2">&amp;</span>HotshotBuilderApiOptions::default(),
-        )
-        .expect(<span class="string">"Failed to construct the builder API for private mempool txns"</span>);
+    </span><span class="kw">let </span>private_mempool_api = hotshot_builder_api::builder::submit_api::&lt;
+        ProxyGlobalState&lt;SeqTypes&gt;,
+        SeqTypes,
+        &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base,
+    &gt;(<span class="kw-2">&amp;</span>HotshotBuilderApiOptions::default())
+    .expect(<span class="string">"Failed to construct the builder API for private mempool txns"</span>);
 
     <span class="kw">let </span><span class="kw-2">mut </span>app: App&lt;ProxyGlobalState&lt;SeqTypes&gt;, BuilderApiError&gt; = App::with_state(source);
 
@@ -843,7 +850,7 @@
     app.register_module(<span class="string">"txn_submit"</span>, private_mempool_api)
         .expect(<span class="string">"Failed to register the private mempool API"</span>);
 
-    async_spawn(app.serve(url, Base::instance()));
+    async_spawn(app.serve(url, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance()));
 }
 
 <span class="attr">#[cfg(test)]
@@ -982,6 +989,10 @@
                 stop_proposing_view: <span class="number">0</span>,
                 start_voting_view: <span class="number">0</span>,
                 stop_voting_view: <span class="number">0</span>,
+                start_proposing_time: <span class="number">0</span>,
+                start_voting_time: <span class="number">0</span>,
+                stop_proposing_time: <span class="number">0</span>,
+                stop_voting_time: <span class="number">0</span>,
             };
 
             <span class="self">Self </span>{
@@ -1137,11 +1148,6 @@
                 <span class="kw-2">&amp;</span><span class="self">self</span>.master_map,
                 <span class="prelude-val">None</span>,
             ));
-            <span class="kw">let </span>networks = Networks {
-                da_network: network.clone(),
-                quorum_network: network,
-                _pd: Default::default(),
-            };
 
             <span class="kw">let </span>node_state = NodeState::new(
                 i <span class="kw">as </span>u64,
@@ -1156,7 +1162,7 @@
                 config,
                 <span class="prelude-val">Some</span>(<span class="self">self</span>.non_staking_nodes_stake_entries.clone()),
                 node_state,
-                networks,
+                network,
                 metrics,
                 i <span class="kw">as </span>u64,
                 <span class="prelude-val">None</span>,
@@ -1191,7 +1197,7 @@
             </span><span class="kw">let </span>hotshot_events_api = hotshot_events_service::events::define_api::&lt;
                 Arc&lt;RwLock&lt;EventsStreamer&lt;SeqTypes&gt;&gt;&gt;,
                 SeqTypes,
-                Base,
+                &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base,
             &gt;(<span class="kw-2">&amp;</span>EventStreamingApiOptions::default())
             .expect(<span class="string">"Failed to define hotshot eventsAPI"</span>);
 
@@ -1200,7 +1206,7 @@
             app.register_module(<span class="string">"hotshot-events"</span>, hotshot_events_api)
                 .expect(<span class="string">"Failed to register hotshot events API"</span>);
 
-            async_spawn(app.serve(url, Base::instance()));
+            async_spawn(app.serve(url, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance()));
         }
         <span class="comment">// enable hotshot event streaming
         </span><span class="kw">pub fn </span>enable_hotshot_node_event_streaming&lt;P: SequencerPersistence&gt;(

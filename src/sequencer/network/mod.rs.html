@@ -10,56 +10,16 @@
 <a href="#10" id="10">10</a>
 <a href="#11" id="11">11</a>
 <a href="#12" id="12">12</a>
-<a href="#13" id="13">13</a>
-<a href="#14" id="14">14</a>
-<a href="#15" id="15">15</a>
-<a href="#16" id="16">16</a>
-<a href="#17" id="17">17</a>
-<a href="#18" id="18">18</a>
-<a href="#19" id="19">19</a>
-<a href="#20" id="20">20</a>
-<a href="#21" id="21">21</a>
-<a href="#22" id="22">22</a>
-<a href="#23" id="23">23</a>
-<a href="#24" id="24">24</a>
-<a href="#25" id="25">25</a>
-<a href="#26" id="26">26</a>
-<a href="#27" id="27">27</a>
-<a href="#28" id="28">28</a>
-<a href="#29" id="29">29</a>
-<a href="#30" id="30">30</a>
-<a href="#31" id="31">31</a>
-<a href="#32" id="32">32</a>
 </pre></div><pre class="rust"><code><span class="kw">use super</span>::<span class="kw-2">*</span>;
 
 <span class="kw">pub mod </span>cdn;
 <span class="kw">pub mod </span>libp2p;
 
-<span class="kw">pub trait </span>Type: <span class="lifetime">'static </span>{
-    <span class="kw">type </span>DAChannel: ConnectedNetwork&lt;PubKey&gt;;
-    <span class="kw">type </span>QuorumChannel: ConnectedNetwork&lt;PubKey&gt;;
-}
-
-<span class="attr">#[derive(Clone, Copy, Default)]
-</span><span class="kw">pub struct </span>Production;
-
 <span class="attr">#[cfg(feature = <span class="string">"libp2p"</span>)]
-</span><span class="kw">impl </span>Type <span class="kw">for </span>Production {
-    <span class="kw">type </span>DAChannel = CombinedNetworks&lt;SeqTypes&gt;;
-    <span class="kw">type </span>QuorumChannel = CombinedNetworks&lt;SeqTypes&gt;;
-}
+</span><span class="kw">pub type </span>Production = CombinedNetworks&lt;SeqTypes&gt;;
 
 <span class="attr">#[cfg(not(feature = <span class="string">"libp2p"</span>))]
-</span><span class="kw">impl </span>Type <span class="kw">for </span>Production {
-    <span class="kw">type </span>DAChannel = PushCdnNetwork&lt;SeqTypes&gt;;
-    <span class="kw">type </span>QuorumChannel = PushCdnNetwork&lt;SeqTypes&gt;;
-}
+</span><span class="kw">pub type </span>Production = PushCdnNetwork&lt;SeqTypes&gt;;
 
-<span class="attr">#[derive(Clone, Copy, Debug, Default)]
-</span><span class="kw">pub struct </span>Memory;
-
-<span class="kw">impl </span>Type <span class="kw">for </span>Memory {
-    <span class="kw">type </span>DAChannel = MemoryNetwork&lt;PubKey&gt;;
-    <span class="kw">type </span>QuorumChannel = MemoryNetwork&lt;PubKey&gt;;
-}
+<span class="kw">pub type </span>Memory = MemoryNetwork&lt;PubKey&gt;;
 </code></pre></div></section></main></body></html>

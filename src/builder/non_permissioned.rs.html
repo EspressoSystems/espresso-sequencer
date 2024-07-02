@@ -680,7 +680,6 @@
         events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
-    <span class="kw">use </span>hotshot_types::constants::Base;
     <span class="kw">use </span>hotshot_types::traits::{
         block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
         node_implementation::NodeType,
@@ -751,9 +750,10 @@
         <span class="kw">let </span>builder_pub_key = builder_config.fee_account;
 
         <span class="comment">// Start a builder api client
-        </span><span class="kw">let </span>builder_client = Client::&lt;hotshot_builder_api::builder::Error, Base&gt;::new(
-            hotshot_builder_api_url.clone(),
-        );
+        </span><span class="kw">let </span>builder_client = Client::&lt;
+            hotshot_builder_api::builder::Error,
+            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base,
+        &gt;::new(hotshot_builder_api_url.clone());
         <span class="macro">assert!</span>(builder_client.connect(<span class="prelude-val">Some</span>(Duration::from_secs(<span class="number">60</span>))).<span class="kw">await</span>);
 
         <span class="kw">let </span>seed = [<span class="number">207_u8</span>; <span class="number">32</span>];

@@ -563,6 +563,9 @@
 <a href="#563" id="563">563</a>
 <a href="#564" id="564">564</a>
 <a href="#565" id="565">565</a>
+<a href="#566" id="566">566</a>
+<a href="#567" id="567">567</a>
+<a href="#568" id="568">568</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer-specific API options and initialization.
 
 </span><span class="kw">use super</span>::{
@@ -576,9 +579,9 @@
 };
 <span class="kw">use crate</span>::{
     context::{SequencerContext, TaskList},
-    network,
     persistence::{<span class="self">self</span>, SequencerPersistence},
     state::{update_state_storage_loop, BlockMerkleTree, FeeMerkleTree},
+    PubKey,
 };
 <span class="kw">use </span>anyhow::bail;
 <span class="kw">use </span>async_std::sync::{Arc, RwLock};
@@ -592,7 +595,10 @@
     status::{<span class="self">self</span>, UpdateStatusData},
     Error,
 };
-<span class="kw">use </span>hotshot_types::traits::metrics::{Metrics, NoMetrics};
+<span class="kw">use </span>hotshot_types::traits::{
+    metrics::{Metrics, NoMetrics},
+    network::ConnectedNetwork,
+};
 <span class="kw">use </span>tide_disco::{
     listener::RateLimitListener,
     method::{ReadState, WriteState},
@@ -713,7 +719,7 @@
         bind_version: Ver,
     ) -&gt; anyhow::Result&lt;SequencerContext&lt;N, P, Ver&gt;&gt;
     <span class="kw">where
-        </span>N: network::Type,
+        </span>N: ConnectedNetwork&lt;PubKey&gt;,
         P: SequencerPersistence,
         F: FnOnce(Box&lt;<span class="kw">dyn </span>Metrics&gt;) -&gt; BoxFuture&lt;<span class="lifetime">'static</span>, SequencerContext&lt;N, P, Ver&gt;&gt;,
     {
@@ -828,7 +834,7 @@
         App&lt;Arc&lt;RwLock&lt;StorageState&lt;N, P, D, Ver&gt;&gt;&gt;, Error&gt;,
     )&gt;
     <span class="kw">where
-        </span>N: network::Type,
+        </span>N: ConnectedNetwork&lt;PubKey&gt;,
         P: SequencerPersistence,
         D: SequencerDataSource + CatchupDataSource + Send + Sync + <span class="lifetime">'static</span>,
     {
@@ -869,7 +875,7 @@
         bind_version: Ver,
     ) -&gt; anyhow::Result&lt;Box&lt;<span class="kw">dyn </span>Metrics&gt;&gt;
     <span class="kw">where
-        </span>N: network::Type,
+        </span>N: ConnectedNetwork&lt;PubKey&gt;,
         P: SequencerPersistence,
     {
         <span class="kw">let </span>ds = &lt;fs::DataSource <span class="kw">as </span>SequencerDataSource&gt;::create(
@@ -903,7 +909,7 @@
         bind_version: Ver,
     ) -&gt; anyhow::Result&lt;Box&lt;<span class="kw">dyn </span>Metrics&gt;&gt;
     <span class="kw">where
-        </span>N: network::Type,
+        </span>N: ConnectedNetwork&lt;PubKey&gt;,
         P: SequencerPersistence,
     {
         <span class="kw">let </span>ds = sql::DataSource::create(
@@ -969,7 +975,7 @@
             + StateSignatureDataSource&lt;N&gt;
             + CatchupDataSource
             + HotShotConfigDataSource,
-        N: network::Type,
+        N: ConnectedNetwork&lt;PubKey&gt;,
     {
         <span class="kw">let </span>bind_version = Ver::instance();
         <span class="comment">// Initialize submit API
@@ -1007,7 +1013,7 @@
         bind_version: Ver,
     ) -&gt; anyhow::Result&lt;()&gt;
     <span class="kw">where
-        </span>N: network::Type,
+        </span>N: ConnectedNetwork&lt;PubKey&gt;,
     {
         <span class="comment">// Start the event streaming API server if it is enabled.
         // It runs to different port and app because State and Extensible Data source needs to support required
