@@ -4,10 +4,6 @@ use std::{
     sync::Arc,
 };
 
-use crate::{
-    events::{HotShotEvent, ProposalMissing},
-    request::REQUEST_TIMEOUT,
-};
 use anyhow::{bail, ensure, Context, Result};
 use async_broadcast::{broadcast, SendError, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn, async_timeout};
@@ -35,6 +31,11 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
+
+use crate::{
+    events::{HotShotEvent, ProposalMissing},
+    request::REQUEST_TIMEOUT,
+};
 
 /// Trigger a request to the network for a proposal for a view and wait for the response
 pub(crate) async fn fetch_proposal<TYPES: NodeType>(

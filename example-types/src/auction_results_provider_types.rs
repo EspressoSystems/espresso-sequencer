@@ -20,7 +20,7 @@ impl HasUrl for TestAuctionResult {
 }
 
 /// The test auction results type is used to mimic the results from the Solver.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct TestAuctionResultsProvider {
     /// We intentionally allow for the results to be pre-cooked for the unit test to gurantee a
     /// particular outcome is met.

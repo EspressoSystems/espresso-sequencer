@@ -20,7 +20,7 @@ pub trait HasUrl {
 /// `AuctionResult`, also implements the [`HasUrl`] trait, which requires that the output
 /// type has the requisite fields available.
 #[async_trait]
-pub trait AuctionResultsProvider<TYPES: NodeType>: Send + Sync {
+pub trait AuctionResultsProvider<TYPES: NodeType>: Send + Sync + Clone {
     /// The AuctionSolverResult is a type that holds the data associated with a particular solver
     /// run, for a particular view.
     type AuctionResult: HasUrl;

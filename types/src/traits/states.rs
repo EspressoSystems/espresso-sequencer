@@ -20,7 +20,7 @@ use crate::{
 };
 
 /// Instance-level state, which allows us to fetch missing validated state.
-pub trait InstanceState: Debug + Send + Sync {}
+pub trait InstanceState: Debug + Clone + Send + Sync {}
 
 /// Application-specific state delta, which will be used to store a list of merkle tree entries.
 pub trait StateDelta:
@@ -38,7 +38,7 @@ pub trait StateDelta:
 /// produce a new state, with the modifications from the block applied
 /// ([`validate_and_apply_header`](`ValidatedState::validate_and_apply_header))
 pub trait ValidatedState<TYPES: NodeType>:
-    Serialize + DeserializeOwned + Debug + Default + PartialEq + Eq + Send + Sync
+    Serialize + DeserializeOwned + Debug + Default + PartialEq + Eq + Send + Sync + Clone
 {
     /// The error type for this particular type of ledger state
     type Error: Error + Debug + Send + Sync;

@@ -5,8 +5,8 @@ use std::sync::Arc;
 use anyhow::Result;
 use async_broadcast::Sender;
 use chrono::Utc;
-use hotshot_types::consensus::OuterConsensus;
 use hotshot_types::{
+    consensus::OuterConsensus,
     data::QuorumProposal,
     event::{Event, EventType},
     traits::node_implementation::{ConsensusTime, NodeImplementation, NodeType},

@@ -3,15 +3,6 @@
 use core::time::Duration;
 use std::{marker::PhantomData, sync::Arc};
 
-use super::ConsensusTaskState;
-use crate::{
-    events::HotShotEvent,
-    helpers::{
-        broadcast_event, decide_from_proposal, fetch_proposal, parent_leaf_and_state,
-        temp_validate_proposal_safety_and_liveness, update_view, validate_proposal_view_and_certs,
-        AnyhowTracing, SEND_VIEW_CHANGE_EVENT,
-    },
-};
 use anyhow::{bail, ensure, Context, Result};
 use async_broadcast::Sender;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
@@ -21,9 +12,8 @@ use async_std::task::JoinHandle;
 use chrono::Utc;
 use committable::Committable;
 use futures::FutureExt;
-use hotshot_types::consensus::OuterConsensus;
 use hotshot_types::{
-    consensus::{CommitmentAndMetadata, View},
+    consensus::{CommitmentAndMetadata, OuterConsensus, View},
     data::{null_block, Leaf, QuorumProposal, ViewChangeEvidence},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Proposal},
@@ -44,6 +34,16 @@ use hotshot_types::{
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
 use vbs::version::Version;
+
+use super::ConsensusTaskState;
+use crate::{
+    events::HotShotEvent,
+    helpers::{
+        broadcast_event, decide_from_proposal, fetch_proposal, parent_leaf_and_state,
+        temp_validate_proposal_safety_and_liveness, update_view, validate_proposal_view_and_certs,
+        AnyhowTracing, SEND_VIEW_CHANGE_EVENT,
+    },
+};
 
 /// Create the header for a proposal, build the proposal, and broadcast
 /// the proposal send evnet.
