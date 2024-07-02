@@ -265,11 +265,13 @@ impl From<MerkleTreeError> for FeeError {
 fn charge_fee(
     state: &mut ValidatedState,
     delta: &mut Delta,
-    fee_info: FeeInfo,
+    fee_info: Vec<FeeInfo>,
     recipient: FeeAccount,
 ) -> Result<(), FeeError> {
-    state.charge_fee(fee_info, recipient)?;
-    delta.fees_delta.extend([fee_info.account, recipient]);
+    for fee_info in fee_info {
+        state.charge_fee(fee_info, recipient)?;
+        delta.fees_delta.extend([fee_info.account, recipient]);
+    }
     Ok(())
 }
 
