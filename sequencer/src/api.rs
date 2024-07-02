@@ -22,7 +22,10 @@ use hotshot::types::{Event, SystemContextHandle};
 use hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_state_prover::service::light_client_genesis_from_stake_table;
-use hotshot_types::{data::ViewNumber, light_client::StateSignatureRequestBody, HotShotConfig};
+use hotshot_types::{
+    data::ViewNumber, light_client::StateSignatureRequestBody, traits::network::ConnectedNetwork,
+    HotShotConfig,
+};
 use jf_merkle_tree::MerkleTreeScheme;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
@@ -55,7 +58,8 @@ type BoxLazy<T> = Pin<Arc<Lazy<T, BoxFuture<'static, T>>>>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-struct ConsensusState<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType> {
+struct ConsensusState<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType>
+{
     state_signer: Arc<StateSigner<Ver>>,
     event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
     node_state: NodeState,
@@ -64,7 +68,7 @@ struct ConsensusState<N: network::Type, P: SequencerPersistence, Ver: StaticVers
     handle: Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>>>>,
 }
 
-impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
+impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType + 'static>
     From<&SequencerContext<N, P, Ver>> for ConsensusState<N, P, Ver>
 {
     fn from(ctx: &SequencerContext<N, P, Ver>) -> Self {
@@ -79,7 +83,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Debug(bound = ""))]
-struct ApiState<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType> {
+struct ApiState<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType> {
     // The consensus state is initialized lazily so we can start the API (and healthcheck endpoints)
     // before consensus has started. Any endpoint that uses consensus state will wait for
     // initialization to finish, but endpoints that do not require a consensus handle can proceed
@@ -88,7 +92,7 @@ struct ApiState<N: network::Type, P: SequencerPersistence, Ver: StaticVersionTyp
     consensus: BoxLazy<ConsensusState<N, P, Ver>>,
 }
 
-impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
+impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType + 'static>
     ApiState<N, P, Ver>
 {
     fn new(init: impl Future<Output = ConsensusState<N, P, Ver>> + Send + 'static) -> Self {
@@ -138,7 +142,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
 type StorageState<N, P, D, Ver> = ExtensibleDataSource<D, ApiState<N, P, Ver>>;
 
 #[async_trait]
-impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
     EventsSource<SeqTypes> for ApiState<N, P, Ver>
 {
     type EventStream = BoxStream<'static, Arc<BuilderEvent<SeqTypes>>>;
@@ -154,7 +158,7 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
 }
 
 impl<
-        N: network::Type,
+        N: ConnectedNetwork<PubKey>,
         D: Send + Sync,
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
@@ -165,7 +169,7 @@ impl<
     }
 }
 
-impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
     SubmitDataSource<N, P> for ApiState<N, P, Ver>
 {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
@@ -180,7 +184,7 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
 }
 
 impl<
-        N: network::Type,
+        N: ConnectedNetwork<PubKey>,
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
         D: CatchupDataSource + Send + Sync,
@@ -238,7 +242,7 @@ impl<
 
 #[async_trait]
 impl<
-        N: network::Type,
+        N: ConnectedNetwork<PubKey>,
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
         D: ChainConfigPersistence + Send + Sync,
@@ -255,8 +259,8 @@ impl<
     }
 }
 
-impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence> CatchupDataSource
-    for ApiState<N, P, Ver>
+impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+    CatchupDataSource for ApiState<N, P, Ver>
 {
     #[tracing::instrument(skip(self))]
     async fn get_account(
@@ -313,15 +317,19 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
     }
 }
 
-impl<N: network::Type, D: Sync, Ver: StaticVersionType + 'static, P: SequencerPersistence>
-    HotShotConfigDataSource for StorageState<N, P, D, Ver>
+impl<
+        N: ConnectedNetwork<PubKey>,
+        D: Sync,
+        Ver: StaticVersionType + 'static,
+        P: SequencerPersistence,
+    > HotShotConfigDataSource for StorageState<N, P, D, Ver>
 {
     async fn get_config(&self) -> PublicHotShotConfig {
         self.as_ref().hotshot_config().await.into()
     }
 }
 
-impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
     HotShotConfigDataSource for ApiState<N, P, Ver>
 {
     async fn get_config(&self) -> PublicHotShotConfig {
@@ -330,8 +338,12 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
 }
 
 #[async_trait]
-impl<N: network::Type, D: Sync, Ver: StaticVersionType + 'static, P: SequencerPersistence>
-    StateSignatureDataSource<N> for StorageState<N, P, D, Ver>
+impl<
+        N: ConnectedNetwork<PubKey>,
+        D: Sync,
+        Ver: StaticVersionType + 'static,
+        P: SequencerPersistence,
+    > StateSignatureDataSource<N> for StorageState<N, P, D, Ver>
 {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.as_ref().get_state_signature(height).await
@@ -339,7 +351,7 @@ impl<N: network::Type, D: Sync, Ver: StaticVersionType + 'static, P: SequencerPe
 }
 
 #[async_trait]
-impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
     StateSignatureDataSource<N> for ApiState<N, P, Ver>
 {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
