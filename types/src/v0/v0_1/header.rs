@@ -42,19 +42,31 @@ impl Header {
     where
         A: SeqAccess<'de>,
     {
+        let height = element!(seq, height);
+        let timestamp = element!(seq, timestamp);
+        let l1_head = element!(seq, l1_head);
+        let l1_finalized = element!(seq, l1_finalized);
+        let payload_commitment = element!(seq, payload_commitment);
+        let builder_commitment = element!(seq, builder_commitment);
+        let ns_table = element!(seq, ns_table);
+        let block_merkle_tree_root = element!(seq, block_merkle_tree_root);
+        let fee_merkle_tree_root = element!(seq, fee_merkle_tree_root);
+        let fee_info = element!(seq, fee_info);
+        let builder_signature = element!(seq, builder_signature);
+
         Ok(Self {
             chain_config,
-            height: element!(seq, height),
-            timestamp: element!(seq, timestamp),
-            l1_head: element!(seq, l1_head),
-            l1_finalized: seq.next_element()?,
-            payload_commitment: element!(seq, payload_commitment),
-            builder_commitment: element!(seq, builder_commitment),
-            ns_table: element!(seq, ns_table),
-            block_merkle_tree_root: element!(seq, block_merkle_tree_root),
-            fee_merkle_tree_root: element!(seq, fee_merkle_tree_root),
-            fee_info: element!(seq, fee_info),
-            builder_signature: seq.next_element()?,
+            height,
+            timestamp,
+            l1_head,
+            l1_finalized,
+            payload_commitment,
+            builder_commitment,
+            ns_table,
+            block_merkle_tree_root,
+            fee_merkle_tree_root,
+            fee_info,
+            builder_signature,
         })
     }
 

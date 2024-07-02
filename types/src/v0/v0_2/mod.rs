@@ -1,6 +1,5 @@
 use vbs::version::Version;
 
-use super::header::ResolvableChainConfigOrVersion;
 // Re-export types which haven't changed since the last minor version.
 pub use super::v0_1::{
     AccountQueryData, BlockMerkleCommitment, BlockMerkleTree, BlockSize, BuilderSignature,
@@ -19,9 +18,3 @@ pub use super::v0_1::{
 };
 
 pub const VERSION: Version = Version { major: 0, minor: 2 };
-
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub struct VersionedHeader {
-    pub version: ResolvableChainConfigOrVersion,
-    pub fields: Header,
-}

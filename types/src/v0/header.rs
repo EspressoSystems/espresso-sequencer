@@ -28,6 +28,12 @@ enum EitherOrVersion<ChainConfig, Commitment> {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct VersionedHeader<Fields> {
+    pub version: ResolvableChainConfigOrVersion,
+    pub fields: Fields,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ResolvableChainConfigOrVersion {
     chain_config: EitherOrVersion<ChainConfig, Commitment<ChainConfig>>,
 }
@@ -60,12 +66,12 @@ impl Serialize for Header {
     {
         match self {
             Self::V1(header) => header.serialize(serializer),
-            Self::V2(fields) => crate::v0_2::VersionedHeader {
+            Self::V2(fields) => VersionedHeader {
                 version: Version { major: 0, minor: 2 }.into(),
                 fields: fields.clone(),
             }
             .serialize(serializer),
-            Self::V3(fields) => crate::v0_3::VersionedHeader {
+            Self::V3(fields) => VersionedHeader {
                 version: Version { major: 0, minor: 3 }.into(),
                 fields: fields.clone(),
             }
@@ -82,10 +88,11 @@ impl<'de> Deserialize<'de> for Header {
         struct HeaderVisitor;
 
         #[derive(Deserialize)]
-        #[serde(field_identifier, rename_all = "lowercase")]
+        #[serde(field_identifier, rename_all = "snake_case")]
         enum StructFields {
             Version,
             Fields,
+            ChainConfig,
         }
 
         impl<'de> Visitor<'de> for HeaderVisitor {
@@ -101,6 +108,7 @@ impl<'de> Deserialize<'de> for Header {
             {
                 let chain_config_or_version: ResolvableChainConfigOrVersion =
                     seq.next_element()?.unwrap();
+
                 match chain_config_or_version.chain_config {
                     // For v0.1, the first field in the sequence of fields is the first field of the struct, so we call a function to get the rest of
                     // the fields from the sequence and pack them into the struct.
@@ -110,9 +118,8 @@ impl<'de> Deserialize<'de> for Header {
                     EitherOrVersion::Right(commit) => Ok(Header::V1(
                         v0_1::Header::deserialize_with_chain_config(commit.into(), seq)?,
                     )),
-                    // For all versions, the first "field" is not actually part of the `Header` struct (you can think of it as the first field of the virtual
-                    // `VersionedHeader` struct, with the `Header` being the second field. We just delegate directly to the derived deserialization
-                    // impl for the appropriate version.
+                    // For all versions > 0.1, the first "field" is not actually part of the `Header` struct.
+                    // We just delegate directly to the derived deserialization impl for the appropriate version.
                     EitherOrVersion::Version(Version { major: 0, minor: 2 }) => Ok(Header::V2(
                         seq.next_element()?
                             .ok_or_else(|| de::Error::missing_field("fields"))?,
@@ -132,7 +139,7 @@ impl<'de> Deserialize<'de> for Header {
                 // retrieving the first entry from the map, which could either be a
                 // `chain_config` (for v0.1 headers) or a `version` (for `VersionedHeader` structs).
                 let Some((_, chain_config_or_version)) =
-                    map.next_entry::<String, ResolvableChainConfigOrVersion>()?
+                    map.next_entry::<StructFields, ResolvableChainConfigOrVersion>()?
                 else {
                     return Err(de::Error::missing_field("version"));
                 };
@@ -146,17 +153,32 @@ impl<'de> Deserialize<'de> for Header {
                         v0_1::Header::deserialize_with_chain_config_map(commit.into(), map)?,
                     )),
                     EitherOrVersion::Version(Version { major: 0, minor: 2 }) => {
-                        Ok(Header::V2(map.next_entry::<String, _>()?.unwrap().1))
+                        Ok(Header::V2(map.next_entry::<StructFields, _>()?.unwrap().1))
                     }
                     EitherOrVersion::Version(Version { major: 0, minor: 3 }) => {
-                        Ok(Header::V3(map.next_entry::<String, _>()?.unwrap().1))
+                        Ok(Header::V3(map.next_entry::<StructFields, _>()?.unwrap().1))
                     }
                     _ => Err(serde::de::Error::custom("invalid version")),
                 }
             }
         }
 
-        const FIELDS: &[&str] = &["version", "fields"];
+        const FIELDS: &[&str] = &[
+            "chain_config",
+            "fields",
+            "height",
+            "timestamp",
+            "l1_head",
+            "l1_finalized",
+            "payload_commitment",
+            "builder_commitment",
+            "ns_table",
+            "block_merkle_tree_root",
+            "fee_merkle_tree_root",
+            "fee_info",
+            "builder_signature",
+        ];
+
         deserializer.deserialize_struct("Header", FIELDS, HeaderVisitor)
     }
 }

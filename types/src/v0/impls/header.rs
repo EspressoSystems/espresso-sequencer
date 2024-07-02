@@ -665,7 +665,10 @@ mod test_headers {
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
     use jf_vid::VidScheme;
     use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client, ProposalValidationError};
-    use vbs::version::{StaticVersion, StaticVersionType};
+    use vbs::{
+        version::{StaticVersion, StaticVersionType},
+        BinarySerializer,
+    };
 
     #[derive(Debug, Default)]
     #[must_use]
@@ -1180,9 +1183,9 @@ mod test_headers {
 
         let v1_header = Header::create(
             genesis.instance_state.chain_config.into(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
+            1,
+            2,
+            3,
             Default::default(),
             header.payload_commitment(),
             header.builder_commitment().clone(),
@@ -1202,9 +1205,9 @@ mod test_headers {
 
         let v2_header = Header::create(
             genesis.instance_state.chain_config.into(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
+            1,
+            2,
+            3,
             Default::default(),
             header.payload_commitment(),
             header.builder_commitment().clone(),
@@ -1224,9 +1227,9 @@ mod test_headers {
 
         let v3_header = Header::create(
             genesis.instance_state.chain_config.into(),
-            Default::default(),
-            Default::default(),
-            Default::default(),
+            1,
+            2,
+            3,
             Default::default(),
             header.payload_commitment(),
             header.builder_commitment().clone(),
@@ -1243,5 +1246,41 @@ mod test_headers {
 
         let serialized = serde_json::to_string(&v3_header).unwrap();
         let _: Header = serde_json::from_str(&serialized).unwrap();
+
+        let v1_bytes =
+            vbs::bincode_serializer::BincodeSerializer::<StaticVersion<0, 1>>::serialize(
+                &v1_header,
+            )
+            .unwrap();
+
+        let _: Header =
+            vbs::bincode_serializer::BincodeSerializer::<StaticVersion<0, 1>>::deserialize(
+                &v1_bytes,
+            )
+            .unwrap();
+
+        let v2_bytes =
+            vbs::bincode_serializer::BincodeSerializer::<StaticVersion<0, 2>>::serialize(
+                &v2_header,
+            )
+            .unwrap();
+
+        let _: Header =
+            vbs::bincode_serializer::BincodeSerializer::<StaticVersion<0, 2>>::deserialize(
+                &v2_bytes,
+            )
+            .unwrap();
+
+        let v3_bytes =
+            vbs::bincode_serializer::BincodeSerializer::<StaticVersion<0, 3>>::serialize(
+                &v3_header,
+            )
+            .unwrap();
+
+        let _: Header =
+            vbs::bincode_serializer::BincodeSerializer::<StaticVersion<0, 3>>::deserialize(
+                &v3_bytes,
+            )
+            .unwrap();
     }
 }

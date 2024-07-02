@@ -1,4 +1,4 @@
-use crate::{v0::header::ResolvableChainConfigOrVersion, NsTable};
+use crate::NsTable;
 
 use super::{
     BlockMerkleCommitment, BuilderSignature, FeeInfo, FeeMerkleCommitment, L1BlockInfo,
@@ -23,10 +23,4 @@ pub struct Header {
     pub(crate) fee_merkle_tree_root: FeeMerkleCommitment,
     pub(crate) fee_info: FeeInfo,
     pub(crate) builder_signature: Option<BuilderSignature>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct VersionedHeader {
-    pub version: ResolvableChainConfigOrVersion,
-    pub fields: Header,
 }

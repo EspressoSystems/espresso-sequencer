@@ -20,4 +20,4 @@ pub const VERSION: Version = Version { major: 0, minor: 3 };
 
 mod header;
 
-pub use header::{Header, VersionedHeader};
+pub use header::Header;
