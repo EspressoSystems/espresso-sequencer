@@ -82,9 +82,6 @@ pub struct ValidatedState {
     /// Fee Merkle Tree
     pub fee_merkle_tree: FeeMerkleTree,
     pub chain_config: ResolvableChainConfig,
-    // TODO
-    // /// Map of Marketplace Results.
-    // slot_map: HashMap<Slot, MarketplaceResults>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]

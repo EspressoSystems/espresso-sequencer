@@ -102,7 +102,6 @@ pub struct Header {
     // /// refund flag set at the beginning of new slots
     // /// In extreme cases, more than one slot may need to be refunded,
     // /// hence this data structure
-    // pub refund_bids: HashSet<Slot>,
 }
 
 impl Committable for Header {

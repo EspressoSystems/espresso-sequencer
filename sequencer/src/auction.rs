@@ -5,7 +5,10 @@ use crate::{
 };
 use committable::{Commitment, Committable};
 use ethers::types::Signature;
-use hotshot_types::{data::ViewNumber, traits::signature_key::BuilderSignatureKey};
+use hotshot_types::{
+    data::ViewNumber,
+    traits::{node_implementation::ConsensusTime, signature_key::BuilderSignatureKey},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -14,61 +17,6 @@ use std::{
 };
 use thiserror::Error;
 use url::Url;
-
-#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, Hash)]
-// This is here to fill in for something I don't understand yet.
-struct SequencerKey;
-
-// for MVP-0(-1) (JIT)
-// Sum of all sequencing fee match current check
-// builder signature no longer includes payload
-// new fee info flag (fee or bid)
-
-pub struct MarketplaceResults {
-    /// Slot these results are for
-    slot: Slot,
-    /// Bids that did not win, initially all bids are added to this,
-    /// and then the winning bids are removed
-    pending_bids: Vec<BidTx>,
-    /// Map of winning sequencer public keys to the bundle of namespaces they bid for
-    winner_map: HashMap<SequencerKey, HashSet<NamespaceId>>,
-    /// Whether refunds have been processed for this slot
-    refunds_processed: bool,
-}
-
-// - needs to be configured in genesis block
-// - needs to be updatable
-/// Configuration for the auction system
-struct AuctionConfig {
-    bid_phase_num_views: NonZeroU64,
-    auction_phase_num_views: NonZeroU64,
-    sequencing_phase_num_views: NonZeroU64,
-}
-
-/// Uniquely identifies an auction for sequencing rights of namespaces in the network
-#[derive(Clone, Copy)]
-struct AuctionId(u64);
-
-/// Uniquely identifies one auction phase for a specific auction
-#[derive(Clone, Copy)]
-struct AuctionPhaseId(AuctionId, AuctionPhaseKind);
-
-/// Describes one auction phase for a specific auction
-#[derive(Clone, Copy)]
-struct AuctionPhase {
-    id: AuctionPhaseId,
-    kind: AuctionPhaseKind,
-    start: ViewNumber,
-    end: ViewNumber,
-}
-
-/// Describes the 3 kinds of phases an active auction can be in
-#[derive(Clone, Copy, Eq, PartialEq)]
-enum AuctionPhaseKind {
-    Bid,
-    Assign,
-    Sequence,
-}
 
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Deserialize, Serialize, Hash)]
 pub struct Slot(u64);
@@ -107,14 +55,14 @@ pub struct BidTxBody {
     /// The bid amount designated in Wei.  This is different than
     /// the sequencing fee (gas price) for this transaction
     bid_amount: FeeAmount,
-    // TODO What is the correct type? What do we use this for?
+    // TODO I think this will end up being a `FeeAccount`
     /// The public key of this sequencer
-    public_key: SequencerKey,
+    public_key: FeeAccount,
     /// The URL the HotShot leader will use to request a bundle
     /// from this sequencer if they win the auction
     url: Url,
     /// The slot this bid is for
-    slot: Slot,
+    view: ViewNumber,
     /// The set of namespace ids the sequencer is bidding for
     bundle: Vec<NamespaceId>,
 }
@@ -157,12 +105,13 @@ impl Default for BidTxBody {
         let key = FeeAccount::test_key_pair();
         let nsid = NamespaceId::from(999);
         Self {
-            url: Url::from_str("htts://sequencer:3939/request_budle").unwrap(),
+            // TODO url will be builder_url, needs to be passed in from somewhere
+            url: Url::from_str("htts://sequencer:3939").unwrap(),
             account: key.fee_account(),
-            public_key: SequencerKey,
+            public_key: FeeAccount::default(),
             gas_price: FeeAmount::default(),
             bid_amount: FeeAmount::default(),
-            slot: Slot::default(),
+            view: ViewNumber::genesis(),
             bundle: vec![nsid],
         }
     }
@@ -209,12 +158,6 @@ impl BidTx {
         &self,
         state: &mut ValidatedState,
     ) -> Result<(), (ExecutionError, FullNetworkTx)> {
-        if get_phase() != AuctionPhaseKind::Bid {
-            return Err((
-                ExecutionError::InvalidPhase,
-                FullNetworkTx::Bid(self.clone()),
-            ));
-        }
         self.verify()
             .map_err(|e| (e, FullNetworkTx::Bid(self.clone())))?;
 
@@ -222,9 +165,6 @@ impl BidTx {
         // charge the bid
         self.charge(state)
             .map_err(|e| (e, FullNetworkTx::Bid(self.clone())))?;
-
-        // TODO do we still do this in JIT auction?
-        // store_in_marketplace_state();
 
         // TODO what do we return in good result?
         Ok(())
@@ -255,15 +195,6 @@ impl BidTx {
     pub fn body(self) -> BidTxBody {
         self.body
     }
-}
-
-// TODO I'm not sure how phases will work in JIT
-pub fn get_phase() -> AuctionPhaseKind {
-    AuctionPhaseKind::Bid
-}
-
-fn store_in_marketplace_state() {
-    unimplemented!();
 }
 
 /// Nonce for special (auction) transactions
