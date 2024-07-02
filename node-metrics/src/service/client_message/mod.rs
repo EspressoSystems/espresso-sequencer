@@ -20,6 +20,23 @@ pub enum InternalClientMessage {
     RequestHistogramSnapshot(ClientId),
 }
 
+impl PartialEq for InternalClientMessage {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Connected(_), Self::Connected(_)) => true,
+            (Self::Disconnected(l0), Self::Disconnected(r0)) => l0 == r0,
+            (Self::SubscribeLatestBlock(l0), Self::SubscribeLatestBlock(r0)) => l0 == r0,
+            (Self::SubscribeNodeIdentity(l0), Self::SubscribeNodeIdentity(r0)) => l0 == r0,
+            (Self::RequestBlocksSnapshot(l0), Self::RequestBlocksSnapshot(r0)) => l0 == r0,
+            (Self::RequestNodeIdentitySnapshot(l0), Self::RequestNodeIdentitySnapshot(r0)) => {
+                l0 == r0
+            }
+            (Self::RequestHistogramSnapshot(l0), Self::RequestHistogramSnapshot(r0)) => l0 == r0,
+            _ => false,
+        }
+    }
+}
+
 /// [ClientMessage] represents the messages that the client can send to the
 /// server for a request.
 ///
