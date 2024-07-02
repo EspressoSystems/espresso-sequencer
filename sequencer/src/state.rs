@@ -1,15 +1,8 @@
-use crate::{
-    api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
-    persistence::ChainConfigPersistence, NodeState, SeqTypes,
-};
-use anyhow::{bail, ensure, Context};
-
-use async_std::stream::StreamExt;
-use async_std::sync::RwLock;
-
 use core::fmt::Debug;
 use std::{sync::Arc, time::Duration};
 
+use anyhow::{bail, ensure, Context};
+use async_std::{stream::StreamExt, sync::RwLock};
 use espresso_types::{
     BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeMerkleTree, ValidatedState,
 };
@@ -23,6 +16,11 @@ use hotshot_query_service::{
 };
 use jf_merkle_tree::{LookupResult, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme};
 use vbs::version::Version;
+
+use crate::{
+    api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
+    persistence::ChainConfigPersistence, NodeState, SeqTypes,
+};
 
 async fn compute_state_update(
     state: &ValidatedState,

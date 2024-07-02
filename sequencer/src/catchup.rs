@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
-use crate::api::{data_source::CatchupDataSource, BlocksFrontier};
 use anyhow::{bail, Context};
 use async_std::sync::RwLock;
 use async_trait::async_trait;
-
 use committable::Commitment;
 use espresso_types::{
     v0_1::BackoffParams, v0_2::PersistenceOptions, v0_3::StateCatchup, AccountQueryData,
@@ -17,6 +15,8 @@ use surf_disco::Request;
 use tide_disco::error::ServerError;
 use url::Url;
 use vbs::version::StaticVersionType;
+
+use crate::api::{data_source::CatchupDataSource, BlocksFrontier};
 
 // This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.

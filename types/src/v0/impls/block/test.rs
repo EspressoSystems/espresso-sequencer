@@ -1,15 +1,17 @@
 #![cfg(test)]
-use crate::{
-    BlockSize, ChainConfig, NamespaceId, NodeState, NsProof, Payload, Transaction, TxProof,
-    ValidatedState,
-};
+use std::collections::HashMap;
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot::traits::BlockPayload;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{traits::EncodeBytes, vid::vid_scheme};
 use jf_vid::VidScheme;
 use rand::RngCore;
-use std::collections::HashMap;
+
+use crate::{
+    BlockSize, ChainConfig, NamespaceId, NodeState, NsProof, Payload, Transaction, TxProof,
+    ValidatedState,
+};
 
 #[async_std::test]
 async fn basic_correctness() {

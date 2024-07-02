@@ -22,7 +22,6 @@ use ethers::types::U256;
 use futures::FutureExt;
 use genesis::L1Finalized;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
-
 use libp2p::Multiaddr;
 use network::libp2p::split_off_peer_id;
 use state_signature::static_stake_table_commitment;

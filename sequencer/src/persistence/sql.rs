@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, time::Duration};
 
-use crate::{catchup::SqlStateCatchup, options::parse_duration, SeqTypes, ViewNumber};
 use anyhow::Context;
 use async_std::{
     stream::StreamExt,
@@ -32,6 +31,8 @@ use hotshot_types::{
     utils::View,
     vote::HasViewNumber,
 };
+
+use crate::{catchup::SqlStateCatchup, options::parse_duration, SeqTypes, ViewNumber};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Derivative, Default)]

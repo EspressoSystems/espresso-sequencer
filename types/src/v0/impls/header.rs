@@ -652,11 +652,6 @@ impl ExplorerHeader<SeqTypes> for Header {
 mod test_headers {
     use std::sync::Arc;
 
-    use super::*;
-    use crate::{
-        eth_signature_key::EthKeyPair, v0::impls::instance_state::mock::MockStateCatchup,
-        validate_proposal, NodeState,
-    };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::{
         types::{Address, U256},
@@ -666,8 +661,15 @@ mod test_headers {
     use jf_vid::VidScheme;
     use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client, ProposalValidationError};
     use vbs::{
+        bincode_serializer::BincodeSerializer,
         version::{StaticVersion, StaticVersionType},
         BinarySerializer,
+    };
+
+    use super::*;
+    use crate::{
+        eth_signature_key::EthKeyPair, v0::impls::instance_state::mock::MockStateCatchup,
+        validate_proposal, NodeState,
     };
 
     #[derive(Debug, Default)]
@@ -1247,40 +1249,13 @@ mod test_headers {
         let serialized = serde_json::to_string(&v3_header).unwrap();
         let _: Header = serde_json::from_str(&serialized).unwrap();
 
-        let v1_bytes =
-            vbs::bincode_serializer::BincodeSerializer::<StaticVersion<0, 1>>::serialize(
-                &v1_header,
-            )
-            .unwrap();
+        let v1_bytes = BincodeSerializer::<StaticVersion<0, 1>>::serialize(&v1_header).unwrap();
+        let _: Header = BincodeSerializer::<StaticVersion<0, 1>>::deserialize(&v1_bytes).unwrap();
 
-        let _: Header =
-            vbs::bincode_serializer::BincodeSerializer::<StaticVersion<0, 1>>::deserialize(
-                &v1_bytes,
-            )
-            .unwrap();
+        let v2_bytes = BincodeSerializer::<StaticVersion<0, 2>>::serialize(&v2_header).unwrap();
+        let _: Header = BincodeSerializer::<StaticVersion<0, 2>>::deserialize(&v2_bytes).unwrap();
 
-        let v2_bytes =
-            vbs::bincode_serializer::BincodeSerializer::<StaticVersion<0, 2>>::serialize(
-                &v2_header,
-            )
-            .unwrap();
-
-        let _: Header =
-            vbs::bincode_serializer::BincodeSerializer::<StaticVersion<0, 2>>::deserialize(
-                &v2_bytes,
-            )
-            .unwrap();
-
-        let v3_bytes =
-            vbs::bincode_serializer::BincodeSerializer::<StaticVersion<0, 3>>::serialize(
-                &v3_header,
-            )
-            .unwrap();
-
-        let _: Header =
-            vbs::bincode_serializer::BincodeSerializer::<StaticVersion<0, 3>>::deserialize(
-                &v3_bytes,
-            )
-            .unwrap();
+        let v3_bytes = BincodeSerializer::<StaticVersion<0, 3>>::serialize(&v3_header).unwrap();
+        let _: Header = BincodeSerializer::<StaticVersion<0, 3>>::deserialize(&v3_bytes).unwrap();
     }
 }

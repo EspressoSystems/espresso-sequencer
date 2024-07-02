@@ -1,11 +1,11 @@
-use crate::v0::impls::block::test::ValidTest;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot::traits::BlockPayload;
 use rand::{Rng, RngCore};
 
 use crate::{
-    v0::impls::block::uint_bytes::{
-        u32_max_from_byte_len, usize_max_from_byte_len, usize_to_bytes,
+    v0::impls::block::{
+        test::ValidTest,
+        uint_bytes::{u32_max_from_byte_len, usize_max_from_byte_len, usize_to_bytes},
     },
     v0_1::{
         NsTableBuilder,

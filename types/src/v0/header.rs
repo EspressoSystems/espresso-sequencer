@@ -4,8 +4,10 @@ use committable::Commitment;
 use hotshot_query_service::VidCommitment;
 use hotshot_types::utils::BuilderCommitment;
 use itertools::Either;
-use serde::de::{self, MapAccess, SeqAccess, Visitor};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{
+    de::{self, MapAccess, SeqAccess, Visitor},
+    Deserialize, Deserializer, Serialize, Serializer,
+};
 use serde_json::{Map, Value};
 use vbs::version::Version;
 
@@ -183,12 +185,14 @@ impl<'de> Deserialize<'de> for Header {
                         .ok_or_else(|| de::Error::missing_field("fields"))?;
 
                     let version =
-                        serde_json::from_value::<Version>(v.clone()).map_err(de::Error::custom)?;
+                        serde_json::from_value::<ResolvableChainConfigOrVersion>(v.clone())
+                            .map_err(de::Error::custom)?
+                            .chain_config;
                     let result = match version {
-                        Version { major: 0, minor: 2 } => Ok(Header::V2(
+                        EitherOrVersion::Version(Version { major: 0, minor: 2 }) => Ok(Header::V2(
                             serde_json::from_value(fields.clone()).map_err(de::Error::custom)?,
                         )),
-                        Version { major: 0, minor: 3 } => Ok(Header::V3(
+                        EitherOrVersion::Version(Version { major: 0, minor: 3 }) => Ok(Header::V3(
                             serde_json::from_value(fields.clone()).map_err(de::Error::custom)?,
                         )),
                         _ => Err(serde::de::Error::custom("invalid version")),

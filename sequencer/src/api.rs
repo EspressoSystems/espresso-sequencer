@@ -340,17 +340,15 @@ impl<N: network::Type, Ver: StaticVersionType + 'static, P: SequencerPersistence
 
 #[cfg(any(test, feature = "testing"))]
 pub mod test_helpers {
-    use super::*;
-    use crate::{
-        persistence::no_storage,
-        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig, TestConfigBuilder},
-    };
+    use std::{collections::BTreeMap, time::Duration};
+
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use committable::Committable;
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
-    use espresso_types::mock::MockStateCatchup;
-    use espresso_types::{v0_3::StateCatchup, NamespaceId, Upgrade, ValidatedState};
+    use espresso_types::{
+        mock::MockStateCatchup, v0_3::StateCatchup, NamespaceId, Upgrade, ValidatedState,
+    };
     use ethers::{prelude::Address, utils::Anvil};
     use futures::{
         future::{join_all, FutureExt},
@@ -365,10 +363,15 @@ pub mod test_helpers {
     use itertools::izip;
     use jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
-    use std::{collections::BTreeMap, time::Duration};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
     use vbs::version::Version;
+
+    use super::*;
+    use crate::{
+        persistence::no_storage,
+        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig, TestConfigBuilder},
+    };
 
     pub const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
@@ -821,10 +824,6 @@ pub mod test_helpers {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod api_tests {
-    use self::options::HotshotEvents;
-
-    use super::*;
-    use crate::testing::{wait_for_decide_on_handle, TestConfigBuilder};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
@@ -841,6 +840,10 @@ mod api_tests {
         TestNetwork, TestNetworkConfigBuilder,
     };
     use tide_disco::error::ServerError;
+
+    use self::options::HotshotEvents;
+    use super::*;
+    use crate::testing::{wait_for_decide_on_handle, TestConfigBuilder};
 
     #[async_std::test]
     pub(crate) async fn submit_test_with_query_module<D: TestableSequencerDataSource>() {
@@ -1028,15 +1031,6 @@ mod api_tests {
 mod test {
     use std::time::Duration;
 
-    use self::{
-        data_source::testing::TestableSequencerDataSource, sql::DataSource as SqlDataSource,
-    };
-    use super::*;
-    use crate::{
-        catchup::StatePeers,
-        persistence::no_storage,
-        testing::{TestConfig, TestConfigBuilder},
-    };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use committable::{Commitment, Committable};
@@ -1067,6 +1061,16 @@ mod test {
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     use vbs::version::Version;
+
+    use self::{
+        data_source::testing::TestableSequencerDataSource, sql::DataSource as SqlDataSource,
+    };
+    use super::*;
+    use crate::{
+        catchup::StatePeers,
+        persistence::no_storage,
+        testing::{TestConfig, TestConfigBuilder},
+    };
 
     #[async_std::test]
     async fn test_healthcheck() {
