@@ -160,24 +160,24 @@ gadgets need to be introduced in order to implement the derivation pipeline logi
   those same transactions obtained after namespace filtering.
 
 ![image](zk-rollup-circuit-no-espresso-consensus.svg) **Figure 2:** Rollup circuit with additional gadgets _Collect &
-Filter_, and _COMMs Equivalence_. Private inputs of the circuit are written in bold font.
+Filter_, and _COMMs Equivalence_. Private inputs of the circuit are written in uppercase and bold font.
 
 The circuit depicted in Figure 2 operates as follows:
 
 - The _Collect & Filter_ gadget receives as input `blk_cm_new` which is the commitment to the latest Espresso block
   available and `blk_cm_old`. Both of these commitments are public inputs. The first witness of this circuit is
-  `cm_txs_history` which is a commitment to all the rollup transactions that have been sequenced since the last Espresso
-  state update `blk_cm_old` (`cm_txs_history` is a rollup-specific commitment, so each rollup's prover must compute this
-  commitment in order to proceed.). The relationship between `blk_cm_new`, `blk_cm_old`, and `cm_txs_history` can be
+  `CM_TXS_HISTORY` which is a commitment to all the rollup transactions that have been sequenced since the last Espresso
+  state update `blk_cm_old` (`CM_TXS_HISTORY` is a rollup-specific commitment, so each rollup's prover must compute this
+  commitment in order to proceed.). The relationship between `blk_cm_new`, `blk_cm_old`, and `CM_TXS_HISTORY` can be
   checked using a second witness `proof_txs_history`. This gadget is required in order to ensure that for each Espresso
   block in the range defined by `blk_cm_old` and `blk_cm_new`, the transactions applied to the rollup state correspond
   to the rollup namespace. The value `proof_txs_history` contains a list of namespace proofs, one for each Espresso
   block in the range. Note that such list of proofs could be aggregated or verified in batch depending on the commitment
   scheme used to represent each Espresso block.
-- The _COMMs Equivalence_ gadget checks that using the same rollup inputs _ROLLUP_TXS_, we obtain `cm_txs_history` using
+- The _COMMs Equivalence_ gadget checks that using the same rollup inputs _ROLLUP_TXS_, we obtain `CM_TXS_HISTORY` using
   the Espresso commitment scheme for representing a set of transactions and the commitment `cm_txs_rollup` that is used
   by _zkVM_ gadget. This gadget is required in order to ensure that the set of transactions fetched from the Espresso
-  blocks and represented as `cm_txs_history` is consistent with the set of transactions applied to the rollup state and
+  blocks and represented as `CM_TXS_HISTORY` is consistent with the set of transactions applied to the rollup state and
   represented by the commitment `cm_txs_rollup`. Note that if both commitment schemes (used in Espresso and the Rollup)
   were the same, this gadget would not be necessary. Thus, if updating the zkVM circuit is possible in practice, by
   using the Espresso commitment scheme inside the zkVM gadget, one can remove the need for the _COMMs Equivalence_
@@ -217,7 +217,7 @@ contract RollupContract1 is RollupContract {
 ## Integration 2: Verify Espresso consensus inside the rollup circuit
 
 ![image](zk-rollup-circuit.svg) **Figure 3:** Rollup circuit with additional gadgets _Espresso Consensus_, _Collect &
-Filter_, and _COMMs Equivalence_. Private inputs of the circuit are written in bold font.
+Filter_, and _COMMs Equivalence_. Private inputs of the circuit are written in uppercase and bold font.
 
 The circuit depicted in Figure 3 operates as follows:
 
