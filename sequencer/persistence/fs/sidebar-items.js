@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Options","Persistence"]};
+window.SIDEBAR_ITEMS = {"fn":["migrate_network_config"],"struct":["Options","Persistence"]};
