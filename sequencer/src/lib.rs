@@ -655,6 +655,10 @@ pub mod testing {
                 self.config.stop_proposing_view = upgrades.stop_proposing_view;
                 self.config.start_voting_view = upgrades.start_voting_view;
                 self.config.stop_voting_view = upgrades.stop_voting_view;
+                self.config.start_proposing_time = 0;
+                self.config.stop_proposing_time = u64::MAX;
+                self.config.start_voting_time = 0;
+                self.config.stop_voting_time = u64::MAX;
             }
 
             TestConfig {
