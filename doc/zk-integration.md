@@ -176,7 +176,7 @@ The circuit depicted in Figure 2 operates as follows:
   scheme used to represent each Espresso block.
 - The _COMMs Equivalence_ gadget checks that using the same rollup inputs _ROLLUP_TXS_, we obtain `cm_txs_history` using
   the Espresso commitment scheme for representing a set of transactions and the commitment `cm_txs_rollup` that is used
-  the by _zkVM_ gadget. This gadget is required in order to ensure that the set of transactions fetched from the
+  by _zkVM_ gadget. This gadget is required in order to ensure that the set of transactions fetched from the
   Espresso blocks and represented as `cm_txs_history` is consistent with the set of transactions applied to the rollup
   state and represented by the commitment `cm_txs_rollup`. Note that if both commitment schemes (used in Espresso and
   the Rollup) were the same, this gadget would not be necessary. Thus, if updating the zkVM circuit is possible in
