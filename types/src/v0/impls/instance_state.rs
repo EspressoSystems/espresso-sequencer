@@ -86,18 +86,20 @@ pub mod mock {
 
     use super::*;
     use crate::{
-        v0_1::{AccountQueryData, FeeAccountProof},
+        v0_1::{AccountQueryData, BackoffParams, FeeAccountProof},
         BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
     };
 
     #[derive(Debug, Clone, Default)]
     pub struct MockStateCatchup {
+        backoff: BackoffParams,
         state: HashMap<ViewNumber, Arc<ValidatedState>>,
     }
 
     impl FromIterator<(ViewNumber, Arc<ValidatedState>)> for MockStateCatchup {
         fn from_iter<I: IntoIterator<Item = (ViewNumber, Arc<ValidatedState>)>>(iter: I) -> Self {
             Self {
+                backoff: Default::default(),
                 state: iter.into_iter().collect(),
             }
         }
@@ -149,6 +151,10 @@ pub mod mock {
             _commitment: Commitment<ChainConfig>,
         ) -> anyhow::Result<ChainConfig> {
             Ok(ChainConfig::default())
+        }
+
+        fn backoff(&self) -> &BackoffParams {
+            &self.backoff
         }
     }
 }

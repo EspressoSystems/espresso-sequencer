@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, time::Duration};
 
+use crate::{catchup::SqlStateCatchup, options::parse_duration, SeqTypes, ViewNumber};
 use anyhow::Context;
 use async_std::{
     stream::StreamExt,
@@ -10,6 +11,7 @@ use clap::Parser;
 use derivative::Derivative;
 use espresso_types::{
     traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
+    v0_1::BackoffParams,
     Leaf, NetworkConfig,
 };
 use futures::future::{BoxFuture, FutureExt};
@@ -30,8 +32,6 @@ use hotshot_types::{
     utils::View,
     vote::HasViewNumber,
 };
-
-use crate::{catchup::SqlStateCatchup, options::parse_duration, SeqTypes, ViewNumber};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Derivative, Default)]
@@ -280,10 +280,14 @@ pub(crate) async fn transaction(
 
 #[async_trait]
 impl SequencerPersistence for Persistence {
-    fn into_catchup_provider(self) -> anyhow::Result<Arc<dyn StateCatchup>> {
-        Ok(Arc::new(SqlStateCatchup::from(Arc::new(RwLock::new(
-            self.db,
-        )))))
+    fn into_catchup_provider(
+        self,
+        backoff: BackoffParams,
+    ) -> anyhow::Result<Arc<dyn StateCatchup>> {
+        Ok(Arc::new(SqlStateCatchup::new(
+            Arc::new(RwLock::new(self.db)),
+            backoff,
+        )))
     }
 
     async fn load_config(&self) -> anyhow::Result<Option<NetworkConfig>> {

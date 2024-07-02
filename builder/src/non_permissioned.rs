@@ -71,7 +71,10 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
         u64::MAX, // dummy node ID, only used for debugging
         chain_config,
         l1_client,
-        Arc::new(StatePeers::<Ver>::from_urls(state_peers)),
+        Arc::new(StatePeers::<Ver>::from_urls(
+            state_peers,
+            Default::default(),
+        )),
     );
     Ok(instance_state)
 }

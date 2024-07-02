@@ -9,4 +9,5 @@ mod l1;
 mod state;
 mod transaction;
 
+pub use instance_state::mock;
 pub use state::validate_proposal;

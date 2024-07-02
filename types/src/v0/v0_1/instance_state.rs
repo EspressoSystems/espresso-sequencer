@@ -1,12 +1,18 @@
-use std::cmp::min;
-use std::collections::BTreeMap;
-use std::{sync::Arc, time::Duration};
-
 use anyhow::Context;
 use async_std::task::sleep;
 use async_trait::async_trait;
+use clap::Parser;
 use committable::Commitment;
 use derive_more::From;
+use futures::future::BoxFuture;
+use futures::{FutureExt, TryFutureExt};
+use snafu::Snafu;
+use std::cmp::{min, Ordering};
+use std::collections::BTreeMap;
+use std::fmt::{self, Display, Formatter};
+use std::num::ParseIntError;
+use std::str::FromStr;
+use std::{sync::Arc, time::Duration};
 
 use hotshot_types::data::ViewNumber;
 use rand::Rng;
@@ -117,27 +123,163 @@ pub struct NodeState {
     pub current_version: Version,
 }
 
-#[must_use]
-fn backoff(delay: Duration) -> Duration {
-    if delay >= MAX_RETRY_DELAY {
-        return MAX_RETRY_DELAY;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Ratio {
+    pub numerator: u64,
+    pub denominator: u64,
+}
+
+impl From<Ratio> for (u64, u64) {
+    fn from(r: Ratio) -> Self {
+        (r.numerator, r.denominator)
+    }
+}
+
+impl Display for Ratio {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.numerator, self.denominator)
+    }
+}
+
+impl PartialOrd for Ratio {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Ratio {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (self.numerator * other.denominator).cmp(&(other.numerator * self.denominator))
+    }
+}
+
+#[derive(Debug, Snafu)]
+pub enum ParseRatioError {
+    #[snafu(display("numerator and denominator must be separated by :"))]
+    MissingDelimiter,
+    InvalidNumerator {
+        err: ParseIntError,
+    },
+    InvalidDenominator {
+        err: ParseIntError,
+    },
+}
+
+impl FromStr for Ratio {
+    type Err = ParseRatioError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (num, den) = s.split_once(':').ok_or(ParseRatioError::MissingDelimiter)?;
+        Ok(Self {
+            numerator: num
+                .parse()
+                .map_err(|err| ParseRatioError::InvalidNumerator { err })?,
+            denominator: den
+                .parse()
+                .map_err(|err| ParseRatioError::InvalidDenominator { err })?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Snafu)]
+pub struct ParseDurationError {
+    reason: String,
+}
+
+pub fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
+    cld::ClDuration::from_str(s)
+        .map(Duration::from)
+        .map_err(|err| ParseDurationError {
+            reason: err.to_string(),
+        })
+}
+
+#[derive(Clone, Copy, Debug, Parser, PartialEq, Eq, PartialOrd, Ord)]
+pub struct BackoffParams {
+    /// Exponential backoff exponent.
+    #[clap(
+        long = "catchup-backoff-factor",
+        env = "ESPRESSO_SEQUENCER_CATCHUP_BACKOFF_FACTOR",
+        default_value = "4"
+    )]
+    factor: u32,
+
+    /// Exponential backoff base delay.
+    #[clap(
+        long = "catchup-base-retry-delay",
+        env = "ESPRESSO_SEQUENCER_CATCHUP_BASE_RETRY_DELAY",
+        default_value = "20ms",
+        value_parser = parse_duration
+    )]
+    base: Duration,
+
+    /// Exponential max delay.
+    #[clap(
+        long = "catchup-max-retry-delay",
+        env = "ESPRESSO_SEQUENCER_CATCHUP_MAX_RETRY_DELAY",
+        default_value = "5s",
+        value_parser = parse_duration
+    )]
+    max: Duration,
+
+    /// Exponential backoff jitter as a ratio of the backoff delay, numerator:denominator.
+    #[clap(
+        long = "catchup-backoff-jitter",
+        env = "ESPRESSO_SEQUENCER_CATCHUP_BACKOFF_JITTER",
+        default_value = "1:10"
+    )]
+    jitter: Ratio,
+}
+
+impl Default for BackoffParams {
+    fn default() -> Self {
+        Self::parse_from(std::iter::empty::<String>())
+    }
+}
+
+impl BackoffParams {
+    async fn retry<S, T>(
+        &self,
+        mut state: S,
+        f: impl for<'a> Fn(&'a mut S) -> BoxFuture<'a, anyhow::Result<T>>,
+    ) -> T {
+        let mut delay = self.base;
+        loop {
+            match f(&mut state).await {
+                Ok(res) => break res,
+                Err(err) => {
+                    tracing::warn!(
+                        "Retryable operation failed, will retry after {delay:?}: {err:#}"
+                    );
+                    sleep(delay).await;
+                    delay = self.backoff(delay);
+                }
+            }
+        }
     }
 
-    let mut rng = rand::thread_rng();
+    #[must_use]
+    fn backoff(&self, delay: Duration) -> Duration {
+        if delay >= self.max {
+            return self.max;
+        }
 
-    // Increase the backoff by the backoff factor.
-    let ms = (delay * BACKOFF_FACTOR).as_millis() as u64;
+        let mut rng = rand::thread_rng();
 
-    // Sample a random jitter factor in the range [0, BACKOFF_JITTER.0 / BACKOFF_JITTER.1].
-    let jitter_num = rng.gen_range(0..BACKOFF_JITTER.0);
-    let jitter_den = BACKOFF_JITTER.1;
+        // Increase the backoff by the backoff factor.
+        let ms = (delay * self.factor).as_millis() as u64;
 
-    // Increase the delay by the jitter factor.
-    let jitter = ms * jitter_num / jitter_den;
-    let delay = Duration::from_millis(ms + jitter);
+        // Sample a random jitter factor in the range [0, self.jitter].
+        let jitter_num = rng.gen_range(0..self.jitter.numerator);
+        let jitter_den = self.jitter.denominator;
 
-    // Bound the delay by the maximum.
-    min(delay, MAX_RETRY_DELAY)
+        // Increase the delay by the jitter factor.
+        let jitter = ms * jitter_num / jitter_den;
+        let delay = Duration::from_millis(ms + jitter);
+
+        // Bound the delay by the maximum.
+        min(delay, self.max)
+    }
 }
 
 #[async_trait]
@@ -161,21 +303,15 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
     ) -> anyhow::Result<Vec<AccountQueryData>> {
         let mut ret = vec![];
         for account in accounts {
-            // Retry until we succeed.
-            let mut delay = MIN_RETRY_DELAY;
-            let account = loop {
-                match self
-                    .try_fetch_account(height, view, fee_merkle_tree_root, account)
-                    .await
-                {
-                    Ok(account) => break account,
-                    Err(err) => {
-                        tracing::warn!(%account, ?delay, "Could not fetch account, retrying: {err:#}");
-                        sleep(delay).await;
-                        delay = backoff(delay);
-                    }
-                }
-            };
+            let account = self
+                .backoff()
+                .retry(self, |provider| {
+                    provider
+                        .try_fetch_account(height, view, fee_merkle_tree_root, account)
+                        .map_err(|err| err.context("fetching account {account}"))
+                        .boxed()
+                })
+                .await;
             ret.push(account);
         }
         Ok(ret)
@@ -196,22 +332,13 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
         view: ViewNumber,
         mt: &mut BlockMerkleTree,
     ) -> anyhow::Result<()> {
-        // Retry until we succeed.
-        let mut delay = MIN_RETRY_DELAY;
-        loop {
-            match self.try_remember_blocks_merkle_tree(height, view, mt).await {
-                Ok(()) => break,
-                Err(err) => {
-                    tracing::warn!(
-                        ?delay,
-                        "Could not fetch frontier from any peer, retrying: {err:#}"
-                    );
-                    sleep(delay).await;
-                    delay = backoff(delay);
-                }
-            }
-        }
-
+        self.backoff()
+            .retry(mt, |mt| {
+                self.try_remember_blocks_merkle_tree(height, view, mt)
+                    .map_err(|err| err.context("fetching frontier"))
+                    .boxed()
+            })
+            .await;
         Ok(())
     }
 
@@ -221,21 +348,15 @@ pub trait StateCatchup: Send + Sync + std::fmt::Debug {
     ) -> anyhow::Result<ChainConfig>;
 
     async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
-        // Retry until we succeed.
-        let mut delay = MIN_RETRY_DELAY;
-
-        loop {
-            match self.try_fetch_chain_config(commitment).await {
-                Ok(cf) => return cf,
-                Err(err) => {
-                    tracing::warn!(
-                        ?delay,
-                        "Could not fetch chain config from any peer, retrying: {err:#}"
-                    );
-                    sleep(delay).await;
-                    delay = backoff(delay);
-                }
-            }
-        }
+        self.backoff()
+            .retry(self, |provider| {
+                provider
+                    .try_fetch_chain_config(commitment)
+                    .map_err(|err| err.context("fetching chain config"))
+                    .boxed()
+            })
+            .await
     }
+
+    fn backoff(&self) -> &BackoffParams;
 }

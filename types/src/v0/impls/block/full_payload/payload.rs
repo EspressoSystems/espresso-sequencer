@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt::Display, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
 use committable::Committable;
@@ -222,7 +222,7 @@ impl QueryablePayload<SeqTypes> for Payload {
     }
 }
 
-impl Display for Payload {
+impl std::fmt::Display for Payload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:#?}")
     }
@@ -242,13 +242,21 @@ impl PayloadByteLen {
 
     #[allow(clippy::result_unit_err)]
     /// Is the payload byte length declared in a [`VidCommon`] equal [`Self`]?
-    pub fn is_consistent(&self, common: &VidCommon) -> Result<(), ()> {
+    pub fn is_consistent(&self, common: &VidCommon) -> bool {
         // failure to convert to usize implies that `common` cannot be
         // consistent with `self`.
-        let expected =
-            usize::try_from(VidSchemeType::get_payload_byte_len(common)).map_err(|_| ())?;
+        let expected = match usize::try_from(VidSchemeType::get_payload_byte_len(common)) {
+            Ok(n) => n,
+            Err(_) => {
+                tracing::warn!(
+                    "VidCommon byte len u32 {} should convert to usize",
+                    VidSchemeType::get_payload_byte_len(common)
+                );
+                return false;
+            }
+        };
 
-        (self.0 == expected).then_some(()).ok_or(())
+        self.0 == expected
     }
 
     pub(in crate::v0::impls::block::full_payload) fn as_usize(&self) -> usize {
@@ -264,5 +272,12 @@ impl hotshot_types::traits::block_contents::TestableBlock<SeqTypes> for Payload 
 
     fn txn_count(&self) -> u64 {
         self.len(&self.ns_table) as u64
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+impl Payload {
+    pub fn ns_table_mut(&mut self) -> &mut NsTable {
+        &mut self.ns_table
     }
 }

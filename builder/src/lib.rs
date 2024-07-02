@@ -61,7 +61,7 @@ use hotshot_types::{
 use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 use jf_signature::bls_over_bn254::VerKey;
 use sequencer::{
-    catchup::{mock::MockStateCatchup, StatePeers},
+    catchup::StatePeers,
     context::{Consensus, SequencerContext},
     network,
     state_signature::{static_stake_table_commitment, StakeTableCommitmentType, StateSigner},
@@ -118,8 +118,7 @@ pub mod testing {
     use async_trait::async_trait;
     use committable::Committable;
     use espresso_types::{
-        ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey, PubKey, Transaction,
-        ValidatedState,
+        mock::MockStateCatchup, ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey, PubKey, Transaction, ValidatedState
     };
     use ethers::{
         types::spoof::State,

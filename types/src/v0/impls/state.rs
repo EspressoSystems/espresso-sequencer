@@ -27,10 +27,11 @@ use vbs::version::Version;
 use crate::{
     constants::{BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT},
     traits::StateCatchup,
+    v0_1::BackoffParams,
     AccountQueryData, BlockMerkleTree, BuilderValidationError, ChainConfig, Delta, FeeAccount,
     FeeAmount, FeeError, FeeInfo, FeeMerkleCommitment, FeeMerkleTree, Header, Leaf, NodeState,
-    NsTableValidationError, ProposalValidationError, ResolvableChainConfig, SeqTypes, UpgradeType,
-    ValidatedState,
+    NsTableValidationError, PayloadByteLen, ProposalValidationError, ResolvableChainConfig,
+    SeqTypes, UpgradeType, ValidatedState,
 };
 
 impl StateDelta for Delta {}
@@ -243,7 +244,9 @@ pub fn validate_proposal(
         });
     }
 
-    proposal.ns_table().validate()?;
+    proposal
+        .ns_table()
+        .validate(&PayloadByteLen::from_vid_common(vid_common))?;
 
     Ok(())
 }
@@ -666,6 +669,10 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
     async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
         (**self).fetch_chain_config(commitment).await
     }
+
+    fn backoff(&self) -> &BackoffParams {
+        (**self).backoff()
+    }
 }
 
 #[async_trait]
@@ -723,6 +730,10 @@ impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
 
     async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
         (**self).fetch_chain_config(commitment).await
+    }
+
+    fn backoff(&self) -> &BackoffParams {
+        (**self).backoff()
     }
 }
 
@@ -788,6 +799,14 @@ impl<T: StateCatchup> StateCatchup for Vec<T> {
         }
 
         bail!("could not fetch chain config from any provider");
+    }
+
+    fn backoff(&self) -> &BackoffParams {
+        // Use whichever provider's backoff is most conservative.
+        self.iter()
+            .map(|p| p.backoff())
+            .max()
+            .expect("provider list not empty")
     }
 }
 

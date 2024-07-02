@@ -135,6 +135,8 @@ pub enum NsTableValidationError {
     InvalidByteLen,
     NonIncreasingEntries,
     InvalidHeader, // TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+    InvalidFinalOffset, // TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
+    ExpectNonemptyNsTable,
 }
 
 pub struct NsTableBuilder {
@@ -185,6 +187,7 @@ pub struct Payload {
 
 /// Byte length of a block payload, which includes all namespaces but *not* the
 /// namespace table.
+#[derive(Clone, Debug, Display, Eq, Hash, PartialEq)]
 pub struct PayloadByteLen(pub(crate) usize);
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

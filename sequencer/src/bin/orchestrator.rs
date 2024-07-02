@@ -1,20 +1,13 @@
-use std::{
-    fmt::{self, Display, Formatter},
-    num::{NonZeroUsize, ParseIntError},
-    str::FromStr,
-    time::Duration,
-};
+use std::{num::NonZeroUsize, time::Duration};
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use derive_more::From;
 use espresso_types::PubKey;
 use ethers::utils::hex::{self, FromHexError};
-use hotshot_orchestrator::{
-    config::{Libp2pConfig, NetworkConfig},
-    run_orchestrator,
-};
-use sequencer::options::parse_duration;
+use hotshot_orchestrator::config::Libp2pConfig;
+use hotshot_orchestrator::{config::NetworkConfig, run_orchestrator};
+use sequencer::options::{parse_duration, Ratio};
 use snafu::Snafu;
 use url::Url;
 use vec1::Vec1;
@@ -111,52 +104,6 @@ enum ParseSeedError {
 fn parse_seed(s: &str) -> Result<[u8; 32], ParseSeedError> {
     <[u8; 32]>::try_from(hex::decode(s)?)
         .map_err(|vec| ParseSeedError::WrongLength { length: vec.len() })
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Ratio {
-    numerator: u64,
-    denominator: u64,
-}
-
-impl From<Ratio> for (u64, u64) {
-    fn from(r: Ratio) -> Self {
-        (r.numerator, r.denominator)
-    }
-}
-
-impl Display for Ratio {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}:{}", self.numerator, self.denominator)
-    }
-}
-
-#[derive(Debug, Snafu)]
-enum ParseRatioError {
-    #[snafu(display("numerator and denominator must be separated by :"))]
-    MissingDelimiter,
-    InvalidNumerator {
-        err: ParseIntError,
-    },
-    InvalidDenominator {
-        err: ParseIntError,
-    },
-}
-
-impl FromStr for Ratio {
-    type Err = ParseRatioError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (num, den) = s.split_once(':').ok_or(ParseRatioError::MissingDelimiter)?;
-        Ok(Self {
-            numerator: num
-                .parse()
-                .map_err(|err| ParseRatioError::InvalidNumerator { err })?,
-            denominator: den
-                .parse()
-                .map_err(|err| ParseRatioError::InvalidDenominator { err })?,
-        })
-    }
 }
 
 #[async_std::main]

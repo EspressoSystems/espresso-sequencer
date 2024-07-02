@@ -18,6 +18,8 @@ use hotshot_types::{
 
 use crate::{traits::StateCatchup, Leaf};
 
+use super::BackoffParams;
+
 #[async_trait]
 pub trait PersistenceOptions: Clone + Send + Sync + 'static {
     type Persistence: SequencerPersistence;
@@ -25,15 +27,21 @@ pub trait PersistenceOptions: Clone + Send + Sync + 'static {
     async fn create(self) -> anyhow::Result<Self::Persistence>;
     async fn reset(self) -> anyhow::Result<()>;
 
-    async fn create_catchup_provider(self) -> anyhow::Result<Arc<dyn StateCatchup>> {
-        self.create().await?.into_catchup_provider()
+    async fn create_catchup_provider(
+        self,
+        backoff: BackoffParams,
+    ) -> anyhow::Result<Arc<dyn StateCatchup>> {
+        self.create().await?.into_catchup_provider(backoff)
     }
 }
 
 #[async_trait]
 pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     /// Use this storage as a state catchup backend, if supported.
-    fn into_catchup_provider(self) -> anyhow::Result<Arc<dyn StateCatchup>> {
+    fn into_catchup_provider(
+        self,
+        _backoff: BackoffParams,
+    ) -> anyhow::Result<Arc<dyn StateCatchup>> {
         bail!("state catchup is not implemented for this persistence type");
     }
 

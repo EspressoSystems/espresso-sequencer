@@ -11,6 +11,7 @@ mod header;
 mod impls;
 
 pub use header::Header;
+pub use impls::mock;
 pub use impls::validate_proposal;
 
 // This is the single source of truth for minor versions supported by this major version.

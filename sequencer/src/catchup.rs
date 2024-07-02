@@ -1,13 +1,14 @@
-use std::{fmt::Debug, sync::Arc};
+use std::sync::Arc;
 
+use crate::api::{data_source::CatchupDataSource, BlocksFrontier};
 use anyhow::{bail, Context};
 use async_std::sync::RwLock;
 use async_trait::async_trait;
+
 use committable::Commitment;
-use derive_more::From;
 use espresso_types::{
-    traits::PersistenceOptions, v0_3::StateCatchup, AccountQueryData, BlockMerkleTree, ChainConfig,
-    FeeAccount, FeeMerkleCommitment,
+    v0_1::BackoffParams, v0_2::PersistenceOptions, v0_3::StateCatchup, AccountQueryData,
+    BlockMerkleTree, ChainConfig, FeeAccount, FeeMerkleCommitment,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
@@ -16,8 +17,6 @@ use surf_disco::Request;
 use tide_disco::error::ServerError;
 use url::Url;
 use vbs::version::StaticVersionType;
-
-use crate::api::{data_source::CatchupDataSource, BlocksFrontier};
 
 // This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.
@@ -46,7 +45,7 @@ pub(crate) async fn local_and_remote(
     local_opt: impl PersistenceOptions,
     remote: impl StateCatchup + 'static,
 ) -> Arc<dyn StateCatchup> {
-    match local_opt.create_catchup_provider().await {
+    match local_opt.create_catchup_provider(*remote.backoff()).await {
         Ok(local) => Arc::new(vec![local, Arc::new(remote)]),
         Err(err) => {
             tracing::warn!("not using local catchup: {err:#}");
@@ -58,16 +57,18 @@ pub(crate) async fn local_and_remote(
 #[derive(Debug, Clone, Default)]
 pub struct StatePeers<Ver: StaticVersionType> {
     clients: Vec<Client<ServerError, Ver>>,
+    backoff: BackoffParams,
 }
 
 impl<Ver: StaticVersionType> StatePeers<Ver> {
-    pub fn from_urls(urls: Vec<Url>) -> Self {
+    pub fn from_urls(urls: Vec<Url>, backoff: BackoffParams) -> Self {
         if urls.is_empty() {
             panic!("Cannot create StatePeers with no peers");
         }
 
         Self {
             clients: urls.into_iter().map(Client::new).collect(),
+            backoff,
         }
     }
 }
@@ -160,17 +161,28 @@ impl<Ver: StaticVersionType> StateCatchup for StatePeers<Ver> {
         }
         bail!("Could not fetch chain config from any peer");
     }
+
+    fn backoff(&self) -> &BackoffParams {
+        &self.backoff
+    }
 }
 
-#[derive(Debug, From)]
+#[derive(Debug)]
 pub(crate) struct SqlStateCatchup<T> {
     db: Arc<RwLock<T>>,
+    backoff: BackoffParams,
+}
+
+impl<T> SqlStateCatchup<T> {
+    pub(crate) fn new(db: Arc<RwLock<T>>, backoff: BackoffParams) -> Self {
+        Self { db, backoff }
+    }
 }
 
 #[async_trait]
 impl<T> StateCatchup for SqlStateCatchup<T>
 where
-    T: CatchupDataSource + Debug + Send + Sync,
+    T: CatchupDataSource + std::fmt::Debug + Send + Sync,
 {
     #[tracing::instrument(skip(self))]
     async fn try_fetch_account(
@@ -217,76 +229,8 @@ where
     ) -> anyhow::Result<ChainConfig> {
         self.db.read().await.get_chain_config(commitment).await
     }
-}
 
-#[cfg(any(test, feature = "testing"))]
-pub mod mock {
-    use std::collections::HashMap;
-
-    use espresso_types::{FeeAccountProof, ValidatedState};
-    use jf_merkle_tree::MerkleTreeScheme;
-
-    use super::*;
-
-    #[derive(Debug, Clone, Default)]
-    pub struct MockStateCatchup {
-        state: HashMap<ViewNumber, Arc<ValidatedState>>,
-    }
-
-    impl FromIterator<(ViewNumber, Arc<ValidatedState>)> for MockStateCatchup {
-        fn from_iter<I: IntoIterator<Item = (ViewNumber, Arc<ValidatedState>)>>(iter: I) -> Self {
-            Self {
-                state: iter.into_iter().collect(),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl StateCatchup for MockStateCatchup {
-        async fn try_fetch_account(
-            &self,
-            _height: u64,
-            view: ViewNumber,
-            fee_merkle_tree_root: FeeMerkleCommitment,
-            account: FeeAccount,
-        ) -> anyhow::Result<AccountQueryData> {
-            let src = &self.state[&view].fee_merkle_tree;
-            assert_eq!(src.commitment(), fee_merkle_tree_root);
-
-            tracing::info!("catchup: fetching account {account:?} for view {view:?}");
-            Ok(FeeAccountProof::prove(src, account.into())
-                .unwrap_or_else(|| panic!("Account {account:?} not in memory"))
-                .into())
-        }
-
-        async fn try_remember_blocks_merkle_tree(
-            &self,
-            _height: u64,
-            view: ViewNumber,
-            mt: &mut BlockMerkleTree,
-        ) -> anyhow::Result<()> {
-            tracing::info!("catchup: fetching frontier for view {view:?}");
-            let src = &self.state[&view].block_merkle_tree;
-
-            assert_eq!(src.commitment(), mt.commitment());
-            assert!(
-                src.num_leaves() > 0,
-                "catchup should not be triggered when blocks tree is empty"
-            );
-
-            let index = src.num_leaves() - 1;
-            let (elem, proof) = src.lookup(index).expect_ok().unwrap();
-            mt.remember(index, elem, proof.clone())
-                .expect("Proof verifies");
-
-            Ok(())
-        }
-
-        async fn try_fetch_chain_config(
-            &self,
-            _commitment: Commitment<ChainConfig>,
-        ) -> anyhow::Result<ChainConfig> {
-            Ok(ChainConfig::default())
-        }
+    fn backoff(&self) -> &BackoffParams {
+        &self.backoff
     }
 }

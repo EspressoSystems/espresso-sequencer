@@ -1,24 +1,27 @@
+use crate::{api, persistence};
+use anyhow::{bail, Context};
+use bytesize::ByteSize;
+use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
+use cld::ClDuration;
 use core::fmt::Display;
+use espresso_types::v0_1::BackoffParams;
 use std::{
+    cmp::Ordering,
     collections::{HashMap, HashSet},
+    fmt::{self, Formatter},
     iter::once,
+    num::ParseIntError,
     path::PathBuf,
     str::FromStr,
     time::Duration,
 };
 
-use anyhow::{bail, Context};
-use bytesize::ByteSize;
-use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
-use cld::ClDuration;
 use derivative::Derivative;
 use derive_more::From;
 use hotshot_types::{light_client::StateSignKey, signature_key::BLSPrivKey};
 use libp2p::Multiaddr;
 use snafu::Snafu;
 use url::Url;
-
-use crate::{api, persistence};
 
 // This options struct is a bit unconventional. The sequencer has multiple optional modules which
 // can be added, in any combination, to the service. These include, for example, the API server.
@@ -183,6 +186,10 @@ pub struct Options {
     #[clap(long, env = "ESPRESSO_SEQUENCER_STATE_PEERS", value_delimiter = ',')]
     #[derivative(Debug(format_with = "fmt_urls"))]
     pub state_peers: Vec<Url>,
+
+    /// Exponential backoff for fetching missing state from peers.
+    #[clap(flatten)]
+    pub catchup_backoff: BackoffParams,
 }
 
 impl Options {
@@ -242,6 +249,64 @@ pub struct ParseSizeError {
 
 pub fn parse_size(s: &str) -> Result<u64, ParseSizeError> {
     Ok(s.parse::<ByteSize>()?.0)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Ratio {
+    pub numerator: u64,
+    pub denominator: u64,
+}
+
+impl From<Ratio> for (u64, u64) {
+    fn from(r: Ratio) -> Self {
+        (r.numerator, r.denominator)
+    }
+}
+
+impl Display for Ratio {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.numerator, self.denominator)
+    }
+}
+
+impl PartialOrd for Ratio {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Ratio {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (self.numerator * other.denominator).cmp(&(other.numerator * self.denominator))
+    }
+}
+
+#[derive(Debug, Snafu)]
+pub enum ParseRatioError {
+    #[snafu(display("numerator and denominator must be separated by :"))]
+    MissingDelimiter,
+    InvalidNumerator {
+        err: ParseIntError,
+    },
+    InvalidDenominator {
+        err: ParseIntError,
+    },
+}
+
+impl FromStr for Ratio {
+    type Err = ParseRatioError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (num, den) = s.split_once(':').ok_or(ParseRatioError::MissingDelimiter)?;
+        Ok(Self {
+            numerator: num
+                .parse()
+                .map_err(|err| ParseRatioError::InvalidNumerator { err })?,
+            denominator: den
+                .parse()
+                .map_err(|err| ParseRatioError::InvalidDenominator { err })?,
+        })
+    }
 }
 
 #[derive(Clone, Debug)]

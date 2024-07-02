@@ -21,6 +21,8 @@ blake3 = { workspace = true }
 bytesize = { workspace = true }
 committable = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
+clap = { workspace = true }
+cld = { workspace = true }
 derivative = { workspace = true }
 derive_more = { workspace = true }
 ethers = { workspace = true }

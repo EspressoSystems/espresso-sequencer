@@ -2747,9 +2747,9 @@ checksum = "bbbaaaf38131deb9ca518a274a45bfdb8771f139517b073b16c2d3d32ae5037b"
 
 [[package]]
 name = "either"
-version = "1.12.0"
+version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3dca9240753cf90908d7e4aac30f630662b02aebaa1b58a3cadabdb23385b58b"
+checksum = "60b1af1c220855b6ceac025d3f6ecdd2b7c4894bfe9cd9bda4fbb4bc7c0d4cf0"
 dependencies = [
  "serde",
 ]
@@ -2907,6 +2907,8 @@ dependencies = [
  "bincode",
  "blake3",
  "bytesize",
+ "clap",
+ "cld",
  "committable",
  "contract-bindings",
  "derivative",
@@ -4125,7 +4127,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.26"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=rc-0.1.29#2f5d1b7bb17bb667cf34df804b95a2816aea6dd2"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=rc-0.1.30-patch1#5ad88e9b81fa8f93d2938b7af5627b8b70de067d"
 dependencies = [
  "anyhow",
  "async-broadcast",

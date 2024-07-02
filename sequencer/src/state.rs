@@ -1,11 +1,17 @@
+use crate::{
+    api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
+    persistence::ChainConfigPersistence, NodeState, SeqTypes,
+};
+use anyhow::{bail, ensure, Context};
+
+use async_std::stream::StreamExt;
+use async_std::sync::RwLock;
+
 use core::fmt::Debug;
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{bail, ensure, Context};
-use async_std::{stream::StreamExt, sync::RwLock};
 use espresso_types::{
-    BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeMerkleTree, NodeState, SeqTypes,
-    ValidatedState,
+    BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeMerkleTree, ValidatedState,
 };
 use futures::future::Future;
 use hotshot::traits::ValidatedState as HotShotState;
@@ -17,11 +23,6 @@ use hotshot_query_service::{
 };
 use jf_merkle_tree::{LookupResult, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme};
 use vbs::version::Version;
-
-use crate::{
-    api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
-    persistence::ChainConfigPersistence,
-};
 
 async fn compute_state_update(
     state: &ValidatedState,
@@ -203,7 +204,7 @@ pub(crate) async fn update_state_storage_loop(
     version: Version,
 ) -> anyhow::Result<()> {
     let mut instance = instance.await;
-    instance.peers = Arc::new(SqlStateCatchup::from(storage.clone()));
+    instance.peers = Arc::new(SqlStateCatchup::new(storage.clone(), Default::default()));
 
     // get last saved merklized state
     let (last_height, parent_leaf, mut leaves) = {

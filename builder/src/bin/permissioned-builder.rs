@@ -1,13 +1,11 @@
 use std::{
-    collections::HashMap, net::ToSocketAddrs, num::NonZeroUsize, path::PathBuf, str::FromStr,
-    time::Duration,
+    collections::HashMap, net::ToSocketAddrs, num::NonZeroUsize, path::PathBuf, time::Duration,
 };
 
 use anyhow::{bail, Context};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use builder::permissioned::init_node;
 use clap::Parser;
-use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
 use espresso_types::eth_signature_key::EthKeyPair;
 use ethers::types::Address;
@@ -18,8 +16,9 @@ use hotshot_types::{
     traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
 };
 use libp2p::Multiaddr;
-use sequencer::{persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams};
-use snafu::Snafu;
+use sequencer::{
+    options::parse_duration, persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams,
+};
 use url::Url;
 
 #[derive(Parser, Clone, Debug)]
@@ -191,18 +190,6 @@ pub struct PermissionedBuilderOptions {
     pub is_da: bool,
 }
 
-#[derive(Clone, Debug, Snafu)]
-pub struct ParseDurationError {
-    reason: String,
-}
-
-pub fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
-    ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError {
-            reason: err.to_string(),
-        })
-}
 impl PermissionedBuilderOptions {
     pub fn private_keys(&self) -> anyhow::Result<(BLSPrivKey, StateSignKey)> {
         if let Some(path) = &self.key_file {
@@ -268,6 +255,7 @@ async fn main() -> anyhow::Result<()> {
         private_staking_key: private_staking_key.clone(),
         private_state_key,
         state_peers: opt.state_peers,
+        catchup_backoff: Default::default(),
     };
 
     let sequencer_version = SEQUENCER_VERSION;
