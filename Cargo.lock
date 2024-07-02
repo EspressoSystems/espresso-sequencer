@@ -1511,11 +1511,11 @@ dependencies = [
 
 [[package]]
 name = "cdn-broker"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.3.12#7bf490b34fb5b996d7e98d3d4be6d88028a076ac"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0#fdcf88863147173fb270e830abbbb24308268087"
 dependencies = [
  "async-std",
- "cdn-proto 0.1.0",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0)",
  "clap",
  "console-subscriber 0.3.0",
  "dashmap 5.5.3",
@@ -1536,10 +1536,10 @@ dependencies = [
 [[package]]
 name = "cdn-broker"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0#fdcf88863147173fb270e830abbbb24308268087"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.2#09389360284c51dd44a3dae1f1c3b395125abe82"
 dependencies = [
  "async-std",
- "cdn-proto 0.4.0",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.2)",
  "clap",
  "console-subscriber 0.3.0",
  "dashmap 5.5.3",
@@ -1563,24 +1563,10 @@ version = "0.4.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0#fdcf88863147173fb270e830abbbb24308268087"
 dependencies = [
  "async-std",
- "cdn-proto 0.4.0",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0)",
  "clap",
  "jf-signature",
  "rand 0.8.5",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.18",
-]
-
-[[package]]
-name = "cdn-marshal"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.3.12#7bf490b34fb5b996d7e98d3d4be6d88028a076ac"
-dependencies = [
- "async-std",
- "cdn-proto 0.1.0",
- "clap",
- "jf-signature",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.18",
@@ -1592,7 +1578,21 @@ version = "0.4.0"
 source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0#fdcf88863147173fb270e830abbbb24308268087"
 dependencies = [
  "async-std",
- "cdn-proto 0.4.0",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0)",
+ "clap",
+ "jf-signature",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.18",
+]
+
+[[package]]
+name = "cdn-marshal"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.2#09389360284c51dd44a3dae1f1c3b395125abe82"
+dependencies = [
+ "async-std",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.2)",
  "clap",
  "jf-signature",
  "tokio",
@@ -1602,8 +1602,8 @@ dependencies = [
 
 [[package]]
 name = "cdn-proto"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.3.12#7bf490b34fb5b996d7e98d3d4be6d88028a076ac"
+version = "0.4.0"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0#fdcf88863147173fb270e830abbbb24308268087"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -1637,7 +1637,7 @@ dependencies = [
 [[package]]
 name = "cdn-proto"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0#fdcf88863147173fb270e830abbbb24308268087"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.2#09389360284c51dd44a3dae1f1c3b395125abe82"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4108,9 +4108,9 @@ dependencies = [
  "bimap",
  "bincode",
  "blake3",
- "cdn-broker 0.4.0",
+ "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0)",
  "cdn-client",
- "cdn-marshal 0.4.0",
+ "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0)",
  "chrono",
  "committable",
  "custom_debug 0.5.1",
@@ -4466,7 +4466,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "bitvec",
- "cdn-proto 0.4.0",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0)",
  "chrono",
  "committable",
  "either",
@@ -4551,7 +4551,7 @@ dependencies = [
  "bincode",
  "bitvec",
  "blake3",
- "cdn-proto 0.4.0",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0)",
  "committable",
  "custom_debug 0.5.1",
  "derivative",
@@ -7082,9 +7082,9 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "pest"
-version = "2.7.10"
+version = "2.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "560131c633294438da9f7c4b08189194b20946c8274c6b9e38881a7874dc8ee8"
+checksum = "cd53dff83f26735fdc1ca837098ccf133605d794cdae66acfc2bfac3ec809d95"
 dependencies = [
  "memchr",
  "thiserror",
@@ -7093,9 +7093,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.7.10"
+version = "2.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26293c9193fbca7b1a3bf9b79dc1e388e927e6cacaa78b4a3ab705a1d3d41459"
+checksum = "2a548d2beca6773b1c244554d36fcf8548a8a58e74156968211567250e48e49a"
 dependencies = [
  "pest",
  "pest_generator",
@@ -7103,9 +7103,9 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.7.10"
+version = "2.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ec22af7d3fb470a85dd2ca96b7c577a1eb4ef6f1683a9fe9a8c16e136c04687"
+checksum = "3c93a82e8d145725dcbaf44e5ea887c8a869efdcc28706df2d08c69e17077183"
 dependencies = [
  "pest",
  "pest_meta",
@@ -7116,9 +7116,9 @@ dependencies = [
 
 [[package]]
 name = "pest_meta"
-version = "2.7.10"
+version = "2.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7a240022f37c361ec1878d646fc5b7d7c4d28d5946e1a80ad5a7a4f4ca0bdcd"
+checksum = "a941429fea7e08bedec25e4f6785b6ffaacc6b755da98df5ef3e7dcf4a124c4f"
 dependencies = [
  "once_cell",
  "pest",
@@ -8656,8 +8656,8 @@ dependencies = [
  "bincode",
  "blake3",
  "bytesize",
- "cdn-broker 0.1.0",
- "cdn-marshal 0.1.0",
+ "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.2)",
+ "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.2)",
  "clap",
  "cld",
  "committable",
