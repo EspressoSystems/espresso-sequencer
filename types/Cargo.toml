@@ -54,3 +54,4 @@ tracing = { workspace = true }
 trait-set = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
+strum = { version = "0.26", features = ["derive"] }

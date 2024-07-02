@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-
-use crate::{v0::header::StructFields, NsTable};
+use crate::NsTable;
 
 use super::{
     BlockMerkleCommitment, BuilderSignature, FeeInfo, FeeMerkleCommitment, L1BlockInfo,
@@ -8,10 +6,9 @@ use super::{
 };
 use hotshot_types::{utils::BuilderCommitment, vid::VidCommitment};
 use serde::{
-    de::{self, MapAccess, SeqAccess},
+    de::{self, SeqAccess},
     Deserialize, Serialize,
 };
-use serde_json::Value;
 /// A header is like a [`Block`] with the body replaced by a digest.
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Header {
@@ -37,22 +34,6 @@ macro_rules! element {
     };
 }
 
-macro_rules! extract_field {
-    ($map:expr, $field:ident) => {
-        serde_json::from_value(
-            $map.get(&StructFields::$field)
-                .ok_or_else(|| {
-                    de::Error::custom(&format!(
-                        "missing field in hashmap :{:?}",
-                        StructFields::$field
-                    ))
-                })?
-                .clone(),
-        )
-        .map_err(de::Error::custom)?
-    };
-}
-
 impl Header {
     pub fn deserialize_with_chain_config<'de, A>(
         chain_config: ResolvableChainConfig,
@@ -73,42 +54,6 @@ impl Header {
         let fee_info = element!(seq, fee_info);
         let builder_signature = element!(seq, builder_signature);
 
-        Ok(Self {
-            chain_config,
-            height,
-            timestamp,
-            l1_head,
-            l1_finalized,
-            payload_commitment,
-            builder_commitment,
-            ns_table,
-            block_merkle_tree_root,
-            fee_merkle_tree_root,
-            fee_info,
-            builder_signature,
-        })
-    }
-
-    pub fn deserialize_with_chain_config_map<'de, M>(
-        chain_config: ResolvableChainConfig,
-        map: HashMap<StructFields, Value>,
-    ) -> Result<Header, M::Error>
-    where
-        M: MapAccess<'de>,
-    {
-        let height = extract_field!(map, Height);
-        let timestamp = extract_field!(map, Timestamp);
-        let l1_head = extract_field!(map, L1Head);
-        let l1_finalized = extract_field!(map, L1Finalized);
-        let payload_commitment = extract_field!(map, PayloadCommitment);
-        let builder_commitment = extract_field!(map, BuilderCommitment);
-        let ns_table = extract_field!(map, NsTable);
-        let block_merkle_tree_root = extract_field!(map, BlockMerkleTreeRoot);
-        let fee_merkle_tree_root = extract_field!(map, FeeMerkleTreeRoot);
-        let fee_info = extract_field!(map, FeeInfo);
-        let builder_signature = extract_field!(map, BuilderSignature);
-
-        // If any field is missing, we return an error indicating which field is missing.
         Ok(Self {
             chain_config,
             height,

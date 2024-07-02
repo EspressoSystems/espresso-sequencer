@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt;
 
 use committable::Commitment;
@@ -7,7 +6,7 @@ use hotshot_types::utils::BuilderCommitment;
 use itertools::Either;
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use vbs::version::Version;
 
 use crate::{
@@ -82,8 +81,9 @@ impl Serialize for Header {
     }
 }
 
-#[derive(Deserialize, Debug, PartialEq, Eq, Hash)]
+#[derive(Deserialize, Debug, PartialEq, Eq, Hash, strum::Display)]
 #[serde(field_identifier, rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 pub enum StructFields {
     Version,
     Fields,
@@ -104,8 +104,8 @@ pub enum StructFields {
 impl StructFields {
     fn list() -> &'static [&'static str] {
         &[
-            "chain_config",
             "fields",
+            "chain_config",
             "height",
             "timestamp",
             "l1_head",
@@ -170,50 +170,36 @@ impl<'de> Deserialize<'de> for Header {
             where
                 V: MapAccess<'de>,
             {
-                // remaining v1 header fields are inserted in the hashmap
-                let mut v1_hashmap: HashMap<StructFields, Value> = HashMap::new();
-                let mut chain_config_or_version = None;
-                let mut fields: Option<Value> = None;
+                // insert all the fields in the serde_map as the map may have out of order fields.
+                let mut serde_map: Map<String, Value> = Map::new();
 
                 while let Some(key) = map.next_key::<StructFields>()? {
-                    match key {
-                        StructFields::ChainConfig => {
-                            chain_config_or_version = Some(map.next_value()?)
-                        }
-                        StructFields::Version => chain_config_or_version = Some(map.next_value()?),
-                        StructFields::Fields => fields = Some(map.next_value()?),
-                        _ => {
-                            v1_hashmap.insert(key, map.next_value()?);
-                        }
-                    }
+                    serde_map.insert(key.to_string(), map.next_value()?);
                 }
 
-                let chain_config_or_version: ResolvableChainConfigOrVersion =
-                    chain_config_or_version
-                        .ok_or_else(|| de::Error::missing_field("chain_config_or_version"))?;
+                if let Some(v) = serde_map.get("version") {
+                    let fields = serde_map
+                        .get(&StructFields::Fields.to_string())
+                        .ok_or_else(|| de::Error::missing_field("fields"))?;
 
-                // Match to determine the appropriate header version.
-                match chain_config_or_version.chain_config {
-                    EitherOrVersion::Left(cfg) => Ok(Header::V1(
-                        v0_1::Header::deserialize_with_chain_config_map::<V>(
-                            cfg.into(),
-                            v1_hashmap,
-                        )?,
-                    )),
-                    EitherOrVersion::Right(commit) => Ok(Header::V1(
-                        v0_1::Header::deserialize_with_chain_config_map::<V>(
-                            commit.into(),
-                            v1_hashmap,
-                        )?,
-                    )),
-                    EitherOrVersion::Version(Version { major: 0, minor: 2 }) => {
-                        Ok(Header::V2(serde_json::from_value(fields.unwrap()).unwrap()))
-                    }
-                    EitherOrVersion::Version(Version { major: 0, minor: 3 }) => {
-                        Ok(Header::V3(serde_json::from_value(fields.unwrap()).unwrap()))
-                    }
-                    _ => Err(serde::de::Error::custom("invalid version")),
+                    let version =
+                        serde_json::from_value::<Version>(v.clone()).map_err(de::Error::custom)?;
+                    let result = match version {
+                        Version { major: 0, minor: 2 } => Ok(Header::V2(
+                            serde_json::from_value(fields.clone()).map_err(de::Error::custom)?,
+                        )),
+                        Version { major: 0, minor: 3 } => Ok(Header::V3(
+                            serde_json::from_value(fields.clone()).map_err(de::Error::custom)?,
+                        )),
+                        _ => Err(serde::de::Error::custom("invalid version")),
+                    };
+
+                    return result;
                 }
+
+                Ok(Header::V1(
+                    serde_json::from_value(serde_map.into()).map_err(de::Error::custom)?,
+                ))
             }
         }
 
