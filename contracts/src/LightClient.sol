@@ -377,9 +377,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// L1 Block Number
     /// @param blockNumber The L1 block number
     /// @param threshold The number of blocks updates to this contract is allowed to lag behind
+    /// Marked as `virtual` for easily testing.
     function lagOverEscapeHatchThreshold(uint256 blockNumber, uint256 threshold)
         public
         view
+        virtual
         returns (bool)
     {
         uint256 updatesCount = stateUpdateBlockNumbers.length;
