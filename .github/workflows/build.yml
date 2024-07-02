@@ -57,6 +57,12 @@ jobs:
         run: |
           cargo build --locked --release --features testing --bin espresso-dev-node
 
+      # Anvil binary is used in espresso-dev-node when the L1 url is not provided.
+      - name: Get anvil binary
+        run: |
+          mkdir -p target/bin
+          cp `which anvil` target/bin/anvil
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -80,6 +86,7 @@ jobs:
             target/release/espresso-dev-node
             target/release/pub-key
             target/release/espresso-bridge
+            target/bin/anvil
 
   build-arm:
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
@@ -108,6 +115,13 @@ jobs:
         run: |
           cargo build --locked --release --features testing --bin espresso-dev-node
 
+      # Anvil binary is used in espresso-dev-node when the L1 url is not provided.
+      - name: Get anvil binary
+        run: |
+          mkdir -p target/bin
+          cp `which anvil` target/bin/anvil
+
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -131,6 +145,7 @@ jobs:
             target/release/espresso-dev-node
             target/release/pub-key
             target/release/espresso-bridge
+            target/bin/anvil
 
   build-dockers:
     runs-on: ubuntu-latest
