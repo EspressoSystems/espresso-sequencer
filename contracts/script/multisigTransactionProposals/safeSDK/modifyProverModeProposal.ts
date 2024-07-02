@@ -4,8 +4,8 @@ import { EthersAdapter } from "@safe-global/protocol-kit";
 import SafeApiKit from "@safe-global/api-kit";
 import Safe from "@safe-global/protocol-kit";
 import { getEnvVar, createSafeTransactionData, validateEthereumAddress } from "./utils";
-const SET_PROVER_CMD = "setProver";
-const DISABLE_PROVER_CMD = "disableProver";
+const SET_PROVER_CMD = "setProver" as const;
+const DISABLE_PROVER_CMD = "disableProver" as const;
 
 // declaring the type returned by the createTransaction method in the safe package locally (since the return type isn't exposed) so that if it's updated, it's reflected here too
 type LocalSafeTransaction = Awaited<ReturnType<Safe["createTransaction"]>>;
@@ -62,7 +62,7 @@ async function main() {
   }
 }
 
-function processCommandLineArguments(): string {
+function processCommandLineArguments() {
   const args = process.argv.slice(2); // Remove the first two args (node command and script name)
   if (args.length === 0) {
     console.log("No commands provided.");
