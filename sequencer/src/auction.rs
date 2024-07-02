@@ -10,11 +10,7 @@ use hotshot_types::{
     traits::{node_implementation::ConsensusTime, signature_key::BuilderSignatureKey},
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, HashSet},
-    num::NonZeroU64,
-    str::FromStr,
-};
+use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
@@ -79,7 +75,7 @@ impl Committable for BidTxBody {
             .fixed_size_field("gas_price", &self.gas_price.to_fixed_bytes())
             .fixed_size_field("bid_amount", &self.bid_amount.to_fixed_bytes())
             .var_size_field("url", self.url.as_str().as_ref())
-            .u64_field("slot", self.slot.0)
+            .u64_field("view", self.view.u64())
             .var_size_field("bundle", &bincode::serialize(&self.bundle).unwrap());
         comm.finalize()
     }
