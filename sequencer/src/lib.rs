@@ -601,7 +601,7 @@ pub mod testing {
         let port = port.unwrap_or_else(|| pick_unused_port().expect("No ports available"));
 
         // This should never fail.
-        let url: Url = format!("localhost:{port}")
+        let url: Url = format!("http://localhost:{port}")
             .parse()
             .expect("Failed to parse builder URL");
 
