@@ -337,11 +337,19 @@ impl ValidatedState {
         // in this block.
         let missing_accounts = self.forgotten_accounts(
             [
-                proposed_header.fee_info().account,
-                chain_config.fee_recipient,
+                proposed_header
+                    .fee_info()
+                    .iter()
+                    .map(|entry| entry.account)
+                    .collect::<Vec<FeeAccount>>(),
+                vec![chain_config.fee_recipient],
+                l1_deposits
+                    .iter()
+                    .map(|fee_info| fee_info.account)
+                    .collect(),
             ]
             .into_iter()
-            .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
+            .flatten(),
         );
 
         let parent_height = parent_leaf.height();
