@@ -8,8 +8,8 @@ use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::{
     data::{BlockError, ViewNumber},
     traits::{
-        block_contents::BlockHeader, node_implementation::ConsensusTime,
-        signature_key::BuilderSignatureKey, states::StateDelta, ValidatedState as HotShotState,
+        node_implementation::ConsensusTime, signature_key::BuilderSignatureKey, states::StateDelta,
+        ValidatedState as HotShotState,
     },
     vid::{VidCommon, VidSchemeType},
 };
@@ -33,6 +33,8 @@ use crate::{
     NsTableValidationError, PayloadByteLen, ProposalValidationError, ResolvableChainConfig,
     SeqTypes, UpgradeType, ValidatedState,
 };
+
+use super::fee_info::IterableFeeInfo;
 
 impl StateDelta for Delta {}
 
@@ -206,17 +208,19 @@ pub fn validate_proposal(
         });
     }
 
-    // TODO here we are validating the each fee amount is at least
-    // base_fee * block_size. Seems inappropriate to use current block
-    // to calculate fees for bid on future block.
-    for fee_info in proposal.fee_info().clone() {
-        if fee_info.amount() < expected_chain_config.base_fee * block_size {
-            return Err(ProposalValidationError::InsufficientFee {
-                max_block_size: expected_chain_config.max_block_size,
-                base_fee: expected_chain_config.base_fee,
-                proposed_fee: fee_info.amount(),
-            });
-        }
+    // Validate that sum of fees is at least `base_fee * blocksize`.
+    // TODO this should be updated to `base_fee * bundle_size` when we have
+    // VID per bundle or namespace.
+    let Some(amount) = proposal.fee_info().amount() else {
+        return Err(ProposalValidationError::TotalFeeAmountOutOfRange);
+    };
+
+    if amount < expected_chain_config.base_fee * block_size {
+        return Err(ProposalValidationError::InsufficientFee {
+            max_block_size: expected_chain_config.max_block_size,
+            base_fee: expected_chain_config.base_fee,
+            proposed_fee: amount.into(),
+        });
     }
 
     // validate height
