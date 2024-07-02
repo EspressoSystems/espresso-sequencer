@@ -353,9 +353,9 @@ pub mod test_helpers {
     use crate::{
         catchup::{mock::MockStateCatchup, StateCatchup},
         genesis::Upgrade,
-        persistence::{no_storage, PersistenceOptions, SequencerPersistence},
+        persistence::{no_storage, PersistenceOptions},
         state::{BlockMerkleTree, ValidatedState},
-        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig},
+        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig, TestConfigBuilder},
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
@@ -379,15 +379,123 @@ pub mod test_helpers {
     use std::{collections::BTreeMap, time::Duration};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
-    use url::Url;
     use vbs::version::Version;
 
     pub const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
-    pub struct TestNetwork<P: SequencerPersistence> {
-        pub server: SequencerContext<network::Memory, P, SequencerVersion>,
-        pub peers: Vec<SequencerContext<network::Memory, P, SequencerVersion>>,
-        pub cfg: TestConfig,
+    pub struct TestNetwork<P: PersistenceOptions, const NUM_NODES: usize> {
+        pub server: SequencerContext<network::Memory, P::Persistence, SequencerVersion>,
+        pub peers: Vec<SequencerContext<network::Memory, P::Persistence, SequencerVersion>>,
+        pub cfg: TestConfig<{ NUM_NODES }>,
+    }
+
+    pub struct TestNetworkConfig<const NUM_NODES: usize, P, C>
+    where
+        P: PersistenceOptions,
+        C: StateCatchup + 'static,
+    {
+        state: [ValidatedState; NUM_NODES],
+        persistence: [P; NUM_NODES],
+        catchup: [C; NUM_NODES],
+        network_config: TestConfig<{ NUM_NODES }>,
+        api_config: Options,
+    }
+
+    pub struct TestNetworkConfigBuilder<const NUM_NODES: usize, P, C>
+    where
+        P: PersistenceOptions,
+        C: StateCatchup + 'static,
+    {
+        state: [ValidatedState; NUM_NODES],
+        persistence: Option<[P; NUM_NODES]>,
+        catchup: Option<[C; NUM_NODES]>,
+        api_config: Option<Options>,
+        network_config: Option<TestConfig<{ NUM_NODES }>>,
+    }
+
+    impl Default for TestNetworkConfigBuilder<5, no_storage::Options, MockStateCatchup> {
+        fn default() -> Self {
+            TestNetworkConfigBuilder {
+                state: std::array::from_fn(|_| ValidatedState::default()),
+                persistence: Some([no_storage::Options; 5]),
+                catchup: Some(std::array::from_fn(|_| MockStateCatchup::default())),
+                network_config: None,
+                api_config: None,
+            }
+        }
+    }
+
+    impl<const NUM_NODES: usize>
+        TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, MockStateCatchup>
+    {
+        pub fn with_num_nodes(
+        ) -> TestNetworkConfigBuilder<{ NUM_NODES }, no_storage::Options, MockStateCatchup>
+        {
+            TestNetworkConfigBuilder {
+                state: std::array::from_fn(|_| ValidatedState::default()),
+                persistence: Some([no_storage::Options; { NUM_NODES }]),
+                catchup: Some(std::array::from_fn(|_| MockStateCatchup::default())),
+                network_config: None,
+                api_config: None,
+            }
+        }
+    }
+
+    impl<const NUM_NODES: usize, P, C> TestNetworkConfigBuilder<{ NUM_NODES }, P, C>
+    where
+        P: PersistenceOptions,
+        C: StateCatchup + 'static,
+    {
+        pub fn states(mut self, state: [ValidatedState; NUM_NODES]) -> Self {
+            self.state = state;
+            self
+        }
+
+        pub fn persistences<NP: PersistenceOptions>(
+            self,
+            persistence: [NP; NUM_NODES],
+        ) -> TestNetworkConfigBuilder<{ NUM_NODES }, NP, C> {
+            TestNetworkConfigBuilder {
+                state: self.state,
+                catchup: self.catchup,
+                network_config: self.network_config,
+                api_config: self.api_config,
+                persistence: Some(persistence),
+            }
+        }
+
+        pub fn api_config(mut self, api_config: Options) -> Self {
+            self.api_config = Some(api_config);
+            self
+        }
+
+        pub fn catchups<NC: StateCatchup + 'static>(
+            self,
+            catchup: [NC; NUM_NODES],
+        ) -> TestNetworkConfigBuilder<{ NUM_NODES }, P, NC> {
+            TestNetworkConfigBuilder {
+                state: self.state,
+                catchup: Some(catchup),
+                network_config: self.network_config,
+                api_config: self.api_config,
+                persistence: self.persistence,
+            }
+        }
+
+        pub fn network_config(mut self, network_config: TestConfig<{ NUM_NODES }>) -> Self {
+            self.network_config = Some(network_config);
+            self
+        }
+
+        pub fn build(self) -> TestNetworkConfig<{ NUM_NODES }, P, C> {
+            TestNetworkConfig {
+                state: self.state,
+                persistence: self.persistence.unwrap(),
+                catchup: self.catchup.unwrap(),
+                network_config: self.network_config.unwrap(),
+                api_config: self.api_config.unwrap(),
+            }
+        }
     }
 
     #[derive(Clone, Debug)]
@@ -399,85 +507,64 @@ pub mod test_helpers {
         pub stop_voting_view: u64,
     }
 
-    impl<P: SequencerPersistence> TestNetwork<P> {
-        pub async fn with_state(
-            api_config: Options,
-            state: [ValidatedState; TestConfig::NUM_NODES],
-            persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
-            catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
-            l1: Url,
-            upgrades: Option<TestNetworkUpgrades>,
-            builder_port: Option<u16>,
+    impl<P: PersistenceOptions, const NUM_NODES: usize> TestNetwork<P, { NUM_NODES }> {
+        pub async fn new<C: StateCatchup + 'static>(
+            cfg: TestNetworkConfig<{ NUM_NODES }, P, C>,
         ) -> Self {
-            let mut cfg = TestConfig::default_with_l1(l1);
-            cfg.builder_port = builder_port;
-            if let Some(upgrades) = upgrades {
-                cfg.set_upgrade_parameters(
-                    upgrades.start_proposing_view,
-                    upgrades.stop_proposing_view,
-                    upgrades.start_voting_view,
-                    upgrades.stop_voting_view,
-                );
-            }
+            let mut cfg = cfg;
+            let (builder_task, builder_url) =
+                run_test_builder::<{ NUM_NODES }>(cfg.network_config.builder_port()).await;
 
-            Self::with_state_and_config(api_config, state, persistence, catchup, cfg).await
-        }
+            cfg.network_config
+                .set_builder_urls(vec1::vec1![builder_url]);
 
-        pub async fn with_state_and_config(
-            api_config: Options,
-            state: [ValidatedState; TestConfig::NUM_NODES],
-            persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
-            catchup: [impl StateCatchup + 'static; TestConfig::NUM_NODES],
-            mut network_config: TestConfig,
-        ) -> Self {
-            let (builder_task, builder_url) = run_test_builder(network_config.builder_port).await;
-            network_config.set_builder_urls(vec1::vec1![builder_url]);
-
-            let mut nodes = join_all(izip!(state, persistence, catchup).enumerate().map(
-                |(i, (state, persistence, catchup))| {
-                    let opt = api_config.clone();
-                    let cfg = &network_config;
-                    let upgrades_map = cfg.upgrades.clone().map(|e| e.upgrades).unwrap_or_default();
-                    async move {
-                        if i == 0 {
-                            opt.serve(
-                                |metrics| {
-                                    let cfg = cfg.clone();
-                                    async move {
-                                        cfg.init_node(
-                                            0,
-                                            state,
-                                            persistence,
-                                            catchup,
-                                            &*metrics,
-                                            STAKE_TABLE_CAPACITY_FOR_TEST,
-                                            SEQUENCER_VERSION,
-                                            upgrades_map,
-                                        )
-                                        .await
-                                    }
-                                    .boxed()
-                                },
-                                SEQUENCER_VERSION,
-                            )
-                            .await
-                            .unwrap()
-                        } else {
-                            cfg.init_node(
-                                i,
-                                state,
-                                persistence,
-                                catchup,
-                                &NoMetrics,
-                                STAKE_TABLE_CAPACITY_FOR_TEST,
-                                SEQUENCER_VERSION,
-                                upgrades_map,
-                            )
-                            .await
+            let mut nodes = join_all(
+                izip!(cfg.state, cfg.persistence, cfg.catchup)
+                    .enumerate()
+                    .map(|(i, (state, persistence, catchup))| {
+                        let opt = cfg.api_config.clone();
+                        let cfg = &cfg.network_config;
+                        let upgrades_map = cfg.upgrades().map(|e| e.upgrades).unwrap_or_default();
+                        async move {
+                            if i == 0 {
+                                opt.serve(
+                                    |metrics| {
+                                        let cfg = cfg.clone();
+                                        async move {
+                                            cfg.init_node(
+                                                0,
+                                                state,
+                                                persistence,
+                                                catchup,
+                                                &*metrics,
+                                                STAKE_TABLE_CAPACITY_FOR_TEST,
+                                                SEQUENCER_VERSION,
+                                                upgrades_map,
+                                            )
+                                            .await
+                                        }
+                                        .boxed()
+                                    },
+                                    SEQUENCER_VERSION,
+                                )
+                                .await
+                                .unwrap()
+                            } else {
+                                cfg.init_node(
+                                    i,
+                                    state,
+                                    persistence,
+                                    catchup,
+                                    &NoMetrics,
+                                    STAKE_TABLE_CAPACITY_FOR_TEST,
+                                    SEQUENCER_VERSION,
+                                    upgrades_map,
+                                )
+                                .await
+                            }
                         }
-                    }
-                },
-            ))
+                    }),
+            )
             .await;
 
             let handle_0 = &nodes[0];
@@ -495,43 +582,8 @@ pub mod test_helpers {
             Self {
                 server,
                 peers,
-                cfg: network_config,
+                cfg: cfg.network_config,
             }
-        }
-
-        pub async fn new_with_config(
-            api_config: Options,
-            persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
-            network_config: TestConfig,
-        ) -> Self {
-            Self::with_state_and_config(
-                api_config,
-                Default::default(),
-                persistence,
-                std::array::from_fn(|_| MockStateCatchup::default()),
-                network_config,
-            )
-            .await
-        }
-
-        // TODO: Remove this constructor and rename `new_with_config` to `new`.
-        // https://github.com/EspressoSystems/espresso-sequencer/issues/1603
-        pub async fn new(
-            api_config: Options,
-            persistence: [impl PersistenceOptions<Persistence = P>; TestConfig::NUM_NODES],
-            l1: Url,
-            builder_port: Option<u16>,
-        ) -> Self {
-            Self::with_state(
-                api_config,
-                Default::default(),
-                persistence,
-                std::array::from_fn(|_| MockStateCatchup::default()),
-                l1,
-                Default::default(),
-                builder_port,
-            )
-            .await
         }
 
         pub fn light_client_genesis(&self) -> ParsedLightClientState {
@@ -566,13 +618,12 @@ pub mod test_helpers {
         let options = opt(Options::with_port(port).status(Default::default()));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let _network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            None,
-        )
-        .await;
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let _network = TestNetwork::new(config).await;
         client.connect(None).await;
 
         // The status API is well tested in the query service repo. Here we are just smoke testing
@@ -620,13 +671,12 @@ pub mod test_helpers {
         let options = opt(Options::with_port(port).submit(Default::default()));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            None,
-        )
-        .await;
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let network = TestNetwork::new(config).await;
         let mut events = network.server.event_stream().await;
 
         client.connect(None).await;
@@ -657,13 +707,12 @@ pub mod test_helpers {
         let options = opt(Options::with_port(port));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            None,
-        )
-        .await;
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let network = TestNetwork::new(config).await;
 
         let mut height: u64;
         // Wait for block >=2 appears
@@ -701,13 +750,12 @@ pub mod test_helpers {
         let options = opt(Options::with_port(port).catchup(Default::default()));
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            None,
-        )
-        .await;
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let network = TestNetwork::new(config).await;
         client.connect(None).await;
 
         // Wait for a few blocks to be decided.
@@ -788,8 +836,7 @@ mod api_tests {
 
     use super::*;
     use crate::{
-        persistence::no_storage,
-        testing::{wait_for_decide_on_handle, TestConfig},
+        testing::{wait_for_decide_on_handle, TestConfigBuilder},
         Header, NamespaceId,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -804,7 +851,7 @@ mod api_tests {
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork,
+        TestNetwork, TestNetworkConfigBuilder,
     };
     use tide_disco::error::ServerError;
 
@@ -840,13 +887,12 @@ mod api_tests {
         let storage = D::create_storage().await;
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let network = TestNetwork::new(
-            D::options(&storage, Options::with_port(port)).submit(Default::default()),
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            None,
-        )
-        .await;
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(D::options(&storage, Options::with_port(port)).submit(Default::default()))
+            .network_config(network_config)
+            .build();
+        let network = TestNetwork::new(config).await;
         let mut events = network.server.event_stream().await;
 
         // Connect client.
@@ -958,13 +1004,12 @@ mod api_tests {
 
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let _network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            None,
-        )
-        .await;
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let _network = TestNetwork::new(config).await;
 
         let mut subscribed_events = client
             .socket("hotshot-events/events")
@@ -1003,7 +1048,7 @@ mod test {
         genesis::{Upgrade, UpgradeType},
         persistence::no_storage,
         state::{FeeAccount, FeeAmount, ValidatedState},
-        testing::TestConfig,
+        testing::{TestConfig, TestConfigBuilder},
         Header,
     };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -1028,7 +1073,7 @@ mod test {
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork, TestNetworkUpgrades,
+        TestNetwork, TestNetworkConfigBuilder, TestNetworkUpgrades,
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     use vbs::version::Version;
@@ -1044,13 +1089,12 @@ mod test {
         let options = Options::with_port(port);
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let _network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            None,
-        )
-        .await;
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::<5, _, MockStateCatchup>::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let _network = TestNetwork::new(config).await;
 
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
@@ -1094,13 +1138,12 @@ mod test {
 
         let anvil: ethers::utils::AnvilInstance = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let mut network = TestNetwork::new(
-            options,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            l1,
-            None,
-        )
-        .await;
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let mut network = TestNetwork::new(config).await;
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
@@ -1137,7 +1180,7 @@ mod test {
             assert_eq!(*path.elem().unwrap(), block.hash());
 
             tracing::info!(i, "get fee state");
-            let account = TestConfig::builder_key().fee_account();
+            let account = TestConfig::<5>::builder_key().fee_account();
             let path = client
                 .get::<MerkleProof<FeeAmount, FeeAccount, Sha3Node, 256>>(&format!(
                     "fee-state/{}/{}",
@@ -1161,20 +1204,18 @@ mod test {
         let port = pick_unused_port().expect("No ports free");
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let mut network = TestNetwork::with_state(
-            Options::with_port(port).catchup(Default::default()),
-            Default::default(),
-            [no_storage::Options; TestConfig::NUM_NODES],
-            std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
-            }),
-            l1,
-            None,
-            None,
-        )
-        .await;
+        const NUM_NODES: usize = 5;
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
+            .api_config(Options::with_port(port).catchup(Default::default()))
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .catchups(std::array::from_fn(|_| {
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
+            }))
+            .build();
+        let mut network = TestNetwork::new(config).await;
 
         // Wait for replica 0 to reach a (non-genesis) decide, before disconnecting it.
         let mut events = network.peers[0].event_stream().await;
@@ -1212,9 +1253,10 @@ mod test {
                 1,
                 ValidatedState::default(),
                 no_storage::Options,
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()]),
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                ),
                 &NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
                 SEQUENCER_VERSION,
@@ -1225,7 +1267,7 @@ mod test {
 
         // Wait for a (non-genesis) block proposed by each node, to prove that the lagging node has
         // caught up and all nodes are in sync.
-        let mut proposers = [false; TestConfig::NUM_NODES];
+        let mut proposers = [false; NUM_NODES];
         loop {
             let event = events.next().await.unwrap();
             let EventType::Decide { leaf_chain, .. } = event.event else {
@@ -1233,7 +1275,7 @@ mod test {
             };
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
                 let height = leaf.height();
-                let leaf_builder = (leaf.view_number().u64() as usize) % TestConfig::NUM_NODES;
+                let leaf_builder = (leaf.view_number().u64() as usize) % NUM_NODES;
                 if height == 0 {
                     continue;
                 }
@@ -1271,20 +1313,19 @@ mod test {
 
         let states = std::array::from_fn(|_| state.clone());
 
-        let mut network = TestNetwork::with_state(
-            Options::with_port(port).catchup(Default::default()),
-            states,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
-            }),
-            l1,
-            None,
-            None,
-        )
-        .await;
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(Options::with_port(port).catchup(Default::default()))
+            .states(states)
+            .catchups(std::array::from_fn(|_| {
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
+            }))
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .build();
+
+        let mut network = TestNetwork::new(config).await;
 
         // Wait for few blocks to be decided.
         network
@@ -1343,24 +1384,26 @@ mod test {
         // all the other nodes should do a catchup to get the full chain config from peer 0
         states[0] = state2;
 
-        let mut network = TestNetwork::with_state(
-            Options::from(options::Http {
-                port,
-                max_connections: None,
-            })
-            .catchup(Default::default()),
-            states,
-            [no_storage::Options; TestConfig::NUM_NODES],
-            std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
-            }),
-            l1,
-            None,
-            None,
-        )
-        .await;
+        const NUM_NODES: usize = 5;
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
+            .api_config(
+                Options::from(options::Http {
+                    port,
+                    max_connections: None,
+                })
+                .catchup(Default::default()),
+            )
+            .states(states)
+            .catchups(std::array::from_fn(|_| {
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
+            }))
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .build();
+
+        let mut network = TestNetwork::new(config).await;
 
         // Wait for a few blocks to be decided.
         network
@@ -1419,25 +1462,31 @@ mod test {
             stop_voting_view,
         };
 
-        let mut network = TestNetwork::with_state(
-            Options::from(options::Http {
-                port,
-                max_connections: None,
-            })
-            .catchup(Default::default())
-            .status(Default::default()),
-            Default::default(),
-            [no_storage::Options; TestConfig::NUM_NODES],
-            std::array::from_fn(|_| {
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
-            }),
-            l1,
-            Some(upgrades),
-            None,
-        )
-        .await;
+        const NUM_NODES: usize = 5;
+        let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
+            .api_config(
+                Options::from(options::Http {
+                    port,
+                    max_connections: None,
+                })
+                .catchup(Default::default())
+                .status(Default::default()),
+            )
+            .catchups(std::array::from_fn(|_| {
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
+            }))
+            .network_config(
+                TestConfigBuilder::default()
+                    .l1_url(l1)
+                    .upgrades(upgrades)
+                    .build(),
+            )
+            .build();
+
+        let mut network = TestNetwork::new(config).await;
 
         let mut events = network.server.event_stream().await;
         loop {
@@ -1491,10 +1540,10 @@ mod test {
         setup_logging();
         setup_backtrace();
 
+        const NUM_NODES: usize = 5;
         // Initialize nodes.
-        let storage =
-            join_all((0..TestConfig::NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
-        let persistence = storage
+        let storage = join_all((0..NUM_NODES).map(|_| SqlDataSource::create_storage())).await;
+        let persistence: [_; NUM_NODES] = storage
             .iter()
             .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
             .collect::<Vec<_>>()
@@ -1503,18 +1552,17 @@ mod test {
         let port = pick_unused_port().unwrap();
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let mut network = TestNetwork::with_state(
-            SqlDataSource::options(&storage[0], Options::with_port(port))
-                .state(Default::default())
-                .status(Default::default()),
-            Default::default(),
-            persistence,
-            std::array::from_fn(|_| MockStateCatchup::default()),
-            l1,
-            None,
-            None,
-        )
-        .await;
+
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(
+                SqlDataSource::options(&storage[0], Options::with_port(port))
+                    .state(Default::default())
+                    .status(Default::default()),
+            )
+            .persistences(persistence)
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .build();
+        let mut network = TestNetwork::new(config).await;
 
         // Connect client.
         let client: Client<ServerError, SequencerVersion> =
@@ -1568,30 +1616,30 @@ mod test {
         let port = pick_unused_port().expect("No ports free");
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
-        let persistence = storage
+        let persistence: [_; NUM_NODES] = storage
             .iter()
             .map(<SqlDataSource as TestableSequencerDataSource>::persistence_options)
             .collect::<Vec<_>>()
             .try_into()
             .unwrap();
-        let _network = TestNetwork::with_state(
-            SqlDataSource::options(&storage[0], Options::with_port(port))
-                .catchup(Default::default()),
-            Default::default(),
-            persistence,
-            std::array::from_fn(|_| {
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(
+                SqlDataSource::options(&storage[0], Options::with_port(port))
+                    .catchup(Default::default()),
+            )
+            .persistences(persistence)
+            .catchups(std::array::from_fn(|_| {
                 // Catchup using node 0 as a peer. Node 0 was running the archival state service
                 // before the restart, so it should be able to resume without catching up by loading
                 // state from storage.
-                StatePeers::<SequencerVersion>::from_urls(vec![format!("http://localhost:{port}")
-                    .parse()
-                    .unwrap()])
-            }),
-            l1,
-            None,
-            None,
-        )
-        .await;
+                StatePeers::<SequencerVersion>::from_urls(
+                    vec![format!("http://localhost:{port}").parse().unwrap()],
+                    Default::default(),
+                )
+            }))
+            .network_config(TestConfigBuilder::default().l1_url(l1).build())
+            .build();
+        let _network = TestNetwork::new(config).await;
         let client: Client<ServerError, SequencerVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;

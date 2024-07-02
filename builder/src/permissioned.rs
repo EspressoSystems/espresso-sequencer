@@ -234,18 +234,12 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Combine the communication channels
     #[cfg(feature = "libp2p")]
     let (da_network, quorum_network) = {
-        (
-            Arc::from(CombinedNetworks::new(
-                cdn_network.clone(),
-                p2p_network.clone(),
-                Duration::from_secs(1),
-            )),
-            Arc::from(CombinedNetworks::new(
-                cdn_network,
-                p2p_network,
-                Duration::from_secs(1),
-            )),
-        )
+        let network = Arc::new(CombinedNetworks::new(
+            cdn_network,
+            p2p_network,
+            Duration::from_secs(1),
+        ));
+        (Arc::clone(&network), network)
     };
 
     #[cfg(not(feature = "libp2p"))]
@@ -282,7 +276,10 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         genesis_header: genesis.header,
         genesis_state: genesis_state.clone(),
         l1_genesis,
-        peers: Arc::new(StatePeers::<Ver>::from_urls(network_params.state_peers)),
+        peers: Arc::new(StatePeers::<Ver>::from_urls(
+            network_params.state_peers,
+            network_params.catchup_backoff,
+        )),
         node_id: node_index,
         upgrades: Default::default(),
         current_version: Ver::VERSION,
