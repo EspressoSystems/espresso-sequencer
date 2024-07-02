@@ -6,7 +6,7 @@ authors = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-anyhow = { workspace = true }
+anyhow = "1.0"
 ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
 ark-ed-on-bn254 = { workspace = true }
@@ -26,25 +26,21 @@ displaydoc = { version = "0.2.3", default-features = false }
 es-version = { workspace = true }
 ethers = { workspace = true }
 futures = { workspace = true }
-hotshot-contract-adapter = { workspace = true }
+hotshot-contract-adapter = { path = "../contracts/rust/adapter" }
 hotshot-orchestrator = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-types = { workspace = true }
 itertools = { workspace = true }
-jf-crhf = { workspace = true }
-jf-pcs = { workspace = true }
 jf-plonk = { workspace = true }
+jf-primitives = { workspace = true }
 jf-relation = { workspace = true }
-jf-rescue = { workspace = true, features = ["gadgets"] }
-jf-signature = { workspace = true, features = ["schnorr", "bls", "gadgets"] }
 jf-utils = { workspace = true }
 rand_chacha = { workspace = true }
-reqwest = { workspace = true }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 snafu = { workspace = true }
 surf-disco = { workspace = true }
-tagged-base64 = { workspace = true }
+tagged-base64 = { git = "https://github.com/EspressoSystems/tagged-base64", tag = "0.3.4" }
 tide-disco = { workspace = true }
 time = { workspace = true }
 toml = "0.8"
@@ -55,4 +51,4 @@ vbs = { workspace = true }
 [features]
 default = ["parallel"]
 std = ["ark-std/std", "ark-ff/std"]
-parallel = ["jf-signature/parallel", "jf-utils/parallel", "ark-ff/parallel"]
+parallel = ["jf-primitives/parallel", "jf-utils/parallel", "ark-ff/parallel"]

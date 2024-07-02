@@ -11,7 +11,7 @@ use jf_plonk::{
     proof_system::{PlonkKzgSnark, UniversalSNARK},
     transcript::SolidityTranscript,
 };
-use jf_signature::schnorr::Signature;
+use jf_primitives::signatures::schnorr::Signature;
 
 /// BLS verification key, base field and Schnorr verification key
 pub use hotshot_stake_table::vec_based::config::QCVerKey;
@@ -113,17 +113,16 @@ mod tests {
         light_client::GenericLightClientState,
         traits::stake_table::{SnapshotVersion, StakeTableScheme},
     };
-    use jf_crhf::CRHF;
     use jf_plonk::{
         proof_system::{PlonkKzgSnark, UniversalSNARK},
         transcript::SolidityTranscript,
     };
-    use jf_relation::Circuit;
-    use jf_rescue::crhf::VariableLengthRescueCRHF;
-    use jf_signature::{
-        schnorr::{SchnorrSignatureScheme, Signature},
-        SignatureScheme,
+    use jf_primitives::{
+        crhf::{VariableLengthRescueCRHF, CRHF},
+        errors::PrimitivesError,
+        signatures::{schnorr::Signature, SchnorrSignatureScheme, SignatureScheme},
     };
+    use jf_relation::Circuit;
     use jf_utils::test_rng;
 
     const ST_CAPACITY: usize = 20;
@@ -133,7 +132,7 @@ mod tests {
     fn universal_setup_for_testing<R>(
         max_degree: usize,
         rng: &mut R,
-    ) -> anyhow::Result<UniversalSrs>
+    ) -> Result<UniversalSrs, PrimitivesError>
     where
         R: RngCore + CryptoRng,
     {
@@ -220,7 +219,7 @@ mod tests {
         let sigs = schnorr_keys
             .iter()
             .map(|(key, _)| SchnorrSignatureScheme::<Config>::sign(&(), key, state_msg, &mut prng))
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
 
         // bit vector with total weight 26

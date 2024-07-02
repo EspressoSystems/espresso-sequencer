@@ -3,15 +3,14 @@ use ark_std::rand::{CryptoRng, RngCore};
 use ethers::types::U256;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::traits::stake_table::StakeTableScheme;
-use jf_signature::{
+use jf_primitives::signatures::{
     bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey as BLSVerKey},
-    schnorr::SchnorrSignatureScheme,
-    SignatureScheme,
+    SchnorrSignatureScheme, SignatureScheme,
 };
 
 type F = ark_ed_on_bn254::Fq;
-type SchnorrVerKey = jf_signature::schnorr::VerKey<EdwardsConfig>;
-type SchnorrSignKey = jf_signature::schnorr::SignKey<ark_ed_on_bn254::Fr>;
+type SchnorrVerKey = jf_primitives::signatures::schnorr::VerKey<EdwardsConfig>;
+type SchnorrSignKey = jf_primitives::signatures::schnorr::SignKey<ark_ed_on_bn254::Fr>;
 
 /// Helper function for test
 pub(crate) fn key_pairs_for_testing<R: CryptoRng + RngCore>(

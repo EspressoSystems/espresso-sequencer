@@ -1,23 +1,18 @@
 [route.account]
-PATH = ["/:height/:view/account/:address"]
-":height" = "Integer"
+PATH = ["/:view/account/:address", "/account/:address"]
 ":view" = "Integer"
 ":address" = "Literal"
 DOC = """
 Get the fee account balance for `address`.
 
 This endpoint can be used to catch up to the current state from a recent state by fetching the
-balance (with proof) at the given block `:height` and `:view` number. `:height` and `:view` _must_
-correspond! `:height` is provided to simplify lookups for backends where data is not indexed by
-view.
+balance (with proof) at the given `:view` number. It can also be used to query the latest finalized
+state.
 
-This endpoint is intended to be used for catchup, so `:view` should be no older than the last
-decided view.
-
-Returns the account balance and a Merkle proof relative to the fee state root at the requested
-height and view. If there is no entry for this account in the requested fee state (note: this is
-distinct from the server _not knowing_ the entry for this account), the returned balance is 0 and
-the proof is a Merkle _non-membership_ proof.
+Returns the account balance and a Merkle proof relative to the fee state root at the requested view.
+If there is no entry for this account in the requested fee state (note: this is distinct from the
+server _not knowing_ the entry for this account), the returned balance is 0 and the proof is a
+Merkle _non-membership_ proof.
 
 ```
 {
@@ -28,31 +23,14 @@ the proof is a Merkle _non-membership_ proof.
 """
 
 [route.blocks]
-PATH = ["/:height/:view/blocks"]
-":height" = "Integer"
+PATH = ["/:view/blocks", "/blocks"]
 ":view" = "Integer"
 DOC = """
 Get the blocks Merkle tree frontier.
 
 This endpoint can be used to catch up to the current state from a recent state by fetching the
-frontier at the given block `:height` and `:view` number. `:height` and `:view` _must_ correspond!
-`:height` is provided to simplify lookups for backends where data is not indexed by view.
-
-This endpoint is intended to be used for catchup, so `:view` should be no older than the last
-decided view.
+frontier at the given `:view` number. It can also be used to query the latest finalized state.
 
 Returns the blocks Merkle tree frontier -- the path to the most recently appended leaf, relative to
-root node at the requested block height and view.
-"""
-
-[route.chainconfig]
-PATH = ["/chain-config/:commitment"]
-":commitment" = "TaggedBase64"
-DOC = """
-
-This endpoint retrieves the chain config from a peer that matches the specified `:commitment`.
-This is only called when the state does not have full chain config which is different from the genesis one.
-This can happen if the node missed a protocol upgrade.
-
-Returns the chain config -- this includes parameters such as `max_block_size`, `chain_id`, `base_fee`, and `fee_recipient`.
+root node at the requested view.
 """

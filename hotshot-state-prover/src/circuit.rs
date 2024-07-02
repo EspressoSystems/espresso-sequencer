@@ -5,13 +5,16 @@ use ark_ff::PrimeField;
 use ark_std::borrow::Borrow;
 use ethers::types::U256;
 use hotshot_types::light_client::{GenericLightClientState, GenericPublicInput};
-use jf_plonk::PlonkError;
-use jf_relation::{BoolVar, Circuit, CircuitError, PlonkCircuit, Variable};
-use jf_rescue::{gadgets::RescueNativeGadget, RescueParameter};
-use jf_signature::{
-    gadgets::schnorr::{SignatureGadget, VerKeyVar},
-    schnorr::{Signature, VerKey as SchnorrVerKey},
+use jf_plonk::errors::PlonkError;
+use jf_primitives::{
+    circuit::{
+        rescue::RescueNativeGadget,
+        signature::schnorr::{SignatureGadget, VerKeyVar},
+    },
+    rescue::RescueParameter,
+    signatures::schnorr::{Signature, VerKey as SchnorrVerKey},
 };
+use jf_relation::{errors::CircuitError, BoolVar, Circuit, PlonkCircuit, Variable};
 
 /// Lossy conversion of a U256 into a field element.
 pub(crate) fn u256_to_field<F: PrimeField>(v: &U256) -> F {
@@ -377,13 +380,11 @@ mod tests {
     use ark_ed_on_bn254::EdwardsConfig as Config;
     use ethers::types::U256;
     use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
-    use jf_crhf::CRHF;
-    use jf_rescue::crhf::VariableLengthRescueCRHF;
-    use jf_signature::{
-        schnorr::{SchnorrSignatureScheme, Signature},
-        SignatureScheme,
+    use jf_primitives::{
+        crhf::{VariableLengthRescueCRHF, CRHF},
+        errors::PrimitivesError,
+        signatures::{schnorr::Signature, SchnorrSignatureScheme, SignatureScheme},
     };
-
     use jf_relation::Circuit;
     use jf_utils::test_rng;
 
@@ -424,7 +425,7 @@ mod tests {
         let sigs = state_keys
             .iter()
             .map(|(key, _)| SchnorrSignatureScheme::<Config>::sign(&(), key, state_msg, &mut prng))
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
 
         // bit vector with total weight 26
@@ -531,7 +532,7 @@ mod tests {
             .map(|(key, _)| {
                 SchnorrSignatureScheme::<Config>::sign(&(), key, bad_state_msg, &mut prng)
             })
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
         let (bad_circuit, public_inputs) = build(
             &entries,
@@ -556,7 +557,7 @@ mod tests {
             .map(|(key, _)| {
                 SchnorrSignatureScheme::<Config>::sign(&(), key, wrong_state_msg, &mut prng)
             })
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<Result<Vec<_>, PrimitivesError>>()
             .unwrap();
         let (bad_circuit, public_inputs) = build(
             &entries,

@@ -75,7 +75,6 @@ async fn main() -> Result<()> {
 
         ca_cert_path: None,
         ca_key_path: None,
-        global_memory_pool_size: Some(1024 * 1024 * 1024),
     };
 
     // Configure the marshal
@@ -85,7 +84,6 @@ async fn main() -> Result<()> {
         discovery_endpoint: discovery_endpoint.clone(),
         ca_cert_path: None,
         ca_key_path: None,
-        global_memory_pool_size: Some(1024 * 1024 * 1024),
     };
 
     // Create a new `Broker`

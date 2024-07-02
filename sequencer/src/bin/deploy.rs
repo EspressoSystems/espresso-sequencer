@@ -1,9 +1,18 @@
+use anyhow::{ensure, Context};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use async_std::sync::Arc;
 use clap::Parser;
-use futures::FutureExt;
+use contract_bindings::{
+    erc1967_proxy::ERC1967Proxy, hot_shot::HotShot, light_client::LightClient,
+};
+use ethers::prelude::{coins_bip39::English, *};
+use futures::future::FutureExt;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::light_client_genesis;
-use sequencer_utils::deployer::{deploy, ContractGroup, Contracts, DeployedContracts};
+use sequencer_utils::deployer::{
+    deploy_light_client_contract, deploy_mock_light_client_contract, Contract, Contracts,
+    DeployedContracts,
+};
 use std::{fs::File, io::stdout, path::PathBuf};
 use url::Url;
 
@@ -34,14 +43,15 @@ struct Options {
     )]
     rpc_url: Url,
 
-    /// URL of a sequencer node that is currently providing the HotShot config.
-    /// This is used to initialize the stake table.
+    /// URL of the HotShot orchestrator.
+    ///
+    /// This is used to get the stake table for initializing the light client contract.
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_URL",
-        default_value = "http://localhost:24000"
+        env = "ESPRESSO_SEQUENCER_ORCHESTRATOR_URL",
+        default_value = "http://localhost:40001"
     )]
-    pub sequencer_url: Url,
+    orchestrator_url: Url,
 
     /// Mnemonic for an L1 wallet.
     ///
@@ -63,10 +73,6 @@ struct Options {
     )]
     account_index: u32,
 
-    /// Only deploy the given groups of related contracts.
-    #[clap(long, value_delimiter = ',')]
-    only: Option<Vec<ContractGroup>>,
-
     /// Write deployment results to OUT as a .env file.
     ///
     /// If not provided, the results will be written to stdout.
@@ -76,7 +82,7 @@ struct Options {
     #[clap(flatten)]
     contracts: DeployedContracts,
 
-    /// If toggled, launch a mock prover contract with a smaller verification key.
+    /// If toggled, launch a mock prover contract that does not do any proof verification.
     #[clap(short, long)]
     pub use_mock_contract: bool,
 
@@ -91,22 +97,58 @@ async fn main() -> anyhow::Result<()> {
     setup_backtrace();
 
     let opt = Options::parse();
-    let contracts = Contracts::from(opt.contracts);
+    let mut contracts = Contracts::from(opt.contracts);
 
-    let sequencer_url = opt.sequencer_url.clone();
+    let provider = Provider::<Http>::try_from(opt.rpc_url.to_string())?;
+    let chain_id = provider.get_chainid().await?.as_u64();
+    let wallet = MnemonicBuilder::<English>::default()
+        .phrase(opt.mnemonic.as_str())
+        .index(opt.account_index)?
+        .build()?
+        .with_chain_id(chain_id);
+    let owner = wallet.address();
+    let l1 = Arc::new(SignerMiddleware::new(provider, wallet));
 
-    let genesis = light_client_genesis(&sequencer_url, opt.stake_table_capacity).boxed();
+    // As a sanity check, check that the deployer address has some balance of ETH it can use to pay
+    // gas.
+    let balance = l1.get_balance(owner, None).await?;
+    ensure!(
+        balance > 0.into(),
+        "deployer account {owner:#x} is not funded!"
+    );
+    tracing::info!(%balance, "deploying from address {owner:#x}");
 
-    let contracts = deploy(
-        opt.rpc_url,
-        opt.mnemonic,
-        opt.account_index,
-        opt.use_mock_contract,
-        opt.only,
-        genesis,
-        contracts,
-    )
-    .await?;
+    contracts
+        .deploy_tx(Contract::HotShot, HotShot::deploy(l1.clone(), ())?)
+        .await?;
+
+    // Deploy the upgradable light client contract first, then initialize it through a proxy contract
+    let lc_address = if opt.use_mock_contract {
+        contracts
+            .deploy_fn(Contract::LightClient, |contracts| {
+                deploy_mock_light_client_contract(l1.clone(), contracts, None).boxed()
+            })
+            .await?
+    } else {
+        contracts
+            .deploy_fn(Contract::LightClient, |contracts| {
+                deploy_light_client_contract(l1.clone(), contracts).boxed()
+            })
+            .await?
+    };
+    let light_client = LightClient::new(lc_address, l1.clone());
+
+    let genesis = light_client_genesis(&opt.orchestrator_url, opt.stake_table_capacity).await?;
+    let data = light_client
+        .initialize(genesis.into(), u32::MAX, owner)
+        .calldata()
+        .context("calldata for initialize transaction not available")?;
+    contracts
+        .deploy_tx(
+            Contract::LightClientProxy,
+            ERC1967Proxy::deploy(l1.clone(), (lc_address, data))?,
+        )
+        .await?;
 
     if let Some(out) = &opt.out {
         let file = File::options()

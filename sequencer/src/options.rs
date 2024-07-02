@@ -1,4 +1,4 @@
-use crate::{api, catchup::BackoffParams, persistence};
+use crate::{api, persistence};
 use anyhow::{bail, Context};
 use bytesize::ByteSize;
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
@@ -6,16 +6,14 @@ use cld::ClDuration;
 use core::fmt::Display;
 use derivative::Derivative;
 use derive_more::From;
+use ethers::types::{Address, U256};
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
-use libp2p::Multiaddr;
 use snafu::Snafu;
 use std::{
-    cmp::Ordering,
     collections::{HashMap, HashSet},
-    fmt::{self, Formatter},
     iter::once,
-    num::ParseIntError,
     path::PathBuf,
     str::FromStr,
     time::Duration,
@@ -45,6 +43,10 @@ use url::Url;
 #[derive(Parser, Clone, Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct Options {
+    /// Unique identifier for this instance of the sequencer network.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
+    pub chain_id: u16,
+
     /// URL of the HotShot orchestrator.
     #[clap(
         short,
@@ -67,6 +69,7 @@ pub struct Options {
 
     /// The address to bind to for Libp2p (in `host:port` form)
     #[clap(
+        short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS",
         default_value = "0.0.0.0:1769"
@@ -76,41 +79,22 @@ pub struct Options {
     /// The address we advertise to other nodes as being a Libp2p endpoint.
     /// Should be supplied in `host:port` form.
     #[clap(
+        short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS",
         default_value = "localhost:1769"
     )]
     pub libp2p_advertise_address: String,
 
-    /// A comma-separated list of Libp2p multiaddresses to use as bootstrap
-    /// nodes.
-    ///
-    /// Overrides those loaded from the `HotShot` config.
-    #[clap(
-        long,
-        env = "ESPRESSO_SEQUENCER_LIBP2P_BOOTSTRAP_NODES",
-        value_delimiter = ',',
-        num_args = 1..
-    )]
-    pub libp2p_bootstrap_nodes: Option<Vec<Multiaddr>>,
-
     /// URL of the Light Client State Relay Server
     #[clap(
+        short,
         long,
         env = "ESPRESSO_STATE_RELAY_SERVER_URL",
         default_value = "http://localhost:8083"
     )]
     #[derivative(Debug(format_with = "Display::fmt"))]
     pub state_relay_server_url: Url,
-
-    /// Path to TOML file containing genesis state.
-    #[clap(
-        long,
-        name = "GENESIS_FILE",
-        env = "ESPRESSO_SEQUENCER_GENESIS_FILE",
-        default_value = "/genesis/demo.toml"
-    )]
-    pub genesis_file: PathBuf,
 
     /// Path to file containing private keys.
     ///
@@ -128,7 +112,7 @@ pub struct Options {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_PRIVATE_STAKING_KEY",
-        conflicts_with = "KEY_FILE"
+        conflicts_with = "key_file"
     )]
     #[derivative(Debug = "ignore")]
     pub private_staking_key: Option<BLSPrivKey>,
@@ -139,7 +123,7 @@ pub struct Options {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY",
-        conflicts_with = "KEY_FILE"
+        conflicts_with = "key_file"
     )]
     #[derivative(Debug = "ignore")]
     pub private_state_key: Option<StateSignKey>,
@@ -160,22 +144,20 @@ pub struct Options {
     #[clap(raw = true)]
     modules: Vec<String>,
 
-    /// Url we will use for RPC communication with L1.
+    /// Prefunded the builder accounts. Use for demo purposes only.
+    ///
+    /// Comma-separated list of Ethereum addresses.
     #[clap(
         long,
-        env = "ESPRESSO_SEQUENCER_L1_PROVIDER",
-        default_value = "http://localhost:8545"
+        env = "ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS",
+        value_delimiter = ','
     )]
+    pub prefunded_builder_accounts: Vec<Address>,
+
+    /// Url we will use for RPC communication with L1.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_L1_PROVIDER")]
     #[derivative(Debug(format_with = "Display::fmt"))]
     pub l1_provider_url: Url,
-
-    /// Maximum number of L1 blocks that can be scanned for events in a single query.
-    #[clap(
-        long,
-        env = "ESPRESSO_SEQUENCER_L1_EVENTS_MAX_BLOCK_RANGE",
-        default_value = "10000"
-    )]
-    pub l1_events_max_block_range: u64,
 
     /// Whether or not we are a DA node.
     #[clap(long, env = "ESPRESSO_SEQUENCER_IS_DA", action)]
@@ -186,9 +168,17 @@ pub struct Options {
     #[derivative(Debug(format_with = "fmt_urls"))]
     pub state_peers: Vec<Url>,
 
-    /// Exponential backoff for fetching missing state from peers.
-    #[clap(flatten)]
-    pub catchup_backoff: BackoffParams,
+    /// Stake table capacity for the prover circuit
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
+    pub stake_table_capacity: usize,
+
+    /// Maximum size in bytes of a block
+    #[clap(long, env = "ESPRESSO_SEQUENCER_MAX_BLOCK_SIZE", value_parser = parse_size)]
+    pub max_block_size: u64,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_BASE_FEE")]
+    /// Minimum fee in WEI per byte of payload
+    pub base_fee: U256,
 }
 
 impl Options {
@@ -250,64 +240,6 @@ pub fn parse_size(s: &str) -> Result<u64, ParseSizeError> {
     Ok(s.parse::<ByteSize>()?.0)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Ratio {
-    pub numerator: u64,
-    pub denominator: u64,
-}
-
-impl From<Ratio> for (u64, u64) {
-    fn from(r: Ratio) -> Self {
-        (r.numerator, r.denominator)
-    }
-}
-
-impl Display for Ratio {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}:{}", self.numerator, self.denominator)
-    }
-}
-
-impl PartialOrd for Ratio {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Ratio {
-    fn cmp(&self, other: &Self) -> Ordering {
-        (self.numerator * other.denominator).cmp(&(other.numerator * self.denominator))
-    }
-}
-
-#[derive(Debug, Snafu)]
-pub enum ParseRatioError {
-    #[snafu(display("numerator and denominator must be separated by :"))]
-    MissingDelimiter,
-    InvalidNumerator {
-        err: ParseIntError,
-    },
-    InvalidDenominator {
-        err: ParseIntError,
-    },
-}
-
-impl FromStr for Ratio {
-    type Err = ParseRatioError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (num, den) = s.split_once(':').ok_or(ParseRatioError::MissingDelimiter)?;
-        Ok(Self {
-            numerator: num
-                .parse()
-                .map_err(|err| ParseRatioError::InvalidNumerator { err })?,
-            denominator: den
-                .parse()
-                .map_err(|err| ParseRatioError::InvalidDenominator { err })?,
-        })
-    }
-}
-
 #[derive(Clone, Debug)]
 struct ModuleArgs(Vec<String>);
 
@@ -347,12 +279,8 @@ impl ModuleArgs {
                 SequencerModule::Status(m) => curr = m.add(&mut modules.status, &mut provided)?,
                 SequencerModule::State(m) => curr = m.add(&mut modules.state, &mut provided)?,
                 SequencerModule::Catchup(m) => curr = m.add(&mut modules.catchup, &mut provided)?,
-                SequencerModule::Config(m) => curr = m.add(&mut modules.config, &mut provided)?,
                 SequencerModule::HotshotEvents(m) => {
                     curr = m.add(&mut modules.hotshot_events, &mut provided)?
-                }
-                SequencerModule::Explorer(m) => {
-                    curr = m.add(&mut modules.explorer, &mut provided)?
                 }
             }
         }
@@ -386,9 +314,7 @@ module!("submit", api::options::Submit, requires: "http");
 module!("status", api::options::Status, requires: "http");
 module!("state", api::options::State, requires: "http", "storage-sql");
 module!("catchup", api::options::Catchup, requires: "http");
-module!("config", api::options::Config, requires: "http");
 module!("hotshot-events", api::options::HotshotEvents, requires: "http");
-module!("explorer", api::options::Explorer, requires: "http", "storage-sql");
 
 #[derive(Clone, Debug, Args)]
 struct Module<Options: ModuleInfo> {
@@ -458,7 +384,6 @@ enum SequencerModule {
     ///
     /// This module requires the http module to be started.
     Catchup(Module<api::options::Catchup>),
-    Config(Module<api::options::Config>),
     /// Run the merklized state  API module.
     ///
     /// This module requires the http and storage-sql modules to be started.
@@ -467,10 +392,6 @@ enum SequencerModule {
     ///
     /// This module requires the http module to be started.
     HotshotEvents(Module<api::options::HotshotEvents>),
-    /// Run the explorer API module.
-    ///
-    /// This module requires the http and storage-sql modules to be started.
-    Explorer(Module<api::options::Explorer>),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -483,7 +404,5 @@ pub struct Modules {
     pub status: Option<api::options::Status>,
     pub state: Option<api::options::State>,
     pub catchup: Option<api::options::Catchup>,
-    pub config: Option<api::options::Config>,
     pub hotshot_events: Option<api::options::HotshotEvents>,
-    pub explorer: Option<api::options::Explorer>,
 }

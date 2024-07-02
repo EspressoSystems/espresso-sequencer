@@ -3,13 +3,13 @@ use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use cld::ClDuration;
 use es_version::SEQUENCER_VERSION;
-use hotshot::traits::ValidatedState;
 use hotshot_types::data::ViewNumber;
 use hotshot_types::traits::node_implementation::ConsensusTime;
-use sequencer::{eth_signature_key::EthKeyPair, Genesis, L1Params};
+use sequencer::eth_signature_key::EthKeyPair;
+use sequencer::L1Params;
 use snafu::Snafu;
 use std::num::NonZeroUsize;
-use std::{path::PathBuf, str::FromStr, time::Duration};
+use std::{str::FromStr, time::Duration};
 use url::Url;
 
 #[derive(Parser, Clone, Debug)]
@@ -50,17 +50,9 @@ struct NonPermissionedBuilderOptions {
     #[clap(short, long, env = "ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW")]
     view_number: u64,
 
-    /// BUILDER TRANSACTIONS CHANNEL CAPACITY
-    #[clap(long, env = "ESPRESSO_BUILDER_TX_CHANNEL_CAPACITY")]
-    pub tx_channel_capacity: NonZeroUsize,
-
-    /// BUILDER HS EVENTS CHANNEL CAPACITY
-    #[clap(long, env = "ESPRESSO_BUILDER_EVENT_CHANNEL_CAPACITY")]
-    pub event_channel_capacity: NonZeroUsize,
-
-    /// NETWORK INITIAL NODE COUNT
-    #[clap(short, long, env = "ESPRESSO_BUILDER_INIT_NODE_COUNT")]
-    node_count: NonZeroUsize,
+    /// BUILDER CHANNEL CAPACITY
+    #[clap(short, long, env = "ESPRESSO_BUILDER_CHANNEL_CAPACITY")]
+    channel_capacity: NonZeroUsize,
 
     /// The amount of time a builder can wait before timing out a request to the API.
     #[clap(
@@ -74,15 +66,21 @@ struct NonPermissionedBuilderOptions {
 
     /// The number of views to buffer before a builder garbage collects its state
     #[clap(
+        short,
         long,
         env = "ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT",
         default_value = "15"
     )]
     buffer_view_num_count: usize,
 
-    /// Path to TOML file containing genesis state.
-    #[clap(long, name = "GENESIS_FILE", env = "ESPRESSO_BUILDER_GENESIS_FILE")]
-    genesis_file: PathBuf,
+    /// Base Fee for a block
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE",
+        default_value = "0"
+    )]
+    base_fee: u64,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -104,13 +102,11 @@ async fn main() -> anyhow::Result<()> {
     setup_backtrace();
 
     let opt = NonPermissionedBuilderOptions::parse();
-    let genesis = Genesis::from_file(&opt.genesis_file)?;
 
     let sequencer_version = SEQUENCER_VERSION;
 
     let l1_params = L1Params {
         url: opt.l1_provider_url,
-        events_max_block_range: 10000,
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
@@ -118,15 +114,8 @@ async fn main() -> anyhow::Result<()> {
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
-    let instance_state = build_instance_state(
-        genesis.chain_config,
-        l1_params,
-        opt.state_peers,
-        sequencer_version,
-    )
-    .unwrap();
-
-    let validated_state = ValidatedState::genesis(&instance_state).0;
+    let instance_state =
+        build_instance_state(l1_params, opt.state_peers, sequencer_version).unwrap();
 
     let api_response_timeout_duration = opt.max_api_timeout_duration;
 
@@ -138,16 +127,14 @@ async fn main() -> anyhow::Result<()> {
     let _builder_config = BuilderConfig::init(
         builder_key_pair,
         bootstrapped_view,
-        opt.tx_channel_capacity,
-        opt.event_channel_capacity,
-        opt.node_count,
+        opt.channel_capacity,
         instance_state,
-        validated_state,
         opt.hotshot_event_streaming_url,
         builder_server_url,
         api_response_timeout_duration,
         buffer_view_num_count,
         txn_timeout_duration,
+        opt.base_fee,
     )
     .await;
 
