@@ -69,6 +69,7 @@ paste = "1.0"
 hotshot = { workspace = true }
 hotshot-contract-adapter = { workspace = true }
 hotshot-events-service = { workspace = true }
+hotshot-example-types = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }

@@ -14,7 +14,7 @@ use super::{
     StorageState,
 };
 use crate::{
-    block::NsProof, network, persistence::SequencerPersistence, NamespaceId, SeqTypes, Transaction,
+    block::NsProof, persistence::SequencerPersistence, NamespaceId, PubKey, SeqTypes, Transaction,
 };
 use anyhow::Result;
 use async_std::sync::{Arc, RwLock};
@@ -29,7 +29,10 @@ use hotshot_query_service::{
     },
     node, Error,
 };
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use hotshot_types::{
+    data::ViewNumber,
+    traits::{network::ConnectedNetwork, node_implementation::ConsensusTime},
+};
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use tagged_base64::TaggedBase64;
@@ -54,7 +57,7 @@ pub(super) fn availability<N, P, D, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
 ) -> Result<AvailabilityApi<N, P, D, Ver>>
 where
-    N: network::Type,
+    N: ConnectedNetwork<PubKey>,
     D: SequencerDataSource + Send + Sync + 'static,
     P: SequencerPersistence,
 {
@@ -127,7 +130,7 @@ pub(super) fn explorer<N, P, D, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
 ) -> Result<ExplorerApi<N, P, D, Ver>>
 where
-    N: network::Type,
+    N: ConnectedNetwork<PubKey>,
     D: ExplorerStorage<SeqTypes> + Send + Sync + 'static,
     P: SequencerPersistence,
 {
@@ -141,7 +144,7 @@ pub(super) fn node<N, P, D, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
 ) -> Result<NodeApi<N, P, D, Ver>>
 where
-    N: network::Type,
+    N: ConnectedNetwork<PubKey>,
     D: SequencerDataSource + Send + Sync + 'static,
     P: SequencerPersistence,
 {
@@ -153,7 +156,7 @@ where
 }
 pub(super) fn submit<N, P, S, Ver: StaticVersionType + 'static>() -> Result<Api<S, Error, Ver>>
 where
-    N: network::Type,
+    N: ConnectedNetwork<PubKey>,
     S: 'static + Send + Sync + WriteState,
     P: SequencerPersistence,
     S::State: Send + Sync + SubmitDataSource<N, P>,
@@ -184,7 +187,7 @@ pub(super) fn state_signature<N, S, Ver: StaticVersionType + 'static>(
     _: Ver,
 ) -> Result<Api<S, Error, Ver>>
 where
-    N: network::Type,
+    N: ConnectedNetwork<PubKey>,
     S: 'static + Send + Sync + ReadState,
     S::State: Send + Sync + StateSignatureDataSource<N>,
 {
@@ -281,7 +284,7 @@ pub(super) fn merklized_state<N, P, D, S, Ver: StaticVersionType + 'static, cons
     _: Ver,
 ) -> Result<MerklizedStateApi<N, P, D, Ver>>
 where
-    N: network::Type,
+    N: ConnectedNetwork<PubKey>,
     D: MerklizedStateDataSource<SeqTypes, S, ARITY>
         + Send
         + Sync
