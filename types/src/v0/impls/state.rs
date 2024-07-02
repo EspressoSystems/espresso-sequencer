@@ -277,7 +277,7 @@ fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidatio
         .iter()
         .zip(proposed_header.builder_signature())
     {
-        // check that amount fits in a u64
+        // check that `amount` fits in a u64
         fee_info
             .amount
             .as_u64()
