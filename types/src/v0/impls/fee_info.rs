@@ -60,6 +60,21 @@ impl FeeInfo {
     }
 }
 
+pub trait IterableFeeInfo {
+    fn amount(&self) -> Option<FeeAmount>;
+}
+
+impl IterableFeeInfo for Vec<FeeInfo> {
+    fn amount(&self) -> Option<FeeAmount> {
+        self.iter()
+            // getting the u64 tests that the value fits
+            .map(|fee_info| fee_info.amount.as_u64())
+            .collect::<Option<Vec<u64>>>()
+            .and_then(|amounts| amounts.iter().try_fold(0u64, |acc, n| acc.checked_add(*n)))
+            .map(|n| FeeAmount::from(n))
+    }
+}
+
 impl From<BuilderFee<SeqTypes>> for FeeInfo {
     fn from(fee: BuilderFee<SeqTypes>) -> Self {
         Self {
