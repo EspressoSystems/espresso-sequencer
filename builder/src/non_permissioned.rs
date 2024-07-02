@@ -71,7 +71,10 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
         u64::MAX, // dummy node ID, only used for debugging
         chain_config,
         l1_client,
-        Arc::new(StatePeers::<Ver>::from_urls(state_peers)),
+        Arc::new(StatePeers::<Ver>::from_urls(
+            state_peers,
+            Default::default(),
+        )),
     );
     Ok(instance_state)
 }
@@ -333,7 +336,7 @@ mod test {
         .expect("Claim block signing failed");
 
         // sleep and wait for builder service to startup
-        async_sleep(Duration::from_millis(3000)).await;
+        async_sleep(Duration::from_millis(500)).await;
 
         let test_view_num = 0;
 
