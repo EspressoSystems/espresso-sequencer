@@ -59,7 +59,7 @@ impl Committable for Header {
             .field("ns_table", self.ns_table().commit())
             .var_size_field("block_merkle_tree_root", &bmt_bytes)
             .var_size_field("fee_merkle_tree_root", &fmt_bytes)
-            .field("fee_info", self.fee_info().commit());
+            .var_size_field("fee_info", &bincode::serialize(&self.fee_info()).unwrap());
 
         c.finalize()
     }
