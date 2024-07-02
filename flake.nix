@@ -2,7 +2,7 @@
   description = "Espresso Decentralized Sequencer";
 
   nixConfig = {
-    extra-substituters = [
+    extra-substitutes = [
       "https://espresso-systems-private.cachix.org"
       "https://nixpkgs-cross-overlay.cachix.org"
     ];
