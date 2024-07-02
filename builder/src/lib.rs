@@ -11,7 +11,7 @@ use futures::{
 use hotshot::{
     traits::election::static_committee::GeneralStaticCommittee,
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, Networks, SystemContext,
+    HotShotInitializer, Memberships, SystemContext,
 };
 use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
@@ -19,7 +19,6 @@ use hotshot_orchestrator::{
 };
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    constants::Base,
     event::Event,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
@@ -37,7 +36,10 @@ use async_compatibility_layer::art::{async_sleep, async_spawn};
 use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
-use hotshot_builder_core::service::{GlobalState, ProxyGlobalState};
+use hotshot_builder_core::{
+    service::{GlobalState, ProxyGlobalState},
+    testing::basic_test::NodeType,
+};
 use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
 use jf_signature::bls_over_bn254::VerKey;
 use sequencer::catchup::mock::MockStateCatchup;
@@ -65,18 +67,20 @@ pub mod permissioned;
 // It runs the api service for the builder
 pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     // it is to serve hotshot
-    let builder_api =
-        hotshot_builder_api::builder::define_api::<ProxyGlobalState<SeqTypes>, SeqTypes, Base>(
-            &HotshotBuilderApiOptions::default(),
-        )
-        .expect("Failed to construct the builder APIs");
+    let builder_api = hotshot_builder_api::builder::define_api::<
+        ProxyGlobalState<SeqTypes>,
+        SeqTypes,
+        <SeqTypes as NodeType>::Base,
+    >(&HotshotBuilderApiOptions::default())
+    .expect("Failed to construct the builder APIs");
 
     // it enables external clients to submit txn to the builder's private mempool
-    let private_mempool_api =
-        hotshot_builder_api::builder::submit_api::<ProxyGlobalState<SeqTypes>, SeqTypes, Base>(
-            &HotshotBuilderApiOptions::default(),
-        )
-        .expect("Failed to construct the builder API for private mempool txns");
+    let private_mempool_api = hotshot_builder_api::builder::submit_api::<
+        ProxyGlobalState<SeqTypes>,
+        SeqTypes,
+        <SeqTypes as NodeType>::Base,
+    >(&HotshotBuilderApiOptions::default())
+    .expect("Failed to construct the builder API for private mempool txns");
 
     let mut app: App<ProxyGlobalState<SeqTypes>, BuilderApiError> = App::with_state(source);
 
@@ -86,7 +90,7 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     app.register_module("txn_submit", private_mempool_api)
         .expect("Failed to register the private mempool API");
 
-    async_spawn(app.serve(url, Base::instance()));
+    async_spawn(app.serve(url, <SeqTypes as NodeType>::Base::instance()));
 }
 
 #[cfg(test)]
@@ -225,6 +229,10 @@ pub mod testing {
                 stop_proposing_view: 0,
                 start_voting_view: 0,
                 stop_voting_view: 0,
+                start_proposing_time: 0,
+                start_voting_time: 0,
+                stop_proposing_time: 0,
+                stop_voting_time: 0,
             };
 
             Self {
@@ -380,11 +388,6 @@ pub mod testing {
                 &self.master_map,
                 None,
             ));
-            let networks = Networks {
-                da_network: network.clone(),
-                quorum_network: network,
-                _pd: Default::default(),
-            };
 
             let node_state = NodeState::new(
                 i as u64,
@@ -399,7 +402,7 @@ pub mod testing {
                 config,
                 Some(self.non_staking_nodes_stake_entries.clone()),
                 node_state,
-                networks,
+                network,
                 metrics,
                 i as u64,
                 None,
@@ -434,7 +437,7 @@ pub mod testing {
             let hotshot_events_api = hotshot_events_service::events::define_api::<
                 Arc<RwLock<EventsStreamer<SeqTypes>>>,
                 SeqTypes,
-                Base,
+                <SeqTypes as NodeType>::Base,
             >(&EventStreamingApiOptions::default())
             .expect("Failed to define hotshot eventsAPI");
 
@@ -443,7 +446,7 @@ pub mod testing {
             app.register_module("hotshot-events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");
 
-            async_spawn(app.serve(url, Base::instance()));
+            async_spawn(app.serve(url, <SeqTypes as NodeType>::Base::instance()));
         }
         // enable hotshot event streaming
         pub fn enable_hotshot_node_event_streaming<P: SequencerPersistence>(
