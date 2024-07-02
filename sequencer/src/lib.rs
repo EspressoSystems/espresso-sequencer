@@ -25,6 +25,7 @@ use genesis::{GenesisHeader, L1Finalized, Upgrade};
 
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 
+use catchup::BackoffParams;
 use l1_client::L1Client;
 
 use libp2p::Multiaddr;
@@ -302,6 +303,7 @@ pub struct NetworkParams {
     pub private_staking_key: BLSPrivKey,
     pub private_state_key: StateSignKey,
     pub state_peers: Vec<Url>,
+    pub catchup_backoff: BackoffParams,
 
     /// The address to send to other Libp2p nodes to contact us
     pub libp2p_advertise_address: SocketAddr,
@@ -475,18 +477,12 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         };
 
         // Combine the CDN and P2P networks
-        (
-            Arc::from(CombinedNetworks::new(
-                cdn_network.clone(),
-                p2p_network.clone(),
-                Duration::from_secs(1),
-            )),
-            Arc::from(CombinedNetworks::new(
-                cdn_network,
-                p2p_network,
-                Duration::from_secs(1),
-            )),
-        )
+        let network = Arc::from(CombinedNetworks::new(
+            cdn_network,
+            p2p_network,
+            Duration::from_secs(1),
+        ));
+        (Arc::clone(&network), network)
     };
 
     // Wait for the CDN network to be ready if we're not using the P2P network
@@ -530,7 +526,10 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         l1_genesis,
         peers: catchup::local_and_remote(
             persistence_opt,
-            StatePeers::<Ver>::from_urls(network_params.state_peers),
+            StatePeers::<Ver>::from_urls(
+                network_params.state_peers,
+                network_params.catchup_backoff,
+            ),
         )
         .await,
         node_id: node_index,
@@ -595,35 +594,78 @@ pub mod testing {
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
-    pub async fn run_test_builder(port: Option<u16>) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
+    pub async fn run_test_builder<const NUM_NODES: usize>(
+        port: Option<u16>,
+    ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
         let builder_config = if let Some(port) = port {
             SimpleBuilderConfig { port }
         } else {
             SimpleBuilderConfig::default()
         };
         <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
-            TestConfig::NUM_NODES,
+            NUM_NODES,
             builder_config,
             Default::default(),
         )
         .await
     }
 
-    #[derive(Clone)]
-    pub struct TestConfig {
+    pub struct TestConfigBuilder<const NUM_NODES: usize> {
         config: HotShotConfig<PubKey>,
-        pub priv_keys: Vec<BLSPrivKey>,
-        pub state_key_pairs: Vec<StateKeyPair>,
-        pub master_map: Arc<MasterMap<PubKey>>,
-        pub url: Url,
-        pub state_relay_url: Option<Url>,
-        pub builder_port: Option<u16>,
-        pub upgrades: Option<TestNetworkUpgrades>,
+        priv_keys: Vec<BLSPrivKey>,
+        state_key_pairs: Vec<StateKeyPair>,
+        master_map: Arc<MasterMap<PubKey>>,
+        url: Url,
+        state_relay_url: Option<Url>,
+        builder_port: Option<u16>,
+        upgrades: Option<TestNetworkUpgrades>,
     }
 
-    impl Default for TestConfig {
+    impl<const NUM_NODES: usize> TestConfigBuilder<NUM_NODES> {
+        pub fn builder_port(mut self, builder_port: Option<u16>) -> Self {
+            self.builder_port = builder_port;
+            self
+        }
+
+        pub fn state_relay_url(mut self, url: Url) -> Self {
+            self.state_relay_url = Some(url);
+            self
+        }
+
+        pub fn l1_url(mut self, l1: Url) -> Self {
+            self.url = l1;
+            self
+        }
+
+        pub fn upgrades(mut self, upgrades: TestNetworkUpgrades) -> Self {
+            self.upgrades = Some(upgrades);
+            self
+        }
+
+        pub fn build(mut self) -> TestConfig<NUM_NODES> {
+            if let Some(upgrades) = &self.upgrades {
+                self.config.start_proposing_view = upgrades.start_proposing_view;
+                self.config.stop_proposing_view = upgrades.stop_proposing_view;
+                self.config.start_voting_view = upgrades.start_voting_view;
+                self.config.stop_voting_view = upgrades.stop_voting_view;
+            }
+
+            TestConfig {
+                config: self.config,
+                priv_keys: self.priv_keys,
+                state_key_pairs: self.state_key_pairs,
+                master_map: self.master_map,
+                url: self.url,
+                state_relay_url: self.state_relay_url,
+                builder_port: self.builder_port,
+                upgrades: self.upgrades,
+            }
+        }
+    }
+
+    impl<const NUM_NODES: usize> Default for TestConfigBuilder<NUM_NODES> {
         fn default() -> Self {
-            let num_nodes = Self::NUM_NODES;
+            let num_nodes = NUM_NODES;
 
             // Generate keys for the nodes.
             let seed = [0; 32];
@@ -691,9 +733,19 @@ pub mod testing {
         }
     }
 
-    impl TestConfig {
-        pub const NUM_NODES: usize = 5;
+    #[derive(Clone)]
+    pub struct TestConfig<const NUM_NODES: usize> {
+        config: HotShotConfig<PubKey>,
+        priv_keys: Vec<BLSPrivKey>,
+        state_key_pairs: Vec<StateKeyPair>,
+        master_map: Arc<MasterMap<PubKey>>,
+        url: Url,
+        state_relay_url: Option<Url>,
+        builder_port: Option<u16>,
+        upgrades: Option<TestNetworkUpgrades>,
+    }
 
+    impl<const NUM_NODES: usize> TestConfig<NUM_NODES> {
         pub fn num_nodes(&self) -> usize {
             self.priv_keys.len()
         }
@@ -706,28 +758,12 @@ pub mod testing {
             self.config.builder_urls = builder_urls;
         }
 
-        pub fn set_state_relay_url(&mut self, url: Url) {
-            self.state_relay_url = Some(url);
+        pub fn builder_port(&self) -> Option<u16> {
+            self.builder_port
         }
 
-        pub fn default_with_l1(l1: Url) -> Self {
-            TestConfig {
-                url: l1,
-                ..Default::default()
-            }
-        }
-
-        pub fn set_upgrade_parameters(
-            &mut self,
-            start_proposing_view: u64,
-            stop_proposing_view: u64,
-            start_voting_view: u64,
-            stop_voting_view: u64,
-        ) {
-            self.config.start_proposing_view = start_proposing_view;
-            self.config.stop_proposing_view = stop_proposing_view;
-            self.config.start_voting_view = start_voting_view;
-            self.config.stop_voting_view = stop_voting_view;
+        pub fn upgrades(&self) -> Option<TestNetworkUpgrades> {
+            self.upgrades.clone()
         }
 
         pub async fn init_nodes<Ver: StaticVersionType + 'static>(
@@ -894,7 +930,7 @@ mod test {
         },
     };
     use sequencer_utils::AnvilOptions;
-    use testing::{wait_for_decide_on_handle, TestConfig};
+    use testing::{wait_for_decide_on_handle, TestConfigBuilder};
 
     #[async_std::test]
     async fn test_skeleton_instantiation() {
@@ -904,9 +940,12 @@ mod test {
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();
-        let mut config = TestConfig::default_with_l1(url);
+        const NUM_NODES: usize = 5;
+        let mut config = TestConfigBuilder::<NUM_NODES>::default()
+            .l1_url(url)
+            .build();
 
-        let (builder_task, builder_url) = run_test_builder(None).await;
+        let (builder_task, builder_url) = run_test_builder::<NUM_NODES>(None).await;
 
         config.set_builder_urls(vec1::vec1![builder_url]);
 
@@ -944,9 +983,12 @@ mod test {
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();
-        let mut config = TestConfig::default_with_l1(url);
+        const NUM_NODES: usize = 5;
+        let mut config = TestConfigBuilder::<NUM_NODES>::default()
+            .l1_url(url)
+            .build();
 
-        let (builder_task, builder_url) = run_test_builder(None).await;
+        let (builder_task, builder_url) = run_test_builder::<NUM_NODES>(None).await;
 
         config.set_builder_urls(vec1::vec1![builder_url]);
         let handles = config.init_nodes(ver).await;

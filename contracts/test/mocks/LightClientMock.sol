@@ -10,6 +10,9 @@ import { LightClientStateUpdateVKMock as VkLib } from "./LightClientStateUpdateV
 
 /// @dev A helper that wraps LightClient contract for testing
 contract LightClientMock is LC {
+    bool internal hotShotDown;
+    uint256 internal frozenL1Height;
+
     constructor(LC.LightClientState memory genesis, uint32 numBlockPerEpoch) LC() {
         _initializeState(genesis, numBlockPerEpoch);
     }
@@ -64,5 +67,27 @@ contract LightClientMock is LC {
         for (uint256 i = 0; i < values.length; i++) {
             hotShotCommitments.push(values[i]);
         }
+    }
+
+    function setHotShotDownSince(uint256 l1Height) public {
+        hotShotDown = true;
+        frozenL1Height = l1Height;
+    }
+
+    function setHotShotUp() public {
+        hotShotDown = false;
+    }
+
+    /// @dev override the production-implementation with frozen data
+    function lagOverEscapeHatchThreshold(uint256 blockNumber, uint256 threshold)
+        public
+        view
+        override
+        returns (bool)
+    {
+        if (hotShotDown) {
+            return blockNumber - frozenL1Height > threshold;
+        }
+        return super.lagOverEscapeHatchThreshold(blockNumber, threshold);
     }
 }

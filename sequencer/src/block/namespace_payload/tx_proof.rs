@@ -54,7 +54,14 @@ impl TxProof {
         common: &VidCommon,
     ) -> Option<(Transaction, Self)> {
         let payload_byte_len = payload.byte_len();
-        payload_byte_len.is_consistent(common).ok()?;
+        if !payload_byte_len.is_consistent(common) {
+            tracing::warn!(
+                "payload byte len {} inconsistent with common {}",
+                payload_byte_len,
+                VidSchemeType::get_payload_byte_len(common)
+            );
+            return None; // error: payload byte len inconsistent with common
+        }
         if !payload.ns_table().in_bounds(index.ns()) {
             tracing::warn!("ns_index {:?} out of bounds", index.ns());
             return None; // error: ns index out of bounds
@@ -103,15 +110,6 @@ impl TxProof {
             TxPayloadRange::new(&payload_num_txs, &payload_tx_table_entries, &ns_byte_len);
         let payload_proof_tx = {
             let range = ns_range.block_range(&tx_payload_range);
-
-            tracing::info!(
-                "prove: (ns,tx) ({:?},{:?}), tx_payload_range {:?}, content {:?}",
-                index.ns(),
-                index.tx(),
-                range,
-                &payload_bytes[range.clone()]
-            );
-
             if range.is_empty() {
                 None
             } else {
