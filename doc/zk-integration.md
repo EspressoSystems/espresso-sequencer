@@ -221,13 +221,13 @@ Filter_, and _COMMs Equivalence_. Private inputs of the circuit are written in u
 
 The circuit depicted in Figure 3 operates as follows:
 
-- The _Espresso Consensus_ gadget checks that the block commitment for Espresso block `BLOCK_NUMBER` is `blk_cm`. To
-  achieve this goal, it is required to obtain the state of the stake table from the previous HotShot epoch. Assuming the
-  rollup state is updated at least once per epoch, the commitment `blk_cm_old` will be computed from such state. Hence,
-  the private input `STAKE_TABLE_ENTRIES`, containing the list of public keys with their respective stake, can be linked
-  to the commitment `blk_cm_old` via the private inputs `STAKE_TABLE_OPENINGS`. Finally, note that the first
-  `blk_cm_old` value needs to be read from the light client contract. Afterward, no dependency on the light client
-  contract is needed.
+- The _Espresso Consensus_ gadget checks that the block commitment for Espresso block `BLOCK_NUMBER` is `blk_cm` using
+  the multi-signature `STATE_SIGS` obtained by the HotShot replicas. To achieve this goal, it is required to obtain the
+  state of the stake table from the previous HotShot epoch. Assuming the rollup state is updated at least once per
+  epoch, the commitment `blk_cm_old` will be computed from such state. Hence, the private input `STAKE_TABLE_ENTRIES`,
+  containing the list of public keys with their respective stake, can be linked to the commitment `blk_cm_old` via the
+  private inputs `STAKE_TABLE_OPENINGS`. Finally, note that the first `blk_cm_old` value needs to be read from the light
+  client contract. Afterward, no dependency on the light client contract is needed.
 - The other gadgets are the same as in Integration 1.
 
 The pseudocode of the rollup contract below shows that in the case we do not rely on the Espresso light client contract
