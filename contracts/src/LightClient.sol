@@ -46,7 +46,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // === Constants ===
     //
     /// @notice System parameter: number of blocks per epoch
-
     /// @dev This variable cannot be made immutable due to how UUPS contracts work. See
     /// https://forum.openzeppelin.com/t/upgradable-contracts-instantiating-an-immutable-value/28763/2#why-cant-i-use-immutable-variables-1
     uint32 public blocksPerEpoch;
@@ -58,17 +57,32 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint32 internal finalizedState;
 
     // === Storage ===
-
+    //
     /// @notice current (finalized) epoch number
     uint64 public currentEpoch;
+
+    ///@notice Max number of blockStates to record
+    uint64 public maxStateHistoryAllowed;
+
+    ///@notice number of block states recorded
+    uint64 public stateHistoryCount;
+
+    ///@notice index of first block in block state series
+    ///@dev use this instead of index 0 since old states would be set to zero to keep storage costs
+    /// constant to maxStateHistoryAllowed
+    uint64 public stateHistoryFirstIndex;
+
     /// @notice The commitment of the stake table used in current voting (i.e. snapshot at the start
     /// of last epoch)
     bytes32 public votingStakeTableCommitment;
+
     /// @notice The quorum threshold for the stake table used in current voting
     uint256 public votingThreshold;
+
     /// @notice The commitment of the stake table frozen for change (i.e. snapshot at the start of
     /// last epoch)
     bytes32 public frozenStakeTableCommitment;
+
     /// @notice The quorum threshold for the frozen stake table
     uint256 public frozenThreshold;
 
@@ -150,6 +164,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InsufficientSnapshotHistory();
     /// @notice Invalid HotShot Block for checking HotShot commitments, premature or in the future
     error InvalidHotShotBlockForCommitmentCheck();
+    /// @notice Invalid Max Block States
+    error InvalidMaxStateHistory();
 
     /// @notice since the constructor initializes storage on this contract we disable it
     /// @dev storage is on the proxy contract since it calls this contract via delegatecall
@@ -207,17 +223,16 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         blocksPerEpoch = numBlockPerEpoch;
 
+        maxStateHistoryAllowed = 10 * 7166; //set the max block states recorded to be 10 days of
+            // ethereum blocks
+
         bytes32 initStakeTableComm = computeStakeTableComm(genesis);
         votingStakeTableCommitment = initStakeTableComm;
         votingThreshold = genesis.threshold;
         frozenStakeTableCommitment = initStakeTableComm;
         frozenThreshold = genesis.threshold;
 
-        //add the L1 Block to stateUpdateBlockNumbers for the genesis state
-        stateUpdateBlockNumbers.push(block.number);
-
-        // add the HotShot commitment for the genesis state
-        hotShotCommitments.push(HotShotCommitment(genesis.blockHeight, genesis.blockCommRoot));
+        updateStateHistory(block.number, genesis);
     }
 
     // === State Modifying APIs ===
@@ -277,11 +292,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // upon successful verification, update the latest finalized state
         states[finalizedState] = newState;
 
-        //add the L1 Block to stateUpdateBlockNumbers for the new finalized state
-        stateUpdateBlockNumbers.push(block.number);
-
-        //add the blockheight and blockCommRoot to hotShotCommitments for the new finalized state
-        hotShotCommitments.push(HotShotCommitment(newState.blockHeight, newState.blockCommRoot));
+        updateStateHistory(block.number, newState);
 
         emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
     }
@@ -373,6 +384,33 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
+    /// @notice update the stateUpdateBlockNumbers and hotShotCommitments arrays each time a new
+    /// finalized state is added
+    /// @dev only maintains maxStateHistoryAllowed non-zero elements in these arrays
+    /// @dev using a FIFO approach to delete elements at the start of the array and storing the new
+    /// initial index in stateHistoryFirstIndex
+    function updateStateHistory(uint256 blockNumber, LightClientState memory state) internal {
+        if (maxStateHistoryAllowed == 0) revert InvalidMaxStateHistory();
+
+        if (stateHistoryCount == maxStateHistoryAllowed) {
+            // the arrays already has the max block states allowed so we clear the first non-empty
+            // element
+            // the arrays are cleared from a FIFO approach
+            delete stateUpdateBlockNumbers[stateHistoryFirstIndex];
+            delete hotShotCommitments[stateHistoryFirstIndex];
+            // and increment the first index so that you know where the first non-zero element is in
+            // the affected arrays
+            stateHistoryFirstIndex++;
+        } else {
+            // increment the num block states recorded, this increment stops when stateHistoryCount
+            // == maxStateHistoryAllowed
+            stateHistoryCount++;
+        }
+        //add the L1 Block to stateUpdateBlockNumbers &  HotShot commitment for the genesis state
+        stateUpdateBlockNumbers.push(blockNumber);
+        hotShotCommitments.push(HotShotCommitment(state.blockHeight, state.blockCommRoot));
+    }
+
     /// @notice check if more than threshold blocks passed since the last state update before
     /// L1 Block Number
     /// @param blockNumber The L1 block number
@@ -406,6 +444,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             if (i < 2) {
                 break;
             }
+
+            // We've reached the first recorded block
+            // i >= 2 because we normally clear out the array from a FIFO approach
+            if (i == stateHistoryFirstIndex) {
+                break;
+            }
             i--;
         }
 
@@ -435,7 +479,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (hotShotBlockHeight >= hotShotCommitments[commitmentsHeight - 1].blockHeight) {
             revert InvalidHotShotBlockForCommitmentCheck();
         }
-        for (uint256 i = 0; i < commitmentsHeight; i++) {
+        for (uint256 i = stateHistoryFirstIndex; i < commitmentsHeight; i++) {
             // The first commitment greater than the provided height is the root of the tree
             // that leaf at that HotShot height
             if (hotShotCommitments[i].blockHeight > hotShotBlockHeight) {
@@ -449,5 +493,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice get the number of HotShot block commitments
     function getHotShotBlockCommitmentsCount() public view returns (uint256) {
         return hotShotCommitments.length;
+    }
+
+    /// @notice set Max Block States allowed
+    function setMaxStateHIstoryAllowed(uint64 numBlocks) public onlyOwner {
+        if (numBlocks == 0) revert InvalidMaxStateHistory();
+
+        maxStateHistoryAllowed = numBlocks;
     }
 }

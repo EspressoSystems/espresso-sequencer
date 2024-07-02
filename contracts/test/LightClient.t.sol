@@ -639,6 +639,10 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         cmds[4] = vm.toString(uint64(1));
         cmds[5] = vm.toString(uint64(1));
 
+        //assert initial conditions
+        assertEq(lc.stateHistoryFirstIndex(), 0);
+        assertNotEq(lc.maxStateHistoryAllowed(), 0);
+
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
@@ -657,6 +661,51 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         lc.newFinalizedState(newState, newProof);
 
         assertEq(lc.getStateUpdateBlockNumbersCount(), blockUpdatesCount + 1);
+    }
+
+    function test_1lBlockUpdatesIsUpdatedOverMaxButOnlyMaxNonZeroElements() public {
+        string[] memory cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-consecutive-finalized-states";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[4] = vm.toString(uint64(5));
+        cmds[5] = vm.toString(uint64(5));
+
+        //assert initial conditions
+        assertEq(lc.stateHistoryFirstIndex(), 0);
+        assertNotEq(lc.maxStateHistoryAllowed(), 0);
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        // set the new max block states allowed to half of the number of states available
+        vm.prank(admin);
+        lc.setMaxStateHIstoryAllowed(uint64(states.length / 2)); //2
+
+        // Update the states to double the max block states allowed
+        for (uint256 i = 0; i < states.length; i++) {
+            vm.prank(permissionedProver);
+            vm.expectEmit(true, true, true, true);
+            emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
+            lc.newFinalizedState(states[i], proofs[i]);
+        }
+        // assert that the number of blocks recorded is the same as maxStateHistoryAllowed
+        assertEq(lc.stateHistoryCount(), lc.maxStateHistoryAllowed());
+
+        // because we recorded more blocks than the maxStateHistoryAllowed, the
+        // stateHistoryFirstIndex can't be zero
+        assertGt(lc.getHotShotBlockCommitmentsCount(), lc.maxStateHistoryAllowed());
+        assertNotEq(lc.stateHistoryFirstIndex(), 0);
+
+        // count the number of non-zero elements in the newFinalizedState method, it should be equal
+        // to maxStateHistoryAllowed
+        uint64 nonZeroElements;
+        for (uint256 i = 0; i < lc.getHotShotBlockCommitmentsCount(); i++) {
+            if (lc.stateUpdateBlockNumbers(i) != 0) nonZeroElements++;
+        }
+        assertEq(nonZeroElements, lc.maxStateHistoryAllowed());
     }
 
     function test_hotshotIsLiveFunctionWhenNoDelayOccurred() public {
@@ -744,6 +793,12 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         vm.expectRevert(LC.InsufficientSnapshotHistory.selector);
         lc.lagOverEscapeHatchThreshold(updates[0] + 2, DELAY_THRESHOLD); //3
+    }
+
+    function test_revertWhenSetZeroMaxStateUpdatesAllowed() public {
+        vm.prank(admin);
+        vm.expectRevert(LC.InvalidMaxStateHistory.selector);
+        lc.setMaxStateHIstoryAllowed(0);
     }
 
     function test_hotShotIsDownWhenBlockIsHigherThanLastRecordedAndTheDelayThresholdHasPassed()
