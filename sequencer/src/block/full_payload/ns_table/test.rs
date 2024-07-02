@@ -131,33 +131,37 @@ fn monotonic_increase() {
     setup_backtrace();
 
     // Duplicate namespace ID
-    two_entries_ns_table((5, 5), (5, 6), false);
+    two_entries_ns_table((5, 5), (5, 6), Some(DuplicateNamespaceId));
 
     // Decreasing namespace ID
-    two_entries_ns_table((5, 5), (4, 6), false);
+    two_entries_ns_table((5, 5), (4, 6), None);
 
     // Duplicate offset
-    two_entries_ns_table((5, 5), (6, 5), false);
+    two_entries_ns_table((5, 5), (6, 5), Some(NonIncreasingEntries));
 
     // Decreasing offset
-    two_entries_ns_table((5, 5), (6, 4), false);
+    two_entries_ns_table((5, 5), (6, 4), Some(NonIncreasingEntries));
 
     // Zero namespace ID
-    two_entries_ns_table((0, 5), (6, 6), true);
+    two_entries_ns_table((0, 5), (6, 6), None);
 
     // Zero offset
-    two_entries_ns_table((5, 0), (6, 6), false);
+    two_entries_ns_table((5, 0), (6, 6), Some(NonIncreasingEntries));
 
     // Helper fn: build a 2-entry NsTable, assert failure
-    fn two_entries_ns_table(entry1: (u32, usize), entry2: (u32, usize), expect_success: bool) {
+    fn two_entries_ns_table(
+        entry1: (u32, usize),
+        entry2: (u32, usize),
+        expect_err: Option<NsTableValidationError>,
+    ) {
         let mut ns_table_builder = NsTableBuilder::new();
         ns_table_builder.append_entry(NamespaceId::from(entry1.0), entry1.1);
         ns_table_builder.append_entry(NamespaceId::from(entry2.0), entry2.1);
         let ns_table = ns_table_builder.into_ns_table();
-        if expect_success {
-            expect_valid(&ns_table);
+        if let Some(err) = expect_err {
+            expect_invalid(&ns_table, err);
         } else {
-            expect_invalid(&ns_table, NonIncreasingEntries);
+            expect_valid(&ns_table);
         }
     }
 }
