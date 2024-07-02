@@ -4,7 +4,7 @@ use crate::{
     eth_signature_key::BuilderSignature,
     genesis::UpgradeType,
     l1_client::L1Snapshot,
-    state::{BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment},
+    state::{BlockMerkleCommitment, FeeAccount, FeeAmount, FeeInfo, FeeInfos, FeeMerkleCommitment},
     ChainConfig, L1BlockInfo, Leaf, NamespaceId, NodeState, SeqTypes, ValidatedState,
 };
 use anyhow::{ensure, Context};
@@ -85,7 +85,7 @@ pub struct Header {
     /// Root Commitment of `FeeMerkleTree`
     pub fee_merkle_tree_root: FeeMerkleCommitment,
     /// Fee paid by the block builder
-    pub fee_info: FeeInfo,
+    pub fee_info: FeeInfos,
     /// Account (etheruem address) of builder
     ///
     /// This signature is not considered formally part of the header; it is just evidence proving
@@ -231,7 +231,7 @@ impl Header {
             ns_table,
             fee_merkle_tree_root,
             block_merkle_tree_root,
-            fee_info,
+            fee_info: FeeInfos::from(vec![fee_info]),
             builder_signature,
         })
     }
@@ -436,7 +436,7 @@ impl BlockHeader<SeqTypes> for Header {
             ns_table,
             block_merkle_tree_root,
             fee_merkle_tree_root,
-            fee_info: FeeInfo::genesis(),
+            fee_info: FeeInfos::genesis(),
             builder_signature: None,
         }
     }
@@ -473,16 +473,16 @@ impl ExplorerHeader<SeqTypes> for Header {
     type ProposerId = FeeAccount;
     type NamespaceId = NamespaceId;
 
-    fn proposer_id(&self) -> Self::ProposerId {
-        self.fee_info.account()
+    fn proposer_id(&self) -> Vec<Self::ProposerId> {
+        self.fee_info.accounts()
     }
 
-    fn fee_info_account(&self) -> Self::WalletAddress {
-        self.fee_info.account()
+    fn fee_info_account(&self) -> Vec<Self::WalletAddress> {
+        self.fee_info.accounts()
     }
 
     fn fee_info_balance(&self) -> Self::BalanceAmount {
-        self.fee_info.amount()
+        self.fee_info.amount().unwrap().into()
     }
 
     /// reward_balance at the moment is only implemented as a stub, as block
