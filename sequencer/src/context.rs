@@ -1,9 +1,14 @@
+use std::fmt::Display;
+
 use anyhow::Context;
 use async_std::{
     sync::{Arc, RwLock},
     task::{spawn, JoinHandle},
 };
 use derivative::Derivative;
+use espresso_types::{
+    traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
+};
 use futures::{
     future::{join_all, Future},
     stream::{Stream, StreamExt},
@@ -13,6 +18,7 @@ use hotshot::{
     types::{Event, SystemContextHandle},
     Memberships, Networks, SystemContext,
 };
+use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_query_service::Leaf;
 use hotshot_types::{
@@ -21,15 +27,10 @@ use hotshot_types::{
     traits::{election::Membership, metrics::Metrics},
     HotShotConfig,
 };
-use std::fmt::Display;
 use url::Url;
 use vbs::version::StaticVersionType;
 
-use crate::{
-    network, persistence::SequencerPersistence, state_signature::StateSigner,
-    static_stake_table_commitment, Node, NodeState, PubKey, SeqTypes, Transaction, ValidatedState,
-};
-use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
+use crate::{network, state_signature::StateSigner, static_stake_table_commitment, Node, SeqTypes};
 /// The consensus handle
 pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>>;
 

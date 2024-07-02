@@ -1,9 +1,12 @@
+use std::time::Duration;
+
 use anyhow::{bail, ensure, Context};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{sync::Arc, task::sleep};
 use clap::Parser;
 use contract_bindings::fee_contract::FeeContract;
 use es_version::SequencerVersion;
+use espresso_types::{eth_signature_key::EthKeyPair, FeeAccount, FeeAmount, FeeMerkleTree, Header};
 use ethers::{
     middleware::{Middleware, SignerMiddleware},
     providers::Provider,
@@ -14,12 +17,6 @@ use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Node},
     MerkleTreeScheme,
 };
-use sequencer::{
-    eth_signature_key::EthKeyPair,
-    state::{FeeAccount, FeeAmount, FeeMerkleTree},
-    Header,
-};
-use std::time::Duration;
 use surf_disco::{error::ClientError, Url};
 
 type EspressoClient = surf_disco::Client<ClientError, SequencerVersion>;
@@ -204,15 +201,15 @@ async fn deposit(opt: Deposit) -> anyhow::Result<()> {
                 continue;
             }
         };
-        let Some(l1_finalized) = header.l1_finalized else {
+        let Some(l1_finalized) = header.l1_finalized() else {
             continue;
         };
         if l1_finalized.number >= l1_block {
-            tracing::info!(block = header.height, "deposit finalized on Espresso");
-            break header.height;
+            tracing::info!(block = header.height(), "deposit finalized on Espresso");
+            break header.height();
         } else {
             tracing::debug!(
-                block = header.height,
+                block = header.height(),
                 l1_block,
                 ?l1_finalized,
                 "waiting for deposit on Espresso"

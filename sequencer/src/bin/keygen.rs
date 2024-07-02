@@ -1,19 +1,19 @@
 //! Utility program to generate keypairs
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+};
 
 use anyhow::anyhow;
+use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::{Parser, ValueEnum};
 use derive_more::Display;
 use ethers::utils::hex;
 use hotshot::types::SignatureKey;
 use hotshot_types::{light_client::StateKeyPair, signature_key::BLSPubKey};
 use rand::{RngCore, SeedableRng};
-use std::{
-    fs::{self, File},
-    io::Write,
-    path::PathBuf,
-};
 use tracing::info_span;
 
 #[derive(Clone, Copy, Debug, Display, Default, ValueEnum)]

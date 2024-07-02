@@ -2,12 +2,10 @@ use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ed_on_bn254::{EdwardsConfig as EdOnBn254Config, Fq as FqEd254};
 use ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
-use ark_poly::domain::radix2::Radix2EvaluationDomain;
-use ark_poly::EvaluationDomain;
+use ark_poly::{domain::radix2::Radix2EvaluationDomain, EvaluationDomain};
 use ark_std::rand::{rngs::StdRng, Rng, SeedableRng};
 use clap::{Parser, ValueEnum};
 use diff_test_bn254::ParsedG2Point;
-
 use ethers::{
     abi::{AbiDecode, AbiEncode, Address},
     types::{Bytes, U256},
@@ -18,15 +16,19 @@ use hotshot_state_prover::mock_ledger::{
 };
 use itertools::multiunzip;
 use jf_pcs::prelude::Commitment;
-use jf_plonk::proof_system::structs::{Proof, VerifyingKey};
-use jf_plonk::proof_system::PlonkKzgSnark;
 use jf_plonk::{
+    proof_system::{
+        structs::{Proof, VerifyingKey},
+        PlonkKzgSnark,
+    },
     testing_apis::Verifier,
     transcript::{PlonkTranscript, SolidityTranscript},
 };
-use jf_signature::bls_over_bn254::{hash_to_curve, KeyPair as BLSKeyPair, Signature};
-use jf_signature::constants::CS_ID_BLS_BN254;
-use jf_signature::schnorr::KeyPair as SchnorrKeyPair;
+use jf_signature::{
+    bls_over_bn254::{hash_to_curve, KeyPair as BLSKeyPair, Signature},
+    constants::CS_ID_BLS_BN254,
+    schnorr::KeyPair as SchnorrKeyPair,
+};
 use sha3::Keccak256;
 
 #[derive(Parser)]

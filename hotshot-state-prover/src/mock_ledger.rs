@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
 use ark_bn254::Bn254;
 use ark_ed_on_bn254::EdwardsConfig;
@@ -6,37 +8,38 @@ use ark_std::{
     rand::{rngs::StdRng, CryptoRng, Rng, RngCore},
     UniformRand,
 };
-
-use ethers::{abi, utils};
 use ethers::{
+    abi,
     abi::Token,
     types::{H256, U256},
+    utils,
 };
-use hotshot_contract_adapter::jellyfish::{field_to_u256, open_key, u256_to_field};
-use hotshot_contract_adapter::light_client::ParsedLightClientState;
+use hotshot_contract_adapter::{
+    jellyfish::{field_to_u256, open_key, u256_to_field},
+    light_client::ParsedLightClientState,
+};
 use hotshot_stake_table::vec_based::StakeTable;
+use hotshot_types::{
+    light_client::{GenericLightClientState, GenericPublicInput, LightClientState},
+    traits::stake_table::{SnapshotVersion, StakeTableScheme},
+};
+use itertools::izip;
+use jf_pcs::prelude::UnivariateUniversalParams;
+use jf_plonk::{
+    proof_system::{PlonkKzgSnark, UniversalSNARK},
+    transcript::SolidityTranscript,
+};
+use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
+use jf_signature::{
+    bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey as BLSVerKey},
+    schnorr::{SchnorrSignatureScheme, Signature},
+    SignatureScheme,
+};
+use jf_utils::test_rng;
 
 use crate::{
     generate_state_update_proof, preprocess, service::one_honest_threshold, Proof, VerifyingKey,
 };
-use hotshot_types::traits::stake_table::StakeTableScheme;
-use hotshot_types::{
-    light_client::{GenericLightClientState, GenericPublicInput, LightClientState},
-    traits::stake_table::SnapshotVersion,
-};
-use itertools::izip;
-use jf_pcs::prelude::UnivariateUniversalParams;
-use jf_plonk::proof_system::{PlonkKzgSnark, UniversalSNARK};
-use jf_plonk::transcript::SolidityTranscript;
-use jf_relation::{Arithmetization, Circuit, PlonkCircuit};
-use jf_signature::schnorr::Signature;
-use jf_signature::{
-    bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey as BLSVerKey},
-    schnorr::SchnorrSignatureScheme,
-    SignatureScheme,
-};
-use jf_utils::test_rng;
-use std::collections::HashMap;
 
 type F = ark_ed_on_bn254::Fq;
 type SchnorrVerKey = jf_signature::schnorr::VerKey<EdwardsConfig>;

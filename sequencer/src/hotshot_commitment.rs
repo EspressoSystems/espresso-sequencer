@@ -1,7 +1,10 @@
+use std::{error::Error, time::Duration};
+
 use anyhow::anyhow;
 use async_std::{sync::Arc, task::sleep};
 use async_trait::async_trait;
 use contract_bindings::hot_shot::{HotShot, HotShotErrors, Qc};
+use espresso_types::Header;
 use ethers::prelude::*;
 use futures::{
     future,
@@ -12,12 +15,10 @@ use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
 use sequencer_utils::{commitment_to_u256, contract_send, init_signer, Signer};
-use std::error::Error;
-use std::time::Duration;
 use surf_disco::Url;
 use vbs::version::StaticVersionType;
 
-use crate::{Header, SeqTypes};
+use crate::SeqTypes;
 
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 
@@ -274,18 +275,18 @@ fn build_sequence_batches_txn<M: ethers::prelude::Middleware>(
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::{l1_client::L1Client, Leaf, NodeState, ValidatedState};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
     use committable::Committable;
     use contract_bindings::hot_shot::{NewBlocksCall, NewBlocksFilter};
+    use espresso_types::{L1Client, Leaf, NodeState, ValidatedState};
     use ethers::{abi::AbiDecode, providers::Middleware};
     use futures::FutureExt;
     use hotshot_types::simple_certificate::QuorumCertificate;
-    use sequencer_utils::test_utils::TestL1System;
-    use sequencer_utils::AnvilOptions;
+    use sequencer_utils::{test_utils::TestL1System, AnvilOptions};
     use surf_disco::{Error, StatusCode};
+
+    use super::*;
 
     const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
@@ -330,7 +331,7 @@ mod test {
     async fn mock_leaf(height: u64, node_state: &NodeState) -> LeafQueryData<SeqTypes> {
         let mut leaf = Leaf::genesis(&ValidatedState::default(), node_state).await;
         let mut qc = QuorumCertificate::genesis(&ValidatedState::default(), node_state).await;
-        leaf.block_header_mut().height = height;
+        *leaf.block_header_mut().height_mut() = height;
         qc.data.leaf_commit = leaf.commit();
         LeafQueryData::new(leaf, qc).unwrap()
     }

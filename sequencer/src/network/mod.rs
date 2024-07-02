@@ -1,3 +1,5 @@
+use espresso_types::PubKey;
+
 use super::*;
 
 pub mod cdn;

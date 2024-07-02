@@ -1,3 +1,5 @@
+use std::{collections::HashMap, io::Write, ops::Deref};
+
 use anyhow::{ensure, Context};
 use async_std::sync::Arc;
 use clap::{builder::OsStr, Parser, ValueEnum};
@@ -16,7 +18,6 @@ use derive_more::Display;
 use ethers::{prelude::*, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_contract_adapter::light_client::ParsedLightClientState;
-use std::{collections::HashMap, io::Write, ops::Deref};
 use url::Url;
 
 /// Set of predeployed contracts.

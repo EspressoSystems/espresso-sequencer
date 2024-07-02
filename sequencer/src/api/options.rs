@@ -1,27 +1,14 @@
 //! Sequencer-specific API options and initialization.
 
-use super::{
-    data_source::{
-        provider, CatchupDataSource, HotShotConfigDataSource, SequencerDataSource,
-        StateSignatureDataSource, SubmitDataSource,
-    },
-    endpoints, fs, sql,
-    update::update_loop,
-    ApiState, StorageState,
-};
-use crate::{
-    context::{SequencerContext, TaskList},
-    network,
-    persistence::{self, SequencerPersistence},
-    state::{update_state_storage_loop, BlockMerkleTree, FeeMerkleTree},
-};
 use anyhow::bail;
 use async_std::sync::{Arc, RwLock};
 use clap::Parser;
+use espresso_types::{traits::SequencerPersistence, BlockMerkleTree, FeeMerkleTree};
 use futures::{
     channel::oneshot,
     future::{BoxFuture, Future, FutureExt},
 };
+use hotshot_events_service::events::Error as EventStreamingError;
 use hotshot_query_service::{
     data_source::{ExtensibleDataSource, MetricsDataSource},
     status::{self, UpdateStatusData},
@@ -35,7 +22,20 @@ use tide_disco::{
 };
 use vbs::version::StaticVersionType;
 
-use hotshot_events_service::events::Error as EventStreamingError;
+use super::{
+    data_source::{
+        provider, CatchupDataSource, HotShotConfigDataSource, SequencerDataSource,
+        StateSignatureDataSource, SubmitDataSource,
+    },
+    endpoints, fs, sql,
+    update::update_loop,
+    ApiState, StorageState,
+};
+use crate::{
+    context::{SequencerContext, TaskList},
+    network, persistence,
+    state::update_state_storage_loop,
+};
 
 #[derive(Clone, Debug)]
 pub struct Options {

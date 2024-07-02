@@ -1,12 +1,13 @@
+use std::str::FromStr;
+
 use anyhow::bail;
 use clap::Parser;
+use espresso_types::{PrivKey, PubKey};
 use hotshot::{traits::implementations::derive_libp2p_peer_id, types::BLSPubKey};
 use hotshot_types::{
     light_client::{StateKeyPair, StateSignKey},
     traits::signature_key::SignatureKey,
 };
-use sequencer::{PrivKey, PubKey};
-use std::str::FromStr;
 
 #[derive(Clone, Debug)]
 enum PrivateKey {

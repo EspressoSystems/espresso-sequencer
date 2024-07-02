@@ -1328,6 +1328,7 @@ dependencies = [
  "committable",
  "dotenvy",
  "es-version",
+ "espresso-types",
  "ethers",
  "futures",
  "hotshot",
@@ -2891,6 +2892,57 @@ source = "git+https://github.com/espressosystems/espresso-systems-common?tag=0.4
 name = "espresso-systems-common"
 version = "0.4.1"
 source = "git+https://github.com/espressosystems/espresso-systems-common?tag=0.4.1#2e889e878866c2a5cce1daaab947f7c93d5811ae"
+
+[[package]]
+name = "espresso-types"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ark-serialize",
+ "async-compatibility-layer",
+ "async-once-cell",
+ "async-std",
+ "async-trait",
+ "base64-bytes",
+ "bincode",
+ "blake3",
+ "bytesize",
+ "clap",
+ "cld",
+ "committable",
+ "contract-bindings",
+ "derivative",
+ "derive_more",
+ "ethers",
+ "fluent-asserter",
+ "futures",
+ "hotshot",
+ "hotshot-orchestrator",
+ "hotshot-query-service",
+ "hotshot-testing",
+ "hotshot-types",
+ "itertools 0.12.1",
+ "jf-merkle-tree",
+ "jf-utils",
+ "jf-vid",
+ "num-traits",
+ "paste",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rand_distr",
+ "sequencer-utils",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "snafu 0.8.3",
+ "static_assertions",
+ "thiserror",
+ "time 0.3.36",
+ "tracing",
+ "trait-set",
+ "url",
+ "vbs",
+]
 
 [[package]]
 name = "etcetera"
@@ -8579,6 +8631,7 @@ dependencies = [
  "es-version",
  "escargot",
  "espresso-macros",
+ "espresso-types",
  "ethers",
  "ethers-contract-derive",
  "fluent-asserter",

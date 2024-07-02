@@ -14,9 +14,11 @@
 //! If this test is failing and you did not intend to change the consensus API, figure out what
 //! code changed caused the serialization change and revert it.
 
-use crate::{Leaf, NodeState, Payload, PubKey, SeqTypes, Transaction, ValidatedState};
+use std::path::Path;
+
 use committable::Committable;
 use es_version::SequencerVersion;
+use espresso_types::{Leaf, NodeState, PubKey, ValidatedState};
 use hotshot::traits::election::static_committee::GeneralStaticCommittee;
 use hotshot_types::{
     data::{
@@ -44,13 +46,15 @@ use hotshot_types::{
 use jf_vid::VidScheme;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
-use std::path::Path;
 use vbs::{version::Version, BinarySerializer};
 
 type Serializer = vbs::Serializer<SequencerVersion>;
 
 #[async_std::test]
+#[cfg(feature = "testing")]
 async fn test_message_compat() {
+    use espresso_types::{Payload, SeqTypes, Transaction};
+
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();
     let membership = GeneralStaticCommittee::new(&[], vec![sender.stake_table_entry(1)], vec![], 0);
@@ -64,7 +68,7 @@ async fn test_message_compat() {
     };
     let leaf = Leaf::genesis(&ValidatedState::default(), &NodeState::mock()).await;
     let block_header = leaf.block_header().clone();
-    let transaction = Transaction::new(1.into(), vec![1, 2, 3]);
+    let transaction = Transaction::new(1_u32.into(), vec![1, 2, 3]);
     let (payload, metadata) = Payload::from_transactions(
         [transaction.clone()],
         &ValidatedState::default(),
@@ -88,7 +92,7 @@ async fn test_message_compat() {
         view: ViewNumber::genesis(),
     };
     let da_data = DaData {
-        payload_commit: block_header.payload_commitment,
+        payload_commit: block_header.payload_commitment(),
     };
 
     let consensus_messages = [

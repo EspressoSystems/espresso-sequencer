@@ -1,8 +1,10 @@
-use super::data_source::{CatchupDataSource, Provider, SequencerDataSource};
-use crate::{persistence::fs::Options, SeqTypes};
+use std::path::Path;
+
 use async_trait::async_trait;
 use hotshot_query_service::data_source::FileSystemDataSource;
-use std::path::Path;
+
+use super::data_source::{CatchupDataSource, Provider, SequencerDataSource};
+use crate::{persistence::fs::Options, SeqTypes};
 
 pub type DataSource = FileSystemDataSource<SeqTypes, Provider>;
 
@@ -28,9 +30,10 @@ impl CatchupDataSource for DataSource {}
 
 #[cfg(test)]
 mod impl_testable_data_source {
+    use tempfile::TempDir;
+
     use super::*;
     use crate::api::{self, data_source::testing::TestableSequencerDataSource};
-    use tempfile::TempDir;
 
     #[async_trait]
     impl TestableSequencerDataSource for DataSource {
@@ -52,9 +55,7 @@ mod impl_testable_data_source {
 
 #[cfg(test)]
 mod generic_tests {
-    use super::super::api_tests;
-    use super::DataSource;
-
+    use super::{super::api_tests, DataSource};
     // For some reason this is the only way to import the macro defined in another module of this
     // crate.
     use crate::*;
