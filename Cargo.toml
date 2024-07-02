@@ -63,7 +63,6 @@ hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" 
 # Temporary, used to pull in the mock auction results provider
 hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.60" }
 
-
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
   "runtime-async-std",
