@@ -486,7 +486,7 @@
 <span class="kw">use </span>derive_more::Display;
 <span class="kw">use </span>hotshot_types::traits::EncodeBytes;
 <span class="kw">use </span>serde::{de, Deserialize, Deserializer, Serialize, Serializer};
-<span class="kw">use </span>std::{ops::Range, sync::Arc};
+<span class="kw">use </span>std::{collections::HashSet, ops::Range, sync::Arc};
 <span class="kw">use </span>thiserror::Error;
 
 <span class="doccomment">/// Byte lengths for the different items that could appear in a namespace table.
@@ -686,8 +686,8 @@
     ///
     /// # Checks
     /// 1. Byte length must hold a whole number of entries.
-    /// 2. All namespace IDs and offsets must increase monotonically. Offsets
-    ///    must be nonzero.
+    /// 2. All offsets must increase monotonically. Offsets
+    ///    must be nonzero. Namespace IDs must be unique.
     /// 3. Header consistent with byte length. (Obsolete after
     ///    &lt;https://github.com/EspressoSystems/espresso-sequencer/issues/1604&gt;.)
     /// 4. Final offset must equal `payload_byte_len`. (Obsolete after
@@ -791,25 +791,24 @@
             <span class="kw">return </span><span class="prelude-val">Err</span>(InvalidHeader);
         }
 
-        <span class="comment">// Namespace IDs and offsets must increase monotonically. Offsets must
-        // be nonzero.
+        <span class="comment">// Offsets must increase monotonically. Offsets must
+        // be nonzero. Namespace IDs must be unique
         </span>{
-            <span class="kw">let </span>(<span class="kw-2">mut </span>prev_ns_id, <span class="kw-2">mut </span>prev_offset) = (<span class="prelude-val">None</span>, <span class="number">0</span>);
+            <span class="kw">let </span><span class="kw-2">mut </span>prev_offset = <span class="number">0</span>;
+            <span class="kw">let </span><span class="kw-2">mut </span>repeat_ns_ids = HashSet::&lt;NamespaceId&gt;::new();
             <span class="kw">for </span>(ns_id, offset) <span class="kw">in </span><span class="self">self</span>.iter().map(|i| {
                 (
                     <span class="self">self</span>.read_ns_id_unchecked(<span class="kw-2">&amp;</span>i),
                     <span class="self">self</span>.read_ns_offset_unchecked(<span class="kw-2">&amp;</span>i),
                 )
             }) {
-                <span class="kw">if let </span><span class="prelude-val">Some</span>(prev_ns_id) = prev_ns_id {
-                    <span class="kw">if </span>ns_id &lt;= prev_ns_id {
-                        <span class="kw">return </span><span class="prelude-val">Err</span>(NonIncreasingEntries);
-                    }
+                <span class="kw">if </span>!repeat_ns_ids.insert(ns_id) {
+                    <span class="kw">return </span><span class="prelude-val">Err</span>(DuplicateNamespaceId);
                 }
                 <span class="kw">if </span>offset &lt;= prev_offset {
                     <span class="kw">return </span><span class="prelude-val">Err</span>(NonIncreasingEntries);
                 }
-                (prev_ns_id, prev_offset) = (<span class="prelude-val">Some</span>(ns_id), offset);
+                prev_offset = offset;
             }
         }
 
@@ -840,6 +839,7 @@
 </span><span class="kw">pub enum </span>NsTableValidationError {
     InvalidByteLen,
     NonIncreasingEntries,
+    DuplicateNamespaceId,
     InvalidHeader, <span class="comment">// TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
     </span>InvalidFinalOffset, <span class="comment">// TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
     </span>ExpectNonemptyNsTable,
