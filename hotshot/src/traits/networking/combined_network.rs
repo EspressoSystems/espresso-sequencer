@@ -141,8 +141,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
             // If the primary failed more than `COMBINED_NETWORK_MIN_PRIMARY_FAILURES` times,
             // we don't want to delay this message, and from now on we consider the primary as down
             warn!(
-                "Primary failed more than {} times and is considered down now",
-                COMBINED_NETWORK_MIN_PRIMARY_FAILURES
+                "View progression is slower than normally, stop delaying messages on the secondary"
             );
             self.primary_down.store(true, Ordering::Relaxed);
             primary_failed = true;
@@ -199,6 +198,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
                 // The task hasn't been cancelled, the primary probably failed.
                 // Increment the primary fail counter and send the message.
                 debug!("Sending on secondary after delay, message possibly has not reached recipient on primary");
+                primary_fail_counter.fetch_add(1, Ordering::Relaxed);
                 secondary_future.await
             });
             Ok(())
