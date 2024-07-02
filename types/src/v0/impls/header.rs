@@ -631,6 +631,7 @@ impl ExplorerHeader<SeqTypes> for Header {
     type ProposerId = FeeAccount;
     type NamespaceId = NamespaceId;
 
+    // TODO what are these expected values w/ multiple Fees
     fn proposer_id(&self) -> Self::ProposerId {
         self.fee_info().account()
     }
