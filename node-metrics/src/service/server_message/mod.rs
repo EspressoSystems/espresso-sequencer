@@ -30,3 +30,17 @@ pub enum ServerMessage {
     /// for the snapshot of the current histogram information.
     HistogramSnapshot(ExplorerHistograms),
 }
+
+impl PartialEq for ServerMessage {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::YouAre(l0), Self::YouAre(r0)) => l0 == r0,
+            (Self::LatestBlock(l0), Self::LatestBlock(r0)) => l0 == r0,
+            (Self::LatestNodeIdentity, Self::LatestNodeIdentity) => true,
+            (Self::BlocksSnapshot(l0), Self::BlocksSnapshot(r0)) => l0 == r0,
+            (Self::NodeIdentitySnapshot, Self::NodeIdentitySnapshot) => true,
+            (Self::HistogramSnapshot(_), Self::HistogramSnapshot(_)) => false,
+            _ => false,
+        }
+    }
+}

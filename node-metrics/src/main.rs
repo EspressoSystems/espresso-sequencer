@@ -48,18 +48,4 @@ async fn main() {
     // we want to keep track of and to be able to relay at a moment's notice.
     // The second is a state of the connected clients.  This state should be
     // able to be read from and written to indirectly by the clients.
-
-    let state = Arc::new(RwLock::new(State {}));
-
-    let mut app = App::<_, node_validator::v0::Error>::with_state(state);
-    let node_validator_api_v0 = node_validator::v0::define_api().expect("api to be defined");
-    app.register_module("node-validator", node_validator_api_v0)
-        .expect("register module");
-
-    // Serve the app
-
-    let url = format!("0.0.0.0:9000");
-    app.serve(&url, SERVICE_VER_0_1)
-        .await
-        .expect("app to be served");
 }
