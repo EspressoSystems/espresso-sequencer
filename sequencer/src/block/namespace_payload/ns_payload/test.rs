@@ -1,11 +1,12 @@
 use super::NsPayloadOwned;
 use crate::{
-    block::namespace_payload::NsPayloadBuilder, block::uint_bytes::usize_to_bytes, NamespaceId,
+    block::{namespace_payload::NsPayloadBuilder, uint_bytes::usize_to_bytes},
+    NamespaceId,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
 #[test]
-fn short_ns_payload() {
+fn ns_payload_len() {
     setup_logging();
     setup_backtrace();
     let ns_id = NamespaceId::from(69); // dummy
@@ -15,27 +16,41 @@ fn short_ns_payload() {
         let ns_payload = ns_payload_with_body(&[10, 20, 30], 30);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 3);
-        assert_eq!(txs[0].payload().len(), 10);
-        assert_eq!(txs[1].payload().len(), 10);
-        assert_eq!(txs[2].payload().len(), 10);
+        assert_eq!(txs[0].payload(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(txs[1].payload(), [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+        assert_eq!(txs[2].payload(), [20, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
     }
 
-    // tx table offsets out of bounds for payload
+    // large payload has wasted space
+    {
+        let ns_payload = ns_payload_with_body(&[10, 20, 30], 40);
+        let txs = ns_payload.export_all_txs(&ns_id);
+        assert_eq!(txs.len(), 3);
+        assert_eq!(txs[0].payload(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(txs[1].payload(), [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+        assert_eq!(txs[2].payload(), [20, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
+
+        // inaccessible payload bytes
+        assert_eq!(ns_payload.0.len(), 56);
+        assert_eq!(ns_payload.0[46..], [30, 31, 32, 33, 34, 35, 36, 37, 38, 39]);
+    }
+
+    // small payload truncates txs
     {
         // final tx partly truncated by short payload
         let ns_payload = ns_payload_with_body(&[10, 20, 30], 25);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 3);
-        assert_eq!(txs[0].payload().len(), 10);
-        assert_eq!(txs[1].payload().len(), 10);
-        assert_eq!(txs[2].payload().len(), 5);
+        assert_eq!(txs[0].payload(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(txs[1].payload(), [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+        assert_eq!(txs[2].payload(), [20, 21, 22, 23, 24]);
 
         // final tx totally truncated, next-to-final partly truncated
         let ns_payload = ns_payload_with_body(&[10, 20, 30], 15);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 3);
-        assert_eq!(txs[0].payload().len(), 10);
-        assert_eq!(txs[1].payload().len(), 5);
+        assert_eq!(txs[0].payload(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(txs[1].payload(), [10, 11, 12, 13, 14]);
         assert_eq!(txs[2].payload().len(), 0);
 
         // all txs totally truncated
@@ -93,7 +108,11 @@ fn tx_table(entries: &[usize]) -> Vec<u8> {
 
 fn ns_payload_with_body(entries: &[usize], body_byte_len: usize) -> NsPayloadOwned {
     let mut bytes = tx_table(entries);
-    bytes.extend(vec![42; body_byte_len]);
+    bytes.append(
+        &mut (0..body_byte_len)
+            .map(|i| (i % u8::MAX as usize) as u8)
+            .collect(),
+    );
     NsPayloadOwned(bytes)
 }
 
