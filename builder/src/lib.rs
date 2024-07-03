@@ -15,7 +15,7 @@ use async_std::{
     task::{spawn, JoinHandle},
 };
 use espresso_types::{
-    traits::{PersistenceOptions, SequencerPersistence},
+    v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
     SeqTypes,
 };
 use ethers::{

@@ -3,7 +3,10 @@ use std::{num::NonZeroUsize, time::Duration};
 use anyhow::bail;
 use async_trait::async_trait;
 use committable::Commitment;
-use espresso_types::{ChainConfig, PersistenceOptions, PubKey, SequencerPersistence, Transaction};
+use espresso_types::{
+    v0::traits::{PersistenceOptions, SequencerPersistence},
+    ChainConfig, PubKey, Transaction,
+};
 use ethers::prelude::Address;
 use futures::future::Future;
 use hotshot_query_service::{

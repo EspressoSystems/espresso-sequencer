@@ -14,9 +14,7 @@ use anyhow::Context;
 use async_std::sync::RwLock;
 use catchup::StatePeers;
 use context::SequencerContext;
-use espresso_types::{
-    BackoffParams, L1Client, NodeState, PersistenceOptions, PubKey, SeqTypes, ValidatedState,
-};
+use espresso_types::{BackoffParams, L1Client, NodeState, PubKey, SeqTypes, ValidatedState};
 use ethers::types::U256;
 #[cfg(feature = "libp2p")]
 use futures::FutureExt;
@@ -35,7 +33,7 @@ use std::time::Duration;
 use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc};
 
 use derivative::Derivative;
-use espresso_types::SequencerPersistence;
+use espresso_types::v0::traits::{PersistenceOptions, SequencerPersistence};
 pub use genesis::Genesis;
 #[cfg(feature = "libp2p")]
 use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
@@ -360,8 +358,10 @@ pub mod testing {
     use api::test_helpers::TestNetworkUpgrades;
     use committable::Committable;
     use espresso_types::{
-        eth_signature_key::EthKeyPair, mock::MockStateCatchup, ChainConfig, Event, FeeAccount,
-        PubKey, SeqTypes, StateCatchup, Transaction, Upgrade,
+        eth_signature_key::EthKeyPair,
+        mock::MockStateCatchup,
+        v0::traits::{PersistenceOptions, StateCatchup},
+        ChainConfig, Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade,
     };
     use futures::{
         future::join_all,

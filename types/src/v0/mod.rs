@@ -9,12 +9,11 @@ use serde::{Deserialize, Serialize};
 mod error;
 mod header;
 mod impls;
-mod traits;
+pub mod traits;
 mod utils;
 pub use error::*;
 pub use header::Header;
 pub use impls::{mock, validate_proposal};
-pub use traits::*;
 pub use utils::*;
 use vbs::version::StaticVersion;
 

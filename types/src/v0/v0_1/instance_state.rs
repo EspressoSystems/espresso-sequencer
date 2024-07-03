@@ -5,9 +5,8 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
+use crate::{v0::traits::StateCatchup, ChainConfig, GenesisHeader, L1BlockInfo, ValidatedState};
 use vbs::version::Version;
-
-use crate::{ChainConfig, GenesisHeader, L1BlockInfo, StateCatchup, ValidatedState};
 
 use super::l1::L1Client;
 

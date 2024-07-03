@@ -4,7 +4,10 @@
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
-use espresso_types::{Leaf, NetworkConfig, PersistenceOptions, SequencerPersistence};
+use espresso_types::{
+    v0::traits::{PersistenceOptions, SequencerPersistence},
+    Leaf, NetworkConfig,
+};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, VidDisperseShare},

@@ -1,7 +1,7 @@
 //! Update loop for query API state.
 
 use async_std::sync::{Arc, RwLock};
-use espresso_types::{PubKey, SequencerPersistence};
+use espresso_types::{v0::traits::SequencerPersistence, PubKey};
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;
 use hotshot_query_service::data_source::{UpdateDataSource, VersionedDataSource};

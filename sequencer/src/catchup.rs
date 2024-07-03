@@ -5,8 +5,8 @@ use async_std::sync::RwLock;
 use async_trait::async_trait;
 use committable::Commitment;
 use espresso_types::{
+    v0::traits::{PersistenceOptions, StateCatchup},
     AccountQueryData, BackoffParams, BlockMerkleTree, ChainConfig, FeeAccount, FeeMerkleCommitment,
-    PersistenceOptions, StateCatchup,
 };
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};

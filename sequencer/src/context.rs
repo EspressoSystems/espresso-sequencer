@@ -6,7 +6,9 @@ use async_std::{
     task::{spawn, JoinHandle},
 };
 use derivative::Derivative;
-use espresso_types::{NodeState, PubKey, SequencerPersistence, Transaction, ValidatedState};
+use espresso_types::{
+    v0::traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
+};
 use futures::{
     future::{join_all, Future},
     stream::{Stream, StreamExt},

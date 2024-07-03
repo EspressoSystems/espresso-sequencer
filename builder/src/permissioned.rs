@@ -23,8 +23,9 @@ use async_std::{
     task::{spawn, JoinHandle},
 };
 use espresso_types::{
-    eth_signature_key::EthKeyPair, traits::SequencerPersistence, L1Client, NodeState, Payload,
-    PubKey, SeqTypes, ValidatedState,
+    eth_signature_key::EthKeyPair,
+    v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
+    L1Client, NodeState, Payload, PubKey, SeqTypes, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
