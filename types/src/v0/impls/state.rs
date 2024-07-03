@@ -212,7 +212,7 @@ pub fn validate_proposal(
     // TODO this should be updated to `base_fee * bundle_size` when we have
     // VID per bundle or namespace.
     let Some(amount) = proposal.fee_info().amount() else {
-        return Err(ProposalValidationError::TotalFeeAmountOutOfRange);
+        return Err(ProposalValidationError::SomeFeeAmountOutOfRange);
     };
 
     if amount < expected_chain_config.base_fee * block_size {

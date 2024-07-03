@@ -85,8 +85,8 @@ pub enum ProposalValidationError {
     },
     #[error("Invalid namespace table: {err}")]
     InvalidNsTable { err: NsTableValidationError },
-    #[error("Total fee amount out of range")]
-    TotalFeeAmountOutOfRange,
+    #[error("Some fee amount or their sum total out of range")]
+    SomeFeeAmountOutOfRange,
 }
 
 /// Possible charge fee failures
