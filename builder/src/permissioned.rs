@@ -543,10 +543,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
 mod test {
     use std::time::Duration;
 
-    use async_compatibility_layer::{
-        art::{async_sleep, async_spawn},
-        logging::{setup_backtrace, setup_logging},
-    };
+    use async_compatibility_layer::art::{async_sleep, async_spawn};
     use async_lock::RwLock;
     use async_std::task;
     use es_version::SequencerVersion;
@@ -575,6 +572,7 @@ mod test {
         },
     };
     use sequencer::persistence::no_storage::{self, NoStorage};
+    use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
 
     use super::*;
@@ -588,8 +586,7 @@ mod test {
 
     #[async_std::test]
     async fn test_permissioned_builder() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let ver = SequencerVersion::instance();
 

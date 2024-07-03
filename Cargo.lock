@@ -1322,6 +1322,7 @@ dependencies = [
  "portpicker",
  "rand 0.8.5",
  "sequencer",
+ "sequencer-utils",
  "serde",
  "snafu 0.8.4",
  "surf",
@@ -6062,6 +6063,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "log-panics"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68f9dd8546191c1850ecf67d22f5ff00a935b890d0e84713159a55495cc2ac5f"
+dependencies = [
+ "backtrace",
+ "log",
+]
+
+[[package]]
 name = "lru"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8475,6 +8486,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ark-serialize",
+ "async-compatibility-layer",
  "async-std",
  "clap",
  "committable",
@@ -8483,6 +8495,7 @@ dependencies = [
  "ethers",
  "futures",
  "hotshot-contract-adapter",
+ "log-panics",
  "portpicker",
  "serde",
  "serde_json",

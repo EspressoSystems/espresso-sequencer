@@ -39,6 +39,7 @@ libp2p = { workspace = true }
 portpicker = { workspace = true }
 rand = "0.8.5"
 sequencer = { path = "../sequencer", features = ["testing"] }
+sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 snafu = { workspace = true }
 surf = "2.3.1"
