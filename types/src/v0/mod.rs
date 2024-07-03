@@ -12,6 +12,7 @@ mod impls;
 
 pub use header::Header;
 pub use impls::{mock, validate_proposal};
+use vbs::version::StaticVersion;
 
 // This is the single source of truth for minor versions supported by this major version.
 //
@@ -132,8 +133,13 @@ impl NodeType for SeqTypes {
     type ValidatedState = ValidatedState;
     type Membership = GeneralStaticCommittee<Self, PubKey>;
     type BuilderSignatureKey = FeeAccount;
+    type Base = StaticVersion<0, 1>;
+    type Upgrade = StaticVersion<0, 2>;
+    const UPGRADE_HASH: [u8; 32] = [
+        1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+        0, 0,
+    ];
 }
-
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
 pub type Event = hotshot::types::Event<SeqTypes>;
 

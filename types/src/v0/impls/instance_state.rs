@@ -1,9 +1,11 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use hotshot_types::{constants::Base, traits::states::InstanceState};
+use hotshot_types::traits::{node_implementation::NodeType, states::InstanceState};
 use vbs::version::{StaticVersionType, Version};
 
-use crate::{traits::StateCatchup, ChainConfig, L1Client, NodeState, Upgrade, ValidatedState};
+use crate::{
+    traits::StateCatchup, ChainConfig, L1Client, NodeState, SeqTypes, Upgrade, ValidatedState,
+};
 
 impl NodeState {
     pub fn new(
@@ -24,7 +26,7 @@ impl NodeState {
             },
             l1_genesis: None,
             upgrades: Default::default(),
-            current_version: Base::VERSION,
+            current_version: <SeqTypes as NodeType>::Base::version(),
         }
     }
 

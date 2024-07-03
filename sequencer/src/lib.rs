@@ -15,12 +15,14 @@ use async_std::sync::RwLock;
 use catchup::StatePeers;
 use context::SequencerContext;
 use espresso_types::{
-    traits::PersistenceOptions, v0_1::BackoffParams, L1Client, NodeState, SeqTypes, ValidatedState,
+    traits::PersistenceOptions, v0_1::BackoffParams, L1Client, NodeState, PubKey, SeqTypes,
+    ValidatedState,
 };
 use ethers::types::U256;
 #[cfg(feature = "libp2p")]
 use futures::FutureExt;
 use genesis::L1Finalized;
+use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
 use network::libp2p::split_off_peer_id;
@@ -44,7 +46,6 @@ use hotshot::{
         WrappedSignatureKey,
     },
     types::SignatureKey,
-    Networks,
 };
 use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
@@ -78,20 +79,22 @@ pub mod network;
     Eq(bound = ""),
     Hash(bound = "")
 )]
-pub struct Node<N: network::Type, P: SequencerPersistence>(PhantomData<fn(&N, &P)>);
+pub struct Node<N: ConnectedNetwork<PubKey>, P: SequencerPersistence>(PhantomData<fn(&N, &P)>);
 
 // Using derivative to derive Clone triggers the clippy lint
 // https://rust-lang.github.io/rust-clippy/master/index.html#/incorrect_clone_impl_on_copy_type
-impl<N: network::Type, P: SequencerPersistence> Clone for Node<N, P> {
+impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> Clone for Node<N, P> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<N: network::Type, P: SequencerPersistence> NodeImplementation<SeqTypes> for Node<N, P> {
-    type QuorumNetwork = N::QuorumChannel;
-    type DaNetwork = N::DAChannel;
+impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> NodeImplementation<SeqTypes>
+    for Node<N, P>
+{
+    type Network = N;
     type Storage = Arc<RwLock<P>>;
+    type AuctionResultsProvider = TestAuctionResultsProvider;
 }
 
 #[derive(Clone, Debug)]
@@ -150,6 +153,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
         advertise_address: Some(network_params.libp2p_advertise_address),
+        builder_address: None,
         network_config_file: None,
     };
     let orchestrator_client = OrchestratorClient::new(validator_args);
@@ -253,7 +257,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
-    let (da_network, quorum_network) = {
+    let network = {
         let p2p_network = Libp2pNetwork::from_config::<SeqTypes>(
             config.clone(),
             network_params.libp2p_bind_address,
@@ -277,28 +281,20 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         };
 
         // Combine the CDN and P2P networks
-        let network = Arc::from(CombinedNetworks::new(
+        Arc::from(CombinedNetworks::new(
             cdn_network,
             p2p_network,
             Duration::from_secs(1),
-        ));
-        (Arc::clone(&network), network)
+        ))
     };
 
     // Wait for the CDN network to be ready if we're not using the P2P network
     #[cfg(not(feature = "libp2p"))]
-    let (da_network, quorum_network) = {
+    let network = {
         tracing::warn!("Waiting for the CDN connection to be initialized");
         cdn_network.wait_for_ready().await;
         tracing::warn!("CDN connection initialized");
-        (Arc::from(cdn_network.clone()), Arc::from(cdn_network))
-    };
-
-    // Convert to the sequencer-compatible type
-    let networks = Networks {
-        da_network,
-        quorum_network,
-        _pd: Default::default(),
+        Arc::from(cdn_network)
     };
 
     let mut genesis_state = ValidatedState {
@@ -341,7 +337,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         config.config,
         instance_state,
         persistence,
-        networks,
+        network,
         Some(network_params.state_relay_server_url),
         metrics,
         genesis.stake_table.capacity,
@@ -360,7 +356,7 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use std::time::Duration;
+    use std::{collections::HashMap, time::Duration};
 
     use api::test_helpers::TestNetworkUpgrades;
     use committable::Committable;
@@ -381,7 +377,7 @@ pub mod testing {
     };
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_testing::block_builder::{
-        BuilderTask, SimpleBuilderConfig, SimpleBuilderImplementation, TestBuilderImplementation,
+        BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
     use hotshot_types::{
         event::LeafInfo,
@@ -400,17 +396,23 @@ pub mod testing {
     pub async fn run_test_builder<const NUM_NODES: usize>(
         port: Option<u16>,
     ) -> (Box<dyn BuilderTask<SeqTypes>>, Url) {
-        let builder_config = if let Some(port) = port {
-            SimpleBuilderConfig { port }
-        } else {
-            SimpleBuilderConfig::default()
-        };
-        <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
-            NUM_NODES,
-            builder_config,
-            Default::default(),
+        let port = port.unwrap_or_else(|| pick_unused_port().expect("No ports available"));
+
+        // This should never fail.
+        let url: Url = format!("http://localhost:{port}")
+            .parse()
+            .expect("Failed to parse builder URL");
+
+        (
+            <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
+                NUM_NODES,
+                url.clone(),
+                (),
+                HashMap::new(),
+            )
+            .await,
+            url,
         )
-        .await
     }
 
     pub struct TestConfigBuilder<const NUM_NODES: usize> {
@@ -418,7 +420,7 @@ pub mod testing {
         priv_keys: Vec<BLSPrivKey>,
         state_key_pairs: Vec<StateKeyPair>,
         master_map: Arc<MasterMap<PubKey>>,
-        url: Url,
+        l1_url: Url,
         state_relay_url: Option<Url>,
         builder_port: Option<u16>,
         upgrades: Option<TestNetworkUpgrades>,
@@ -435,8 +437,8 @@ pub mod testing {
             self
         }
 
-        pub fn l1_url(mut self, l1: Url) -> Self {
-            self.url = l1;
+        pub fn l1_url(mut self, l1_url: Url) -> Self {
+            self.l1_url = l1_url;
             self
         }
 
@@ -451,6 +453,10 @@ pub mod testing {
                 self.config.stop_proposing_view = upgrades.stop_proposing_view;
                 self.config.start_voting_view = upgrades.start_voting_view;
                 self.config.stop_voting_view = upgrades.stop_voting_view;
+                self.config.start_proposing_time = 0;
+                self.config.stop_proposing_time = u64::MAX;
+                self.config.start_voting_time = 0;
+                self.config.stop_voting_time = u64::MAX;
             }
 
             TestConfig {
@@ -458,7 +464,7 @@ pub mod testing {
                 priv_keys: self.priv_keys,
                 state_key_pairs: self.state_key_pairs,
                 master_map: self.master_map,
-                url: self.url,
+                l1_url: self.l1_url,
                 state_relay_url: self.state_relay_url,
                 builder_port: self.builder_port,
                 upgrades: self.upgrades,
@@ -521,6 +527,10 @@ pub mod testing {
                 stop_proposing_view: 0,
                 start_voting_view: 0,
                 stop_voting_view: 0,
+                start_proposing_time: 0,
+                start_voting_time: 0,
+                stop_proposing_time: 0,
+                stop_voting_time: 0,
             };
 
             Self {
@@ -528,7 +538,7 @@ pub mod testing {
                 priv_keys,
                 state_key_pairs,
                 master_map,
-                url: "http://localhost:8545".parse().unwrap(),
+                l1_url: "http://localhost:8545".parse().unwrap(),
                 state_relay_url: None,
                 builder_port: None,
                 upgrades: None,
@@ -542,7 +552,7 @@ pub mod testing {
         priv_keys: Vec<BLSPrivKey>,
         state_key_pairs: Vec<StateKeyPair>,
         master_map: Arc<MasterMap<PubKey>>,
-        url: Url,
+        l1_url: Url,
         state_relay_url: Option<Url>,
         builder_port: Option<u16>,
         upgrades: Option<TestNetworkUpgrades>,
@@ -563,6 +573,10 @@ pub mod testing {
 
         pub fn builder_port(&self) -> Option<u16> {
             self.builder_port
+        }
+
+        pub fn l1_url(&self) -> Url {
+            self.l1_url.clone()
         }
 
         pub fn upgrades(&self) -> Option<TestNetworkUpgrades> {
@@ -636,11 +650,6 @@ pub mod testing {
                 &self.master_map,
                 None,
             ));
-            let networks = Networks {
-                da_network: network.clone(),
-                quorum_network: network,
-                _pd: Default::default(),
-            };
 
             // Make sure the builder account is funded.
             let builder_account = Self::builder_key().fee_account();
@@ -649,7 +658,7 @@ pub mod testing {
             let node_state = NodeState::new(
                 i as u64,
                 ChainConfig::default(),
-                L1Client::new(self.url.clone(), 1000),
+                L1Client::new(self.l1_url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
             )
             .with_genesis(state)
@@ -665,7 +674,7 @@ pub mod testing {
                 config,
                 node_state,
                 persistence_opt.create().await.unwrap(),
-                networks,
+                network,
                 self.state_relay_url.clone(),
                 metrics,
                 stake_table_capacity,

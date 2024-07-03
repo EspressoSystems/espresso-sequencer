@@ -248,7 +248,6 @@ mod test {
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
     use hotshot_types::{
-        constants::Base,
         signature_key::BLSPubKey,
         traits::{
             block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
@@ -318,9 +317,10 @@ mod test {
         let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
-        let builder_client = Client::<hotshot_builder_api::builder::Error, Base>::new(
-            hotshot_builder_api_url.clone(),
-        );
+        let builder_client = Client::<
+            hotshot_builder_api::builder::Error,
+            <SeqTypes as NodeType>::Base,
+        >::new(hotshot_builder_api_url.clone());
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
 
         let seed = [207_u8; 32];

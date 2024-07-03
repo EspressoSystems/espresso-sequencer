@@ -5,7 +5,7 @@
 //!
 //! See [`NsTable`] for a full specification of the binary format of a namespace
 //! table.
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::traits::EncodeBytes;
@@ -105,8 +105,8 @@ impl NsTable {
     ///
     /// # Checks
     /// 1. Byte length must hold a whole number of entries.
-    /// 2. All namespace IDs and offsets must increase monotonically. Offsets
-    ///    must be nonzero.
+    /// 2. All offsets must increase monotonically. Offsets
+    ///    must be nonzero. Namespace IDs must be unique.
     /// 3. Header consistent with byte length. (Obsolete after
     ///    <https://github.com/EspressoSystems/espresso-sequencer/issues/1604>.)
     /// 4. Final offset must equal `payload_byte_len`. (Obsolete after
@@ -210,25 +210,24 @@ impl NsTable {
             return Err(InvalidHeader);
         }
 
-        // Namespace IDs and offsets must increase monotonically. Offsets must
-        // be nonzero.
+        // Offsets must increase monotonically. Offsets must
+        // be nonzero. Namespace IDs must be unique
         {
-            let (mut prev_ns_id, mut prev_offset) = (None, 0);
+            let mut prev_offset = 0;
+            let mut repeat_ns_ids = HashSet::<NamespaceId>::new();
             for (ns_id, offset) in self.iter().map(|i| {
                 (
                     self.read_ns_id_unchecked(&i),
                     self.read_ns_offset_unchecked(&i),
                 )
             }) {
-                if let Some(prev_ns_id) = prev_ns_id {
-                    if ns_id <= prev_ns_id {
-                        return Err(NonIncreasingEntries);
-                    }
+                if !repeat_ns_ids.insert(ns_id) {
+                    return Err(DuplicateNamespaceId);
                 }
                 if offset <= prev_offset {
                     return Err(NonIncreasingEntries);
                 }
-                (prev_ns_id, prev_offset) = (Some(ns_id), offset);
+                prev_offset = offset;
             }
         }
 

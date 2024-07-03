@@ -590,8 +590,9 @@ mod generic_tests {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn test_config_migrations_add_builder_urls() {

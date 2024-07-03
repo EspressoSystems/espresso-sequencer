@@ -16,21 +16,22 @@ use futures::{
 use hotshot::{
     traits::election::static_committee::GeneralStaticCommittee,
     types::{Event, SystemContextHandle},
-    Memberships, Networks, SystemContext,
+    Memberships, SystemContext,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
+use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
-    traits::{election::Membership, metrics::Metrics},
+    traits::{election::Membership, metrics::Metrics, network::ConnectedNetwork},
     HotShotConfig,
 };
 use url::Url;
 use vbs::version::StaticVersionType;
 
-use crate::{network, state_signature::StateSigner, static_stake_table_commitment, Node, SeqTypes};
+use crate::{state_signature::StateSigner, static_stake_table_commitment, Node, SeqTypes};
 /// The consensus handle
 pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>>;
 
@@ -38,7 +39,7 @@ pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>>;
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct SequencerContext<
-    N: network::Type,
+    N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
     Ver: StaticVersionType + 'static,
 > {
@@ -64,7 +65,7 @@ pub struct SequencerContext<
     node_state: NodeState,
 }
 
-impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
+impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType + 'static>
     SequencerContext<N, P, Ver>
 {
     #[tracing::instrument(skip_all, fields(node_id = instance_state.node_id))]
@@ -73,7 +74,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
         config: HotShotConfig<PubKey>,
         instance_state: NodeState,
         persistence: P,
-        networks: Networks<SeqTypes, Node<N, P>>,
+        network: Arc<N>,
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
         stake_table_capacity: u64,
@@ -132,10 +133,11 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
             instance_state.node_id,
             config,
             memberships,
-            networks,
+            network,
             initializer,
             ConsensusMetricsValue::new(metrics),
             persistence.clone(),
+            TestAuctionResultsProvider::default(),
         )
         .await?
         .0;
@@ -285,7 +287,7 @@ impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static
     }
 }
 
-impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static> Drop
+impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType + 'static> Drop
     for SequencerContext<N, P, Ver>
 {
     fn drop(&mut self) {

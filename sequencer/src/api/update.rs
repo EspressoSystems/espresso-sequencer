@@ -1,20 +1,21 @@
 //! Update loop for query API state.
 
 use async_std::sync::{Arc, RwLock};
-use espresso_types::traits::SequencerPersistence;
+use espresso_types::{traits::SequencerPersistence, PubKey};
 use futures::stream::{Stream, StreamExt};
 use hotshot::types::Event;
 use hotshot_query_service::data_source::{UpdateDataSource, VersionedDataSource};
+use hotshot_types::traits::network::ConnectedNetwork;
 use vbs::version::StaticVersionType;
 
 use super::{data_source::SequencerDataSource, StorageState};
-use crate::{network, SeqTypes};
+use crate::SeqTypes;
 
 pub(super) async fn update_loop<N, P, D, Ver: StaticVersionType>(
     state: Arc<RwLock<StorageState<N, P, D, Ver>>>,
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
 ) where
-    N: network::Type,
+    N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
     D: SequencerDataSource + Send + Sync,
 {
@@ -42,7 +43,7 @@ async fn update_state<N, P, D, Ver: StaticVersionType>(
     event: &Event<SeqTypes>,
 ) -> anyhow::Result<()>
 where
-    N: network::Type,
+    N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
     D: SequencerDataSource + Send + Sync,
 {

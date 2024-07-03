@@ -17,8 +17,8 @@ use hotshot_query_service::{
     status::StatusDataSource,
 };
 use hotshot_types::{
-    data::ViewNumber, light_client::StateSignatureRequestBody, ExecutionType, HotShotConfig,
-    PeerConfig, ValidatorConfig,
+    data::ViewNumber, light_client::StateSignatureRequestBody, traits::network::ConnectedNetwork,
+    ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use serde::Serialize;
 use tide_disco::Url;
@@ -31,7 +31,6 @@ use super::{
     sql, AccountQueryData, BlocksFrontier,
 };
 use crate::{
-    network,
     persistence::{self},
     SeqTypes,
 };
@@ -93,7 +92,7 @@ pub fn provider<Ver: StaticVersionType + 'static>(
     provider
 }
 
-pub(crate) trait SubmitDataSource<N: network::Type, P: SequencerPersistence> {
+pub(crate) trait SubmitDataSource<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> {
     fn submit(&self, tx: Transaction) -> impl Send + Future<Output = anyhow::Result<()>>;
 }
 
@@ -102,7 +101,7 @@ pub(crate) trait HotShotConfigDataSource {
 }
 
 #[async_trait]
-pub(crate) trait StateSignatureDataSource<N: network::Type> {
+pub(crate) trait StateSignatureDataSource<N: ConnectedNetwork<PubKey>> {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody>;
 }
 
@@ -225,6 +224,10 @@ pub struct PublicHotShotConfig {
     pub stop_proposing_view: u64,
     pub start_voting_view: u64,
     pub stop_voting_view: u64,
+    pub start_proposing_time: u64,
+    pub stop_proposing_time: u64,
+    pub start_voting_time: u64,
+    pub stop_voting_time: u64,
 }
 
 impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
@@ -257,6 +260,10 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             stop_proposing_view,
             start_voting_view,
             stop_voting_view,
+            start_proposing_time,
+            stop_proposing_time,
+            start_voting_time,
+            stop_voting_time,
         } = v;
 
         Self {
@@ -284,6 +291,10 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             stop_proposing_view,
             start_voting_view,
             stop_voting_view,
+            start_proposing_time,
+            stop_proposing_time,
+            start_voting_time,
+            stop_voting_time,
         }
     }
 }

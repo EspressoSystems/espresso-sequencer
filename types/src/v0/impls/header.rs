@@ -1116,7 +1116,7 @@ mod test_headers {
             ns_table,
             builder_fee,
             vid_common.clone(),
-            hotshot_types::constants::Base::VERSION,
+            <SeqTypes as NodeType>::Base::version(),
         )
         .await
         .unwrap();

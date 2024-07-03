@@ -134,6 +134,7 @@ pub struct NsTable {
 pub enum NsTableValidationError {
     InvalidByteLen,
     NonIncreasingEntries,
+    DuplicateNamespaceId,
     InvalidHeader, // TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
     InvalidFinalOffset, // TODO this variant obsolete after https://github.com/EspressoSystems/espresso-sequencer/issues/1604
     ExpectNonemptyNsTable,

@@ -45,7 +45,7 @@ use hotshot::{
         BlockPayload,
     },
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, Networks, SystemContext,
+    HotShotInitializer, Memberships, SystemContext,
 };
 use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
@@ -65,6 +65,7 @@ use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
     events_source::{BuilderEvent, EventConsumer, EventsStreamer},
 };
+use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
     config::NetworkConfig,
@@ -82,6 +83,7 @@ use hotshot_types::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
         election::Membership,
         metrics::Metrics,
+        network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeType},
         EncodeBytes,
     },
@@ -106,7 +108,7 @@ use vbs::version::StaticVersionType;
 use crate::run_builder_api_service;
 
 pub struct BuilderContext<
-    N: network::Type,
+    N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
     Ver: StaticVersionType + 'static,
 > {
@@ -151,6 +153,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let validator_args = ValidatorArgs {
         url: network_params.orchestrator_url,
         advertise_address: Some(network_params.libp2p_advertise_address),
+        builder_address: None,
         network_config_file: None,
     };
     let orchestrator_client = OrchestratorClient::new(validator_args);
@@ -234,24 +237,14 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     // Combine the communication channels
     #[cfg(feature = "libp2p")]
-    let (da_network, quorum_network) = {
-        let network = Arc::new(CombinedNetworks::new(
-            cdn_network,
-            p2p_network,
-            Duration::from_secs(1),
-        ));
-        (Arc::clone(&network), network)
-    };
+    let network = Arc::new(CombinedNetworks::new(
+        cdn_network,
+        p2p_network,
+        Duration::from_secs(1),
+    ));
 
     #[cfg(not(feature = "libp2p"))]
-    let (da_network, quorum_network) = { (Arc::from(cdn_network.clone()), Arc::from(cdn_network)) };
-
-    // Convert to the sequencer-compatible type
-    let networks = Networks {
-        da_network,
-        quorum_network,
-        _pd: Default::default(),
-    };
+    let network = Arc::from(cdn_network.clone());
 
     let mut genesis_state = ValidatedState {
         chain_config: genesis.chain_config.into(),
@@ -293,7 +286,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         config.config,
         None,
         instance_state.clone(),
-        networks,
+        network,
         metrics,
         node_index,
         Some(network_params.state_relay_server_url),
@@ -325,7 +318,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
 
 #[allow(clippy::too_many_arguments)]
 pub async fn init_hotshot<
-    N: network::Type,
+    N: ConnectedNetwork<PubKey>,
     P: SequencerPersistence,
     Ver: StaticVersionType + 'static,
 >(
@@ -334,7 +327,7 @@ pub async fn init_hotshot<
         Vec<PeerConfig<hotshot_state_prover::QCVerKey>>,
     >,
     instance_state: NodeState,
-    networks: Networks<SeqTypes, Node<N, P>>,
+    networks: Arc<N>,
     metrics: &dyn Metrics,
     node_id: u64,
     state_relay_server: Option<Url>,
@@ -382,6 +375,7 @@ pub async fn init_hotshot<
             .unwrap(),
         ConsensusMetricsValue::new(metrics),
         da_storage,
+        TestAuctionResultsProvider::default(),
     )
     .await
     .unwrap()
@@ -397,7 +391,7 @@ pub async fn init_hotshot<
     (hotshot_handle, state_signer)
 }
 
-impl<N: network::Type, P: SequencerPersistence, Ver: StaticVersionType + 'static>
+impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType + 'static>
     BuilderContext<N, P, Ver>
 {
     /// Constructor
@@ -571,7 +565,6 @@ mod test {
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
     use hotshot_types::{
-        constants::Base,
         signature_key::BLSPubKey,
         traits::{
             block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
@@ -630,9 +623,10 @@ mod test {
         let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
-        let builder_client = Client::<hotshot_builder_api::builder::Error, Base>::new(
-            hotshot_builder_api_url.clone(),
-        );
+        let builder_client = Client::<
+            hotshot_builder_api::builder::Error,
+            <SeqTypes as NodeType>::Base,
+        >::new(hotshot_builder_api_url.clone());
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
 
         let seed = [207_u8; 32];
