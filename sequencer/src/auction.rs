@@ -58,7 +58,7 @@ pub struct BidTxBody {
     /// The slot this bid is for
     view: ViewNumber,
     /// The set of namespace ids the sequencer is bidding for
-    bundle: Vec<NamespaceId>,
+    namespaces: Vec<NamespaceId>,
 }
 
 // TODO consider a committable derive macro
@@ -74,7 +74,7 @@ impl Committable for BidTxBody {
             .fixed_size_field("bid_amount", &self.bid_amount.to_fixed_bytes())
             .var_size_field("url", self.url.as_str().as_ref())
             .u64_field("view", self.view.u64())
-            .var_size_field("bundle", &bincode::serialize(&self.bundle).unwrap());
+            .var_size_field("namespaces", &bincode::serialize(&self.namespaces).unwrap());
         comm.finalize()
     }
 }
@@ -106,7 +106,7 @@ impl Default for BidTxBody {
             gas_price: FeeAmount::default(),
             bid_amount: FeeAmount::default(),
             view: ViewNumber::genesis(),
-            bundle: vec![nsid],
+            namespaces: vec![nsid],
         }
     }
 }
@@ -154,7 +154,6 @@ impl BidTx {
         self.verify()
             .map_err(|e| (e, FullNetworkTx::Bid(self.clone())))?;
 
-        
         // In JIT sequencer only receives winning bids. In AOT all
         // bids are charged as received (losing bids are refunded). In
         // any case we can charge the bids and gas during execution.
@@ -192,9 +191,6 @@ impl BidTx {
         self.body
     }
 }
-
-/// Nonce for special (auction) transactions
-struct Nonce(u64);
 
 pub fn mock_full_network_txs(key: Option<EthKeyPair>) -> Vec<FullNetworkTx> {
     // if no key is supplied, use `test_key_pair`. Since default `BidTxBody` is
