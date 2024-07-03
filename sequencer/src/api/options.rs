@@ -3,7 +3,7 @@
 use anyhow::bail;
 use async_std::sync::{Arc, RwLock};
 use clap::Parser;
-use espresso_types::{traits::SequencerPersistence, BlockMerkleTree, FeeMerkleTree, PubKey};
+use espresso_types::{BlockMerkleTree, FeeMerkleTree, PubKey, SequencerPersistence};
 use futures::{
     channel::oneshot,
     future::{BoxFuture, Future, FutureExt},

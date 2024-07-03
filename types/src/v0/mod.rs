@@ -5,13 +5,17 @@ use hotshot_types::{
     traits::{node_implementation::NodeType, signature_key::SignatureKey},
 };
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
 
+mod error;
 mod header;
 mod impls;
-
+mod traits;
+mod utils;
+pub use error::*;
 pub use header::Header;
 pub use impls::{mock, validate_proposal};
+pub use traits::*;
+pub use utils::*;
 use vbs::version::StaticVersion;
 
 // This is the single source of truth for minor versions supported by this major version.
@@ -63,19 +67,16 @@ reexport_unchanged_types!(
     BlockMerkleCommitment,
     BlockMerkleTree,
     BuilderSignature,
-    BuilderValidationError,
     ChainConfig,
     ChainId,
     Delta,
     FeeAccount,
     FeeAccountProof,
     FeeAmount,
-    FeeError,
     FeeInfo,
     FeeMerkleCommitment,
     FeeMerkleProof,
     FeeMerkleTree,
-    GenesisHeader,
     Index,
     Iter,
     L1BlockInfo,
@@ -100,10 +101,7 @@ reexport_unchanged_types!(
     NumTxsUnchecked,
     Payload,
     PayloadByteLen,
-    ProposalValidationError,
     ResolvableChainConfig,
-    StateValidationError,
-    Timestamp,
     Transaction,
     TxIndex,
     TxIter,
@@ -148,42 +146,7 @@ pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey>;
 
-#[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
-pub enum Error {
-    // TODO: Can we nest these errors in a `ValidationError` to group them?
-
-    // Parent state commitment of block doesn't match current state commitment
-    IncorrectParent,
-
-    // New view number isn't strictly after current view
-    IncorrectView,
-
-    // Genesis block either has zero or more than one transaction
-    GenesisWrongSize,
-
-    // Genesis transaction not present in genesis block
-    MissingGenesis,
-
-    // Genesis transaction in non-genesis block
-    UnexpectedGenesis,
-
-    // Merkle tree error
-    MerkleTreeError { error: String },
-
-    BlockBuilding,
-}
-
-pub mod constants {
-    pub use crate::v0_1::{
-        BACKOFF_FACTOR, BACKOFF_JITTER, BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT,
-        MAX_RETRY_DELAY, MIN_RETRY_DELAY, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN,
-        NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
-    };
-}
-
-pub mod traits {
-    pub use crate::v0_1::{
-        FromNsPayloadBytes, NsPayloadBytesRange, PersistenceOptions, SequencerPersistence,
-        StateCatchup,
-    };
-}
+pub use crate::v0_1::{
+    BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
+    NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
+};

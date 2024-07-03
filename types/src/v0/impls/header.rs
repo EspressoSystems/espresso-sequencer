@@ -35,8 +35,6 @@ impl Committable for Header {
             .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
             .unwrap();
 
-        //
-
         let mut c = RawCommitmentBuilder::new(&Self::tag());
         if self.version() > v0_1::VERSION {
             // The original commitment scheme (from version 0.1) did not include the version in the
@@ -63,8 +61,6 @@ impl Committable for Header {
 
         c.finalize()
     }
-
-    //
 
     fn tag() -> String {
         // We use the tag "BLOCK" since blocks are identified by the hash of their header. This will
@@ -659,7 +655,7 @@ mod test_headers {
     };
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
     use jf_vid::VidScheme;
-    use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client, ProposalValidationError};
+    use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client};
     use vbs::{
         bincode_serializer::BincodeSerializer,
         version::{StaticVersion, StaticVersionType},
@@ -669,7 +665,7 @@ mod test_headers {
     use super::*;
     use crate::{
         eth_signature_key::EthKeyPair, v0::impls::instance_state::mock::MockStateCatchup,
-        validate_proposal, NodeState,
+        validate_proposal, NodeState, ProposalValidationError,
     };
 
     #[derive(Debug, Default)]

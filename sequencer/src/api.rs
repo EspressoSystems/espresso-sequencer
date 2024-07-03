@@ -8,9 +8,8 @@ use committable::Commitment;
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
-    traits::{PersistenceOptions, SequencerPersistence},
-    AccountQueryData, BlockMerkleTree, ChainConfig, FeeAccountProof, NodeState, PubKey,
-    Transaction,
+    AccountQueryData, BlockMerkleTree, ChainConfig, FeeAccountProof, NodeState, PersistenceOptions,
+    PubKey, SequencerPersistence, Transaction,
 };
 use ethers::prelude::Address;
 use futures::{
@@ -359,7 +358,7 @@ pub mod test_helpers {
     use committable::Committable;
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
     use espresso_types::{
-        mock::MockStateCatchup, v0_3::StateCatchup, NamespaceId, Upgrade, ValidatedState,
+        mock::MockStateCatchup, NamespaceId, StateCatchup, Upgrade, ValidatedState,
     };
     use ethers::{prelude::Address, utils::Anvil};
     use futures::{

@@ -28,7 +28,7 @@ pub trait ChainConfigPersistence: Sized + Send + Sync + 'static {
 #[cfg(any(test, feature = "testing"))]
 mod testing {
 
-    use espresso_types::traits::SequencerPersistence;
+    use espresso_types::SequencerPersistence;
 
     use super::*;
     #[allow(dead_code)]

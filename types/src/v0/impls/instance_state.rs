@@ -3,9 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use hotshot_types::traits::{node_implementation::NodeType, states::InstanceState};
 use vbs::version::{StaticVersionType, Version};
 
-use crate::{
-    traits::StateCatchup, ChainConfig, L1Client, NodeState, SeqTypes, Upgrade, ValidatedState,
-};
+use crate::{ChainConfig, L1Client, NodeState, SeqTypes, StateCatchup, Upgrade, ValidatedState};
 
 impl NodeState {
     pub fn new(
@@ -88,8 +86,8 @@ pub mod mock {
 
     use super::*;
     use crate::{
-        v0_1::{AccountQueryData, BackoffParams, FeeAccountProof},
-        BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
+        v0_1::{AccountQueryData, FeeAccountProof},
+        BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
     };
 
     #[derive(Debug, Clone, Default)]

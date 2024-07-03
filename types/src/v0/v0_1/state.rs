@@ -1,11 +1,11 @@
 use crate::ResolvableChainConfig;
 
-use super::{BlockSize, FeeAccount, FeeAmount, NsTableValidationError};
+use super::{FeeAccount, FeeAmount};
 
 use jf_merkle_tree::{
     prelude::{LightWeightSHA3MerkleTree, Sha3Digest, Sha3Node},
     universal_merkle_tree::UniversalMerkleTree,
-    MerkleTreeError, MerkleTreeScheme,
+    MerkleTreeScheme,
 };
 use serde::{Deserialize, Serialize};
 
@@ -21,19 +21,9 @@ pub type FeeMerkleCommitment = <FeeMerkleTree as MerkleTreeScheme>::Commitment;
 use core::fmt::Debug;
 
 use std::collections::HashSet;
-use thiserror::Error;
 
 pub const BLOCK_MERKLE_TREE_HEIGHT: usize = 32;
 pub const FEE_MERKLE_TREE_HEIGHT: usize = 20;
-
-/// This enum is not used in code but functions as an index of
-/// possible validation errors.
-#[allow(dead_code)]
-pub enum StateValidationError {
-    ProposalValidation(ProposalValidationError),
-    BuilderValidation(BuilderValidationError),
-    Fee(FeeError),
-}
 
 #[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ValidatedState {
@@ -47,65 +37,4 @@ pub struct ValidatedState {
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Delta {
     pub fees_delta: HashSet<FeeAccount>,
-}
-
-/// Possible proposal validation failures
-#[derive(Error, Debug, Eq, PartialEq)]
-pub enum ProposalValidationError {
-    #[error("Invalid ChainConfig: expected={expected}, proposal={proposal}")]
-    InvalidChainConfig { expected: String, proposal: String },
-
-    #[error(
-        "Invalid Payload Size: (max_block_size={max_block_size}, proposed_block_size={block_size})"
-    )]
-    MaxBlockSizeExceeded {
-        max_block_size: BlockSize,
-        block_size: BlockSize,
-    },
-    #[error("Insufficient Fee: block_size={max_block_size}, base_fee={base_fee}, proposed_fee={proposed_fee}")]
-    InsufficientFee {
-        max_block_size: BlockSize,
-        base_fee: FeeAmount,
-        proposed_fee: FeeAmount,
-    },
-    #[error("Invalid Height: parent_height={parent_height}, proposal_height={proposal_height}")]
-    InvalidHeight {
-        parent_height: u64,
-        proposal_height: u64,
-    },
-    #[error("Invalid Block Root Error: expected={expected_root}, proposal={proposal_root}")]
-    InvalidBlockRoot {
-        expected_root: BlockMerkleCommitment,
-        proposal_root: BlockMerkleCommitment,
-    },
-    #[error("Invalid Fee Root Error: expected={expected_root}, proposal={proposal_root}")]
-    InvalidFeeRoot {
-        expected_root: FeeMerkleCommitment,
-        proposal_root: FeeMerkleCommitment,
-    },
-    #[error("Invalid namespace table: {err}")]
-    InvalidNsTable { err: NsTableValidationError },
-}
-
-/// Possible charge fee failures
-#[derive(Error, Debug, Eq, PartialEq)]
-pub enum FeeError {
-    #[error("Insuficcient Funds: have {balance:?}, required {amount:?}")]
-    InsufficientFunds {
-        balance: Option<FeeAmount>,
-        amount: FeeAmount,
-    },
-    #[error("Merkle Tree Error: {0}")]
-    MerkleTreeError(MerkleTreeError),
-}
-
-/// Possible builder validation failures
-#[derive(Error, Debug, Eq, PartialEq)]
-pub enum BuilderValidationError {
-    #[error("Builder signature not found")]
-    SignatureNotFound,
-    #[error("Fee amount out of range: {0}")]
-    FeeAmountOutOfRange(FeeAmount),
-    #[error("Invalid Builder Signature")]
-    InvalidBuilderSignature,
 }

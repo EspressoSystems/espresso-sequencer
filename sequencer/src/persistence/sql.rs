@@ -9,9 +9,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use derivative::Derivative;
 use espresso_types::{
-    traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
-    v0_1::BackoffParams,
-    Leaf, NetworkConfig,
+    BackoffParams, Leaf, NetworkConfig, PersistenceOptions, SequencerPersistence, StateCatchup,
 };
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_query_service::data_source::{

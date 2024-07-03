@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::{traits::NsPayloadBytesRange, NsPayloadByteLen, NsPayloadRange};
+use crate::{NsPayloadByteLen, NsPayloadBytesRange, NsPayloadRange};
 
 impl NsPayloadRange {
     /// TODO restrict visibility?

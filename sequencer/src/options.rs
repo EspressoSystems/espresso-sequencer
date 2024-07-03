@@ -16,7 +16,7 @@ use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
 use cld::ClDuration;
 use derivative::Derivative;
 use derive_more::From;
-use espresso_types::v0_1::BackoffParams;
+use espresso_types::BackoffParams;
 use hotshot_types::{light_client::StateSignKey, signature_key::BLSPrivKey};
 use libp2p::Multiaddr;
 use snafu::Snafu;

@@ -1,7 +1,7 @@
 use crate::{
-    traits::{FromNsPayloadBytes, NsPayloadBytesRange},
-    NamespaceId, NsPayload, NsPayloadByteLen, NumTxs, NumTxsRange, NumTxsUnchecked, Transaction,
-    TxIndex, TxIter, TxPayloadRange, TxTableEntriesRange,
+    FromNsPayloadBytes, NamespaceId, NsPayload, NsPayloadByteLen, NsPayloadBytesRange, NumTxs,
+    NumTxsRange, NumTxsUnchecked, Transaction, TxIndex, TxIter, TxPayloadRange,
+    TxTableEntriesRange,
 };
 
 impl NsPayload {

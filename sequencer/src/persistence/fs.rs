@@ -8,10 +8,7 @@ use std::{
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use clap::Parser;
-use espresso_types::{
-    traits::{PersistenceOptions, SequencerPersistence},
-    Leaf, NetworkConfig, SeqTypes,
-};
+use espresso_types::{Leaf, NetworkConfig, PersistenceOptions, SeqTypes, SequencerPersistence};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, VidDisperseShare},

@@ -109,11 +109,10 @@ use std::ops::Range;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{
-    constants::{NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN},
-    traits::{FromNsPayloadBytes, NsPayloadBytesRange},
     v0::impls::block::{bytes_serde_impl, usize_from_bytes, usize_to_bytes},
-    NsPayloadBuilder, NsPayloadByteLen, NumTxs, NumTxsRange, NumTxsUnchecked, Transaction, TxIndex,
-    TxIter, TxPayload, TxPayloadRange, TxTableEntries, TxTableEntriesRange,
+    FromNsPayloadBytes, NsPayloadBuilder, NsPayloadByteLen, NsPayloadBytesRange, NumTxs,
+    NumTxsRange, NumTxsUnchecked, Transaction, TxIndex, TxIter, TxPayload, TxPayloadRange,
+    TxTableEntries, TxTableEntriesRange, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
 
 impl NumTxs {

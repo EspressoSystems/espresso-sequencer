@@ -1,8 +1,7 @@
-use std::{ops::Add, sync::Arc};
+use std::ops::Add;
 
 use anyhow::bail;
-use async_trait::async_trait;
-use committable::{Commitment, Committable};
+use committable::Committable;
 use ethers::types::Address;
 use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::{
@@ -25,13 +24,10 @@ use num_traits::CheckedSub;
 use vbs::version::Version;
 
 use crate::{
-    constants::{BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT},
-    traits::StateCatchup,
-    v0_1::BackoffParams,
-    AccountQueryData, BlockMerkleTree, BuilderValidationError, ChainConfig, Delta, FeeAccount,
-    FeeAmount, FeeError, FeeInfo, FeeMerkleCommitment, FeeMerkleTree, Header, Leaf, NodeState,
-    NsTableValidationError, PayloadByteLen, ProposalValidationError, ResolvableChainConfig,
-    SeqTypes, UpgradeType, ValidatedState,
+    BlockMerkleTree, BuilderValidationError, ChainConfig, Delta, FeeAccount, FeeAmount, FeeError,
+    FeeInfo, FeeMerkleTree, Header, Leaf, NodeState, NsTableValidationError, PayloadByteLen,
+    ProposalValidationError, ResolvableChainConfig, SeqTypes, UpgradeType, ValidatedState,
+    BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT,
 };
 
 impl StateDelta for Delta {}
@@ -610,203 +606,6 @@ impl hotshot_types::traits::states::TestableState<SeqTypes> for ValidatedState {
         _padding: u64,
     ) -> crate::Transaction {
         crate::Transaction::random(rng)
-    }
-}
-
-#[async_trait]
-impl<T: StateCatchup + ?Sized> StateCatchup for Box<T> {
-    async fn try_fetch_account(
-        &self,
-        height: u64,
-        view: ViewNumber,
-        fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData> {
-        (**self)
-            .try_fetch_account(height, view, fee_merkle_tree_root, account)
-            .await
-    }
-
-    async fn fetch_accounts(
-        &self,
-        height: u64,
-        view: ViewNumber,
-        fee_merkle_tree_root: FeeMerkleCommitment,
-        accounts: Vec<FeeAccount>,
-    ) -> anyhow::Result<Vec<AccountQueryData>> {
-        (**self)
-            .fetch_accounts(height, view, fee_merkle_tree_root, accounts)
-            .await
-    }
-
-    async fn try_remember_blocks_merkle_tree(
-        &self,
-        height: u64,
-        view: ViewNumber,
-        mt: &mut BlockMerkleTree,
-    ) -> anyhow::Result<()> {
-        (**self)
-            .try_remember_blocks_merkle_tree(height, view, mt)
-            .await
-    }
-
-    async fn remember_blocks_merkle_tree(
-        &self,
-        height: u64,
-        view: ViewNumber,
-        mt: &mut BlockMerkleTree,
-    ) -> anyhow::Result<()> {
-        (**self).remember_blocks_merkle_tree(height, view, mt).await
-    }
-
-    async fn try_fetch_chain_config(
-        &self,
-        commitment: Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig> {
-        (**self).try_fetch_chain_config(commitment).await
-    }
-
-    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
-        (**self).fetch_chain_config(commitment).await
-    }
-
-    fn backoff(&self) -> &BackoffParams {
-        (**self).backoff()
-    }
-}
-
-#[async_trait]
-impl<T: StateCatchup + ?Sized> StateCatchup for Arc<T> {
-    async fn try_fetch_account(
-        &self,
-        height: u64,
-        view: ViewNumber,
-        fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData> {
-        (**self)
-            .try_fetch_account(height, view, fee_merkle_tree_root, account)
-            .await
-    }
-
-    async fn fetch_accounts(
-        &self,
-        height: u64,
-        view: ViewNumber,
-        fee_merkle_tree_root: FeeMerkleCommitment,
-        accounts: Vec<FeeAccount>,
-    ) -> anyhow::Result<Vec<AccountQueryData>> {
-        (**self)
-            .fetch_accounts(height, view, fee_merkle_tree_root, accounts)
-            .await
-    }
-
-    async fn try_remember_blocks_merkle_tree(
-        &self,
-        height: u64,
-        view: ViewNumber,
-        mt: &mut BlockMerkleTree,
-    ) -> anyhow::Result<()> {
-        (**self)
-            .try_remember_blocks_merkle_tree(height, view, mt)
-            .await
-    }
-
-    async fn remember_blocks_merkle_tree(
-        &self,
-        height: u64,
-        view: ViewNumber,
-        mt: &mut BlockMerkleTree,
-    ) -> anyhow::Result<()> {
-        (**self).remember_blocks_merkle_tree(height, view, mt).await
-    }
-
-    async fn try_fetch_chain_config(
-        &self,
-        commitment: Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig> {
-        (**self).try_fetch_chain_config(commitment).await
-    }
-
-    async fn fetch_chain_config(&self, commitment: Commitment<ChainConfig>) -> ChainConfig {
-        (**self).fetch_chain_config(commitment).await
-    }
-
-    fn backoff(&self) -> &BackoffParams {
-        (**self).backoff()
-    }
-}
-
-/// Catchup from multiple providers tries each provider in a round robin fashion until it succeeds.
-#[async_trait]
-impl<T: StateCatchup> StateCatchup for Vec<T> {
-    #[tracing::instrument(skip(self))]
-    async fn try_fetch_account(
-        &self,
-        height: u64,
-        view: ViewNumber,
-        fee_merkle_tree_root: FeeMerkleCommitment,
-        account: FeeAccount,
-    ) -> anyhow::Result<AccountQueryData> {
-        for provider in self {
-            match provider
-                .try_fetch_account(height, view, fee_merkle_tree_root, account)
-                .await
-            {
-                Ok(account) => return Ok(account),
-                Err(err) => {
-                    tracing::warn!(%account, ?provider, "failed to fetch account: {err:#}");
-                }
-            }
-        }
-
-        bail!("could not fetch account from any provider");
-    }
-
-    #[tracing::instrument(skip(self, mt))]
-    async fn try_remember_blocks_merkle_tree(
-        &self,
-        height: u64,
-        view: ViewNumber,
-        mt: &mut BlockMerkleTree,
-    ) -> anyhow::Result<()> {
-        for provider in self {
-            match provider
-                .try_remember_blocks_merkle_tree(height, view, mt)
-                .await
-            {
-                Ok(()) => return Ok(()),
-                Err(err) => {
-                    tracing::warn!(?provider, "failed to fetch frontier: {err:#}");
-                }
-            }
-        }
-
-        bail!("could not fetch account from any provider");
-    }
-
-    async fn try_fetch_chain_config(
-        &self,
-        commitment: Commitment<ChainConfig>,
-    ) -> anyhow::Result<ChainConfig> {
-        for provider in self {
-            match provider.try_fetch_chain_config(commitment).await {
-                Ok(cf) => return Ok(cf),
-                Err(err) => {
-                    tracing::warn!(?provider, "failed to fetch chain config: {err:#}");
-                }
-            }
-        }
-
-        bail!("could not fetch chain config from any provider");
-    }
-
-    fn backoff(&self) -> &BackoffParams {
-        // Use whichever provider's backoff is most conservative.
-        self.iter()
-            .map(|p| p.backoff())
-            .max()
-            .expect("provider list not empty")
     }
 }
 
