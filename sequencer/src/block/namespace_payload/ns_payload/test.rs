@@ -51,15 +51,15 @@ fn ns_payload_len() {
         assert_eq!(txs.len(), 3);
         assert_eq!(txs[0].payload(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
         assert_eq!(txs[1].payload(), [10, 11, 12, 13, 14]);
-        assert_eq!(txs[2].payload().len(), 0);
+        assert!(txs[2].payload().is_empty());
 
         // all txs totally truncated
         let ns_payload = NsPayloadOwned(tx_table(&[10, 20, 30]));
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 3);
-        assert_eq!(txs[0].payload().len(), 0);
-        assert_eq!(txs[1].payload().len(), 0);
-        assert_eq!(txs[2].payload().len(), 0);
+        assert!(txs[0].payload().is_empty());
+        assert!(txs[1].payload().is_empty());
+        assert!(txs[2].payload().is_empty());
     }
 
     // small payload can't fit the whole tx table
@@ -90,6 +90,74 @@ fn ns_payload_len() {
             let ns_payload = tx_table_truncated(&[10, 20, 30], i);
             assert_eq!(ns_payload.iter().count(), 0);
         }
+    }
+}
+
+#[test]
+fn negative_len_txs() {
+    setup_logging();
+    setup_backtrace();
+    let ns_id = NamespaceId::from(69); // dummy
+
+    // 1 negative-length tx at the end, no overlapping tx bytes
+    {
+        let ns_payload = ns_payload_with_body(&[10, 30, 20], 30);
+        let txs = ns_payload.export_all_txs(&ns_id);
+        assert_eq!(txs.len(), 3);
+        assert_eq!(txs[0].payload(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        assert_eq!(
+            txs[1].payload(),
+            [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+        );
+        assert!(txs[2].payload().is_empty());
+    }
+
+    // 1 negative-length tx in the middle, overlapping tx bytes
+    {
+        let ns_payload = ns_payload_with_body(&[20, 10, 30], 30);
+        let txs = ns_payload.export_all_txs(&ns_id);
+        assert_eq!(txs.len(), 3);
+        assert_eq!(
+            txs[0].payload(),
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+        );
+        assert!(txs[1].payload().is_empty());
+        assert_eq!(
+            txs[2].payload(),
+            [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+        );
+    }
+
+    // 1 negative-length tx in the middle, one tx contains all others
+    {
+        let ns_payload = ns_payload_with_body(&[30, 10, 20], 30);
+        let txs = ns_payload.export_all_txs(&ns_id);
+        assert_eq!(txs.len(), 3);
+        assert_eq!(
+            txs[0].payload(),
+            [
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+                23, 24, 25, 26, 27, 28, 29
+            ]
+        );
+        assert!(txs[1].payload().is_empty());
+        assert_eq!(txs[2].payload(), [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+    }
+
+    // all txs negative-length except the first
+    {
+        let ns_payload = ns_payload_with_body(&[30, 20, 10], 30);
+        let txs = ns_payload.export_all_txs(&ns_id);
+        assert_eq!(txs.len(), 3);
+        assert_eq!(
+            txs[0].payload(),
+            [
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+                23, 24, 25, 26, 27, 28, 29
+            ]
+        );
+        assert!(txs[1].payload().is_empty());
+        assert!(txs[2].payload().is_empty());
     }
 }
 
