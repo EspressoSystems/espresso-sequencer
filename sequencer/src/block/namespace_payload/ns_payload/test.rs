@@ -13,7 +13,7 @@ fn ns_payload_len() {
 
     // ordinary valid ns_payload
     {
-        let ns_payload = ns_payload_with_body(&[10, 20, 30], 30);
+        let ns_payload = NsPayloadOwned::entries_body(&[10, 20, 30], 30);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 3);
         assert_eq!(txs[0].payload(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
@@ -23,7 +23,7 @@ fn ns_payload_len() {
 
     // large payload has wasted space
     {
-        let ns_payload = ns_payload_with_body(&[10, 20, 30], 40);
+        let ns_payload = NsPayloadOwned::entries_body(&[10, 20, 30], 40);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 3);
         assert_eq!(txs[0].payload(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
@@ -38,7 +38,7 @@ fn ns_payload_len() {
     // small payload truncates txs
     {
         // final tx partly truncated by short payload
-        let ns_payload = ns_payload_with_body(&[10, 20, 30], 25);
+        let ns_payload = NsPayloadOwned::entries_body(&[10, 20, 30], 25);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 3);
         assert_eq!(txs[0].payload(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
@@ -46,7 +46,7 @@ fn ns_payload_len() {
         assert_eq!(txs[2].payload(), [20, 21, 22, 23, 24]);
 
         // final tx totally truncated, next-to-final partly truncated
-        let ns_payload = ns_payload_with_body(&[10, 20, 30], 15);
+        let ns_payload = NsPayloadOwned::entries_body(&[10, 20, 30], 15);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 3);
         assert_eq!(txs[0].payload(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
@@ -54,7 +54,7 @@ fn ns_payload_len() {
         assert!(txs[2].payload().is_empty());
 
         // all txs totally truncated
-        let ns_payload = NsPayloadOwned(tx_table(&[10, 20, 30]));
+        let ns_payload = NsPayloadOwned::entries_body(&[10, 20, 30], 0);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 3);
         assert!(txs[0].payload().is_empty());
@@ -65,21 +65,23 @@ fn ns_payload_len() {
     // small payload can't fit the whole tx table
     {
         // final tx table entry partly truncated by short payload
-        let ns_payload = tx_table_truncated(&[10, 20, 30], tx_table_byte_len(3) - 1);
+        let ns_payload = NsPayloadOwned::entries_total(&[10, 20, 30], tx_table_byte_len(3) - 1);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 2);
         assert_eq!(txs[0].payload().len(), 0);
         assert_eq!(txs[1].payload().len(), 0);
 
         // final tx table entry totally truncated, next-to-final partly truncated
-        let ns_payload = tx_table_truncated(&[10, 20, 30], tx_table_byte_len(2) - 1);
+        let ns_payload = NsPayloadOwned::entries_total(&[10, 20, 30], tx_table_byte_len(2) - 1);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 1);
         assert_eq!(txs[0].payload().len(), 0);
 
         // all tx table entries totally truncated (tx table header only)
-        let ns_payload =
-            tx_table_truncated(&[10, 20, 30], NsPayloadBuilder::tx_table_header_byte_len());
+        let ns_payload = NsPayloadOwned::entries_total(
+            &[10, 20, 30],
+            NsPayloadBuilder::tx_table_header_byte_len(),
+        );
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 0);
     }
@@ -87,7 +89,7 @@ fn ns_payload_len() {
     // extremely small payload can't even fit the tx table header
     {
         for i in 0..NsPayloadBuilder::tx_table_header_byte_len() {
-            let ns_payload = tx_table_truncated(&[10, 20, 30], i);
+            let ns_payload = NsPayloadOwned::entries_total(&[10, 20, 30], i);
             assert_eq!(ns_payload.iter().count(), 0);
         }
     }
@@ -101,7 +103,7 @@ fn negative_len_txs() {
 
     // 1 negative-length tx at the end, no overlapping tx bytes
     {
-        let ns_payload = ns_payload_with_body(&[10, 30, 20], 30);
+        let ns_payload = NsPayloadOwned::entries_body(&[10, 30, 20], 30);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 3);
         assert_eq!(txs[0].payload(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
@@ -114,7 +116,7 @@ fn negative_len_txs() {
 
     // 1 negative-length tx in the middle, overlapping tx bytes
     {
-        let ns_payload = ns_payload_with_body(&[20, 10, 30], 30);
+        let ns_payload = NsPayloadOwned::entries_body(&[20, 10, 30], 30);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 3);
         assert_eq!(
@@ -130,7 +132,7 @@ fn negative_len_txs() {
 
     // 1 negative-length tx in the middle, one tx contains all others
     {
-        let ns_payload = ns_payload_with_body(&[30, 10, 20], 30);
+        let ns_payload = NsPayloadOwned::entries_body(&[30, 10, 20], 30);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 3);
         assert_eq!(
@@ -146,7 +148,7 @@ fn negative_len_txs() {
 
     // all txs negative-length except the first
     {
-        let ns_payload = ns_payload_with_body(&[30, 20, 10], 30);
+        let ns_payload = NsPayloadOwned::entries_body(&[30, 20, 10], 30);
         let txs = ns_payload.export_all_txs(&ns_id);
         assert_eq!(txs.len(), 3);
         assert_eq!(
@@ -161,11 +163,11 @@ fn negative_len_txs() {
     }
 }
 
-fn tx_table(entries: &[usize]) -> Vec<u8> {
+fn tx_table_with_header(header: usize, entries: &[usize]) -> Vec<u8> {
     let mut bytes = Vec::new();
     bytes.extend(usize_to_bytes::<
         { NsPayloadBuilder::tx_table_header_byte_len() },
-    >(entries.len()));
+    >(header));
     for entry in entries {
         bytes.extend(usize_to_bytes::<
             { NsPayloadBuilder::tx_table_entry_byte_len() },
@@ -174,23 +176,38 @@ fn tx_table(entries: &[usize]) -> Vec<u8> {
     bytes
 }
 
-fn ns_payload_with_body(entries: &[usize], body_byte_len: usize) -> NsPayloadOwned {
-    let mut bytes = tx_table(entries);
-    bytes.append(
-        &mut (0..body_byte_len)
-            .map(|i| (i % u8::MAX as usize) as u8)
-            .collect(),
-    );
-    NsPayloadOwned(bytes)
-}
-
-fn tx_table_truncated(entries: &[usize], tx_table_byte_len: usize) -> NsPayloadOwned {
-    let mut bytes = tx_table(entries);
-    bytes.truncate(tx_table_byte_len);
-    NsPayloadOwned(bytes)
+fn ns_payload_body(body_byte_len: usize) -> Vec<u8> {
+    (0..body_byte_len)
+        .map(|i| (i % u8::MAX as usize) as u8)
+        .collect()
 }
 
 fn tx_table_byte_len(num_entries: usize) -> usize {
     NsPayloadBuilder::tx_table_header_byte_len()
         + num_entries * NsPayloadBuilder::tx_table_entry_byte_len()
+}
+
+impl NsPayloadOwned {
+    fn entries_body(entries: &[usize], body_byte_len: usize) -> Self {
+        Self::header_entries_body(entries.len(), entries, body_byte_len)
+    }
+    fn header_entries_body(header: usize, entries: &[usize], body_byte_len: usize) -> Self {
+        Self::header_entries_total(
+            header,
+            entries,
+            body_byte_len + tx_table_byte_len(entries.len()),
+        )
+    }
+    fn entries_total(entries: &[usize], total_byte_len: usize) -> Self {
+        Self::header_entries_total(entries.len(), entries, total_byte_len)
+    }
+    fn header_entries_total(header: usize, entries: &[usize], total_byte_len: usize) -> Self {
+        let mut bytes = tx_table_with_header(header, entries);
+        if total_byte_len > bytes.len() {
+            bytes.append(&mut ns_payload_body(total_byte_len - bytes.len()));
+        } else {
+            bytes.truncate(total_byte_len);
+        }
+        Self(bytes)
+    }
 }
