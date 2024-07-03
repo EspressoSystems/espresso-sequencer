@@ -23,11 +23,12 @@
 
 use crate::{
     block::NsTable, state::FeeInfo, ChainConfig, FeeAccount, Header, L1BlockInfo, Payload,
-    Transaction, ValidatedState,
+    SeqTypes, Transaction, ValidatedState,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
 use es_version::SequencerVersion;
+use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::{
     block_contents::vid_commitment, signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
 };
@@ -134,6 +135,11 @@ fn reference_transaction() -> Transaction {
 }
 
 const REFERENCE_TRANSACTION_COMMITMENT: &str = "TX~jmYCutMVgguprgpZHywPwkehwXfibQx951gh4LSLmfwp";
+
+async fn reference_tx_index() -> <Payload as QueryablePayload<SeqTypes>>::TransactionIndex {
+    let payload = reference_payload().await;
+    payload.iter(payload.ns_table()).next().unwrap()
+}
 
 fn reference_test_without_committable<T: Serialize + DeserializeOwned + Eq + Debug>(
     name: &str,
@@ -254,6 +260,11 @@ Actual: {actual}
 #[async_std::test]
 async fn test_reference_payload() {
     reference_test_without_committable("payload", &reference_payload().await);
+}
+
+#[async_std::test]
+async fn test_reference_tx_index() {
+    reference_test_without_committable("tx_index", &reference_tx_index().await);
 }
 
 #[async_std::test]
