@@ -54,6 +54,20 @@ async fn reference_payload() -> Payload {
     .0
 }
 
+// TODO TEMPORARY: alternate reference payload with 2 transactions (not just 1).
+// In the future we should modify all reference tests to use only this reference
+// payload.
+async fn reference_payload2() -> Payload {
+    Payload::from_transactions(
+        vec![reference_transaction(), reference_transaction2()],
+        &Default::default(),
+        &Default::default(),
+    )
+    .await
+    .unwrap()
+    .0
+}
+
 async fn reference_ns_table() -> NsTable {
     reference_payload().await.ns_table().clone()
 }
@@ -134,11 +148,16 @@ fn reference_transaction() -> Transaction {
     Transaction::new(12648430.into(), payload.to_vec())
 }
 
+fn reference_transaction2() -> Transaction {
+    let payload: [u8; 512] = std::array::from_fn(|i| (6 * i + 7 % (u8::MAX as usize)) as u8);
+    Transaction::new(314159.into(), payload.to_vec())
+}
+
 const REFERENCE_TRANSACTION_COMMITMENT: &str = "TX~jmYCutMVgguprgpZHywPwkehwXfibQx951gh4LSLmfwp";
 
 async fn reference_tx_index() -> <Payload as QueryablePayload<SeqTypes>>::TransactionIndex {
-    let payload = reference_payload().await;
-    payload.iter(payload.ns_table()).next().unwrap()
+    let payload = reference_payload2().await;
+    payload.iter(payload.ns_table()).last().unwrap()
 }
 
 fn reference_test_without_committable<T: Serialize + DeserializeOwned + Eq + Debug>(
