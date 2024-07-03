@@ -22,8 +22,8 @@
 //! test.
 
 use crate::{
-    block::NsTable, state::FeeInfo, ChainConfig, FeeAccount, Header, L1BlockInfo, Payload,
-    SeqTypes, Transaction, ValidatedState,
+    block::NsTable, state::FeeInfo, ChainConfig, FeeAccount, Header, L1BlockInfo, NamespaceId,
+    Payload, SeqTypes, Transaction, ValidatedState,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
@@ -34,6 +34,7 @@ use hotshot_types::traits::{
 };
 use jf_merkle_tree::MerkleTreeScheme;
 use pretty_assertions::assert_eq;
+use rand::{Rng, RngCore};
 use sequencer_utils::commitment_to_u256;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
@@ -44,35 +45,31 @@ use vbs::BinarySerializer;
 type Serializer = vbs::Serializer<SequencerVersion>;
 
 async fn reference_payload() -> Payload {
-    Payload::from_transactions(
-        vec![reference_transaction()],
-        &Default::default(),
-        &Default::default(),
-    )
-    .await
-    .unwrap()
-    .0
-}
+    const NUM_NS_IDS: usize = 3;
+    let ns_ids: [NamespaceId; NUM_NS_IDS] = [12648430.into(), 314159265.into(), 2718281828.into()];
 
-// TODO TEMPORARY: alternate reference payload with 2 transactions (not just 1).
-// In the future we should modify all reference tests to use only this reference
-// payload.
-async fn reference_payload2() -> Payload {
-    Payload::from_transactions(
-        vec![reference_transaction(), reference_transaction2()],
-        &Default::default(),
-        &Default::default(),
-    )
-    .await
-    .unwrap()
-    .0
+    let mut rng = jf_utils::test_rng();
+    let txs = {
+        const NUM_TXS: usize = 20;
+        let mut txs = Vec::with_capacity(NUM_TXS);
+        for _ in 0..NUM_TXS {
+            let ns_id = ns_ids[rng.gen_range(0..NUM_NS_IDS)];
+            txs.push(reference_transaction(ns_id, &mut rng));
+        }
+        txs
+    };
+
+    Payload::from_transactions(txs, &Default::default(), &Default::default())
+        .await
+        .unwrap()
+        .0
 }
 
 async fn reference_ns_table() -> NsTable {
     reference_payload().await.ns_table().clone()
 }
 
-const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~jqBfNUW1lSijWpKpPNc9yxQs28YckB80gFJWnHIwOQMC";
+const REFERENCE_NS_TABLE_COMMITMENT: &str = "NSTABLE~tMW0-hGn0563bgYgvsO9r95f2AUiTD_2tvjDOuGRwNA5";
 
 fn reference_l1_block() -> L1BlockInfo {
     L1BlockInfo {
@@ -141,22 +138,21 @@ async fn reference_header() -> Header {
     }
 }
 
-const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~mHlaknD1qKCz0UBtV2GpnqfO6gFqF5yN-9qkmLMRG3rp";
+const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~dh1KpdvvxSvnnPpOi2yI3DOg8h6ltr2Kv13iRzbQvtN2";
 
-fn reference_transaction() -> Transaction {
-    let payload: [u8; 1024] = std::array::from_fn(|i| (i % (u8::MAX as usize)) as u8);
-    Transaction::new(12648430.into(), payload.to_vec())
+fn reference_transaction<R>(ns_id: NamespaceId, rng: &mut R) -> Transaction
+where
+    R: RngCore,
+{
+    let mut tx_payload = vec![0u8; 256];
+    rng.fill_bytes(&mut tx_payload);
+    Transaction::new(ns_id, tx_payload)
 }
 
-fn reference_transaction2() -> Transaction {
-    let payload: [u8; 512] = std::array::from_fn(|i| (6 * i + 7 % (u8::MAX as usize)) as u8);
-    Transaction::new(314159.into(), payload.to_vec())
-}
-
-const REFERENCE_TRANSACTION_COMMITMENT: &str = "TX~jmYCutMVgguprgpZHywPwkehwXfibQx951gh4LSLmfwp";
+const REFERENCE_TRANSACTION_COMMITMENT: &str = "TX~EikfLslj3g6sIWRZYpN6ZuU1gadN77AHXmRA56yNnPrQ";
 
 async fn reference_tx_index() -> <Payload as QueryablePayload<SeqTypes>>::TransactionIndex {
-    let payload = reference_payload2().await;
+    let payload = reference_payload().await;
     payload.iter(payload.ns_table()).last().unwrap()
 }
 
@@ -335,7 +331,7 @@ async fn test_reference_header() {
 fn test_reference_transaction() {
     reference_test(
         "transaction",
-        reference_transaction(),
+        reference_transaction(12648430.into(), &mut jf_utils::test_rng()),
         REFERENCE_TRANSACTION_COMMITMENT,
     );
 }
