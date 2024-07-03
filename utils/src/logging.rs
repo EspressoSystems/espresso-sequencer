@@ -2,22 +2,29 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::{Parser, ValueEnum};
 use log_panics::BacktraceMode;
 
+/// Controls how backtraces are logged on panic.
+///
+/// The values here match the possible values of `RUST_LOG_FORMAT`, and their corresponding behavior
+/// on backtrace logging is:
+/// * `full`: print a prettified dump of the stack trace and span trace to stdout, optimized for
+///   human readability rather than machine parsing
+/// * `compact`: output the default panic message, with backtraces controlled by `RUST_BACKTRACE`
+/// * `json`: output the panic message and stack trace as a tracing event. This in turn works with
+///   the behavior of the tracing subscriber with `RUST_LOG_FORMAT=json` to output the event in a
+///   machine-parseable, JSON format.
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]
 enum BacktraceLoggingMode {
     #[default]
-    Pretty,
-    Tracing,
+    Full,
+    Compact,
+    Json,
 }
 
 /// Logging configuration.
 #[derive(Clone, Debug, Default, Parser)]
 pub struct Config {
-    #[clap(
-        long,
-        env = "ESPRESSO_SEQUENCER_BACKTRACE_MODE",
-        default_value = "pretty"
-    )]
-    backtrace_mode: BacktraceLoggingMode,
+    #[clap(long, env = "RUST_LOG_FORMAT")]
+    backtrace_mode: Option<BacktraceLoggingMode>,
 }
 
 impl Config {
@@ -29,23 +36,12 @@ impl Config {
     /// Initialize logging and panic handlers based on this configuration.
     pub fn init(&self) {
         setup_logging();
-        match self.backtrace_mode {
-            BacktraceLoggingMode::Pretty => setup_backtrace(),
-            BacktraceLoggingMode::Tracing => log_panics::Config::new()
+        match self.backtrace_mode.unwrap_or_default() {
+            BacktraceLoggingMode::Full => setup_backtrace(),
+            BacktraceLoggingMode::Compact => {}
+            BacktraceLoggingMode::Json => log_panics::Config::new()
                 .backtrace_mode(BacktraceMode::Resolved)
                 .install_panic_hook(),
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_panic() {
-        Config::from_env().init();
-
-        panic!("panic message");
     }
 }
