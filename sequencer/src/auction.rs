@@ -145,7 +145,6 @@ impl BidTx {
     /// Executes `BidTx`.
     /// * verify signature
     /// * charge fee
-    /// * store state (maybe not for JIT)
     // The rational behind the `Err` is to provide not only what
     // failed, but for which variant. The entire Tx is probably
     // overkill, but we can narrow down how much we want to know about
@@ -157,8 +156,10 @@ impl BidTx {
         self.verify()
             .map_err(|e| (e, FullNetworkTx::Bid(self.clone())))?;
 
-        // TODO review when this actually occurs in JIT auction
-        // charge the bid
+        
+        // In JIT sequencer only receives winning bids. In AOT all
+        // bids are charged as received (losing bids are refunded). In
+        // any case we can charge the bids and gas during execution.
         self.charge(state)
             .map_err(|e| (e, FullNetworkTx::Bid(self.clone())))?;
 
@@ -172,6 +173,7 @@ impl BidTx {
         // error in case code is shifted around in the future.
         if let Some(chain_config) = state.chain_config.resolve() {
             let recipient = chain_config.bid_recipient;
+            // TODO also charge gas fee
             state
                 .charge_fee(FeeInfo::from(self.clone()), recipient)
                 .map_err(ExecutionError::from)
