@@ -117,7 +117,12 @@ library PolynomialEval {
         BN254.ScalarField zeta,
         BN254.ScalarField vanishEval
     ) internal view returns (BN254.ScalarField res) {
+        if (BN254.ScalarField.unwrap(zeta) == 1) {
+            // when zeta is first element in the eval domain
+            return BN254.ScalarField.wrap(1);
+        }
         if (BN254.ScalarField.unwrap(vanishEval) == 0) {
+            // else, if zeta is other elements in the eval domain
             return BN254.ScalarField.wrap(0);
         }
 
@@ -148,12 +153,23 @@ library PolynomialEval {
         uint256 zeta,
         uint256 vanishEval
     ) internal view returns (uint256 res) {
+        uint256 p = BN254.R_MOD;
+        uint256 length = pi.length;
+
+        // when zeta is one of the eval domain, vanishEval = 0
+        // lagrange coeffs for all but the one corresponding to zeta are zero
+        // NOTE: since this happens with negligible probability, we avoid writing in assembly
         if (vanishEval == 0) {
+            uint256 group = 1;
+            for (uint256 i = 0; i < length; i++) {
+                if (zeta == group) {
+                    return pi[i];
+                }
+                group = mulmod(group, self.groupGen, p);
+            }
             return 0;
         }
 
-        uint256 p = BN254.R_MOD;
-        uint256 length = pi.length;
         uint256 ithLagrange;
         uint256 ithDivisor;
         uint256 tmp;

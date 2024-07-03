@@ -109,4 +109,66 @@ contract PolynomialEval_evalDataGen_Test is Test {
         assertEq(lagrangeOne, BN254.ScalarField.unwrap(evalData.lagrangeOne));
         assertEq(piEval, BN254.ScalarField.unwrap(evalData.piEval));
     }
+
+    /// @dev Test edge cases when zeta is one of the elements in the evaluation domain.
+    /// The random evaluation point case (most likely outside evalDomain) is already
+    /// tested in `testFuzz_evalDataGen_matches()`
+    function test_lagrangeOneCoeffForDomainElements() external view {
+        uint256 size = 2 ** 5;
+        Poly.EvalDomain memory domain = Poly.newEvalDomain(size);
+
+        uint256[] memory elements = Poly.domainElements(domain, size);
+        uint256 vanishEval = Poly.evaluateVanishingPoly(domain, elements[0]);
+
+        // L_0(g^0) = 1
+        assertEq(
+            BN254.ScalarField.unwrap(
+                Poly.evaluateLagrangeOne(
+                    domain, BN254.ScalarField.wrap(elements[0]), BN254.ScalarField.wrap(vanishEval)
+                )
+            ),
+            1
+        );
+
+        // L_i(g^0) = 0 for i \in [size]
+        for (uint256 i = 1; i < size; i++) {
+            vanishEval = Poly.evaluateVanishingPoly(domain, elements[i]);
+            assertEq(
+                BN254.ScalarField.unwrap(
+                    Poly.evaluateLagrangeOne(
+                        domain,
+                        BN254.ScalarField.wrap(elements[i]),
+                        BN254.ScalarField.wrap(vanishEval)
+                    )
+                ),
+                0
+            );
+        }
+    }
+
+    /// @dev Test edge cases when zeta is one of the elements in the evaluation domain.
+    function test_evaluatePiPolyForDomainElements() external view {
+        uint256 size = 2 ** 5;
+        Poly.EvalDomain memory domain = Poly.newEvalDomain(size);
+
+        uint256[] memory elements = Poly.domainElements(domain, size);
+        uint256 piLen = 10;
+        uint256[] memory publicInputs = new uint256[](piLen);
+        // arbitrarily pick public input length = 10, and fill in arbitrary values
+        for (uint256 i = 0; i < piLen; i++) {
+            publicInputs[i] = 2 ** i;
+        }
+
+        for (uint256 i = 0; i < size; i++) {
+            uint256 zeta = elements[i];
+            uint256 vanishEval = Poly.evaluateVanishingPoly(domain, zeta);
+            if (i < piLen) {
+                assertEq(
+                    Poly.evaluatePiPoly(domain, publicInputs, zeta, vanishEval), publicInputs[i]
+                );
+            } else {
+                assertEq(Poly.evaluatePiPoly(domain, publicInputs, zeta, vanishEval), 0);
+            }
+        }
+    }
 }
