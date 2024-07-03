@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    auction::{mock_full_network_txs, FullNetworkTx, Slot},
+    auction::{mock_full_network_txs, FullNetworkTx},
     block::NsTable,
     chain_config::ResolvableChainConfig,
     eth_signature_key::BuilderSignature,
@@ -144,9 +144,6 @@ impl Header {
     pub fn get_full_network_txs(&self) -> Vec<FullNetworkTx> {
         // TODO unmock
         mock_full_network_txs(None)
-    }
-    pub fn get_refund_bids(&self) -> HashSet<Slot> {
-        unimplemented!();
     }
     #[allow(clippy::too_many_arguments)]
     fn from_info(

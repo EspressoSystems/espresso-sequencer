@@ -14,8 +14,6 @@ use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
-#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, Deserialize, Serialize, Hash)]
-pub struct Slot(u64);
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, Hash)]
 /// Wrapper enum for Full Network Transactions. Each transaction type
 /// will be a variant of this enum.
