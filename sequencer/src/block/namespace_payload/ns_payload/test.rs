@@ -1,6 +1,9 @@
 use super::NsPayloadOwned;
 use crate::{
-    block::{namespace_payload::NsPayloadBuilder, uint_bytes::usize_to_bytes},
+    block::{
+        namespace_payload::NsPayloadBuilder,
+        uint_bytes::{usize_max_from_byte_len, usize_to_bytes},
+    },
     NamespaceId,
 };
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -160,6 +163,80 @@ fn negative_len_txs() {
         );
         assert!(txs[1].payload().is_empty());
         assert!(txs[2].payload().is_empty());
+    }
+}
+
+#[test]
+fn tx_table_header() {
+    setup_logging();
+    setup_backtrace();
+    let ns_id = NamespaceId::from(69); // dummy
+
+    // header declares 1 fewer txs, tx table bytes appear in tx payloads, wasted
+    // pßayload bytes
+    {
+        let ns_payload = NsPayloadOwned::header_entries_body(2, &[10, 20, 30], 30);
+        let txs = ns_payload.export_all_txs(&ns_id);
+        assert_eq!(txs.len(), 2);
+
+        // first tx contains 4 bytes from final tx table entry [30,0,0,0] then 6
+        // bytes from payload [0,1,2,3,4,5]
+        assert_eq!(txs[0].payload(), [30, 0, 0, 0, 0, 1, 2, 3, 4, 5]);
+        assert_eq!(txs[1].payload(), [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+
+        // inaccessible payload bytes
+        assert_eq!(ns_payload.0.len(), 46);
+        assert_eq!(
+            ns_payload.0[32..],
+            [16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+        );
+    }
+
+    // header declares 0 txs, all payload bytes are wasted
+    {
+        let ns_payload = NsPayloadOwned::header_entries_body(0, &[10, 20, 30], 30);
+        let txs = ns_payload.export_all_txs(&ns_id);
+        assert_eq!(txs.len(), 0);
+    }
+
+    // header declares 1 extra tx, payload bytes appear in tx table, payload is
+    // now too small
+    {
+        let ns_payload = NsPayloadOwned::header_entries_body(4, &[10, 20, 30], 30);
+        let txs = ns_payload.export_all_txs(&ns_id);
+        assert_eq!(txs.len(), 4);
+
+        // first tx starts after the final tx table entry containing bytes
+        // [0,1,2,3]
+        assert_eq!(txs[0].payload(), [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+
+        assert_eq!(txs[1].payload(), [14, 15, 16, 17, 18, 19, 20, 21, 22, 23]);
+
+        // 3rd tx is truncated by small payload size
+        assert_eq!(txs[2].payload(), [24, 25, 26, 27, 28, 29]);
+
+        // 4th tx completely truncated
+        assert!(txs[3].payload().is_empty());
+    }
+
+    // header declares large number of txs, tx table cannot fit in payload, all txs 0-length
+    {
+        let ns_payload = NsPayloadOwned::header_entries_body(
+            usize_max_from_byte_len(NsPayloadBuilder::tx_table_header_byte_len()),
+            &[10, 20, 30],
+            30,
+        );
+        let expected_payload_byte_len = 46;
+        assert_eq!(ns_payload.0.len(), expected_payload_byte_len);
+
+        let txs = ns_payload.export_all_txs(&ns_id);
+        let expected_num_txs = (expected_payload_byte_len
+            - NsPayloadBuilder::tx_table_header_byte_len())
+            / NsPayloadBuilder::tx_table_entry_byte_len();
+        assert_eq!(txs.len(), expected_num_txs);
+        for tx in txs {
+            assert!(tx.payload().is_empty());
+        }
     }
 }
 
