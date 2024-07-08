@@ -41,7 +41,7 @@ pub struct DataState {
     latest_voters: CircularBuffer<MAX_HISTORY, BitVec<u16>>,
     stake_table: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     // Do we need any other data at the moment?
-    node_identity: Vec<(BLSPubKey, NodeIdentity)>,
+    node_identity: Vec<NodeIdentity>,
 }
 
 impl DataState {
@@ -49,7 +49,7 @@ impl DataState {
         latest_blocks: CircularBuffer<MAX_HISTORY, BlockDetail<SeqTypes>>,
         latest_voters: CircularBuffer<MAX_HISTORY, BitVec<u16>>,
         stake_table: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
-        node_identity: Vec<(BLSPubKey, NodeIdentity)>,
+        node_identity: Vec<NodeIdentity>,
     ) -> Self {
         Self {
             latest_blocks,
@@ -71,7 +71,7 @@ impl DataState {
         &self.stake_table
     }
 
-    pub fn node_identity(&self) -> impl Iterator<Item = &(BLSPubKey, NodeIdentity)> {
+    pub fn node_identity(&self) -> impl Iterator<Item = &NodeIdentity> {
         self.node_identity.iter()
     }
 
@@ -80,6 +80,30 @@ impl DataState {
         stake_table: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     ) {
         self.stake_table = stake_table;
+
+        // We want to make sure that we're accounting for this node identity
+        // information that we have.  In the case of any new public keys
+        // being added, we want to ensure we have an entry for them in our
+        // node identity list.
+
+        let current_identity_set = self
+            .node_identity
+            .iter()
+            .map(|node_identity| *node_identity.public_key())
+            .collect::<HashSet<_>>();
+
+        let stake_table_iter_result = self.stake_table.try_iter(SnapshotVersion::Head);
+        let stake_table_iter = match stake_table_iter_result {
+            Ok(into_iter) => into_iter,
+            Err(_) => return,
+        };
+
+        let missing_node_identity_entries =
+            stake_table_iter.filter(|(key, _, _)| !current_identity_set.contains(key));
+
+        self.node_identity.extend(
+            missing_node_identity_entries.map(|(key, _, _)| NodeIdentity::from_public_key(key)),
+        );
     }
 
     pub fn add_latest_block(&mut self, block: BlockDetail<SeqTypes>) {
@@ -91,7 +115,30 @@ impl DataState {
     }
 
     pub fn add_node_identity(&mut self, identity: NodeIdentity) {
-        self.node_identity.push((*identity.public_key(), identity));
+        // We need to check to see if this identity is already in the list,
+        // if it is, we will want to replace it.
+
+        let pub_key = identity.public_key();
+
+        let mut matching_public_keys = self
+            .node_identity
+            .iter()
+            // We want the index of the entry for easier editing
+            .enumerate()
+            .filter(|(_, node_identity)| node_identity.public_key() == pub_key);
+
+        // We only expect this have a single entry.
+        let existing_node_identity_option = matching_public_keys.next();
+
+        debug_assert_eq!(matching_public_keys.next(), None);
+
+        if let Some((index, _)) = existing_node_identity_option {
+            self.node_identity[index] = identity;
+            return;
+        }
+
+        // This entry doesn't appear in our table, so let's add it.
+        self.node_identity.push(identity);
     }
 }
 
@@ -215,8 +262,8 @@ where
 
     let voters_bitvec = data_state_write_lock_guard.node_identity.iter().fold(
         BitVec::with_capacity(data_state_write_lock_guard.node_identity.len()),
-        |mut acc, key| {
-            acc.push(voters_set.contains(&key.0));
+        |mut acc, node_identity| {
+            acc.push(voters_set.contains(node_identity.public_key()));
             acc
         },
     );

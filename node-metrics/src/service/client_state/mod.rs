@@ -331,7 +331,7 @@ pub async fn handle_client_message_request_node_identity_snapshot(
         // Let's copy the current node identity snapshot and send them
         let nodes = data_state_read_lock_guard
             .node_identity()
-            .map(|(_, node)| node.clone())
+            .cloned()
             .collect::<Vec<_>>();
 
         if let Err(err) = sender
@@ -824,7 +824,7 @@ async fn handle_received_voters(
     // These are the clients who are subscribed to the node identities, that
     // have an active ClientState within the system.
     let node_identity_subscribers = client_thread_state_read_lock_guard
-        .subscribed_node_identity
+        .subscribed_voters
         .iter()
         .map(|client_id| {
             (
