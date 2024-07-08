@@ -984,9 +984,9 @@ pub mod tests {
         },
         server_message::ServerMessage,
     };
-    use async_std::sync::RwLock;
+    use async_std::{prelude::FutureExt, sync::RwLock};
     use bitvec::vec::BitVec;
-    use futures::{channel::mpsc, FutureExt, SinkExt, StreamExt};
+    use futures::{channel::mpsc, SinkExt, StreamExt};
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use sequencer::{Leaf, NodeState, ValidatedState};
     use std::{
@@ -1067,7 +1067,7 @@ pub mod tests {
 
         let (mut internal_client_message_sender, internal_client_message_receiver) =
             mpsc::channel(1);
-        let process_client_handling_stream_handle: async_std::task::JoinHandle<()> =
+        let process_internal_client_message_handle: async_std::task::JoinHandle<()> =
             async_std::task::spawn(process_internal_client_message_stream(
                 internal_client_message_receiver,
                 data_state,
@@ -1078,14 +1078,12 @@ pub mod tests {
         internal_client_message_sender.disconnect();
 
         // Join the async task.
-        if let Err(timeout_error) = async_std::io::timeout(
-            Duration::from_millis(200),
-            process_client_handling_stream_handle.map(Ok),
-        )
-        .await
+        if let Err(timeout_error) = process_internal_client_message_handle
+            .timeout(Duration::from_millis(200))
+            .await
         {
             panic!(
-                "process_client_handling_stream_handle did not complete in time, error: {}",
+                "process_internal_client_message_handle did not complete in time, error: {}",
                 timeout_error
             );
         }
@@ -1105,7 +1103,7 @@ pub mod tests {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
-        let process_client_handling_stream_handle =
+        let process_internal_client_message_handle =
             async_std::task::spawn(process_internal_client_message_stream(
                 internal_client_message_receiver,
                 data_state,
@@ -1164,14 +1162,12 @@ pub mod tests {
         assert_eq!(server_message_receiver_1.next().await, None);
         assert_eq!(server_message_receiver_2.next().await, None);
 
-        if let Err(timeout_error) = async_std::io::timeout(
-            Duration::from_millis(200),
-            process_client_handling_stream_handle.map(Ok),
-        )
-        .await
+        if let Err(timeout_error) = process_internal_client_message_handle
+            .timeout(Duration::from_millis(200))
+            .await
         {
             panic!(
-                "process_client_handling_stream_handle did not complete in time, error: {}",
+                "process_internal_client_message_handle did not complete in time, error: {}",
                 timeout_error
             );
         }
@@ -1194,7 +1190,7 @@ pub mod tests {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
-        let process_client_handling_stream_handle =
+        let process_internal_client_message_handle =
             async_std::task::spawn(process_internal_client_message_stream(
                 internal_client_message_receiver,
                 data_state,
@@ -1252,14 +1248,12 @@ pub mod tests {
         assert_eq!(server_message_receiver_2.next().await, None);
 
         // Join the async task.
-        if let Err(timeout_error) = async_std::io::timeout(
-            Duration::from_millis(200),
-            process_client_handling_stream_handle.map(Ok),
-        )
-        .await
+        if let Err(timeout_error) = process_internal_client_message_handle
+            .timeout(Duration::from_millis(200))
+            .await
         {
             panic!(
-                "process_client_handling_stream_handle did not complete in time, error: {}",
+                "process_internal_client_message_handle did not complete in time, error: {}",
                 timeout_error
             );
         }
@@ -1274,7 +1268,7 @@ pub mod tests {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
-        let process_client_handling_stream_handle: async_std::task::JoinHandle<()> =
+        let process_internal_client_message_handle: async_std::task::JoinHandle<()> =
             async_std::task::spawn(process_internal_client_message_stream(
                 internal_client_message_receiver,
                 data_state,
@@ -1339,14 +1333,12 @@ pub mod tests {
         assert_eq!(server_message_receiver_2.next().await, None);
 
         // Join the async task.
-        if let Err(timeout_error) = async_std::io::timeout(
-            Duration::from_millis(200),
-            process_client_handling_stream_handle.map(Ok),
-        )
-        .await
+        if let Err(timeout_error) = process_internal_client_message_handle
+            .timeout(Duration::from_millis(200))
+            .await
         {
             panic!(
-                "process_client_handling_stream_handle did not complete in time, error: {}",
+                "process_internal_client_message_handle did not complete in time, error: {}",
                 timeout_error
             );
         }
@@ -1364,14 +1356,14 @@ pub mod tests {
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
         let (server_message_sender_3, mut server_message_receiver_3) = mpsc::channel(1);
-        let process_client_handling_stream_handle =
+        let process_internal_client_message_handle =
             async_std::task::spawn(process_internal_client_message_stream(
                 internal_client_message_receiver,
                 data_state.clone(),
                 client_thread_state.clone(),
             ));
 
-        let process_distribute_client_handling_handle =
+        let process_distribute_block_detail_handle =
             async_std::task::spawn(process_distribute_block_detail_handling_stream(
                 client_thread_state,
                 block_detail_receiver,
@@ -1465,11 +1457,9 @@ pub mod tests {
         leaf_sender.disconnect();
 
         // Join the async task.
-        if let Err(timeout_error) = async_std::io::timeout(
-            Duration::from_millis(200),
-            process_leaf_stream_handle.map(Ok),
-        )
-        .await
+        if let Err(timeout_error) = process_leaf_stream_handle
+            .timeout(Duration::from_millis(200))
+            .await
         {
             panic!(
                 "process_leaf_stream_handle did not complete in time, error: {}",
@@ -1478,11 +1468,9 @@ pub mod tests {
         }
 
         // Join the async task.
-        if let Err(timeout_error) = async_std::io::timeout(
-            Duration::from_millis(200),
-            process_distribute_client_handling_handle.map(Ok),
-        )
-        .await
+        if let Err(timeout_error) = process_distribute_block_detail_handle
+            .timeout(Duration::from_millis(200))
+            .await
         {
             panic!(
                 "process_distribute_client_handling_handle did not complete in time, error: {}",
@@ -1502,14 +1490,12 @@ pub mod tests {
         assert_eq!(server_message_receiver_3.next().await, None);
 
         // Join the async task.
-        if let Err(timeout_error) = async_std::io::timeout(
-            Duration::from_millis(200),
-            process_client_handling_stream_handle.map(Ok),
-        )
-        .await
+        if let Err(timeout_error) = process_internal_client_message_handle
+            .timeout(Duration::from_millis(200))
+            .await
         {
             panic!(
-                "process_client_handling_stream_handle did not complete in time, error: {}",
+                "process_internal_client_message_handle did not complete in time, error: {}",
                 timeout_error
             );
         }
@@ -1526,14 +1512,14 @@ pub mod tests {
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
         let (server_message_sender_3, mut server_message_receiver_3) = mpsc::channel(1);
-        let process_client_handling_stream_handle =
+        let process_internal_client_message_handle =
             async_std::task::spawn(process_internal_client_message_stream(
                 internal_client_message_receiver,
                 data_state.clone(),
                 client_thread_state.clone(),
             ));
 
-        let process_distribute_client_handling_handle =
+        let process_distribute_node_identity_handle =
             async_std::task::spawn(process_distribute_node_identity_handling_stream(
                 client_thread_state,
                 node_identity_receiver,
@@ -1623,14 +1609,12 @@ pub mod tests {
         node_identity_sender.disconnect();
 
         // Join the async task.
-        if let Err(timeout_error) = async_std::io::timeout(
-            Duration::from_millis(200),
-            process_distribute_client_handling_handle.map(Ok),
-        )
-        .await
+        if let Err(timeout_error) = process_distribute_node_identity_handle
+            .timeout(Duration::from_millis(200))
+            .await
         {
             panic!(
-                "process_distribute_client_handling_handle did not complete in time, error: {}",
+                "process_distribute_node_identity_handle did not complete in time, error: {}",
                 timeout_error
             );
         }
@@ -1647,14 +1631,12 @@ pub mod tests {
         assert_eq!(server_message_receiver_3.next().await, None);
 
         // Join the async task.
-        if let Err(timeout_error) = async_std::io::timeout(
-            Duration::from_millis(200),
-            process_client_handling_stream_handle.map(Ok),
-        )
-        .await
+        if let Err(timeout_error) = process_internal_client_message_handle
+            .timeout(Duration::from_millis(200))
+            .await
         {
             panic!(
-                "process_client_handling_stream_handle did not complete in time, error: {}",
+                "process_internal_client_message_handle did not complete in time, error: {}",
                 timeout_error
             );
         }
@@ -1671,7 +1653,7 @@ pub mod tests {
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
         let (server_message_sender_3, mut server_message_receiver_3) = mpsc::channel(1);
-        let process_client_handling_stream_handle =
+        let process_internal_client_message_handle =
             async_std::task::spawn(process_internal_client_message_stream(
                 internal_client_message_receiver,
                 data_state.clone(),
@@ -1761,11 +1743,9 @@ pub mod tests {
         voters_sender.disconnect();
 
         // Join the async task.
-        if let Err(timeout_error) = async_std::io::timeout(
-            Duration::from_millis(200),
-            process_distribute_voters_handle.map(Ok),
-        )
-        .await
+        if let Err(timeout_error) = process_distribute_voters_handle
+            .timeout(Duration::from_millis(200))
+            .await
         {
             panic!(
                 "process_distribute_voters_handle did not complete in time, error: {}",
@@ -1785,14 +1765,12 @@ pub mod tests {
         assert_eq!(server_message_receiver_3.next().await, None);
 
         // Join the async task.
-        if let Err(timeout_error) = async_std::io::timeout(
-            Duration::from_millis(200),
-            process_client_handling_stream_handle.map(Ok),
-        )
-        .await
+        if let Err(timeout_error) = process_internal_client_message_handle
+            .timeout(Duration::from_millis(200))
+            .await
         {
             panic!(
-                "process_client_handling_stream_handle did not complete in time, error: {}",
+                "process_internal_client_message_handle did not complete in time, error: {}",
                 timeout_error
             );
         }
