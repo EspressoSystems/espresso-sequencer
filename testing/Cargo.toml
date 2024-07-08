@@ -31,6 +31,7 @@ hotshot-macros = { path = "../macros" }
 hotshot-orchestrator = { version = "0.5.36", path = "../orchestrator", default-features = false }
 hotshot-task = { path = "../task" }
 hotshot-task-impls = { path = "../task-impls", version = "0.5.36", default-features = false }
+hotshot-fakeapi = { path = "../fakeapi" }
 hotshot-types = { path = "../types" }
 hotshot-builder-api = { path = "../builder-api" }
 jf-signature = { workspace = true }
@@ -47,6 +48,8 @@ vbs = { workspace = true }
 lru = { workspace = true }
 tagged-base64.workspace = true
 vec1 = { workspace = true }
+reqwest = { workspace = true }
+url = { workspace = true }
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }

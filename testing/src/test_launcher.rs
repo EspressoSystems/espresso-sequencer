@@ -36,7 +36,7 @@ pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYP
 pub struct TestLauncher<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     /// generator for resources
     pub resource_generator: ResourceGenerators<TYPES, I>,
-    /// metadasta used for tasks
+    /// metadata used for tasks
     pub metadata: TestDescription,
 }
 
@@ -47,6 +47,7 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, 
         TestRunner::<TYPES, I, N> {
             launcher: self,
             nodes: Vec::new(),
+            solver_server: None,
             late_start: HashMap::new(),
             next_node_id: 0,
             _pd: PhantomData,

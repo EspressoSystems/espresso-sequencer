@@ -76,6 +76,8 @@ pub struct TestDescription {
     pub view_sync_properties: ViewSyncTaskDescription,
     /// description of builders to run
     pub builders: Vec1<BuilderDescription>,
+    /// description of the solver to run
+    pub solver: FakeSolverApiDescription,
 }
 
 /// Describes a possible change to builder status during test
@@ -95,6 +97,12 @@ pub enum BuilderChange {
 pub struct BuilderDescription {
     /// view number -> change to builder status
     pub changes: HashMap<u64, BuilderChange>,
+}
+
+#[derive(Clone, Debug)]
+pub struct FakeSolverApiDescription {
+    /// The rate at which errors occur in the mock solver API
+    pub error_pct: f32,
 }
 
 impl Default for TimingData {
@@ -249,6 +257,10 @@ impl Default for TestDescription {
                     changes: HashMap::new()
                 }
             ],
+            solver: FakeSolverApiDescription {
+                // Default to a 10% error rate.
+                error_pct: 0.1,
+            },
         }
     }
 }
