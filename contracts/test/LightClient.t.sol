@@ -716,7 +716,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
         updates[3] = updates[2] + DELAY_THRESHOLD + 5; // 18
         updates[4] = updates[3] + DELAY_THRESHOLD / 2; // 21
-        lc.setStateUpdateBlockNumbers(updates);
+        LC.HotShotCommitment[] memory emptyHotShotCommitmentArr = new LC.HotShotCommitment[](0);
+        lc.setStateHistory(updates, emptyHotShotCommitmentArr);
 
         // set the current block to block number larger than the l1 block numbers used in this test
         vm.roll(updates[4] + (DELAY_THRESHOLD * 5));
@@ -740,7 +741,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
         updates[3] = updates[2] + DELAY_THRESHOLD + 5; // 18
         updates[4] = updates[3] + DELAY_THRESHOLD / 2; // 21
-        lc.setStateUpdateBlockNumbers(updates);
+        LC.HotShotCommitment[] memory emptyHotShotCommitmentArr = new LC.HotShotCommitment[](0);
+        lc.setStateHistory(updates, emptyHotShotCommitmentArr);
 
         // set the current block to block number larger than the l1 block numbers used in this test
         vm.roll(updates[4] + (DELAY_THRESHOLD * 5));
@@ -756,7 +758,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         uint256[] memory updates = new uint256[](2);
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD + 5; //12
-        lc.setStateUpdateBlockNumbers(updates);
+        LC.HotShotCommitment[] memory emptyHotShotCommitmentArr = new LC.HotShotCommitment[](0);
+        lc.setStateHistory(updates, emptyHotShotCommitmentArr);
 
         vm.roll(DELAY_THRESHOLD * 5);
 
@@ -769,7 +772,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     function test_revertWhenThereIsOnlyOneUpdate() public {
         uint256[] memory updates = new uint256[](1);
         updates[0] = 1;
-        lc.setStateUpdateBlockNumbers(updates);
+        LC.HotShotCommitment[] memory emptyHotShotCommitmentArr = new LC.HotShotCommitment[](0);
+        lc.setStateHistory(updates, emptyHotShotCommitmentArr);
 
         vm.roll(DELAY_THRESHOLD * 3);
 
@@ -785,7 +789,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 21
-        lc.setStateUpdateBlockNumbers(updates);
+        LC.HotShotCommitment[] memory emptyHotShotCommitmentArr = new LC.HotShotCommitment[](0);
+        lc.setStateHistory(updates, emptyHotShotCommitmentArr);
 
         vm.roll(DELAY_THRESHOLD * 5);
 
@@ -809,7 +814,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 21
-        lc.setStateUpdateBlockNumbers(updates);
+        LC.HotShotCommitment[] memory emptyHotShotCommitmentArr = new LC.HotShotCommitment[](0);
+        lc.setStateHistory(updates, emptyHotShotCommitmentArr);
 
         // set the current block to block number larger than the l1 block numbers used in this test
         vm.roll(updates[2] + (DELAY_THRESHOLD * 5));
@@ -829,7 +835,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 21
-        lc.setStateUpdateBlockNumbers(updates);
+        LC.HotShotCommitment[] memory emptyHotShotCommitmentArr = new LC.HotShotCommitment[](0);
+        lc.setStateHistory(updates, emptyHotShotCommitmentArr);
 
         // set the current block to block number larger than the l1 block numbers used in this test
         vm.roll(updates[2] + (DELAY_THRESHOLD * 5));
@@ -843,7 +850,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         uint256[] memory updates = new uint256[](2);
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
-        lc.setStateUpdateBlockNumbers(updates);
+        LC.HotShotCommitment[] memory emptyHotShotCommitmentArr = new LC.HotShotCommitment[](0);
+        lc.setStateHistory(updates, emptyHotShotCommitmentArr);
 
         // set the current block
         uint256 currBlock = 20;
@@ -859,7 +867,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         uint256[] memory updates = new uint256[](2);
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
-        lc.setStateUpdateBlockNumbers(updates);
+        LC.HotShotCommitment[] memory emptyHotShotCommitmentArr = new LC.HotShotCommitment[](0);
+        lc.setStateHistory(updates, emptyHotShotCommitmentArr);
 
         // set the current block
         uint256 currBlock = 20;

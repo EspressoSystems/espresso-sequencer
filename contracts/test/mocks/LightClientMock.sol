@@ -17,12 +17,12 @@ contract LightClientMock is LC {
         _initializeState(genesis, numBlockPerEpoch);
     }
 
-    /// @dev Directly mutate `currentEpoch` variable for test
+    /// @dev Directly mutate currentEpoch variable for test
     function setCurrentEpoch(uint64 newEpoch) public {
         currentEpoch = newEpoch;
     }
 
-    /// @dev Directly mutate `finalizedState` variable for test
+    /// @dev Directly mutate finalizedState variable for test
     function setFinalizedState(LC.LightClientState memory state) public {
         states[finalizedState] = state;
     }
@@ -51,21 +51,15 @@ contract LightClientMock is LC {
         }
     }
 
-    function setStateUpdateBlockNumbers(uint256[] memory values) public {
-        // Empty the array
-        delete stateUpdateBlockNumbers;
-
+    function setStateHistory(uint256[] memory blockValues, HotShotCommitment[] memory hotShotValues)
+        public
+    {
         // Set the stateUpdateBlockNumbers to the new values
-        stateUpdateBlockNumbers = values;
-    }
-
-    function setHotShotCommitments(HotShotCommitment[] memory values) public {
-        // Empty the array
-        delete hotShotCommitments;
+        stateUpdateBlockNumbers = blockValues;
 
         // Set the hotShotCommitments to the new values
-        for (uint256 i = 0; i < values.length; i++) {
-            hotShotCommitments.push(values[i]);
+        for (uint256 i = 0; i < hotShotValues.length; i++) {
+            hotShotCommitments.push(hotShotValues[i]);
         }
     }
 
@@ -85,9 +79,8 @@ contract LightClientMock is LC {
         override
         returns (bool)
     {
-        if (hotShotDown) {
-            return blockNumber - frozenL1Height > threshold;
-        }
-        return super.lagOverEscapeHatchThreshold(blockNumber, threshold);
+        return hotShotDown
+            ? blockNumber - frozenL1Height > threshold
+            : super.lagOverEscapeHatchThreshold(blockNumber, threshold);
     }
 }

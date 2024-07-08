@@ -155,9 +155,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InvalidAddress();
     /// @notice Only a permissioned prover can perform this action
     error ProverNotPermissioned();
-    /// @notice If the contract is in permissioned mode and the permissioned prover is not set when
-    /// the newFinalizedState method is called, then revert
-    error PermissionedProverNotSet();
     /// @notice If the same mode or prover is sent to the function, then no change is required
     error NoChangeRequired();
     /// @notice Invalid L1 Block for checking Light Client Updates, premature or in the future
@@ -255,9 +252,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ) external {
         //revert if we're in permissionedProver mode and the permissioned prover has not been set
         if (permissionedProverEnabled && msg.sender != permissionedProver) {
-            if (permissionedProver == address(0)) {
-                revert PermissionedProverNotSet();
-            }
             revert ProverNotPermissioned();
         }
 
