@@ -5,6 +5,11 @@ use futures::{
     channel::mpsc::{self, Sender},
     FutureExt, SinkExt, StreamExt,
 };
+use hotshot_stake_table::vec_based::StakeTable;
+use hotshot_types::light_client::{CircuitField, StateVerKey};
+use hotshot_types::signature_key::BLSPubKey;
+use hotshot_types::traits::{signature_key::StakeTableEntryType, stake_table::StakeTableScheme};
+use hotshot_types::PeerConfig;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tide_disco::socket::Connection;
@@ -284,6 +289,55 @@ where
     Ok(api)
 }
 
+#[derive(Debug, Deserialize)]
+pub struct PublishHotShotConfig {
+    pub known_nodes_with_stake: Vec<PeerConfig<BLSPubKey>>,
+}
+
+/// [get_stake_table_from_sequencer] retrieves the stake table from the
+/// Sequencer.  It expects a [surf_disco::Client] to be provided so that it can
+/// make the request to the Hotshot Query Service.  It will return a
+/// [StakeTable] that is populated with the data retrieved from the Hotshot
+/// Query Service.
+pub async fn get_stake_table_from_sequencer(
+    client: surf_disco::Client<hotshot_query_service::Error, Version01>,
+) -> Result<StakeTable<BLSPubKey, StateVerKey, CircuitField>, hotshot_query_service::Error> {
+    let request = client
+        .get("config/hotshot")
+        // We need to set the Accept header, otherwise the Content-Type
+        // will be application/octet-stream, and we won't be able to
+        // deserialize the response.
+        .header("Accept", "application/json");
+    let stake_table_result = request.send().await;
+
+    let public_hot_shot_config: PublishHotShotConfig = match stake_table_result {
+        Ok(public_hot_shot_config) => public_hot_shot_config,
+        Err(err) => {
+            tracing::info!("retrieve stake table request failed: {}", err);
+            return Err(err);
+        }
+    };
+
+    let mut stake_table = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(
+        public_hot_shot_config.known_nodes_with_stake.len(),
+    );
+
+    for node in public_hot_shot_config.known_nodes_with_stake.into_iter() {
+        stake_table
+            .register(
+                *node.stake_table_entry.key(),
+                node.stake_table_entry.stake(),
+                node.state_ver_key,
+            )
+            .expect("registering stake table entry");
+    }
+
+    stake_table.advance();
+    stake_table.advance();
+
+    Ok(stake_table)
+}
+
 /// [stream_leaves_from_hotshot_query_service] retrieves a stream of
 /// [sequencer::Leaf]s from the Hotshot Query Service.  It expects a
 /// [current_block_height] to be provided so that it can determine the starting
@@ -336,7 +390,8 @@ pub async fn stream_leaves_from_hotshot_query_service(
 #[cfg(test)]
 mod tests {
     use super::{
-        stream_leaves_from_hotshot_query_service, Error, StateClientMessageSender, STATIC_VER_0_1,
+        get_stake_table_from_sequencer, stream_leaves_from_hotshot_query_service, Error,
+        StateClientMessageSender, STATIC_VER_0_1,
     };
     use crate::service::{
         client_id::ClientId,
@@ -385,7 +440,7 @@ mod tests {
             panic!("Error: {:?}", e);
         }
 
-        let data_state = DataState::new(
+        let mut data_state = DataState::new(
             Default::default(),
             Default::default(),
             Default::default(),
@@ -399,6 +454,16 @@ mod tests {
             Default::default(),
             ClientId::from_count(1),
         );
+
+        let client = surf_disco::Client::new(
+            "https://query.cappuccino.testnet.espresso.network/v0"
+                .parse()
+                .unwrap(),
+        );
+
+        let get_stake_table_result = get_stake_table_from_sequencer(client.clone()).await;
+        let stake_table = get_stake_table_result.unwrap();
+        data_state.replace_stake_table(stake_table);
 
         let data_state = Arc::new(RwLock::new(data_state));
         let client_thread_state = Arc::new(RwLock::new(client_thread_state));
@@ -440,11 +505,7 @@ mod tests {
         let _leaf_retriever_handle = async_std::task::spawn(async move {
             // Alright, let's get some leaves, bro
 
-            let client = surf_disco::Client::new(
-                "https://query.cappuccino.testnet.espresso.network/v0"
-                    .parse()
-                    .unwrap(),
-            );
+            let client = client;
 
             let mut leaf_stream = stream_leaves_from_hotshot_query_service(None, client)
                 .await
