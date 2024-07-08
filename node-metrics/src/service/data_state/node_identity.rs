@@ -9,28 +9,28 @@ use std::net::IpAddr;
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct NodeIdentity {
     public_key: BLSPubKey,
-    name: String,
-    wallet_address: FeeAccount,
-    ip_addresses: Vec<IpAddr>,
-    company: String,
+    name: Option<String>,
+    wallet_address: Option<FeeAccount>,
+    ip_addresses: Option<Vec<IpAddr>>,
+    company: Option<String>,
     location: Option<LocationDetails>,
-    operating_system: String,
-    node_type: String,
-    network_type: String,
+    operating_system: Option<String>,
+    node_type: Option<String>,
+    network_type: Option<String>,
 }
 
 impl NodeIdentity {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         public_key: BLSPubKey,
-        name: String,
-        wallet_address: FeeAccount,
-        ip_addresses: Vec<IpAddr>,
-        company: String,
+        name: Option<String>,
+        wallet_address: Option<FeeAccount>,
+        ip_addresses: Option<Vec<IpAddr>>,
+        company: Option<String>,
         location: Option<LocationDetails>,
-        operating_system: String,
-        node_type: String,
-        network_type: String,
+        operating_system: Option<String>,
+        node_type: Option<String>,
+        network_type: Option<String>,
     ) -> Self {
         Self {
             public_key,
@@ -49,19 +49,19 @@ impl NodeIdentity {
         &self.public_key
     }
 
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &Option<String> {
         &self.name
     }
 
-    pub fn wallet_address(&self) -> &FeeAccount {
+    pub fn wallet_address(&self) -> &Option<FeeAccount> {
         &self.wallet_address
     }
 
-    pub fn ip_addresses(&self) -> &[IpAddr] {
+    pub fn ip_addresses(&self) -> &Option<Vec<IpAddr>> {
         &self.ip_addresses
     }
 
-    pub fn company(&self) -> &str {
+    pub fn company(&self) -> &Option<String> {
         &self.company
     }
 
@@ -69,29 +69,29 @@ impl NodeIdentity {
         self.location.as_ref()
     }
 
-    pub fn operating_system(&self) -> &str {
+    pub fn operating_system(&self) -> &Option<String> {
         &self.operating_system
     }
 
-    pub fn node_type(&self) -> &str {
+    pub fn node_type(&self) -> &Option<String> {
         &self.node_type
     }
 
-    pub fn network_type(&self) -> &str {
+    pub fn network_type(&self) -> &Option<String> {
         &self.network_type
     }
 
     pub fn from_public_key(public_key: BLSPubKey) -> Self {
         Self {
             public_key,
-            name: String::new(),
-            wallet_address: Default::default(),
-            ip_addresses: vec![],
-            company: String::new(),
+            name: None,
+            wallet_address: None,
+            ip_addresses: None,
+            company: None,
             location: None,
-            operating_system: String::new(),
-            node_type: String::new(),
-            network_type: String::new(),
+            operating_system: None,
+            node_type: None,
+            network_type: None,
         }
     }
 }
@@ -110,14 +110,14 @@ pub mod tests {
 
         NodeIdentity::new(
             pub_key,
-            "a".to_string(),
-            Default::default(),
-            vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))],
-            "company".to_string(),
+            Some("a".to_string()),
+            Some(Default::default()),
+            Some(vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))]),
+            Some("company".to_string()),
             Some(LocationDetails::new((0.0, 0.0), "US".to_string())),
-            "Windows 11".to_string(),
-            "espresso".to_string(),
-            "residential".to_string(),
+            Some("Windows 11".to_string()),
+            Some("espresso".to_string()),
+            Some("residential".to_string()),
         )
     }
 
@@ -168,7 +168,7 @@ pub mod tests {
         let node_identity = create_test_node(1);
         let name = node_identity.name();
 
-        assert_eq!(name, "a");
+        assert_eq!(name, &Some("a".to_string()));
     }
 
     #[test]
@@ -176,7 +176,7 @@ pub mod tests {
         let node_identity = create_test_node(1);
         let wallet_address = node_identity.wallet_address();
 
-        assert_eq!(wallet_address, &Default::default());
+        assert_eq!(wallet_address, &Some(Default::default()));
     }
 
     #[test]
@@ -184,7 +184,10 @@ pub mod tests {
         let node_identity = create_test_node(1);
         let ip_addresses = node_identity.ip_addresses();
 
-        assert_eq!(ip_addresses, &[IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))]);
+        assert_eq!(
+            ip_addresses,
+            &Some(vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))])
+        );
     }
 
     #[test]
@@ -192,7 +195,7 @@ pub mod tests {
         let node_identity = create_test_node(1);
         let company = node_identity.company();
 
-        assert_eq!(company, "company");
+        assert_eq!(company, &Some("company".to_string()));
     }
 
     #[test]
@@ -211,7 +214,7 @@ pub mod tests {
         let node_identity = create_test_node(1);
         let operating_system = node_identity.operating_system();
 
-        assert_eq!(operating_system, "Windows 11");
+        assert_eq!(operating_system, &Some("Windows 11".to_string()));
     }
 
     #[test]
@@ -219,7 +222,7 @@ pub mod tests {
         let node_identity = create_test_node(1);
         let node_type = node_identity.node_type();
 
-        assert_eq!(node_type, "espresso");
+        assert_eq!(node_type, &Some("espresso".to_string()));
     }
 
     #[test]
@@ -227,6 +230,6 @@ pub mod tests {
         let node_identity = create_test_node(1);
         let network_type = node_identity.network_type();
 
-        assert_eq!(network_type, "residential");
+        assert_eq!(network_type, &Some("residential".to_string()));
     }
 }

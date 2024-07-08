@@ -1010,14 +1010,14 @@ pub mod tests {
             let (pub_key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 0);
             NodeIdentity::new(
                 pub_key,
-                "a".to_string(),
-                Default::default(),
-                vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))],
-                "company".to_string(),
+                Some("a".to_string()),
+                Some(Default::default()),
+                Some(vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))]),
+                Some("company".to_string()),
                 Some(LocationDetails::new((0.0, 0.0), "US".to_string())),
-                "Windows 11".to_string(),
-                "espresso".to_string(),
-                "residential".to_string(),
+                Some("Windows 11".to_string()),
+                Some("espresso".to_string()),
+                Some("residential".to_string()),
             )
         };
 
@@ -1025,14 +1025,14 @@ pub mod tests {
             let (pub_key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 1);
             NodeIdentity::new(
                 pub_key,
-                "b".to_string(),
-                Default::default(),
-                vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2))],
-                "company".to_string(),
+                Some("b".to_string()),
+                Some(Default::default()),
+                Some(vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2))]),
+                Some("company".to_string()),
                 Some(LocationDetails::new((0.0, 0.0), "US".to_string())),
-                "Windows 11".to_string(),
-                "espresso".to_string(),
-                "residential".to_string(),
+                Some("Windows 11".to_string()),
+                Some("espresso".to_string()),
+                Some("residential".to_string()),
             )
         };
 
@@ -1040,14 +1040,14 @@ pub mod tests {
             let (pub_key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], 2);
             NodeIdentity::new(
                 pub_key,
-                "b".to_string(),
-                Default::default(),
-                vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 3))],
-                "company".to_string(),
+                Some("b".to_string()),
+                Some(Default::default()),
+                Some(vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 3))]),
+                Some("company".to_string()),
                 Some(LocationDetails::new((0.0, 0.0), "US".to_string())),
-                "Windows 11".to_string(),
-                "espresso".to_string(),
-                "residential".to_string(),
+                Some("Windows 11".to_string()),
+                Some("espresso".to_string()),
+                Some("residential".to_string()),
             )
         };
 
