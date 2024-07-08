@@ -48,6 +48,7 @@ impl PartialEq for ServerMessage {
             (Self::YouAre(lhs), Self::YouAre(rhg)) => lhs == rhg,
             (Self::LatestBlock(lhs), Self::LatestBlock(rhs)) => lhs == rhs,
             (Self::LatestNodeIdentity(lhs), Self::LatestNodeIdentity(rhs)) => lhs == rhs,
+            (Self::LatestVoters(lhs), Self::LatestVoters(rhs)) => lhs == rhs,
             (Self::BlocksSnapshot(lhs), Self::BlocksSnapshot(rhs)) => lhs == rhs,
             (Self::NodeIdentitySnapshot(lhs), Self::NodeIdentitySnapshot(rhs)) => lhs == rhs,
             (Self::HistogramSnapshot(_), Self::HistogramSnapshot(_)) => false,
