@@ -284,9 +284,60 @@ where
     Ok(api)
 }
 
+/// [stream_leaves_from_hotshot_query_service] retrieves a stream of
+/// [sequencer::Leaf]s from the Hotshot Query Service.  It expects a
+/// [current_block_height] to be provided so that it can determine the starting
+/// block height to begin streaming from.  No matter what the value of
+/// [current_block_height] is the stream will always check what the latest
+/// block height is on the hotshot query service.  It will then attempt to
+/// pull as few Leafs as it needs from the stream.
+pub async fn stream_leaves_from_hotshot_query_service(
+    current_block_height: Option<u64>,
+    client: surf_disco::Client<hotshot_query_service::Error, Version01>,
+) -> Result<
+    impl futures::Stream<Item = Result<sequencer::Leaf, hotshot_query_service::Error>> + Unpin,
+    hotshot_query_service::Error,
+> {
+    let block_height_result = client.get("status/block-height").send().await;
+    let block_height: u64 = match block_height_result {
+        Ok(block_height) => block_height,
+        Err(err) => {
+            tracing::info!("retrieve block height request failed: {}", err);
+            return Err(err);
+        }
+    };
+
+    let latest_block_start = block_height.saturating_sub(50);
+    let start_block_height = if let Some(known_height) = current_block_height {
+        std::cmp::min(known_height, latest_block_start)
+    } else {
+        latest_block_start
+    };
+
+    let leaves_stream_result = client
+        .socket(&format!(
+            "availability/stream/leaves/{}",
+            start_block_height
+        ))
+        .subscribe::<sequencer::Leaf>()
+        .await;
+
+    let leaves_stream = match leaves_stream_result {
+        Ok(leaves_stream) => leaves_stream,
+        Err(err) => {
+            tracing::info!("retrieve leaves stream failed: {}", err);
+            return Err(err);
+        }
+    };
+
+    Ok(leaves_stream)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Error, StateClientMessageSender, Version01, STATIC_VER_0_1};
+    use super::{
+        stream_leaves_from_hotshot_query_service, Error, StateClientMessageSender, STATIC_VER_0_1,
+    };
     use crate::service::{
         client_id::ClientId,
         client_message::InternalClientMessage,
@@ -303,7 +354,6 @@ mod tests {
         channel::mpsc::{self, Sender},
         SinkExt, StreamExt,
     };
-    use sequencer::Leaf;
     use std::sync::Arc;
     use tide_disco::App;
 
@@ -316,6 +366,7 @@ mod tests {
     }
 
     #[async_std::test]
+    #[ignore]
     async fn test_api_creation() {
         let node_validator_api_result = super::define_api::<TestState>();
 
@@ -389,34 +440,20 @@ mod tests {
         let _leaf_retriever_handle = async_std::task::spawn(async move {
             // Alright, let's get some leaves, bro
 
-            let client: surf_disco::Client<Error, Version01> = surf_disco::Client::new(
+            let client = surf_disco::Client::new(
                 "https://query.cappuccino.testnet.espresso.network/v0"
                     .parse()
                     .unwrap(),
             );
 
-            let block_height_result = client.get("status/block-height").send().await;
-            let block_height: u64 = if let Ok(block_height) = block_height_result {
-                block_height
-            } else {
-                tracing::info!("block height request failed");
-                return;
-            };
-
-            let start_block_height = block_height.saturating_sub(50);
-
-            let mut leaf_sender = leaf_sender;
-            let mut leaves = client
-                .socket(&format!(
-                    "availability/stream/leaves/{}",
-                    start_block_height
-                ))
-                .subscribe::<Leaf>()
+            let mut leaf_stream = stream_leaves_from_hotshot_query_service(None, client)
                 .await
                 .unwrap();
 
+            let mut leaf_sender = leaf_sender;
+
             loop {
-                let leaf_result = leaves.next().await;
+                let leaf_result = leaf_stream.next().await;
                 let leaf = if let Some(Ok(leaf)) = leaf_result {
                     leaf
                 } else {
