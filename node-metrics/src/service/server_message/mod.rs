@@ -23,7 +23,7 @@ pub enum ServerMessage {
 
     /// LatestVoters is a message that is meant to show the most recent
     /// voters that have arrived.
-    LatestVoters(BitVec),
+    LatestVoters(BitVec<u16>),
 
     /// BlocksSnapshot is a message that is sent in response to a request for
     /// the snapshot of block information that is available.
@@ -39,7 +39,7 @@ pub enum ServerMessage {
 
     /// VotersSnapshot is a message that is sent in response to a request for
     /// the snapshot of the current voters information.
-    VotersSnapshot(Arc<Vec<BitVec>>),
+    VotersSnapshot(Arc<Vec<BitVec<u16>>>),
 }
 
 impl PartialEq for ServerMessage {

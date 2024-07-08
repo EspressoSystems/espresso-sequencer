@@ -38,7 +38,7 @@ const MAX_HISTORY: usize = 50;
 #[cfg_attr(test, derive(Default))]
 pub struct DataState {
     latest_blocks: CircularBuffer<MAX_HISTORY, BlockDetail<SeqTypes>>,
-    latest_voters: CircularBuffer<MAX_HISTORY, BitVec>,
+    latest_voters: CircularBuffer<MAX_HISTORY, BitVec<u16>>,
     stake_table: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
     // Do we need any other data at the moment?
     node_identity: Vec<(BLSPubKey, NodeIdentity)>,
@@ -47,7 +47,7 @@ pub struct DataState {
 impl DataState {
     pub fn new(
         latest_blocks: CircularBuffer<MAX_HISTORY, BlockDetail<SeqTypes>>,
-        latest_voters: CircularBuffer<MAX_HISTORY, BitVec>,
+        latest_voters: CircularBuffer<MAX_HISTORY, BitVec<u16>>,
         stake_table: StakeTable<BLSPubKey, StateVerKey, CircuitField>,
         node_identity: Vec<(BLSPubKey, NodeIdentity)>,
     ) -> Self {
@@ -63,7 +63,7 @@ impl DataState {
         self.latest_blocks.iter()
     }
 
-    pub fn latest_voters(&self) -> impl Iterator<Item = &BitVec> {
+    pub fn latest_voters(&self) -> impl Iterator<Item = &BitVec<u16>> {
         self.latest_voters.iter()
     }
 
@@ -86,7 +86,7 @@ impl DataState {
         self.latest_blocks.push_back(block);
     }
 
-    pub fn add_latest_voters(&mut self, voters: BitVec) {
+    pub fn add_latest_voters(&mut self, voters: BitVec<u16>) {
         self.latest_voters.push_back(voters);
     }
 
@@ -152,7 +152,7 @@ async fn process_incoming_leaf(
     leaf: Leaf<SeqTypes>,
     data_state: Arc<RwLock<DataState>>,
     mut block_sender: Sender<BlockDetail<SeqTypes>>,
-    mut voters_sender: Sender<BitVec>,
+    mut voters_sender: Sender<BitVec<u16>>,
 ) -> Result<(), ProcessLeafError>
 where
     Header: BlockHeader<SeqTypes> + QueryableHeader<SeqTypes> + ExplorerHeader<SeqTypes>,
@@ -249,7 +249,7 @@ pub async fn process_leaf_stream<S>(
     mut stream: S,
     data_state: Arc<RwLock<DataState>>,
     block_sender: Sender<BlockDetail<SeqTypes>>,
-    voters_senders: Sender<BitVec>,
+    voters_senders: Sender<BitVec<u16>>,
 ) where
     S: Stream<Item = Leaf<SeqTypes>> + Unpin,
     Header: BlockHeader<SeqTypes> + QueryableHeader<SeqTypes> + ExplorerHeader<SeqTypes>,

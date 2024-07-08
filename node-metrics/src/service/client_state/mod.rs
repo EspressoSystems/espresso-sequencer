@@ -817,7 +817,7 @@ async fn handle_received_node_identity(
 /// subscribed to the voters stream.
 async fn handle_received_voters(
     client_thread_state: Arc<RwLock<ClientThreadState>>,
-    voters: BitVec,
+    voters: BitVec<u16>,
 ) {
     let client_thread_state_read_lock_guard = client_thread_state.read().await;
 
@@ -951,7 +951,7 @@ pub async fn process_distribute_voters_handling_stream<S>(
     client_thread_state: Arc<RwLock<ClientThreadState>>,
     mut stream: S,
 ) where
-    S: Stream<Item = BitVec> + Unpin,
+    S: Stream<Item = BitVec<u16>> + Unpin,
 {
     loop {
         let voters_result = stream.next().await;
