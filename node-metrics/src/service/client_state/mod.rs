@@ -1798,8 +1798,21 @@ pub mod tests {
         }
     }
 
+    // The following tests codify assumptions being bad on behalf of the Sender
+    // and Receivers provided by the async_std library.  The purpose of these
+    // tests are to document these assumptions, and add a test to ensure that
+    // they behave as expected.  If they ever do not behave as expected, then
+    // the rest of this library will need to be modified to account for that
+    // change in behavior.
+
+    /// Tests the behavior of the sender and receiver when the sender is
+    /// dropped before the receiver is polled.
+    ///
+    /// This is a separate library test to ensure that the behavior that this
+    /// library is built on top of does not introduce a change that would
+    /// make this library no longer operate correctly.
     #[async_std::test]
-    async fn test_channel_assumption_1() {
+    async fn test_sender_receiver_behavior_drop_sender_before_receiver_polled_closes_receiver() {
         let (sender, mut receiver) = mpsc::channel::<u64>(1);
 
         drop(sender);
@@ -1807,18 +1820,31 @@ pub mod tests {
         assert_eq!(receiver.next().await, None);
     }
 
+    /// Tests the behavior of the  sender and receiver when the sender is
+    /// dropped after the receiver is polled.
+    ///
+    /// This is a separate library test to ensure that the behavior that this
+    /// library is built on top of does not introduce a change that would
+    /// make this library no longer operate correctly.
     #[async_std::test]
-    async fn test_channel_assumption_2() {
+    async fn test_sender_receiver_behavior_drop_sender_after_receiver_polled_closes_receiver() {
         let (sender, mut receiver) = mpsc::channel::<u64>(1);
 
         let join_handle = async_std::task::spawn(async move { receiver.next().await });
+        async_std::task::sleep(Duration::from_millis(100)).await;
         drop(sender);
 
         assert_eq!(join_handle.await, None);
     }
 
+    /// Tests the behavior of the sender and receiver when the receiver is
+    /// dropped before anything is sent across the Sender.
+    ///
+    /// This is a separate library test to ensure that the behavior that this
+    /// library is built on top of does not introduce a change that would
+    /// make this library no longer operate correctly.
     #[async_std::test]
-    async fn test_channel_assumption_3() {
+    async fn test_sender_receiver_behavior_drop_receiver_before_sender_sends() {
         let (mut sender, receiver) = mpsc::channel(1);
 
         drop(receiver);
@@ -1826,8 +1852,14 @@ pub mod tests {
         assert_ne!(sender.send(1).await, Ok(()));
     }
 
+    /// Tests the behavior of the sender and receiver when the receiver is
+    /// dropped after the sender has sent a value.
+    ///
+    /// This is a separate library test to ensure that the behavior that this
+    /// library is built on top of does not introduce a change that would
+    /// make this library no longer operate correctly.
     #[async_std::test]
-    async fn test_channel_assumption_4() {
+    async fn test_sender_receiver_behavior_drop_receiver_after_sender_sends() {
         let (mut sender, mut receiver) = mpsc::channel(1);
 
         let join_handle = async_std::task::spawn(async move {
@@ -1843,24 +1875,49 @@ pub mod tests {
         assert_ne!(join_handle.await, Ok(()));
     }
 
+    /// Tests to ensure that time timeout on an already ready future does not
+    /// cause the future to be dropped.
     #[async_std::test]
-    async fn test_timeout_assumption_1() {
+    async fn test_timeout_on_already_ready_future() {
         assert_eq!(
-            async_std::future::timeout(std::time::Duration::from_millis(100), async move { 1u64 })
-                .await,
+            futures::future::ready(1u64).timeout(Duration::ZERO).await,
             Ok(1u64)
         );
     }
 
+    /// Tests to ensure that time timeout on a pending future does not cause the
+    /// future to be dropped.
     #[async_std::test]
-    async fn test_timeout_assumption_2() {
+    async fn test_timeout_on_async_block_resolves_when_polled() {
+        assert_eq!(async move { 1u64 }.timeout(Duration::ZERO).await, Ok(1u64),);
+
+        assert_eq!(
+            async move { 1u64 }
+                .timeout(Duration::from_millis(100))
+                .await,
+            Ok(1u64),
+        );
+    }
+
+    /// Tests to ensure that time timeout on a pending future does not cause the
+    /// future to be dropped.
+    #[async_std::test]
+    async fn test_timeout_on_pending_future_times_out() {
         assert_ne!(
-            async_std::future::timeout(
-                std::time::Duration::from_millis(100),
-                futures::future::pending::<u64>()
-            )
-            .await,
+            async_std::future::timeout(Duration::ZERO, futures::future::pending::<u64>()).await,
             Ok(1u64)
         );
+    }
+
+    /// Tests to ensure that bitvec is directly comparable without needing to
+    /// worry about their instances points to the same memory.
+    #[test]
+    fn test_bitvec_is_comparable() {
+        let bitvec_1: BitVec<usize> = BitVec::from_vec(vec![0x55]);
+        let bitvec_2: BitVec<usize> = BitVec::from_vec(vec![0x55]);
+        let bitvec_3: BitVec<usize> = BitVec::from_vec(vec![0xAA]);
+
+        assert_eq!(bitvec_1, bitvec_2);
+        assert_ne!(bitvec_1, bitvec_3);
     }
 }
