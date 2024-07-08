@@ -3108,7 +3108,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "snafu",
- "surf-disco 0.9.0",
+ "surf-disco",
  "time 0.3.36",
  "tokio",
  "tracing",
@@ -3129,7 +3129,7 @@ dependencies = [
  "serde",
  "snafu",
  "tagged-base64",
- "tide-disco 0.9.0",
+ "tide-disco",
  "toml",
  "vbs",
 ]
@@ -3153,9 +3153,9 @@ dependencies = [
  "portpicker",
  "serde",
  "snafu",
- "surf-disco 0.8.0",
+ "surf-disco",
  "tagged-base64",
- "tide-disco 0.8.0",
+ "tide-disco",
  "toml",
  "tracing",
  "vbs",
@@ -3213,9 +3213,9 @@ dependencies = [
  "serde",
  "serde-inline-default",
  "serde_json",
- "surf-disco 0.9.0",
+ "surf-disco",
  "thiserror",
- "tide-disco 0.9.0",
+ "tide-disco",
  "tokio",
  "toml",
  "tracing",
@@ -3265,7 +3265,7 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "snafu",
- "surf-disco 0.9.0",
+ "surf-disco",
  "tagged-base64",
  "time 0.3.36",
  "tokio",
@@ -7423,25 +7423,6 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
 name = "surf-disco"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55c871338479a1c27b5e2ae15e5ae0fe70769306d2ef5a0c2d30896a09ac8a3c"
-dependencies = [
- "async-std",
- "async-tungstenite",
- "derivative",
- "futures",
- "hex",
- "reqwest",
- "serde",
- "serde_json",
- "tide-disco 0.8.0",
- "tracing",
- "vbs",
-]
-
-[[package]]
-name = "surf-disco"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14e00ab9d939d04110f14281d5a1e45b6c8acdfbc42e720cbfaef33007c907e6"
@@ -7454,7 +7435,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "tide-disco 0.9.0",
+ "tide-disco",
  "tracing",
  "vbs",
 ]
@@ -7717,59 +7698,6 @@ dependencies = [
  "route-recognizer",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "tide-disco"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "715558234f09576333f92ee769bd160e6c4bb1d156d25613cf62be9a592f291a"
-dependencies = [
- "anyhow",
- "async-h1",
- "async-lock 3.4.0",
- "async-std",
- "async-trait",
- "clap",
- "config",
- "derivative",
- "derive_more",
- "dirs",
- "edit-distance",
- "futures",
- "futures-util",
- "http 1.1.0",
- "include_dir",
- "itertools 0.12.1",
- "lazy_static",
- "libc",
- "markdown",
- "maud",
- "parking_lot",
- "prometheus",
- "reqwest",
- "routefinder",
- "semver 1.0.23",
- "serde",
- "serde_json",
- "serde_with",
- "shellexpand",
- "signal-hook",
- "signal-hook-async-std",
- "snafu",
- "strum",
- "strum_macros",
- "tagged-base64",
- "tide",
- "tide-websockets",
- "toml",
- "tracing",
- "tracing-distributed",
- "tracing-futures",
- "tracing-log",
- "tracing-subscriber 0.3.18",
- "url",
- "vbs",
 ]
 
 [[package]]
