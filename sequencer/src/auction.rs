@@ -201,15 +201,25 @@ impl BidTx {
         // As the code is currently organized, I think chain_config
         // will always be resolved here. But let's guard against the
         // error in case code is shifted around in the future.
-        if let Some(chain_config) = state.chain_config.resolve() {
-            let recipient = chain_config.bid_recipient;
-            // TODO also charge gas fee
-            state
-                .charge_fee(FeeInfo::from(self.clone()), recipient)
-                .map_err(ExecutionError::from)
-        } else {
-            Err(ExecutionError::UnresolvableChainConfig)
-        }
+        let Some(chain_config) = state.chain_config.resolve() else {
+            return Err(ExecutionError::UnresolvableChainConfig);
+        };
+
+        let recipient = chain_config.bid_recipient;
+        // Charge the bid amount
+        state
+            .charge_fee(FeeInfo::new(self.account(), self.amount()), recipient)
+            .map_err(ExecutionError::from)?;
+
+        // TODO are gas and bid funded to same recipient? Possibly
+        // gas would be funded to recipient sequencing
+        // fee recipient?
+        // Charge the the gas amount
+        state
+            .charge_fee(FeeInfo::new(self.account(), self.gas_price()), recipient)
+            .map_err(ExecutionError::from)?;
+
+        Ok(())
     }
     /// Cryptographic signature verification
     fn verify(&self) -> Result<(), ExecutionError> {
@@ -231,6 +241,18 @@ impl BidTx {
     /// Get the `url` field from the body
     pub fn url(&self) -> Url {
         self.body.url()
+    }
+    /// get gas price
+    pub fn gas_price(&self) -> FeeAmount {
+        self.body.gas_price
+    }
+    /// get bid amount
+    pub fn amount(&self) -> FeeAmount {
+        self.body.bid_amount
+    }
+    /// get bid amount
+    pub fn account(&self) -> FeeAccount {
+        self.body.account()
     }
 }
 
