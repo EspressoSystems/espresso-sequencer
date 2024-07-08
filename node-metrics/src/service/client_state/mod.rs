@@ -1352,6 +1352,7 @@ pub mod tests {
 
         let (mut leaf_sender, leaf_receiver) = mpsc::channel(1);
         let (block_detail_sender, block_detail_receiver) = mpsc::channel(1);
+        let (voters_sender, voters_receiver) = mpsc::channel(1);
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
@@ -1365,14 +1366,19 @@ pub mod tests {
 
         let process_distribute_block_detail_handle =
             async_std::task::spawn(process_distribute_block_detail_handling_stream(
-                client_thread_state,
+                client_thread_state.clone(),
                 block_detail_receiver,
             ));
+
+        let process_distribute_voters_handle = async_std::task::spawn(
+            process_distribute_voters_handling_stream(client_thread_state, voters_receiver),
+        );
 
         let process_leaf_stream_handle = async_std::task::spawn(process_leaf_stream(
             leaf_receiver,
             data_state,
             block_detail_sender,
+            voters_sender,
         ));
 
         // Send a Connected Message to the server
@@ -1474,6 +1480,16 @@ pub mod tests {
         {
             panic!(
                 "process_distribute_client_handling_handle did not complete in time, error: {}",
+                timeout_error
+            );
+        }
+
+        if let Err(timeout_error) = process_distribute_voters_handle
+            .timeout(Duration::from_millis(200))
+            .await
+        {
+            panic!(
+                "process_distribute_voters_handle did not complete in time, error: {}",
                 timeout_error
             );
         }

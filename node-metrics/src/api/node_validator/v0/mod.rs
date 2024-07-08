@@ -354,7 +354,7 @@ mod tests {
         let (block_detail_sender, block_detail_receiver) = mpsc::channel(32);
         let (leaf_sender, leaf_receiver) = mpsc::channel(32);
         let (_node_identity_sender, node_identity_receiver) = mpsc::channel(32);
-        let (_voters_sender, voters_receiver) = mpsc::channel(32);
+        let (voters_sender, voters_receiver) = mpsc::channel(32);
 
         let _process_internal_client_message_handle =
             async_std::task::spawn(process_internal_client_message_stream(
@@ -383,6 +383,7 @@ mod tests {
             leaf_receiver,
             data_state.clone(),
             block_detail_sender,
+            voters_sender,
         ));
 
         let _leaf_retriever_handle = async_std::task::spawn(async move {

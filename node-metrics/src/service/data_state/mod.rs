@@ -152,6 +152,7 @@ async fn process_incoming_leaf(
     leaf: Leaf<SeqTypes>,
     data_state: Arc<RwLock<DataState>>,
     mut block_sender: Sender<BlockDetail<SeqTypes>>,
+    mut voters_sender: Sender<BitVec>,
 ) -> Result<(), ProcessLeafError>
 where
     Header: BlockHeader<SeqTypes> + QueryableHeader<SeqTypes> + ExplorerHeader<SeqTypes>,
@@ -225,11 +226,16 @@ where
         .push_back(block_detail);
     data_state_write_lock_guard
         .latest_voters
-        .push_back(voters_bitvec);
+        .push_back(voters_bitvec.clone());
 
     drop(data_state_write_lock_guard);
 
     if let Err(err) = block_sender.send(block_detail_copy).await {
+        // We have an error that prevents us from continuing
+        return Err(ProcessLeafError::SendError(err));
+    }
+
+    if let Err(err) = voters_sender.send(voters_bitvec).await {
         // We have an error that prevents us from continuing
         return Err(ProcessLeafError::SendError(err));
     }
@@ -243,6 +249,7 @@ pub async fn process_leaf_stream<S>(
     mut stream: S,
     data_state: Arc<RwLock<DataState>>,
     block_sender: Sender<BlockDetail<SeqTypes>>,
+    voters_senders: Sender<BitVec>,
 ) where
     S: Stream<Item = Leaf<SeqTypes>> + Unpin,
     Header: BlockHeader<SeqTypes> + QueryableHeader<SeqTypes> + ExplorerHeader<SeqTypes>,
@@ -258,8 +265,13 @@ pub async fn process_leaf_stream<S>(
             return;
         };
 
-        if let Err(err) =
-            process_incoming_leaf(leaf, data_state.clone(), block_sender.clone()).await
+        if let Err(err) = process_incoming_leaf(
+            leaf,
+            data_state.clone(),
+            block_sender.clone(),
+            voters_senders.clone(),
+        )
+        .await
         {
             // We have an error that prevents us from continuing
             tracing::info!("process leaf stream: error processing leaf: {}", err);
@@ -304,12 +316,14 @@ mod tests {
         let data_state: DataState = Default::default();
         let data_state = Arc::new(RwLock::new(data_state));
         let (block_sender, block_receiver) = futures::channel::mpsc::channel(1);
+        let (voters_sender, voters_receiver) = futures::channel::mpsc::channel(1);
         let (leaf_sender, leaf_receiver) = futures::channel::mpsc::channel(1);
 
         let process_leaf_stream_task_handle = async_std::task::spawn(process_leaf_stream(
             leaf_receiver,
             data_state.clone(),
             block_sender,
+            voters_sender,
         ));
 
         {
@@ -338,6 +352,11 @@ mod tests {
 
         let next_block = block_receiver.next().await;
         assert!(next_block.is_some());
+
+        let mut voters_receiver = voters_receiver;
+        // We should receive a BitVec of voters.
+        let next_voters = voters_receiver.next().await;
+        assert!(next_voters.is_some());
 
         {
             let data_state = data_state.read().await;
