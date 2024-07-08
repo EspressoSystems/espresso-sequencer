@@ -16,17 +16,32 @@ use hotshot_query_service::explorer::MonetaryValue;
 use hotshot_types::traits::block_contents::BuilderFee;
 use jf_merkle_tree::{
     ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme, LookupResult,
-    MerkleCommitment, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme,
+    MerkleCommitment, MerkleTreeError, MerkleTreeScheme, ToTraversalPath,
+    UniversalMerkleTreeScheme,
 };
 use num_traits::CheckedSub;
 use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
+use thiserror::Error;
 
 use crate::{
     eth_signature_key::EthKeyPair, AccountQueryData, FeeAccount, FeeAccountProof, FeeAmount,
     FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree, SeqTypes,
 };
+
+/// Possible charge fee failures
+#[derive(Error, Debug, Eq, PartialEq)]
+pub enum FeeError {
+    #[error("Insuficcient Funds: have {balance:?}, required {amount:?}")]
+    InsufficientFunds {
+        balance: Option<FeeAmount>,
+        amount: FeeAmount,
+    },
+    #[error("Merkle Tree Error: {0}")]
+    MerkleTreeError(MerkleTreeError),
+}
+
 impl FeeInfo {
     pub fn new(account: impl Into<FeeAccount>, amount: impl Into<FeeAmount>) -> Self {
         Self {

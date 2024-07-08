@@ -13,7 +13,10 @@ pub mod traits;
 mod utils;
 pub use error::*;
 pub use header::Header;
-pub use impls::{mock, validate_proposal};
+pub use impls::{
+    mock, validate_proposal, BuilderValidationError, FeeError, ProposalValidationError,
+    StateValidationError,
+};
 pub use utils::*;
 use vbs::version::StaticVersion;
 

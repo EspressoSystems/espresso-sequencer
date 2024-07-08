@@ -21,14 +21,35 @@ use jf_merkle_tree::{
 };
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
+use thiserror::Error;
 use vbs::version::Version;
 
+use super::{fee_info::FeeError, header::ProposalValidationError};
 use crate::{
-    BlockMerkleTree, BuilderValidationError, ChainConfig, Delta, FeeAccount, FeeAmount, FeeError,
-    FeeInfo, FeeMerkleTree, Header, Leaf, NodeState, NsTableValidationError, PayloadByteLen,
-    ProposalValidationError, ResolvableChainConfig, SeqTypes, UpgradeType, ValidatedState,
-    BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT,
+    BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header,
+    Leaf, NodeState, NsTableValidationError, PayloadByteLen, ResolvableChainConfig, SeqTypes,
+    UpgradeType, ValidatedState, BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT,
 };
+
+/// Possible builder validation failures
+#[derive(Error, Debug, Eq, PartialEq)]
+pub enum BuilderValidationError {
+    #[error("Builder signature not found")]
+    SignatureNotFound,
+    #[error("Fee amount out of range: {0}")]
+    FeeAmountOutOfRange(FeeAmount),
+    #[error("Invalid Builder Signature")]
+    InvalidBuilderSignature,
+}
+
+/// This enum is not used in code but functions as an index of
+/// possible validation errors.
+#[allow(dead_code)]
+pub enum StateValidationError {
+    ProposalValidation(ProposalValidationError),
+    BuilderValidation(BuilderValidationError),
+    Fee(FeeError),
+}
 
 impl StateDelta for Delta {}
 

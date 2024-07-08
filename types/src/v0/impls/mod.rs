@@ -9,5 +9,7 @@ mod l1;
 mod state;
 mod transaction;
 
+pub use fee_info::FeeError;
+pub use header::ProposalValidationError;
 pub use instance_state::mock;
-pub use state::validate_proposal;
+pub use state::{validate_proposal, BuilderValidationError, StateValidationError};
