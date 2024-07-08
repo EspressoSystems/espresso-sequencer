@@ -80,10 +80,35 @@ impl Committable for BidTxBody {
 }
 
 impl BidTxBody {
-    /// Sign Tx
+    pub fn new(
+        account: FeeAccount,
+        bid: FeeAmount,
+        view: ViewNumber,
+        namespaces: Vec<NamespaceId>,
+    ) -> Self {
+        Self {
+            account,
+            bid_amount: bid,
+            view,
+            namespaces,
+            ..Self::default()
+        }
+    }
+
+    /// Sign `BidTxBody` and return the signature.
     pub fn sign(&self, key: &EthKeyPair) -> Result<Signature, SigningError> {
         FeeAccount::sign_builder_message(key, self.commit().as_ref())
     }
+    /// Sign Body and return a `BidTx`
+    pub fn signed(self, key: &EthKeyPair) -> Result<BidTx, SigningError> {
+        let signature = self.sign(key)?;
+        let bid = BidTx {
+            body: self,
+            signature,
+        };
+        Ok(bid)
+    }
+
     /// Get account submitting the bid
     pub fn account(&self) -> FeeAccount {
         self.account
@@ -108,7 +133,7 @@ impl Default for BidTxBody {
         let nsid = NamespaceId::from(999);
         Self {
             // TODO url will be builder_url, needs to be passed in from somewhere
-            url: Url::from_str("htts://sequencer:3939").unwrap(),
+            url: Url::from_str("https://sequencer:3939").unwrap(),
             account: key.fee_account(),
             public_key: FeeAccount::default(),
             gas_price: FeeAmount::default(),
@@ -217,28 +242,45 @@ pub fn mock_full_network_txs(key: Option<EthKeyPair>) -> Vec<FullNetworkTx> {
 }
 
 mod test {
+    use ethers::core::k256::ecdsa::SigningKey;
+
+    use crate::genesis;
+
     use super::*;
 
     impl BidTx {
         pub fn mock(key: EthKeyPair) -> Self {
-            let body = BidTxBody::default();
-            let signature = body.sign(&key).unwrap();
-            Self { signature, body }
+            BidTxBody::default().signed(&key).unwrap()
         }
     }
 
     #[test]
-    fn test_sign_and_verify_mock_bid() {
+    fn test_mock_bid_tx_sign_and_verify() {
         let key = FeeAccount::test_key_pair();
         let bidtx = BidTx::mock(key);
         bidtx.verify().unwrap();
     }
 
     #[test]
-    fn test_charge_mock_bid() {
+    fn test_mock_bid_tx_charge() {
         let mut state = ValidatedState::default();
         let key = FeeAccount::test_key_pair();
         let bidtx = BidTx::mock(key);
         bidtx.charge(&mut state).unwrap();
+    }
+
+    #[test]
+    fn test_bid_tx_construct() {
+        let key_pair = EthKeyPair::random();
+        BidTxBody::new(
+            key_pair.fee_account(),
+            FeeAmount::from(1),
+            ViewNumber::genesis(),
+            vec![NamespaceId::from(999)],
+        )
+        .signed(&key_pair)
+        .unwrap()
+        .verify()
+        .unwrap();
     }
 }
