@@ -1,4 +1,7 @@
-use super::client_id::ClientId;
+use std::sync::Arc;
+
+use super::{client_id::ClientId, data_state::NodeIdentity};
+use bitvec::vec::BitVec;
 use hotshot_query_service::explorer::{BlockDetail, ExplorerHistograms};
 use sequencer::SeqTypes;
 use serde::{Deserialize, Serialize};
@@ -12,35 +15,47 @@ pub enum ServerMessage {
 
     /// LatestBlock is a message that is meant to show the most recent block
     /// that has arrived.
-    LatestBlock(BlockDetail<SeqTypes>),
+    LatestBlock(Arc<BlockDetail<SeqTypes>>),
 
     /// LatestNodeIdentity is a message that is meant to show the most recent
     /// node identity that has arrived.
-    LatestNodeIdentity,
+    LatestNodeIdentity(Arc<NodeIdentity>),
+
+    /// LatestVoters is a message that is meant to show the most recent
+    /// voters that have arrived.
+    LatestVoters(BitVec),
 
     /// BlocksSnapshot is a message that is sent in response to a request for
     /// the snapshot of block information that is available.
-    BlocksSnapshot(Vec<BlockDetail<SeqTypes>>),
+    BlocksSnapshot(Arc<Vec<BlockDetail<SeqTypes>>>),
 
     /// NodeIdentitySnapshot is a message that is sent in response to a request
     /// for the snapshot of the current node identity information.
-    NodeIdentitySnapshot,
+    NodeIdentitySnapshot(Arc<Vec<NodeIdentity>>),
 
     /// HistogramSnapshot is a message that is sent in response to to a request
     /// for the snapshot of the current histogram information.
-    HistogramSnapshot(ExplorerHistograms),
+    HistogramSnapshot(Arc<ExplorerHistograms>),
+
+    /// VotersSnapshot is a message that is sent in response to a request for
+    /// the snapshot of the current voters information.
+    VotersSnapshot(Arc<Vec<BitVec>>),
 }
 
 impl PartialEq for ServerMessage {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::YouAre(l0), Self::YouAre(r0)) => l0 == r0,
-            (Self::LatestBlock(l0), Self::LatestBlock(r0)) => l0 == r0,
-            (Self::LatestNodeIdentity, Self::LatestNodeIdentity) => true,
-            (Self::BlocksSnapshot(l0), Self::BlocksSnapshot(r0)) => l0 == r0,
-            (Self::NodeIdentitySnapshot, Self::NodeIdentitySnapshot) => true,
+            (Self::YouAre(lhs), Self::YouAre(rhg)) => lhs == rhg,
+            (Self::LatestBlock(lhs), Self::LatestBlock(rhs)) => lhs == rhs,
+            (Self::LatestNodeIdentity(lhs), Self::LatestNodeIdentity(rhs)) => lhs == rhs,
+            (Self::BlocksSnapshot(lhs), Self::BlocksSnapshot(rhs)) => lhs == rhs,
+            (Self::NodeIdentitySnapshot(lhs), Self::NodeIdentitySnapshot(rhs)) => lhs == rhs,
             (Self::HistogramSnapshot(_), Self::HistogramSnapshot(_)) => false,
+            (Self::VotersSnapshot(lhs), Self::VotersSnapshot(rhs)) => lhs == rhs,
             _ => false,
         }
     }
 }
+
+#[cfg(test)]
+mod tests {}

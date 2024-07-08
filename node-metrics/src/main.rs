@@ -1,7 +1,3 @@
-use std::sync::{Arc, RwLock};
-
-use node_metrics::api::node_validator;
-use tide_disco::App;
 use vbs::version::{StaticVersion, Version};
 
 /// CONSTANT for protocol major version
@@ -30,8 +26,6 @@ pub const SERVICE_VER_0_1: Version01 = StaticVersion {};
 /// definition in that is on the client-side.
 #[derive(Clone)]
 pub struct ClientDef;
-
-struct State {}
 
 /// ClientConnectionMessage is a message that indicates when a client is
 /// connecting or disconnecting from the service. This message is used

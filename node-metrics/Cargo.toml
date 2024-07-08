@@ -6,9 +6,7 @@ authors = { workspace = true }
 edition = { workspace = true }
 
 [features]
-default = ["libp2p"]
-testing = ["hotshot-testing"]
-libp2p = []
+testing = ["sequencer/testing", "serde_json"]
 
 [dependencies]
 async-compatibility-layer = { workspace = true } 
@@ -17,14 +15,17 @@ bitvec = { workspace = true }
 circular-buffer = { workspace = true }
 futures = { workspace = true }
 hotshot-query-service = { workspace = true }
-hotshot-types = { workspace = true }
 hotshot-stake-table = { workspace = true }
-sequencer = { path = "../sequencer" }
+hotshot-types = { workspace = true }
+sequencer = { path = "../sequencer"}
 serde = { workspace = true }
-tide-disco = { workspace = true }
+serde_json = { version = "^1.0.113", optional = true }
+surf-disco = { workspace = true }
+tide-disco = { version = "0.9.0" }
 time = { workspace = true }
+tracing = { workspace = true }
 toml = { workspace = true }
 vbs = { workspace = true }
 
 # Dependencies for feature `testing`
-hotshot-testing = { workspace = true, optional = true  }
+hotshot-testing = { workspace = true, optional = true }
