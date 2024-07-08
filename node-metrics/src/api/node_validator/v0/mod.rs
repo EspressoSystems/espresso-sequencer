@@ -32,33 +32,44 @@ pub type Version01 = StaticVersion<VERSION_MAJ, VERSION_MIN>;
 pub const STATIC_VER_0_1: Version01 = StaticVersion {};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum Error {}
+pub enum Error {
+    UnhandledTideDisco(tide_disco::StatusCode, String),
+    UnhandledSurfDisco(surf_disco::StatusCode, String),
+}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error")
+        match self {
+            Self::UnhandledSurfDisco(status, msg) => {
+                write!(f, "Unhandled Surf Disco Error: {} - {}", status, msg)
+            }
+
+            Self::UnhandledTideDisco(status, msg) => {
+                write!(f, "Unhandled Tide Disco Error: {} - {}", status, msg)
+            }
+        }
     }
 }
 
 impl std::error::Error for Error {}
 
 impl tide_disco::Error for Error {
-    fn catch_all(_status: tide_disco::StatusCode, _msg: String) -> Self {
-        todo!()
+    fn catch_all(status: tide_disco::StatusCode, msg: String) -> Self {
+        Self::UnhandledTideDisco(status, msg)
     }
 
     fn status(&self) -> tide_disco::StatusCode {
-        todo!()
+        tide_disco::StatusCode::INTERNAL_SERVER_ERROR
     }
 }
 
 impl surf_disco::Error for Error {
-    fn catch_all(_status: surf_disco::StatusCode, _msg: String) -> Self {
-        todo!()
+    fn catch_all(status: surf_disco::StatusCode, msg: String) -> Self {
+        Self::UnhandledSurfDisco(status, msg)
     }
 
     fn status(&self) -> surf_disco::StatusCode {
-        todo!()
+        surf_disco::StatusCode::INTERNAL_SERVER_ERROR
     }
 }
 
