@@ -97,30 +97,3 @@
 
 pub mod api;
 pub mod service;
-
-#[cfg(test)]
-pub mod test;
-
-/// Storage is a general purpose trait that allows for the storage of
-/// arbitrary data.  This trait allows for the specification of the
-/// Get result to be different than that of the Set result.  This should
-/// allow for a larger degree of flexibility when it comes to storing things.
-pub trait Storage {
-    type Get;
-    type Set;
-    fn get(&self) -> Self::Get;
-    fn set(&mut self, value: Self::Set);
-}
-
-/// KeyValueStorage is a general purpose trait that allows for the storage
-/// of key value pairs.  This trait allows for the specification of the
-/// Key and Value types to be different.  This should allow for a larger
-/// degree of flexibility when it comes to storing things.
-pub trait KeyValueStorage {
-    type Key: Eq;
-    type Value: Clone;
-    fn get(&self, key: &Self::Key) -> &Self::Value;
-    fn set(&mut self, key: &Self::Key, value: Self::Value);
-}
-
-pub struct NodeInformation {}
