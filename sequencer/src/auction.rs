@@ -264,10 +264,6 @@ pub fn mock_full_network_txs(key: Option<EthKeyPair>) -> Vec<FullNetworkTx> {
 }
 
 mod test {
-    use ethers::core::k256::ecdsa::SigningKey;
-
-    use crate::genesis;
-
     use super::*;
 
     impl BidTx {
