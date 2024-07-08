@@ -252,7 +252,7 @@ impl BidTx {
     }
     /// get bid amount
     pub fn account(&self) -> FeeAccount {
-        self.body.account()
+        self.body.account
     }
 }
 
