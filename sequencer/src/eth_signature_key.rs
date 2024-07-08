@@ -47,6 +47,9 @@ impl EthKeyPair {
         let signing_key: &SigningKey = derived_priv_key.as_ref();
         Ok(signing_key.clone().into())
     }
+    pub fn random() -> EthKeyPair {
+        SigningKey::random(&mut rand::thread_rng()).into()
+    }
 
     pub fn fee_account(&self) -> FeeAccount {
         self.fee_account
