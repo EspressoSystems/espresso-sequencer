@@ -92,6 +92,14 @@ impl BidTxBody {
     pub fn amount(&self) -> FeeAmount {
         self.bid_amount
     }
+    /// Update `url` field on a previously instantiated `BidTxBody`.
+    pub fn with_url(self, url: Url) -> Self {
+        Self { url, ..self }
+    }
+    /// Get the `url` field.
+    pub fn url(&self) -> Url {
+        self.url.clone()
+    }
 }
 
 impl Default for BidTxBody {
@@ -128,7 +136,7 @@ pub enum ExecutionError {
     InvalidPhase,
     #[error("FeeError: {0}")]
     FeeError(FeeError),
-    #[error("Could not resolve ChainConfig")]
+    #[error("Could not resolve `ChainConfig`")]
     UnresolvableChainConfig,
 }
 
@@ -189,6 +197,15 @@ impl BidTx {
     /// Return the body of the transaction
     pub fn body(self) -> BidTxBody {
         self.body
+    }
+    /// Update `url` field on a previously instantiated `BidTxBody`.
+    pub fn with_url(self, url: Url) -> Self {
+        let body = self.body.with_url(url);
+        Self { body, ..self }
+    }
+    /// Get the `url` field from the body
+    pub fn url(&self) -> Url {
+        self.body.url()
     }
 }
 
