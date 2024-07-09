@@ -19,10 +19,11 @@ use time::OffsetDateTime;
 use vbs::version::Version;
 
 use crate::{
-    v0_1::{self, IterableFeeInfo},
-    v0_2, v0_3, BlockMerkleCommitment, BuilderSignature, ChainConfig, FeeAccount, FeeAmount,
-    FeeInfo, FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NodeState,
-    NsTable, ResolvableChainConfig, SeqTypes, UpgradeType, ValidatedState,
+    v0_1, v0_2,
+    v0_3::{self, IterableFeeInfo},
+    BlockMerkleCommitment, BuilderSignature, ChainConfig, FeeAccount, FeeAmount, FeeInfo,
+    FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NodeState, NsTable,
+    ResolvableChainConfig, SeqTypes, UpgradeType, ValidatedState,
 };
 
 impl Committable for Header {

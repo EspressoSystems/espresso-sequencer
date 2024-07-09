@@ -297,7 +297,7 @@ impl<T> SequencerStateDataSource for T where
 mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use espresso_types::{
-        v0_1::IterableFeeInfo, validate_proposal, BlockSize, FeeAccount, FeeAccountProof,
+        v0_3::IterableFeeInfo, validate_proposal, BlockSize, FeeAccount, FeeAccountProof,
         FeeAmount, FeeError, FeeInfo, FeeMerkleProof, Leaf, ProposalValidationError,
     };
     use ethers::{abi::Address, types::U256};

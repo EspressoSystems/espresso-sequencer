@@ -25,7 +25,7 @@ use sequencer_utils::{
 };
 
 use crate::{
-    eth_signature_key::EthKeyPair, v0_1::IterableFeeInfo, AccountQueryData, FeeAccount,
+    eth_signature_key::EthKeyPair, v0_3::IterableFeeInfo, AccountQueryData, FeeAccount,
     FeeAccountProof, FeeAmount, FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree,
     SeqTypes,
 };
@@ -70,7 +70,7 @@ impl IterableFeeInfo for Vec<FeeInfo> {
             .map(|fee_info| fee_info.amount.as_u64())
             .collect::<Option<Vec<u64>>>()
             .and_then(|amounts| amounts.iter().try_fold(0u64, |acc, n| acc.checked_add(*n)))
-            .map(|n| FeeAmount::from(n))
+            .map(FeeAmount::from)
     }
 
     /// Get a `Vec` of all unique fee accounts

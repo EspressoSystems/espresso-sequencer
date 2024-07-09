@@ -67,12 +67,6 @@ pub struct FeeInfo {
     pub amount: FeeAmount,
 }
 
-/// Methods for use w/ Vec<FeeInfo>
-pub trait IterableFeeInfo {
-    fn amount(&self) -> Option<FeeAmount>;
-    fn accounts(&self) -> Vec<FeeAccount>;
-}
-
 /// A proof of the balance of an account in the fee ledger.
 ///
 /// If the account of interest does not exist in the fee state, this is a Merkle non-membership

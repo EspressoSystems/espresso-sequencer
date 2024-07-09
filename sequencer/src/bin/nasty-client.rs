@@ -31,7 +31,7 @@ use clap::Parser;
 use committable::Committable;
 use derivative::Derivative;
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
-use espresso_types::{v0_1::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
+use espresso_types::{v0_3::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
 use futures::{
     future::{FutureExt, TryFuture, TryFutureExt},
     stream::{Peekable, StreamExt},
