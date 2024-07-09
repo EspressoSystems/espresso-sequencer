@@ -14,7 +14,6 @@ use hotshot_types::{
     utils::BuilderCommitment,
     vid::{VidCommitment, VidCommon},
 };
-use itertools::Either;
 use jf_merkle_tree::{AppendableMerkleTreeScheme, MerkleTreeScheme};
 use serde::{
     de::{self, MapAccess, SeqAccess, Visitor},
@@ -27,7 +26,7 @@ use time::OffsetDateTime;
 use vbs::version::Version;
 
 use crate::{
-    v0::header::{EitherOrVersion, ResolvableChainConfigOrVersion, VersionedHeader},
+    v0::header::{EitherOrVersion, VersionedHeader},
     v0_1, v0_2, v0_3, BlockMerkleCommitment, BlockSize, BuilderSignature, ChainConfig, FeeAccount,
     FeeAmount, FeeInfo, FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId,
     NodeState, NsTable, NsTableValidationError, ResolvableChainConfig, SeqTypes, UpgradeType,
@@ -74,40 +73,46 @@ pub enum ProposalValidationError {
 
 impl Committable for Header {
     fn commit(&self) -> Commitment<Self> {
-        let mut bmt_bytes = vec![];
-        self.block_merkle_tree_root()
-            .serialize_with_mode(&mut bmt_bytes, ark_serialize::Compress::Yes)
-            .unwrap();
-        let mut fmt_bytes = vec![];
-        self.fee_merkle_tree_root()
-            .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
-            .unwrap();
+        let v1_commit = || {
+            let mut bmt_bytes = vec![];
+            self.block_merkle_tree_root()
+                .serialize_with_mode(&mut bmt_bytes, ark_serialize::Compress::Yes)
+                .unwrap();
+            let mut fmt_bytes = vec![];
+            self.fee_merkle_tree_root()
+                .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
+                .unwrap();
 
-        let mut c = RawCommitmentBuilder::new(&Self::tag());
-        if self.version() > v0_1::VERSION {
-            // The original commitment scheme (from version 0.1) did not include the version in the
-            // commitment. We respect this for backwards compatibility, but for all future versions,
-            // we want to include it.
-            c = c
-                .u64_field("version_major", self.version().major.into())
-                .u64_field("version_minor", self.version().minor.into());
+            RawCommitmentBuilder::new(&Self::tag())
+                .field("chain_config", self.chain_config().commit())
+                .u64_field("height", self.height())
+                .u64_field("timestamp", self.timestamp())
+                .u64_field("l1_head", self.l1_head())
+                .optional("l1_finalized", &self.l1_finalized())
+                .constant_str("payload_commitment")
+                .fixed_size_bytes(self.payload_commitment().as_ref().as_ref())
+                .constant_str("builder_commitment")
+                .fixed_size_bytes(self.builder_commitment().as_ref())
+                .field("ns_table", self.ns_table().commit())
+                .var_size_field("block_merkle_tree_root", &bmt_bytes)
+                .var_size_field("fee_merkle_tree_root", &fmt_bytes)
+                .field("fee_info", self.fee_info().commit())
+                .finalize()
+        };
+
+        match self {
+            Self::V1(_) => v1_commit(),
+            Self::V2(fields) => RawCommitmentBuilder::new(&Self::tag())
+                .u64_field("version_major", 0)
+                .u64_field("version_minor", 2)
+                .field("fields", fields.commit())
+                .finalize(),
+            Self::V3(fields) => RawCommitmentBuilder::new(&Self::tag())
+                .u64_field("version_major", 0)
+                .u64_field("version_minor", 3)
+                .field("fields", fields.commit())
+                .finalize(),
         }
-        c = c
-            .field("chain_config", self.chain_config().commit())
-            .u64_field("height", self.height())
-            .u64_field("timestamp", self.timestamp())
-            .u64_field("l1_head", self.l1_head())
-            .optional("l1_finalized", &self.l1_finalized())
-            .constant_str("payload_commitment")
-            .fixed_size_bytes(self.payload_commitment().as_ref().as_ref())
-            .constant_str("builder_commitment")
-            .fixed_size_bytes(self.builder_commitment().as_ref())
-            .field("ns_table", self.ns_table().commit())
-            .var_size_field("block_merkle_tree_root", &bmt_bytes)
-            .var_size_field("fee_merkle_tree_root", &fmt_bytes)
-            .field("fee_info", self.fee_info().commit());
-
-        c.finalize()
     }
 
     fn tag() -> String {
@@ -127,26 +132,26 @@ impl Header {
     }
 }
 
-impl From<Version> for ResolvableChainConfigOrVersion {
-    fn from(version: Version) -> Self {
-        Self {
-            chain_config: EitherOrVersion::Version(version),
-        }
-    }
-}
+// impl From<Version> for ResolvableChainConfigOrVersion {
+//     fn from(version: Version) -> Self {
+//         Self {
+//             chain_config: EitherOrVersion::Version(version),
+//         }
+//     }
+// }
 
-impl From<ResolvableChainConfig> for ResolvableChainConfigOrVersion {
-    fn from(v: ResolvableChainConfig) -> Self {
-        let value = match v.chain_config {
-            Either::Left(cfg) => EitherOrVersion::Left(cfg),
-            Either::Right(commit) => EitherOrVersion::Right(commit),
-        };
+// impl From<ResolvableChainConfig> for ResolvableChainConfigOrVersion {
+//     fn from(v: ResolvableChainConfig) -> Self {
+//         let value = match v.chain_config {
+//             Either::Left(cfg) => EitherOrVersion::Left(cfg),
+//             Either::Right(commit) => EitherOrVersion::Right(commit),
+//         };
 
-        Self {
-            chain_config: value,
-        }
-    }
-}
+//         Self {
+//             chain_config: value,
+//         }
+//     }
+// }
 
 impl Serialize for Header {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -156,12 +161,12 @@ impl Serialize for Header {
         match self {
             Self::V1(header) => header.serialize(serializer),
             Self::V2(fields) => VersionedHeader {
-                version: Version { major: 0, minor: 2 }.into(),
+                version: EitherOrVersion::Version(Version { major: 0, minor: 2 }),
                 fields: fields.clone(),
             }
             .serialize(serializer),
             Self::V3(fields) => VersionedHeader {
-                version: Version { major: 0, minor: 3 }.into(),
+                version: EitherOrVersion::Version(Version { major: 0, minor: 3 }),
                 fields: fields.clone(),
             }
             .serialize(serializer),
@@ -194,6 +199,7 @@ impl StructFields {
         &[
             "fields",
             "chain_config",
+            "version",
             "height",
             "timestamp",
             "l1_head",
@@ -227,11 +233,11 @@ impl<'de> Deserialize<'de> for Header {
             where
                 V: SeqAccess<'de>,
             {
-                let chain_config_or_version: ResolvableChainConfigOrVersion =
-                    seq.next_element()?
-                        .ok_or_else(|| de::Error::missing_field("chain_config"))?;
+                let chain_config_or_version: EitherOrVersion = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::missing_field("chain_config"))?;
 
-                match chain_config_or_version.chain_config {
+                match chain_config_or_version {
                     // For v0.1, the first field in the sequence of fields is the first field of the struct, so we call a function to get the rest of
                     // the fields from the sequence and pack them into the struct.
                     EitherOrVersion::Left(cfg) => Ok(Header::V1(
@@ -250,7 +256,9 @@ impl<'de> Deserialize<'de> for Header {
                         seq.next_element()?
                             .ok_or_else(|| de::Error::missing_field("fields"))?,
                     )),
-                    _ => Err(serde::de::Error::custom("invalid version")),
+                    EitherOrVersion::Version(v) => {
+                        Err(serde::de::Error::custom(format!("invalid version {v:?}")))
+                    }
                 }
             }
 
@@ -270,10 +278,8 @@ impl<'de> Deserialize<'de> for Header {
                         .get(&StructFields::Fields.to_string())
                         .ok_or_else(|| de::Error::missing_field("fields"))?;
 
-                    let version =
-                        serde_json::from_value::<ResolvableChainConfigOrVersion>(v.clone())
-                            .map_err(de::Error::custom)?
-                            .chain_config;
+                    let version = serde_json::from_value::<EitherOrVersion>(v.clone())
+                        .map_err(de::Error::custom)?;
                     let result = match version {
                         EitherOrVersion::Version(Version { major: 0, minor: 2 }) => Ok(Header::V2(
                             serde_json::from_value(fields.clone()).map_err(de::Error::custom)?,
@@ -281,9 +287,8 @@ impl<'de> Deserialize<'de> for Header {
                         EitherOrVersion::Version(Version { major: 0, minor: 3 }) => Ok(Header::V3(
                             serde_json::from_value(fields.clone()).map_err(de::Error::custom)?,
                         )),
-                        _ => Err(serde::de::Error::custom("invalid version")),
+                        v => Err(serde::de::Error::custom(format!("invalid version {v:?}"))),
                     };
-
                     return result;
                 }
 
@@ -299,7 +304,7 @@ impl<'de> Deserialize<'de> for Header {
 
 impl Header {
     #[allow(clippy::too_many_arguments)]
-    pub fn create(
+    pub(crate) fn create(
         chain_config: ResolvableChainConfig,
         height: u64,
         timestamp: u64,
@@ -1459,7 +1464,8 @@ mod test_headers {
         );
 
         let serialized = serde_json::to_string(&v1_header).unwrap();
-        let _: Header = serde_json::from_str(&serialized).unwrap();
+        let deserialized: Header = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(v1_header, deserialized);
 
         let v2_header = Header::create(
             genesis.instance_state.chain_config.into(),
@@ -1481,7 +1487,8 @@ mod test_headers {
         );
 
         let serialized = serde_json::to_string(&v2_header).unwrap();
-        let _: Header = serde_json::from_str(&serialized).unwrap();
+        let deserialized: Header = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(v2_header, deserialized);
 
         let v3_header = Header::create(
             genesis.instance_state.chain_config.into(),
@@ -1503,15 +1510,22 @@ mod test_headers {
         );
 
         let serialized = serde_json::to_string(&v3_header).unwrap();
-        let _: Header = serde_json::from_str(&serialized).unwrap();
+        let deserialized: Header = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(v3_header, deserialized);
 
         let v1_bytes = BincodeSerializer::<StaticVersion<0, 1>>::serialize(&v1_header).unwrap();
-        let _: Header = BincodeSerializer::<StaticVersion<0, 1>>::deserialize(&v1_bytes).unwrap();
+        let deserialized: Header =
+            BincodeSerializer::<StaticVersion<0, 1>>::deserialize(&v1_bytes).unwrap();
+        assert_eq!(v1_header, deserialized);
 
         let v2_bytes = BincodeSerializer::<StaticVersion<0, 2>>::serialize(&v2_header).unwrap();
-        let _: Header = BincodeSerializer::<StaticVersion<0, 2>>::deserialize(&v2_bytes).unwrap();
+        let deserialized: Header =
+            BincodeSerializer::<StaticVersion<0, 2>>::deserialize(&v2_bytes).unwrap();
+        assert_eq!(v2_header, deserialized);
 
         let v3_bytes = BincodeSerializer::<StaticVersion<0, 3>>::serialize(&v3_header).unwrap();
-        let _: Header = BincodeSerializer::<StaticVersion<0, 3>>::deserialize(&v3_bytes).unwrap();
+        let deserialized: Header =
+            BincodeSerializer::<StaticVersion<0, 3>>::deserialize(&v3_bytes).unwrap();
+        assert_eq!(v3_header, deserialized);
     }
 }

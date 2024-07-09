@@ -25,8 +25,8 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
 use es_version::SequencerVersion;
 use espresso_types::{
-    ChainConfig, FeeAccount, FeeInfo, Header, L1BlockInfo, NamespaceId, NsTable, Payload, SeqTypes,
-    Transaction, ValidatedState,
+    v0_1, ChainConfig, FeeAccount, FeeInfo, Header, L1BlockInfo, NamespaceId, NsTable, Payload,
+    SeqTypes, Transaction, ValidatedState,
 };
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::{
@@ -40,7 +40,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use std::{fmt::Debug, path::Path, str::FromStr};
 use tagged_base64::TaggedBase64;
-use vbs::{version::Version, BinarySerializer};
+use vbs::BinarySerializer;
 
 type Serializer = vbs::Serializer<SequencerVersion>;
 
@@ -126,21 +126,20 @@ async fn reference_header() -> Header {
 
     let state = ValidatedState::default();
 
-    Header::create(
-        reference_chain_config().into(),
-        42,
-        789,
-        124,
-        Some(reference_l1_block()),
+    Header::V1(v0_1::Header {
+        chain_config: reference_chain_config().into(),
+        height: 42,
+        timestamp: 789,
+        l1_head: 124,
+        l1_finalized: Some(reference_l1_block()),
         payload_commitment,
         builder_commitment,
         ns_table,
-        state.fee_merkle_tree.commitment(),
-        state.block_merkle_tree.commitment(),
+        block_merkle_tree_root: state.fee_merkle_tree.commitment(),
+        fee_merkle_tree_root: state.block_merkle_tree.commitment(),
         fee_info,
-        Some(builder_signature),
-        Version { major: 0, minor: 1 },
-    )
+        builder_signature: Some(builder_signature),
+    })
 }
 
 const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~dh1KpdvvxSvnnPpOi2yI3DOg8h6ltr2Kv13iRzbQvtN2";

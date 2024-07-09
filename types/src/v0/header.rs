@@ -11,20 +11,28 @@ pub enum Header {
     V3(v0_3::Header),
 }
 
+// Enum to represent the first field of different versions of a header
+//
+// In v1 headers, the first field is a ChainConfig, which contains either the chain config or its commitment.
+// For versions > 0.1, the first field contains the version.
+//
+// This enum has the same variant names and types in the same positions (0 and 1) as the Either enum,
+// ensuring identical serialization and deserialization for the Left and Right variants.
+// However, it will deserialize successfully in one additional case due to the Version variant.
+//
+// Variants:
+// - Left: Represents the ChainConfig variant in v1 headers.
+// - Right: Represents the chain config commitment variant in v1 headers.
+// - Version: Represents the versioned header for versions > 0.1.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub(crate) enum EitherOrVersion<ChainConfig, Commitment> {
+pub(crate) enum EitherOrVersion {
     Left(ChainConfig),
-    Right(Commitment),
+    Right(Commitment<ChainConfig>),
     Version(Version),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VersionedHeader<Fields> {
-    pub(crate) version: ResolvableChainConfigOrVersion,
+    pub(crate) version: EitherOrVersion,
     pub(crate) fields: Fields,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ResolvableChainConfigOrVersion {
-    pub(crate) chain_config: EitherOrVersion<ChainConfig, Commitment<ChainConfig>>,
 }
