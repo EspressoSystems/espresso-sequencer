@@ -21,6 +21,8 @@
 //! constant in this module with the "actual" value that can be found in the logs of the failing
 //! test.
 
+use std::{fmt::Debug, path::Path, str::FromStr};
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
 use es_version::SequencerVersion;
@@ -38,7 +40,6 @@ use rand::{Rng, RngCore};
 use sequencer_utils::commitment_to_u256;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
-use std::{fmt::Debug, path::Path, str::FromStr};
 use tagged_base64::TaggedBase64;
 use vbs::BinarySerializer;
 
