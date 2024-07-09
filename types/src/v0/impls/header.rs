@@ -142,7 +142,7 @@ impl Header {
         parent_leaf: &Leaf,
         mut l1: L1Snapshot,
         l1_deposits: &[FeeInfo],
-        builder_fee: BuilderFee<SeqTypes>,
+        builder_fee: Vec<BuilderFee<SeqTypes>>,
         mut timestamp: u64,
         mut state: ValidatedState,
         chain_config: ChainConfig,
@@ -211,21 +211,33 @@ impl Header {
                 .context(format!("missing fee account {}", fee_info.account()))?;
         }
 
-        // Charge the builder fee.
-        ensure!(
-            builder_fee.fee_account.validate_fee_signature(
-                &builder_fee.fee_signature,
-                builder_fee.fee_amount,
-                &ns_table,
-                &payload_commitment,
-            ),
-            "invalid builder signature"
-        );
-        let builder_signature = Some(builder_fee.fee_signature);
-        let fee_info = builder_fee.into();
-        state
-            .charge_fee(fee_info, chain_config.fee_recipient)
-            .context(format!("invalid builder fee {fee_info:?}"))?;
+        // Validate and charge the builder fee.
+        for BuilderFee {
+            fee_account,
+            fee_signature,
+            fee_amount,
+        } in &builder_fee
+        {
+            ensure!(
+                fee_account.validate_fee_signature(
+                    &fee_signature,
+                    *fee_amount,
+                    &ns_table,
+                    &payload_commitment,
+                ),
+                "invalid builder signature"
+            );
+
+            let fee_info = FeeInfo::new(*fee_account, *fee_amount);
+            state
+                .charge_fee(fee_info, chain_config.fee_recipient)
+                .context(format!("invalid builder fee {fee_info:?}"))?;
+        }
+
+        let fee_info = FeeInfo::from_builder_fees(builder_fee.clone());
+
+        let builder_signature: Vec<BuilderSignature> =
+            builder_fee.iter().map(|e| e.fee_signature).collect();
 
         let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
 
@@ -413,8 +425,12 @@ impl Header {
     /// signature. Thus, this signature is not included in the header commitment.
     pub fn builder_signature(&self) -> Vec<BuilderSignature> {
         match self {
-            Self::V1(fields) => vec![fields.builder_signature],
-            Self::V2(fields) => vec![fields.builder_signature],
+            // Previously we used `Option<BuilderSignature>` to
+            // represent presence/absence of signature.  The simplest
+            // way to represent the same now that we have a `Vec` is
+            // empty/non-empty
+            Self::V1(fields) => fields.builder_signature.as_slice().to_vec(),
+            Self::V2(fields) => fields.builder_signature.as_slice().to_vec(),
             Self::V3(fields) => fields.builder_signature.clone(),
         }
     }
@@ -456,7 +472,7 @@ impl BlockHeader<SeqTypes> for Header {
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
-        builder_fee: BuilderFee<SeqTypes>,
+        builder_fee: Vec<BuilderFee<SeqTypes>>,
         _vid_common: VidCommon,
         version: Version,
     ) -> Result<Self, Self::Error> {
@@ -505,8 +521,9 @@ impl BlockHeader<SeqTypes> for Header {
         // fee and the recipient account which is receiving it, plus any counts receiving deposits
         // in this block.
         let missing_accounts = parent_state.forgotten_accounts(
-            [builder_fee.fee_account, chain_config.fee_recipient]
+            [builder_fee.accounts(), vec![chain_config.fee_recipient]]
                 .into_iter()
+                .flatten()
                 .chain(l1_deposits.iter().map(|info| info.account())),
         );
         if !missing_accounts.is_empty() {
@@ -599,8 +616,8 @@ impl BlockHeader<SeqTypes> for Header {
             ns_table.clone(),
             fee_merkle_tree_root,
             block_merkle_tree_root,
-            FeeInfo::genesis(),
-            None,
+            vec![FeeInfo::genesis()],
+            vec![],
             version,
         )
     }
@@ -766,11 +783,11 @@ mod test_headers {
                     finalized: self.l1_finalized,
                 },
                 &self.l1_deposits,
-                BuilderFee {
+                vec![BuilderFee {
                     fee_account,
                     fee_amount,
                     fee_signature,
-                },
+                }],
                 self.timestamp,
                 validated_state.clone(),
                 genesis.instance_state.chain_config,
@@ -1214,10 +1231,10 @@ mod test_headers {
             ns_table.clone(),
             header.fee_merkle_tree_root(),
             header.block_merkle_tree_root(),
-            FeeInfo {
+            vec![FeeInfo {
                 amount: 0.into(),
                 account: fee_account,
-            },
+            }],
             Default::default(),
             Version { major: 0, minor: 1 },
         );
@@ -1236,10 +1253,10 @@ mod test_headers {
             ns_table.clone(),
             header.fee_merkle_tree_root(),
             header.block_merkle_tree_root(),
-            FeeInfo {
+            vec![FeeInfo {
                 amount: 0.into(),
                 account: fee_account,
-            },
+            }],
             Default::default(),
             Version { major: 0, minor: 2 },
         );
@@ -1258,10 +1275,10 @@ mod test_headers {
             ns_table.clone(),
             header.fee_merkle_tree_root(),
             header.block_merkle_tree_root(),
-            FeeInfo {
+            vec![FeeInfo {
                 amount: 0.into(),
                 account: fee_account,
-            },
+            }],
             Default::default(),
             Version { major: 0, minor: 3 },
         );
