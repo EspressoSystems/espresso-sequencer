@@ -1,9 +1,9 @@
 {
   "block_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAQA",
-  "builder_commitment": "BUILDER_COMMITMENT~upd4eFij7NNHTMYiVQoL-hDBw3bJiOMmCoNJxxgGwJ6h",
+  "builder_commitment": "BUILDER_COMMITMENT~jlEvJoHPETCSwXF6UKcD22zOjfoHGuyVFTVkP_BNc-no",
   "builder_signature": {
-    "r": "0xc7b7c4062ada11d09530d759af4f2d9d84dd2d1ca6117299dee9b36e039642b6",
-    "s": "0x10cc3c7c0d0d69ba19348c720ee95cbb48470b9181cc32c9922af86b83fba9a2",
+    "r": "0xa1c3795850b7b490e616b60fead89753841fbc9fffe1a939d483f1d959ad1c45",
+    "s": "0x20228f5b63b14792d371dce479978e45020f19602189ef6d325b73029a2848ac",
     "v": 27
   },
   "chain_config": {
@@ -30,8 +30,8 @@
   },
   "l1_head": 124,
   "ns_table": {
-    "bytes": "AQAAAO7/wAAIBAAA"
+    "bytes": "AwAAAO7/wAAcBgAAobC5EkAOAABksAWiXBQAAA=="
   },
-  "payload_commitment": "HASH~Ojg3e_G9UzTwOygEDDcbvgakaVCqMByIiFrlkLXT72qf",
+  "payload_commitment": "HASH~u-mEo1mwByROUhnvO7pBFitcD0UEvruK-b8WONkKoCLQ",
   "timestamp": 789
 }
