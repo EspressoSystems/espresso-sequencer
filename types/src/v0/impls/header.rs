@@ -411,7 +411,7 @@ impl Header {
     /// checked during consensus, any downstream client who has a proof of consensus finality of a
     /// header can trust that [`fee_info`](Self::fee_info) is correct without relying on the
     /// signature. Thus, this signature is not included in the header commitment.
-    pub fn builder_signature(&self) -> Vec<Option<BuilderSignature>> {
+    pub fn builder_signature(&self) -> Vec<BuilderSignature> {
         match self {
             Self::V1(fields) => vec![fields.builder_signature],
             Self::V2(fields) => vec![fields.builder_signature],

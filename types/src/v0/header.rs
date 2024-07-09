@@ -224,13 +224,14 @@ impl Header {
         ns_table: NsTable,
         fee_merkle_tree_root: FeeMerkleCommitment,
         block_merkle_tree_root: BlockMerkleCommitment,
-        fee_info: FeeInfo,
-        builder_signature: Option<BuilderSignature>,
+        fee_info: Vec<FeeInfo>,
+        builder_signature: Vec<BuilderSignature>,
         version: Version,
     ) -> Self {
         let Version { major, minor } = version;
 
         assert!(major == 0, "Invalid major version {major}");
+        assert!(fee_info.len() > 0, "Invalid fee_info length: 0");
 
         match minor {
             1 => Self::V1(v0_1::Header {
@@ -244,8 +245,8 @@ impl Header {
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
-                fee_info,
-                builder_signature,
+                fee_info: fee_info[0], // NOTE this is asserted to exist above
+                builder_signature: builder_signature.first().copied(),
             }),
             2 => Self::V2(v0_2::Header {
                 chain_config,
@@ -258,8 +259,8 @@ impl Header {
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
-                fee_info,
-                builder_signature,
+                fee_info: fee_info[0], // NOTE this is asserted to exist above
+                builder_signature: builder_signature.first().copied(),
             }),
             3 => Self::V3(v0_3::Header {
                 chain_config,
@@ -272,8 +273,8 @@ impl Header {
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
-                fee_info: vec![fee_info],
-                builder_signature: vec![builder_signature],
+                fee_info,
+                builder_signature,
             }),
             _ => panic!("invalid version: {version}"),
         }

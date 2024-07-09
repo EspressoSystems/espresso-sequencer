@@ -22,5 +22,5 @@ pub struct Header {
     pub(crate) block_merkle_tree_root: BlockMerkleCommitment,
     pub(crate) fee_merkle_tree_root: FeeMerkleCommitment,
     pub(crate) fee_info: Vec<FeeInfo>,
-    pub(crate) builder_signature: Vec<Option<BuilderSignature>>,
+    pub(crate) builder_signature: Vec<BuilderSignature>,
 }
