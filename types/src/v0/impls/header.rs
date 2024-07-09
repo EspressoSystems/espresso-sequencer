@@ -524,7 +524,7 @@ impl BlockHeader<SeqTypes> for Header {
             [chain_config.fee_recipient]
                 .into_iter()
                 .chain(builder_fee.accounts())
-                .chain(l1_deposits.iter().map(|info| info.account())),
+                .chain(l1_deposits.accounts()),
         );
         if !missing_accounts.is_empty() {
             tracing::warn!(

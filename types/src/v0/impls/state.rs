@@ -342,12 +342,7 @@ impl ValidatedState {
             [chain_config.fee_recipient]
                 .into_iter()
                 .chain(proposed_header.fee_info().accounts())
-                .chain(
-                    l1_deposits
-                        .iter()
-                        .map(|fee_info| fee_info.account)
-                        .collect::<Vec<FeeAccount>>(),
-                ),
+                .chain(l1_deposits.accounts()),
         );
 
         let parent_height = parent_leaf.height();
