@@ -7,7 +7,10 @@ use committable::{Commitment, Committable};
 use ethers::types::Signature;
 use hotshot_types::{
     data::ViewNumber,
-    traits::{node_implementation::ConsensusTime, signature_key::BuilderSignatureKey},
+    traits::{
+        auction_results_provider::HasUrl, node_implementation::ConsensusTime,
+        signature_key::BuilderSignatureKey,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -120,10 +123,6 @@ impl BidTxBody {
     /// Update `url` field on a previously instantiated `BidTxBody`.
     pub fn with_url(self, url: Url) -> Self {
         Self { url, ..self }
-    }
-    /// Get the `url` field.
-    pub fn url(&self) -> Url {
-        self.url.clone()
     }
 }
 
@@ -238,10 +237,6 @@ impl BidTx {
         let body = self.body.with_url(url);
         Self { body, ..self }
     }
-    /// Get the `url` field from the body
-    pub fn url(&self) -> Url {
-        self.body.url()
-    }
     /// get gas price
     pub fn gas_price(&self) -> FeeAmount {
         self.body.gas_price
@@ -253,6 +248,20 @@ impl BidTx {
     /// get bid amount
     pub fn account(&self) -> FeeAccount {
         self.body.account
+    }
+}
+
+impl HasUrl for BidTx {
+    /// Get the `url` field from the body.
+    fn url(&self) -> Url {
+        self.body.url()
+    }
+}
+
+impl HasUrl for BidTxBody {
+    /// Get the cloned `url` field.
+    fn url(&self) -> Url {
+        self.url.clone()
     }
 }
 
