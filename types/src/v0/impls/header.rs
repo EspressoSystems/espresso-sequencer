@@ -521,9 +521,9 @@ impl BlockHeader<SeqTypes> for Header {
         // fee and the recipient account which is receiving it, plus any counts receiving deposits
         // in this block.
         let missing_accounts = parent_state.forgotten_accounts(
-            [builder_fee.accounts(), vec![chain_config.fee_recipient]]
+            [chain_config.fee_recipient]
                 .into_iter()
-                .flatten()
+                .chain(builder_fee.accounts())
                 .chain(l1_deposits.iter().map(|info| info.account())),
         );
         if !missing_accounts.is_empty() {
