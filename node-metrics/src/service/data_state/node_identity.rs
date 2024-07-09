@@ -2,7 +2,7 @@ use super::LocationDetails;
 use hotshot_types::signature_key::BLSPubKey;
 use sequencer::state::FeeAccount;
 use serde::{Deserialize, Serialize};
-use std::net::IpAddr;
+use surf_disco::Url;
 
 /// [NodeIdentity] represents the identity of the node that is participating
 /// in the network.
@@ -11,7 +11,7 @@ pub struct NodeIdentity {
     public_key: BLSPubKey,
     name: Option<String>,
     wallet_address: Option<FeeAccount>,
-    ip_addresses: Option<Vec<IpAddr>>,
+    public_url: Option<Url>,
     company: Option<String>,
     location: Option<LocationDetails>,
     operating_system: Option<String>,
@@ -25,7 +25,7 @@ impl NodeIdentity {
         public_key: BLSPubKey,
         name: Option<String>,
         wallet_address: Option<FeeAccount>,
-        ip_addresses: Option<Vec<IpAddr>>,
+        public_url: Option<Url>,
         company: Option<String>,
         location: Option<LocationDetails>,
         operating_system: Option<String>,
@@ -36,7 +36,7 @@ impl NodeIdentity {
             public_key,
             name,
             wallet_address,
-            ip_addresses,
+            public_url,
             company,
             location,
             operating_system,
@@ -57,8 +57,8 @@ impl NodeIdentity {
         &self.wallet_address
     }
 
-    pub fn ip_addresses(&self) -> &Option<Vec<IpAddr>> {
-        &self.ip_addresses
+    pub fn public_url(&self) -> &Option<Url> {
+        &self.public_url
     }
 
     pub fn company(&self) -> &Option<String> {
@@ -86,7 +86,7 @@ impl NodeIdentity {
             public_key,
             name: None,
             wallet_address: None,
-            ip_addresses: None,
+            public_url: None,
             company: None,
             location: None,
             operating_system: None,
@@ -102,8 +102,6 @@ pub mod tests {
     use super::NodeIdentity;
     use hotshot_types::signature_key::BLSPubKey;
     use hotshot_types::traits::signature_key::SignatureKey;
-    use std::net::IpAddr;
-    use std::net::Ipv4Addr;
 
     pub fn create_test_node(index: u64) -> NodeIdentity {
         let (pub_key, _) = BLSPubKey::generated_from_seed_indexed([0; 32], index);
@@ -112,7 +110,7 @@ pub mod tests {
             pub_key,
             Some("a".to_string()),
             Some(Default::default()),
-            Some(vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))]),
+            Some("https://espressosys.com/".parse().unwrap()),
             Some("company".to_string()),
             Some(LocationDetails::new((0.0, 0.0), "US".to_string())),
             Some("Windows 11".to_string()),
@@ -180,13 +178,13 @@ pub mod tests {
     }
 
     #[test]
-    fn test_node_identity_ip_addresses() {
+    fn test_node_identity_public_url() {
         let node_identity = create_test_node(1);
-        let ip_addresses = node_identity.ip_addresses();
+        let public_url = node_identity.public_url();
 
         assert_eq!(
-            ip_addresses,
-            &Some(vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))])
+            public_url,
+            &Some("https://espressosys.com/".parse().unwrap()),
         );
     }
 

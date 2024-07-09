@@ -989,11 +989,7 @@ pub mod tests {
     use futures::{channel::mpsc, SinkExt, StreamExt};
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use sequencer::{Leaf, NodeState, ValidatedState};
-    use std::{
-        net::{IpAddr, Ipv4Addr},
-        sync::Arc,
-        time::Duration,
-    };
+    use std::{sync::Arc, time::Duration};
 
     pub fn create_test_client_thread_state() -> ClientThreadState {
         ClientThreadState {
@@ -1012,7 +1008,7 @@ pub mod tests {
                 pub_key,
                 Some("a".to_string()),
                 Some(Default::default()),
-                Some(vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))]),
+                Some("http://localhost/".parse().unwrap()),
                 Some("company".to_string()),
                 Some(LocationDetails::new((0.0, 0.0), "US".to_string())),
                 Some("Windows 11".to_string()),
@@ -1027,7 +1023,7 @@ pub mod tests {
                 pub_key,
                 Some("b".to_string()),
                 Some(Default::default()),
-                Some(vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2))]),
+                Some("http://localhost/".parse().unwrap()),
                 Some("company".to_string()),
                 Some(LocationDetails::new((0.0, 0.0), "US".to_string())),
                 Some("Windows 11".to_string()),
@@ -1042,7 +1038,7 @@ pub mod tests {
                 pub_key,
                 Some("b".to_string()),
                 Some(Default::default()),
-                Some(vec![IpAddr::V4(Ipv4Addr::new(127, 0, 0, 3))]),
+                Some("http://localhost/".parse().unwrap()),
                 Some("company".to_string()),
                 Some(LocationDetails::new((0.0, 0.0), "US".to_string())),
                 Some("Windows 11".to_string()),
