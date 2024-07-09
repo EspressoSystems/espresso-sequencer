@@ -51,15 +51,13 @@ contract LightClientMock is LC {
         }
     }
 
-    function setStateHistory(uint256[] memory blockValues, HotShotCommitment[] memory hotShotValues)
-        public
-    {
-        // Set the stateUpdateBlockNumbers to the new values
-        stateUpdateBlockNumbers = blockValues;
+    function setStateHistory(StateHistoryCommitment[] memory _stateHistoryCommitments) public {
+        // delete the previous stateHistoryCommitments
+        delete stateHistoryCommitments;
 
-        // Set the hotShotCommitments to the new values
-        for (uint256 i = 0; i < hotShotValues.length; i++) {
-            hotShotCommitments.push(hotShotValues[i]);
+        // Set the stateHistoryCommitments to the new values
+        for (uint256 i = 0; i < _stateHistoryCommitments.length; i++) {
+            stateHistoryCommitments.push(_stateHistoryCommitments[i]);
         }
     }
 

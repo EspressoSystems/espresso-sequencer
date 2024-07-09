@@ -98,12 +98,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice a flag that indicates when a permissioned provrer is needed
     bool public permissionedProverEnabled;
 
-    /// @notice an array to store the L1 Block Heights where the finalizedState was updated
-    uint256[] public stateUpdateBlockNumbers;
-
-    /// @notice an array to store the HotShot Block Heights and their respective HotShot
+    /// @notice an array to store the L1 block heights, HotShot Block Heights and their respective
+    /// state history
     /// commitments
-    HotShotCommitment[] public hotShotCommitments;
+    StateHistoryCommitment[] public stateHistoryCommitments;
 
     // === Data Structure ===
     //
@@ -133,6 +131,16 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     struct HotShotCommitment {
         uint64 blockHeight;
         BN254.ScalarField blockCommRoot;
+    }
+
+    /// @notice Simplified HotShot commitment struct
+    /// @param l1BlockHeight the block height of l1 when this state update was stored
+    /// @param hotshotBlockHeight The block height of the latest finalized HotShot block
+    /// @param hotShotBlockCommRoot The merkle root of historical block commitments
+    /// (BN254::ScalarField)
+    struct StateHistoryCommitment {
+        uint256 l1BlockHeight;
+        HotShotCommitment hotShotCommitment;
     }
 
     /// @notice Event that a new finalized state has been successfully verified and updated
@@ -390,8 +398,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             // the arrays already has the max block states allowed so we clear the first non-empty
             // element
             // the arrays are cleared from a FIFO approach
-            delete stateUpdateBlockNumbers[stateHistoryFirstIndex];
-            delete hotShotCommitments[stateHistoryFirstIndex];
+            delete stateHistoryCommitments[stateHistoryFirstIndex];
             // and increment the first index so that you know where the first non-zero element is in
             // the affected arrays
             stateHistoryFirstIndex++;
@@ -400,9 +407,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             // == maxStateHistoryAllowed
             stateHistoryCount++;
         }
-        //add the L1 Block to stateUpdateBlockNumbers &  HotShot commitment for the genesis state
-        stateUpdateBlockNumbers.push(blockNumber);
-        hotShotCommitments.push(HotShotCommitment(state.blockHeight, state.blockCommRoot));
+        // //add the L1 Block to stateUpdateBlockNumbers &  HotShot commitment for the genesis state
+        stateHistoryCommitments.push(
+            StateHistoryCommitment(
+                blockNumber, HotShotCommitment(state.blockHeight, state.blockCommRoot)
+            )
+        );
     }
 
     /// @notice check if more than threshold blocks passed since the last state update before
@@ -416,7 +426,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         virtual
         returns (bool)
     {
-        uint256 updatesCount = stateUpdateBlockNumbers.length;
+        uint256 updatesCount = stateHistoryCommitments.length;
 
         // Handling Edge Cases
         // Edgecase 1: The block is in the future or in the past before HotShot was live
@@ -429,9 +439,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         uint256 i = updatesCount - 1;
         while (!prevUpdateFound) {
-            if (stateUpdateBlockNumbers[i] <= blockNumber) {
+            if (stateHistoryCommitments[i].l1BlockHeight <= blockNumber) {
                 prevUpdateFound = true;
-                prevBlock = stateUpdateBlockNumbers[i];
+                prevBlock = stateHistoryCommitments[i].l1BlockHeight;
             }
 
             // We don't consider the lag time for the first two updates
@@ -456,37 +466,35 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return blockNumber - prevBlock > threshold;
     }
 
-    /// @notice get the number of L1 block updates
-    function getStateUpdateBlockNumbersCount() public view returns (uint256) {
-        return stateUpdateBlockNumbers.length;
-    }
-
     /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at
-    /// the provided height
+    /// the provided HotShot height
     /// @param hotShotBlockHeight hotShotBlockHeight
     function getHotShotCommitment(uint256 hotShotBlockHeight)
         public
         view
         returns (HotShotCommitment memory)
     {
-        uint256 commitmentsHeight = hotShotCommitments.length;
-        if (hotShotBlockHeight >= hotShotCommitments[commitmentsHeight - 1].blockHeight) {
+        uint256 commitmentsHeight = stateHistoryCommitments.length;
+        if (
+            hotShotBlockHeight
+                >= stateHistoryCommitments[commitmentsHeight - 1].hotShotCommitment.blockHeight
+        ) {
             revert InvalidHotShotBlockForCommitmentCheck();
         }
         for (uint256 i = stateHistoryFirstIndex; i < commitmentsHeight; i++) {
             // The first commitment greater than the provided height is the root of the tree
             // that leaf at that HotShot height
-            if (hotShotCommitments[i].blockHeight > hotShotBlockHeight) {
-                return hotShotCommitments[i];
+            if (stateHistoryCommitments[i].hotShotCommitment.blockHeight > hotShotBlockHeight) {
+                return stateHistoryCommitments[i].hotShotCommitment;
             }
         }
 
-        return hotShotCommitments[commitmentsHeight - 1];
+        return stateHistoryCommitments[commitmentsHeight - 1].hotShotCommitment;
     }
 
-    /// @notice get the number of HotShot block commitments
-    function getHotShotBlockCommitmentsCount() public view returns (uint256) {
-        return hotShotCommitments.length;
+    /// @notice get the number of state history commitments
+    function getStateHistoryCount() public view returns (uint256) {
+        return stateHistoryCommitments.length;
     }
 
     /// @notice set Max Block States allowed
