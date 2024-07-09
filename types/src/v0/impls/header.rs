@@ -71,37 +71,39 @@ pub enum ProposalValidationError {
     InvalidNsTable { err: NsTableValidationError },
 }
 
+impl v0_1::Header {
+    pub(crate) fn commit(&self) -> Commitment<Header> {
+        let mut bmt_bytes = vec![];
+        self.block_merkle_tree_root
+            .serialize_with_mode(&mut bmt_bytes, ark_serialize::Compress::Yes)
+            .unwrap();
+        let mut fmt_bytes = vec![];
+        self.fee_merkle_tree_root
+            .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
+            .unwrap();
+
+        RawCommitmentBuilder::new(&Self::tag())
+            .field("chain_config", self.chain_config.commit())
+            .u64_field("height", self.height)
+            .u64_field("timestamp", self.timestamp)
+            .u64_field("l1_head", self.l1_head)
+            .optional("l1_finalized", &self.l1_finalized)
+            .constant_str("payload_commitment")
+            .fixed_size_bytes(self.payload_commitment.as_ref().as_ref())
+            .constant_str("builder_commitment")
+            .fixed_size_bytes(self.builder_commitment.as_ref())
+            .field("ns_table", self.ns_table.commit())
+            .var_size_field("block_merkle_tree_root", &bmt_bytes)
+            .var_size_field("fee_merkle_tree_root", &fmt_bytes)
+            .field("fee_info", self.fee_info.commit())
+            .finalize()
+    }
+}
+
 impl Committable for Header {
     fn commit(&self) -> Commitment<Self> {
-        let v1_commit = || {
-            let mut bmt_bytes = vec![];
-            self.block_merkle_tree_root()
-                .serialize_with_mode(&mut bmt_bytes, ark_serialize::Compress::Yes)
-                .unwrap();
-            let mut fmt_bytes = vec![];
-            self.fee_merkle_tree_root()
-                .serialize_with_mode(&mut fmt_bytes, ark_serialize::Compress::Yes)
-                .unwrap();
-
-            RawCommitmentBuilder::new(&Self::tag())
-                .field("chain_config", self.chain_config().commit())
-                .u64_field("height", self.height())
-                .u64_field("timestamp", self.timestamp())
-                .u64_field("l1_head", self.l1_head())
-                .optional("l1_finalized", &self.l1_finalized())
-                .constant_str("payload_commitment")
-                .fixed_size_bytes(self.payload_commitment().as_ref().as_ref())
-                .constant_str("builder_commitment")
-                .fixed_size_bytes(self.builder_commitment().as_ref())
-                .field("ns_table", self.ns_table().commit())
-                .var_size_field("block_merkle_tree_root", &bmt_bytes)
-                .var_size_field("fee_merkle_tree_root", &fmt_bytes)
-                .field("fee_info", self.fee_info().commit())
-                .finalize()
-        };
-
         match self {
-            Self::V1(_) => v1_commit(),
+            Self::V1(header) => header.commit(),
             Self::V2(fields) => RawCommitmentBuilder::new(&Self::tag())
                 .u64_field("version_major", 0)
                 .u64_field("version_minor", 2)
@@ -131,27 +133,6 @@ impl Header {
         }
     }
 }
-
-// impl From<Version> for ResolvableChainConfigOrVersion {
-//     fn from(version: Version) -> Self {
-//         Self {
-//             chain_config: EitherOrVersion::Version(version),
-//         }
-//     }
-// }
-
-// impl From<ResolvableChainConfig> for ResolvableChainConfigOrVersion {
-//     fn from(v: ResolvableChainConfig) -> Self {
-//         let value = match v.chain_config {
-//             Either::Left(cfg) => EitherOrVersion::Left(cfg),
-//             Either::Right(commit) => EitherOrVersion::Right(commit),
-//         };
-
-//         Self {
-//             chain_config: value,
-//         }
-//     }
-// }
 
 impl Serialize for Header {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -287,7 +268,12 @@ impl<'de> Deserialize<'de> for Header {
                         EitherOrVersion::Version(Version { major: 0, minor: 3 }) => Ok(Header::V3(
                             serde_json::from_value(fields.clone()).map_err(de::Error::custom)?,
                         )),
-                        v => Err(serde::de::Error::custom(format!("invalid version {v:?}"))),
+                        EitherOrVersion::Version(v) => {
+                            Err(de::Error::custom(format!("invalid version {v:?}")))
+                        }
+                        chain_config => Err(de::Error::custom(format!(
+                            "expected version, found chain_config {chain_config:?}"
+                        ))),
                     };
                     return result;
                 }
