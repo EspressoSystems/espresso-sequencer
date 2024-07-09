@@ -25,8 +25,9 @@ use sequencer_utils::{
 };
 
 use crate::{
-    eth_signature_key::EthKeyPair, AccountQueryData, FeeAccount, FeeAccountProof, FeeAmount,
-    FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree, SeqTypes,
+    eth_signature_key::EthKeyPair, v0_1::IterableFeeInfo, AccountQueryData, FeeAccount,
+    FeeAccountProof, FeeAmount, FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree,
+    SeqTypes,
 };
 impl FeeInfo {
     pub fn new(account: impl Into<FeeAccount>, amount: impl Into<FeeAmount>) -> Self {
@@ -59,12 +60,6 @@ impl FeeInfo {
     pub fn amount(&self) -> FeeAmount {
         self.amount
     }
-}
-
-/// Methods for use w/ Vec<FeeInfo>
-pub trait IterableFeeInfo {
-    fn amount(&self) -> Option<FeeAmount>;
-    fn accounts(&self) -> Vec<FeeAccount>;
 }
 
 impl IterableFeeInfo for Vec<FeeInfo> {

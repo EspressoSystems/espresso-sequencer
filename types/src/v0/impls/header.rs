@@ -19,7 +19,8 @@ use time::OffsetDateTime;
 use vbs::version::Version;
 
 use crate::{
-    v0_1, v0_2, v0_3, BlockMerkleCommitment, BuilderSignature, ChainConfig, FeeAccount, FeeAmount,
+    v0_1::{self, IterableFeeInfo},
+    v0_2, v0_3, BlockMerkleCommitment, BuilderSignature, ChainConfig, FeeAccount, FeeAmount,
     FeeInfo, FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NodeState,
     NsTable, ResolvableChainConfig, SeqTypes, UpgradeType, ValidatedState,
 };
@@ -409,8 +410,12 @@ impl Header {
     /// checked during consensus, any downstream client who has a proof of consensus finality of a
     /// header can trust that [`fee_info`](Self::fee_info) is correct without relying on the
     /// signature. Thus, this signature is not included in the header commitment.
-    pub fn builder_signature(&self) -> Option<BuilderSignature> {
-        *field!(self.builder_signature)
+    pub fn builder_signature(&self) -> Vec<Option<BuilderSignature>> {
+        match self {
+            Self::V1(fields) => vec![fields.builder_signature],
+            Self::V2(fields) => vec![fields.builder_signature],
+            Self::V3(fields) => fields.builder_signature.clone(),
+        }
     }
 }
 
@@ -627,21 +632,22 @@ impl QueryableHeader<SeqTypes> for Header {
 
 impl ExplorerHeader<SeqTypes> for Header {
     type BalanceAmount = FeeAmount;
-    type WalletAddress = FeeAccount;
-    type ProposerId = FeeAccount;
+    type WalletAddress = Vec<FeeAccount>;
+    type ProposerId = Vec<FeeAccount>;
     type NamespaceId = NamespaceId;
 
     // TODO what are these expected values w/ multiple Fees
     fn proposer_id(&self) -> Self::ProposerId {
-        self.fee_info().account()
+        self.fee_info().accounts()
     }
 
     fn fee_info_account(&self) -> Self::WalletAddress {
-        self.fee_info().account()
+        self.fee_info().accounts()
     }
 
     fn fee_info_balance(&self) -> Self::BalanceAmount {
-        self.fee_info().amount()
+        // TODO this will panic if some amount or total does not fit in a u64
+        self.fee_info().amount().unwrap()
     }
 
     /// reward_balance at the moment is only implemented as a stub, as block

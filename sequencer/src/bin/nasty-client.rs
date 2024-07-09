@@ -31,7 +31,7 @@ use clap::Parser;
 use committable::Committable;
 use derivative::Derivative;
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
-use espresso_types::{BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
+use espresso_types::{v0_1::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
 use futures::{
     future::{FutureExt, TryFuture, TryFutureExt},
     stream::{Peekable, StreamExt},
@@ -929,7 +929,10 @@ impl ResourceManager<Header> {
                     .await
             })
             .await?;
-        let builder_address = builder_header.fee_info().account();
+
+        // Since we have multiple fee accounts, we need to select one.
+        let accounts = builder_header.fee_info().accounts();
+        let builder_address = accounts.first().unwrap();
 
         // Get the header of the state snapshot we're going to query so we can later verify our
         // results.

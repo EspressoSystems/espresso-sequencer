@@ -27,14 +27,12 @@ use vbs::version::Version;
 use crate::{
     constants::{BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT},
     traits::StateCatchup,
-    v0_1::BackoffParams,
+    v0_1::{BackoffParams, IterableFeeInfo},
     AccountQueryData, BlockMerkleTree, BuilderValidationError, ChainConfig, Delta, FeeAccount,
     FeeAmount, FeeError, FeeInfo, FeeMerkleCommitment, FeeMerkleTree, Header, Leaf, NodeState,
     NsTableValidationError, PayloadByteLen, ProposalValidationError, ResolvableChainConfig,
     SeqTypes, UpgradeType, ValidatedState,
 };
-
-use super::fee_info::IterableFeeInfo;
 
 impl StateDelta for Delta {}
 
@@ -902,7 +900,7 @@ mod test {
     use sequencer_utils::ser::FromStringOrInteger;
 
     use super::*;
-    use crate::{BlockSize, FeeAccountProof, FeeMerkleProof};
+    use crate::{v0_1::IterableFeeInfo, BlockSize, FeeAccountProof, FeeMerkleProof};
 
     #[test]
     fn test_fee_proofs() {
@@ -1005,7 +1003,7 @@ mod test {
             ProposalValidationError::InsufficientFee {
                 max_block_size: instance.chain_config.max_block_size,
                 base_fee: instance.chain_config.base_fee,
-                proposed_fee: header.fee_info().amount()
+                proposed_fee: header.fee_info().amount().unwrap()
             },
             err
         );
