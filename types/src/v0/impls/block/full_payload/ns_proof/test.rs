@@ -1,7 +1,4 @@
-use crate::{
-    block::{full_payload::NsIndex, test::ValidTest, NsProof},
-    Payload,
-};
+use crate::{v0::impls::block::test::ValidTest, NsIndex, NsProof, Payload};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use futures::future;
 use hotshot::traits::BlockPayload;
