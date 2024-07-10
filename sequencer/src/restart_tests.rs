@@ -323,7 +323,7 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
             // Give enough time for every node to propose, with every view timing out. This is
             // conservative: of course if we actually make progress, not every view will time out,
             // and we will take less than this amount of time.
-            let timeout = Duration::from_millis(next_view_timeout) * (self.num_nodes as u32);
+            let timeout = 2 * Duration::from_millis(next_view_timeout) * (self.num_nodes as u32);
             match async_timeout(timeout, self.check_progress()).await {
                 Ok(res) => res,
                 Err(_) => bail!("timed out waiting for progress on node {node_id}"),
@@ -514,9 +514,14 @@ impl TestNetwork {
         )
         .await;
 
-        let quorum_threshold = 2 * self.num_nodes() / 3 + 1;
+        // We use 3n/4 + 1 as the quorum threshold (fault tolerance f = n/4), even though the
+        // theoretical fault tolerance of HotStuff consensus is n/3, because our implementation does
+        // not currently re-randomize the order of leaders, and requires 4 consecutive honest
+        // leaders to commit. Thus, with 1/4 or more of the nodes dishonest, you could get unlucky
+        // and have one dishonest leader every 4, thus preventing consensus from progressing.
+        let quorum_threshold = 3 * self.num_nodes() / 4 + 1;
         let da_threshold = 2 * self.da_nodes.len() / 3 + 1;
-        if self.num_nodes() - da_nodes - regular_nodes >= quorum_threshold
+        if self.num_nodes() - da_nodes - regular_nodes > quorum_threshold
             && self.da_nodes.len() - da_nodes >= da_threshold
         {
             // If we are shutting down less than f nodes, the remaining nodes should be able to make
