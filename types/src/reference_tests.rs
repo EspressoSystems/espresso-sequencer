@@ -169,6 +169,7 @@ async fn reference_tx_index() -> <Payload as QueryablePayload<SeqTypes>>::Transa
 }
 
 fn reference_test_without_committable<T: Serialize + DeserializeOwned + Eq + Debug>(
+    version: &str,
     name: &str,
     reference: &T,
 ) {
@@ -176,8 +177,13 @@ fn reference_test_without_committable<T: Serialize + DeserializeOwned + Eq + Deb
     setup_backtrace();
 
     // Load the expected serialization from the repo.
-    let data_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../data");
-    let expected_bytes = std::fs::read(data_dir.join(format!("{name}.json"))).unwrap();
+    let data_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../data")
+        .join(version);
+
+    let file_path = data_dir.join(format!("{name}.json"));
+
+    let expected_bytes = std::fs::read(file_path).unwrap();
     let expected: Value = serde_json::from_slice(&expected_bytes).unwrap();
 
     // Check that the reference object matches the expected serialized form.
@@ -250,6 +256,7 @@ change in the serialization of this data structure.
 }
 
 fn reference_test<T: Committable + Serialize + DeserializeOwned + Eq + Debug>(
+    version: &str,
     name: &str,
     reference: T,
     commitment: &str,
@@ -257,7 +264,7 @@ fn reference_test<T: Committable + Serialize + DeserializeOwned + Eq + Debug>(
     setup_logging();
     setup_backtrace();
 
-    reference_test_without_committable(name, &reference);
+    reference_test_without_committable(version, name, &reference);
 
     // Print information about the commitment that might be useful in generating tests for other
     // languages.
@@ -286,17 +293,18 @@ Actual: {actual}
 
 #[async_std::test]
 async fn test_reference_payload() {
-    reference_test_without_committable("payload", &reference_payload().await);
+    reference_test_without_committable("v1", "payload", &reference_payload().await);
 }
 
 #[async_std::test]
 async fn test_reference_tx_index() {
-    reference_test_without_committable("tx_index", &reference_tx_index().await);
+    reference_test_without_committable("v1", "tx_index", &reference_tx_index().await);
 }
 
 #[async_std::test]
 async fn test_reference_ns_table() {
     reference_test(
+        "v1",
         "ns_table",
         reference_ns_table().await,
         REFERENCE_NS_TABLE_COMMITMENT,
@@ -306,6 +314,7 @@ async fn test_reference_ns_table() {
 #[test]
 fn test_reference_l1_block() {
     reference_test(
+        "v1",
         "l1_block",
         reference_l1_block(),
         REFERENCE_L1_BLOCK_COMMITMENT,
@@ -315,6 +324,7 @@ fn test_reference_l1_block() {
 #[test]
 fn test_reference_chain_config() {
     reference_test(
+        "v1",
         "chain_config",
         reference_chain_config(),
         REFERENCE_CHAIN_CONFIG_COMMITMENT,
@@ -324,6 +334,7 @@ fn test_reference_chain_config() {
 #[test]
 fn test_reference_fee_info() {
     reference_test(
+        "v1",
         "fee_info",
         reference_fee_info(),
         REFERENCE_FEE_INFO_COMMITMENT,
@@ -333,19 +344,22 @@ fn test_reference_fee_info() {
 #[async_std::test]
 async fn test_reference_header() {
     reference_test(
-        "header_v1",
+        "v1",
+        "header",
         reference_header(StaticVersion::<0, 1>::version()).await,
         REFERENCE_V1_HEADER_COMMITMENT,
     );
 
     reference_test(
-        "header_v2",
+        "v2",
+        "header",
         reference_header(StaticVersion::<0, 2>::version()).await,
         REFERENCE_V2_HEADER_COMMITMENT,
     );
 
     reference_test(
-        "header_v3",
+        "v3",
+        "header",
         reference_header(StaticVersion::<0, 3>::version()).await,
         REFERENCE_V3_HEADER_COMMITMENT,
     );
@@ -354,6 +368,7 @@ async fn test_reference_header() {
 #[test]
 fn test_reference_transaction() {
     reference_test(
+        "v1",
         "transaction",
         reference_transaction(12648430_u32.into(), &mut jf_utils::test_rng()),
         REFERENCE_TRANSACTION_COMMITMENT,
