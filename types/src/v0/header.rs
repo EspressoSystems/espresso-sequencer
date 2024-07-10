@@ -1,8 +1,7 @@
+use crate::{v0_1, v0_2, v0_3, ChainConfig};
 use committable::Commitment;
 use serde::{Deserialize, Serialize};
 use vbs::version::Version;
-
-use crate::{v0_1, v0_2, v0_3, ChainConfig};
 
 /// Each variant presents a specific minor version header.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]

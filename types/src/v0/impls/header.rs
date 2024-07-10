@@ -155,47 +155,6 @@ impl Serialize for Header {
     }
 }
 
-#[derive(Deserialize, Debug, PartialEq, Eq, Hash, strum::Display)]
-#[serde(field_identifier, rename_all = "snake_case")]
-#[strum(serialize_all = "snake_case")]
-pub enum StructFields {
-    Version,
-    Fields,
-    ChainConfig,
-    Height,
-    Timestamp,
-    L1Head,
-    L1Finalized,
-    PayloadCommitment,
-    BuilderCommitment,
-    NsTable,
-    BlockMerkleTreeRoot,
-    FeeMerkleTreeRoot,
-    FeeInfo,
-    BuilderSignature,
-}
-
-impl StructFields {
-    fn list() -> &'static [&'static str] {
-        &[
-            "fields",
-            "chain_config",
-            "version",
-            "height",
-            "timestamp",
-            "l1_head",
-            "l1_finalized",
-            "payload_commitment",
-            "builder_commitment",
-            "ns_table",
-            "block_merkle_tree_root",
-            "fee_merkle_tree_root",
-            "fee_info",
-            "builder_signature",
-        ]
-    }
-}
-
 impl<'de> Deserialize<'de> for Header {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -250,13 +209,13 @@ impl<'de> Deserialize<'de> for Header {
                 // insert all the fields in the serde_map as the map may have out of order fields.
                 let mut serde_map: Map<String, Value> = Map::new();
 
-                while let Some(key) = map.next_key::<StructFields>()? {
-                    serde_map.insert(key.to_string(), map.next_value()?);
+                while let Some(key) = map.next_key::<String>()? {
+                    serde_map.insert(key.trim().to_owned(), map.next_value()?);
                 }
 
                 if let Some(v) = serde_map.get("version") {
                     let fields = serde_map
-                        .get(&StructFields::Fields.to_string())
+                        .get("fields")
                         .ok_or_else(|| de::Error::missing_field("fields"))?;
 
                     let version = serde_json::from_value::<EitherOrVersion>(v.clone())
@@ -284,7 +243,38 @@ impl<'de> Deserialize<'de> for Header {
             }
         }
 
-        deserializer.deserialize_struct("Header", StructFields::list(), HeaderVisitor)
+        // List of all possible fields of all versions of the `Header`.
+        // serde's `deserialize_struct` works by deserializing to a struct with a specific list of fields.
+        // The length of the fields list we provide is always going to be greater than the length of the target struct.
+        // In our case, we are deserializing to either a V1 Header or a VersionedHeader for versions > 0.1.
+        // We use serde_json and bincode serialization in the sequencer.
+        // Fortunately, serde_json ignores fields parameter and only cares about our Visitor implementation.
+        // -  https://docs.rs/serde_json/1.0.120/serde_json/struct.Deserializer.html#method.deserialize_struct
+        // Bincode uses the length of the fields list, but the bincode deserialization only cares that the length of the fields
+        // is an upper bound of the target struct's fields length.
+        // -  https://docs.rs/bincode/1.3.3/src/bincode/de/mod.rs.html#313
+        // This works because the bincode deserializer only consumes the next field when `next_element` is called,
+        // and our visitor calls it the correct number of times.
+        // This would, however, break if the bincode deserializer implementation required an exact match of the field's length,
+        // consuming one element for each field.
+        let fields: &[&str] = &[
+            "fields",
+            "chain_config",
+            "version",
+            "height",
+            "timestamp",
+            "l1_head",
+            "l1_finalized",
+            "payload_commitment",
+            "builder_commitment",
+            "ns_table",
+            "block_merkle_tree_root",
+            "fee_merkle_tree_root",
+            "fee_info",
+            "builder_signature",
+        ];
+
+        deserializer.deserialize_struct("Header", fields, HeaderVisitor)
     }
 }
 

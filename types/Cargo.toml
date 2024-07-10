@@ -47,11 +47,10 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
 snafu = { workspace = true }
-static_assertions = { workspace = true }
-strum = { version = "0.26", features = ["derive"] }
+static_assertions = { workspace = true } 
 thiserror = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
 trait-set = { workspace = true }
 url = { workspace = true }
-vbs = { workspace = true }
+vbs = { workspace = true } 
