@@ -3,6 +3,7 @@ use core::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 
+// TODO: Remove issue #1681 (https://github.com/EspressoSystems/espresso-sequencer/issues/1681)
 #[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
 pub enum Error {
     // TODO: Can we nest these errors in a `ValidationError` to group them?
