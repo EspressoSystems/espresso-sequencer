@@ -27,8 +27,8 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
 use es_version::SequencerVersion;
 use espresso_types::{
-    v0_1, ChainConfig, FeeAccount, FeeInfo, Header, L1BlockInfo, NamespaceId, NsTable, Payload,
-    SeqTypes, Transaction, ValidatedState,
+    ChainConfig, FeeAccount, FeeInfo, Header, L1BlockInfo, NamespaceId, NsTable, Payload, SeqTypes,
+    Transaction, ValidatedState,
 };
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::{
@@ -41,7 +41,10 @@ use sequencer_utils::commitment_to_u256;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use tagged_base64::TaggedBase64;
-use vbs::BinarySerializer;
+use vbs::{
+    version::{StaticVersion, StaticVersionType, Version},
+    BinarySerializer,
+};
 
 type Serializer = vbs::Serializer<SequencerVersion>;
 
@@ -110,7 +113,7 @@ fn reference_fee_info() -> FeeInfo {
 
 const REFERENCE_FEE_INFO_COMMITMENT: &str = "FEE_INFO~xCCeTjJClBtwtOUrnAmT65LNTQGceuyjSJHUFfX6VRXR";
 
-async fn reference_header() -> Header {
+async fn reference_header(version: Version) -> Header {
     let builder_key = FeeAccount::generated_from_seed_indexed(Default::default(), 0).1;
     let fee_info = reference_fee_info();
     let payload = reference_payload().await;
@@ -127,23 +130,26 @@ async fn reference_header() -> Header {
 
     let state = ValidatedState::default();
 
-    Header::V1(v0_1::Header {
-        chain_config: reference_chain_config().into(),
-        height: 42,
-        timestamp: 789,
-        l1_head: 124,
-        l1_finalized: Some(reference_l1_block()),
+    Header::create(
+        reference_chain_config().into(),
+        42,
+        789,
+        124,
+        Some(reference_l1_block()),
         payload_commitment,
         builder_commitment,
         ns_table,
-        block_merkle_tree_root: state.fee_merkle_tree.commitment(),
-        fee_merkle_tree_root: state.block_merkle_tree.commitment(),
+        state.fee_merkle_tree.commitment(),
+        state.block_merkle_tree.commitment(),
         fee_info,
-        builder_signature: Some(builder_signature),
-    })
+        Some(builder_signature),
+        version,
+    )
 }
 
-const REFERENCE_HEADER_COMMITMENT: &str = "BLOCK~dh1KpdvvxSvnnPpOi2yI3DOg8h6ltr2Kv13iRzbQvtN2";
+const REFERENCE_V1_HEADER_COMMITMENT: &str = "BLOCK~dh1KpdvvxSvnnPpOi2yI3DOg8h6ltr2Kv13iRzbQvtN2";
+const REFERENCE_V2_HEADER_COMMITMENT: &str = "BLOCK~RQjkitE0BU_wA0MpUK9EfcgiPleyHJCd4cl3M7iBrCgh";
+const REFERENCE_V3_HEADER_COMMITMENT: &str = "BLOCK~RQjkitE0BU_wA0MpUK9EfcgiPleyHJCd4cl3M7iBrCgh";
 
 fn reference_transaction<R>(ns_id: NamespaceId, rng: &mut R) -> Transaction
 where
@@ -326,9 +332,21 @@ fn test_reference_fee_info() {
 #[async_std::test]
 async fn test_reference_header() {
     reference_test(
-        "header",
-        reference_header().await,
-        REFERENCE_HEADER_COMMITMENT,
+        "header_v1",
+        reference_header(StaticVersion::<0, 1>::version()).await,
+        REFERENCE_V1_HEADER_COMMITMENT,
+    );
+
+    reference_test(
+        "header_v2",
+        reference_header(StaticVersion::<0, 2>::version()).await,
+        REFERENCE_V2_HEADER_COMMITMENT,
+    );
+
+    reference_test(
+        "header_v3",
+        reference_header(StaticVersion::<0, 3>::version()).await,
+        REFERENCE_V3_HEADER_COMMITMENT,
     );
 }
 

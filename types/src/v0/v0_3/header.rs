@@ -9,10 +9,9 @@ use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{utils::BuilderCommitment, vid::VidCommitment};
 use serde::{Deserialize, Serialize};
 
-/// A header is like a [`Block`] with the body replaced by a digest.
+// TODO : marketplace header
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Header {
-    /// A commitment to a ChainConfig or a full ChainConfig.
     pub chain_config: ResolvableChainConfig,
     pub height: u64,
     pub timestamp: u64,
