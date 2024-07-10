@@ -173,7 +173,6 @@ where
                                 marketplace_config,
                             )
                             .await
-                            .unwrap()
                         }
                         .boxed()
                     },

@@ -569,17 +569,18 @@ pub mod test_helpers {
                                     |metrics| {
                                         let cfg = cfg.clone();
                                         async move {
-                                            cfg.init_node(
-                                                0,
-                                                state,
-                                                persistence,
-                                                catchup,
-                                                &*metrics,
-                                                STAKE_TABLE_CAPACITY_FOR_TEST,
-                                                Ver::instance(),
-                                                upgrades_map,
-                                            )
-                                            .await
+                                            Ok(cfg
+                                                .init_node(
+                                                    0,
+                                                    state,
+                                                    persistence,
+                                                    catchup,
+                                                    &*metrics,
+                                                    STAKE_TABLE_CAPACITY_FOR_TEST,
+                                                    Ver::instance(),
+                                                    upgrades_map,
+                                                )
+                                                .await)
                                         }
                                         .boxed()
                                     },

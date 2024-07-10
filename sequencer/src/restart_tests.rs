@@ -259,14 +259,36 @@ impl<S: TestableSequencerDataSource> TestNode<S> {
     {
         async {
             tracing::info!("starting node");
-            let ctx = init_with_storage(
-                self.modules.clone(),
-                self.opt.clone(),
-                S::persistence_options(&self.storage),
-                <SequencerVersions as Versions>::Base::instance(),
-            )
-            .await
-            .unwrap();
+
+            // If we are starting a node which had already been started and stopped, we may need to
+            // delay a bit for the OS to reclaim the node's P2P port. Otherwise initialization of
+            // libp2p may fail with "address already in use". Thus, retry the node initialization
+            // with a backoff.
+            let mut retries = 5;
+            let mut delay = Duration::from_secs(1);
+            let ctx = loop {
+                match init_with_storage(
+                    self.modules.clone(),
+                    self.opt.clone(),
+                    S::persistence_options(&self.storage),
+                    <SequencerVersions as Versions>::Base::instance(),
+                )
+                .await
+                {
+                    Ok(ctx) => break ctx,
+                    Err(err) => {
+                        tracing::error!(retries, ?delay, "initialization failed: {err:#}");
+                        if retries == 0 {
+                            panic!("initialization failed too many times");
+                        }
+
+                        sleep(delay).await;
+                        delay *= 2;
+                        retries -= 1;
+                    }
+                }
+            };
+
             tracing::info!(node_id = ctx.node_id(), "starting consensus");
             ctx.start_consensus().await;
             self.context = Some(ctx);

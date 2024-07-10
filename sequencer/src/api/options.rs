@@ -1,12 +1,12 @@
 //! Sequencer-specific API options and initialization.
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use async_std::sync::{Arc, RwLock};
 use clap::Parser;
 use espresso_types::{v0::traits::SequencerPersistence, BlockMerkleTree, FeeMerkleTree, PubKey};
 use futures::{
     channel::oneshot,
-    future::{BoxFuture, Future, FutureExt},
+    future::{BoxFuture, Future},
 };
 use hotshot_events_service::events::Error as EventStreamingError;
 use hotshot_query_service::{
@@ -153,7 +153,9 @@ impl Options {
     where
         N: ConnectedNetwork<PubKey>,
         P: SequencerPersistence,
-        F: FnOnce(Box<dyn Metrics>) -> BoxFuture<'static, SequencerContext<N, P, Ver>>,
+        F: FnOnce(
+            Box<dyn Metrics>,
+        ) -> BoxFuture<'static, anyhow::Result<SequencerContext<N, P, Ver>>>,
     {
         // Create a channel to send the context to the web server after it is initialized. This
         // allows the web server to start before initialization can complete, since initialization
@@ -164,17 +166,6 @@ impl Options {
                 .await
                 .expect("context initialized and sent over channel")
         });
-        let init_context = move |metrics| {
-            let fut = init_context(metrics);
-            async move {
-                let ctx = fut.await;
-                if send_ctx.send(super::ConsensusState::from(&ctx)).is_err() {
-                    tracing::warn!("API server exited without receiving context");
-                }
-                ctx
-            }
-            .boxed()
-        };
         let mut tasks = TaskList::default();
 
         // The server state type depends on whether we are running a query or status API or not, so
@@ -239,7 +230,12 @@ impl Options {
             Box::new(NoMetrics)
         };
 
-        Ok(init_context(metrics).await.with_task_list(tasks))
+        let ctx = init_context(metrics).await?;
+        send_ctx
+            .send(super::ConsensusState::from(&ctx))
+            .ok()
+            .context("API server exited without receiving context")?;
+        Ok(ctx.with_task_list(tasks))
     }
 
     async fn init_app_modules<N, P, D, Ver: StaticVersionType + 'static>(
