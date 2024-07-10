@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 pragma experimental ABIEncoderV2;
 
-import { Test } /*, console2*/ from "forge-std/Test.sol";
+import { Test, console2 } from "forge-std/Test.sol";
 import { LightClient as LCV1 } from "../src/LightClient.sol";
 import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
 import { DeployLightClientContractScript } from "../script/LightClient.s.sol";
@@ -46,6 +46,7 @@ contract LightClientUpgradeTest is Test {
         // Upgrade LightClient and check that the genesis state is not changed and that the new
         // field
         // of the upgraded contract is set to 0
+
         lcV2Proxy = LCV2(upgrader.run(admin, proxy));
 
         assertEq(lcV2Proxy.newField(), 0);

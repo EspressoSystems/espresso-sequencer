@@ -101,7 +101,7 @@ Follow the same steps as for the deployment of the fee contract above.
 forge verify-contract --chain-id 11155111 \
 --watch --etherscan-api-key $ETHERSCAN_API_KEY \
 --compiler-version $SOLC_VERSION \
-$LIGHT_CLIENT_CONTRACT_ADDRESS \
+$LIGHT_CLIENT_PROXY_CONTRACT_ADDRESS \
 contracts/src/LightClient.sol:LightClient --watch
 ```
 

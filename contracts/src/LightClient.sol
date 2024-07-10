@@ -61,17 +61,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice current (finalized) epoch number
     uint64 public currentEpoch;
 
-    ///@notice Max number of blockStates to record
-    uint64 public maxStateHistoryAllowed;
-
-    ///@notice number of block states recorded
-    uint64 public stateHistoryCount;
-
-    ///@notice index of first block in block state series
-    ///@dev use this instead of index 0 since old states would be set to zero to keep storage costs
-    /// constant to maxStateHistoryAllowed
-    uint64 public stateHistoryFirstIndex;
-
     /// @notice The commitment of the stake table used in current voting (i.e. snapshot at the start
     /// of last epoch)
     bytes32 public votingStakeTableCommitment;
@@ -97,6 +86,17 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice a flag that indicates when a permissioned provrer is needed
     bool public permissionedProverEnabled;
+
+    ///@notice Max number of blockStates to record
+    uint64 public maxStateHistoryAllowed;
+
+    ///@notice number of block states recorded
+    uint64 public stateHistoryCount;
+
+    ///@notice index of first block in block state series
+    ///@dev use this instead of index 0 since old states would be set to zero to keep storage costs
+    /// constant to maxStateHistoryAllowed
+    uint64 public stateHistoryFirstIndex;
 
     /// @notice an array to store the L1 block heights, HotShot Block Heights and their respective
     /// state history
