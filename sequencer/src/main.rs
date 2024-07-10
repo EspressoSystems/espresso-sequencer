@@ -149,7 +149,6 @@ where
                                 opt.is_da,
                             )
                             .await
-                            .unwrap()
                         }
                         .boxed()
                     },
