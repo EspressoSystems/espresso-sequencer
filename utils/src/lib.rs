@@ -1,3 +1,10 @@
+use std::{
+    fmt::Debug,
+    path::{Path, PathBuf},
+    process::{Child, Command},
+    time::Duration,
+};
+
 use anyhow::anyhow;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use async_std::task::sleep;
@@ -6,16 +13,9 @@ use ethers::{
     abi::Detokenize,
     contract::builders::ContractCall,
     prelude::*,
-    providers::Middleware,
-    providers::{Http, Provider},
+    providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, Signer as _},
     types::U256,
-};
-use std::path::{Path, PathBuf};
-use std::time::Duration;
-use std::{
-    fmt::Debug,
-    process::{Child, Command},
 };
 use tempfile::TempDir;
 use url::Url;
@@ -439,8 +439,9 @@ async fn wait_for_transaction_to_be_mined<P: JsonRpcClient>(
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use committable::RawCommitmentBuilder;
+
+    use super::*;
 
     struct TestCommittable;
 

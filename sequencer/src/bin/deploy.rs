@@ -1,10 +1,11 @@
+use std::{fs::File, io::stdout, path::PathBuf};
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use futures::FutureExt;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::light_client_genesis;
 use sequencer_utils::deployer::{deploy, ContractGroup, Contracts, DeployedContracts};
-use std::{fs::File, io::stdout, path::PathBuf};
 use url::Url;
 
 /// Deploy contracts needed to run the sequencer.

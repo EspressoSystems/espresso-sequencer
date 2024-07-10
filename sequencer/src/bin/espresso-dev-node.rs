@@ -206,6 +206,7 @@ mod tests {
     use contract_bindings::light_client::LightClient;
     use es_version::SequencerVersion;
     use escargot::CargoBuild;
+    use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
     use ethers::types::{Address, U256};
     use futures::TryStreamExt;
     use hotshot_query_service::{
@@ -214,10 +215,7 @@ mod tests {
     };
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
-    use sequencer::{
-        api::endpoints::NamespaceProofQueryData, state::BlockMerkleTree, Header, SeqTypes,
-        Transaction,
-    };
+    use sequencer::api::endpoints::NamespaceProofQueryData;
     use sequencer_utils::{init_signer, AnvilOptions};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
@@ -303,7 +301,7 @@ mod tests {
 
         assert!(!builder_address.is_empty());
 
-        let tx = Transaction::new(100.into(), vec![1, 2, 3]);
+        let tx = Transaction::new(100_u32.into(), vec![1, 2, 3]);
 
         let hash: Commitment<Transaction> = api_client
             .post("submit/submit")

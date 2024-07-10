@@ -1,11 +1,5 @@
-use self::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
-use crate::{
-    network,
-    persistence::{ChainConfigPersistence, SequencerPersistence},
-    state::{BlockMerkleTree, FeeAccountProof},
-    state_signature::StateSigner,
-    ChainConfig, NamespaceId, Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
-};
+use std::pin::Pin;
+
 use anyhow::{bail, Context};
 use async_once_cell::Lazy;
 use async_std::sync::{Arc, RwLock};
@@ -13,7 +7,11 @@ use async_trait::async_trait;
 use committable::Commitment;
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
-use ethers::prelude::{Address, U256};
+use espresso_types::{
+    v0::traits::SequencerPersistence, AccountQueryData, BlockMerkleTree, ChainConfig,
+    FeeAccountProof, NodeState, PubKey, Transaction,
+};
+use ethers::prelude::Address;
 use futures::{
     future::{BoxFuture, Future, FutureExt},
     stream::{BoxStream, Stream},
@@ -27,9 +25,13 @@ use hotshot_types::{
     HotShotConfig,
 };
 use jf_merkle_tree::MerkleTreeScheme;
-use serde::{Deserialize, Serialize};
-use std::pin::Pin;
 use vbs::version::StaticVersionType;
+
+use self::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
+use crate::{
+    network, persistence::ChainConfigPersistence, state_signature::StateSigner, Node, SeqTypes,
+    SequencerContext,
+};
 
 pub mod data_source;
 pub mod endpoints;
@@ -39,18 +41,6 @@ pub mod sql;
 mod update;
 
 pub use options::Options;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AccountQueryData {
-    pub balance: U256,
-    pub proof: FeeAccountProof,
-}
-
-impl From<(FeeAccountProof, U256)> for AccountQueryData {
-    fn from((proof, balance): (FeeAccountProof, U256)) -> Self {
-        Self { balance, proof }
-    }
-}
 
 pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
 
@@ -361,25 +351,23 @@ impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: Sequencer
 
 #[cfg(any(test, feature = "testing"))]
 pub mod test_helpers {
-    use super::*;
-    use crate::{
-        catchup::{mock::MockStateCatchup, StateCatchup},
-        genesis::Upgrade,
-        persistence::{no_storage, PersistenceOptions},
-        state::{BlockMerkleTree, ValidatedState},
-        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig, TestConfigBuilder},
-    };
+    use std::{collections::BTreeMap, time::Duration};
+
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use committable::Committable;
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
+    use espresso_types::{
+        mock::MockStateCatchup,
+        v0::traits::{PersistenceOptions, StateCatchup},
+        NamespaceId, Upgrade, ValidatedState,
+    };
     use ethers::{prelude::Address, utils::Anvil};
     use futures::{
         future::{join_all, FutureExt},
         stream::StreamExt,
     };
     use hotshot::types::{Event, EventType};
-
     use hotshot_contract_adapter::light_client::ParsedLightClientState;
     use hotshot_types::{
         event::LeafInfo,
@@ -388,10 +376,15 @@ pub mod test_helpers {
     use itertools::izip;
     use jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
-    use std::{collections::BTreeMap, time::Duration};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
     use vbs::version::Version;
+
+    use super::*;
+    use crate::{
+        persistence::no_storage,
+        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig, TestConfigBuilder},
+    };
 
     pub const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
@@ -673,7 +666,7 @@ pub mod test_helpers {
         setup_logging();
         setup_backtrace();
 
-        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3, 4]);
+        let txn = Transaction::new(NamespaceId::from(1_u32), vec![1, 2, 3, 4]);
 
         let port = pick_unused_port().expect("No ports free");
 
@@ -780,7 +773,7 @@ pub mod test_helpers {
             {
                 if leaf_chain
                     .iter()
-                    .any(|LeafInfo { leaf, .. }| leaf.block_header().height > 2)
+                    .any(|LeafInfo { leaf, .. }| leaf.block_header().height() > 2)
                 {
                     break;
                 }
@@ -844,18 +837,12 @@ pub mod test_helpers {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod api_tests {
-    use self::options::HotshotEvents;
-
-    use super::*;
-    use crate::{
-        testing::{wait_for_decide_on_handle, TestConfigBuilder},
-        Header, NamespaceId,
-    };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
     use es_version::SequencerVersion;
+    use espresso_types::{Header, NamespaceId};
     use ethers::utils::Anvil;
     use futures::stream::StreamExt;
     use hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
@@ -866,6 +853,10 @@ mod api_tests {
         TestNetwork, TestNetworkConfigBuilder,
     };
     use tide_disco::error::ServerError;
+
+    use self::options::HotshotEvents;
+    use super::*;
+    use crate::testing::{wait_for_decide_on_handle, TestConfigBuilder};
 
     #[async_std::test]
     pub(crate) async fn submit_test_with_query_module<D: TestableSequencerDataSource>() {
@@ -891,7 +882,7 @@ mod api_tests {
         setup_backtrace();
 
         // Arbitrary transaction, arbitrary namespace ID
-        let ns_id = NamespaceId::from(42);
+        let ns_id = NamespaceId::from(42_u32);
         let txn = Transaction::new(ns_id, vec![1, 2, 3, 4]);
 
         // Start query service.
@@ -959,14 +950,14 @@ mod api_tests {
 
                 ns_proof
                     .verify(
-                        &header.ns_table,
-                        &header.payload_commitment,
+                        header.ns_table(),
+                        &header.payload_commitment(),
                         vid_common.common(),
                     )
                     .unwrap();
             } else {
                 // Namespace proof should be present if ns_id exists in ns_table
-                assert!(header.ns_table.find_ns_id(&ns_id).is_none());
+                assert!(header.ns_table().find_ns_id(&ns_id).is_none());
                 assert!(ns_query_res.transactions.is_empty());
             }
 
@@ -1051,25 +1042,20 @@ mod api_tests {
 
 #[cfg(test)]
 mod test {
-    use self::{
-        data_source::testing::TestableSequencerDataSource, sql::DataSource as SqlDataSource,
-    };
-    use super::*;
-    use crate::{
-        catchup::{mock::MockStateCatchup, StatePeers},
-        genesis::{Upgrade, UpgradeType},
-        persistence::no_storage,
-        state::{FeeAccount, FeeAmount, ValidatedState},
-        testing::{TestConfig, TestConfigBuilder},
-        Header,
-    };
+    use std::time::Duration;
+
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use committable::{Commitment, Committable};
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
+    use espresso_types::{
+        mock::MockStateCatchup, FeeAccount, FeeAmount, Header, Upgrade, UpgradeType, ValidatedState,
+    };
     use ethers::utils::Anvil;
-    use futures::future::{self, join_all};
-    use futures::stream::{StreamExt, TryStreamExt};
+    use futures::{
+        future::{self, join_all},
+        stream::{StreamExt, TryStreamExt},
+    };
     use hotshot::types::EventType;
     use hotshot_query_service::{
         availability::{BlockQueryData, LeafQueryData},
@@ -1081,7 +1067,6 @@ mod test {
     };
     use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     use portpicker::pick_unused_port;
-    use std::time::Duration;
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
@@ -1089,6 +1074,16 @@ mod test {
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     use vbs::version::Version;
+
+    use self::{
+        data_source::testing::TestableSequencerDataSource, sql::DataSource as SqlDataSource,
+    };
+    use super::*;
+    use crate::{
+        catchup::StatePeers,
+        persistence::no_storage,
+        testing::{TestConfig, TestConfigBuilder},
+    };
 
     #[async_std::test]
     async fn test_healthcheck() {

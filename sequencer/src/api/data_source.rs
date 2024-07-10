@@ -1,17 +1,12 @@
 use std::{num::NonZeroUsize, time::Duration};
 
-use super::{
-    fs,
-    options::{Options, Query},
-    sql, AccountQueryData, BlocksFrontier,
-};
-use crate::{
-    persistence::{self, SequencerPersistence},
-    ChainConfig, PubKey, SeqTypes, Transaction,
-};
 use anyhow::bail;
 use async_trait::async_trait;
 use committable::Commitment;
+use espresso_types::{
+    v0::traits::{PersistenceOptions, SequencerPersistence},
+    ChainConfig, PubKey, Transaction,
+};
 use ethers::prelude::Address;
 use futures::future::Future;
 use hotshot_query_service::{
@@ -25,13 +20,22 @@ use hotshot_types::{
     data::ViewNumber, light_client::StateSignatureRequestBody, traits::network::ConnectedNetwork,
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
-
 use serde::Serialize;
 use tide_disco::Url;
 use vbs::version::StaticVersionType;
 use vec1::Vec1;
 
-pub trait DataSourceOptions: persistence::PersistenceOptions {
+use super::{
+    fs,
+    options::{Options, Query},
+    sql, AccountQueryData, BlocksFrontier,
+};
+use crate::{
+    persistence::{self},
+    SeqTypes,
+};
+
+pub trait DataSourceOptions: PersistenceOptions {
     type DataSource: SequencerDataSource<Options = Self>;
 
     fn enable_query_module(&self, opt: Options, query: Query) -> Options;
@@ -297,8 +301,7 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
 
 #[cfg(test)]
 pub(crate) mod testing {
-    use super::super::Options;
-    use super::*;
+    use super::{super::Options, *};
 
     #[async_trait]
     pub(crate) trait TestableSequencerDataSource: SequencerDataSource {

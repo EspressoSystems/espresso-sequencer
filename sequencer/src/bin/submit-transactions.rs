@@ -1,10 +1,16 @@
 //! Utility program to submit random transactions to an Espresso Sequencer.
 
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::{sleep, spawn};
 use clap::Parser;
 use committable::{Commitment, Committable};
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
+use espresso_types::{SeqTypes, Transaction};
 use futures::{
     channel::mpsc::{self, Sender},
     sink::SinkExt,
@@ -14,14 +20,7 @@ use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, 
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
-use sequencer::{
-    options::{parse_duration, parse_size},
-    SeqTypes, Transaction,
-};
-use std::{
-    collections::HashMap,
-    time::{Duration, Instant},
-};
+use sequencer::options::{parse_duration, parse_size};
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
 use vbs::version::StaticVersionType;
