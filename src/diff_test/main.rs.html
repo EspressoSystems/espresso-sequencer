@@ -636,16 +636,16 @@
 <a href="#636" id="636">636</a>
 <a href="#637" id="637">637</a>
 <a href="#638" id="638">638</a>
+<a href="#639" id="639">639</a>
+<a href="#640" id="640">640</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
 <span class="kw">use </span>ark_ec::{AffineRepr, CurveGroup};
 <span class="kw">use </span>ark_ed_on_bn254::{EdwardsConfig <span class="kw">as </span>EdOnBn254Config, Fq <span class="kw">as </span>FqEd254};
 <span class="kw">use </span>ark_ff::field_hashers::{DefaultFieldHasher, HashToField};
-<span class="kw">use </span>ark_poly::domain::radix2::Radix2EvaluationDomain;
-<span class="kw">use </span>ark_poly::EvaluationDomain;
+<span class="kw">use </span>ark_poly::{domain::radix2::Radix2EvaluationDomain, EvaluationDomain};
 <span class="kw">use </span>ark_std::rand::{rngs::StdRng, Rng, SeedableRng};
 <span class="kw">use </span>clap::{Parser, ValueEnum};
 <span class="kw">use </span>diff_test_bn254::ParsedG2Point;
-
 <span class="kw">use </span>ethers::{
     abi::{AbiDecode, AbiEncode, Address},
     types::{Bytes, U256},
@@ -656,15 +656,19 @@
 };
 <span class="kw">use </span>itertools::multiunzip;
 <span class="kw">use </span>jf_pcs::prelude::Commitment;
-<span class="kw">use </span>jf_plonk::proof_system::structs::{Proof, VerifyingKey};
-<span class="kw">use </span>jf_plonk::proof_system::PlonkKzgSnark;
 <span class="kw">use </span>jf_plonk::{
+    proof_system::{
+        structs::{Proof, VerifyingKey},
+        PlonkKzgSnark,
+    },
     testing_apis::Verifier,
     transcript::{PlonkTranscript, SolidityTranscript},
 };
-<span class="kw">use </span>jf_signature::bls_over_bn254::{hash_to_curve, KeyPair <span class="kw">as </span>BLSKeyPair, Signature};
-<span class="kw">use </span>jf_signature::constants::CS_ID_BLS_BN254;
-<span class="kw">use </span>jf_signature::schnorr::KeyPair <span class="kw">as </span>SchnorrKeyPair;
+<span class="kw">use </span>jf_signature::{
+    bls_over_bn254::{hash_to_curve, KeyPair <span class="kw">as </span>BLSKeyPair, Signature},
+    constants::CS_ID_BLS_BN254,
+    schnorr::KeyPair <span class="kw">as </span>SchnorrKeyPair,
+};
 <span class="kw">use </span>sha3::Keccak256;
 
 <span class="attr">#[derive(Parser)]

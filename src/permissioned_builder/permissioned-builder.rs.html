@@ -295,37 +295,27 @@
 <a href="#295" id="295">295</a>
 <a href="#296" id="296">296</a>
 <a href="#297" id="297">297</a>
-<a href="#298" id="298">298</a>
-<a href="#299" id="299">299</a>
-<a href="#300" id="300">300</a>
-<a href="#301" id="301">301</a>
-<a href="#302" id="302">302</a>
-<a href="#303" id="303">303</a>
-<a href="#304" id="304">304</a>
-<a href="#305" id="305">305</a>
-<a href="#306" id="306">306</a>
-<a href="#307" id="307">307</a>
-<a href="#308" id="308">308</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{bail, Context};
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{
+    collections::HashMap, net::ToSocketAddrs, num::NonZeroUsize, path::PathBuf, time::Duration,
+};
+
+<span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>builder::permissioned::init_node;
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>cld::ClDuration;
 <span class="kw">use </span>es_version::SEQUENCER_VERSION;
+<span class="kw">use </span>espresso_types::eth_signature_key::EthKeyPair;
 <span class="kw">use </span>ethers::types::Address;
-<span class="kw">use </span>hotshot_types::data::ViewNumber;
-<span class="kw">use </span>hotshot_types::light_client::StateSignKey;
-<span class="kw">use </span>hotshot_types::signature_key::BLSPrivKey;
-<span class="kw">use </span>hotshot_types::traits::metrics::NoMetrics;
-<span class="kw">use </span>hotshot_types::traits::node_implementation::ConsensusTime;
+<span class="kw">use </span>hotshot_types::{
+    data::ViewNumber,
+    light_client::StateSignKey,
+    signature_key::BLSPrivKey,
+    traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
+};
 <span class="kw">use </span>libp2p::Multiaddr;
-<span class="kw">use </span>sequencer::persistence::no_storage::NoStorage;
-<span class="kw">use </span>sequencer::{eth_signature_key::EthKeyPair, Genesis};
-<span class="kw">use </span>sequencer::{L1Params, NetworkParams};
-<span class="kw">use </span>snafu::Snafu;
-<span class="kw">use </span>std::net::ToSocketAddrs;
-<span class="kw">use </span>std::num::NonZeroUsize;
-<span class="kw">use </span>std::{collections::HashMap, path::PathBuf, str::FromStr, time::Duration};
+<span class="kw">use </span>sequencer::{
+    options::parse_duration, persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams,
+};
 <span class="kw">use </span>url::Url;
 
 <span class="attr">#[derive(Parser, Clone, Debug)]
@@ -497,18 +487,6 @@
     </span><span class="kw">pub </span>is_da: bool,
 }
 
-<span class="attr">#[derive(Clone, Debug, Snafu)]
-</span><span class="kw">pub struct </span>ParseDurationError {
-    reason: String,
-}
-
-<span class="kw">pub fn </span>parse_duration(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Duration, ParseDurationError&gt; {
-    ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError {
-            reason: err.to_string(),
-        })
-}
 <span class="kw">impl </span>PermissionedBuilderOptions {
     <span class="kw">pub fn </span>private_keys(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; anyhow::Result&lt;(BLSPrivKey, StateSignKey)&gt; {
         <span class="kw">if let </span><span class="prelude-val">Some</span>(path) = <span class="kw-2">&amp;</span><span class="self">self</span>.key_file {

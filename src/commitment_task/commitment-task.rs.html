@@ -138,19 +138,19 @@
 <a href="#138" id="138">138</a>
 <a href="#139" id="139">139</a>
 <a href="#140" id="140">140</a>
-<a href="#141" id="141">141</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{io, time::Duration};
+
+<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>async_std::task::spawn;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>es_version::SEQUENCER_VERSION;
 <span class="kw">use </span>ethers::prelude::<span class="kw-2">*</span>;
 <span class="kw">use </span>futures::FutureExt;
-<span class="kw">use </span>sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
-<span class="kw">use </span>sequencer::options::parse_duration;
-<span class="kw">use </span>std::io;
-<span class="kw">use </span>std::time::Duration;
-<span class="kw">use </span>tide_disco::error::ServerError;
-<span class="kw">use </span>tide_disco::Api;
+<span class="kw">use </span>sequencer::{
+    hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
+    options::parse_duration,
+};
+<span class="kw">use </span>tide_disco::{error::ServerError, Api};
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
@@ -255,9 +255,7 @@
     <span class="kw">use </span>portpicker::pick_unused_port;
     <span class="kw">use </span>surf_disco::Client;
 
-    <span class="kw">use </span><span class="kw">super</span>::start_http_server;
-    <span class="kw">use </span><span class="kw">super</span>::Address;
-    <span class="kw">use </span><span class="kw">super</span>::ServerError;
+    <span class="kw">use super</span>::{start_http_server, Address, ServerError};
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_get_hotshot_contract() {

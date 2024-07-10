@@ -345,29 +345,17 @@
 <a href="#345" id="345">345</a>
 <a href="#346" id="346">346</a>
 <a href="#347" id="347">347</a>
-<a href="#348" id="348">348</a>
-<a href="#349" id="349">349</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer-specific API endpoint handlers.
 
-</span><span class="kw">use </span>serde::de::Error <span class="kw">as _</span>;
-<span class="kw">use </span>std::{
+</span><span class="kw">use </span>std::{
     collections::{BTreeSet, HashMap},
     env,
 };
 
-<span class="kw">use super</span>::{
-    data_source::{
-        CatchupDataSource, HotShotConfigDataSource, SequencerDataSource, StateSignatureDataSource,
-        SubmitDataSource,
-    },
-    StorageState,
-};
-<span class="kw">use crate</span>::{
-    block::NsProof, persistence::SequencerPersistence, NamespaceId, PubKey, SeqTypes, Transaction,
-};
 <span class="kw">use </span>anyhow::Result;
 <span class="kw">use </span>async_std::sync::{Arc, RwLock};
 <span class="kw">use </span>committable::Committable;
+<span class="kw">use </span>espresso_types::{NamespaceId, NsProof, PubKey, Transaction};
 <span class="kw">use </span>futures::{try_join, FutureExt};
 <span class="kw">use </span>hotshot_query_service::{
     availability::{<span class="self">self</span>, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
@@ -382,15 +370,23 @@
     data::ViewNumber,
     traits::{network::ConnectedNetwork, node_implementation::ConsensusTime},
 };
-<span class="kw">use </span>serde::{Deserialize, Serialize};
+<span class="kw">use </span>serde::{de::Error <span class="kw">as _</span>, Deserialize, Serialize};
 <span class="kw">use </span>snafu::OptionExt;
 <span class="kw">use </span>tagged_base64::TaggedBase64;
 <span class="kw">use </span>tide_disco::{
     method::{ReadState, WriteState},
     Api, Error <span class="kw">as _</span>, StatusCode,
 };
-
 <span class="kw">use </span>vbs::version::StaticVersionType;
+
+<span class="kw">use super</span>::{
+    data_source::{
+        CatchupDataSource, HotShotConfigDataSource, SequencerDataSource, StateSignatureDataSource,
+        SubmitDataSource,
+    },
+    StorageState,
+};
+<span class="kw">use crate</span>::{SeqTypes, SequencerPersistence};
 
 <span class="attr">#[derive(Clone, Debug, Serialize, Deserialize)]
 </span><span class="kw">pub struct </span>NamespaceProofQueryData {

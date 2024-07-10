@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["local_and_remote"],"mod":["mock"],"struct":["BackoffParams","Client","SqlStateCatchup","StatePeers"],"trait":["StateCatchup"]};
+window.SIDEBAR_ITEMS = {"fn":["local_and_remote"],"struct":["Client","SqlStateCatchup","StatePeers"]};

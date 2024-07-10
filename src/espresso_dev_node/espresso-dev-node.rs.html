@@ -398,8 +398,6 @@
 <a href="#398" id="398">398</a>
 <a href="#399" id="399">399</a>
 <a href="#400" id="400">400</a>
-<a href="#401" id="401">401</a>
-<a href="#402" id="402">402</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{sync::Arc, time::Duration};
 
 <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -608,6 +606,7 @@
     <span class="kw">use </span>contract_bindings::light_client::LightClient;
     <span class="kw">use </span>es_version::SequencerVersion;
     <span class="kw">use </span>escargot::CargoBuild;
+    <span class="kw">use </span>espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
     <span class="kw">use </span>ethers::types::{Address, U256};
     <span class="kw">use </span>futures::TryStreamExt;
     <span class="kw">use </span>hotshot_query_service::{
@@ -616,10 +615,7 @@
     };
     <span class="kw">use </span>jf_merkle_tree::MerkleTreeScheme;
     <span class="kw">use </span>portpicker::pick_unused_port;
-    <span class="kw">use </span>sequencer::{
-        api::endpoints::NamespaceProofQueryData, state::BlockMerkleTree, Header, SeqTypes,
-        Transaction,
-    };
+    <span class="kw">use </span>sequencer::api::endpoints::NamespaceProofQueryData;
     <span class="kw">use </span>sequencer_utils::{init_signer, AnvilOptions};
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>tide_disco::error::ServerError;
@@ -705,7 +701,7 @@
 
         <span class="macro">assert!</span>(!builder_address.is_empty());
 
-        <span class="kw">let </span>tx = Transaction::new(<span class="number">100</span>.into(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]);
+        <span class="kw">let </span>tx = Transaction::new(<span class="number">100_u32</span>.into(), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]);
 
         <span class="kw">let </span>hash: Commitment&lt;Transaction&gt; = api_client
             .post(<span class="string">"submit/submit"</span>)

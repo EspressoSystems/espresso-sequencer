@@ -26,8 +26,8 @@
     init_context: F,
     bind_version: Ver
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.85/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="struct" href="../../context/struct.SequencerContext.html" title="struct sequencer::context::SequencerContext">SequencerContext</a>&lt;N, P, Ver&gt;&gt;<div class="where">where
-    N: ConnectedNetwork&lt;<a class="type" href="../../type.PubKey.html" title="type sequencer::PubKey">PubKey</a>&gt;,
-    P: <a class="trait" href="../../persistence/trait.SequencerPersistence.html" title="trait sequencer::persistence::SequencerPersistence">SequencerPersistence</a>,
+    N: ConnectedNetwork&lt;PubKey&gt;,
+    P: SequencerPersistence,
     F: <a class="trait" href="https://doc.rust-lang.org/1.79.0/core/ops/function/trait.FnOnce.html" title="trait core::ops::function::FnOnce">FnOnce</a>(<a class="struct" href="https://doc.rust-lang.org/1.79.0/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn Metrics&gt;) -&gt; BoxFuture&lt;'static, <a class="struct" href="../../context/struct.SequencerContext.html" title="struct sequencer::context::SequencerContext">SequencerContext</a>&lt;N, P, Ver&gt;&gt;,</div></h4></section></summary><div class="docblock"><p>Start the server.</p>
 <p>The function <code>init_context</code> is used to create a sequencer context from a metrics object and
 optional saved consensus state. The metrics object is created from the API data source, so
@@ -39,8 +39,8 @@ that consensus will populuate metrics that can then be read and served by the AP
     tasks: &amp;mut <a class="struct" href="../../context/struct.TaskList.html" title="struct sequencer::context::TaskList">TaskList</a>,
     bind_version: Ver
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.85/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;(<a class="struct" href="https://doc.rust-lang.org/1.79.0/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn Metrics&gt;, <a class="struct" href="https://doc.rust-lang.org/1.79.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;RwLock&lt;ExtensibleDataSource&lt;D, <a class="struct" href="../struct.ApiState.html" title="struct sequencer::api::ApiState">ApiState</a>&lt;N, P, Ver&gt;&gt;&gt;&gt;, App&lt;<a class="struct" href="https://doc.rust-lang.org/1.79.0/alloc/sync/struct.Arc.html" title="struct alloc::sync::Arc">Arc</a>&lt;RwLock&lt;ExtensibleDataSource&lt;D, <a class="struct" href="../struct.ApiState.html" title="struct sequencer::api::ApiState">ApiState</a>&lt;N, P, Ver&gt;&gt;&gt;&gt;, Error&gt;)&gt;<div class="where">where
-    N: ConnectedNetwork&lt;<a class="type" href="../../type.PubKey.html" title="type sequencer::PubKey">PubKey</a>&gt;,
-    P: <a class="trait" href="../../persistence/trait.SequencerPersistence.html" title="trait sequencer::persistence::SequencerPersistence">SequencerPersistence</a>,
+    N: ConnectedNetwork&lt;PubKey&gt;,
+    P: SequencerPersistence,
     D: <a class="trait" href="../data_source/trait.SequencerDataSource.html" title="trait sequencer::api::data_source::SequencerDataSource">SequencerDataSource</a> + <a class="trait" href="../data_source/trait.CatchupDataSource.html" title="trait sequencer::api::data_source::CatchupDataSource">CatchupDataSource</a> + <a class="trait" href="https://doc.rust-lang.org/1.79.0/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/1.79.0/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + 'static,</div></h4></section><section id="method.init_with_query_module_fs" class="method"><a class="src rightside" href="../../../src/sequencer/api/options.rs.html#301-333">source</a><h4 class="code-header">async fn <a href="#method.init_with_query_module_fs" class="fn">init_with_query_module_fs</a>&lt;N, P, Ver: StaticVersionType + 'static&gt;(
     &amp;self,
     query_opt: <a class="struct" href="struct.Query.html" title="struct sequencer::api::options::Query">Query</a>,
@@ -49,8 +49,8 @@ that consensus will populuate metrics that can then be read and served by the AP
     tasks: &amp;mut <a class="struct" href="../../context/struct.TaskList.html" title="struct sequencer::context::TaskList">TaskList</a>,
     bind_version: Ver
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.85/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.79.0/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn Metrics&gt;&gt;<div class="where">where
-    N: ConnectedNetwork&lt;<a class="type" href="../../type.PubKey.html" title="type sequencer::PubKey">PubKey</a>&gt;,
-    P: <a class="trait" href="../../persistence/trait.SequencerPersistence.html" title="trait sequencer::persistence::SequencerPersistence">SequencerPersistence</a>,</div></h4></section><section id="method.init_with_query_module_sql" class="method"><a class="src rightside" href="../../../src/sequencer/api/options.rs.html#335-390">source</a><h4 class="code-header">async fn <a href="#method.init_with_query_module_sql" class="fn">init_with_query_module_sql</a>&lt;N, P, Ver: StaticVersionType + 'static&gt;(
+    N: ConnectedNetwork&lt;PubKey&gt;,
+    P: SequencerPersistence,</div></h4></section><section id="method.init_with_query_module_sql" class="method"><a class="src rightside" href="../../../src/sequencer/api/options.rs.html#335-390">source</a><h4 class="code-header">async fn <a href="#method.init_with_query_module_sql" class="fn">init_with_query_module_sql</a>&lt;N, P, Ver: StaticVersionType + 'static&gt;(
     self,
     query_opt: <a class="struct" href="struct.Query.html" title="struct sequencer::api::options::Query">Query</a>,
     mod_opt: <a class="struct" href="../../persistence/sql/struct.Options.html" title="struct sequencer::persistence::sql::Options">Options</a>,
@@ -58,25 +58,25 @@ that consensus will populuate metrics that can then be read and served by the AP
     tasks: &amp;mut <a class="struct" href="../../context/struct.TaskList.html" title="struct sequencer::context::TaskList">TaskList</a>,
     bind_version: Ver
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.85/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.79.0/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn Metrics&gt;&gt;<div class="where">where
-    N: ConnectedNetwork&lt;<a class="type" href="../../type.PubKey.html" title="type sequencer::PubKey">PubKey</a>&gt;,
-    P: <a class="trait" href="../../persistence/trait.SequencerPersistence.html" title="trait sequencer::persistence::SequencerPersistence">SequencerPersistence</a>,</div></h4></section><details class="toggle method-toggle" open><summary><section id="method.init_hotshot_modules" class="method"><a class="src rightside" href="../../../src/sequencer/api/options.rs.html#397-434">source</a><h4 class="code-header">fn <a href="#method.init_hotshot_modules" class="fn">init_hotshot_modules</a>&lt;N, P, S, Ver: StaticVersionType + 'static&gt;(
+    N: ConnectedNetwork&lt;PubKey&gt;,
+    P: SequencerPersistence,</div></h4></section><details class="toggle method-toggle" open><summary><section id="method.init_hotshot_modules" class="method"><a class="src rightside" href="../../../src/sequencer/api/options.rs.html#397-434">source</a><h4 class="code-header">fn <a href="#method.init_hotshot_modules" class="fn">init_hotshot_modules</a>&lt;N, P, S, Ver: StaticVersionType + 'static&gt;(
     &amp;self,
     app: &amp;mut App&lt;S, Error&gt;
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.85/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.unit.html">()</a>&gt;<div class="where">where
     S: 'static + <a class="trait" href="https://doc.rust-lang.org/1.79.0/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/1.79.0/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + ReadState + WriteState,
-    P: <a class="trait" href="../../persistence/trait.SequencerPersistence.html" title="trait sequencer::persistence::SequencerPersistence">SequencerPersistence</a>,
+    P: SequencerPersistence,
     S::State: <a class="trait" href="https://doc.rust-lang.org/1.79.0/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/1.79.0/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> + <a class="trait" href="../data_source/trait.SubmitDataSource.html" title="trait sequencer::api::data_source::SubmitDataSource">SubmitDataSource</a>&lt;N, P&gt; + <a class="trait" href="../data_source/trait.StateSignatureDataSource.html" title="trait sequencer::api::data_source::StateSignatureDataSource">StateSignatureDataSource</a>&lt;N&gt; + <a class="trait" href="../data_source/trait.CatchupDataSource.html" title="trait sequencer::api::data_source::CatchupDataSource">CatchupDataSource</a> + <a class="trait" href="../data_source/trait.HotShotConfigDataSource.html" title="trait sequencer::api::data_source::HotShotConfigDataSource">HotShotConfigDataSource</a>,
-    N: ConnectedNetwork&lt;<a class="type" href="../../type.PubKey.html" title="type sequencer::PubKey">PubKey</a>&gt;,</div></h4></section></summary><div class="docblock"><p>Initialize the modules for interacting with HotShot.</p>
+    N: ConnectedNetwork&lt;PubKey&gt;,</div></h4></section></summary><div class="docblock"><p>Initialize the modules for interacting with HotShot.</p>
 <p>This function adds the <code>submit</code>, <code>state</code>, and <code>state_signature</code> API modules to the given
 app. These modules only require a HotShot handle as state, and thus they work with any data
 source, so initialization is the same no matter what mode the service is running in.</p>
-</div></details><section id="method.init_and_spawn_hotshot_event_streaming_module" class="method"><a class="src rightside" href="../../../src/sequencer/api/options.rs.html#437-474">source</a><h4 class="code-header">fn <a href="#method.init_and_spawn_hotshot_event_streaming_module" class="fn">init_and_spawn_hotshot_event_streaming_module</a>&lt;N, P: <a class="trait" href="../../persistence/trait.SequencerPersistence.html" title="trait sequencer::persistence::SequencerPersistence">SequencerPersistence</a>, Ver: StaticVersionType + 'static&gt;(
+</div></details><section id="method.init_and_spawn_hotshot_event_streaming_module" class="method"><a class="src rightside" href="../../../src/sequencer/api/options.rs.html#437-474">source</a><h4 class="code-header">fn <a href="#method.init_and_spawn_hotshot_event_streaming_module" class="fn">init_and_spawn_hotshot_event_streaming_module</a>&lt;N, P: SequencerPersistence, Ver: StaticVersionType + 'static&gt;(
     &amp;self,
     state: <a class="struct" href="../struct.ApiState.html" title="struct sequencer::api::ApiState">ApiState</a>&lt;N, P, Ver&gt;,
     tasks: &amp;mut <a class="struct" href="../../context/struct.TaskList.html" title="struct sequencer::context::TaskList">TaskList</a>,
     bind_version: Ver
 ) -&gt; <a class="type" href="https://docs.rs/anyhow/1.0.85/anyhow/type.Result.html" title="type anyhow::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.unit.html">()</a>&gt;<div class="where">where
-    N: ConnectedNetwork&lt;<a class="type" href="../../type.PubKey.html" title="type sequencer::PubKey">PubKey</a>&gt;,</div></h4></section><section id="method.listen" class="method"><a class="src rightside" href="../../../src/sequencer/api/options.rs.html#476-498">source</a><h4 class="code-header">fn <a href="#method.listen" class="fn">listen</a>&lt;S, E, Ver&gt;(
+    N: ConnectedNetwork&lt;PubKey&gt;,</div></h4></section><section id="method.listen" class="method"><a class="src rightside" href="../../../src/sequencer/api/options.rs.html#476-498">source</a><h4 class="code-header">fn <a href="#method.listen" class="fn">listen</a>&lt;S, E, Ver&gt;(
     &amp;self,
     port: <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.u16.html">u16</a>,
     app: App&lt;S, E&gt;,

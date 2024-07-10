@@ -363,12 +363,18 @@
 <a href="#363" id="363">363</a>
 <a href="#364" id="364">364</a>
 <a href="#365" id="365">365</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
+<a href="#366" id="366">366</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::Display;
+
+<span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_std::{
     sync::{Arc, RwLock},
     task::{spawn, JoinHandle},
 };
 <span class="kw">use </span>derivative::Derivative;
+<span class="kw">use </span>espresso_types::{
+    v0::traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
+};
 <span class="kw">use </span>futures::{
     future::{join_all, Future},
     stream::{Stream, StreamExt},
@@ -378,6 +384,7 @@
     types::{Event, SystemContextHandle},
     Memberships, SystemContext,
 };
+<span class="kw">use </span>hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 <span class="kw">use </span>hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 <span class="kw">use </span>hotshot_orchestrator::client::OrchestratorClient;
 <span class="kw">use </span>hotshot_query_service::Leaf;
@@ -387,15 +394,10 @@
     traits::{election::Membership, metrics::Metrics, network::ConnectedNetwork},
     HotShotConfig,
 };
-<span class="kw">use </span>std::fmt::Display;
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
-<span class="kw">use crate</span>::{
-    persistence::SequencerPersistence, state_signature::StateSigner, static_stake_table_commitment,
-    Node, NodeState, PubKey, SeqTypes, Transaction, ValidatedState,
-};
-<span class="kw">use </span>hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
+<span class="kw">use crate</span>::{state_signature::StateSigner, static_stake_table_commitment, Node, SeqTypes};
 <span class="doccomment">/// The consensus handle
 </span><span class="kw">pub type </span>Consensus&lt;N, P&gt; = SystemContextHandle&lt;SeqTypes, Node&lt;N, P&gt;&gt;;
 

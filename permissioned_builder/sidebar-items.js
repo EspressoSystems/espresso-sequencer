@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main","parse_duration"],"struct":["ParseDurationError","ParseDurationSnafu","PermissionedBuilderOptions"]};
+window.SIDEBAR_ITEMS = {"fn":["main"],"struct":["PermissionedBuilderOptions"]};

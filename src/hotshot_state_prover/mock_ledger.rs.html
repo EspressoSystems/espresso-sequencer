@@ -539,7 +539,12 @@
 <a href="#539" id="539">539</a>
 <a href="#540" id="540">540</a>
 <a href="#541" id="541">541</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Result;
+<a href="#542" id="542">542</a>
+<a href="#543" id="543">543</a>
+<a href="#544" id="544">544</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::HashMap;
+
+<span class="kw">use </span>anyhow::Result;
 <span class="kw">use </span>ark_bn254::Bn254;
 <span class="kw">use </span>ark_ed_on_bn254::EdwardsConfig;
 <span class="kw">use </span>ark_ff::PrimeField;
@@ -547,37 +552,38 @@
     rand::{rngs::StdRng, CryptoRng, Rng, RngCore},
     UniformRand,
 };
-
-<span class="kw">use </span>ethers::{abi, utils};
 <span class="kw">use </span>ethers::{
+    abi,
     abi::Token,
     types::{H256, U256},
+    utils,
 };
-<span class="kw">use </span>hotshot_contract_adapter::jellyfish::{field_to_u256, open_key, u256_to_field};
-<span class="kw">use </span>hotshot_contract_adapter::light_client::ParsedLightClientState;
+<span class="kw">use </span>hotshot_contract_adapter::{
+    jellyfish::{field_to_u256, open_key, u256_to_field},
+    light_client::ParsedLightClientState,
+};
 <span class="kw">use </span>hotshot_stake_table::vec_based::StakeTable;
+<span class="kw">use </span>hotshot_types::{
+    light_client::{GenericLightClientState, GenericPublicInput, LightClientState},
+    traits::stake_table::{SnapshotVersion, StakeTableScheme},
+};
+<span class="kw">use </span>itertools::izip;
+<span class="kw">use </span>jf_pcs::prelude::UnivariateUniversalParams;
+<span class="kw">use </span>jf_plonk::{
+    proof_system::{PlonkKzgSnark, UniversalSNARK},
+    transcript::SolidityTranscript,
+};
+<span class="kw">use </span>jf_relation::{Arithmetization, Circuit, PlonkCircuit};
+<span class="kw">use </span>jf_signature::{
+    bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey <span class="kw">as </span>BLSVerKey},
+    schnorr::{SchnorrSignatureScheme, Signature},
+    SignatureScheme,
+};
+<span class="kw">use </span>jf_utils::test_rng;
 
 <span class="kw">use crate</span>::{
     generate_state_update_proof, preprocess, service::one_honest_threshold, Proof, VerifyingKey,
 };
-<span class="kw">use </span>hotshot_types::traits::stake_table::StakeTableScheme;
-<span class="kw">use </span>hotshot_types::{
-    light_client::{GenericLightClientState, GenericPublicInput, LightClientState},
-    traits::stake_table::SnapshotVersion,
-};
-<span class="kw">use </span>itertools::izip;
-<span class="kw">use </span>jf_pcs::prelude::UnivariateUniversalParams;
-<span class="kw">use </span>jf_plonk::proof_system::{PlonkKzgSnark, UniversalSNARK};
-<span class="kw">use </span>jf_plonk::transcript::SolidityTranscript;
-<span class="kw">use </span>jf_relation::{Arithmetization, Circuit, PlonkCircuit};
-<span class="kw">use </span>jf_signature::schnorr::Signature;
-<span class="kw">use </span>jf_signature::{
-    bls_over_bn254::{BLSOverBN254CurveSignatureScheme, VerKey <span class="kw">as </span>BLSVerKey},
-    schnorr::SchnorrSignatureScheme,
-    SignatureScheme,
-};
-<span class="kw">use </span>jf_utils::test_rng;
-<span class="kw">use </span>std::collections::HashMap;
 
 <span class="kw">type </span>F = ark_ed_on_bn254::Fq;
 <span class="kw">type </span>SchnorrVerKey = jf_signature::schnorr::VerKey&lt;EdwardsConfig&gt;;

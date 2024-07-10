@@ -99,20 +99,18 @@
 <a href="#99" id="99">99</a>
 <a href="#100" id="100">100</a>
 <a href="#101" id="101">101</a>
-<a href="#102" id="102">102</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utility program to count transactions sequenced by HotShot.
 
-</span><span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+</span><span class="kw">use </span>std::{cmp::max, collections::HashSet, time::Duration};
+
+<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>async_std::task::sleep;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>es_version::SequencerVersion;
+<span class="kw">use </span>espresso_types::SeqTypes;
 <span class="kw">use </span>futures::future::join_all;
 <span class="kw">use </span>hotshot_query_service::availability::BlockQueryData;
-<span class="kw">use </span>sequencer::SeqTypes;
-<span class="kw">use </span>std::cmp::max;
-<span class="kw">use </span>std::collections::HashSet;
-<span class="kw">use </span>std::time::Duration;
 <span class="kw">use </span>surf_disco::Url;
 
 <span class="doccomment">/// Utility program to count transactions sequenced by HotShot.

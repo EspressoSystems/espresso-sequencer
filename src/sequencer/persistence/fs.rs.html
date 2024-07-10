@@ -685,12 +685,23 @@
 <a href="#685" id="685">685</a>
 <a href="#686" id="686">686</a>
 <a href="#687" id="687">687</a>
-</pre></div><pre class="rust"><code><span class="kw">use super</span>::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-<span class="kw">use crate</span>::{Leaf, SeqTypes, ViewNumber};
+<a href="#688" id="688">688</a>
+<a href="#689" id="689">689</a>
+<a href="#690" id="690">690</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{
+    collections::BTreeMap,
+    fs::{<span class="self">self</span>, File, OpenOptions},
+    io::{Read, Seek, SeekFrom, Write},
+    path::{Path, PathBuf},
+};
+
 <span class="kw">use </span>anyhow::{anyhow, Context};
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>clap::Parser;
-
+<span class="kw">use </span>espresso_types::{
+    v0::traits::{PersistenceOptions, SequencerPersistence},
+    Leaf, NetworkConfig, SeqTypes,
+};
 <span class="kw">use </span>hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, VidDisperseShare},
@@ -701,12 +712,8 @@
     utils::View,
     vote::HasViewNumber,
 };
-<span class="kw">use </span>std::{
-    collections::BTreeMap,
-    fs::{<span class="self">self</span>, File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
-    path::{Path, PathBuf},
-};
+
+<span class="kw">use </span><span class="kw">crate</span>::ViewNumber;
 
 <span class="doccomment">/// Options for file system backed persistence.
 </span><span class="attr">#[derive(Parser, Clone, Debug)]
@@ -1243,9 +1250,9 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>testing {
-    <span class="kw">use </span><span class="kw">super</span>::<span class="kw">super</span>::testing::TestablePersistence;
-    <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use </span>tempfile::TempDir;
+
+    <span class="kw">use super</span>::{<span class="kw">super</span>::testing::TestablePersistence, <span class="kw-2">*</span>};
 
     <span class="attr">#[async_trait]
     </span><span class="kw">impl </span>TestablePersistence <span class="kw">for </span>Persistence {
@@ -1263,9 +1270,7 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>generic_tests {
-    <span class="kw">use </span><span class="kw">super</span>::<span class="kw">super</span>::persistence_tests;
-    <span class="kw">use </span><span class="kw">super</span>::Persistence;
-
+    <span class="kw">use super</span>::{<span class="kw">super</span>::persistence_tests, Persistence};
     <span class="comment">// For some reason this is the only way to import the macro defined in another module of this
     // crate.
     </span><span class="kw">use crate</span>::<span class="kw-2">*</span>;
@@ -1275,8 +1280,9 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use </span>serde_json::json;
+
+    <span class="kw">use super</span>::<span class="kw-2">*</span>;
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_config_migrations_add_builder_urls() {

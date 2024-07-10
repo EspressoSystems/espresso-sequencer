@@ -132,17 +132,23 @@
 <a href="#132" id="132">132</a>
 <a href="#133" id="133">133</a>
 <a href="#134" id="134">134</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+<a href="#135" id="135">135</a>
+<a href="#136" id="136">136</a>
+<a href="#137" id="137">137</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{str::FromStr <span class="kw">as _</span>, time::Duration};
+
+<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>cld::ClDuration;
 <span class="kw">use </span>es_version::SEQUENCER_VERSION;
-<span class="kw">use </span>ethers::providers::{Http, Middleware, Provider};
-<span class="kw">use </span>ethers::signers::{coins_bip39::English, MnemonicBuilder, Signer};
-<span class="kw">use </span>ethers::types::Address;
+<span class="kw">use </span>ethers::{
+    providers::{Http, Middleware, Provider},
+    signers::{coins_bip39::English, MnemonicBuilder, Signer},
+    types::Address,
+};
 <span class="kw">use </span>hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 <span class="kw">use </span>hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
 <span class="kw">use </span>snafu::Snafu;
-<span class="kw">use </span>std::{str::FromStr <span class="kw">as _</span>, time::Duration};
 <span class="kw">use </span>url::Url;
 
 <span class="attr">#[derive(Parser)]

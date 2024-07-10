@@ -244,7 +244,13 @@
 <a href="#244" id="244">244</a>
 <a href="#245" id="245">245</a>
 <a href="#246" id="246">246</a>
-</pre></div><pre class="rust"><code><span class="kw">use super</span>::{LightClientState, StateSignatureRequestBody};
+<a href="#247" id="247">247</a>
+<a href="#248" id="248">248</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{
+    collections::{BTreeSet, HashMap},
+    path::PathBuf,
+};
+
 <span class="kw">use </span>async_compatibility_layer::channel::OneShotReceiver;
 <span class="kw">use </span>async_std::sync::RwLock;
 <span class="kw">use </span>clap::Args;
@@ -255,10 +261,6 @@
     StateSignature, StateSignatureScheme, StateSignaturesBundle, StateVerKey,
 };
 <span class="kw">use </span>jf_signature::SignatureScheme;
-<span class="kw">use </span>std::{
-    collections::{BTreeSet, HashMap},
-    path::PathBuf,
-};
 <span class="kw">use </span>tide_disco::{
     api::ApiError,
     error::ServerError,
@@ -267,6 +269,8 @@
 };
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
+
+<span class="kw">use super</span>::{LightClientState, StateSignatureRequestBody};
 
 <span class="doccomment">/// State that checks the light client state update and the signature collection
 </span><span class="attr">#[derive(Default)]

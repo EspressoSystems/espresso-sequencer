@@ -957,20 +957,20 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>tests {
-    <span class="kw">use super</span>::{build, GenericLightClientState};
-    <span class="kw">use </span><span class="kw">crate</span>::test_utils::{key_pairs_for_testing, stake_table_for_testing};
     <span class="kw">use </span>ark_ed_on_bn254::EdwardsConfig <span class="kw">as </span>Config;
     <span class="kw">use </span>ethers::types::U256;
     <span class="kw">use </span>hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
     <span class="kw">use </span>jf_crhf::CRHF;
+    <span class="kw">use </span>jf_relation::Circuit;
     <span class="kw">use </span>jf_rescue::crhf::VariableLengthRescueCRHF;
     <span class="kw">use </span>jf_signature::{
         schnorr::{SchnorrSignatureScheme, Signature},
         SignatureScheme,
     };
-
-    <span class="kw">use </span>jf_relation::Circuit;
     <span class="kw">use </span>jf_utils::test_rng;
+
+    <span class="kw">use super</span>::{build, GenericLightClientState};
+    <span class="kw">use </span><span class="kw">crate</span>::test_utils::{key_pairs_for_testing, stake_table_for_testing};
 
     <span class="kw">type </span>F = ark_ed_on_bn254::Fq;
     <span class="kw">const </span>ST_CAPACITY: usize = <span class="number">20</span>;

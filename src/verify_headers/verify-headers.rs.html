@@ -213,19 +213,17 @@
 <a href="#213" id="213">213</a>
 <a href="#214" id="214">214</a>
 <a href="#215" id="215">215</a>
-<a href="#216" id="216">216</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utility program to verify properties of headers sequenced by HotShot.
 
-</span><span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+</span><span class="kw">use </span>std::{cmp::max, process::exit, time::Duration};
+
+<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>async_std::{sync::Arc, task::sleep};
 <span class="kw">use </span>clap::Parser;
+<span class="kw">use </span>espresso_types::{Header, L1BlockInfo};
 <span class="kw">use </span>ethers::prelude::<span class="kw-2">*</span>;
 <span class="kw">use </span>futures::future::join_all;
 <span class="kw">use </span>itertools::Itertools;
-<span class="kw">use </span>sequencer::{Header, L1BlockInfo};
-<span class="kw">use </span>std::cmp::max;
-<span class="kw">use </span>std::process::exit;
-<span class="kw">use </span>std::time::Duration;
 <span class="kw">use </span>surf_disco::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
@@ -292,31 +290,31 @@
 
     <span class="kw">let </span><span class="kw-2">mut </span>ok = <span class="bool-val">true</span>;
 
-    <span class="kw">if </span>!opt.no_timestamps &amp;&amp; header.timestamp &lt; parent.timestamp {
+    <span class="kw">if </span>!opt.no_timestamps &amp;&amp; header.timestamp() &lt; parent.timestamp() {
         <span class="macro">tracing::error!</span>(
             <span class="string">"header {height} has decreasing timestamp: {} -&gt; {}"</span>,
-            parent.timestamp,
-            header.timestamp
+            parent.timestamp(),
+            header.timestamp()
         );
         ok = <span class="bool-val">false</span>;
     }
-    <span class="kw">if </span>!opt.no_l1_heads &amp;&amp; header.l1_head &lt; parent.l1_head {
+    <span class="kw">if </span>!opt.no_l1_heads &amp;&amp; header.l1_head() &lt; parent.l1_head() {
         <span class="macro">tracing::error!</span>(
             <span class="string">"header {height} has decreasing L1 head: {} -&gt; {}"</span>,
-            parent.l1_head,
-            header.l1_head
+            parent.l1_head(),
+            header.l1_head()
         );
         ok = <span class="bool-val">false</span>;
     }
-    <span class="kw">if </span>!opt.no_l1_finalized &amp;&amp; header.l1_finalized &lt; parent.l1_finalized {
+    <span class="kw">if </span>!opt.no_l1_finalized &amp;&amp; header.l1_finalized() &lt; parent.l1_finalized() {
         <span class="macro">tracing::error!</span>(
             <span class="string">"header {height} has decreasing L1 finalized: {:?} -&gt; {:?}"</span>,
-            parent.l1_finalized,
-            header.l1_finalized
+            parent.l1_finalized(),
+            header.l1_finalized()
         );
         ok = <span class="bool-val">false</span>;
 
-        <span class="kw">if let </span>(<span class="prelude-val">Some</span>(l1), <span class="prelude-val">Some</span>(l1_finalized)) = (l1, <span class="kw-2">&amp;</span>header.l1_finalized) {
+        <span class="kw">if let </span>(<span class="prelude-val">Some</span>(l1), <span class="prelude-val">Some</span>(l1_finalized)) = (l1, <span class="kw-2">&amp;</span>header.l1_finalized()) {
             <span class="kw">let </span>l1_block = get_l1_block(l1, l1_finalized.number).<span class="kw">await</span>;
             <span class="kw">if </span><span class="kw-2">*</span>l1_finalized != l1_block {
                 <span class="macro">tracing::error!</span>(

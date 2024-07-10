@@ -474,6 +474,9 @@
 <a href="#474" id="474">474</a>
 <a href="#475" id="475">475</a>
 <a href="#476" id="476">476</a>
+<a href="#477" id="477">477</a>
+<a href="#478" id="478">478</a>
+<a href="#479" id="479">479</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Helpers for connecting types between Jellyfish and Solidity.
 //! Usually used during differential testing (via FFI).
 
@@ -488,9 +491,12 @@
     types::{Bytes, H256, U256},
 };
 <span class="kw">use </span>jf_pcs::prelude::Commitment;
-<span class="kw">use </span>jf_plonk::proof_system::structs::{OpenKey, Proof, ProofEvaluations, VerifyingKey};
-<span class="kw">use </span>jf_plonk::testing_apis::Challenges;
-<span class="kw">use </span>jf_plonk::{constants::KECCAK256_STATE_SIZE, transcript::SolidityTranscript};
+<span class="kw">use </span>jf_plonk::{
+    constants::KECCAK256_STATE_SIZE,
+    proof_system::structs::{OpenKey, Proof, ProofEvaluations, VerifyingKey},
+    testing_apis::Challenges,
+    transcript::SolidityTranscript,
+};
 <span class="kw">use </span>num_bigint::BigUint;
 <span class="kw">use </span>num_traits::Num;
 

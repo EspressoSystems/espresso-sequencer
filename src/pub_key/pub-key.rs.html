@@ -61,15 +61,17 @@
 <a href="#61" id="61">61</a>
 <a href="#62" id="62">62</a>
 <a href="#63" id="63">63</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::bail;
+<a href="#64" id="64">64</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::str::FromStr;
+
+<span class="kw">use </span>anyhow::bail;
 <span class="kw">use </span>clap::Parser;
+<span class="kw">use </span>espresso_types::{PrivKey, PubKey};
 <span class="kw">use </span>hotshot::{traits::implementations::derive_libp2p_peer_id, types::BLSPubKey};
 <span class="kw">use </span>hotshot_types::{
     light_client::{StateKeyPair, StateSignKey},
     traits::signature_key::SignatureKey,
 };
-<span class="kw">use </span>sequencer::{PrivKey, PubKey};
-<span class="kw">use </span>std::str::FromStr;
 
 <span class="attr">#[derive(Clone, Debug)]
 </span><span class="kw">enum </span>PrivateKey {

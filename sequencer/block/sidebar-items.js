@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["NsTableValidationError"],"mod":["full_payload","namespace_payload","uint_bytes"],"struct":["NsProof","NsTable","Payload","PayloadByteLen"]};

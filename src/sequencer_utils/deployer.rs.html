@@ -402,7 +402,10 @@
 <a href="#402" id="402">402</a>
 <a href="#403" id="403">403</a>
 <a href="#404" id="404">404</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{ensure, Context};
+<a href="#405" id="405">405</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::HashMap, io::Write, ops::Deref};
+
+<span class="kw">use </span>anyhow::{ensure, Context};
 <span class="kw">use </span>async_std::sync::Arc;
 <span class="kw">use </span>clap::{builder::OsStr, Parser, ValueEnum};
 <span class="kw">use </span>contract_bindings::{
@@ -420,7 +423,6 @@
 <span class="kw">use </span>ethers::{prelude::<span class="kw-2">*</span>, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
 <span class="kw">use </span>futures::future::{BoxFuture, FutureExt};
 <span class="kw">use </span>hotshot_contract_adapter::light_client::ParsedLightClientState;
-<span class="kw">use </span>std::{collections::HashMap, io::Write, ops::Deref};
 <span class="kw">use </span>url::Url;
 
 <span class="doccomment">/// Set of predeployed contracts.

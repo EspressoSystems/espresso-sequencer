@@ -156,18 +156,18 @@
 <a href="#156" id="156">156</a>
 <a href="#157" id="157">157</a>
 <a href="#158" id="158">158</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, path::PathBuf, str::FromStr, time::Duration};
+
+<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>builder::non_permissioned::{build_instance_state, BuilderConfig};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>cld::ClDuration;
 <span class="kw">use </span>es_version::SEQUENCER_VERSION;
+<span class="kw">use </span>espresso_types::eth_signature_key::EthKeyPair;
 <span class="kw">use </span>hotshot::traits::ValidatedState;
-<span class="kw">use </span>hotshot_types::data::ViewNumber;
-<span class="kw">use </span>hotshot_types::traits::node_implementation::ConsensusTime;
-<span class="kw">use </span>sequencer::{eth_signature_key::EthKeyPair, Genesis, L1Params};
+<span class="kw">use </span>hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+<span class="kw">use </span>sequencer::{Genesis, L1Params};
 <span class="kw">use </span>snafu::Snafu;
-<span class="kw">use </span>std::num::NonZeroUsize;
-<span class="kw">use </span>std::{path::PathBuf, str::FromStr, time::Duration};
 <span class="kw">use </span>url::Url;
 
 <span class="attr">#[derive(Parser, Clone, Debug)]

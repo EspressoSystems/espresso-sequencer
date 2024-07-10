@@ -226,22 +226,10 @@
 <a href="#226" id="226">226</a>
 <a href="#227" id="227">227</a>
 <a href="#228" id="228">228</a>
-<a href="#229" id="229">229</a>
-</pre></div><pre class="rust"><code><span class="kw">use super</span>::{
-    data_source::{CatchupDataSource, Provider, SequencerDataSource},
-    AccountQueryData, BlocksFrontier,
-};
-<span class="kw">use crate</span>::{
-    persistence::{
-        sql::{sql_param, transaction, Options},
-        ChainConfigPersistence,
-    },
-    state::{BlockMerkleTree, FeeAccountProof, FeeMerkleTree},
-    ChainConfig, SeqTypes,
-};
-<span class="kw">use </span>anyhow::{bail, Context};
+</pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::Commitment;
+<span class="kw">use </span>espresso_types::{BlockMerkleTree, ChainConfig, FeeAccountProof, FeeMerkleTree};
 <span class="kw">use </span>ethers::prelude::Address;
 <span class="kw">use </span>futures::FutureExt;
 <span class="kw">use </span>hotshot_query_service::{
@@ -254,6 +242,18 @@
 };
 <span class="kw">use </span>hotshot_types::data::ViewNumber;
 <span class="kw">use </span>jf_merkle_tree::{prelude::MerkleNode, MerkleTreeScheme};
+
+<span class="kw">use super</span>::{
+    data_source::{CatchupDataSource, Provider, SequencerDataSource},
+    AccountQueryData, BlocksFrontier,
+};
+<span class="kw">use crate</span>::{
+    persistence::{
+        sql::{sql_param, transaction, Options},
+        ChainConfigPersistence,
+    },
+    SeqTypes,
+};
 
 <span class="kw">pub type </span>DataSource = SqlDataSource&lt;SeqTypes, Provider&gt;;
 
@@ -412,10 +412,10 @@
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>impl_testable_data_source {
 
+    <span class="kw">use </span>hotshot_query_service::data_source::storage::sql::testing::TmpDb;
+
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use </span><span class="kw">crate</span>::api::{<span class="self">self</span>, data_source::testing::TestableSequencerDataSource};
-
-    <span class="kw">use </span>hotshot_query_service::data_source::storage::sql::testing::TmpDb;
 
     <span class="kw">fn </span>tmp_options(db: <span class="kw-2">&amp;</span>TmpDb) -&gt; Options {
         Options {
@@ -447,9 +447,7 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>generic_tests {
-    <span class="kw">use </span><span class="kw">super</span>::<span class="kw">super</span>::api_tests;
-    <span class="kw">use </span><span class="kw">super</span>::DataSource;
-
+    <span class="kw">use super</span>::{<span class="kw">super</span>::api_tests, DataSource};
     <span class="comment">// For some reason this is the only way to import the macro defined in another module of this
     // crate.
     </span><span class="kw">use crate</span>::<span class="kw-2">*</span>;

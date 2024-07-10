@@ -211,20 +211,24 @@
 <a href="#211" id="211">211</a>
 <a href="#212" id="212">212</a>
 <a href="#213" id="213">213</a>
+<a href="#214" id="214">214</a>
+<a href="#215" id="215">215</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utilities for generating and storing the most recent light client state signatures.
 
-</span><span class="kw">use crate</span>::{Leaf, SeqTypes, StateKeyPair};
+</span><span class="kw">use </span>std::collections::{HashMap, VecDeque};
+
 <span class="kw">use </span>ark_ff::PrimeField;
 <span class="kw">use </span>ark_serialize::CanonicalSerialize;
 <span class="kw">use </span>async_std::sync::RwLock;
+<span class="kw">use </span>espresso_types::Leaf;
 <span class="kw">use </span>hotshot::types::{Event, EventType};
 <span class="kw">use </span>hotshot_stake_table::vec_based::StakeTable;
-<span class="kw">use </span>hotshot_types::light_client::{
-    CircuitField, LightClientState, StateSignatureRequestBody, StateVerKey,
-};
 <span class="kw">use </span>hotshot_types::{
     event::LeafInfo,
-    light_client::{StateSignature, StateSignatureScheme},
+    light_client::{
+        CircuitField, LightClientState, StateSignature, StateSignatureRequestBody,
+        StateSignatureScheme, StateVerKey,
+    },
     signature_key::BLSPubKey,
     traits::{
         node_implementation::ConsensusTime,
@@ -234,13 +238,13 @@
     PeerConfig,
 };
 <span class="kw">use </span>jf_crhf::CRHF;
-<span class="kw">use </span>jf_rescue::crhf::VariableLengthRescueCRHF;
-<span class="kw">use </span>jf_rescue::RescueError;
+<span class="kw">use </span>jf_rescue::{crhf::VariableLengthRescueCRHF, RescueError};
 <span class="kw">use </span>jf_signature::SignatureScheme;
-<span class="kw">use </span>std::collections::{HashMap, VecDeque};
 <span class="kw">use </span>surf_disco::{Client, Url};
 <span class="kw">use </span>tide_disco::error::ServerError;
 <span class="kw">use </span>vbs::version::StaticVersionType;
+
+<span class="kw">use crate</span>::{SeqTypes, StateKeyPair};
 
 <span class="doccomment">/// A relay server that's collecting and serving the light client state signatures
 </span><span class="kw">pub mod </span>relay_server;
@@ -364,12 +368,12 @@
     <span class="kw">let </span>header = leaf.block_header();
     <span class="kw">let </span><span class="kw-2">mut </span>block_comm_root_bytes = <span class="macro">vec!</span>[];
     header
-        .block_merkle_tree_root
+        .block_merkle_tree_root()
         .serialize_compressed(<span class="kw-2">&amp;mut </span>block_comm_root_bytes)<span class="question-mark">?</span>;
 
     <span class="kw">let </span><span class="kw-2">mut </span>fee_ledger_comm_bytes = <span class="macro">vec!</span>[];
     header
-        .fee_merkle_tree_root
+        .fee_merkle_tree_root()
         .serialize_compressed(<span class="kw-2">&amp;mut </span>fee_ledger_comm_bytes)<span class="question-mark">?</span>;
     <span class="prelude-val">Ok</span>(LightClientState {
         view_number: leaf.view_number().u64() <span class="kw">as </span>usize,

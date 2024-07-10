@@ -1,0 +1,3 @@
+(function() {var implementors = {
+"sequencer":[["impl PersistenceOptions for <a class=\"struct\" href=\"sequencer/persistence/fs/struct.Options.html\" title=\"struct sequencer::persistence::fs::Options\">Options</a>"],["impl PersistenceOptions for <a class=\"struct\" href=\"sequencer/persistence/no_storage/struct.Options.html\" title=\"struct sequencer::persistence::no_storage::Options\">Options</a>"],["impl PersistenceOptions for <a class=\"struct\" href=\"sequencer/persistence/sql/struct.Options.html\" title=\"struct sequencer::persistence::sql::Options\">Options</a>"]]
+};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

@@ -1682,19 +1682,8 @@
 <a href="#1682" id="1682">1682</a>
 <a href="#1683" id="1683">1683</a>
 <a href="#1684" id="1684">1684</a>
-<a href="#1685" id="1685">1685</a>
-<a href="#1686" id="1686">1686</a>
-<a href="#1687" id="1687">1687</a>
-<a href="#1688" id="1688">1688</a>
-<a href="#1689" id="1689">1689</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span><span class="self">self</span>::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
-<span class="kw">use crate</span>::{
-    network,
-    persistence::{ChainConfigPersistence, SequencerPersistence},
-    state::{BlockMerkleTree, FeeAccountProof},
-    state_signature::StateSigner,
-    ChainConfig, NamespaceId, Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
-};
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::pin::Pin;
+
 <span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>async_once_cell::Lazy;
 <span class="kw">use </span>async_std::sync::{Arc, RwLock};
@@ -1702,7 +1691,11 @@
 <span class="kw">use </span>committable::Commitment;
 <span class="kw">use </span>data_source::{CatchupDataSource, SubmitDataSource};
 <span class="kw">use </span>derivative::Derivative;
-<span class="kw">use </span>ethers::prelude::{Address, U256};
+<span class="kw">use </span>espresso_types::{
+    v0::traits::SequencerPersistence, AccountQueryData, BlockMerkleTree, ChainConfig,
+    FeeAccountProof, NodeState, PubKey, Transaction,
+};
+<span class="kw">use </span>ethers::prelude::Address;
 <span class="kw">use </span>futures::{
     future::{BoxFuture, Future, FutureExt},
     stream::{BoxStream, Stream},
@@ -1716,9 +1709,13 @@
     HotShotConfig,
 };
 <span class="kw">use </span>jf_merkle_tree::MerkleTreeScheme;
-<span class="kw">use </span>serde::{Deserialize, Serialize};
-<span class="kw">use </span>std::pin::Pin;
 <span class="kw">use </span>vbs::version::StaticVersionType;
+
+<span class="kw">use </span><span class="self">self</span>::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
+<span class="kw">use crate</span>::{
+    network, persistence::ChainConfigPersistence, state_signature::StateSigner, Node, SeqTypes,
+    SequencerContext,
+};
 
 <span class="kw">pub mod </span>data_source;
 <span class="kw">pub mod </span>endpoints;
@@ -1728,18 +1725,6 @@
 <span class="kw">mod </span>update;
 
 <span class="kw">pub use </span>options::Options;
-
-<span class="attr">#[derive(Clone, Debug, Serialize, Deserialize)]
-</span><span class="kw">pub struct </span>AccountQueryData {
-    <span class="kw">pub </span>balance: U256,
-    <span class="kw">pub </span>proof: FeeAccountProof,
-}
-
-<span class="kw">impl </span>From&lt;(FeeAccountProof, U256)&gt; <span class="kw">for </span>AccountQueryData {
-    <span class="kw">fn </span>from((proof, balance): (FeeAccountProof, U256)) -&gt; <span class="self">Self </span>{
-        <span class="self">Self </span>{ balance, proof }
-    }
-}
 
 <span class="kw">pub type </span>BlocksFrontier = &lt;BlockMerkleTree <span class="kw">as </span>MerkleTreeScheme&gt;::MembershipProof;
 
@@ -2050,25 +2035,23 @@
 
 <span class="attr">#[cfg(any(test, feature = <span class="string">"testing"</span>))]
 </span><span class="kw">pub mod </span>test_helpers {
-    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use crate</span>::{
-        catchup::{mock::MockStateCatchup, StateCatchup},
-        genesis::Upgrade,
-        persistence::{no_storage, PersistenceOptions},
-        state::{BlockMerkleTree, ValidatedState},
-        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig, TestConfigBuilder},
-    };
+    <span class="kw">use </span>std::{collections::BTreeMap, time::Duration};
+
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>async_std::task::sleep;
     <span class="kw">use </span>committable::Committable;
     <span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
+    <span class="kw">use </span>espresso_types::{
+        mock::MockStateCatchup,
+        v0::traits::{PersistenceOptions, StateCatchup},
+        NamespaceId, Upgrade, ValidatedState,
+    };
     <span class="kw">use </span>ethers::{prelude::Address, utils::Anvil};
     <span class="kw">use </span>futures::{
         future::{join_all, FutureExt},
         stream::StreamExt,
     };
     <span class="kw">use </span>hotshot::types::{Event, EventType};
-
     <span class="kw">use </span>hotshot_contract_adapter::light_client::ParsedLightClientState;
     <span class="kw">use </span>hotshot_types::{
         event::LeafInfo,
@@ -2077,10 +2060,15 @@
     <span class="kw">use </span>itertools::izip;
     <span class="kw">use </span>jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     <span class="kw">use </span>portpicker::pick_unused_port;
-    <span class="kw">use </span>std::{collections::BTreeMap, time::Duration};
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>tide_disco::error::ServerError;
     <span class="kw">use </span>vbs::version::Version;
+
+    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+    <span class="kw">use crate</span>::{
+        persistence::no_storage,
+        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig, TestConfigBuilder},
+    };
 
     <span class="kw">pub const </span>STAKE_TABLE_CAPACITY_FOR_TEST: u64 = <span class="number">10</span>;
 
@@ -2362,7 +2350,7 @@
         setup_logging();
         setup_backtrace();
 
-        <span class="kw">let </span>txn = Transaction::new(NamespaceId::from(<span class="number">1</span>), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]);
+        <span class="kw">let </span>txn = Transaction::new(NamespaceId::from(<span class="number">1_u32</span>), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]);
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
 
@@ -2469,7 +2457,7 @@
             {
                 <span class="kw">if </span>leaf_chain
                     .iter()
-                    .any(|LeafInfo { leaf, .. }| leaf.block_header().height &gt; <span class="number">2</span>)
+                    .any(|LeafInfo { leaf, .. }| leaf.block_header().height() &gt; <span class="number">2</span>)
                 {
                     <span class="kw">break</span>;
                 }
@@ -2533,18 +2521,12 @@
 <span class="attr">#[cfg(test)]
 #[espresso_macros::generic_tests]
 </span><span class="kw">mod </span>api_tests {
-    <span class="kw">use </span><span class="self">self</span>::options::HotshotEvents;
-
-    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use crate</span>::{
-        testing::{wait_for_decide_on_handle, TestConfigBuilder},
-        Header, NamespaceId,
-    };
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>committable::Committable;
     <span class="kw">use </span>data_source::testing::TestableSequencerDataSource;
     <span class="kw">use </span>endpoints::NamespaceProofQueryData;
     <span class="kw">use </span>es_version::SequencerVersion;
+    <span class="kw">use </span>espresso_types::{Header, NamespaceId};
     <span class="kw">use </span>ethers::utils::Anvil;
     <span class="kw">use </span>futures::stream::StreamExt;
     <span class="kw">use </span>hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
@@ -2555,6 +2537,10 @@
         TestNetwork, TestNetworkConfigBuilder,
     };
     <span class="kw">use </span>tide_disco::error::ServerError;
+
+    <span class="kw">use </span><span class="self">self</span>::options::HotshotEvents;
+    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+    <span class="kw">use </span><span class="kw">crate</span>::testing::{wait_for_decide_on_handle, TestConfigBuilder};
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>submit_test_with_query_module&lt;D: TestableSequencerDataSource&gt;() {
@@ -2580,7 +2566,7 @@
         setup_backtrace();
 
         <span class="comment">// Arbitrary transaction, arbitrary namespace ID
-        </span><span class="kw">let </span>ns_id = NamespaceId::from(<span class="number">42</span>);
+        </span><span class="kw">let </span>ns_id = NamespaceId::from(<span class="number">42_u32</span>);
         <span class="kw">let </span>txn = Transaction::new(ns_id, <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]);
 
         <span class="comment">// Start query service.
@@ -2648,14 +2634,14 @@
 
                 ns_proof
                     .verify(
-                        <span class="kw-2">&amp;</span>header.ns_table,
-                        <span class="kw-2">&amp;</span>header.payload_commitment,
+                        header.ns_table(),
+                        <span class="kw-2">&amp;</span>header.payload_commitment(),
                         vid_common.common(),
                     )
                     .unwrap();
             } <span class="kw">else </span>{
                 <span class="comment">// Namespace proof should be present if ns_id exists in ns_table
-                </span><span class="macro">assert!</span>(header.ns_table.find_ns_id(<span class="kw-2">&amp;</span>ns_id).is_none());
+                </span><span class="macro">assert!</span>(header.ns_table().find_ns_id(<span class="kw-2">&amp;</span>ns_id).is_none());
                 <span class="macro">assert!</span>(ns_query_res.transactions.is_empty());
             }
 
@@ -2740,25 +2726,20 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use </span><span class="self">self</span>::{
-        data_source::testing::TestableSequencerDataSource, sql::DataSource <span class="kw">as </span>SqlDataSource,
-    };
-    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use crate</span>::{
-        catchup::{mock::MockStateCatchup, StatePeers},
-        genesis::{Upgrade, UpgradeType},
-        persistence::no_storage,
-        state::{FeeAccount, FeeAmount, ValidatedState},
-        testing::{TestConfig, TestConfigBuilder},
-        Header,
-    };
+    <span class="kw">use </span>std::time::Duration;
+
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>async_std::task::sleep;
     <span class="kw">use </span>committable::{Commitment, Committable};
     <span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
+    <span class="kw">use </span>espresso_types::{
+        mock::MockStateCatchup, FeeAccount, FeeAmount, Header, Upgrade, UpgradeType, ValidatedState,
+    };
     <span class="kw">use </span>ethers::utils::Anvil;
-    <span class="kw">use </span>futures::future::{<span class="self">self</span>, join_all};
-    <span class="kw">use </span>futures::stream::{StreamExt, TryStreamExt};
+    <span class="kw">use </span>futures::{
+        future::{<span class="self">self</span>, join_all},
+        stream::{StreamExt, TryStreamExt},
+    };
     <span class="kw">use </span>hotshot::types::EventType;
     <span class="kw">use </span>hotshot_query_service::{
         availability::{BlockQueryData, LeafQueryData},
@@ -2770,7 +2751,6 @@
     };
     <span class="kw">use </span>jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     <span class="kw">use </span>portpicker::pick_unused_port;
-    <span class="kw">use </span>std::time::Duration;
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
@@ -2778,6 +2758,16 @@
     };
     <span class="kw">use </span>tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     <span class="kw">use </span>vbs::version::Version;
+
+    <span class="kw">use </span><span class="self">self</span>::{
+        data_source::testing::TestableSequencerDataSource, sql::DataSource <span class="kw">as </span>SqlDataSource,
+    };
+    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+    <span class="kw">use crate</span>::{
+        catchup::StatePeers,
+        persistence::no_storage,
+        testing::{TestConfig, TestConfigBuilder},
+    };
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_healthcheck() {

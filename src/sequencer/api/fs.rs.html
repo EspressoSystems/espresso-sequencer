@@ -61,11 +61,14 @@
 <a href="#61" id="61">61</a>
 <a href="#62" id="62">62</a>
 <a href="#63" id="63">63</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">super</span>::data_source::{CatchupDataSource, Provider, SequencerDataSource};
-<span class="kw">use crate</span>::{persistence::fs::Options, SeqTypes};
+<a href="#64" id="64">64</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::path::Path;
+
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>hotshot_query_service::data_source::FileSystemDataSource;
-<span class="kw">use </span>std::path::Path;
+
+<span class="kw">use </span><span class="kw">super</span>::data_source::{CatchupDataSource, Provider, SequencerDataSource};
+<span class="kw">use crate</span>::{persistence::fs::Options, SeqTypes};
 
 <span class="kw">pub type </span>DataSource = FileSystemDataSource&lt;SeqTypes, Provider&gt;;
 
@@ -91,9 +94,10 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>impl_testable_data_source {
+    <span class="kw">use </span>tempfile::TempDir;
+
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use </span><span class="kw">crate</span>::api::{<span class="self">self</span>, data_source::testing::TestableSequencerDataSource};
-    <span class="kw">use </span>tempfile::TempDir;
 
     <span class="attr">#[async_trait]
     </span><span class="kw">impl </span>TestableSequencerDataSource <span class="kw">for </span>DataSource {
@@ -115,9 +119,7 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>generic_tests {
-    <span class="kw">use </span><span class="kw">super</span>::<span class="kw">super</span>::api_tests;
-    <span class="kw">use </span><span class="kw">super</span>::DataSource;
-
+    <span class="kw">use super</span>::{<span class="kw">super</span>::api_tests, DataSource};
     <span class="comment">// For some reason this is the only way to import the macro defined in another module of this
     // crate.
     </span><span class="kw">use crate</span>::<span class="kw-2">*</span>;

@@ -568,28 +568,15 @@
 <a href="#568" id="568">568</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer-specific API options and initialization.
 
-</span><span class="kw">use super</span>::{
-    data_source::{
-        provider, CatchupDataSource, HotShotConfigDataSource, SequencerDataSource,
-        StateSignatureDataSource, SubmitDataSource,
-    },
-    endpoints, fs, sql,
-    update::update_loop,
-    ApiState, StorageState,
-};
-<span class="kw">use crate</span>::{
-    context::{SequencerContext, TaskList},
-    persistence::{<span class="self">self</span>, SequencerPersistence},
-    state::{update_state_storage_loop, BlockMerkleTree, FeeMerkleTree},
-    PubKey,
-};
-<span class="kw">use </span>anyhow::bail;
+</span><span class="kw">use </span>anyhow::bail;
 <span class="kw">use </span>async_std::sync::{Arc, RwLock};
 <span class="kw">use </span>clap::Parser;
+<span class="kw">use </span>espresso_types::{v0::traits::SequencerPersistence, BlockMerkleTree, FeeMerkleTree, PubKey};
 <span class="kw">use </span>futures::{
     channel::oneshot,
     future::{BoxFuture, Future, FutureExt},
 };
+<span class="kw">use </span>hotshot_events_service::events::Error <span class="kw">as </span>EventStreamingError;
 <span class="kw">use </span>hotshot_query_service::{
     data_source::{ExtensibleDataSource, MetricsDataSource},
     status::{<span class="self">self</span>, UpdateStatusData},
@@ -606,7 +593,20 @@
 };
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
-<span class="kw">use </span>hotshot_events_service::events::Error <span class="kw">as </span>EventStreamingError;
+<span class="kw">use super</span>::{
+    data_source::{
+        provider, CatchupDataSource, HotShotConfigDataSource, SequencerDataSource,
+        StateSignatureDataSource, SubmitDataSource,
+    },
+    endpoints, fs, sql,
+    update::update_loop,
+    ApiState, StorageState,
+};
+<span class="kw">use crate</span>::{
+    context::{SequencerContext, TaskList},
+    persistence,
+    state::update_state_storage_loop,
+};
 
 <span class="attr">#[derive(Clone, Debug)]
 </span><span class="kw">pub struct </span>Options {

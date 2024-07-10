@@ -1289,6 +1289,12 @@
 <a href="#1289" id="1289">1289</a>
 <a href="#1290" id="1290">1290</a>
 <a href="#1291" id="1291">1291</a>
+<a href="#1292" id="1292">1292</a>
+<a href="#1293" id="1293">1293</a>
+<a href="#1294" id="1294">1294</a>
+<a href="#1295" id="1295">1295</a>
+<a href="#1296" id="1296">1296</a>
+<a href="#1297" id="1297">1297</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Adversarial Espresso client.
 //!
 //! This program runs a randomized client for the Espresso query service. It is designed to hit
@@ -1303,7 +1309,16 @@
 //! provides a healthcheck endpoint as well as a prometheus endpoint which provides metrics like the
 //! count of various types of actions performed and the number of open streams.
 
-</span><span class="kw">use </span>anyhow::{bail, ensure, Context};
+</span><span class="kw">use </span>std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap},
+    fmt::Debug,
+    pin::Pin,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+<span class="kw">use </span>anyhow::{bail, ensure, Context};
 <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>async_std::{
     sync::RwLock,
@@ -1313,6 +1328,7 @@
 <span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>derivative::Derivative;
 <span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
+<span class="kw">use </span>espresso_types::{BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
 <span class="kw">use </span>futures::{
     future::{FutureExt, TryFuture, TryFutureExt},
     stream::{Peekable, StreamExt},
@@ -1327,21 +1343,8 @@
     ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
 <span class="kw">use </span>rand::{seq::SliceRandom, RngCore};
-<span class="kw">use </span>sequencer::{
-    api::endpoints::NamespaceProofQueryData,
-    options::parse_duration,
-    state::{BlockMerkleTree, FeeMerkleTree},
-    Header, SeqTypes,
-};
+<span class="kw">use </span>sequencer::{api::endpoints::NamespaceProofQueryData, options::parse_duration};
 <span class="kw">use </span>serde::de::DeserializeOwned;
-<span class="kw">use </span>std::{
-    borrow::Cow,
-    collections::{BTreeMap, HashMap},
-    fmt::Debug,
-    pin::Pin,
-    sync::Arc,
-    time::{Duration, Instant},
-};
 <span class="kw">use </span>strum::{EnumDiscriminants, VariantArray};
 <span class="kw">use </span>surf_disco::{error::ClientError, socket, Error, StatusCode, Url};
 <span class="kw">use </span>tide_disco::{error::ServerError, App};
@@ -1673,7 +1676,7 @@
     }
 
     <span class="kw">fn </span>payload_hash(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; String {
-        <span class="self">self</span>.payload_commitment.to_string()
+        <span class="self">self</span>.payload_commitment().to_string()
     }
 }
 
@@ -2082,42 +2085,43 @@
         <span class="comment">// Sanity check the window: prev and next should be correct bookends.
         </span><span class="kw">if let </span><span class="prelude-val">Some</span>(prev) = <span class="kw-2">&amp;</span>window.prev {
             <span class="macro">ensure!</span>(
-                prev.timestamp &lt; start,
-                <span class="macro">format!</span>(<span class="string">"prev header {} is later than {start}"</span>, prev.height)
+                prev.timestamp() &lt; start,
+                <span class="macro">format!</span>(<span class="string">"prev header {} is later than {start}"</span>, prev.height())
             );
         }
         <span class="kw">if let </span><span class="prelude-val">Some</span>(next) = <span class="kw-2">&amp;</span>window.next {
             <span class="macro">ensure!</span>(
-                next.timestamp &gt;= end,
-                <span class="macro">format!</span>(<span class="string">"next header {} is earlier than {end}"</span>, next.height)
+                next.timestamp() &gt;= end,
+                <span class="macro">format!</span>(<span class="string">"next header {} is earlier than {end}"</span>, next.height())
             );
         }
         <span class="comment">// Each header in the window proper should have an appropriate timestamp.
         </span><span class="kw">let </span><span class="kw-2">mut </span>prev = window.prev;
         <span class="kw">for </span>header <span class="kw">in </span>window.window {
             <span class="macro">ensure!</span>(
-                header.timestamp &gt;= start &amp;&amp; header.timestamp &lt; end,
+                header.timestamp() &gt;= start &amp;&amp; header.timestamp() &lt; end,
                 <span class="macro">format!</span>(
                     <span class="string">"header {} with timestamp {} is not in window [{start}, {end})"</span>,
-                    header.height, header.timestamp
+                    header.height(),
+                    header.timestamp()
                 )
             );
 
             <span class="kw">if let </span><span class="prelude-val">Some</span>(prev) = prev {
                 <span class="macro">ensure!</span>(
-                    prev.height + <span class="number">1 </span>== header.height,
+                    prev.height() + <span class="number">1 </span>== header.height(),
                     <span class="macro">format!</span>(
                         <span class="string">"headers in window from {start} to {end} are not consecutive (prev = {}, curr = {})"</span>,
-                        prev.height,
-                        header.height,
+                        prev.height(),
+                        header.height(),
                     ),
                 );
                 <span class="macro">ensure!</span>(
-                    prev.timestamp &lt;= header.timestamp,
+                    prev.timestamp() &lt;= header.timestamp(),
                     <span class="macro">format!</span>(
                         <span class="string">"headers in window from {start} to {end} have decreasing timestamps (prev = {}, curr = {})"</span>,
-                        prev.timestamp,
-                        header.timestamp,
+                        prev.timestamp(),
+                        header.timestamp(),
                     ),
                 );
             }
@@ -2168,11 +2172,15 @@
 
         <span class="comment">// Check that the proof proves inclusion of `index_header` at position `index` relative to
         // `block_header`.
-        </span>BlockMerkleTree::verify(block_header.block_merkle_tree_root.digest(), index, <span class="kw-2">&amp;</span>proof)
-            .context(<span class="string">"malformed merkle proof"</span>)<span class="question-mark">?
-            </span>.or_else(|<span class="kw">_</span>| <span class="macro">bail!</span>(<span class="string">"invalid merkle proof"</span>))<span class="question-mark">?</span>;
+        </span>BlockMerkleTree::verify(
+            block_header.block_merkle_tree_root().digest(),
+            index,
+            <span class="kw-2">&amp;</span>proof,
+        )
+        .context(<span class="string">"malformed merkle proof"</span>)<span class="question-mark">?
+        </span>.or_else(|<span class="kw">_</span>| <span class="macro">bail!</span>(<span class="string">"invalid merkle proof"</span>))<span class="question-mark">?</span>;
         <span class="macro">ensure!</span>(
-            proof.elem() == <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>index_header.commit()),
+            proof.elem() == <span class="prelude-val">Some</span>(index_header.commit().as_ref()),
             <span class="string">"merkle proof is for wrong element: {:?} != {:?}"</span>,
             proof.elem(),
             index_header.commit()
@@ -2186,12 +2194,12 @@
                     <span class="string">"get block proof by state commitment"</span>,
                     block,
                     index,
-                    commitment = %block_header.block_merkle_tree_root,
+                    commitment = %block_header.block_merkle_tree_root(),
                 ),
                 || <span class="kw">async </span>{
                     <span class="self">self</span>.get::&lt;&lt;BlockMerkleTree <span class="kw">as </span>MerkleTreeScheme&gt;::MembershipProof&gt;(<span class="macro">format!</span>(
                         <span class="string">"block-state/commit/{}/{index}"</span>,
-                        block_header.block_merkle_tree_root,
+                        block_header.block_merkle_tree_root(),
                     ))
                     .<span class="kw">await
                 </span>},
@@ -2218,7 +2226,7 @@
                     .<span class="kw">await
             </span>})
             .<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="kw">let </span>builder_address = builder_header.fee_info.account();
+        <span class="kw">let </span>builder_address = builder_header.fee_info().account();
 
         <span class="comment">// Get the header of the state snapshot we're going to query so we can later verify our
         // results.
@@ -2245,7 +2253,7 @@
         <span class="comment">// Check that the proof is valid relative to `builder_header`.
         </span><span class="kw">if </span>proof.elem().is_some() {
             FeeMerkleTree::verify(
-                block_header.fee_merkle_tree_root.digest(),
+                block_header.fee_merkle_tree_root().digest(),
                 builder_address,
                 <span class="kw-2">&amp;</span>proof,
             )
@@ -2253,7 +2261,7 @@
             </span>.or_else(|<span class="kw">_</span>| <span class="macro">bail!</span>(<span class="string">"invalid membership proof"</span>))<span class="question-mark">?</span>;
         } <span class="kw">else </span>{
             <span class="macro">ensure!</span>(
-                FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root)
+                FeeMerkleTree::from_commitment(block_header.fee_merkle_tree_root())
                     .non_membership_verify(builder_address, <span class="kw-2">&amp;</span>proof)
                     .context(<span class="string">"malformed non-membership proof"</span>)<span class="question-mark">?</span>,
                 <span class="string">"invalid non-membership proof"
@@ -2268,12 +2276,12 @@
                     <span class="string">"get account proof by state commitment"</span>,
                     block,
                     %builder_address,
-                    commitment = %block_header.fee_merkle_tree_root,
+                    commitment = %block_header.fee_merkle_tree_root(),
                 ),
                 || <span class="kw">async </span>{
                     <span class="self">self</span>.get::&lt;&lt;FeeMerkleTree <span class="kw">as </span>MerkleTreeScheme&gt;::MembershipProof&gt;(<span class="macro">format!</span>(
                         <span class="string">"fee-state/commit/{}/{builder_address}"</span>,
-                        block_header.fee_merkle_tree_root,
+                        block_header.fee_merkle_tree_root(),
                     ))
                     .<span class="kw">await
                 </span>},
@@ -2302,13 +2310,17 @@
                 <span class="self">self</span>.get(<span class="macro">format!</span>(<span class="string">"availability/header/{block}"</span>)).<span class="kw">await
             </span>})
             .<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="kw">let </span>num_namespaces = header.ns_table.iter().count();
+        <span class="kw">let </span>num_namespaces = header.ns_table().iter().count();
         <span class="kw">if </span>num_namespaces == <span class="number">0 </span>{
             <span class="macro">tracing::info!</span>(<span class="string">"not fetching namespace because block {block} is empty"</span>);
             <span class="kw">return </span><span class="prelude-val">Ok</span>(());
         }
-        <span class="kw">let </span>ns_index = header.ns_table.iter().nth(index % num_namespaces).unwrap();
-        <span class="kw">let </span>ns = header.ns_table.read_ns_id(<span class="kw-2">&amp;</span>ns_index).unwrap();
+        <span class="kw">let </span>ns_index = header
+            .ns_table()
+            .iter()
+            .nth(index % num_namespaces)
+            .unwrap();
+        <span class="kw">let </span>ns = header.ns_table().read_ns_id(<span class="kw-2">&amp;</span>ns_index).unwrap();
 
         <span class="kw">let </span>ns_proof: NamespaceProofQueryData = <span class="self">self
             </span>.retry(<span class="macro">info_span!</span>(<span class="string">"fetch namespace"</span>, %ns), || <span class="kw">async </span>{
@@ -2332,8 +2344,8 @@
                 .proof
                 .unwrap()
                 .verify(
-                    <span class="kw-2">&amp;</span>header.ns_table,
-                    <span class="kw-2">&amp;</span>header.payload_commitment,
+                    header.ns_table(),
+                    <span class="kw-2">&amp;</span>header.payload_commitment(),
                     vid_common.common()
                 )
                 .is_some(),

@@ -1,3 +1,3 @@
 (function() {var implementors = {
-"sequencer":[["impl EncodeBytes for <a class=\"struct\" href=\"sequencer/block/full_payload/ns_table/struct.NsTable.html\" title=\"struct sequencer::block::full_payload::ns_table::NsTable\">NsTable</a>"],["impl EncodeBytes for <a class=\"struct\" href=\"sequencer/block/full_payload/payload/struct.Payload.html\" title=\"struct sequencer::block::full_payload::payload::Payload\">Payload</a>"]]
+"espresso_types":[["impl EncodeBytes for <a class=\"struct\" href=\"espresso_types/v0/v0_1/block/struct.NsTable.html\" title=\"struct espresso_types::v0::v0_1::block::NsTable\">NsTable</a>"],["impl EncodeBytes for <a class=\"struct\" href=\"espresso_types/v0/v0_1/block/struct.Payload.html\" title=\"struct espresso_types::v0::v0_1::block::Payload\">Payload</a>"]]
 };if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

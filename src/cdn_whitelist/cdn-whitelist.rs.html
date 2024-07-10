@@ -96,12 +96,12 @@
 <span class="kw">use </span>anyhow::{Context, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>cdn_broker::reexports::discovery::{DiscoveryClient, Embedded, Redis};
 <span class="kw">use </span>clap::Parser;
+<span class="kw">use </span>espresso_types::SeqTypes;
 <span class="kw">use </span>hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
     config::NetworkConfig,
 };
 <span class="kw">use </span>hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
-<span class="kw">use </span>sequencer::SeqTypes;
 <span class="kw">use </span>surf_disco::Url;
 
 <span class="attr">#[derive(Parser, Debug)]

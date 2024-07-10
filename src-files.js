@@ -11,6 +11,7 @@ var srcIndex = new Map(JSON.parse('[\
 ["diff_test",["",[],["main.rs"]]],\
 ["espresso_bridge",["",[],["espresso-bridge.rs"]]],\
 ["espresso_dev_node",["",[],["espresso-dev-node.rs"]]],\
+["espresso_types",["",[["v0",[["impls",[["block",[["full_payload",[],["ns_proof.rs","ns_table.rs","payload.rs"]],["namespace_payload",[],["iter.rs","ns_payload.rs","ns_payload_range.rs","tx_proof.rs","types.rs"]]],["full_payload.rs","mod.rs","namespace_payload.rs","uint_bytes.rs"]]],["chain_config.rs","fee_info.rs","header.rs","instance_state.rs","l1.rs","mod.rs","state.rs","transaction.rs"]],["v0_1",[],["block.rs","chain_config.rs","fee_info.rs","header.rs","instance_state.rs","l1.rs","mod.rs","signature.rs","state.rs","transaction.rs"]],["v0_2",[],["mod.rs"]],["v0_3",[],["header.rs","mod.rs"]]],["error.rs","header.rs","mod.rs","traits.rs","utils.rs"]]],["eth_signature_key.rs","lib.rs"]]],\
 ["eval_domain",["",[],["eval_domain.rs"]]],\
 ["gen_demo_genesis",["",[],["gen-demo-genesis.rs"]]],\
 ["gen_vk_contract",["",[],["main.rs"]]],\
@@ -23,7 +24,7 @@ var srcIndex = new Map(JSON.parse('[\
 ["permissionless_builder",["",[],["permissionless-builder.rs"]]],\
 ["pub_key",["",[],["pub-key.rs"]]],\
 ["reset_storage",["",[],["reset-storage.rs"]]],\
-["sequencer",["",[["api",[],["data_source.rs","endpoints.rs","fs.rs","options.rs","sql.rs","update.rs"]],["block",[["full_payload",[],["ns_proof.rs","ns_table.rs","payload.rs"]],["namespace_payload",[],["iter.rs","ns_payload.rs","ns_payload_range.rs","tx_proof.rs","types.rs"]]],["full_payload.rs","namespace_payload.rs","uint_bytes.rs"]],["network",[],["cdn.rs","libp2p.rs","mod.rs"]],["persistence",[],["fs.rs","no_storage.rs","sql.rs"]],["state_signature",[],["relay_server.rs"]]],["api.rs","block.rs","catchup.rs","chain_config.rs","context.rs","eth_signature_key.rs","genesis.rs","header.rs","hotshot_commitment.rs","l1_client.rs","lib.rs","options.rs","persistence.rs","state.rs","state_signature.rs","transaction.rs"]]],\
+["sequencer",["",[["api",[],["data_source.rs","endpoints.rs","fs.rs","options.rs","sql.rs","update.rs"]],["network",[],["cdn.rs","libp2p.rs","mod.rs"]],["persistence",[],["fs.rs","no_storage.rs","sql.rs"]],["state_signature",[],["relay_server.rs"]]],["api.rs","catchup.rs","context.rs","genesis.rs","hotshot_commitment.rs","lib.rs","options.rs","persistence.rs","state.rs","state_signature.rs"]]],\
 ["sequencer_utils",["",[],["deployer.rs","lib.rs","ser.rs","test_utils.rs"]]],\
 ["state_prover",["",[],["state-prover.rs"]]],\
 ["state_relay_server",["",[],["state-relay-server.rs"]]],\

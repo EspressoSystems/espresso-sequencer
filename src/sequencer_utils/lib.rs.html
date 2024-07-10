@@ -458,7 +458,15 @@
 <a href="#458" id="458">458</a>
 <a href="#459" id="459">459</a>
 <a href="#460" id="460">460</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::anyhow;
+<a href="#461" id="461">461</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{
+    fmt::Debug,
+    path::{Path, PathBuf},
+    process::{Child, Command},
+    time::Duration,
+};
+
+<span class="kw">use </span>anyhow::anyhow;
 <span class="kw">use </span>ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 <span class="kw">use </span>async_std::task::sleep;
 <span class="kw">use </span>committable::{Commitment, Committable};
@@ -466,16 +474,9 @@
     abi::Detokenize,
     contract::builders::ContractCall,
     prelude::<span class="kw-2">*</span>,
-    providers::Middleware,
-    providers::{Http, Provider},
+    providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, Signer <span class="kw">as _</span>},
     types::U256,
-};
-<span class="kw">use </span>std::path::{Path, PathBuf};
-<span class="kw">use </span>std::time::Duration;
-<span class="kw">use </span>std::{
-    fmt::Debug,
-    process::{Child, Command},
 };
 <span class="kw">use </span>tempfile::TempDir;
 <span class="kw">use </span>url::Url;
@@ -899,8 +900,9 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use </span>committable::RawCommitmentBuilder;
+
+    <span class="kw">use super</span>::<span class="kw-2">*</span>;
 
     <span class="kw">struct </span>TestCommittable;
 

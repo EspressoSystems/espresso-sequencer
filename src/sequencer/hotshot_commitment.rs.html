@@ -534,10 +534,14 @@
 <a href="#534" id="534">534</a>
 <a href="#535" id="535">535</a>
 <a href="#536" id="536">536</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::anyhow;
+<a href="#537" id="537">537</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{error::Error, time::Duration};
+
+<span class="kw">use </span>anyhow::anyhow;
 <span class="kw">use </span>async_std::{sync::Arc, task::sleep};
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>contract_bindings::hot_shot::{HotShot, HotShotErrors, Qc};
+<span class="kw">use </span>espresso_types::Header;
 <span class="kw">use </span>ethers::prelude::<span class="kw-2">*</span>;
 <span class="kw">use </span>futures::{
     future,
@@ -548,12 +552,10 @@
 <span class="kw">use </span>rand_chacha::ChaChaRng;
 <span class="kw">use </span>rand_distr::Distribution;
 <span class="kw">use </span>sequencer_utils::{commitment_to_u256, contract_send, init_signer, Signer};
-<span class="kw">use </span>std::error::Error;
-<span class="kw">use </span>std::time::Duration;
 <span class="kw">use </span>surf_disco::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
-<span class="kw">use crate</span>::{Header, SeqTypes};
+<span class="kw">use </span><span class="kw">crate</span>::SeqTypes;
 
 <span class="kw">const </span>RETRY_DELAY: Duration = Duration::from_secs(<span class="number">1</span>);
 
@@ -810,18 +812,18 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use crate</span>::{l1_client::L1Client, Leaf, NodeState, ValidatedState};
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>async_std::task::spawn;
     <span class="kw">use </span>committable::Committable;
     <span class="kw">use </span>contract_bindings::hot_shot::{NewBlocksCall, NewBlocksFilter};
+    <span class="kw">use </span>espresso_types::{L1Client, Leaf, NodeState, ValidatedState};
     <span class="kw">use </span>ethers::{abi::AbiDecode, providers::Middleware};
     <span class="kw">use </span>futures::FutureExt;
     <span class="kw">use </span>hotshot_types::simple_certificate::QuorumCertificate;
-    <span class="kw">use </span>sequencer_utils::test_utils::TestL1System;
-    <span class="kw">use </span>sequencer_utils::AnvilOptions;
+    <span class="kw">use </span>sequencer_utils::{test_utils::TestL1System, AnvilOptions};
     <span class="kw">use </span>surf_disco::{Error, StatusCode};
+
+    <span class="kw">use super</span>::<span class="kw-2">*</span>;
 
     <span class="kw">const </span>TEST_MNEMONIC: <span class="kw-2">&amp;</span>str = <span class="string">"test test test test test test test test test test test junk"</span>;
 
@@ -866,7 +868,7 @@
     <span class="kw">async fn </span>mock_leaf(height: u64, node_state: <span class="kw-2">&amp;</span>NodeState) -&gt; LeafQueryData&lt;SeqTypes&gt; {
         <span class="kw">let </span><span class="kw-2">mut </span>leaf = Leaf::genesis(<span class="kw-2">&amp;</span>ValidatedState::default(), node_state).<span class="kw">await</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>qc = QuorumCertificate::genesis(<span class="kw-2">&amp;</span>ValidatedState::default(), node_state).<span class="kw">await</span>;
-        leaf.block_header_mut().height = height;
+        <span class="kw-2">*</span>leaf.block_header_mut().height_mut() = height;
         qc.data.leaf_commit = leaf.commit();
         LeafQueryData::new(leaf, qc).unwrap()
     }

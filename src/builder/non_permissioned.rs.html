@@ -434,7 +434,12 @@
 <a href="#434" id="434">434</a>
 <a href="#435" id="435">435</a>
 <a href="#436" id="436">436</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::Context;
+<a href="#437" id="437">437</a>
+<a href="#438" id="438">438</a>
+<a href="#439" id="439">439</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
+
+<span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_broadcast::{
     broadcast, Receiver <span class="kw">as </span>BroadcastReceiver, RecvError, Sender <span class="kw">as </span>BroadcastSender, TryRecvError,
 };
@@ -443,6 +448,10 @@
     channel::{unbounded, UnboundedReceiver, UnboundedSender},
 };
 <span class="kw">use </span>async_std::sync::{Arc, RwLock};
+<span class="kw">use </span>espresso_types::{
+    eth_signature_key::EthKeyPair, ChainConfig, L1Client, NodeState, Payload, SeqTypes,
+    ValidatedState,
+};
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
     signers::{coins_bip39::English, MnemonicBuilder, Signer <span class="kw">as _</span>, Wallet},
@@ -462,7 +471,10 @@
         ReceivedTransaction,
     },
 };
-
+<span class="kw">use </span>hotshot_events_service::{
+    events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
+    events_source::{BuilderEvent, EventConsumer, EventsStreamer},
+};
 <span class="kw">use </span>hotshot_types::{
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
@@ -472,22 +484,13 @@
     },
     utils::BuilderCommitment,
 };
-<span class="kw">use </span>sequencer::{
-    catchup::StatePeers, eth_signature_key::EthKeyPair, l1_client::L1Client, ChainConfig, L1Params,
-    NetworkParams, NodeState, Payload, PrivKey, PubKey, SeqTypes, ValidatedState,
-};
-
-<span class="kw">use </span>hotshot_events_service::{
-    events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
-    events_source::{BuilderEvent, EventConsumer, EventsStreamer},
-};
-
-<span class="kw">use </span><span class="kw">crate</span>::run_builder_api_service;
-<span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
+<span class="kw">use </span>sequencer::{catchup::StatePeers, L1Params, NetworkParams};
 <span class="kw">use </span>surf::http::headers::ACCEPT;
 <span class="kw">use </span>surf_disco::Client;
 <span class="kw">use </span>tide_disco::{app, method::ReadState, App, Url};
 <span class="kw">use </span>vbs::version::StaticVersionType;
+
+<span class="kw">use </span><span class="kw">crate</span>::run_builder_api_service;
 
 <span class="attr">#[derive(Clone, Debug)]
 </span><span class="kw">pub struct </span>BuilderConfig {
@@ -658,43 +661,46 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use </span><span class="kw">crate</span>::testing::{
-        hotshot_builder_url, HotShotTestConfig, NonPermissionedBuilderTestConfig,
+    <span class="kw">use </span>std::time::Duration;
+
+    <span class="kw">use </span>async_compatibility_layer::{
+        art::{async_sleep, async_spawn},
+        logging::{setup_backtrace, setup_logging},
     };
-    <span class="kw">use </span>async_compatibility_layer::art::{async_sleep, async_spawn};
-    <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>async_lock::RwLock;
     <span class="kw">use </span>async_std::task;
     <span class="kw">use </span>es_version::SequencerVersion;
+    <span class="kw">use </span>espresso_types::{FeeAccount, NamespaceId, Transaction};
     <span class="kw">use </span>hotshot_builder_api::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
-    <span class="kw">use </span>hotshot_builder_core::builder_state::BuilderProgress;
-    <span class="kw">use </span>hotshot_builder_core::service::{
-        run_non_permissioned_standalone_builder_service,
-        run_permissioned_standalone_builder_service,
+    <span class="kw">use </span>hotshot_builder_core::{
+        builder_state::BuilderProgress,
+        service::{
+            run_non_permissioned_standalone_builder_service,
+            run_permissioned_standalone_builder_service,
+        },
     };
     <span class="kw">use </span>hotshot_events_service::{
         events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
         events_source::{BuilderEvent, EventConsumer, EventsStreamer},
     };
-    <span class="kw">use </span>hotshot_types::traits::{
-        block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
-        node_implementation::NodeType,
-    };
-    <span class="kw">use </span>hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-    <span class="kw">use </span>sequencer::{
-        persistence::{
-            no_storage::{<span class="self">self</span>, NoStorage},
-            PersistenceOptions,
+    <span class="kw">use </span>hotshot_types::{
+        signature_key::BLSPubKey,
+        traits::{
+            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+            node_implementation::NodeType,
+            signature_key::SignatureKey,
         },
-        state::FeeAccount,
-        NamespaceId, Payload, Transaction,
     };
-    <span class="kw">use </span>std::time::Duration;
+    <span class="kw">use </span>sequencer::persistence::no_storage::{<span class="self">self</span>, NoStorage};
     <span class="kw">use </span>surf_disco::Client;
+
+    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+    <span class="kw">use </span><span class="kw">crate</span>::testing::{
+        hotshot_builder_url, HotShotTestConfig, NonPermissionedBuilderTestConfig,
+    };
 
     <span class="doccomment">/// Test the non-permissioned builder core
     /// It creates a memory hotshot network and launches the hotshot event streaming api
@@ -852,7 +858,7 @@
             }
         }
 
-        <span class="kw">let </span>txn = Transaction::new(NamespaceId::from(<span class="number">1</span>), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]);
+        <span class="kw">let </span>txn = Transaction::new(NamespaceId::from(<span class="number">1_u32</span>), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>]);
         <span class="kw">match </span>builder_client
             .post::&lt;()&gt;(<span class="string">"txn_submit/submit"</span>)
             .body_json(<span class="kw-2">&amp;</span>txn)

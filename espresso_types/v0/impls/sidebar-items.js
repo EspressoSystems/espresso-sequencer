@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["block","chain_config","fee_info","header","instance_state","l1","state","transaction"]};

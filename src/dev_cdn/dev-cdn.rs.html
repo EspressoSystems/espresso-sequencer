@@ -102,10 +102,6 @@
 <a href="#102" id="102">102</a>
 <a href="#103" id="103">103</a>
 <a href="#104" id="104">104</a>
-<a href="#105" id="105">105</a>
-<a href="#106" id="106">106</a>
-<a href="#107" id="107">107</a>
-<a href="#108" id="108">108</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! The following is the main `Broker` binary, which just instantiates and runs
 //! a `Broker` object.
 
@@ -113,18 +109,14 @@
 
 <span class="kw">use </span>anyhow::Result;
 <span class="kw">use </span>async_compatibility_layer::art::async_spawn;
-<span class="kw">use </span>cdn_broker::reexports::crypto::signature::KeyPair;
-<span class="kw">use </span>cdn_broker::{Broker, Config <span class="kw">as </span>BrokerConfig};
+<span class="kw">use </span>cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config <span class="kw">as </span>BrokerConfig};
 <span class="kw">use </span>cdn_marshal::{Config <span class="kw">as </span>MarshalConfig, Marshal};
 <span class="kw">use </span>clap::Parser;
-
-<span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
-<span class="kw">use </span>hotshot_types::traits::signature_key::SignatureKey;
+<span class="kw">use </span>espresso_types::SeqTypes;
+<span class="kw">use </span>hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 <span class="kw">use </span>portpicker::pick_unused_port;
-<span class="kw">use </span>rand::rngs::StdRng;
-<span class="kw">use </span>rand::{RngCore, SeedableRng};
+<span class="kw">use </span>rand::{rngs::StdRng, RngCore, SeedableRng};
 <span class="kw">use </span>sequencer::network::cdn::{TestingDef, WrappedSignatureKey};
-<span class="kw">use </span>sequencer::SeqTypes;
 
 <span class="attr">#[derive(Parser, Debug)]
 #[command(author, version, about, long_about = <span class="prelude-val">None</span>)]

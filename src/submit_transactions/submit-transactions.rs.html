@@ -340,14 +340,19 @@
 <a href="#340" id="340">340</a>
 <a href="#341" id="341">341</a>
 <a href="#342" id="342">342</a>
-<a href="#343" id="343">343</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utility program to submit random transactions to an Espresso Sequencer.
 
-</span><span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+</span><span class="kw">use </span>std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
+
+<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>async_std::task::{sleep, spawn};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
+<span class="kw">use </span>espresso_types::{SeqTypes, Transaction};
 <span class="kw">use </span>futures::{
     channel::mpsc::{<span class="self">self</span>, Sender},
     sink::SinkExt,
@@ -357,14 +362,7 @@
 <span class="kw">use </span>rand::{Rng, RngCore, SeedableRng};
 <span class="kw">use </span>rand_chacha::ChaChaRng;
 <span class="kw">use </span>rand_distr::Distribution;
-<span class="kw">use </span>sequencer::{
-    options::{parse_duration, parse_size},
-    SeqTypes, Transaction,
-};
-<span class="kw">use </span>std::{
-    collections::HashMap,
-    time::{Duration, Instant},
-};
+<span class="kw">use </span>sequencer::options::{parse_duration, parse_size};
 <span class="kw">use </span>surf_disco::{Client, Url};
 <span class="kw">use </span>tide_disco::{error::ServerError, App};
 <span class="kw">use </span>vbs::version::StaticVersionType;

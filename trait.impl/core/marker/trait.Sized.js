@@ -1,3 +1,3 @@
 (function() {var implementors = {
-"sequencer":[["impl !<a class=\"trait\" href=\"https://doc.rust-lang.org/1.79.0/core/marker/trait.Sized.html\" title=\"trait core::marker::Sized\">Sized</a> for <a class=\"struct\" href=\"sequencer/block/namespace_payload/ns_payload/struct.NsPayload.html\" title=\"struct sequencer::block::namespace_payload::ns_payload::NsPayload\">NsPayload</a>",1,["sequencer::block::namespace_payload::ns_payload::NsPayload"]]]
+"espresso_types":[["impl !<a class=\"trait\" href=\"https://doc.rust-lang.org/1.79.0/core/marker/trait.Sized.html\" title=\"trait core::marker::Sized\">Sized</a> for <a class=\"struct\" href=\"espresso_types/v0/v0_1/block/struct.NsPayload.html\" title=\"struct espresso_types::v0::v0_1::block::NsPayload\">NsPayload</a>",1,["espresso_types::v0::v0_1::block::NsPayload"]]]
 };if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

@@ -1,3 +1,3 @@
 (function() {var implementors = {
-"sequencer":[["impl ValidatedState&lt;<a class=\"struct\" href=\"sequencer/struct.SeqTypes.html\" title=\"struct sequencer::SeqTypes\">SeqTypes</a>&gt; for <a class=\"struct\" href=\"sequencer/state/struct.ValidatedState.html\" title=\"struct sequencer::state::ValidatedState\">ValidatedState</a>"]]
+"espresso_types":[["impl ValidatedState&lt;<a class=\"struct\" href=\"espresso_types/v0/struct.SeqTypes.html\" title=\"struct espresso_types::v0::SeqTypes\">SeqTypes</a>&gt; for <a class=\"struct\" href=\"espresso_types/v0/v0_1/state/struct.ValidatedState.html\" title=\"struct espresso_types::v0::v0_1::state::ValidatedState\">ValidatedState</a>"]]
 };if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

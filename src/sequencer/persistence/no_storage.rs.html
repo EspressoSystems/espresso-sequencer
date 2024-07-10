@@ -125,12 +125,21 @@
 <a href="#125" id="125">125</a>
 <a href="#126" id="126">126</a>
 <a href="#127" id="127">127</a>
+<a href="#128" id="128">128</a>
+<a href="#129" id="129">129</a>
+<a href="#130" id="130">130</a>
+<a href="#131" id="131">131</a>
+<a href="#132" id="132">132</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Mock implementation of persistence, for testing.
 </span><span class="attr">#![cfg(any(test, feature = <span class="string">"testing"</span>))]
 
-</span><span class="kw">use super</span>::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-<span class="kw">use crate</span>::{Leaf, SeqTypes, ViewNumber};
+</span><span class="kw">use </span>std::collections::BTreeMap;
+
 <span class="kw">use </span>async_trait::async_trait;
+<span class="kw">use </span>espresso_types::{
+    v0::traits::{PersistenceOptions, SequencerPersistence},
+    Leaf, NetworkConfig,
+};
 <span class="kw">use </span>hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, VidDisperseShare},
@@ -139,7 +148,8 @@
     simple_certificate::QuorumCertificate,
     utils::View,
 };
-<span class="kw">use </span>std::collections::BTreeMap;
+
+<span class="kw">use crate</span>::{SeqTypes, ViewNumber};
 
 <span class="attr">#[derive(Clone, Copy, Debug)]
 </span><span class="kw">pub struct </span>Options;
