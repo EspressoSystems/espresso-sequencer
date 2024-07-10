@@ -203,6 +203,12 @@ async fn main() {
     let mut benchmark_total_transactions = 0;
     #[cfg(feature = "benchmarking")]
     let mut benchmark_finish = false;
+    #[cfg(feature = "benchmarking")]
+    let mut total_throughput = 0;
+    #[cfg(feature = "benchmarking")]
+    let mut start: Instant = Instant::now(); // will be re-assign once has_started turned to true
+    #[cfg(feature = "benchmarking")]
+    let mut has_started: bool = false;
 
     while let Some(block) = blocks.next().await {
         let block: BlockQueryData<SeqTypes> = match block {
@@ -217,6 +223,10 @@ async fn main() {
         #[cfg(feature = "benchmarking")]
         {
             num_successful_commits += 1;
+            if !has_started && num_successful_commits >= start_round {
+                has_started = true;
+                start = Instant::now();
+            }
         }
 
         // Get all transactions which were submitted before this block.
@@ -254,6 +264,12 @@ async fn main() {
 
                         benchmark_total_latency += latency;
                         benchmark_total_transactions += 1;
+                        // Transaction = NamespaceId(u64) + payload(Vec<u8>)
+                        let payload_length = tx.into_payload().len();
+                        let tx_sz = payload_length * std::mem::size_of::<u8>() // size of payload
+                        + std::mem::size_of::<u64>() // size of the namespace
+                        + std::mem::size_of::<Transaction>(); // size of the struct wrapper
+                        total_throughput += tx_sz;
                     }
                 }
             }
@@ -262,6 +278,9 @@ async fn main() {
         #[cfg(feature = "benchmarking")]
         if !benchmark_finish && num_successful_commits > end_round {
             let benchmark_average_latency = benchmark_total_latency / benchmark_total_transactions;
+            let total_time_elapsed = start.elapsed(); // in seconds
+            let throughput_bytes_per_sec =
+                (total_throughput as u64) / std::cmp::max(total_time_elapsed.as_secs(), 1u64);
             // Open the CSV file in append mode
             let results_csv_file = OpenOptions::new()
                 .create(true)
@@ -275,18 +294,24 @@ async fn main() {
                     "public_pool_avg_latency_in_sec",
                     "minimum_latency_in_sec",
                     "maximum_latency_in_sec",
+                    "throughput_bytes_per_sec",
+                    "total_time_elapsed",
                 ]);
             } else {
                 let _ = wtr.write_record([
                     "private_pool_avg_latency_in_sec",
                     "minimum_latency_in_sec",
                     "maximum_latency_in_sec",
+                    "throughput_bytes_per_sec",
+                    "total_time_elapsed",
                 ]);
             }
             let _ = wtr.write_record(&[
                 benchmark_average_latency.as_secs().to_string(),
                 benchmark_minimum_latency.as_secs().to_string(),
                 benchmark_maximum_latency.as_secs().to_string(),
+                throughput_bytes_per_sec.to_string(),
+                total_time_elapsed.as_secs().to_string(),
             ]);
             let _ = wtr.flush();
             println!(

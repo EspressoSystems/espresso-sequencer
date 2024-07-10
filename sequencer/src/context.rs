@@ -14,7 +14,7 @@ use hotshot::{
     Memberships, SystemContext,
 };
 use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
-use hotshot_orchestrator::client::OrchestratorClient;
+use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
 use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -257,6 +257,8 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     pub async fn start_consensus(&self) {
         #[cfg(feature = "benchmarking")]
         let mut has_orchestrator_client = false;
+        #[cfg(feature = "benchmarking")]
+        let mut network_config: NetworkConfig<PubKey> = Default::default();
         if let Some(orchestrator_client) = &self.wait_for_orchestrator {
             tracing::warn!("waiting for orchestrated start");
             orchestrator_client
@@ -265,6 +267,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             #[cfg(feature = "benchmarking")]
             {
                 has_orchestrator_client = true;
+                network_config = orchestrator_client.get_config_after_collection().await;
             }
         } else {
             tracing::error!("Cannot get info from orchestrator client");
@@ -276,7 +279,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         if has_orchestrator_client {
             // start_round is the number of rounds for warm up, which will not be counted in for benchmarking phase
             let start_round: usize = 20;
-            let end_round: usize = 120;
+            let end_round: usize = start_round + network_config.rounds;
             let mut event_stream = self.event_stream().await;
             let mut num_successful_commits = 0;
             let mut total_transactions_committed = 0;
@@ -287,7 +290,9 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             loop {
                 match event_stream.next().await {
                     None => {
-                        panic!("Error! Event stream completed before consensus ended.");
+                        tracing::error!(
+                            "Error in Benchmarking! Event stream completed before consensus ended."
+                        );
                     }
                     Some(Event { event, .. }) => {
                         match event {
