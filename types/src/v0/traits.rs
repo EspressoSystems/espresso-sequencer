@@ -1,3 +1,5 @@
+//! This module contains all the traits used for building the sequencer types.
+//! It also includes some trait implementations that cannot be implemented in an external crate.
 use std::{cmp::max, collections::BTreeMap, ops::Range, sync::Arc};
 
 use anyhow::{bail, ensure, Context};
@@ -523,8 +525,6 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()>;
 }
-
-// move into impls
 
 #[async_trait]
 impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {

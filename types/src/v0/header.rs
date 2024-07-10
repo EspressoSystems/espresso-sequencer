@@ -3,7 +3,7 @@ use committable::Commitment;
 use serde::{Deserialize, Serialize};
 use vbs::version::Version;
 
-/// Each variant presents a specific minor version header.
+/// Each variant represents a specific minor version header.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Header {
     V1(v0_1::Header),
