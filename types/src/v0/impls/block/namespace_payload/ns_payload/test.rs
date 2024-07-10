@@ -170,7 +170,7 @@ fn tx_table_header() {
     let ns_id = NamespaceId::from(69_u32); // dummy
 
     // header declares 1 fewer txs, tx table bytes appear in tx payloads, wasted
-    // pßayload bytes
+    // payload bytes
     {
         let ns_payload = NsPayloadOwned::header_entries_body(2, &[10, 20, 30], 30);
         let txs = ns_payload.export_all_txs(&ns_id);

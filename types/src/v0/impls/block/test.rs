@@ -165,7 +165,7 @@ async fn enforce_max_block_size() {
 
 // TODO lots of infra here that could be reused in other tests.
 pub struct ValidTest {
-    nss: BTreeMap<NamespaceId, Vec<Transaction>>,
+    pub nss: BTreeMap<NamespaceId, Vec<Transaction>>,
 }
 
 impl ValidTest {
