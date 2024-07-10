@@ -1,12 +1,13 @@
+use std::{
+    io::{self, ErrorKind},
+    thread, time,
+};
+
 use anyhow::Result;
 use async_lock::RwLock;
 use futures::FutureExt;
 use hotshot_example_types::auction_results_provider_types::TestAuctionResult;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
-use std::{
-    io::{self, ErrorKind},
-    thread, time,
-};
 use tide_disco::{
     api::ApiError,
     error::ServerError,

@@ -38,13 +38,13 @@ use crate::{
 };
 
 /// Trigger a request to the network for a proposal for a view and wait for the response
+#[instrument(skip_all)]
 pub(crate) async fn fetch_proposal<TYPES: NodeType>(
     view: TYPES::Time,
     event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     quorum_membership: Arc<TYPES::Membership>,
     consensus: OuterConsensus<TYPES>,
 ) -> Result<Leaf<TYPES>> {
-    tracing::debug!("Fetching proposal for view {:?}", view);
     let (tx, mut rx) = broadcast(1);
     let event = ProposalMissing {
         view,
@@ -112,7 +112,7 @@ pub struct LeafChainTraversalOutcome<TYPES: NodeType> {
     pub included_txns: Option<HashSet<Commitment<<TYPES as NodeType>::Transaction>>>,
 
     /// The most recent upgrade certificate from one of the leaves.
-    pub decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
+    pub decided_upgrade_cert: Option<UpgradeCertificate<TYPES>>,
 }
 
 /// We need Default to be implemented because the leaf ascension has very few failure branches,
@@ -128,7 +128,7 @@ impl<TYPES: NodeType + Default> Default for LeafChainTraversalOutcome<TYPES> {
             leaf_views: Vec::new(),
             leaves_decided: Vec::new(),
             included_txns: None,
-            decided_upgrade_certificate: None,
+            decided_upgrade_cert: None,
         }
     }
 }
@@ -226,7 +226,7 @@ pub async fn decide_from_proposal<TYPES: NodeType>(
                             warn!("Failed to decide an upgrade certificate in time. Ignoring.");
                         } else {
                             info!("Reached decide on upgrade certificate: {:?}", cert);
-                            res.decided_upgrade_certificate = Some(cert.clone());
+                            res.decided_upgrade_cert = Some(cert.clone());
                         }
                     }
                 }
@@ -278,6 +278,7 @@ pub async fn decide_from_proposal<TYPES: NodeType>(
 }
 
 /// Gets the parent leaf and state from the parent of a proposal, returning an [`anyhow::Error`] if not.
+#[instrument(skip_all)]
 pub(crate) async fn parent_leaf_and_state<TYPES: NodeType>(
     next_proposal_view_number: TYPES::Time,
     quorum_membership: Arc<TYPES::Membership>,
@@ -347,6 +348,7 @@ pub(crate) async fn parent_leaf_and_state<TYPES: NodeType>(
 /// we merge the dependency tasks.
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_lines)]
+#[instrument(skip_all, fields(id = id, view = *proposal.data.view_number()))]
 #[cfg(not(feature = "dependency-tasks"))]
 pub async fn temp_validate_proposal_safety_and_liveness<TYPES: NodeType>(
     proposal: Proposal<TYPES, QuorumProposal<TYPES>>,
@@ -358,6 +360,7 @@ pub async fn temp_validate_proposal_safety_and_liveness<TYPES: NodeType>(
     event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     sender: TYPES::SignatureKey,
     event_sender: Sender<Event<TYPES>>,
+    id: u64,
 ) -> Result<()> {
     let view_number = proposal.data.view_number();
 

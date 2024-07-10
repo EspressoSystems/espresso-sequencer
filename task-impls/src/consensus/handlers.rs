@@ -210,7 +210,7 @@ pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
         create_and_send_proposal(
             public_key,
             private_key,
-            consensus,
+            OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
             sender,
             view,
             cnm,
@@ -272,6 +272,7 @@ pub async fn publish_proposal_if_able<TYPES: NodeType>(
 ///
 /// Returns the proposal that should be used to set the `cur_proposal` for other tasks.
 #[allow(clippy::too_many_lines)]
+#[instrument(skip_all)]
 pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
     sender: &TYPES::SignatureKey,
@@ -490,6 +491,7 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
                 event_stream.clone(),
                 sender,
                 task_state.output_event_stream.clone(),
+                task_state.id,
             )
             .map(AnyhowTracing::err_as_debug),
         ));
@@ -498,6 +500,7 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
 
 /// Handle `QuorumProposalValidated` event content and submit a proposal if possible.
 #[allow(clippy::too_many_lines)]
+#[instrument(skip_all)]
 pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     proposal: &QuorumProposal<TYPES>,
     event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
@@ -514,7 +517,7 @@ pub async fn handle_quorum_proposal_validated<TYPES: NodeType, I: NodeImplementa
     )
     .await;
 
-    if let Some(cert) = res.decided_upgrade_certificate {
+    if let Some(cert) = res.decided_upgrade_cert {
         task_state.decided_upgrade_cert = Some(cert.clone());
 
         let mut decided_certificate_lock = task_state.decided_upgrade_certificate.write().await;
@@ -628,6 +631,7 @@ type VoteInfo<TYPES> = (
 #[allow(unused_variables)]
 /// Check if we are able to vote, like whether the proposal is valid,
 /// whether we have DAC and VID share, and if so, vote.
+#[instrument(skip_all, fields(id = id, view = *cur_view))]
 pub async fn update_state_and_vote_if_able<TYPES: NodeType, I: NodeImplementation<TYPES>>(
     cur_view: TYPES::Time,
     proposal: QuorumProposal<TYPES>,

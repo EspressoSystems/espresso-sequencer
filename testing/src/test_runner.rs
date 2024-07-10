@@ -1,17 +1,15 @@
 #![allow(clippy::panic)]
-#[cfg(async_executor_impl = "async-std")]
-use async_std::task::JoinHandle;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     marker::PhantomData,
     sync::Arc,
 };
-#[cfg(async_executor_impl = "tokio")]
-use tokio::task::JoinHandle;
 
 use async_broadcast::broadcast;
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
+#[cfg(async_executor_impl = "async-std")]
+use async_std::task::JoinHandle;
 use futures::future::join_all;
 use hotshot::{
     traits::TestableNodeImplementation, types::SystemContextHandle, HotShotInitializer,
@@ -36,6 +34,8 @@ use hotshot_types::{
     HotShotConfig, ValidatorConfig,
 };
 use tide_disco::Url;
+#[cfg(async_executor_impl = "tokio")]
+use tokio::task::JoinHandle;
 #[allow(deprecated)]
 use tracing::info;
 

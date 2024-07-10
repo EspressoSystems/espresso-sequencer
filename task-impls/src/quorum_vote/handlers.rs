@@ -38,7 +38,7 @@ pub(crate) async fn handle_quorum_proposal_validated<
         leaf_views,
         leaves_decided,
         included_txns,
-        decided_upgrade_certificate,
+        decided_upgrade_cert,
     } = decide_from_proposal(
         proposal,
         OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
@@ -48,7 +48,7 @@ pub(crate) async fn handle_quorum_proposal_validated<
     .await;
     drop(decided_upgrade_certificate_read);
 
-    if let Some(cert) = decided_upgrade_certificate.clone() {
+    if let Some(cert) = decided_upgrade_cert.clone() {
         let mut decided_certificate_lock = task_state.decided_upgrade_certificate.write().await;
         *decided_certificate_lock = Some(cert.clone());
         drop(decided_certificate_lock);
