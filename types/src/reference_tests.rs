@@ -23,10 +23,6 @@
 
 use std::{fmt::Debug, path::Path, str::FromStr};
 
-use crate::{
-    ChainConfig, FeeAccount, FeeInfo, Header, L1BlockInfo, NamespaceId, NsTable, Payload, SeqTypes,
-    Transaction, ValidatedState,
-};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
 use es_version::SequencerVersion;
@@ -44,6 +40,11 @@ use tagged_base64::TaggedBase64;
 use vbs::{
     version::{StaticVersion, StaticVersionType, Version},
     BinarySerializer,
+};
+
+use crate::{
+    ChainConfig, FeeAccount, FeeInfo, Header, L1BlockInfo, NamespaceId, NsTable, Payload, SeqTypes,
+    Transaction, ValidatedState,
 };
 
 type Serializer = vbs::Serializer<SequencerVersion>;

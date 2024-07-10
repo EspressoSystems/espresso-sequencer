@@ -1,9 +1,9 @@
+use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+
 use crate::{
     v0::impls::block::{usize_max_from_byte_len, usize_to_bytes},
     NamespaceId, NsPayloadBuilder, NsPayloadOwned,
 };
-
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 
 #[test]
 fn ns_payload_len() {

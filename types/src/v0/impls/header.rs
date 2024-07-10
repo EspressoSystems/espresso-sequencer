@@ -297,6 +297,7 @@ impl Header {
     ) -> Self {
         let Version { major, minor } = version;
 
+        // Ensure the major version is 0, otherwise panic
         assert!(major == 0, "Invalid major version {major}");
 
         match minor {
@@ -342,6 +343,9 @@ impl Header {
                 fee_info,
                 builder_signature,
             }),
+            // This case should never occur
+            // but if it does, we must panic
+            // because we don't have the versioned types for this version
             _ => panic!("invalid version: {version}"),
         }
     }
