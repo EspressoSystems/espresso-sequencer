@@ -12,18 +12,18 @@ use serde::{Deserialize, Serialize};
 // TODO : marketplace header
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Header {
-    pub chain_config: ResolvableChainConfig,
-    pub height: u64,
-    pub timestamp: u64,
-    pub l1_head: u64,
-    pub l1_finalized: Option<L1BlockInfo>,
-    pub payload_commitment: VidCommitment,
-    pub builder_commitment: BuilderCommitment,
-    pub ns_table: NsTable,
-    pub block_merkle_tree_root: BlockMerkleCommitment,
-    pub fee_merkle_tree_root: FeeMerkleCommitment,
-    pub fee_info: FeeInfo,
-    pub builder_signature: Option<BuilderSignature>,
+    pub(crate) chain_config: ResolvableChainConfig,
+    pub(crate) height: u64,
+    pub(crate) timestamp: u64,
+    pub(crate) l1_head: u64,
+    pub(crate) l1_finalized: Option<L1BlockInfo>,
+    pub(crate) payload_commitment: VidCommitment,
+    pub(crate) builder_commitment: BuilderCommitment,
+    pub(crate) ns_table: NsTable,
+    pub(crate) block_merkle_tree_root: BlockMerkleCommitment,
+    pub(crate) fee_merkle_tree_root: FeeMerkleCommitment,
+    pub(crate) fee_info: FeeInfo,
+    pub(crate) builder_signature: Option<BuilderSignature>,
 }
 
 impl Committable for Header {

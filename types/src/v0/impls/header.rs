@@ -280,7 +280,7 @@ impl<'de> Deserialize<'de> for Header {
 
 impl Header {
     #[allow(clippy::too_many_arguments)]
-    pub fn create(
+    pub(crate) fn create(
         chain_config: ResolvableChainConfig,
         height: u64,
         timestamp: u64,

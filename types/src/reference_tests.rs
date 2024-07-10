@@ -23,13 +23,13 @@
 
 use std::{fmt::Debug, path::Path, str::FromStr};
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use committable::Committable;
-use es_version::SequencerVersion;
-use espresso_types::{
+use crate::{
     ChainConfig, FeeAccount, FeeInfo, Header, L1BlockInfo, NamespaceId, NsTable, Payload, SeqTypes,
     Transaction, ValidatedState,
 };
+use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+use committable::Committable;
+use es_version::SequencerVersion;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::{
     block_contents::vid_commitment, signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,

@@ -25,6 +25,7 @@ committable = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
 derivative = { workspace = true }
 derive_more = { workspace = true }
+es-version = { workspace = true } 
 ethers = { workspace = true }
 fluent-asserter = "0.1.9"
 futures = { workspace = true } 
@@ -39,6 +40,7 @@ jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
 num-traits = { workspace = true }
 paste = { workspace = true }
+pretty_assertions   = { workspace = true } 
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rand_distr = { workspace = true }
@@ -48,6 +50,7 @@ serde_json = { workspace = true }
 sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
 snafu = { workspace = true }
 static_assertions = { workspace = true } 
+tagged-base64 = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
