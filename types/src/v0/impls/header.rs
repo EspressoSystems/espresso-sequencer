@@ -797,8 +797,10 @@ impl BlockHeader<SeqTypes> for Header {
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
 
+        // The Header is versioned, so we check if there are any upgrades.
+        // If no upgrades are specified, we use the default V1 Header (version 0.1).
+        // If an upgrade is specified, we use the version from the latest upgrade.
         let upgrades = instance_state.upgrades.last_key_value();
-
         let version = match upgrades {
             None => Version { major: 0, minor: 1 },
             Some((version, _)) => *version,
