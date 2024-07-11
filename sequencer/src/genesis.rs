@@ -67,7 +67,7 @@ mod upgrade_serialization {
         for (version, upgrade) in map {
             seq.serialize_element(&(
                 version.to_string(),
-                upgrade.view,
+                upgrade.start_proposing_view,
                 upgrade.propose_window,
                 upgrade.upgrade_type.clone(),
             ))?;
@@ -115,7 +115,7 @@ mod upgrade_serialization {
                     map.insert(
                         version,
                         Upgrade {
-                            view: fields.view,
+                            start_proposing_view: fields.view,
                             propose_window: fields.propose_window,
                             upgrade_type: fields.upgrade_type,
                         },
