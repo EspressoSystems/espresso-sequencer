@@ -197,8 +197,8 @@ forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript 
 To Upgrade
 
 ```bash
-forge script contracts/script/UpgradeLightClient.s.sol:UpgradeLightClientScript $admin $mostRecentlyDeployedProxy \
---sig 'run(address, address)' \
+forge script contracts/script/UpgradeLightClient.s.sol:UpgradeLightClientScript $offset $mostRecentlyDeployedProxy \
+--sig 'run(uint32, address)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com \
 --broadcast --legacy
