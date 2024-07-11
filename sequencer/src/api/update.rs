@@ -34,6 +34,8 @@ pub(super) async fn update_loop<N, P, D, Ver: StaticVersionType>(
             );
             state.revert().await;
         }
+
+        tracing::debug!(?event, "update API");
     }
     tracing::warn!("end of HotShot event stream, updater task will exit");
 }
