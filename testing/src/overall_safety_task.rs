@@ -393,7 +393,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
     /// check if the test failed due to not enough nodes getting through enough views
     pub fn check_if_failed(&mut self, threshold: usize, total_num_nodes: usize) -> bool {
         let num_failed = self.failed_nodes.len();
-        total_num_nodes - num_failed >= threshold
+        total_num_nodes - num_failed < threshold
     }
     /// determines whether or not the round passes
     /// also do a safety check
