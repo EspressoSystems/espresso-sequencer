@@ -38,6 +38,7 @@ The window between `start_proposing_view` and `stop_proposing_view` should provi
 
 Ensure that the `ESPRESSO_SEQUENCER_GENESIS_FILE` environment variable is defined to point to the path of the genesis TOML file. For an example with upgrades enabled, refer to [`data/genesis/demo.toml`](../data/genesis/demo.toml).
 
+Note: We currently support only chain config upgrade.
 ### Example TOML Configuration
 
 ```toml
@@ -53,10 +54,19 @@ max_block_size = '1mb'
 fee_recipient = '0x0000000000000000000000000000000000000000'
 fee_contract = '0xa15bb66138824a1c7167f5e85b957d04dd34e468'
 ```
-In the TOML configuration example above, the `upgrade` section defines an array of tables, each specifying upgrade parameters such as version, view, and propose window. 
+In the TOML configuration example above, the `upgrade` section defines an array of tables, each specifying upgrade parameters:
 
 - **Version:** the current version targeted for the upgrade.
 - **View:** Represents the `start_proposing_view` value at which the upgrade is proposed.
 - **Propose Window:** Refers to the view window between `start_proposing_view` and `stop_proposing_view`.
 
-We currently support only chain config upgrades. The `upgrade.chain_config` table contains the complete set of chain config parameters, which can be used, for example, to enable protocol fees or modify other parameters during an upgrade.
+The `upgrade.chain_config` table contains the complete set of chain config parameters, which can be used, for example, to enable protocol fees or modify other parameters.
+
+
+## Fee upgrade
+
+A successful Hotshot upgrade results in a new version, which allows us to update the chain config and execute the upgrade if there exists any. Chainconfig includes the fee parameters. The sequencer node has two states: NodeState and ValidatedState. NodeState is an immutable state that contains ResolvableChainConfig, whereas ValidatedState is a mutable state. To make updates to the chain config post-upgrade possible, ResolvableChainConfig is also added to ValidatedState.
+
+NodeState also includes two additional fields: upgrades and current_version. Functions like Header::new() and ValidatedState::apply_header() include a version parameter, which is used to apply upgrades by comparing this version with current_version in NodeState and fetching the upgrade if available from the upgrades BTreeMap in NodeState.
+
+In scenarios where nodes join the network or restart, missing the upgrade window may result in their validated_state having only a chain config commitment. In such cases, nodes need to catch up from their peers to get the updated full chain config.
