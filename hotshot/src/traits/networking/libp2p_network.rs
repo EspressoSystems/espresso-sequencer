@@ -18,7 +18,10 @@ use std::{
 use anyhow::anyhow;
 use async_compatibility_layer::{
     art::{async_sleep, async_spawn},
-    channel::{self, bounded, unbounded, UnboundedReceiver, UnboundedSendError, UnboundedSender},
+    channel::{
+        self, bounded, unbounded, Receiver as BoundedReceiver, Sender as BoundedSender,
+        TrySendError, UnboundedReceiver, UnboundedSender,
+    },
 };
 use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
@@ -147,7 +150,7 @@ struct Libp2pNetworkInner<K: SignatureKey + 'static> {
     /// Sender for broadcast messages
     sender: UnboundedSender<Vec<u8>>,
     /// Sender for node lookup (relevant view number, key of node) (None for shutdown)
-    node_lookup_send: UnboundedSender<Option<(ViewNumber, K)>>,
+    node_lookup_send: BoundedSender<Option<(ViewNumber, K)>>,
     /// this is really cheating to enable local tests
     /// hashset of (bootstrap_addr, peer_id)
     bootstrap_addrs: PeerInfoVec,
@@ -517,7 +520,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         // if bounded figure out a way to log dropped msgs
         let (sender, receiver) = unbounded();
         let (requests_tx, requests_rx) = channel(100);
-        let (node_lookup_send, node_lookup_recv) = unbounded();
+        let (node_lookup_send, node_lookup_recv) = bounded(10);
         let (kill_tx, kill_rx) = bounded(1);
         rx.set_kill_switch(kill_rx);
 
@@ -557,7 +560,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
 
     /// Spawns task for looking up nodes pre-emptively
     #[allow(clippy::cast_sign_loss, clippy::cast_precision_loss)]
-    fn spawn_node_lookup(&self, node_lookup_recv: UnboundedReceiver<Option<(ViewNumber, K)>>) {
+    fn spawn_node_lookup(&self, mut node_lookup_recv: BoundedReceiver<Option<(ViewNumber, K)>>) {
         let handle = Arc::clone(&self.inner.handle);
         let dht_timeout = self.inner.dht_timeout;
         let latest_seen_view = Arc::clone(&self.inner.latest_seen_view);
@@ -1075,15 +1078,14 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
     }
 
     #[instrument(name = "Libp2pNetwork::queue_node_lookup", skip_all)]
-    async fn queue_node_lookup(
+    fn queue_node_lookup(
         &self,
         view_number: ViewNumber,
         pk: K,
-    ) -> Result<(), UnboundedSendError<Option<(ViewNumber, K)>>> {
+    ) -> Result<(), TrySendError<Option<(ViewNumber, K)>>> {
         self.inner
             .node_lookup_send
-            .send(Some((view_number, pk)))
-            .await
+            .try_send(Some((view_number, pk)))
     }
 
     /// handles view update
@@ -1096,7 +1098,6 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
 
         let _ = self
             .queue_node_lookup(ViewNumber::new(*future_view), future_leader)
-            .await
             .map_err(|err| tracing::warn!("failed to process node lookup request: {err}"));
     }
 }

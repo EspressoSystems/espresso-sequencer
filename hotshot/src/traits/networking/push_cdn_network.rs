@@ -4,7 +4,7 @@ use std::{collections::BTreeSet, marker::PhantomData, sync::Arc};
 #[cfg(feature = "hotshot-testing")]
 use std::{path::Path, time::Duration};
 
-use async_compatibility_layer::channel::UnboundedSendError;
+use async_compatibility_layer::channel::TrySendError;
 #[cfg(feature = "hotshot-testing")]
 use async_compatibility_layer::{art::async_sleep, art::async_spawn};
 use async_trait::async_trait;
@@ -557,11 +557,11 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for PushCdnNetwork<T
     }
 
     /// Do nothing here, as we don't need to look up nodes.
-    async fn queue_node_lookup(
+    fn queue_node_lookup(
         &self,
         _view_number: ViewNumber,
         _pk: TYPES::SignatureKey,
-    ) -> Result<(), UnboundedSendError<Option<(ViewNumber, TYPES::SignatureKey)>>> {
+    ) -> Result<(), TrySendError<Option<(ViewNumber, TYPES::SignatureKey)>>> {
         Ok(())
     }
 }

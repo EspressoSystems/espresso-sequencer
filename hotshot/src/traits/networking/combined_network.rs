@@ -15,7 +15,7 @@ use std::{
 use async_broadcast::{broadcast, InactiveReceiver, Sender};
 use async_compatibility_layer::{
     art::{async_sleep, async_spawn},
-    channel::UnboundedSendError,
+    channel::TrySendError,
 };
 use async_lock::RwLock;
 use async_trait::async_trait;
@@ -488,15 +488,13 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks
         Ok(filtered_msgs)
     }
 
-    async fn queue_node_lookup(
+    fn queue_node_lookup(
         &self,
         view_number: ViewNumber,
         pk: TYPES::SignatureKey,
-    ) -> Result<(), UnboundedSendError<Option<(ViewNumber, TYPES::SignatureKey)>>> {
-        self.primary()
-            .queue_node_lookup(view_number, pk.clone())
-            .await?;
-        self.secondary().queue_node_lookup(view_number, pk).await
+    ) -> Result<(), TrySendError<Option<(ViewNumber, TYPES::SignatureKey)>>> {
+        self.primary().queue_node_lookup(view_number, pk.clone())?;
+        self.secondary().queue_node_lookup(view_number, pk)
     }
 
     async fn update_view<'a, T>(&'a self, view: u64, membership: &T::Membership)
