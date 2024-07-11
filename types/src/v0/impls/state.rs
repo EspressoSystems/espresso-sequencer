@@ -24,12 +24,12 @@ use num_traits::CheckedSub;
 use thiserror::Error;
 use vbs::version::Version;
 
-use super::{fee_info::FeeError, header::ProposalValidationError};
+use super::{auction::ExecutionError, fee_info::FeeError, header::ProposalValidationError};
 use crate::{
-    v0_3::IterableFeeInfo, BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeAmount, FeeInfo,
-    FeeMerkleTree, Header, Leaf, NodeState, NsTableValidationError, PayloadByteLen,
-    ResolvableChainConfig, SeqTypes, UpgradeType, ValidatedState, BLOCK_MERKLE_TREE_HEIGHT,
-    FEE_MERKLE_TREE_HEIGHT,
+    v0_3::{FullNetworkTx, IterableFeeInfo},
+    BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header,
+    Leaf, NodeState, NsTableValidationError, PayloadByteLen, ResolvableChainConfig, SeqTypes,
+    UpgradeType, ValidatedState, BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT,
 };
 
 /// Possible builder validation failures
@@ -417,6 +417,10 @@ impl ValidatedState {
         let mut validated_state =
             apply_proposal(&validated_state, &mut delta, parent_leaf, l1_deposits);
 
+        // TODO I guess we will need deltas for this?
+        apply_full_transactions(&mut validated_state, proposed_header.get_full_network_txs())
+            .map_err(|e| anyhow::anyhow!("Error: {e:?}"))?;
+
         charge_fee(
             &mut validated_state,
             &mut delta,
@@ -477,6 +481,16 @@ impl ValidatedState {
 
         Ok(cf)
     }
+}
+
+fn apply_full_transactions(
+    validated_state: &mut ValidatedState,
+    full_network_txs: Vec<FullNetworkTx>,
+) -> Result<(), (ExecutionError, FullNetworkTx)> {
+    dbg!(&full_network_txs);
+    full_network_txs
+        .iter()
+        .try_for_each(|tx| tx.execute(validated_state))
 }
 
 pub async fn get_l1_deposits(
@@ -715,7 +729,24 @@ mod test {
     use sequencer_utils::ser::FromStringOrInteger;
 
     use super::*;
-    use crate::{BlockSize, FeeAccountProof, FeeMerkleProof};
+    use crate::{
+        v0::impls::auction::mock_full_network_txs, BlockSize, FeeAccountProof, FeeMerkleProof,
+    };
+
+    #[test]
+    fn test_apply_full_tx() {
+        let mut state = ValidatedState::default();
+        let txs = mock_full_network_txs(None);
+        // Default key can be verified b/c it is the same that signs the mock tx
+        apply_full_transactions(&mut state, txs).unwrap();
+
+        // Tx will be invalid if it is signed by a different key than
+        // set in `account` field.
+        let key = FeeAccount::generated_from_seed_indexed([1; 32], 0).1;
+        let invalid = mock_full_network_txs(Some(key));
+        let (err, _) = apply_full_transactions(&mut state, invalid).unwrap_err();
+        assert_eq!(ExecutionError::InvalidSignature, err);
+    }
 
     #[test]
     fn test_fee_proofs() {

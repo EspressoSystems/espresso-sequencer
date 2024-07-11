@@ -99,6 +99,7 @@ fn reference_chain_config() -> ChainConfig {
         base_fee: 0.into(),
         fee_contract: Some(Default::default()),
         fee_recipient: Default::default(),
+        bid_recipient: Default::default(),
     }
 }
 

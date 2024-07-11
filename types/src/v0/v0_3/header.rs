@@ -23,6 +23,10 @@ pub struct Header {
     pub(crate) fee_merkle_tree_root: FeeMerkleCommitment,
     pub(crate) fee_info: Vec<FeeInfo>,
     pub(crate) builder_signature: Vec<BuilderSignature>,
+    // pub(crate) full_network_txs: Vec<FullNetworkTx>,
+    // /// refund flag set at the beginning of new slots
+    // /// In extreme cases, more than one slot may need to be refunded,
+    // /// hence this data structure
 }
 
 impl Committable for Header {

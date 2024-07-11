@@ -28,7 +28,7 @@ use vbs::version::Version;
 use crate::{
     v0::header::{EitherOrVersion, VersionedHeader},
     v0_1, v0_2,
-    v0_3::{self, IterableFeeInfo},
+    v0_3::{self, FullNetworkTx, IterableFeeInfo},
     BlockMerkleCommitment, BlockSize, BuilderSignature, ChainConfig, FeeAccount, FeeAmount,
     FeeInfo, FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NodeState,
     NsTable, NsTableValidationError, ResolvableChainConfig, SeqTypes, UpgradeType, ValidatedState,
@@ -128,6 +128,11 @@ impl Committable for Header {
 }
 
 impl Header {
+    pub fn get_full_network_txs(&self) -> Vec<FullNetworkTx> {
+        // TODO unmock
+        super::auction::mock_full_network_txs(None)
+    }
+
     pub fn version(&self) -> Version {
         match self {
             Self::V1(_) => Version { major: 0, minor: 1 },

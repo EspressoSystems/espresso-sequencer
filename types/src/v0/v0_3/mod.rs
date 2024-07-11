@@ -17,8 +17,10 @@ pub use super::v0_1::{
 
 pub const VERSION: Version = Version { major: 0, minor: 3 };
 
+mod auction;
 mod fee_info;
 mod header;
 
+pub use auction::{BidTx, BidTxBody, FullNetworkTx};
 pub use fee_info::IterableFeeInfo;
 pub use header::Header;

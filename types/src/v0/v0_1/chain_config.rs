@@ -40,6 +40,9 @@ pub struct ChainConfig {
     /// regardless of whether or not their is a `fee_contract` deployed. Once deployed, the fee
     /// contract can decide what to do with tokens locked in this account in Espresso.
     pub fee_recipient: FeeAccount,
+
+    /// Account that receives sequencing bids.
+    pub bid_recipient: FeeAccount,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Deserialize, Serialize, Eq, Hash)]

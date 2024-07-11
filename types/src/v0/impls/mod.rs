@@ -1,5 +1,6 @@
 pub use super::*;
 
+mod auction;
 mod block;
 mod chain_config;
 mod fee_info;

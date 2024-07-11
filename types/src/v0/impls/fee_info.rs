@@ -1,7 +1,8 @@
-// use crate::SeqTypes;
-
-use std::str::FromStr;
-
+use crate::{
+    eth_signature_key::EthKeyPair, v0_3::IterableFeeInfo, AccountQueryData, FeeAccount,
+    FeeAccountProof, FeeAmount, FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree,
+    SeqTypes,
+};
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
@@ -24,13 +25,8 @@ use num_traits::CheckedSub;
 use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
+use std::str::FromStr;
 use thiserror::Error;
-
-use crate::{
-    eth_signature_key::EthKeyPair, v0_3::IterableFeeInfo, AccountQueryData, FeeAccount,
-    FeeAccountProof, FeeAmount, FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree,
-    SeqTypes,
-};
 
 /// Possible charge fee failures
 #[derive(Error, Debug, Eq, PartialEq)]
