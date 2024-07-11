@@ -223,6 +223,7 @@ async fn main() {
         #[cfg(feature = "benchmarking")]
         {
             num_successful_commits += 1;
+            println!("current num_successful_commits = {num_successful_commits}");
             if !has_started && num_successful_commits >= start_round {
                 has_started = true;
                 start = Instant::now();
@@ -248,9 +249,7 @@ async fn main() {
                 tracing::info!("average latency: {:?}", total_latency / total_transactions);
                 #[cfg(feature = "benchmarking")]
                 {
-                    if !benchmark_finish
-                        && (start_round..=end_round).contains(&num_successful_commits)
-                    {
+                    if has_started && !benchmark_finish {
                         benchmark_minimum_latency = if total_transactions == 0 {
                             latency
                         } else {
@@ -277,10 +276,16 @@ async fn main() {
 
         #[cfg(feature = "benchmarking")]
         if !benchmark_finish && num_successful_commits > end_round {
+            let transactions_per_batch = format!(
+                "{}~{}",
+                (opt.jobs as u64 * opt.min_batch_size),
+                (opt.jobs as u64 * opt.max_batch_size),
+            );
             let benchmark_average_latency = benchmark_total_latency / benchmark_total_transactions;
-            let total_time_elapsed = start.elapsed(); // in seconds
-            let throughput_bytes_per_sec =
-                (total_throughput as u64) / std::cmp::max(total_time_elapsed.as_secs(), 1u64);
+            let avg_transaction_size = total_throughput as u32 / benchmark_total_transactions;
+            let total_time_elapsed_in_sec = start.elapsed(); // in seconds
+            let avg_throughput_bytes_per_sec = (total_throughput as u64)
+                / std::cmp::max(total_time_elapsed_in_sec.as_secs(), 1u64);
             // Open the CSV file in append mode
             let results_csv_file = OpenOptions::new()
                 .create(true)
@@ -289,29 +294,29 @@ async fn main() {
                 .unwrap();
             // Open a file for writing
             let mut wtr = Writer::from_writer(results_csv_file);
+            let mut pub_or_priv_pool = "private_pool_avg_latency_in_sec";
             if opt.use_public_mempool() {
-                let _ = wtr.write_record([
-                    "public_pool_avg_latency_in_sec",
-                    "minimum_latency_in_sec",
-                    "maximum_latency_in_sec",
-                    "throughput_bytes_per_sec",
-                    "total_time_elapsed",
-                ]);
-            } else {
-                let _ = wtr.write_record([
-                    "private_pool_avg_latency_in_sec",
-                    "minimum_latency_in_sec",
-                    "maximum_latency_in_sec",
-                    "throughput_bytes_per_sec",
-                    "total_time_elapsed",
-                ]);
+                pub_or_priv_pool = "public_pool_avg_latency_in_sec";
             }
+            let _ = wtr.write_record([
+                "transaction_per_batch",
+                pub_or_priv_pool,
+                "minimum_latency_in_sec",
+                "maximum_latency_in_sec",
+                "avg_throughput_bytes_per_sec",
+                "total_transactions",
+                "avg_transaction_size",
+                "total_time_elapsed_in_sec",
+            ]);
             let _ = wtr.write_record(&[
+                transactions_per_batch,
                 benchmark_average_latency.as_secs().to_string(),
                 benchmark_minimum_latency.as_secs().to_string(),
                 benchmark_maximum_latency.as_secs().to_string(),
-                throughput_bytes_per_sec.to_string(),
-                total_time_elapsed.as_secs().to_string(),
+                avg_throughput_bytes_per_sec.to_string(),
+                benchmark_total_transactions.to_string(),
+                avg_transaction_size.to_string(),
+                total_time_elapsed_in_sec.as_secs().to_string(),
             ]);
             let _ = wtr.flush();
             println!(
