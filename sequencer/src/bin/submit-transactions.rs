@@ -29,6 +29,8 @@ use vbs::version::StaticVersionType;
 use csv::Writer;
 #[cfg(feature = "benchmarking")]
 use std::fs::OpenOptions;
+#[cfg(feature = "benchmarking")]
+use std::num::NonZeroUsize;
 
 /// Submit random transactions to an Espresso Sequencer.
 #[derive(Clone, Debug, Parser)]
@@ -128,6 +130,10 @@ struct Options {
     /// URL of the query service.
     #[clap(env = "ESPRESSO_SEQUENCER_URL")]
     url: Url,
+
+    #[cfg(feature = "benchmarking")]
+    #[clap(short, long, env = "ESPRESSO_ORCHESTRATOR_NUM_NODES")]
+    num_nodes: NonZeroUsize,
 }
 
 impl Options {
@@ -294,15 +300,17 @@ async fn main() {
                 .unwrap();
             // Open a file for writing
             let mut wtr = Writer::from_writer(results_csv_file);
-            let mut pub_or_priv_pool = "private_pool_avg_latency_in_sec";
+            let mut pub_or_priv_pool = "private";
             if opt.use_public_mempool() {
-                pub_or_priv_pool = "public_pool_avg_latency_in_sec";
+                pub_or_priv_pool = "public";
             }
             let _ = wtr.write_record([
+                "total_nodes",
                 "block_range",
                 "transaction_size_range",
                 "transaction_per_batch_range",
-                pub_or_priv_pool,
+                "pub_or_priv_pool",
+                "avg_latency_in_sec",
                 "minimum_latency_in_sec",
                 "maximum_latency_in_sec",
                 "avg_throughput_bytes_per_sec",
@@ -311,9 +319,11 @@ async fn main() {
                 "total_time_elapsed_in_sec",
             ]);
             let _ = wtr.write_record(&[
+                opt.num_nodes.to_string(),
                 block_range,
                 transaction_size_range,
                 transactions_per_batch_range,
+                pub_or_priv_pool.to_string(),
                 benchmark_average_latency.as_secs().to_string(),
                 benchmark_minimum_latency.as_secs().to_string(),
                 benchmark_maximum_latency.as_secs().to_string(),
