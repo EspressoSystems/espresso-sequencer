@@ -94,7 +94,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     ) -> anyhow::Result<Self> {
         let config = &network_config.config;
         let pub_key = config.my_own_validator_config.public_key;
-        tracing::info!(%pub_key, "initializing consensus");
+        tracing::info!(%pub_key, is_da = config.my_own_validator_config.is_da, "initializing consensus");
 
         // Stick our node ID in `metrics` so it is easily accessible via the status API.
         metrics
@@ -193,6 +193,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     ) -> Self {
         let events = handle.event_stream();
 
+        let node_id = node_state.node_id;
         let mut ctx = Self {
             handle: Arc::new(RwLock::new(handle)),
             state_signer: Arc::new(state_signer),
@@ -206,6 +207,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         ctx.spawn(
             "main event handler",
             handle_events(
+                node_id,
                 events,
                 persistence,
                 ctx.state_signer.clone(),
@@ -337,6 +339,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
 }
 
 async fn handle_events<Ver: StaticVersionType>(
+    node_id: u64,
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
     persistence: Arc<RwLock<impl SequencerPersistence>>,
     state_signer: Arc<StateSigner<Ver>>,
@@ -344,7 +347,7 @@ async fn handle_events<Ver: StaticVersionType>(
     events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
 ) {
     while let Some(event) = events.next().await {
-        tracing::debug!(?event, "consensus event");
+        tracing::debug!(node_id, ?event, "consensus event");
 
         {
             let mut p = persistence.write().await;
