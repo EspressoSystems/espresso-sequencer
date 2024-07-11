@@ -1,24 +1,14 @@
 //! Sequencer-specific API endpoint handlers.
 
-use serde::de::Error as _;
 use std::{
     collections::{BTreeSet, HashMap},
     env,
 };
 
-use super::{
-    data_source::{
-        CatchupDataSource, HotShotConfigDataSource, SequencerDataSource, StateSignatureDataSource,
-        SubmitDataSource,
-    },
-    StorageState,
-};
-use crate::{
-    block::NsProof, persistence::SequencerPersistence, NamespaceId, PubKey, SeqTypes, Transaction,
-};
 use anyhow::Result;
 use async_std::sync::{Arc, RwLock};
 use committable::Committable;
+use espresso_types::{NamespaceId, NsProof, PubKey, Transaction};
 use futures::{try_join, FutureExt};
 use hotshot_query_service::{
     availability::{self, AvailabilityDataSource, CustomSnafu, FetchBlockSnafu},
@@ -33,15 +23,23 @@ use hotshot_types::{
     data::ViewNumber,
     traits::{network::ConnectedNetwork, node_implementation::ConsensusTime},
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::Error as _, Deserialize, Serialize};
 use snafu::OptionExt;
 use tagged_base64::TaggedBase64;
 use tide_disco::{
     method::{ReadState, WriteState},
     Api, Error as _, StatusCode,
 };
-
 use vbs::version::StaticVersionType;
+
+use super::{
+    data_source::{
+        CatchupDataSource, HotShotConfigDataSource, SequencerDataSource, StateSignatureDataSource,
+        SubmitDataSource,
+    },
+    StorageState,
+};
+use crate::{SeqTypes, SequencerPersistence};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {

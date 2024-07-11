@@ -1,4 +1,5 @@
-use crate::Signer;
+use std::sync::Arc;
+
 use anyhow::Result;
 use contract_bindings::hot_shot::HotShot;
 use ethers::{
@@ -6,7 +7,8 @@ use ethers::{
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer as _},
 };
-use std::sync::Arc;
+
+use crate::Signer;
 
 #[derive(Debug, Clone)]
 pub struct TestClient {

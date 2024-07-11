@@ -1,17 +1,11 @@
-use crate::{
-    l1_client::L1BlockInfo,
-    state::{FeeAccount, FeeAmount},
-    ChainConfig,
-};
-use anyhow::Context;
-use derive_more::{Display, From, Into};
-use sequencer_utils::{impl_serde_from_string_or_integer, ser::FromStringOrInteger};
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
     path::Path,
 };
-use time::{format_description::well_known::Rfc3339 as TimestampFormat, OffsetDateTime};
+
+use anyhow::Context;
+use espresso_types::{ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade};
+use serde::{Deserialize, Serialize};
 use vbs::version::Version;
 
 /// Initial configuration of an Espresso stake table.
@@ -39,60 +33,6 @@ pub enum L1Finalized {
     Number { number: u64 },
 }
 
-#[derive(Hash, Copy, Clone, Debug, Display, PartialEq, Eq, From, Into)]
-#[display(fmt = "{}", "_0.format(&TimestampFormat).unwrap()")]
-pub struct Timestamp(OffsetDateTime);
-
-impl_serde_from_string_or_integer!(Timestamp);
-
-impl Default for Timestamp {
-    fn default() -> Self {
-        Self::from_integer(0).unwrap()
-    }
-}
-
-impl Timestamp {
-    pub fn unix_timestamp(&self) -> u64 {
-        self.0.unix_timestamp() as u64
-    }
-}
-
-impl FromStringOrInteger for Timestamp {
-    type Binary = u64;
-    type Integer = u64;
-
-    fn from_binary(b: Self::Binary) -> anyhow::Result<Self> {
-        Self::from_integer(b)
-    }
-
-    fn from_integer(i: Self::Integer) -> anyhow::Result<Self> {
-        let unix = i.try_into().context("timestamp out of range")?;
-        Ok(Self(
-            OffsetDateTime::from_unix_timestamp(unix).context("invalid timestamp")?,
-        ))
-    }
-
-    fn from_string(s: String) -> anyhow::Result<Self> {
-        Ok(Self(
-            OffsetDateTime::parse(&s, &TimestampFormat).context("invalid timestamp")?,
-        ))
-    }
-
-    fn to_binary(&self) -> anyhow::Result<Self::Binary> {
-        Ok(self.unix_timestamp())
-    }
-
-    fn to_string(&self) -> anyhow::Result<String> {
-        Ok(format!("{self}"))
-    }
-}
-
-/// Information about the genesis state which feeds into the genesis block header.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-pub struct GenesisHeader {
-    pub timestamp: Timestamp,
-}
-
 /// Genesis of an Espresso chain.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Genesis {
@@ -107,31 +47,16 @@ pub struct Genesis {
     pub upgrades: BTreeMap<Version, Upgrade>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-#[serde(rename_all = "snake_case")]
-pub enum UpgradeType {
-    // Note: Wrapping this in a tuple variant causes deserialization to fail because
-    // the 'chain_config' name is also provided in the TOML input.
-    ChainConfig { chain_config: ChainConfig },
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Upgrade {
-    pub view: u64,
-    pub propose_window: u64,
-    #[serde(flatten)]
-    pub upgrade_type: UpgradeType,
-}
-
 mod upgrade_serialization {
-    use crate::genesis::{Upgrade, UpgradeType};
-    use serde::ser::SerializeSeq;
+
+    use std::{collections::BTreeMap, fmt};
+
+    use espresso_types::{Upgrade, UpgradeType};
     use serde::{
         de::{SeqAccess, Visitor},
+        ser::SerializeSeq,
         Deserialize, Deserializer, Serializer,
     };
-    use std::{collections::BTreeMap, fmt};
     use vbs::version::Version;
 
     pub fn serialize<S>(map: &BTreeMap<Version, Upgrade>, serializer: S) -> Result<S::Ok, S::Error>
@@ -142,7 +67,7 @@ mod upgrade_serialization {
         for (version, upgrade) in map {
             seq.serialize_element(&(
                 version.to_string(),
-                upgrade.view,
+                upgrade.start_proposing_view,
                 upgrade.propose_window,
                 upgrade.upgrade_type.clone(),
             ))?;
@@ -190,7 +115,7 @@ mod upgrade_serialization {
                     map.insert(
                         version,
                         Upgrade {
-                            view: fields.view,
+                            start_proposing_view: fields.view,
                             propose_window: fields.propose_window,
                             upgrade_type: fields.upgrade_type,
                         },
@@ -223,10 +148,12 @@ impl Genesis {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
+    use espresso_types::{L1BlockInfo, Timestamp};
     use ethers::prelude::{Address, H160, H256};
+    use sequencer_utils::ser::FromStringOrInteger;
     use toml::toml;
+
+    use super::*;
 
     #[test]
     fn test_genesis_from_toml_with_optional_fields() {

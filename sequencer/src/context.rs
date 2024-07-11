@@ -1,9 +1,14 @@
+use std::fmt::Display;
+
 use anyhow::Context;
 use async_std::{
     sync::{Arc, RwLock},
     task::{spawn, JoinHandle},
 };
 use derivative::Derivative;
+use espresso_types::{
+    v0::traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
+};
 use futures::{
     future::{join_all, Future},
     stream::{Stream, StreamExt},
@@ -13,8 +18,9 @@ use hotshot::{
     types::{Event, SystemContextHandle},
     Memberships, SystemContext,
 };
+use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
-use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
+use hotshot_orchestrator::client::OrchestratorClient;
 use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
@@ -22,7 +28,6 @@ use hotshot_types::{
     traits::{election::Membership, metrics::Metrics, network::ConnectedNetwork},
     HotShotConfig,
 };
-use std::fmt::Display;
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -31,15 +36,13 @@ use hotshot::{traits::BlockPayload, types::EventType};
 #[cfg(feature = "benchmarking")]
 use hotshot_orchestrator::client::BenchResults;
 #[cfg(feature = "benchmarking")]
+use hotshot_orchestrator::config::NetworkConfig;
+#[cfg(feature = "benchmarking")]
 use hotshot_types::traits::{block_contents::BlockHeader, node_implementation::ConsensusTime};
 #[cfg(feature = "benchmarking")]
 use std::time::Instant;
 
-use crate::{
-    persistence::SequencerPersistence, state_signature::StateSigner, static_stake_table_commitment,
-    Node, NodeState, PubKey, SeqTypes, Transaction, ValidatedState,
-};
-use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
+use crate::{state_signature::StateSigner, static_stake_table_commitment, Node, SeqTypes};
 /// The consensus handle
 pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>>;
 

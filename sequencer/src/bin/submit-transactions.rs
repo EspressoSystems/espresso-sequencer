@@ -1,10 +1,16 @@
 //! Utility program to submit random transactions to an Espresso Sequencer.
 
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::{sleep, spawn};
 use clap::Parser;
 use committable::{Commitment, Committable};
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
+use espresso_types::{SeqTypes, Transaction};
 use futures::{
     channel::mpsc::{self, Sender},
     sink::SinkExt,
@@ -14,14 +20,7 @@ use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, 
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
-use sequencer::{
-    options::{parse_duration, parse_size},
-    SeqTypes, Transaction,
-};
-use std::{
-    collections::HashMap,
-    time::{Duration, Instant},
-};
+use sequencer::options::{parse_duration, parse_size};
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
 use vbs::version::StaticVersionType;
@@ -223,7 +222,6 @@ async fn main() {
         #[cfg(feature = "benchmarking")]
         {
             num_successful_commits += 1;
-            println!("current num_successful_commits = {num_successful_commits}");
             if !has_started && num_successful_commits >= start_round {
                 has_started = true;
                 start = Instant::now();
@@ -276,7 +274,8 @@ async fn main() {
 
         #[cfg(feature = "benchmarking")]
         if !benchmark_finish && num_successful_commits > end_round {
-            let transactions_per_batch = format!(
+            let transaction_size_range = format!("{}~{}", opt.min_size, opt.max_size,);
+            let transactions_per_batch_range = format!(
                 "{}~{}",
                 (opt.jobs as u64 * opt.min_batch_size),
                 (opt.jobs as u64 * opt.max_batch_size),
@@ -299,17 +298,19 @@ async fn main() {
                 pub_or_priv_pool = "public_pool_avg_latency_in_sec";
             }
             let _ = wtr.write_record([
-                "transaction_per_batch",
+                "transaction_size_range",
+                "transaction_per_batch_range",
                 pub_or_priv_pool,
                 "minimum_latency_in_sec",
                 "maximum_latency_in_sec",
                 "avg_throughput_bytes_per_sec",
                 "total_transactions",
-                "avg_transaction_size",
+                "avg_transaction_size_bytes",
                 "total_time_elapsed_in_sec",
             ]);
             let _ = wtr.write_record(&[
-                transactions_per_batch,
+                transaction_size_range,
+                transactions_per_batch_range,
                 benchmark_average_latency.as_secs().to_string(),
                 benchmark_minimum_latency.as_secs().to_string(),
                 benchmark_maximum_latency.as_secs().to_string(),
