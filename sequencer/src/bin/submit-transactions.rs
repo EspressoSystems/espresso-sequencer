@@ -187,11 +187,11 @@ async fn main() {
 
     // Keep track of the latency after warm up for benchmarking
     #[cfg(feature = "benchmarking")]
-    let mut num_successful_commits = 0;
+    let mut num_block = 0;
     #[cfg(feature = "benchmarking")]
-    let start_round = 20;
+    let start_round = 50;
     #[cfg(feature = "benchmarking")]
-    let end_round = 120;
+    let end_round = 150;
     #[cfg(feature = "benchmarking")]
     let mut benchmark_total_latency = Duration::default();
     #[cfg(feature = "benchmarking")]
@@ -221,8 +221,8 @@ async fn main() {
         tracing::debug!("got block {}", block.height());
         #[cfg(feature = "benchmarking")]
         {
-            num_successful_commits += 1;
-            if !has_started && num_successful_commits >= start_round {
+            num_block += 1;
+            if !has_started && num_block >= start_round {
                 has_started = true;
                 start = Instant::now();
             }
@@ -273,7 +273,8 @@ async fn main() {
         }
 
         #[cfg(feature = "benchmarking")]
-        if !benchmark_finish && num_successful_commits > end_round {
+        if !benchmark_finish && num_block > end_round {
+            let block_range = format!("{}~{}", start_round, end_round,);
             let transaction_size_range = format!("{}~{}", opt.min_size, opt.max_size,);
             let transactions_per_batch_range = format!(
                 "{}~{}",
@@ -298,6 +299,7 @@ async fn main() {
                 pub_or_priv_pool = "public_pool_avg_latency_in_sec";
             }
             let _ = wtr.write_record([
+                "block_range",
                 "transaction_size_range",
                 "transaction_per_batch_range",
                 pub_or_priv_pool,
@@ -309,6 +311,7 @@ async fn main() {
                 "total_time_elapsed_in_sec",
             ]);
             let _ = wtr.write_record(&[
+                block_range,
                 transaction_size_range,
                 transactions_per_batch_range,
                 benchmark_average_latency.as_secs().to_string(),
