@@ -3131,12 +3131,12 @@
             ..Default::default()
         };
         <span class="kw">let </span><span class="kw-2">mut </span>map = std::collections::BTreeMap::new();
-        <span class="kw">let </span>view = <span class="number">5</span>;
+        <span class="kw">let </span>start_proposing_view = <span class="number">5</span>;
         <span class="kw">let </span>propose_window = <span class="number">10</span>;
         map.insert(
             Version { major: <span class="number">0</span>, minor: <span class="number">2 </span>},
             Upgrade {
-                view,
+                start_proposing_view,
                 propose_window,
                 upgrade_type: UpgradeType::ChainConfig {
                     chain_config: chain_config_upgrade,
@@ -3147,8 +3147,8 @@
         <span class="kw">let </span>stop_voting_view = <span class="number">100</span>;
         <span class="kw">let </span>upgrades = TestNetworkUpgrades {
             upgrades: map,
-            start_proposing_view: view,
-            stop_proposing_view: view + propose_window,
+            start_proposing_view,
+            stop_proposing_view: start_proposing_view + propose_window,
             start_voting_view: <span class="number">1</span>,
             stop_voting_view,
         };

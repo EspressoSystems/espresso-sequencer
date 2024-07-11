@@ -863,6 +863,8 @@
 <a href="#863" id="863">863</a>
 <a href="#864" id="864">864</a>
 <a href="#865" id="865">865</a>
+<a href="#866" id="866">866</a>
+<a href="#867" id="867">867</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
@@ -1065,9 +1067,11 @@
         }
     };
 
-    <span class="kw">let </span>version = Ver::version();
-    <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrade) = genesis.upgrades.get(<span class="kw-2">&amp;</span>version) {
-        <span class="kw">let </span>view = upgrade.view;
+    <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrade) = genesis
+        .upgrades
+        .get(<span class="kw-2">&amp;</span>&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Upgrade::VERSION)
+    {
+        <span class="kw">let </span>view = upgrade.start_proposing_view;
         config.config.start_proposing_view = view;
         config.config.stop_proposing_view = view + upgrade.propose_window;
         config.config.start_voting_view = <span class="number">1</span>;
