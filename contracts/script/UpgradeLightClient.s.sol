@@ -3,7 +3,7 @@ pragma solidity ^0.8.19;
 
 import { Script } from "forge-std/Script.sol";
 
-import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
+import { LightClient as LCV2 } from "../src/LightClient.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
 
 contract UpgradeLightClientScript is Script {
