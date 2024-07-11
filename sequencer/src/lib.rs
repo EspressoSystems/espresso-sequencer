@@ -200,8 +200,10 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         }
     };
 
-    let version = Ver::version();
-    if let Some(upgrade) = genesis.upgrades.get(&version) {
+    if let Some(upgrade) = genesis
+        .upgrades
+        .get(&<SeqTypes as NodeType>::Upgrade::VERSION)
+    {
         let view = upgrade.start_proposing_view;
         config.config.start_proposing_view = view;
         config.config.stop_proposing_view = view + upgrade.propose_window;
