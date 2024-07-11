@@ -65,8 +65,8 @@ The `upgrade.chain_config` table contains the complete set of chain config param
 
 ## Fee upgrade
 
-A successful Hotshot upgrade results in a new version, which allows us to update the chain config and execute the upgrade if there exists any. Chainconfig includes the fee parameters. The sequencer node has two states: NodeState and ValidatedState. NodeState is an immutable state that contains ResolvableChainConfig, whereas ValidatedState is a mutable state. To make updates to the chain config post-upgrade possible, ResolvableChainConfig is also added to ValidatedState.
+A successful Hotshot upgrade results in a new version, which allows us to update the `ChainConfig` and execute the upgrade if there exists any. `Chainconfig` includes the fee parameters. The sequencer node has two states: `NodeState` and `ValidatedState`. `NodeState` is an immutable state that contains `ResolvableChainConfig` (Enum of `ChainConfig`'s commitment and full `ChainConfig`), whereas `ValidatedState` is a mutable state. To make updates to the chain config post-upgrade possible, `ResolvableChainConfig` is also added to `ValidatedState`.
 
-NodeState also includes two additional fields: upgrades and current_version. Functions like Header::new() and ValidatedState::apply_header() include a version parameter, which is used to apply upgrades by comparing this version with current_version in NodeState and fetching the upgrade if available from the upgrades BTreeMap in NodeState.
+`NodeState` also includes two additional fields: `upgrades` and `current_version`. Functions like `Header::new()` and `ValidatedState::apply_header()` include a version parameter, which is used to apply upgrades by comparing this version with `current_version` in NodeState and fetching the upgrade if available from the upgrades BTreeMap in NodeState.
 
 In scenarios where nodes join the network or restart, missing the upgrade window may result in their validated_state having only a chain config commitment. In such cases, nodes need to catch up from their peers to get the updated full chain config.
