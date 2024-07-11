@@ -11,8 +11,15 @@ use jf_vid::{VidDisperse, VidScheme};
 #[async_std::test]
 async fn ns_proof() {
     let test_cases = vec![
-        vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8], vec![7, 8, 9]],
+        vec![
+            vec![5, 8, 8],
+            vec![7, 9, 11],
+            vec![10, 5, 8],
+            vec![7, 8, 9],
+            vec![],
+        ],
         vec![vec![1, 2, 3], vec![4, 5, 6]],
+        vec![],
     ];
 
     setup_logging();
