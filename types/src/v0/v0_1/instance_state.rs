@@ -69,7 +69,8 @@ pub struct NodeState {
     /// Current version of the sequencer.
     ///
     /// This version is checked to determine if an upgrade is planned,
-    /// and which version variant for versioned types (e.g., build V2 header is version is 0,2) to use
-    /// in functions such as genesis.
+    /// and which version variant for versioned types  
+    /// to use in functions such as genesis.
+    /// (example: genesis returns V2 Header if version is 0.2) 
     pub current_version: Version,
 }

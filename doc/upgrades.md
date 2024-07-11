@@ -9,7 +9,7 @@ Voting for the `UpgradeProposal` begins before its proposal. Sufficient votes ar
 
 To enable an upgrade in Hotshot protocol:
 
-When preparing for an upgrade, it's essential to define the base version, the upgrade version, and a unique upgrade hash:
+When preparing for an upgrade, it is essential to define the base version, the upgrade version, and a upgrade hash:
 
 - **Base Version:** Represents the current version of the protocol (`0.1` in this example).
 - **Upgrade Version:** Specifies the version to which the protocol will upgrade once the process is successful (`0.2` in this example).
@@ -29,7 +29,7 @@ impl NodeType for SeqTypes {
 
 These parameters are fetched from the genesis TOML file and set in Hotshot config:
 
-- **start_voting_view:**  view at which voting for the upgrade proposal starts. In our implementation, this is set to 1 so that voting begins as soon as the node is bootup.
+- **start_voting_view:**  view at which voting for the upgrade proposal starts. In our implementation, this is set to 1 so that voting begins as soon as the node is started.
 - **stop_voting_view:**  view at which voting for the upgrade proposal stops. To disable an upgrade, set this parameter to 0 or ensure `stop_voting_view` is less than `start_voting_view`.
 - **start_proposing_view:**  view at which the node proposes an upgrade. This should be set to when an upgrade is intended. If the current view > `start_proposing_view`, the node proposes as soon as `UpgradeCertificate` is formed.
 - **stop_proposing_view:** The view after which the upgrade proposal is no longer valid. If the upgrade proposal fails and the current view > stop_proposing_view then the upgrade is never proposed again.
@@ -55,8 +55,8 @@ fee_contract = '0xa15bb66138824a1c7167f5e85b957d04dd34e468'
 ```
 In the TOML configuration example above, the `upgrade` section defines an array of tables, each specifying upgrade parameters such as version, view, and propose window. 
 
-- **Version:** Indicates the current version targeted for the upgrade.
-- **View:** Represents the `start_proposing_view` value, marking when the upgrade proposal initiates.
+- **Version:** the current version targeted for the upgrade.
+- **View:** Represents the `start_proposing_view` value at which the upgrade is proposed.
 - **Propose Window:** Refers to the view window between `start_proposing_view` and `stop_proposing_view`.
 
 We currently support only chain config upgrades. The `upgrade.chain_config` table contains the complete set of chain config parameters, which can be used, for example, to enable protocol fees or modify other parameters during an upgrade.
