@@ -229,7 +229,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
             spawned_tasks: BTreeMap::new(),
             formed_upgrade_certificate: None,
             proposal_cert: None,
-            decided_upgrade_cert: None,
             version: Arc::clone(&handle.hotshot.version),
             output_event_stream: handle.hotshot.external_event_stream.0.clone(),
             current_proposal: None,

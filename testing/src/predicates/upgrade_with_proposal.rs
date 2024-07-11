@@ -37,14 +37,14 @@ impl Predicate<QuorumProposalTaskTestState> for UpgradeCertPredicate {
     }
 }
 
-pub fn no_decided_upgrade_cert() -> Box<UpgradeCertPredicate> {
-    let info = "expected decided_upgrade_cert to be None".to_string();
+pub fn no_decided_upgrade_certificate() -> Box<UpgradeCertPredicate> {
+    let info = "expected decided_upgrade_certificate to be None".to_string();
     let check: UpgradeCertCallback = Arc::new(move |s| s.is_none());
     Box::new(UpgradeCertPredicate { info, check })
 }
 
-pub fn decided_upgrade_cert() -> Box<UpgradeCertPredicate> {
-    let info = "expected decided_upgrade_cert to be Some(_)".to_string();
+pub fn decided_upgrade_certificate() -> Box<UpgradeCertPredicate> {
+    let info = "expected decided_upgrade_certificate to be Some(_)".to_string();
     let check: UpgradeCertCallback = Arc::new(move |s| s.is_some());
     Box::new(UpgradeCertPredicate { info, check })
 }

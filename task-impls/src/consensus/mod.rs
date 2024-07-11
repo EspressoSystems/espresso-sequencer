@@ -113,9 +113,6 @@ pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// last View Sync Certificate or Timeout Certificate this node formed.
     pub proposal_cert: Option<ViewChangeEvidence<TYPES>>,
 
-    /// most recent decided upgrade certificate
-    pub decided_upgrade_cert: Option<UpgradeCertificate<TYPES>>,
-
     /// Globally shared reference to the current network version.
     pub version: Arc<RwLock<Version>>,
 
@@ -211,7 +208,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
             OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
             self.round_start_delay,
             self.formed_upgrade_certificate.clone(),
-            self.decided_upgrade_cert.clone(),
+            Arc::clone(&self.decided_upgrade_certificate),
             self.payload_commitment_and_metadata.clone(),
             self.proposal_cert.clone(),
             Arc::clone(&self.instance_state),
@@ -242,7 +239,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
         if proposal.view_number() != view {
             return;
         }
-        let upgrade = self.decided_upgrade_cert.clone();
+        let upgrade = Arc::clone(&self.decided_upgrade_certificate);
         let pub_key = self.public_key.clone();
         let priv_key = self.private_key.clone();
         let consensus = OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus));
@@ -500,7 +497,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
 
                 // If we have a decided upgrade certificate,
                 // we may need to upgrade the protocol version on a view change.
-                if let Some(ref cert) = self.decided_upgrade_cert {
+                if let Some(cert) = self.decided_upgrade_certificate.read().await.clone() {
                     if new_view == cert.data.new_version_first_view {
                         warn!(
                             "Updating version based on a decided upgrade cert: {:?}",

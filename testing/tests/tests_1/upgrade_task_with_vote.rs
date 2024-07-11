@@ -139,7 +139,7 @@ async fn test_upgrade_task_with_vote() {
                 validated_state_updated(),
                 quorum_vote_send(),
             ],
-            vec![no_decided_upgrade_cert()],
+            vec![no_decided_upgrade_certificate()],
         ),
         Expectations::from_outputs_and_task_states(
             all_predicates![
@@ -152,7 +152,7 @@ async fn test_upgrade_task_with_vote() {
                 validated_state_updated(),
                 quorum_vote_send(),
             ],
-            vec![no_decided_upgrade_cert()],
+            vec![no_decided_upgrade_certificate()],
         ),
         Expectations::from_outputs_and_task_states(
             all_predicates![
@@ -165,7 +165,7 @@ async fn test_upgrade_task_with_vote() {
                 validated_state_updated(),
                 quorum_vote_send(),
             ],
-            vec![no_decided_upgrade_cert()],
+            vec![no_decided_upgrade_certificate()],
         ),
         Expectations::from_outputs_and_task_states(
             all_predicates![
@@ -174,7 +174,7 @@ async fn test_upgrade_task_with_vote() {
                 exact(LastDecidedViewUpdated(ViewNumber::new(3))),
                 leaf_decided(),
             ],
-            vec![decided_upgrade_cert()],
+            vec![decided_upgrade_certificate()],
         ),
     ];
 
