@@ -164,13 +164,88 @@ fn negative_len_txs() {
 }
 
 #[test]
+fn negative_len_txs_and_abnormal_payload_len() {
+    setup_logging();
+    setup_backtrace();
+    let ns_id = NamespaceId::from(69_u32); // dummy
+
+    // 1 negative-length tx in the middle, overlapping tx bytes
+    // final tx partly truncated by short payload
+    {
+        let ns_payload = NsPayloadOwned::entries_body(&[20, 10, 30], 25);
+        let txs = ns_payload.export_all_txs(&ns_id);
+        assert_eq!(txs.len(), 3);
+        assert_eq!(
+            txs[0].payload(),
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+        );
+        assert!(txs[1].payload().is_empty());
+        assert_eq!(
+            txs[2].payload(),
+            [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+        );
+    }
+
+    // 1 negative-length tx in the middle, overlapping tx bytes
+    // large payload has wasted space
+    {
+        let ns_payload = NsPayloadOwned::entries_body(&[20, 10, 30], 40);
+        let txs = ns_payload.export_all_txs(&ns_id);
+        assert_eq!(txs.len(), 3);
+        assert_eq!(
+            txs[0].payload(),
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+        );
+        assert!(txs[1].payload().is_empty());
+        assert_eq!(
+            txs[2].payload(),
+            [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+        );
+    }
+
+    // all txs negative-length except the first
+    // tx partly truncated by short payload
+    {
+        let ns_payload = NsPayloadOwned::entries_body(&[30, 20, 10], 25);
+        let txs = ns_payload.export_all_txs(&ns_id);
+        assert_eq!(txs.len(), 3);
+        assert_eq!(
+            txs[0].payload(),
+            [
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+                23, 24
+            ]
+        );
+        assert!(txs[1].payload().is_empty());
+        assert!(txs[2].payload().is_empty());
+    }
+
+    // all txs negative-length except the first
+    // large payload has wasted space
+    {
+        let ns_payload = NsPayloadOwned::entries_body(&[30, 20, 10], 40);
+        let txs = ns_payload.export_all_txs(&ns_id);
+        assert_eq!(txs.len(), 3);
+        assert_eq!(
+            txs[0].payload(),
+            [
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
+                23, 24, 25, 26, 27, 28, 29
+            ]
+        );
+        assert!(txs[1].payload().is_empty());
+        assert!(txs[2].payload().is_empty());
+    }
+}
+
+#[test]
 fn tx_table_header() {
     setup_logging();
     setup_backtrace();
     let ns_id = NamespaceId::from(69_u32); // dummy
 
     // header declares 1 fewer txs, tx table bytes appear in tx payloads, wasted
-    // pßayload bytes
+    // payload bytes
     {
         let ns_payload = NsPayloadOwned::header_entries_body(2, &[10, 20, 30], 30);
         let txs = ns_payload.export_all_txs(&ns_id);
