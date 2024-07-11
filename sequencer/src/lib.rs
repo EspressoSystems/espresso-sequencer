@@ -202,7 +202,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     let version = Ver::version();
     if let Some(upgrade) = genesis.upgrades.get(&version) {
-        let view = upgrade.view;
+        let view = upgrade.start_proposing_view;
         config.config.start_proposing_view = view;
         config.config.stop_proposing_view = view + upgrade.propose_window;
         config.config.start_voting_view = 1;
