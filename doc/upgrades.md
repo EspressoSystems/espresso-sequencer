@@ -41,7 +41,7 @@ Note: We currently support only chain config upgrade.
 
 ```toml
 [[upgrade]]
-version = "0.1"
+version = "0.2"
 view = 5
 propose_window = 10
 
@@ -54,7 +54,7 @@ fee_contract = '0xa15bb66138824a1c7167f5e85b957d04dd34e468'
 ```
 In the TOML configuration example above, the `upgrade` section defines an array of tables, each specifying upgrade parameters:
 
-- **Version:** the current version targeted for the upgrade.
+- **Version:** the new version after an upgrade is successful.
 - **View:** Represents the `start_proposing_view` value at which the upgrade is proposed.
 - **Propose Window:** Refers to the view window between `start_proposing_view` and `stop_proposing_view`.
 
