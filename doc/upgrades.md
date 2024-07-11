@@ -3,7 +3,7 @@
 
 Hotshot protocol supports upgrades through an Upgrade proposal mechanism. The Upgrade proposal is broadcast separately from the `QuorumProposal`, typically several views in advance of its attachment. The goal is to ensure ample time for nodes to receive and prepare for the upgrade process.
 
-Voting for the `UpgradeProposal` begins before its proposal. Sufficient votes are gathered to form an upgrade certificate. Once obtained, the proposal is broadcasted, and any node that receives it accepts and attaches it to its own `QuorumProposal`.
+After enough votes have been collected on the `UpgradeProposal`, an `UpgradeCertificate` is formed. This is attached to the next `QuorumProposal`, and any node that receives an `UpgradeCertificate` in this way re-attaches it to its own `QuorumProposal` until the network has upgraded, or (in rare cases) we failed to reach consensus on the `UpgradeCertificate`.
 
 ## Enabling an Upgrade
 
@@ -27,10 +27,10 @@ impl NodeType for SeqTypes {
 
 These parameters are fetched from the genesis TOML file and set in Hotshot config:
 
-- **start_voting_view:**  view at which voting for the upgrade proposal starts. In our implementation, this is set to 1 so that voting begins as soon as the node is started.
+- **start_voting_view:**  view at which voting for the upgrade proposal starts. In our implementation, this is set to 1 so that voting is enabled as soon as the node is started.
 - **stop_voting_view:**  view at which voting for the upgrade proposal stops. To disable an upgrade, set this parameter to 0 or ensure `stop_voting_view` is less than `start_voting_view`.
-- **start_proposing_view:**  view at which the node proposes an upgrade. This should be set to when an upgrade is intended. If the current view > `start_proposing_view`, the node proposes as soon as `UpgradeCertificate` is formed.
-- **stop_proposing_view:** The view after which the upgrade proposal is no longer valid. If the upgrade proposal fails and the current view > stop_proposing_view then the upgrade is never proposed again.
+- **start_proposing_view:** the earliest view in which the node can propose an upgrade. This should be set to when an upgrade is intended. If the current view > `start_proposing_view`, the node will send out an `UpgradeProposal`.
+- **stop_proposing_view:** view after which the node stops proposing an upgrade. If the upgrade proposal fails and the current view > stop_proposing_view then the upgrade is never proposed again.
 
 The window between `start_proposing_view` and `stop_proposing_view` should provide sufficient time for nodes to continue proposing the upgrade until successful.
 
@@ -65,6 +65,8 @@ The `upgrade.chain_config` table contains the complete set of chain config param
 
 A successful Hotshot upgrade results in a new version, which allows us to update the `ChainConfig` and execute the upgrade if there exists any. `Chainconfig` includes the fee parameters. The sequencer node has two states: `NodeState` and `ValidatedState`. `NodeState` is an immutable state that contains `ResolvableChainConfig` (Enum of `ChainConfig`'s commitment and full `ChainConfig`), whereas `ValidatedState` is a mutable state. To make updates to the chain config post-upgrade possible, `ResolvableChainConfig` is also added to `ValidatedState`.
 
-`NodeState` also includes two additional fields: `upgrades` and `current_version`. Functions like `Header::new()` and `ValidatedState::apply_header()` include a version parameter, which is used to apply upgrades by comparing this version with `current_version` in NodeState and fetching the upgrade if available from the upgrades BTreeMap in NodeState.
+`NodeState` also includes two additional fields: `upgrades` and `current_version`. Functions like `Header::new()` and `ValidatedState::apply_header()` include a version parameter, which is used to apply upgrades by checking if this version is greater than  `current_version` in NodeState and fetching the upgrade, if available, from the upgrades BTreeMap in NodeState.
 
-In scenarios where nodes join the network or restart, missing the upgrade window may result in their validated_state having only a chain config commitment. In such cases, nodes need to catch up from their peers to get the updated full chain config.
+In scenarios where nodes join the network or restart, missing the upgrade window may result in their ValidatedState having only a chain config commitment. In such cases, nodes need to catch up from their peers to get the  full chain config for this chain config commitment.
+
+Note: For the fee upgrade to work, the builder must have sufficient funds to cover the fees. The Espresso bridge can be used to fund the builder.
