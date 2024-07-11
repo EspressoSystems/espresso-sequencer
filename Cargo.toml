@@ -30,7 +30,7 @@ ark-ff = "0.4"
 ark-poly = "0.4"
 ark-serialize = "0.4"
 ark-srs = "0.3.1"
-async-compatibility-layer = { version = "1.1", default-features = false, features = [
+async-compatibility-layer = { version = "1.2", default-features = false, features = [
   "logging-utils",
 ] }
 async-once-cell = "0.5"
