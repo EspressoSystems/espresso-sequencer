@@ -1,4 +1,5 @@
 use crate::service::client_message::{ClientMessage, InternalClientMessage};
+use crate::service::data_state::{LocationDetails, NodeIdentity};
 use crate::service::server_message::ServerMessage;
 use futures::future::Either;
 use futures::{
@@ -8,10 +9,13 @@ use futures::{
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::light_client::{CircuitField, StateVerKey};
 use hotshot_types::signature_key::BLSPubKey;
+use hotshot_types::traits::signature_key::SignatureKey;
 use hotshot_types::traits::{signature_key::StakeTableEntryType, stake_table::StakeTableScheme};
 use hotshot_types::PeerConfig;
+use prometheus_parse::Scrape;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::io::BufRead;
 use tide_disco::socket::Connection;
 use tide_disco::{api::ApiError, Api};
 use vbs::version::{StaticVersion, StaticVersionType, Version};
@@ -338,6 +342,51 @@ pub async fn get_stake_table_from_sequencer(
     Ok(stake_table)
 }
 
+pub enum GetNodeIdentityFromUrlError {
+    Url(url::ParseError),
+    Reqwest(reqwest::Error),
+    Io(std::io::Error),
+    NoNodeIdentity,
+}
+
+impl From<url::ParseError> for GetNodeIdentityFromUrlError {
+    fn from(err: url::ParseError) -> Self {
+        GetNodeIdentityFromUrlError::Url(err)
+    }
+}
+
+impl From<reqwest::Error> for GetNodeIdentityFromUrlError {
+    fn from(err: reqwest::Error) -> Self {
+        GetNodeIdentityFromUrlError::Reqwest(err)
+    }
+}
+
+impl From<std::io::Error> for GetNodeIdentityFromUrlError {
+    fn from(err: std::io::Error) -> Self {
+        GetNodeIdentityFromUrlError::Io(err)
+    }
+}
+
+pub async fn get_node_identity_from_url(
+    url: url::Url,
+) -> Result<NodeIdentity, GetNodeIdentityFromUrlError> {
+    let client = reqwest::Client::new();
+
+    let completed_url = url.join("v0/status/metrics")?;
+    let request = client.get(completed_url).build()?;
+    let response = client.execute(request).await?;
+    let response_bytes = response.bytes().await?;
+
+    let buffered_response = std::io::BufReader::new(&*response_bytes);
+    let scrape = prometheus_parse::Scrape::parse(buffered_response.lines())?;
+
+    if let Some(node_identity) = node_identity_from_scrape(scrape) {
+        Ok(node_identity)
+    } else {
+        Err(GetNodeIdentityFromUrlError::NoNodeIdentity)
+    }
+}
+
 /// [stream_leaves_from_hotshot_query_service] retrieves a stream of
 /// [sequencer::Leaf]s from the Hotshot Query Service.  It expects a
 /// [current_block_height] to be provided so that it can determine the starting
@@ -387,6 +436,137 @@ pub async fn stream_leaves_from_hotshot_query_service(
     Ok(leaves_stream)
 }
 
+pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scrape: Scrape) {
+    // Handle General Information Population
+
+    // Determine the key for the "consensus_node_identity_general" sample
+    let node_identity_general_key = scrape
+        .docs
+        .iter()
+        .find(|(_, key)| key == &"node_identity_general")
+        .map(|(key, _)| key);
+
+    if let Some(node_identity_general_key) = node_identity_general_key {
+        let node_identity_general_sample = scrape
+            .samples
+            .iter()
+            .find(|sample| &sample.metric == node_identity_general_key);
+
+        if let Some(node_identity_general_sample) = node_identity_general_sample {
+            node_identity.name = node_identity_general_sample
+                .labels
+                .get("name")
+                .map(|s| s.into());
+            node_identity.company = node_identity_general_sample
+                .labels
+                .get("company_name")
+                .map(|s| s.into());
+            node_identity.network_type = node_identity_general_sample
+                .labels
+                .get("network_type")
+                .map(|s| s.into());
+            node_identity.node_type = node_identity_general_sample
+                .labels
+                .get("node_type")
+                .map(|s| s.into());
+            node_identity.operating_system = node_identity_general_sample
+                .labels
+                .get("operating_system")
+                .map(|s| s.into());
+
+            // node_identity.wallet_address = node_identity_general.labels.get("wallet").map(|s| s.into());
+        }
+    }
+
+    let node_identity_location_key = scrape
+        .docs
+        .iter()
+        .find(|(_, key)| key == &"node_identity_location")
+        .map(|(key, _)| key);
+    if let Some(node_identity_location_key) = node_identity_location_key {
+        let node_identity_location_sample = scrape
+            .samples
+            .iter()
+            .find(|sample| &sample.metric == node_identity_location_key);
+
+        // We either have an existing location, or we'd potentially like to create
+        // one.
+
+        if let Some(node_identity_location_sample) = node_identity_location_sample {
+            let mut location = node_identity
+                .location
+                .take()
+                .unwrap_or(LocationDetails::new(None, None));
+            location.country = node_identity_location_sample
+                .labels
+                .get("country")
+                .map(|s| s.into());
+
+            let latitude = node_identity_location_sample
+                .labels
+                .get("latitude")
+                .map(|s| s.parse::<f64>());
+            let longitude = node_identity_location_sample
+                .labels
+                .get("latitude")
+                .map(|s| s.parse::<f64>());
+
+            if let (Some(Ok(latitude)), Some(Ok(longitude))) = (latitude, longitude) {
+                location.coords = Some((latitude, longitude));
+            }
+
+            // Are there any details populated?
+            if location.country.is_some() || location.coords.is_some() {
+                node_identity.location = Some(location);
+            } else {
+                node_identity.location = None;
+            }
+        }
+    }
+}
+
+pub fn node_identity_from_scrape(scrape: Scrape) -> Option<NodeIdentity> {
+    let node_key = scrape
+        .docs
+        .iter()
+        .find(|(_, key)| key == &"node")
+        .map(|(key, _)| key);
+
+    let node_key = node_key?;
+
+    let node_sample = scrape
+        .samples
+        .iter()
+        .find(|sample| &sample.metric == node_key);
+
+    let node_sample = node_sample?;
+
+    let public_key_string = node_sample.labels.get("key")?;
+
+    //  create the Tagged Base 64 Public Key representation
+    let tagged_base64 =
+        if let Ok(tagged_base64) = tagged_base64::TaggedBase64::parse(public_key_string) {
+            tagged_base64
+        } else {
+            return None;
+        };
+
+    // Now we can take those bytes and we can create a Public Key from them.
+    let public_key = match BLSPubKey::from_bytes(tagged_base64.value().as_ref()) {
+        Ok(public_key) => public_key,
+        Err(err) => {
+            // We couldn't parse the public key, so we can't create a NodeIdentity.
+            tracing::info!("parsing public key failed: {}", err);
+            return None;
+        }
+    };
+
+    let mut node_identity = NodeIdentity::from_public_key(public_key);
+    populate_node_identity_from_scrape(&mut node_identity, scrape);
+
+    Some(node_identity)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
@@ -409,7 +589,10 @@ mod tests {
         channel::mpsc::{self, Sender},
         SinkExt, StreamExt,
     };
-    use std::sync::Arc;
+    use std::{
+        io::{BufRead, BufReader},
+        sync::Arc,
+    };
     use tide_disco::App;
 
     struct TestState(Sender<InternalClientMessage>);
@@ -531,5 +714,199 @@ mod tests {
         });
 
         let _app_serve_result = app.serve("0.0.0.0:9000", STATIC_VER_0_1).await;
+    }
+
+    fn example_prometheus_output() -> &'static str {
+        "# HELP consensus_cdn_num_failed_messages num_failed_messages
+# TYPE consensus_cdn_num_failed_messages counter
+consensus_cdn_num_failed_messages 0
+# HELP consensus_current_view current_view
+# TYPE consensus_current_view gauge
+consensus_current_view 7
+# HELP consensus_invalid_qc invalid_qc
+# TYPE consensus_invalid_qc gauge
+consensus_invalid_qc 0
+# HELP consensus_last_decided_time last_decided_time
+# TYPE consensus_last_decided_time gauge
+consensus_last_decided_time 1720537017
+# HELP consensus_last_decided_view last_decided_view
+# TYPE consensus_last_decided_view gauge
+consensus_last_decided_view 4
+# HELP consensus_last_synced_block_height last_synced_block_height
+# TYPE consensus_last_synced_block_height gauge
+consensus_last_synced_block_height 4
+# HELP consensus_libp2p_num_connected_peers num_connected_peers
+# TYPE consensus_libp2p_num_connected_peers gauge
+consensus_libp2p_num_connected_peers 4
+# HELP consensus_libp2p_num_failed_messages num_failed_messages
+# TYPE consensus_libp2p_num_failed_messages counter
+consensus_libp2p_num_failed_messages 0
+# HELP consensus_node node
+# TYPE consensus_node gauge
+consensus_node{key=\"BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U\"} 1
+# HELP consensus_node_identity_general node_identity_general
+# TYPE consensus_node_identity_general gauge
+consensus_node_identity_general{company_name=\"Espresso Systems\",name=\"sequencer0\",network_type=\"local\",node_type=\"espresso-sequencer 0.1\",operating_system=\"Linux 5.15.153.1\",wallet=\"0x00000000000000000000000000000000\"} 1
+# HELP consensus_node_identity_location node_identity_location
+# TYPE consensus_node_identity_location gauge
+consensus_node_identity_location{country=\"US\",latitude=\"-40.7128\",longitude=\"-74.0060\"} 1
+# HELP consensus_node_index node_index
+# TYPE consensus_node_index gauge
+consensus_node_index 4
+# HELP consensus_number_of_empty_blocks_proposed number_of_empty_blocks_proposed
+# TYPE consensus_number_of_empty_blocks_proposed counter
+consensus_number_of_empty_blocks_proposed 1
+# HELP consensus_number_of_timeouts number_of_timeouts
+# TYPE consensus_number_of_timeouts counter
+consensus_number_of_timeouts 0
+# HELP consensus_number_of_timeouts_as_leader number_of_timeouts_as_leader
+# TYPE consensus_number_of_timeouts_as_leader counter
+consensus_number_of_timeouts_as_leader 0
+# HELP consensus_number_of_views_per_decide_event number_of_views_per_decide_event
+# TYPE consensus_number_of_views_per_decide_event histogram
+consensus_number_of_views_per_decide_event_bucket{le=\"0.005\"} 0
+consensus_number_of_views_per_decide_event_bucket{le=\"0.01\"} 0
+consensus_number_of_views_per_decide_event_bucket{le=\"0.025\"} 0
+consensus_number_of_views_per_decide_event_bucket{le=\"0.05\"} 0
+consensus_number_of_views_per_decide_event_bucket{le=\"0.1\"} 0
+consensus_number_of_views_per_decide_event_bucket{le=\"0.25\"} 0
+consensus_number_of_views_per_decide_event_bucket{le=\"0.5\"} 0
+consensus_number_of_views_per_decide_event_bucket{le=\"1\"} 0
+consensus_number_of_views_per_decide_event_bucket{le=\"2.5\"} 0
+consensus_number_of_views_per_decide_event_bucket{le=\"5\"} 4
+consensus_number_of_views_per_decide_event_bucket{le=\"10\"} 4
+consensus_number_of_views_per_decide_event_bucket{le=\"+Inf\"} 4
+consensus_number_of_views_per_decide_event_sum 12
+consensus_number_of_views_per_decide_event_count 4
+# HELP consensus_number_of_views_since_last_decide number_of_views_since_last_decide
+# TYPE consensus_number_of_views_since_last_decide gauge
+consensus_number_of_views_since_last_decide 4
+# HELP consensus_outstanding_transactions outstanding_transactions
+# TYPE consensus_outstanding_transactions gauge
+consensus_outstanding_transactions 0
+# HELP consensus_outstanding_transactions_memory_size outstanding_transactions_memory_size
+# TYPE consensus_outstanding_transactions_memory_size gauge
+consensus_outstanding_transactions_memory_size 0
+# HELP consensus_version version
+# TYPE consensus_version gauge
+consensus_version{desc=\"20240701-15-gbd0957fd-dirty\",rev=\"bd0957fddad19caab010dc59e5a92bc1c95cbc07\",timestamp=\"1980-01-01T00:00:00.000000000Z\"} 1
+# HELP consensus_view_duration_as_leader view_duration_as_leader
+# TYPE consensus_view_duration_as_leader histogram
+consensus_view_duration_as_leader_bucket{le=\"0.005\"} 0
+consensus_view_duration_as_leader_bucket{le=\"0.01\"} 0
+consensus_view_duration_as_leader_bucket{le=\"0.025\"} 0
+consensus_view_duration_as_leader_bucket{le=\"0.05\"} 0
+consensus_view_duration_as_leader_bucket{le=\"0.1\"} 0
+consensus_view_duration_as_leader_bucket{le=\"0.25\"} 0
+consensus_view_duration_as_leader_bucket{le=\"0.5\"} 0
+consensus_view_duration_as_leader_bucket{le=\"1\"} 0
+consensus_view_duration_as_leader_bucket{le=\"2.5\"} 1
+consensus_view_duration_as_leader_bucket{le=\"5\"} 1
+consensus_view_duration_as_leader_bucket{le=\"10\"} 1
+consensus_view_duration_as_leader_bucket{le=\"+Inf\"} 1
+consensus_view_duration_as_leader_sum 2
+consensus_view_duration_as_leader_count 1"
+    }
+
+    #[test]
+    fn test_prometheus_scraping_example() {
+        let example_input = example_prometheus_output();
+
+        let buffered_reader = BufReader::new(example_input.as_bytes());
+        let lines = buffered_reader.lines();
+
+        let scrape_result = prometheus_parse::Scrape::parse(lines);
+
+        assert!(scrape_result.is_ok());
+        let scrape = scrape_result.unwrap();
+
+        let node_identity_general_key = scrape
+            .docs
+            .iter()
+            .find(|(_, key)| key == &"node_identity_general")
+            .map(|(key, _)| key);
+        let node_identity_location_key = scrape
+            .docs
+            .iter()
+            .find(|(_, key)| key == &"node_identity_location")
+            .map(|(key, _)| key);
+
+        assert!(node_identity_general_key.is_some());
+        assert!(node_identity_location_key.is_some());
+
+        let node_identity_general_key = node_identity_general_key.unwrap();
+        let node_identity_location_key = node_identity_location_key.unwrap();
+
+        // Let's look for the general_info
+        let node_identity_general = scrape
+            .samples
+            .iter()
+            .find(|sample| &sample.metric == node_identity_general_key);
+
+        let node_identity_location = scrape
+            .samples
+            .iter()
+            .find(|sample| &sample.metric == node_identity_location_key);
+
+        assert!(node_identity_general.is_some());
+        assert!(node_identity_location.is_some());
+
+        let node_identity_general = node_identity_general.unwrap();
+        let node_identity_location = node_identity_location.unwrap();
+
+        assert_eq!(
+            node_identity_general.labels.get("company_name"),
+            Some("Espresso Systems")
+        );
+        assert_eq!(node_identity_general.labels.get("name"), Some("sequencer0"));
+        assert_eq!(
+            node_identity_general.labels.get("network_type"),
+            Some("local")
+        );
+        assert_eq!(
+            node_identity_general.labels.get("node_type"),
+            Some("espresso-sequencer 0.1")
+        );
+        assert_eq!(
+            node_identity_general.labels.get("node_type"),
+            Some("espresso-sequencer 0.1")
+        );
+        assert_eq!(
+            node_identity_general.labels.get("operating_system"),
+            Some("Linux 5.15.153.1")
+        );
+        assert_eq!(
+            node_identity_general.labels.get("wallet"),
+            Some("0x00000000000000000000000000000000")
+        );
+
+        assert_eq!(node_identity_location.labels.get("country"), Some("US"));
+        assert_eq!(
+            node_identity_location.labels.get("latitude"),
+            Some("-40.7128")
+        );
+        assert_eq!(
+            node_identity_location.labels.get("longitude"),
+            Some("-74.0060")
+        );
+
+        print!("{:?}", scrape);
+    }
+
+    #[test]
+    fn test_node_identity_from_scrape() {
+        let example_input = example_prometheus_output();
+
+        let buffered_reader = BufReader::new(example_input.as_bytes());
+        let lines = buffered_reader.lines();
+
+        let scrape_result = prometheus_parse::Scrape::parse(lines);
+
+        assert!(scrape_result.is_ok());
+        let scrape = scrape_result.unwrap();
+
+        let node_identity = super::node_identity_from_scrape(scrape);
+
+        assert!(node_identity.is_some());
     }
 }

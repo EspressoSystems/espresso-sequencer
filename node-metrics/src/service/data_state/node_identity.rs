@@ -8,15 +8,15 @@ use surf_disco::Url;
 /// in the network.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct NodeIdentity {
-    public_key: BLSPubKey,
-    name: Option<String>,
-    wallet_address: Option<FeeAccount>,
-    public_url: Option<Url>,
-    company: Option<String>,
-    location: Option<LocationDetails>,
-    operating_system: Option<String>,
-    node_type: Option<String>,
-    network_type: Option<String>,
+    pub(crate) public_key: BLSPubKey,
+    pub(crate) name: Option<String>,
+    pub(crate) wallet_address: Option<FeeAccount>,
+    pub(crate) public_url: Option<Url>,
+    pub(crate) company: Option<String>,
+    pub(crate) location: Option<LocationDetails>,
+    pub(crate) operating_system: Option<String>,
+    pub(crate) node_type: Option<String>,
+    pub(crate) network_type: Option<String>,
 }
 
 impl NodeIdentity {
@@ -112,7 +112,10 @@ pub mod tests {
             Some(Default::default()),
             Some("https://espressosys.com/".parse().unwrap()),
             Some("company".to_string()),
-            Some(LocationDetails::new((0.0, 0.0), "US".to_string())),
+            Some(LocationDetails::new(
+                Some((0.0, 0.0)),
+                Some("US".to_string()),
+            )),
             Some("Windows 11".to_string()),
             Some("espresso".to_string()),
             Some("residential".to_string()),
@@ -203,7 +206,10 @@ pub mod tests {
 
         assert_eq!(
             location,
-            Some(&LocationDetails::new((0.0, 0.0), "US".to_string()))
+            Some(&LocationDetails::new(
+                Some((0.0, 0.0)),
+                Some("US".to_string())
+            ))
         );
     }
 
