@@ -26,9 +26,10 @@ use vbs::version::Version;
 
 use super::{fee_info::FeeError, header::ProposalValidationError};
 use crate::{
-    BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header,
-    Leaf, NodeState, NsTableValidationError, PayloadByteLen, ResolvableChainConfig, SeqTypes,
-    UpgradeType, ValidatedState, BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT,
+    v0_3::IterableFeeInfo, BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeAmount, FeeInfo,
+    FeeMerkleTree, Header, Leaf, NodeState, NsTableValidationError, PayloadByteLen,
+    ResolvableChainConfig, SeqTypes, UpgradeType, ValidatedState, BLOCK_MERKLE_TREE_HEIGHT,
+    FEE_MERKLE_TREE_HEIGHT,
 };
 
 /// Possible builder validation failures
@@ -223,11 +224,18 @@ pub fn validate_proposal(
         });
     }
 
-    if proposal.fee_info().amount() < expected_chain_config.base_fee * block_size {
+    // Validate that sum of fees is at least `base_fee * blocksize`.
+    // TODO this should be updated to `base_fee * bundle_size` when we have
+    // VID per bundle or namespace.
+    let Some(amount) = proposal.fee_info().amount() else {
+        return Err(ProposalValidationError::SomeFeeAmountOutOfRange);
+    };
+
+    if amount < expected_chain_config.base_fee * block_size {
         return Err(ProposalValidationError::InsufficientFee {
             max_block_size: expected_chain_config.max_block_size,
             base_fee: expected_chain_config.base_fee,
-            proposed_fee: proposal.fee_info().amount(),
+            proposed_fee: amount,
         });
     }
 
@@ -277,32 +285,38 @@ impl From<MerkleTreeError> for FeeError {
 fn charge_fee(
     state: &mut ValidatedState,
     delta: &mut Delta,
-    fee_info: FeeInfo,
+    fee_info: Vec<FeeInfo>,
     recipient: FeeAccount,
 ) -> Result<(), FeeError> {
-    state.charge_fee(fee_info, recipient)?;
-    delta.fees_delta.extend([fee_info.account, recipient]);
+    for fee_info in fee_info {
+        state.charge_fee(fee_info, recipient)?;
+        delta.fees_delta.extend([fee_info.account, recipient]);
+    }
     Ok(())
 }
 
-/// Validate builder account by verifying signature
+/// Validate builder accounts by verifying signatures. All fees are
+/// verified against signature by index.
 fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidationError> {
-    // Beware of Malice!
-    let signature = proposed_header
-        .builder_signature()
-        .ok_or(BuilderValidationError::SignatureNotFound)?;
-    let fee_amount = proposed_header.fee_info().amount().as_u64().ok_or(
-        BuilderValidationError::FeeAmountOutOfRange(proposed_header.fee_info().amount()),
-    )?;
+    // TODO since we are iterating, should we include account/amount in errors?
+    for (fee_info, signature) in proposed_header
+        .fee_info()
+        .iter()
+        .zip(proposed_header.builder_signature())
+    {
+        // check that `amount` fits in a u64
+        fee_info
+            .amount
+            .as_u64()
+            .ok_or(BuilderValidationError::FeeAmountOutOfRange(fee_info.amount))?;
 
-    // verify signature
-    if !proposed_header.fee_info().account.validate_fee_signature(
-        &signature,
-        fee_amount,
-        proposed_header.metadata(),
-        &proposed_header.payload_commitment(),
-    ) {
-        return Err(BuilderValidationError::InvalidBuilderSignature);
+        // verify signature
+        fee_info
+            .account
+            // TODO remove metadata, payload from trait `validate_fee_signature`
+            .validate_fee_signature(&signature, fee_info.amount.as_u64().unwrap())
+            .then_some(())
+            .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
     }
 
     Ok(())
@@ -342,12 +356,10 @@ impl ValidatedState {
         // fee and the recipient account which is receiving it, plus any counts receiving deposits
         // in this block.
         let missing_accounts = self.forgotten_accounts(
-            [
-                proposed_header.fee_info().account,
-                chain_config.fee_recipient,
-            ]
-            .into_iter()
-            .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
+            [chain_config.fee_recipient]
+                .into_iter()
+                .chain(proposed_header.fee_info().accounts())
+                .chain(l1_deposits.accounts()),
         );
 
         let parent_height = parent_leaf.height();
@@ -806,7 +818,7 @@ mod test {
             ProposalValidationError::InsufficientFee {
                 max_block_size: instance.chain_config.max_block_size,
                 base_fee: instance.chain_config.base_fee,
-                proposed_fee: header.fee_info().amount()
+                proposed_fee: header.fee_info().amount().unwrap()
             },
             err
         );

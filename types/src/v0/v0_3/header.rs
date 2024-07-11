@@ -9,7 +9,6 @@ use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{utils::BuilderCommitment, vid::VidCommitment};
 use serde::{Deserialize, Serialize};
 
-// TODO : marketplace header
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
 pub struct Header {
     pub(crate) chain_config: ResolvableChainConfig,
@@ -22,8 +21,8 @@ pub struct Header {
     pub(crate) ns_table: NsTable,
     pub(crate) block_merkle_tree_root: BlockMerkleCommitment,
     pub(crate) fee_merkle_tree_root: FeeMerkleCommitment,
-    pub(crate) fee_info: FeeInfo,
-    pub(crate) builder_signature: Option<BuilderSignature>,
+    pub(crate) fee_info: Vec<FeeInfo>,
+    pub(crate) builder_signature: Vec<BuilderSignature>,
 }
 
 impl Committable for Header {
@@ -50,11 +49,11 @@ impl Committable for Header {
             .field("ns_table", self.ns_table.commit())
             .var_size_field("block_merkle_tree_root", &bmt_bytes)
             .var_size_field("fee_merkle_tree_root", &fmt_bytes)
-            .field("fee_info", self.fee_info.commit())
+            .var_size_field("fee_info", &bincode::serialize(&self.fee_info).unwrap())
             .finalize()
     }
 
     fn tag() -> String {
-        "BLOCK".into()
+        crate::v0_1::Header::tag()
     }
 }
