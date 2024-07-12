@@ -2,13 +2,11 @@ use std::collections::BTreeMap;
 
 use std::sync::Arc;
 
-use hotshot_types::HotShotConfig;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 use crate::{
-    v0::traits::StateCatchup, ChainConfig, GenesisHeader, L1BlockInfo, PubKey, Timestamp,
-    ValidatedState,
+    v0::traits::StateCatchup, ChainConfig, GenesisHeader, L1BlockInfo, Timestamp, ValidatedState,
 };
 use vbs::version::Version;
 
@@ -67,38 +65,6 @@ pub struct Upgrade {
     pub mode: UpgradeMode,
     /// The type of the upgrade.
     pub upgrade_type: UpgradeType,
-}
-
-impl Upgrade {
-    pub fn set_hotshot_config(&self, config: &mut HotShotConfig<PubKey>) {
-        match &self.mode {
-            UpgradeMode::View(v) => {
-                config.start_proposing_view = v.start_proposing_view;
-                config.stop_proposing_view = v.stop_proposing_view;
-                config.start_voting_view = v.start_voting_view.unwrap_or(0);
-                config.stop_voting_view = v.stop_voting_view.unwrap_or(u64::MAX);
-                config.start_proposing_time = 0;
-                config.stop_proposing_time = u64::MAX;
-                config.start_voting_time = 0;
-                config.stop_voting_time = u64::MAX;
-            }
-            UpgradeMode::Time(t) => {
-                config.start_proposing_time = t.start_proposing_time.unix_timestamp();
-                config.stop_proposing_time = t.stop_proposing_time.unix_timestamp();
-                config.start_voting_time = t.start_voting_time.unwrap_or_default().unix_timestamp();
-                // this should not panic because Timestamp::max() constructs the maximum possible Unix timestamp
-                // using i64::MAX
-                config.stop_voting_time = t
-                    .stop_voting_time
-                    .unwrap_or(Timestamp::max().expect("overflow"))
-                    .unix_timestamp();
-                config.start_proposing_view = 0;
-                config.stop_proposing_view = u64::MAX;
-                config.start_voting_view = 0;
-                config.stop_voting_view = u64::MAX;
-            }
-        }
-    }
 }
 
 /// Represents the immutable state of a node.

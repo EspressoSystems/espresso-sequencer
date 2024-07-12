@@ -1,10 +1,14 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use hotshot_types::traits::{node_implementation::NodeType, states::InstanceState};
+use hotshot_types::{
+    traits::{node_implementation::NodeType, states::InstanceState},
+    HotShotConfig,
+};
 use vbs::version::{StaticVersionType, Version};
 
 use crate::{
-    v0::traits::StateCatchup, ChainConfig, L1Client, NodeState, SeqTypes, Upgrade, ValidatedState,
+    v0::traits::StateCatchup, ChainConfig, L1Client, NodeState, PubKey, SeqTypes, Timestamp,
+    Upgrade, UpgradeMode, ValidatedState,
 };
 
 impl NodeState {
@@ -76,6 +80,38 @@ impl Default for NodeState {
 }
 
 impl InstanceState for NodeState {}
+
+impl Upgrade {
+    pub fn set_hotshot_config_parameters(&self, config: &mut HotShotConfig<PubKey>) {
+        match &self.mode {
+            UpgradeMode::View(v) => {
+                config.start_proposing_view = v.start_proposing_view;
+                config.stop_proposing_view = v.stop_proposing_view;
+                config.start_voting_view = v.start_voting_view.unwrap_or(0);
+                config.stop_voting_view = v.stop_voting_view.unwrap_or(u64::MAX);
+                config.start_proposing_time = 0;
+                config.stop_proposing_time = u64::MAX;
+                config.start_voting_time = 0;
+                config.stop_voting_time = u64::MAX;
+            }
+            UpgradeMode::Time(t) => {
+                config.start_proposing_time = t.start_proposing_time.unix_timestamp();
+                config.stop_proposing_time = t.stop_proposing_time.unix_timestamp();
+                config.start_voting_time = t.start_voting_time.unwrap_or_default().unix_timestamp();
+                // this should not panic because Timestamp::max() constructs the maximum possible Unix timestamp
+                // using i64::MAX
+                config.stop_voting_time = t
+                    .stop_voting_time
+                    .unwrap_or(Timestamp::max().expect("overflow"))
+                    .unix_timestamp();
+                config.start_proposing_view = 0;
+                config.stop_proposing_view = u64::MAX;
+                config.start_voting_view = 0;
+                config.stop_voting_view = u64::MAX;
+            }
+        }
+    }
+}
 
 #[cfg(any(test, feature = "testing"))]
 pub mod mock {
