@@ -11,7 +11,7 @@ use vbs::version::Version;
 use super::l1::L1Client;
 
 /// Represents the specific type of upgrade.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 #[serde(rename_all = "snake_case")]
 pub enum UpgradeType {
@@ -21,27 +21,29 @@ pub enum UpgradeType {
 }
 
 /// Represents the  upgrade config including the type of upgrade and upgrade parameters for hotshot config.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Upgrade {
-    /// The view at which the upgrade is proposed.
-    ///
-    /// Note: Voting for the proposal begins before the upgrade is formally proposed.
-    /// In our implementation, `start_proposing_view` is set to `1`` for all upgrades,
-    /// so if an upgrade is planned then the voting starts as soon as node is started.
-    #[serde(rename = "view")]
+    pub start_voting_time: Option<u64>,
+    pub stop_voting_time: Option<u64>,
+    pub start_proposing_time: u64,
+    pub stop_proposing_time: u64,
+    pub start_voting_view: Option<u64>,
+    pub stop_voting_view: Option<u64>,
     pub start_proposing_view: u64,
-
-    /// The time window during which the upgrade can be proposed.
-    ///
-    /// This parameter is used for setting the `stop_propose_window_view`.
-    /// `stop_proposing_view` is calculated as `start_proposing_view + propose_window`.
-    pub propose_window: u64,
-
+    pub stop_proposing_view: u64,
+    // View or time based
+    pub mode: UpgradeMode,
     /// The specific type of upgrade configuration.
     ///
     /// Currently, we only support chain configuration upgrades (`upgrade.chain_config` in genesis toml file).
     #[serde(flatten)]
     pub upgrade_type: UpgradeType,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub enum UpgradeMode {
+    View,
+    Time,
 }
 
 /// Represents the immutable state of a node.
@@ -71,6 +73,6 @@ pub struct NodeState {
     /// This version is checked to determine if an upgrade is planned,
     /// and which version variant for versioned types  
     /// to use in functions such as genesis.
-    /// (example: genesis returns V2 Header if version is 0.2) 
+    /// (example: genesis returns V2 Header if version is 0.2)
     pub current_version: Version,
 }

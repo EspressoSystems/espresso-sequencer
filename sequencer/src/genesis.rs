@@ -51,13 +51,46 @@ mod upgrade_serialization {
 
     use std::{collections::BTreeMap, fmt};
 
-    use espresso_types::{Upgrade, UpgradeType};
+    use espresso_types::{v0_1::UpgradeMode, Upgrade, UpgradeType};
     use serde::{
         de::{SeqAccess, Visitor},
         ser::SerializeSeq,
-        Deserialize, Deserializer, Serializer,
+        Deserialize, Deserializer, Serialize, Serializer,
     };
     use vbs::version::Version;
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct UpgradeTimeParams {
+        pub start_proposing_time: u64,
+        pub stop_proposing_time: u64,
+        pub start_voting_time: Option<u64>,
+        pub stop_voting_time: Option<u64>,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct UpgradeViewParams {
+        pub start_proposing_view: u64,
+        pub stop_proposing_view: u64,
+        pub start_voting_view: Option<u64>,
+        pub stop_voting_view: Option<u64>,
+    }
+
+    /// Represents the specific type of upgrade.
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[serde(untagged)]
+    pub enum UpgradeParameters {
+        Time(UpgradeTimeParams),
+        View(UpgradeViewParams),
+    }
+
+    #[derive(Deserialize)]
+    struct UpgradeFields {
+        version: String,
+        #[serde(flatten)]
+        params: UpgradeParameters,
+        #[serde(flatten)]
+        upgrade_type: UpgradeType,
+    }
 
     pub fn serialize<S>(map: &BTreeMap<Version, Upgrade>, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -65,12 +98,24 @@ mod upgrade_serialization {
     {
         let mut seq = serializer.serialize_seq(Some(map.len()))?;
         for (version, upgrade) in map {
-            seq.serialize_element(&(
-                version.to_string(),
-                upgrade.start_proposing_view,
-                upgrade.propose_window,
-                upgrade.upgrade_type.clone(),
-            ))?;
+            match upgrade.mode {
+                UpgradeMode::View => seq.serialize_element(&(
+                    version.to_string(),
+                    upgrade.start_proposing_view,
+                    upgrade.stop_proposing_view,
+                    upgrade.start_voting_view,
+                    upgrade.stop_voting_view,
+                    upgrade.upgrade_type.clone(),
+                ))?,
+                UpgradeMode::Time => seq.serialize_element(&(
+                    version.to_string(),
+                    upgrade.start_proposing_time,
+                    upgrade.stop_proposing_time,
+                    upgrade.start_voting_time,
+                    upgrade.stop_voting_time,
+                    upgrade.upgrade_type.clone(),
+                ))?,
+            }
         }
         seq.end()
     }
@@ -94,15 +139,6 @@ mod upgrade_serialization {
             {
                 let mut map = BTreeMap::new();
 
-                #[derive(Deserialize)]
-                struct UpgradeFields {
-                    version: String,
-                    view: u64,
-                    propose_window: u64,
-                    #[serde(flatten)]
-                    upgrade_type: UpgradeType,
-                }
-
                 while let Some(fields) = seq.next_element::<UpgradeFields>()? {
                     // add try_from in Version
                     let version: Vec<_> = fields.version.split('.').collect();
@@ -112,14 +148,38 @@ mod upgrade_serialization {
                         minor: version[1].parse().expect("invalid version"),
                     };
 
-                    map.insert(
-                        version,
-                        Upgrade {
-                            start_proposing_view: fields.view,
-                            propose_window: fields.propose_window,
-                            upgrade_type: fields.upgrade_type,
-                        },
-                    );
+                    match fields.params {
+                        UpgradeParameters::Time(t) => map.insert(
+                            version,
+                            Upgrade {
+                                start_voting_time: t.start_voting_time,
+                                stop_voting_time: t.stop_voting_time,
+                                start_proposing_time: t.start_proposing_time,
+                                stop_proposing_time: t.stop_proposing_time,
+                                start_voting_view: None,
+                                stop_voting_view: None,
+                                start_proposing_view: 0,
+                                stop_proposing_view: u64::MAX,
+                                mode: UpgradeMode::Time,
+                                upgrade_type: fields.upgrade_type,
+                            },
+                        ),
+                        UpgradeParameters::View(v) => map.insert(
+                            version,
+                            Upgrade {
+                                start_voting_time: None,
+                                stop_voting_time: None,
+                                start_proposing_time: 0,
+                                stop_proposing_time: u64::MAX,
+                                start_voting_view: v.start_voting_view,
+                                stop_voting_view: v.stop_voting_view,
+                                start_proposing_view: v.start_proposing_view,
+                                stop_proposing_view: v.stop_proposing_view,
+                                mode: UpgradeMode::View,
+                                upgrade_type: fields.upgrade_type,
+                            },
+                        ),
+                    };
                 }
 
                 Ok(map)
@@ -148,7 +208,7 @@ impl Genesis {
 
 #[cfg(test)]
 mod test {
-    use espresso_types::{L1BlockInfo, Timestamp};
+    use espresso_types::{v0_1::UpgradeMode, L1BlockInfo, Timestamp, UpgradeType};
     use ethers::prelude::{Address, H160, H256};
     use sequencer_utils::ser::FromStringOrInteger;
     use toml::toml;
@@ -179,18 +239,6 @@ mod test {
             number = 64
             timestamp = "0x123def"
             hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
-
-            [[upgrade]]
-            version = "1.0"
-            view = 1
-            propose_window = 10
-
-            [upgrade.chain_config]
-            chain_id = 12345
-            max_block_size = 30000
-            base_fee = 1
-            fee_recipient = "0x0000000000000000000000000000000000000000"
-            fee_contract = "0x0000000000000000000000000000000000000000"
         }
         .to_string();
 
@@ -334,5 +382,85 @@ mod test {
                 timestamp: Timestamp::from_integer(1715872828).unwrap(),
             }
         )
+    }
+
+    #[test]
+    fn test_genesis_toml_upgrade() {
+        // without optional fields
+        // with view settings
+        let toml = toml! {
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [accounts]
+            "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f" = 100000
+            "0x0000000000000000000000000000000000000000" = 42
+
+            [l1_finalized]
+            number = 64
+            timestamp = "0x123def"
+            hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 1
+            stop_proposing_view = 10
+
+            [upgrade.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+
+        let (version, genesis_upgrade) = genesis.upgrades.last_key_value().unwrap();
+
+        assert_eq!(*version, Version { major: 0, minor: 2 });
+
+        let upgrade = Upgrade {
+            start_voting_time: None,
+            stop_voting_time: None,
+            start_proposing_time: 0,
+            stop_proposing_time: u64::MAX,
+            start_voting_view: None,
+            stop_voting_view: None,
+            start_proposing_view: 1,
+            stop_proposing_view: 10,
+            mode: UpgradeMode::View,
+            upgrade_type: UpgradeType::ChainConfig {
+                chain_config: genesis.chain_config,
+            },
+        };
+
+        assert_eq!(*genesis_upgrade, upgrade);
+
+        let mut upgrades = BTreeMap::new();
+        upgrades.insert(Version { major: 0, minor: 2 }, upgrade);
+
+        let genesis = Genesis {
+            chain_config: genesis.chain_config,
+            stake_table: genesis.stake_table,
+            accounts: genesis.accounts,
+            l1_finalized: genesis.l1_finalized,
+            header: genesis.header,
+            upgrades,
+        };
+
+        let toml_from_genesis = toml::to_string(&genesis).unwrap();
+        assert_eq!(toml, toml_from_genesis);
     }
 }

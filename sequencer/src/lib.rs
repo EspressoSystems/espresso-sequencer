@@ -204,11 +204,15 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         .upgrades
         .get(&<SeqTypes as NodeType>::Upgrade::VERSION)
     {
-        let view = upgrade.start_proposing_view;
-        config.config.start_proposing_view = view;
-        config.config.stop_proposing_view = view + upgrade.propose_window;
-        config.config.start_voting_view = 1;
-        config.config.stop_voting_view = u64::MAX;
+        config.config.start_proposing_view = upgrade.start_proposing_view;
+        config.config.stop_proposing_view = upgrade.stop_proposing_view;
+        config.config.start_voting_view = upgrade.start_voting_view.unwrap_or(0);
+        config.config.stop_voting_view = upgrade.stop_voting_view.unwrap_or(u64::MAX);
+
+        config.config.start_proposing_time = upgrade.start_proposing_time;
+        config.config.stop_proposing_time = upgrade.stop_proposing_time;
+        config.config.start_voting_time = upgrade.start_voting_time.unwrap_or(0);
+        config.config.stop_voting_time = upgrade.stop_voting_time.unwrap_or(u64::MAX);
     }
 
     // If the `Libp2p` bootstrap nodes were supplied via the command line, override those
@@ -356,7 +360,6 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 pub mod testing {
     use std::{collections::HashMap, time::Duration};
 
-    use api::test_helpers::TestNetworkUpgrades;
     use committable::Committable;
     use espresso_types::{
         eth_signature_key::EthKeyPair,
@@ -423,7 +426,7 @@ pub mod testing {
         l1_url: Url,
         state_relay_url: Option<Url>,
         builder_port: Option<u16>,
-        upgrades: Option<TestNetworkUpgrades>,
+        upgrades: BTreeMap<Version, Upgrade>,
     }
 
     impl<const NUM_NODES: usize> TestConfigBuilder<NUM_NODES> {
@@ -442,21 +445,21 @@ pub mod testing {
             self
         }
 
-        pub fn upgrades(mut self, upgrades: TestNetworkUpgrades) -> Self {
-            self.upgrades = Some(upgrades);
+        pub fn upgrades(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
+            self.upgrades = upgrades;
             self
         }
 
         pub fn build(mut self) -> TestConfig<NUM_NODES> {
-            if let Some(upgrades) = &self.upgrades {
-                self.config.start_proposing_view = upgrades.start_proposing_view;
-                self.config.stop_proposing_view = upgrades.stop_proposing_view;
-                self.config.start_voting_view = upgrades.start_voting_view;
-                self.config.stop_voting_view = upgrades.stop_voting_view;
-                self.config.start_proposing_time = 0;
-                self.config.stop_proposing_time = u64::MAX;
-                self.config.start_voting_time = 0;
-                self.config.stop_voting_time = u64::MAX;
+            if let Some(upgrade) = self.upgrades.get(&<SeqTypes as NodeType>::Upgrade::VERSION) {
+                self.config.start_proposing_view = upgrade.start_proposing_view;
+                self.config.stop_proposing_view = upgrade.stop_proposing_view;
+                self.config.start_voting_view = upgrade.start_voting_view.unwrap_or(0);
+                self.config.stop_voting_view = upgrade.stop_voting_view.unwrap_or(u64::MAX);
+                self.config.start_proposing_time = upgrade.start_proposing_time;
+                self.config.stop_proposing_time = upgrade.stop_proposing_time;
+                self.config.start_voting_time = upgrade.start_voting_time.unwrap_or(0);
+                self.config.stop_voting_time = upgrade.stop_voting_time.unwrap_or(u64::MAX);
             }
 
             TestConfig {
@@ -541,7 +544,7 @@ pub mod testing {
                 l1_url: "http://localhost:8545".parse().unwrap(),
                 state_relay_url: None,
                 builder_port: None,
-                upgrades: None,
+                upgrades: Default::default(),
             }
         }
     }
@@ -555,7 +558,7 @@ pub mod testing {
         l1_url: Url,
         state_relay_url: Option<Url>,
         builder_port: Option<u16>,
-        upgrades: Option<TestNetworkUpgrades>,
+        upgrades: BTreeMap<Version, Upgrade>,
     }
 
     impl<const NUM_NODES: usize> TestConfig<NUM_NODES> {
@@ -579,7 +582,7 @@ pub mod testing {
             self.l1_url.clone()
         }
 
-        pub fn upgrades(&self) -> Option<TestNetworkUpgrades> {
+        pub fn upgrades(&self) -> BTreeMap<Version, Upgrade> {
             self.upgrades.clone()
         }
 

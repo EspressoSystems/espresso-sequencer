@@ -351,7 +351,7 @@ impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: Sequencer
 
 #[cfg(any(test, feature = "testing"))]
 pub mod test_helpers {
-    use std::{collections::BTreeMap, time::Duration};
+    use std::time::Duration;
 
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
@@ -360,7 +360,7 @@ pub mod test_helpers {
     use espresso_types::{
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        NamespaceId, Upgrade, ValidatedState,
+        NamespaceId, ValidatedState,
     };
     use ethers::{prelude::Address, utils::Anvil};
     use futures::{
@@ -378,7 +378,6 @@ pub mod test_helpers {
     use portpicker::pick_unused_port;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
-    use vbs::version::Version;
 
     use super::*;
     use crate::{
@@ -503,15 +502,6 @@ pub mod test_helpers {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct TestNetworkUpgrades {
-        pub upgrades: BTreeMap<Version, Upgrade>,
-        pub start_proposing_view: u64,
-        pub stop_proposing_view: u64,
-        pub start_voting_view: u64,
-        pub stop_voting_view: u64,
-    }
-
     impl<P: PersistenceOptions, const NUM_NODES: usize> TestNetwork<P, { NUM_NODES }> {
         pub async fn new<C: StateCatchup + 'static>(
             cfg: TestNetworkConfig<{ NUM_NODES }, P, C>,
@@ -529,7 +519,7 @@ pub mod test_helpers {
                     .map(|(i, (state, persistence, catchup))| {
                         let opt = cfg.api_config.clone();
                         let cfg = &cfg.network_config;
-                        let upgrades_map = cfg.upgrades().map(|e| e.upgrades).unwrap_or_default();
+                        let upgrades_map = cfg.upgrades();
                         async move {
                             if i == 0 {
                                 opt.serve(
@@ -1049,7 +1039,8 @@ mod test {
     use committable::{Commitment, Committable};
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
     use espresso_types::{
-        mock::MockStateCatchup, FeeAccount, FeeAmount, Header, Upgrade, UpgradeType, ValidatedState,
+        mock::MockStateCatchup, v0_1::UpgradeMode, FeeAccount, FeeAmount, Header, Upgrade,
+        UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1063,14 +1054,14 @@ mod test {
     };
     use hotshot_types::{
         event::LeafInfo,
-        traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
+        traits::{metrics::NoMetrics, node_implementation::{ConsensusTime, NodeType}},
     };
     use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     use portpicker::pick_unused_port;
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork, TestNetworkConfigBuilder, TestNetworkUpgrades,
+        TestNetwork, TestNetworkConfigBuilder,
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     use vbs::version::Version;
@@ -1446,28 +1437,27 @@ mod test {
             base_fee: 1.into(),
             ..Default::default()
         };
-        let mut map = std::collections::BTreeMap::new();
-        let start_proposing_view = 5;
-        let propose_window = 10;
-        map.insert(
-            Version { major: 0, minor: 2 },
+        let mut upgrades = std::collections::BTreeMap::new();
+
+        upgrades.insert(
+            <SeqTypes as NodeType>::Upgrade::VERSION,
             Upgrade {
-                start_proposing_view,
-                propose_window,
+                start_voting_time: None,
+                stop_voting_time: None,
+                start_proposing_time: 0,
+                stop_proposing_time: u64::MAX,
+                start_voting_view: None,
+                stop_voting_view: None,
+                start_proposing_view: 1,
+                stop_proposing_view: 10,
+                mode: UpgradeMode::View,
                 upgrade_type: UpgradeType::ChainConfig {
                     chain_config: chain_config_upgrade,
                 },
             },
         );
 
-        let stop_voting_view = 100;
-        let upgrades = TestNetworkUpgrades {
-            upgrades: map,
-            start_proposing_view,
-            stop_proposing_view: start_proposing_view + propose_window,
-            start_voting_view: 1,
-            stop_voting_view,
-        };
+        let stop_voting_view = u64::MAX;
 
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
