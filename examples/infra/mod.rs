@@ -39,9 +39,7 @@ use hotshot_example_types::{
 use hotshot_orchestrator::{
     self,
     client::{BenchResults, OrchestratorClient, ValidatorArgs},
-    config::{
-        BuilderType, CombinedNetworkConfig, NetworkConfig, NetworkConfigFile, NetworkConfigSource,
-    },
+    config::{BuilderType, NetworkConfig, NetworkConfigFile, NetworkConfigSource},
 };
 use hotshot_testing::block_builder::{
     BuilderTask, RandomBuilderImplementation, SimpleBuilderImplementation,
@@ -801,10 +799,10 @@ where
         .await;
 
         // Create our combined network config
-        let CombinedNetworkConfig { delay_duration }: CombinedNetworkConfig = config
-            .clone()
+        let delay_duration = config
             .combined_network_config
-            .expect("combined network config not specified");
+            .as_ref()
+            .map(|config| config.delay_duration);
 
         // Create our combined network
         let network =

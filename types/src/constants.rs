@@ -17,6 +17,12 @@ pub const COMBINED_NETWORK_MIN_PRIMARY_FAILURES: u64 = 5;
 /// the number of messages to send over the secondary network without delay before re-attempting the (presumed down) primary network
 pub const COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL: u64 = 50;
 
+/// the default delay duration value in milliseconds of sending on the secondary in the combined networks
+pub const COMBINED_NETWORK_DELAY_DURATION: u64 = 5000;
+
+/// The default network data request delay in milliseconds
+pub const REQUEST_DATA_DELAY: u64 = 5000;
+
 /// Default channel size for consensus event sharing
 pub const EVENT_CHANNEL_SIZE: usize = 100_000;
 

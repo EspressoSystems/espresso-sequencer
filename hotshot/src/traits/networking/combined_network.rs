@@ -27,8 +27,8 @@ use hotshot_types::traits::network::{
 use hotshot_types::{
     boxed_sync,
     constants::{
-        COMBINED_NETWORK_CACHE_SIZE, COMBINED_NETWORK_MIN_PRIMARY_FAILURES,
-        COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
+        COMBINED_NETWORK_CACHE_SIZE, COMBINED_NETWORK_DELAY_DURATION,
+        COMBINED_NETWORK_MIN_PRIMARY_FAILURES, COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
     },
     data::ViewNumber,
     traits::{
@@ -89,7 +89,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
     pub fn new(
         primary_network: PushCdnNetwork<TYPES>,
         secondary_network: Libp2pNetwork<TYPES::SignatureKey>,
-        delay_duration: Duration,
+        delay_duration: Option<Duration>,
     ) -> Self {
         // Create networks from the ones passed in
         let networks = Arc::from(UnderlyingCombinedNetworks(
@@ -104,7 +104,9 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
             ))),
             primary_fail_counter: Arc::new(AtomicU64::new(0)),
             primary_down: Arc::new(AtomicBool::new(false)),
-            delay_duration: Arc::new(RwLock::new(delay_duration)),
+            delay_duration: Arc::new(RwLock::new(
+                delay_duration.unwrap_or(Duration::from_millis(COMBINED_NETWORK_DELAY_DURATION)),
+            )),
             delayed_tasks_channels: Arc::default(),
             no_delay_counter: Arc::new(AtomicU64::new(0)),
         }
