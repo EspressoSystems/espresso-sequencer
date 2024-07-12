@@ -140,6 +140,12 @@ mod upgrade_serialization {
                             ))
                         }
                         (None, Some(v)) => {
+                            if v.start_proposing_view < v.stop_proposing_view {
+                                return Err(de::Error::custom(
+                                    "start_proposing_view is less than stop_proposing_view",
+                                ));
+                            }
+
                             map.insert(
                                 version,
                                 Upgrade {
@@ -149,6 +155,14 @@ mod upgrade_serialization {
                             );
                         }
                         (Some(t), None) => {
+                            if t.start_proposing_time.unix_timestamp()
+                                < t.stop_proposing_time.unix_timestamp()
+                            {
+                                return Err(de::Error::custom(
+                                    "start_proposing_time is less than stop_proposing_time",
+                                ));
+                            }
+
                             map.insert(
                                 version,
                                 Upgrade {
