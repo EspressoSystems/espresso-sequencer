@@ -288,7 +288,7 @@ async fn main() {
         #[cfg(feature = "benchmarking")]
         if !benchmark_finish && (num_block as usize) >= opt.benchmark_end_block.into() {
             let block_range = format!("{}~{}", opt.benchmark_start_block, opt.benchmark_end_block,);
-            let transaction_size_range = format!("{}~{}", opt.min_size, opt.max_size,);
+            let transaction_size_range_in_bytes = format!("{}~{}", opt.min_size, opt.max_size,);
             let transactions_per_batch_range = format!(
                 "{}~{}",
                 (opt.jobs as u64 * opt.min_batch_size),
@@ -315,7 +315,7 @@ async fn main() {
                 "total_nodes",
                 "da_committee_size",
                 "block_range",
-                "transaction_size_range",
+                "transaction_size_range_in_bytes",
                 "transaction_per_batch_range",
                 "pub_or_priv_pool",
                 "avg_latency_in_sec",
@@ -323,14 +323,14 @@ async fn main() {
                 "maximum_latency_in_sec",
                 "avg_throughput_bytes_per_sec",
                 "total_transactions",
-                "avg_transaction_size_bytes",
+                "avg_transaction_size_in_bytes",
                 "total_time_elapsed_in_sec",
             ]);
             let _ = wtr.write_record(&[
                 opt.num_nodes.to_string(),
                 opt.num_nodes.to_string(),
                 block_range,
-                transaction_size_range,
+                transaction_size_range_in_bytes,
                 transactions_per_batch_range,
                 pub_or_priv_pool.to_string(),
                 benchmark_average_latency.as_secs().to_string(),
