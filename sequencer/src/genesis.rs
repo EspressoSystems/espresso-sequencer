@@ -83,7 +83,7 @@ mod upgrade_serialization {
         View(UpgradeViewParams),
     }
 
-    #[derive(Deserialize)]
+    #[derive(Serialize, Deserialize)]
     struct UpgradeFields {
         version: String,
         #[serde(flatten)]
@@ -99,22 +99,26 @@ mod upgrade_serialization {
         let mut seq = serializer.serialize_seq(Some(map.len()))?;
         for (version, upgrade) in map {
             match upgrade.mode {
-                UpgradeMode::View => seq.serialize_element(&(
-                    version.to_string(),
-                    upgrade.start_proposing_view,
-                    upgrade.stop_proposing_view,
-                    upgrade.start_voting_view,
-                    upgrade.stop_voting_view,
-                    upgrade.upgrade_type.clone(),
-                ))?,
-                UpgradeMode::Time => seq.serialize_element(&(
-                    version.to_string(),
-                    upgrade.start_proposing_time,
-                    upgrade.stop_proposing_time,
-                    upgrade.start_voting_time,
-                    upgrade.stop_voting_time,
-                    upgrade.upgrade_type.clone(),
-                ))?,
+                UpgradeMode::View => seq.serialize_element(&UpgradeFields {
+                    version: version.to_string(),
+                    params: UpgradeParameters::View(UpgradeViewParams {
+                        start_proposing_view: upgrade.start_proposing_view,
+                        stop_proposing_view: upgrade.stop_proposing_view,
+                        start_voting_view: upgrade.start_voting_view,
+                        stop_voting_view: upgrade.stop_voting_view,
+                    }),
+                    upgrade_type: upgrade.upgrade_type.clone(),
+                })?,
+                UpgradeMode::Time => seq.serialize_element(&UpgradeFields {
+                    version: version.to_string(),
+                    params: UpgradeParameters::Time(UpgradeTimeParams {
+                        start_proposing_time: upgrade.start_proposing_time,
+                        stop_proposing_time: upgrade.stop_proposing_time,
+                        start_voting_time: upgrade.start_voting_time,
+                        stop_voting_time: upgrade.stop_voting_time,
+                    }),
+                    upgrade_type: upgrade.upgrade_type.clone(),
+                })?,
             }
         }
         seq.end()
@@ -462,5 +466,48 @@ mod test {
 
         let toml_from_genesis = toml::to_string(&genesis).unwrap();
         assert_eq!(toml, toml_from_genesis);
+
+        // set both time and view parameters
+        // this should err
+        let toml = toml! {
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [accounts]
+            "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f" = 100000
+            "0x0000000000000000000000000000000000000000" = 42
+
+            [l1_finalized]
+            number = 64
+            timestamp = "0x123def"
+            hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 1
+            stop_proposing_view = 10
+            start_proposing_time = 1
+            stop_proposing_time = 10
+
+            [upgrade.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+        }
+        .to_string();
+
+        toml::from_str::<Genesis>(&toml).unwrap_err();
     }
 }
