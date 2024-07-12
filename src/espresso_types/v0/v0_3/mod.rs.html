@@ -19,6 +19,7 @@
 <a href="#19" id="19">19</a>
 <a href="#20" id="20">20</a>
 <a href="#21" id="21">21</a>
+<a href="#22" id="22">22</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>vbs::version::Version;
 
 <span class="comment">// Re-export types which haven't changed since the last minor version.
@@ -29,10 +30,11 @@
     L1Snapshot, NamespaceId, NodeState, NsIndex, NsIter, NsPayload, NsPayloadBuilder,
     NsPayloadByteLen, NsPayloadOwned, NsPayloadRange, NsProof, NsTable, NsTableBuilder,
     NsTableValidationError, NumNss, NumTxs, NumTxsRange, NumTxsUnchecked, Payload, PayloadByteLen,
-    ResolvableChainConfig, Transaction, TxIndex, TxIter, TxPayload, TxPayloadRange, TxProof,
-    TxTableEntries, TxTableEntriesRange, Upgrade, UpgradeType, ValidatedState,
-    BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
-    NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
+    ResolvableChainConfig, TimeBasedUpgrade, Transaction, TxIndex, TxIter, TxPayload,
+    TxPayloadRange, TxProof, TxTableEntries, TxTableEntriesRange, Upgrade, UpgradeMode,
+    UpgradeType, ValidatedState, ViewBasedUpgrade, BLOCK_MERKLE_TREE_HEIGHT,
+    FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN,
+    TX_OFFSET_BYTE_LEN,
 };
 
 <span class="kw">pub const </span>VERSION: Version = Version { major: <span class="number">0</span>, minor: <span class="number">3 </span>};

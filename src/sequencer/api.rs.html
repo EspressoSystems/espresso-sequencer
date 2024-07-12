@@ -1673,15 +1673,6 @@
 <a href="#1673" id="1673">1673</a>
 <a href="#1674" id="1674">1674</a>
 <a href="#1675" id="1675">1675</a>
-<a href="#1676" id="1676">1676</a>
-<a href="#1677" id="1677">1677</a>
-<a href="#1678" id="1678">1678</a>
-<a href="#1679" id="1679">1679</a>
-<a href="#1680" id="1680">1680</a>
-<a href="#1681" id="1681">1681</a>
-<a href="#1682" id="1682">1682</a>
-<a href="#1683" id="1683">1683</a>
-<a href="#1684" id="1684">1684</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::pin::Pin;
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -2035,7 +2026,7 @@
 
 <span class="attr">#[cfg(any(test, feature = <span class="string">"testing"</span>))]
 </span><span class="kw">pub mod </span>test_helpers {
-    <span class="kw">use </span>std::{collections::BTreeMap, time::Duration};
+    <span class="kw">use </span>std::time::Duration;
 
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>async_std::task::sleep;
@@ -2044,7 +2035,7 @@
     <span class="kw">use </span>espresso_types::{
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        NamespaceId, Upgrade, ValidatedState,
+        NamespaceId, ValidatedState,
     };
     <span class="kw">use </span>ethers::{prelude::Address, utils::Anvil};
     <span class="kw">use </span>futures::{
@@ -2062,7 +2053,6 @@
     <span class="kw">use </span>portpicker::pick_unused_port;
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>tide_disco::error::ServerError;
-    <span class="kw">use </span>vbs::version::Version;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use crate</span>::{
@@ -2187,15 +2177,6 @@
         }
     }
 
-    <span class="attr">#[derive(Clone, Debug)]
-    </span><span class="kw">pub struct </span>TestNetworkUpgrades {
-        <span class="kw">pub </span>upgrades: BTreeMap&lt;Version, Upgrade&gt;,
-        <span class="kw">pub </span>start_proposing_view: u64,
-        <span class="kw">pub </span>stop_proposing_view: u64,
-        <span class="kw">pub </span>start_voting_view: u64,
-        <span class="kw">pub </span>stop_voting_view: u64,
-    }
-
     <span class="kw">impl</span>&lt;P: PersistenceOptions, <span class="kw">const </span>NUM_NODES: usize&gt; TestNetwork&lt;P, { NUM_NODES }&gt; {
         <span class="kw">pub async fn </span>new&lt;C: StateCatchup + <span class="lifetime">'static</span>&gt;(
             cfg: TestNetworkConfig&lt;{ NUM_NODES }, P, C&gt;,
@@ -2213,7 +2194,7 @@
                     .map(|(i, (state, persistence, catchup))| {
                         <span class="kw">let </span>opt = cfg.api_config.clone();
                         <span class="kw">let </span>cfg = <span class="kw-2">&amp;</span>cfg.network_config;
-                        <span class="kw">let </span>upgrades_map = cfg.upgrades().map(|e| e.upgrades).unwrap_or_default();
+                        <span class="kw">let </span>upgrades_map = cfg.upgrades();
                         <span class="kw">async move </span>{
                             <span class="kw">if </span>i == <span class="number">0 </span>{
                                 opt.serve(
@@ -2733,7 +2714,9 @@
     <span class="kw">use </span>committable::{Commitment, Committable};
     <span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
     <span class="kw">use </span>espresso_types::{
-        mock::MockStateCatchup, FeeAccount, FeeAmount, Header, Upgrade, UpgradeType, ValidatedState,
+        mock::MockStateCatchup,
+        v0_1::{UpgradeMode, ViewBasedUpgrade},
+        FeeAccount, FeeAmount, Header, Upgrade, UpgradeType, ValidatedState,
     };
     <span class="kw">use </span>ethers::utils::Anvil;
     <span class="kw">use </span>futures::{
@@ -2747,14 +2730,17 @@
     };
     <span class="kw">use </span>hotshot_types::{
         event::LeafInfo,
-        traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
+        traits::{
+            metrics::NoMetrics,
+            node_implementation::{ConsensusTime, NodeType},
+        },
     };
     <span class="kw">use </span>jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     <span class="kw">use </span>portpicker::pick_unused_port;
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork, TestNetworkConfigBuilder, TestNetworkUpgrades,
+        TestNetwork, TestNetworkConfigBuilder,
     };
     <span class="kw">use </span>tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     <span class="kw">use </span>vbs::version::Version;
@@ -3130,28 +3116,24 @@
             base_fee: <span class="number">1</span>.into(),
             ..Default::default()
         };
-        <span class="kw">let </span><span class="kw-2">mut </span>map = std::collections::BTreeMap::new();
-        <span class="kw">let </span>start_proposing_view = <span class="number">5</span>;
-        <span class="kw">let </span>propose_window = <span class="number">10</span>;
-        map.insert(
-            Version { major: <span class="number">0</span>, minor: <span class="number">2 </span>},
+        <span class="kw">let </span><span class="kw-2">mut </span>upgrades = std::collections::BTreeMap::new();
+
+        upgrades.insert(
+            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Upgrade::VERSION,
             Upgrade {
-                start_proposing_view,
-                propose_window,
+                mode: UpgradeMode::View(ViewBasedUpgrade {
+                    start_voting_view: <span class="prelude-val">None</span>,
+                    stop_voting_view: <span class="prelude-val">None</span>,
+                    start_proposing_view: <span class="number">1</span>,
+                    stop_proposing_view: <span class="number">10</span>,
+                }),
                 upgrade_type: UpgradeType::ChainConfig {
                     chain_config: chain_config_upgrade,
                 },
             },
         );
 
-        <span class="kw">let </span>stop_voting_view = <span class="number">100</span>;
-        <span class="kw">let </span>upgrades = TestNetworkUpgrades {
-            upgrades: map,
-            start_proposing_view,
-            stop_proposing_view: start_proposing_view + propose_window,
-            start_voting_view: <span class="number">1</span>,
-            stop_voting_view,
-        };
+        <span class="kw">let </span>stop_voting_view = u64::MAX;
 
         <span class="kw">const </span>NUM_NODES: usize = <span class="number">5</span>;
         <span class="kw">let </span>config = TestNetworkConfigBuilder::&lt;NUM_NODES, <span class="kw">_</span>, <span class="kw">_</span>&gt;::with_num_nodes()

@@ -74,20 +74,81 @@
 <a href="#74" id="74">74</a>
 <a href="#75" id="75">75</a>
 <a href="#76" id="76">76</a>
+<a href="#77" id="77">77</a>
+<a href="#78" id="78">78</a>
+<a href="#79" id="79">79</a>
+<a href="#80" id="80">80</a>
+<a href="#81" id="81">81</a>
+<a href="#82" id="82">82</a>
+<a href="#83" id="83">83</a>
+<a href="#84" id="84">84</a>
+<a href="#85" id="85">85</a>
+<a href="#86" id="86">86</a>
+<a href="#87" id="87">87</a>
+<a href="#88" id="88">88</a>
+<a href="#89" id="89">89</a>
+<a href="#90" id="90">90</a>
+<a href="#91" id="91">91</a>
+<a href="#92" id="92">92</a>
+<a href="#93" id="93">93</a>
+<a href="#94" id="94">94</a>
+<a href="#95" id="95">95</a>
+<a href="#96" id="96">96</a>
+<a href="#97" id="97">97</a>
+<a href="#98" id="98">98</a>
+<a href="#99" id="99">99</a>
+<a href="#100" id="100">100</a>
+<a href="#101" id="101">101</a>
+<a href="#102" id="102">102</a>
+<a href="#103" id="103">103</a>
+<a href="#104" id="104">104</a>
+<a href="#105" id="105">105</a>
+<a href="#106" id="106">106</a>
+<a href="#107" id="107">107</a>
+<a href="#108" id="108">108</a>
+<a href="#109" id="109">109</a>
+<a href="#110" id="110">110</a>
+<a href="#111" id="111">111</a>
+<a href="#112" id="112">112</a>
+<a href="#113" id="113">113</a>
+<a href="#114" id="114">114</a>
+<a href="#115" id="115">115</a>
+<a href="#116" id="116">116</a>
+<a href="#117" id="117">117</a>
+<a href="#118" id="118">118</a>
+<a href="#119" id="119">119</a>
+<a href="#120" id="120">120</a>
+<a href="#121" id="121">121</a>
+<a href="#122" id="122">122</a>
+<a href="#123" id="123">123</a>
+<a href="#124" id="124">124</a>
+<a href="#125" id="125">125</a>
+<a href="#126" id="126">126</a>
+<a href="#127" id="127">127</a>
+<a href="#128" id="128">128</a>
+<a href="#129" id="129">129</a>
+<a href="#130" id="130">130</a>
+<a href="#131" id="131">131</a>
+<a href="#132" id="132">132</a>
+<a href="#133" id="133">133</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::collections::BTreeMap;
 
 <span class="kw">use </span>std::sync::Arc;
 
+<span class="kw">use </span>hotshot_types::HotShotConfig;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>std::fmt::Debug;
 
-<span class="kw">use crate</span>::{v0::traits::StateCatchup, ChainConfig, GenesisHeader, L1BlockInfo, ValidatedState};
+<span class="kw">use crate</span>::{
+    v0::traits::StateCatchup, ChainConfig, GenesisHeader, L1BlockInfo, PubKey, Timestamp,
+    ValidatedState,
+};
 <span class="kw">use </span>vbs::version::Version;
 
 <span class="kw">use </span><span class="kw">super</span>::l1::L1Client;
 
 <span class="doccomment">/// Represents the specific type of upgrade.
-</span><span class="attr">#[derive(Clone, Debug, Deserialize, Serialize)]
+</span><span class="attr">#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 #[serde(rename_all = <span class="string">"snake_case"</span>)]
 </span><span class="kw">pub enum </span>UpgradeType {
@@ -96,28 +157,81 @@
     </span>ChainConfig { chain_config: ChainConfig },
 }
 
-<span class="doccomment">/// Represents the  upgrade config including the type of upgrade and upgrade parameters for hotshot config.
-</span><span class="attr">#[derive(Clone, Debug, Deserialize, Serialize)]
-</span><span class="kw">pub struct </span>Upgrade {
-    <span class="doccomment">/// The view at which the upgrade is proposed.
-    ///
-    /// Note: Voting for the proposal begins before the upgrade is formally proposed.
-    /// In our implementation, `start_proposing_view` is set to `1`` for all upgrades,
-    /// so if an upgrade is planned then the voting starts as soon as node is started.
-    </span><span class="attr">#[serde(rename = <span class="string">"view"</span>)]
+<span class="doccomment">/// Represents an upgrade based on time (unix timestamp).
+</span><span class="attr">#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+</span><span class="kw">pub struct </span>TimeBasedUpgrade {
+    <span class="doccomment">/// the earliest unix timestamp in which the node can propose an upgrade
+    </span><span class="kw">pub </span>start_proposing_time: Timestamp,
+    <span class="doccomment">/// timestamp after which the node stops proposing an upgrade
+    </span><span class="kw">pub </span>stop_proposing_time: Timestamp,
+    <span class="doccomment">/// The timestamp at which voting for the upgrade proposal starts
+    </span><span class="kw">pub </span>start_voting_time: <span class="prelude-ty">Option</span>&lt;Timestamp&gt;,
+    <span class="doccomment">/// The timestamp at which voting for the upgrade proposal stops
+    </span><span class="kw">pub </span>stop_voting_time: <span class="prelude-ty">Option</span>&lt;Timestamp&gt;,
+}
+
+<span class="doccomment">/// Represents an upgrade based on view.
+</span><span class="attr">#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+</span><span class="kw">pub struct </span>ViewBasedUpgrade {
+    <span class="doccomment">/// the earliest view in which the node can propose an upgrade
     </span><span class="kw">pub </span>start_proposing_view: u64,
+    <span class="doccomment">/// view after which the node stops proposing an upgrade
+    </span><span class="kw">pub </span>stop_proposing_view: u64,
+    <span class="doccomment">/// The view at which voting for the upgrade proposal starts
+    </span><span class="kw">pub </span>start_voting_view: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+    <span class="doccomment">/// The view at which voting for the upgrade proposal stops
+    </span><span class="kw">pub </span>stop_voting_view: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+}
 
-    <span class="doccomment">/// The time window during which the upgrade can be proposed.
-    ///
-    /// This parameter is used for setting the `stop_propose_window_view`.
-    /// `stop_proposing_view` is calculated as `start_proposing_view + propose_window`.
-    </span><span class="kw">pub </span>propose_window: u64,
+<span class="doccomment">/// Represents the specific type of upgrade.
+</span><span class="attr">#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(untagged)]
+</span><span class="kw">pub enum </span>UpgradeMode {
+    <span class="doccomment">/// Upgrade based on unix timestamp.
+    </span>Time(TimeBasedUpgrade),
+    <span class="doccomment">/// Upgrade based on view.
+    </span>View(ViewBasedUpgrade),
+}
 
-    <span class="doccomment">/// The specific type of upgrade configuration.
-    ///
-    /// Currently, we only support chain configuration upgrades (`upgrade.chain_config` in genesis toml file).
-    </span><span class="attr">#[serde(flatten)]
+<span class="doccomment">/// Represents a general upgrade with mode and type.
+</span><span class="attr">#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+</span><span class="kw">pub struct </span>Upgrade {
+    <span class="doccomment">/// The mode of the upgrade (time-based or view-based).
+    </span><span class="kw">pub </span>mode: UpgradeMode,
+    <span class="doccomment">/// The type of the upgrade.
     </span><span class="kw">pub </span>upgrade_type: UpgradeType,
+}
+
+<span class="kw">impl </span>Upgrade {
+    <span class="kw">pub fn </span>set_hotshot_config(<span class="kw-2">&amp;</span><span class="self">self</span>, config: <span class="kw-2">&amp;mut </span>HotShotConfig&lt;PubKey&gt;) {
+        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.mode {
+            UpgradeMode::View(v) =&gt; {
+                config.start_proposing_view = v.start_proposing_view;
+                config.stop_proposing_view = v.stop_proposing_view;
+                config.start_voting_view = v.start_voting_view.unwrap_or(<span class="number">0</span>);
+                config.stop_voting_view = v.stop_voting_view.unwrap_or(u64::MAX);
+                config.start_proposing_time = <span class="number">0</span>;
+                config.stop_proposing_time = u64::MAX;
+                config.start_voting_time = <span class="number">0</span>;
+                config.stop_voting_time = u64::MAX;
+            }
+            UpgradeMode::Time(t) =&gt; {
+                config.start_proposing_time = t.start_proposing_time.unix_timestamp();
+                config.stop_proposing_time = t.stop_proposing_time.unix_timestamp();
+                config.start_voting_time = t.start_voting_time.unwrap_or_default().unix_timestamp();
+                <span class="comment">// this should not panic because Timestamp::max() constructs the maximum possible Unix timestamp
+                // using i64::MAX
+                </span>config.stop_voting_time = t
+                    .stop_voting_time
+                    .unwrap_or(Timestamp::max().expect(<span class="string">"overflow"</span>))
+                    .unix_timestamp();
+                config.start_proposing_view = <span class="number">0</span>;
+                config.stop_proposing_view = u64::MAX;
+                config.start_voting_view = <span class="number">0</span>;
+                config.stop_voting_view = u64::MAX;
+            }
+        }
+    }
 }
 
 <span class="doccomment">/// Represents the immutable state of a node.
@@ -147,7 +261,7 @@
     /// This version is checked to determine if an upgrade is planned,
     /// and which version variant for versioned types  
     /// to use in functions such as genesis.
-    /// (example: genesis returns V2 Header if version is 0.2) 
+    /// (example: genesis returns V2 Header if version is 0.2)
     </span><span class="kw">pub </span>current_version: Version,
 }
 </code></pre></div></section></main></body></html>

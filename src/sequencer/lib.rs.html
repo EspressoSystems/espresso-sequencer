@@ -853,18 +853,6 @@
 <a href="#853" id="853">853</a>
 <a href="#854" id="854">854</a>
 <a href="#855" id="855">855</a>
-<a href="#856" id="856">856</a>
-<a href="#857" id="857">857</a>
-<a href="#858" id="858">858</a>
-<a href="#859" id="859">859</a>
-<a href="#860" id="860">860</a>
-<a href="#861" id="861">861</a>
-<a href="#862" id="862">862</a>
-<a href="#863" id="863">863</a>
-<a href="#864" id="864">864</a>
-<a href="#865" id="865">865</a>
-<a href="#866" id="866">866</a>
-<a href="#867" id="867">867</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
@@ -1071,11 +1059,7 @@
         .upgrades
         .get(<span class="kw-2">&amp;</span>&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Upgrade::VERSION)
     {
-        <span class="kw">let </span>view = upgrade.start_proposing_view;
-        config.config.start_proposing_view = view;
-        config.config.stop_proposing_view = view + upgrade.propose_window;
-        config.config.start_voting_view = <span class="number">1</span>;
-        config.config.stop_voting_view = u64::MAX;
+        upgrade.set_hotshot_config(<span class="kw-2">&amp;mut </span>config.config);
     }
 
     <span class="comment">// If the `Libp2p` bootstrap nodes were supplied via the command line, override those
@@ -1223,7 +1207,6 @@
 </span><span class="kw">pub mod </span>testing {
     <span class="kw">use </span>std::{collections::HashMap, time::Duration};
 
-    <span class="kw">use </span>api::test_helpers::TestNetworkUpgrades;
     <span class="kw">use </span>committable::Committable;
     <span class="kw">use </span>espresso_types::{
         eth_signature_key::EthKeyPair,
@@ -1290,7 +1273,7 @@
         l1_url: Url,
         state_relay_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
         builder_port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
-        upgrades: <span class="prelude-ty">Option</span>&lt;TestNetworkUpgrades&gt;,
+        upgrades: BTreeMap&lt;Version, Upgrade&gt;,
     }
 
     <span class="kw">impl</span>&lt;<span class="kw">const </span>NUM_NODES: usize&gt; TestConfigBuilder&lt;NUM_NODES&gt; {
@@ -1309,21 +1292,14 @@
             <span class="self">self
         </span>}
 
-        <span class="kw">pub fn </span>upgrades(<span class="kw-2">mut </span><span class="self">self</span>, upgrades: TestNetworkUpgrades) -&gt; <span class="self">Self </span>{
-            <span class="self">self</span>.upgrades = <span class="prelude-val">Some</span>(upgrades);
+        <span class="kw">pub fn </span>upgrades(<span class="kw-2">mut </span><span class="self">self</span>, upgrades: BTreeMap&lt;Version, Upgrade&gt;) -&gt; <span class="self">Self </span>{
+            <span class="self">self</span>.upgrades = upgrades;
             <span class="self">self
         </span>}
 
         <span class="kw">pub fn </span>build(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; TestConfig&lt;NUM_NODES&gt; {
-            <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrades) = <span class="kw-2">&amp;</span><span class="self">self</span>.upgrades {
-                <span class="self">self</span>.config.start_proposing_view = upgrades.start_proposing_view;
-                <span class="self">self</span>.config.stop_proposing_view = upgrades.stop_proposing_view;
-                <span class="self">self</span>.config.start_voting_view = upgrades.start_voting_view;
-                <span class="self">self</span>.config.stop_voting_view = upgrades.stop_voting_view;
-                <span class="self">self</span>.config.start_proposing_time = <span class="number">0</span>;
-                <span class="self">self</span>.config.stop_proposing_time = u64::MAX;
-                <span class="self">self</span>.config.start_voting_time = <span class="number">0</span>;
-                <span class="self">self</span>.config.stop_voting_time = u64::MAX;
+            <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrade) = <span class="self">self</span>.upgrades.get(<span class="kw-2">&amp;</span>&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Upgrade::VERSION) {
+                upgrade.set_hotshot_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>.config)
             }
 
             TestConfig {
@@ -1408,7 +1384,7 @@
                 l1_url: <span class="string">"http://localhost:8545"</span>.parse().unwrap(),
                 state_relay_url: <span class="prelude-val">None</span>,
                 builder_port: <span class="prelude-val">None</span>,
-                upgrades: <span class="prelude-val">None</span>,
+                upgrades: Default::default(),
             }
         }
     }
@@ -1422,7 +1398,7 @@
         l1_url: Url,
         state_relay_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
         builder_port: <span class="prelude-ty">Option</span>&lt;u16&gt;,
-        upgrades: <span class="prelude-ty">Option</span>&lt;TestNetworkUpgrades&gt;,
+        upgrades: BTreeMap&lt;Version, Upgrade&gt;,
     }
 
     <span class="kw">impl</span>&lt;<span class="kw">const </span>NUM_NODES: usize&gt; TestConfig&lt;NUM_NODES&gt; {
@@ -1446,7 +1422,7 @@
             <span class="self">self</span>.l1_url.clone()
         }
 
-        <span class="kw">pub fn </span>upgrades(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;TestNetworkUpgrades&gt; {
+        <span class="kw">pub fn </span>upgrades(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; BTreeMap&lt;Version, Upgrade&gt; {
             <span class="self">self</span>.upgrades.clone()
         }
 
