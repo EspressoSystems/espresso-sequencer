@@ -2,6 +2,7 @@ use std::net::ToSocketAddrs;
 
 use clap::Parser;
 use es_version::SEQUENCER_VERSION;
+use espresso_types::traits::NullEventConsumer;
 use futures::future::FutureExt;
 use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
@@ -137,7 +138,7 @@ where
             }
             http_opt
                 .serve(
-                    move |metrics| {
+                    move |metrics, consumer| {
                         async move {
                             init_node(
                                 genesis,
@@ -146,6 +147,7 @@ where
                                 storage_opt,
                                 l1_params,
                                 bind_version,
+                                consumer,
                                 opt.is_da,
                             )
                             .await
@@ -164,6 +166,7 @@ where
                 storage_opt,
                 l1_params,
                 bind_version,
+                NullEventConsumer,
                 opt.is_da,
             )
             .await?

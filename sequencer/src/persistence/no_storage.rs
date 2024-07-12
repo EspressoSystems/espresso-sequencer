@@ -1,21 +1,21 @@
 //! Mock implementation of persistence, for testing.
 #![cfg(any(test, feature = "testing"))]
 
-use std::collections::BTreeMap;
-
+use async_std::sync::Arc;
 use async_trait::async_trait;
 use espresso_types::{
-    v0::traits::{PersistenceOptions, SequencerPersistence},
+    v0::traits::{EventConsumer, PersistenceOptions, SequencerPersistence},
     Leaf, NetworkConfig,
 };
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, VidDisperseShare},
-    event::HotShotAction,
+    event::{Event, EventType, HotShotAction, LeafInfo},
     message::Proposal,
     simple_certificate::QuorumCertificate,
     utils::View,
 };
+use std::collections::BTreeMap;
 
 use crate::{SeqTypes, ViewNumber};
 
@@ -48,16 +48,34 @@ impl SequencerPersistence for NoStorage {
         Ok(())
     }
 
-    async fn collect_garbage(&mut self, _view: ViewNumber) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    async fn save_anchor_leaf(
+    async fn append_decided_leaves(
         &mut self,
-        _: &Leaf,
-        _: &QuorumCertificate<SeqTypes>,
+        view_number: ViewNumber,
+        leaves: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate<SeqTypes>)> + Send,
+        consumer: &impl EventConsumer,
     ) -> anyhow::Result<()> {
-        Ok(())
+        let (mut leaf_chain, mut qcs): (Vec<_>, Vec<_>) = leaves
+            .into_iter()
+            .map(|(info, qc)| (info.clone(), qc))
+            .unzip();
+
+        // Put in reverse chronological order, as expected from Decide events.
+        leaf_chain.reverse();
+        qcs.reverse();
+
+        // Generate decide event for the consumer.
+        let final_qc = qcs.pop().unwrap();
+
+        consumer
+            .handle_event(&Event {
+                view_number,
+                event: EventType::Decide {
+                    leaf_chain: Arc::new(leaf_chain),
+                    qc: Arc::new(final_qc),
+                    block_size: None,
+                },
+            })
+            .await
     }
 
     async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>> {
@@ -92,9 +110,8 @@ impl SequencerPersistence for NoStorage {
 
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>
-    {
-        Ok(None)
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>> {
+        Ok(Default::default())
     }
 
     async fn append_vid(

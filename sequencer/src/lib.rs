@@ -13,7 +13,9 @@ use anyhow::Context;
 use async_std::sync::RwLock;
 use catchup::StatePeers;
 use context::SequencerContext;
-use espresso_types::{BackoffParams, L1Client, NodeState, PubKey, SeqTypes, ValidatedState};
+use espresso_types::{
+    traits::EventConsumer, BackoffParams, L1Client, NodeState, PubKey, SeqTypes, ValidatedState,
+};
 use ethers::types::U256;
 #[cfg(feature = "libp2p")]
 use futures::FutureExt;
@@ -119,6 +121,7 @@ pub struct L1Params {
     pub events_max_block_range: u64,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     genesis: Genesis,
     network_params: NetworkParams,
@@ -126,6 +129,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     persistence_opt: P,
     l1_params: L1Params,
     bind_version: Ver,
+    event_consumer: impl EventConsumer + 'static,
     is_da: bool,
 ) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
     // Expose git information via status API.
@@ -354,6 +358,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         Some(network_params.state_relay_server_url),
         metrics,
         genesis.stake_table.capacity,
+        event_consumer,
         bind_version,
     )
     .await?;
@@ -375,7 +380,7 @@ pub mod testing {
     use espresso_types::{
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
-        v0::traits::{PersistenceOptions, StateCatchup},
+        v0::traits::{EventConsumer, NullEventConsumer, PersistenceOptions, StateCatchup},
         Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade,
     };
     use futures::{
@@ -604,6 +609,7 @@ pub mod testing {
                     MockStateCatchup::default(),
                     &NoMetrics,
                     STAKE_TABLE_CAPACITY_FOR_TEST,
+                    NullEventConsumer,
                     bind_version,
                     Default::default(),
                 )
@@ -641,6 +647,7 @@ pub mod testing {
             catchup: impl StateCatchup + 'static,
             metrics: &dyn Metrics,
             stake_table_capacity: u64,
+            event_consumer: impl EventConsumer + 'static,
             bind_version: Ver,
             upgrades: BTreeMap<Version, Upgrade>,
         ) -> SequencerContext<network::Memory, P::Persistence, Ver> {
@@ -692,6 +699,7 @@ pub mod testing {
                 self.state_relay_url.clone(),
                 metrics,
                 stake_table_capacity,
+                event_consumer,
                 bind_version,
             )
             .await

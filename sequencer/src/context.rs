@@ -7,7 +7,8 @@ use async_std::{
 };
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
+    v0::traits::{EventConsumer as PersistenceEventConsumer, SequencerPersistence},
+    NodeState, PubKey, Transaction, ValidatedState,
 };
 use futures::{
     future::{join_all, Future},
@@ -31,6 +32,7 @@ use url::Url;
 use vbs::version::StaticVersionType;
 
 use crate::{state_signature::StateSigner, static_stake_table_commitment, Node, SeqTypes};
+
 /// The consensus handle
 pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>>;
 
@@ -74,11 +76,12 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     pub async fn init(
         network_config: NetworkConfig<PubKey>,
         instance_state: NodeState,
-        persistence: P,
+        mut persistence: P,
         network: Arc<N>,
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
         stake_table_capacity: u64,
+        event_consumer: impl PersistenceEventConsumer + 'static,
         _: Ver,
     ) -> anyhow::Result<Self> {
         let config = &network_config.config;
@@ -92,7 +95,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
 
         // Load saved consensus state from storage.
         let initializer = persistence
-            .load_consensus_state(instance_state.clone())
+            .load_consensus_state(instance_state.clone(), &event_consumer)
             .await?;
 
         let committee_membership = GeneralStaticCommittee::create_election(
@@ -156,6 +159,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             event_streamer,
             instance_state,
             network_config,
+            event_consumer,
         ))
     }
 
@@ -167,6 +171,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
         node_state: NodeState,
         config: NetworkConfig<PubKey>,
+        event_consumer: impl PersistenceEventConsumer + 'static,
     ) -> Self {
         let events = handle.event_stream();
 
@@ -189,6 +194,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
                 persistence,
                 ctx.state_signer.clone(),
                 Some(event_streamer.clone()),
+                event_consumer,
             ),
         );
 
@@ -320,6 +326,7 @@ async fn handle_events<Ver: StaticVersionType>(
     persistence: Arc<RwLock<impl SequencerPersistence>>,
     state_signer: Arc<StateSigner<Ver>>,
     events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
+    event_consumer: impl PersistenceEventConsumer + 'static,
 ) {
     while let Some(event) = events.next().await {
         tracing::debug!(node_id, ?event, "consensus event");
@@ -327,7 +334,7 @@ async fn handle_events<Ver: StaticVersionType>(
         {
             let mut p = persistence.write().await;
             // Store latest consensus state.
-            p.handle_event(&event).await;
+            p.handle_event(&event, &event_consumer).await;
         }
         // Generate state signature.
         state_signer.handle_event(&event).await;
