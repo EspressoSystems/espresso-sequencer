@@ -4,10 +4,7 @@ use std::{
 };
 
 use anyhow::Context;
-
-use espresso_types::Upgrade;
-use espresso_types::{ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo};
-
+use espresso_types::{ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade};
 use serde::{Deserialize, Serialize};
 use vbs::version::Version;
 
@@ -190,8 +187,7 @@ impl Genesis {
 #[cfg(test)]
 mod test {
     use espresso_types::{
-        v0_1::{UpgradeMode, ViewBasedUpgrade},
-        L1BlockInfo, Timestamp, UpgradeType,
+        L1BlockInfo, TimeBasedUpgrade, Timestamp, UpgradeMode, UpgradeType, ViewBasedUpgrade,
     };
     use ethers::prelude::{Address, H160, H256};
     use sequencer_utils::ser::FromStringOrInteger;
@@ -369,7 +365,7 @@ mod test {
     }
 
     #[test]
-    fn test_genesis_toml_upgrade() {
+    fn test_genesis_toml_upgrade_view_mode() {
         // without optional fields
         // with view settings
         let toml = toml! {
@@ -428,10 +424,74 @@ mod test {
         };
 
         assert_eq!(*genesis_upgrade, upgrade);
+    }
 
-        let mut upgrades = BTreeMap::new();
-        upgrades.insert(Version { major: 0, minor: 2 }, upgrade);
+    #[test]
+    fn test_genesis_toml_upgrade_time_mode() {
+        // without optional fields
+        // with time settings
+        let toml = toml! {
+            [stake_table]
+            capacity = 10
 
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [accounts]
+            "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f" = 100000
+            "0x0000000000000000000000000000000000000000" = 42
+
+            [l1_finalized]
+            number = 64
+            timestamp = "0x123def"
+            hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_time = "2024-01-01T00:00:00Z"
+            stop_proposing_time = "2024-01-02T00:00:00Z"
+
+            [upgrade.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+
+        let (version, genesis_upgrade) = genesis.upgrades.last_key_value().unwrap();
+
+        assert_eq!(*version, Version { major: 0, minor: 2 });
+
+        let upgrade = Upgrade {
+            mode: UpgradeMode::Time(TimeBasedUpgrade {
+                start_voting_time: None,
+                stop_voting_time: None,
+                start_proposing_time: Timestamp::from_string("2024-01-01T00:00:00Z".to_string())
+                    .unwrap(),
+                stop_proposing_time: Timestamp::from_string("2024-01-02T00:00:00Z".to_string())
+                    .unwrap(),
+            }),
+            upgrade_type: UpgradeType::ChainConfig {
+                chain_config: genesis.chain_config,
+            },
+        };
+
+        assert_eq!(*genesis_upgrade, upgrade);
+    }
+
+    #[test]
+    fn test_genesis_toml_upgrade_view_and_time_mode() {
         // set both time and view parameters
         // this should err
         let toml = toml! {

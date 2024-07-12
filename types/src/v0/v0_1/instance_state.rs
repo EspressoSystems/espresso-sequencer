@@ -3,11 +3,13 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use hotshot_types::HotShotConfig;
+use sequencer_utils::ser::FromStringOrInteger;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 use crate::{
-    v0::traits::StateCatchup, ChainConfig, GenesisHeader, L1BlockInfo, PubKey, ValidatedState,
+    v0::traits::StateCatchup, ChainConfig, GenesisHeader, L1BlockInfo, PubKey, Timestamp,
+    ValidatedState,
 };
 use vbs::version::Version;
 
@@ -23,19 +25,29 @@ pub enum UpgradeType {
     ChainConfig { chain_config: ChainConfig },
 }
 
+/// Represents an upgrade based on time (unix timestamp).
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct TimeBasedUpgrade {
-    pub start_proposing_time: u64,
-    pub stop_proposing_time: u64,
-    pub start_voting_time: Option<u64>,
-    pub stop_voting_time: Option<u64>,
+    /// the earliest unix timestamp in which the node can propose an upgrade
+    pub start_proposing_time: Timestamp,
+    /// timestamp after which the node stops proposing an upgrade
+    pub stop_proposing_time: Timestamp,
+    /// The timestamp at which voting for the upgrade proposal starts
+    pub start_voting_time: Option<Timestamp>,
+    /// The timestamp at which voting for the upgrade proposal stops
+    pub stop_voting_time: Option<Timestamp>,
 }
 
+/// Represents an upgrade based on view.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ViewBasedUpgrade {
+    /// the earliest view in which the node can propose an upgrade
     pub start_proposing_view: u64,
+    /// view after which the node stops proposing an upgrade
     pub stop_proposing_view: u64,
+    /// The view at which voting for the upgrade proposal starts
     pub start_voting_view: Option<u64>,
+    /// The view at which voting for the upgrade proposal stops
     pub stop_voting_view: Option<u64>,
 }
 
@@ -43,13 +55,18 @@ pub struct ViewBasedUpgrade {
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum UpgradeMode {
+    /// Upgrade based on unix timestamp.
     Time(TimeBasedUpgrade),
+    /// Upgrade based on view.
     View(ViewBasedUpgrade),
 }
 
+/// Represents a general upgrade with mode and type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Upgrade {
+    /// The mode of the upgrade (time-based or view-based).
     pub mode: UpgradeMode,
+    /// The type of the upgrade.
     pub upgrade_type: UpgradeType,
 }
 
@@ -67,10 +84,13 @@ impl Upgrade {
                 config.stop_voting_time = u64::MAX;
             }
             UpgradeMode::Time(t) => {
-                config.start_proposing_time = t.start_proposing_time;
-                config.stop_proposing_time = t.stop_proposing_time;
-                config.start_voting_time = t.start_voting_time.unwrap_or(0);
-                config.stop_voting_time = t.stop_voting_time.unwrap_or(u64::MAX);
+                config.start_proposing_time = t.start_proposing_time.unix_timestamp();
+                config.stop_proposing_time = t.stop_proposing_time.unix_timestamp();
+                config.start_voting_time = t.start_voting_time.unwrap_or_default().unix_timestamp();
+                config.stop_voting_time = t
+                    .stop_voting_time
+                    .unwrap_or(Timestamp::from_integer(u64::MAX).unwrap())
+                    .unix_timestamp();
                 config.start_proposing_view = 0;
                 config.stop_proposing_view = u64::MAX;
                 config.start_voting_view = 0;

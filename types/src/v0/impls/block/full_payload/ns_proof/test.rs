@@ -1,4 +1,3 @@
-use crate::{v0::impls::block::test::ValidTest, NsProof, Payload};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use futures::future;
 use hotshot::traits::BlockPayload;
@@ -7,6 +6,8 @@ use hotshot_types::{
     vid::{vid_scheme, VidSchemeType},
 };
 use jf_vid::{VidDisperse, VidScheme};
+
+use crate::{v0::impls::block::test::ValidTest, NsProof, Payload};
 
 #[async_std::test]
 async fn ns_proof() {
