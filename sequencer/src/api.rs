@@ -1054,7 +1054,10 @@ mod test {
     };
     use hotshot_types::{
         event::LeafInfo,
-        traits::{metrics::NoMetrics, node_implementation::{ConsensusTime, NodeType}},
+        traits::{
+            metrics::NoMetrics,
+            node_implementation::{ConsensusTime, NodeType},
+        },
     };
     use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     use portpicker::pick_unused_port;
