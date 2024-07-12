@@ -140,9 +140,9 @@ mod upgrade_serialization {
                             ))
                         }
                         (None, Some(v)) => {
-                            if v.start_proposing_view < v.stop_proposing_view {
+                            if v.start_proposing_view > v.stop_proposing_view {
                                 return Err(de::Error::custom(
-                                    "start_proposing_view is less than stop_proposing_view",
+                                    "stop_proposing_view is less than start_proposing_view",
                                 ));
                             }
 
@@ -156,10 +156,10 @@ mod upgrade_serialization {
                         }
                         (Some(t), None) => {
                             if t.start_proposing_time.unix_timestamp()
-                                < t.stop_proposing_time.unix_timestamp()
+                                > t.stop_proposing_time.unix_timestamp()
                             {
                                 return Err(de::Error::custom(
-                                    "start_proposing_time is less than stop_proposing_time",
+                                    "stop_proposing_time is less than start_proposing_time",
                                 ));
                             }
 
