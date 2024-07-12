@@ -1,9 +1,8 @@
-Note: actual rounds = 100 (usually calculate info between round 20 ~ 120), actual transactions_per_round is a distribution between 1~20, transaction_size is the avg size of all txs
-commit_sha,total_nodes,da_committee_size,transactions_per_round,transaction_size,rounds,leader_election_type,avg_latency_in_sec,minimum_latency_in_sec,maximum_latency_in_sec,throughput_bytes_per_sec,total_transactions_committed,total_time_elapsed_in_sec,total_num_views,failed_num_views
-20-120-no-latency,5,5,10,542,10,static-leader-selection,0,0,0,2022,149,40,121,1
-commit_sha,total_nodes,da_committee_size,transactions_per_round,transaction_size,rounds,leader_election_type,avg_latency_in_sec,minimum_latency_in_sec,maximum_latency_in_sec,throughput_bytes_per_sec,total_transactions_committed,total_time_elapsed_in_sec,total_num_views,failed_num_views
-20-120,5,5,10,578,10,static-leader-selection,0,0,0,2826,303,62,121,1
-private_pool_avg_latency_in_sec,minimum_latency_in_sec,maximum_latency_in_sec
-3,0,7
-public_pool_avg_latency_in_sec,minimum_latency_in_sec,maximum_latency_in_sec
-2,0,7
+total_nodes,da_committee_size,block_range,transaction_size_range,transaction_per_batch_range,pub_or_priv_pool,avg_latency_in_sec,minimum_latency_in_sec,maximum_latency_in_sec,avg_throughput_bytes_per_sec,total_transactions,avg_transaction_size_bytes,total_time_elapsed_in_sec
+5,5,20~120,1~1000,1~20,public,1,0,4,209,22,503,53
+total_nodes,da_committee_size,block_range,transaction_size_range,transaction_per_batch_range,pub_or_priv_pool,avg_latency_in_sec,minimum_latency_in_sec,maximum_latency_in_sec,avg_throughput_bytes_per_sec,total_transactions,avg_transaction_size_bytes,total_time_elapsed_in_sec
+5,5,20~120,1~1000,1~20,private,3,0,6,1267,115,584,53
+total_nodes,da_committee_size,block_range,transaction_size_range_in_bytes,transaction_per_batch_range,pub_or_priv_pool,avg_latency_in_sec,minimum_latency_in_sec,maximum_latency_in_sec,avg_throughput_bytes_per_sec,total_transactions,avg_transaction_size_in_bytes,total_time_elapsed_in_sec
+5,5,50~150,1~1000,1~20,public,1,0,2,260,23,566,50
+total_nodes,da_committee_size,block_range,transaction_size_range_in_bytes,transaction_per_batch_range,pub_or_priv_pool,avg_latency_in_sec,minimum_latency_in_sec,maximum_latency_in_sec,avg_throughput_bytes_per_sec,total_transactions,avg_transaction_size_in_bytes,total_time_elapsed_in_sec
+5,5,50~150,1~1000,1~20,private,2,0,2,1277,118,541,50
