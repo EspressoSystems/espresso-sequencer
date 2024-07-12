@@ -27,7 +27,6 @@ impl FullNetworkTx {
     }
 }
 
-// TODO consider a committable derive macro
 impl Committable for BidTxBody {
     fn tag() -> String {
         "BID_TX".to_string()

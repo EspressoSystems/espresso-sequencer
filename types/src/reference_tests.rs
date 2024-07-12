@@ -146,6 +146,7 @@ async fn reference_header(version: Version) -> Header {
         vec![fee_info],
         vec![builder_signature],
         version,
+        vec![],
     )
 }
 

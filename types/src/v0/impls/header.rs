@@ -357,6 +357,7 @@ impl Header {
                 fee_merkle_tree_root,
                 fee_info,
                 builder_signature,
+                full_network_txs,
             }),
             // This case should never occur
             // but if it does, we must panic
@@ -509,6 +510,7 @@ impl Header {
             fee_info,
             builder_signature,
             version,
+            vec![],
         ))
     }
 
@@ -868,6 +870,7 @@ impl BlockHeader<SeqTypes> for Header {
             FeeInfo::genesis(),
             vec![],
             instance_state.current_version,
+            vec![],
         )
     }
 
@@ -1486,6 +1489,7 @@ mod test_headers {
             }],
             Default::default(),
             Version { major: 0, minor: 1 },
+            vec![],
         );
 
         let serialized = serde_json::to_string(&v1_header).unwrap();
@@ -1508,6 +1512,7 @@ mod test_headers {
             }],
             Default::default(),
             Version { major: 0, minor: 2 },
+            vec![],
         );
 
         let serialized = serde_json::to_string(&v2_header).unwrap();
@@ -1530,6 +1535,7 @@ mod test_headers {
             }],
             Default::default(),
             Version { major: 0, minor: 3 },
+            vec![],
         );
 
         let serialized = serde_json::to_string(&v3_header).unwrap();
