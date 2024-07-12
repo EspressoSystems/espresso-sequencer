@@ -1,11 +1,12 @@
 //! This module contains all the traits used for building the sequencer types.
 //! It also includes some trait implementations that cannot be implemented in an external crate.
-use std::{cmp::max, collections::BTreeMap, ops::Range, sync::Arc};
+use std::{cmp::max, collections::BTreeMap, fmt::Debug, ops::Range, sync::Arc};
 
 use anyhow::{bail, ensure, Context};
 use async_std::sync::RwLock;
 use async_trait::async_trait;
-use committable::{Commitment, Committable};
+use committable::Commitment;
+use dyn_clone::DynClone;
 use futures::{FutureExt, TryFutureExt};
 use hotshot::{types::EventType, HotShotInitializer};
 use hotshot_types::{
@@ -338,24 +339,8 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     /// Save the orchestrator config to storage.
     async fn save_config(&mut self, cfg: &NetworkConfig) -> anyhow::Result<()>;
 
-    async fn collect_garbage(&mut self, view: ViewNumber) -> anyhow::Result<()>;
-
-    /// Saves the latest decided leaf.
-    ///
-    /// If the height of the new leaf is not greater than the height of the previous decided leaf,
-    /// storage is not updated.
-    async fn save_anchor_leaf(
-        &mut self,
-        leaf: &Leaf,
-        qc: &QuorumCertificate<SeqTypes>,
-    ) -> anyhow::Result<()>;
-
     /// Load the highest view saved with [`save_voted_view`](Self::save_voted_view).
     async fn load_latest_acted_view(&self) -> anyhow::Result<Option<ViewNumber>>;
-
-    /// Load the latest leaf saved with [`save_anchor_leaf`](Self::save_anchor_leaf).
-    async fn load_anchor_leaf(&self)
-        -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>>;
 
     /// Load undecided state saved by consensus before we shut down.
     async fn load_undecided_state(
@@ -365,7 +350,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     /// Load the proposals saved by consensus
     async fn load_quorum_proposals(
         &self,
-    ) -> anyhow::Result<Option<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>>;
+    ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>>;
 
     async fn load_vid_share(
         &self,
@@ -381,8 +366,9 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     /// Returns an initializer to resume HotShot from the latest saved state (or start from genesis,
     /// if there is no saved state).
     async fn load_consensus_state(
-        &self,
+        &mut self,
         state: NodeState,
+        consumer: &(impl EventConsumer + 'static),
     ) -> anyhow::Result<HotShotInitializer<SeqTypes>> {
         let genesis_validated_state = ValidatedState::genesis(&state).0;
         let highest_voted_view = match self
@@ -414,6 +400,18 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                         high_qc.view_number
                     )
                 );
+
+                // Process and clean up any leaves that we may have persisted last time we were
+                // running but failed to handle due to a shutdown.
+                if let Err(err) = self
+                    .append_decided_leaves(leaf.view_number(), vec![], consumer)
+                    .await
+                {
+                    tracing::warn!(
+                        "failed to process decided leaves, chain may not be up to date: {err:#}"
+                    );
+                }
+
                 (leaf, high_qc)
             }
             None => {
@@ -451,9 +449,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         let saved_proposals = self
             .load_quorum_proposals()
             .await
-            .context("loading saved proposals")
-            .unwrap_or_default()
-            .unwrap_or_default();
+            .context("loading saved proposals")?;
 
         tracing::info!(
             ?leaf,
@@ -465,6 +461,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             ?saved_proposals,
             "loaded consensus state"
         );
+
         Ok(HotShotInitializer::from_reload(
             leaf,
             state,
@@ -478,32 +475,68 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     }
 
     /// Update storage based on an event from consensus.
-    async fn handle_event(&mut self, event: &Event) {
+    async fn handle_event(&mut self, event: &Event, consumer: &(impl EventConsumer + 'static)) {
         if let EventType::Decide { leaf_chain, qc, .. } = &event.event {
-            if let Some(LeafInfo { leaf, .. }) = leaf_chain.first() {
-                if qc.view_number != leaf.view_number() {
-                    tracing::error!(
-                        leaf_view = ?leaf.view_number(),
-                        qc_view = ?qc.view_number,
-                        "latest leaf and QC are from different views!",
-                    );
-                    return;
-                }
-                if let Err(err) = self.save_anchor_leaf(leaf, qc).await {
-                    tracing::error!(
-                        ?leaf,
-                        hash = %leaf.commit(),
-                        "Failed to save anchor leaf. When restarting make sure anchor leaf is at least as recent as this leaf. {err:#}",
-                    );
-                }
+            let Some(LeafInfo { leaf, .. }) = leaf_chain.first() else {
+                // No new leaves.
+                return;
+            };
 
-                if let Err(err) = self.collect_garbage(leaf.view_number()).await {
-                    tracing::error!("Failed to garbage collect. {err:#}",);
-                }
+            // Associate each decided leaf with a QC.
+            let chain = leaf_chain.iter().zip(
+                // The first (most recent) leaf corresponds to the QC triggering the decide event.
+                std::iter::once((**qc).clone())
+                    // Moving backwards in the chain, each leaf corresponds with the subsequent
+                    // leaf's justify QC.
+                    .chain(leaf_chain.iter().map(|leaf| leaf.leaf.justify_qc())),
+            );
+
+            if let Err(err) = self
+                .append_decided_leaves(leaf.view_number(), chain, consumer)
+                .await
+            {
+                tracing::error!(
+                    "failed to save decided leaves, chain may not be up to date: {err:#}"
+                );
+                return;
             }
         }
     }
 
+    /// Append decided leaves to persistent storage and emit a corresponding event.
+    ///
+    /// `consumer` will be sent a `Decide` event containing all decided leaves in persistent storage
+    /// up to and including `view`. If available in persistent storage, full block payloads and VID
+    /// info will also be included for each leaf.
+    ///
+    /// Once the new decided leaves have been processed, old data up to `view` will be garbage
+    /// collected The consumer's handling of this event is a prerequisite for the completion of
+    /// garbage collection: if the consumer fails to process the event, no data is deleted. This
+    /// ensures that, if called repeatedly, all decided leaves ever recorded in consensus storage
+    /// will eventually be passed to the consumer.
+    ///
+    /// Note that the converse is not true: if garbage collection fails, it is not guaranteed that
+    /// the consumer hasn't processed the decide event. Thus, in rare cases, some events may be
+    /// processed twice, or the consumer may get two events which share a subset of their data.
+    /// Thus, it is the consumer's responsibility to make sure its handling of each leaf is
+    /// idempotent.
+    ///
+    /// If the consumer fails to handle the new decide event, it may be retried, or simply postponed
+    /// until the next decide, at which point all persisted leaves from the failed GC run will be
+    /// included in the event along with subsequently decided leaves.
+    ///
+    /// This functionality is useful for keeping a separate view of the blockchain in sync with the
+    /// consensus storage. For example, the `consumer` could be used for moving data from consensus
+    /// storage to long-term archival storage.
+    async fn append_decided_leaves(
+        &mut self,
+        decided_view: ViewNumber,
+        leaf_chain: impl IntoIterator<Item = (&LeafInfo<SeqTypes>, QuorumCertificate<SeqTypes>)> + Send,
+        consumer: &(impl EventConsumer + 'static),
+    ) -> anyhow::Result<()>;
+
+    async fn load_anchor_leaf(&self)
+        -> anyhow::Result<Option<(Leaf, QuorumCertificate<SeqTypes>)>>;
     async fn append_vid(
         &mut self,
         proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
@@ -526,6 +559,34 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
         &mut self,
         proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
     ) -> anyhow::Result<()>;
+}
+
+#[async_trait]
+pub trait EventConsumer: Debug + DynClone + Send + Sync {
+    async fn handle_event(&self, event: &Event) -> anyhow::Result<()>;
+}
+
+dyn_clone::clone_trait_object!(EventConsumer);
+
+#[async_trait]
+impl<T> EventConsumer for Box<T>
+where
+    Self: Clone,
+    T: EventConsumer + ?Sized,
+{
+    async fn handle_event(&self, event: &Event) -> anyhow::Result<()> {
+        (**self).handle_event(event).await
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct NullEventConsumer;
+
+#[async_trait]
+impl EventConsumer for NullEventConsumer {
+    async fn handle_event(&self, _event: &Event) -> anyhow::Result<()> {
+        Ok(())
+    }
 }
 
 #[async_trait]

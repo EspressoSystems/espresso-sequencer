@@ -1,7 +1,7 @@
 use std::{net::ToSocketAddrs, sync::Arc};
 
 use clap::Parser;
-use espresso_types::{SequencerVersions, SolverAuctionResultsProvider};
+use espresso_types::{traits::NullEventConsumer, SequencerVersions, SolverAuctionResultsProvider};
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
@@ -159,7 +159,7 @@ where
 
             http_opt
                 .serve(
-                    move |metrics| {
+                    move |metrics, consumer| {
                         async move {
                             init_node(
                                 genesis,
@@ -168,6 +168,7 @@ where
                                 storage_opt,
                                 l1_params,
                                 bind_version,
+                                consumer,
                                 opt.is_da,
                                 opt.identity,
                                 marketplace_config,
@@ -188,6 +189,7 @@ where
                 storage_opt,
                 l1_params,
                 bind_version,
+                NullEventConsumer,
                 opt.is_da,
                 opt.identity,
                 marketplace_config,

@@ -14,9 +14,9 @@ use espresso_types::{
 use ethers::prelude::Address;
 use futures::{
     future::{BoxFuture, Future, FutureExt},
-    stream::{BoxStream, Stream},
+    stream::BoxStream,
 };
-use hotshot::types::{Event, SystemContextHandle};
+use hotshot::types::SystemContextHandle;
 use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
@@ -25,6 +25,7 @@ use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber,
+    event::Event,
     light_client::StateSignatureRequestBody,
     traits::{network::ConnectedNetwork, node_implementation::Versions},
 };
@@ -97,13 +98,6 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         Self {
             consensus: Arc::pin(Lazy::from_future(init.boxed())),
         }
-    }
-
-    fn event_stream(&self) -> impl Stream<Item = Event<SeqTypes>> + Unpin {
-        let state = self.clone();
-        async move { state.consensus().await.read().await.event_stream() }
-            .boxed()
-            .flatten_stream()
     }
 
     async fn state_signer(&self) -> &StateSigner<Ver> {
@@ -393,7 +387,7 @@ pub mod test_helpers {
 
     use espresso_types::{
         mock::MockStateCatchup,
-        v0::traits::{PersistenceOptions, StateCatchup},
+        v0::traits::{NullEventConsumer, PersistenceOptions, StateCatchup},
         NamespaceId, SequencerVersions, ValidatedState,
     };
     use ethers::{prelude::Address, utils::Anvil};
@@ -566,7 +560,7 @@ pub mod test_helpers {
                         async move {
                             if i == 0 {
                                 opt.serve(
-                                    |metrics| {
+                                    |metrics, consumer| {
                                         let cfg = cfg.clone();
                                         async move {
                                             Ok(cfg
@@ -577,6 +571,7 @@ pub mod test_helpers {
                                                     catchup,
                                                     &*metrics,
                                                     STAKE_TABLE_CAPACITY_FOR_TEST,
+                                                    consumer,
                                                     Ver::instance(),
                                                     upgrades_map,
                                                 )
@@ -596,6 +591,7 @@ pub mod test_helpers {
                                     catchup,
                                     &NoMetrics,
                                     STAKE_TABLE_CAPACITY_FOR_TEST,
+                                    NullEventConsumer,
                                     Ver::instance(),
                                     upgrades_map,
                                 )
@@ -878,7 +874,7 @@ mod api_tests {
     use espresso_types::{Header, NamespaceId, SequencerVersions};
     use ethers::utils::Anvil;
     use futures::stream::StreamExt;
-    use hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
+    use hotshot_query_service::availability::{BlockQueryData, VidCommonQueryData};
 
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
@@ -937,17 +933,6 @@ mod api_tests {
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
-        // Wait for at least one empty block to be sequenced (after consensus starts VID).
-        client
-            .socket("availability/stream/leaves/0")
-            .subscribe::<LeafQueryData<SeqTypes>>()
-            .await
-            .unwrap()
-            .next()
-            .await
-            .unwrap()
-            .unwrap();
-
         let hash = client
             .post("submit/submit")
             .body_json(&txn)
@@ -960,6 +945,18 @@ mod api_tests {
         // Wait for a Decide event containing transaction matching the one we sent
         let block_height = wait_for_decide_on_handle(&mut events, &txn).await as usize;
         tracing::info!(block_height, "transaction sequenced");
+
+        // Wait for the query service to update to this block height.
+        client
+            .socket(&format!("availability/stream/blocks/{block_height}"))
+            .subscribe::<BlockQueryData<SeqTypes>>()
+            .await
+            .unwrap()
+            .next()
+            .await
+            .unwrap()
+            .unwrap();
+
         let mut found_txn = false;
         let mut found_empty_block = false;
         for block_num in 0..=block_height {
@@ -1024,6 +1021,7 @@ mod test {
 
     use espresso_types::{
         mock::MockStateCatchup,
+        traits::NullEventConsumer,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
         FeeAccount, FeeAmount, Header, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade,
         UpgradeType, ValidatedState,
@@ -1247,6 +1245,7 @@ mod test {
                 ),
                 &NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
+                NullEventConsumer,
                 <SequencerVersions as Versions>::Base::instance(),
                 Default::default(),
             )

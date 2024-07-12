@@ -23,6 +23,7 @@ cld = { workspace = true }
 committable = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
 derive_more = { workspace = true }
+dyn-clone = { workspace = true }
 ethers = { workspace = true }
 fluent-asserter = "0.1.9"
 futures = { workspace = true }

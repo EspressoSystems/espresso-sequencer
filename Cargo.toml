@@ -49,6 +49,7 @@ clap = { version = "4.4", features = ["derive", "env", "string"] }
 cld = "0.5"
 derive_more = "0.99.17"
 dotenvy = "0.15"
+dyn-clone = "1.0"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
@@ -73,11 +74,11 @@ hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", ta
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
     "runtime-async-std",
     "global-permits",
-], tag = "0.4.3", package = "cdn-broker" }
+], tag = "0.4.4", package = "cdn-broker" }
 cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
     "runtime-async-std",
     "global-permits",
-], tag = "0.4.3", package = "cdn-marshal" }
+], tag = "0.4.4", package = "cdn-marshal" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
     "test-apis",
