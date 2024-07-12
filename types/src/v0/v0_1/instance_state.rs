@@ -2,10 +2,13 @@ use std::collections::BTreeMap;
 
 use std::sync::Arc;
 
+use hotshot_types::HotShotConfig;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-use crate::{v0::traits::StateCatchup, ChainConfig, GenesisHeader, L1BlockInfo, ValidatedState};
+use crate::{
+    v0::traits::StateCatchup, ChainConfig, GenesisHeader, L1BlockInfo, PubKey, ValidatedState,
+};
 use vbs::version::Version;
 
 use super::l1::L1Client;
@@ -20,30 +23,61 @@ pub enum UpgradeType {
     ChainConfig { chain_config: ChainConfig },
 }
 
-/// Represents the  upgrade config including the type of upgrade and upgrade parameters for hotshot config.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-pub struct Upgrade {
-    pub start_voting_time: Option<u64>,
-    pub stop_voting_time: Option<u64>,
+pub struct TimeBasedUpgrade {
     pub start_proposing_time: u64,
     pub stop_proposing_time: u64,
-    pub start_voting_view: Option<u64>,
-    pub stop_voting_view: Option<u64>,
-    pub start_proposing_view: u64,
-    pub stop_proposing_view: u64,
-    // View or time based
-    pub mode: UpgradeMode,
-    /// The specific type of upgrade configuration.
-    ///
-    /// Currently, we only support chain configuration upgrades (`upgrade.chain_config` in genesis toml file).
-    #[serde(flatten)]
-    pub upgrade_type: UpgradeType,
+    pub start_voting_time: Option<u64>,
+    pub stop_voting_time: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ViewBasedUpgrade {
+    pub start_proposing_view: u64,
+    pub stop_proposing_view: u64,
+    pub start_voting_view: Option<u64>,
+    pub stop_voting_view: Option<u64>,
+}
+
+/// Represents the specific type of upgrade.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(untagged)]
 pub enum UpgradeMode {
-    View,
-    Time,
+    Time(TimeBasedUpgrade),
+    View(ViewBasedUpgrade),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Upgrade {
+    pub mode: UpgradeMode,
+    pub upgrade_type: UpgradeType,
+}
+
+impl Upgrade {
+    pub fn set_hotshot_config(&self, config: &mut HotShotConfig<PubKey>) {
+        match &self.mode {
+            UpgradeMode::View(v) => {
+                config.start_proposing_view = v.start_proposing_view;
+                config.stop_proposing_view = v.stop_proposing_view;
+                config.start_voting_view = v.start_voting_view.unwrap_or(0);
+                config.stop_voting_view = v.stop_voting_view.unwrap_or(u64::MAX);
+                config.start_proposing_time = 0;
+                config.stop_proposing_time = u64::MAX;
+                config.start_voting_time = 0;
+                config.stop_voting_time = u64::MAX;
+            }
+            UpgradeMode::Time(t) => {
+                config.start_proposing_time = t.start_proposing_time;
+                config.stop_proposing_time = t.stop_proposing_time;
+                config.start_voting_time = t.start_voting_time.unwrap_or(0);
+                config.stop_voting_time = t.stop_voting_time.unwrap_or(u64::MAX);
+                config.start_proposing_view = 0;
+                config.stop_proposing_view = u64::MAX;
+                config.start_voting_view = 0;
+                config.stop_voting_view = u64::MAX;
+            }
+        }
+    }
 }
 
 /// Represents the immutable state of a node.

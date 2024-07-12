@@ -204,15 +204,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         .upgrades
         .get(&<SeqTypes as NodeType>::Upgrade::VERSION)
     {
-        config.config.start_proposing_view = upgrade.start_proposing_view;
-        config.config.stop_proposing_view = upgrade.stop_proposing_view;
-        config.config.start_voting_view = upgrade.start_voting_view.unwrap_or(0);
-        config.config.stop_voting_view = upgrade.stop_voting_view.unwrap_or(u64::MAX);
-
-        config.config.start_proposing_time = upgrade.start_proposing_time;
-        config.config.stop_proposing_time = upgrade.stop_proposing_time;
-        config.config.start_voting_time = upgrade.start_voting_time.unwrap_or(0);
-        config.config.stop_voting_time = upgrade.stop_voting_time.unwrap_or(u64::MAX);
+        upgrade.set_hotshot_config(&mut config.config);
     }
 
     // If the `Libp2p` bootstrap nodes were supplied via the command line, override those
@@ -452,14 +444,7 @@ pub mod testing {
 
         pub fn build(mut self) -> TestConfig<NUM_NODES> {
             if let Some(upgrade) = self.upgrades.get(&<SeqTypes as NodeType>::Upgrade::VERSION) {
-                self.config.start_proposing_view = upgrade.start_proposing_view;
-                self.config.stop_proposing_view = upgrade.stop_proposing_view;
-                self.config.start_voting_view = upgrade.start_voting_view.unwrap_or(0);
-                self.config.stop_voting_view = upgrade.stop_voting_view.unwrap_or(u64::MAX);
-                self.config.start_proposing_time = upgrade.start_proposing_time;
-                self.config.stop_proposing_time = upgrade.stop_proposing_time;
-                self.config.start_voting_time = upgrade.start_voting_time.unwrap_or(0);
-                self.config.stop_voting_time = upgrade.stop_voting_time.unwrap_or(u64::MAX);
+                upgrade.set_hotshot_config(&mut self.config)
             }
 
             TestConfig {

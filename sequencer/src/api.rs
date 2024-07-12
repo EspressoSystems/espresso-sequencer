@@ -1039,8 +1039,9 @@ mod test {
     use committable::{Commitment, Committable};
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
     use espresso_types::{
-        mock::MockStateCatchup, v0_1::UpgradeMode, FeeAccount, FeeAmount, Header, Upgrade,
-        UpgradeType, ValidatedState,
+        mock::MockStateCatchup,
+        v0_1::{UpgradeMode, ViewBasedUpgrade},
+        FeeAccount, FeeAmount, Header, Upgrade, UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1445,15 +1446,12 @@ mod test {
         upgrades.insert(
             <SeqTypes as NodeType>::Upgrade::VERSION,
             Upgrade {
-                start_voting_time: None,
-                stop_voting_time: None,
-                start_proposing_time: 0,
-                stop_proposing_time: u64::MAX,
-                start_voting_view: None,
-                stop_voting_view: None,
-                start_proposing_view: 1,
-                stop_proposing_view: 10,
-                mode: UpgradeMode::View,
+                mode: UpgradeMode::View(ViewBasedUpgrade {
+                    start_voting_view: None,
+                    stop_voting_view: None,
+                    start_proposing_view: 1,
+                    stop_proposing_view: 10,
+                }),
                 upgrade_type: UpgradeType::ChainConfig {
                     chain_config: chain_config_upgrade,
                 },

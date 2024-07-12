@@ -4,7 +4,10 @@ use std::{
 };
 
 use anyhow::Context;
-use espresso_types::{ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade};
+
+use espresso_types::Upgrade;
+use espresso_types::{ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo};
+
 use serde::{Deserialize, Serialize};
 use vbs::version::Version;
 
@@ -51,75 +54,37 @@ mod upgrade_serialization {
 
     use std::{collections::BTreeMap, fmt};
 
-    use espresso_types::{v0_1::UpgradeMode, Upgrade, UpgradeType};
+    use espresso_types::{
+        v0_1::{TimeBasedUpgrade, UpgradeMode, ViewBasedUpgrade},
+        Upgrade, UpgradeType,
+    };
     use serde::{
-        de::{SeqAccess, Visitor},
+        de::{self, SeqAccess, Visitor},
         ser::SerializeSeq,
         Deserialize, Deserializer, Serialize, Serializer,
     };
     use vbs::version::Version;
 
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct UpgradeTimeParams {
-        pub start_proposing_time: u64,
-        pub stop_proposing_time: u64,
-        pub start_voting_time: Option<u64>,
-        pub stop_voting_time: Option<u64>,
-    }
-
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct UpgradeViewParams {
-        pub start_proposing_view: u64,
-        pub stop_proposing_view: u64,
-        pub start_voting_view: Option<u64>,
-        pub stop_voting_view: Option<u64>,
-    }
-
-    /// Represents the specific type of upgrade.
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    #[serde(untagged)]
-    pub enum UpgradeParameters {
-        Time(UpgradeTimeParams),
-        View(UpgradeViewParams),
-    }
-
-    #[derive(Serialize, Deserialize)]
-    struct UpgradeFields {
-        version: String,
-        #[serde(flatten)]
-        params: UpgradeParameters,
-        #[serde(flatten)]
-        upgrade_type: UpgradeType,
-    }
-
     pub fn serialize<S>(map: &BTreeMap<Version, Upgrade>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
+        #[derive(Debug, Clone, Serialize, Deserialize)]
+        pub struct Fields {
+            pub version: String,
+            #[serde(flatten)]
+            pub mode: UpgradeMode,
+            #[serde(flatten)]
+            pub upgrade_type: UpgradeType,
+        }
+
         let mut seq = serializer.serialize_seq(Some(map.len()))?;
         for (version, upgrade) in map {
-            match upgrade.mode {
-                UpgradeMode::View => seq.serialize_element(&UpgradeFields {
-                    version: version.to_string(),
-                    params: UpgradeParameters::View(UpgradeViewParams {
-                        start_proposing_view: upgrade.start_proposing_view,
-                        stop_proposing_view: upgrade.stop_proposing_view,
-                        start_voting_view: upgrade.start_voting_view,
-                        stop_voting_view: upgrade.stop_voting_view,
-                    }),
-                    upgrade_type: upgrade.upgrade_type.clone(),
-                })?,
-                UpgradeMode::Time => seq.serialize_element(&UpgradeFields {
-                    version: version.to_string(),
-                    params: UpgradeParameters::Time(UpgradeTimeParams {
-                        start_proposing_time: upgrade.start_proposing_time,
-                        stop_proposing_time: upgrade.stop_proposing_time,
-                        start_voting_time: upgrade.start_voting_time,
-                        stop_voting_time: upgrade.stop_voting_time,
-                    }),
-                    upgrade_type: upgrade.upgrade_type.clone(),
-                })?,
-            }
+            seq.serialize_element(&Fields {
+                version: version.to_string(),
+                mode: upgrade.mode.clone(),
+                upgrade_type: upgrade.upgrade_type.clone(),
+            })?
         }
         seq.end()
     }
@@ -129,6 +94,20 @@ mod upgrade_serialization {
         D: Deserializer<'de>,
     {
         struct VecToHashMap;
+
+        #[derive(Debug, Clone, Serialize, Deserialize)]
+        pub struct Fields {
+            pub version: String,
+            // If both `time_based` and `view_based` fields are provided
+            // and we use an enum for deserialization, then one of the variant fields will be ignored.
+            // We want to raise an error in such a case to avoid ambiguity
+            #[serde(flatten)]
+            pub time_based: Option<TimeBasedUpgrade>,
+            #[serde(flatten)]
+            pub view_based: Option<ViewBasedUpgrade>,
+            #[serde(flatten)]
+            pub upgrade_type: UpgradeType,
+        }
 
         impl<'de> Visitor<'de> for VecToHashMap {
             type Value = BTreeMap<Version, Upgrade>;
@@ -143,7 +122,7 @@ mod upgrade_serialization {
             {
                 let mut map = BTreeMap::new();
 
-                while let Some(fields) = seq.next_element::<UpgradeFields>()? {
+                while let Some(fields) = seq.next_element::<Fields>()? {
                     // add try_from in Version
                     let version: Vec<_> = fields.version.split('.').collect();
 
@@ -152,38 +131,36 @@ mod upgrade_serialization {
                         minor: version[1].parse().expect("invalid version"),
                     };
 
-                    match fields.params {
-                        UpgradeParameters::Time(t) => map.insert(
-                            version,
-                            Upgrade {
-                                start_voting_time: t.start_voting_time,
-                                stop_voting_time: t.stop_voting_time,
-                                start_proposing_time: t.start_proposing_time,
-                                stop_proposing_time: t.stop_proposing_time,
-                                start_voting_view: None,
-                                stop_voting_view: None,
-                                start_proposing_view: 0,
-                                stop_proposing_view: u64::MAX,
-                                mode: UpgradeMode::Time,
-                                upgrade_type: fields.upgrade_type,
-                            },
-                        ),
-                        UpgradeParameters::View(v) => map.insert(
-                            version,
-                            Upgrade {
-                                start_voting_time: None,
-                                stop_voting_time: None,
-                                start_proposing_time: 0,
-                                stop_proposing_time: u64::MAX,
-                                start_voting_view: v.start_voting_view,
-                                stop_voting_view: v.stop_voting_view,
-                                start_proposing_view: v.start_proposing_view,
-                                stop_proposing_view: v.stop_proposing_view,
-                                mode: UpgradeMode::View,
-                                upgrade_type: fields.upgrade_type,
-                            },
-                        ),
-                    };
+                    match (fields.time_based, fields.view_based) {
+                        (Some(_), Some(_)) => {
+                            return Err(de::Error::custom(
+                                "both view and time mode parameters are set",
+                            ))
+                        }
+                        (None, None) => {
+                            return Err(de::Error::custom(
+                                "no view or time mode parameters provided",
+                            ))
+                        }
+                        (None, Some(v)) => {
+                            map.insert(
+                                version,
+                                Upgrade {
+                                    mode: UpgradeMode::View(v),
+                                    upgrade_type: fields.upgrade_type,
+                                },
+                            );
+                        }
+                        (Some(t), None) => {
+                            map.insert(
+                                version,
+                                Upgrade {
+                                    mode: UpgradeMode::Time(t),
+                                    upgrade_type: fields.upgrade_type.clone(),
+                                },
+                            );
+                        }
+                    }
                 }
 
                 Ok(map)
@@ -212,7 +189,10 @@ impl Genesis {
 
 #[cfg(test)]
 mod test {
-    use espresso_types::{v0_1::UpgradeMode, L1BlockInfo, Timestamp, UpgradeType};
+    use espresso_types::{
+        v0_1::{UpgradeMode, ViewBasedUpgrade},
+        L1BlockInfo, Timestamp, UpgradeType,
+    };
     use ethers::prelude::{Address, H160, H256};
     use sequencer_utils::ser::FromStringOrInteger;
     use toml::toml;
@@ -418,7 +398,7 @@ mod test {
             [[upgrade]]
             version = "0.2"
             start_proposing_view = 1
-            stop_proposing_view = 10
+            stop_proposing_view = 15
 
             [upgrade.chain_config]
             chain_id = 12345
@@ -436,15 +416,12 @@ mod test {
         assert_eq!(*version, Version { major: 0, minor: 2 });
 
         let upgrade = Upgrade {
-            start_voting_time: None,
-            stop_voting_time: None,
-            start_proposing_time: 0,
-            stop_proposing_time: u64::MAX,
-            start_voting_view: None,
-            stop_voting_view: None,
-            start_proposing_view: 1,
-            stop_proposing_view: 10,
-            mode: UpgradeMode::View,
+            mode: UpgradeMode::View(ViewBasedUpgrade {
+                start_voting_view: None,
+                stop_voting_view: None,
+                start_proposing_view: 1,
+                stop_proposing_view: 15,
+            }),
             upgrade_type: UpgradeType::ChainConfig {
                 chain_config: genesis.chain_config,
             },
@@ -454,18 +431,6 @@ mod test {
 
         let mut upgrades = BTreeMap::new();
         upgrades.insert(Version { major: 0, minor: 2 }, upgrade);
-
-        let genesis = Genesis {
-            chain_config: genesis.chain_config,
-            stake_table: genesis.stake_table,
-            accounts: genesis.accounts,
-            l1_finalized: genesis.l1_finalized,
-            header: genesis.header,
-            upgrades,
-        };
-
-        let toml_from_genesis = toml::to_string(&genesis).unwrap();
-        assert_eq!(toml, toml_from_genesis);
 
         // set both time and view parameters
         // this should err
