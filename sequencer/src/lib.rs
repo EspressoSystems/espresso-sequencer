@@ -204,7 +204,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         .upgrades
         .get(&<SeqTypes as NodeType>::Upgrade::VERSION)
     {
-        upgrade.set_hotshot_config(&mut config.config);
+        upgrade.set_hotshot_config_parameters(&mut config.config);
     }
 
     // If the `Libp2p` bootstrap nodes were supplied via the command line, override those
@@ -444,7 +444,7 @@ pub mod testing {
 
         pub fn build(mut self) -> TestConfig<NUM_NODES> {
             if let Some(upgrade) = self.upgrades.get(&<SeqTypes as NodeType>::Upgrade::VERSION) {
-                upgrade.set_hotshot_config(&mut self.config)
+                upgrade.set_hotshot_config_parameters(&mut self.config)
             }
 
             TestConfig {
