@@ -1059,7 +1059,7 @@
         .upgrades
         .get(<span class="kw-2">&amp;</span>&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Upgrade::VERSION)
     {
-        upgrade.set_hotshot_config(<span class="kw-2">&amp;mut </span>config.config);
+        upgrade.set_hotshot_config_parameters(<span class="kw-2">&amp;mut </span>config.config);
     }
 
     <span class="comment">// If the `Libp2p` bootstrap nodes were supplied via the command line, override those
@@ -1299,7 +1299,7 @@
 
         <span class="kw">pub fn </span>build(<span class="kw-2">mut </span><span class="self">self</span>) -&gt; TestConfig&lt;NUM_NODES&gt; {
             <span class="kw">if let </span><span class="prelude-val">Some</span>(upgrade) = <span class="self">self</span>.upgrades.get(<span class="kw-2">&amp;</span>&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Upgrade::VERSION) {
-                upgrade.set_hotshot_config(<span class="kw-2">&amp;mut </span><span class="self">self</span>.config)
+                upgrade.set_hotshot_config_parameters(<span class="kw-2">&amp;mut </span><span class="self">self</span>.config)
             }
 
             TestConfig {

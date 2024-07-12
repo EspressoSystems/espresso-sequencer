@@ -160,13 +160,53 @@
 <a href="#160" id="160">160</a>
 <a href="#161" id="161">161</a>
 <a href="#162" id="162">162</a>
+<a href="#163" id="163">163</a>
+<a href="#164" id="164">164</a>
+<a href="#165" id="165">165</a>
+<a href="#166" id="166">166</a>
+<a href="#167" id="167">167</a>
+<a href="#168" id="168">168</a>
+<a href="#169" id="169">169</a>
+<a href="#170" id="170">170</a>
+<a href="#171" id="171">171</a>
+<a href="#172" id="172">172</a>
+<a href="#173" id="173">173</a>
+<a href="#174" id="174">174</a>
+<a href="#175" id="175">175</a>
+<a href="#176" id="176">176</a>
+<a href="#177" id="177">177</a>
+<a href="#178" id="178">178</a>
+<a href="#179" id="179">179</a>
+<a href="#180" id="180">180</a>
+<a href="#181" id="181">181</a>
+<a href="#182" id="182">182</a>
+<a href="#183" id="183">183</a>
+<a href="#184" id="184">184</a>
+<a href="#185" id="185">185</a>
+<a href="#186" id="186">186</a>
+<a href="#187" id="187">187</a>
+<a href="#188" id="188">188</a>
+<a href="#189" id="189">189</a>
+<a href="#190" id="190">190</a>
+<a href="#191" id="191">191</a>
+<a href="#192" id="192">192</a>
+<a href="#193" id="193">193</a>
+<a href="#194" id="194">194</a>
+<a href="#195" id="195">195</a>
+<a href="#196" id="196">196</a>
+<a href="#197" id="197">197</a>
+<a href="#198" id="198">198</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, sync::Arc};
 
-<span class="kw">use </span>hotshot_types::traits::{node_implementation::NodeType, states::InstanceState};
+<span class="kw">use </span>hotshot_types::{
+    traits::{node_implementation::NodeType, states::InstanceState},
+    HotShotConfig,
+};
 <span class="kw">use </span>vbs::version::{StaticVersionType, Version};
 
 <span class="kw">use crate</span>::{
-    v0::traits::StateCatchup, ChainConfig, L1Client, NodeState, SeqTypes, Upgrade, ValidatedState,
+    v0::traits::StateCatchup, ChainConfig, L1Client, NodeState, PubKey, SeqTypes, Timestamp,
+    Upgrade, UpgradeMode, ValidatedState,
 };
 
 <span class="kw">impl </span>NodeState {
@@ -238,6 +278,38 @@
 }
 
 <span class="kw">impl </span>InstanceState <span class="kw">for </span>NodeState {}
+
+<span class="kw">impl </span>Upgrade {
+    <span class="kw">pub fn </span>set_hotshot_config_parameters(<span class="kw-2">&amp;</span><span class="self">self</span>, config: <span class="kw-2">&amp;mut </span>HotShotConfig&lt;PubKey&gt;) {
+        <span class="kw">match </span><span class="kw-2">&amp;</span><span class="self">self</span>.mode {
+            UpgradeMode::View(v) =&gt; {
+                config.start_proposing_view = v.start_proposing_view;
+                config.stop_proposing_view = v.stop_proposing_view;
+                config.start_voting_view = v.start_voting_view.unwrap_or(<span class="number">0</span>);
+                config.stop_voting_view = v.stop_voting_view.unwrap_or(u64::MAX);
+                config.start_proposing_time = <span class="number">0</span>;
+                config.stop_proposing_time = u64::MAX;
+                config.start_voting_time = <span class="number">0</span>;
+                config.stop_voting_time = u64::MAX;
+            }
+            UpgradeMode::Time(t) =&gt; {
+                config.start_proposing_time = t.start_proposing_time.unix_timestamp();
+                config.stop_proposing_time = t.stop_proposing_time.unix_timestamp();
+                config.start_voting_time = t.start_voting_time.unwrap_or_default().unix_timestamp();
+                <span class="comment">// this should not panic because Timestamp::max() constructs the maximum possible Unix timestamp
+                // using i64::MAX
+                </span>config.stop_voting_time = t
+                    .stop_voting_time
+                    .unwrap_or(Timestamp::max().expect(<span class="string">"overflow"</span>))
+                    .unix_timestamp();
+                config.start_proposing_view = <span class="number">0</span>;
+                config.stop_proposing_view = u64::MAX;
+                config.start_voting_view = <span class="number">0</span>;
+                config.stop_voting_view = u64::MAX;
+            }
+        }
+    }
+}
 
 <span class="attr">#[cfg(any(test, feature = <span class="string">"testing"</span>))]
 </span><span class="kw">pub mod </span>mock {
