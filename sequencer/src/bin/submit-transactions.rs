@@ -131,9 +131,20 @@ struct Options {
     #[clap(env = "ESPRESSO_SEQUENCER_URL")]
     url: Url,
 
+    /// Relay num_nodes for benchmark results output
     #[cfg(feature = "benchmarking")]
     #[clap(short, long, env = "ESPRESSO_ORCHESTRATOR_NUM_NODES")]
     num_nodes: NonZeroUsize,
+
+    /// The first block that benchmark starts counting in
+    #[cfg(feature = "benchmarking")]
+    #[clap(short, long, env = "ESPRESSO_BENCH_START_BLOCK")]
+    benchmark_start_block: NonZeroUsize,
+
+    /// The final block that benchmark counts in
+    #[cfg(feature = "benchmarking")]
+    #[clap(short, long, env = "ESPRESSO_BENCH_END_BLOCK")]
+    benchmark_end_block: NonZeroUsize,
 }
 
 impl Options {
@@ -195,10 +206,6 @@ async fn main() {
     #[cfg(feature = "benchmarking")]
     let mut num_block = 0;
     #[cfg(feature = "benchmarking")]
-    let start_round = 50;
-    #[cfg(feature = "benchmarking")]
-    let end_round = 150;
-    #[cfg(feature = "benchmarking")]
     let mut benchmark_total_latency = Duration::default();
     #[cfg(feature = "benchmarking")]
     let mut benchmark_minimum_latency = Duration::default();
@@ -228,7 +235,7 @@ async fn main() {
         #[cfg(feature = "benchmarking")]
         {
             num_block += 1;
-            if !has_started && num_block >= start_round {
+            if !has_started && (num_block as usize) >= opt.benchmark_start_block.into() {
                 has_started = true;
                 start = Instant::now();
             }
@@ -279,8 +286,8 @@ async fn main() {
         }
 
         #[cfg(feature = "benchmarking")]
-        if !benchmark_finish && num_block > end_round {
-            let block_range = format!("{}~{}", start_round, end_round,);
+        if !benchmark_finish && (num_block as usize) >= opt.benchmark_end_block.into() {
+            let block_range = format!("{}~{}", opt.benchmark_start_block, opt.benchmark_end_block,);
             let transaction_size_range = format!("{}~{}", opt.min_size, opt.max_size,);
             let transactions_per_batch_range = format!(
                 "{}~{}",
@@ -306,6 +313,7 @@ async fn main() {
             }
             let _ = wtr.write_record([
                 "total_nodes",
+                "da_committee_size",
                 "block_range",
                 "transaction_size_range",
                 "transaction_per_batch_range",
@@ -319,6 +327,7 @@ async fn main() {
                 "total_time_elapsed_in_sec",
             ]);
             let _ = wtr.write_record(&[
+                opt.num_nodes.to_string(),
                 opt.num_nodes.to_string(),
                 block_range,
                 transaction_size_range,
