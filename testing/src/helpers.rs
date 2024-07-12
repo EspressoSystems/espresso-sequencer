@@ -46,9 +46,10 @@ pub async fn build_system_handle(
     Sender<Arc<HotShotEvent<TestTypes>>>,
     Receiver<Arc<HotShotEvent<TestTypes>>>,
 ) {
-    let builder = TestDescription::default_multiple_rounds();
+    let builder: TestDescription<TestTypes, MemoryImpl> =
+        TestDescription::default_multiple_rounds();
 
-    let launcher = builder.gen_launcher::<TestTypes, MemoryImpl>(node_id);
+    let launcher = builder.gen_launcher(node_id);
 
     let network = (launcher.resource_generator.channel_generator)(node_id).await;
     let storage = (launcher.resource_generator.storage)(node_id);

@@ -21,7 +21,7 @@ async fn test_timeout() {
         ..Default::default()
     };
 
-    let mut metadata = TestDescription {
+    let mut metadata: TestDescription<TestTypes,MemoryImpl> = TestDescription {
         num_nodes_with_stake: 10,
         start_nodes: 10,
         ..Default::default()
@@ -53,7 +53,7 @@ async fn test_timeout() {
     // TODO ED Test with memory network once issue is resolved
     // https://github.com/EspressoSystems/HotShot/issues/1790
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>(0)
+        .gen_launcher(0)
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;
@@ -84,7 +84,7 @@ async fn test_timeout_libp2p() {
         ..Default::default()
     };
 
-    let mut metadata = TestDescription {
+    let mut metadata: TestDescription<TestTypes, Libp2pImpl> = TestDescription {
         num_nodes_with_stake: 10,
         start_nodes: 10,
         num_bootstrap_nodes: 10,
@@ -117,7 +117,7 @@ async fn test_timeout_libp2p() {
     // TODO ED Test with memory network once issue is resolved
     // https://github.com/EspressoSystems/HotShot/issues/1790
     metadata
-        .gen_launcher::<TestTypes, Libp2pImpl>(0)
+        .gen_launcher(0)
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;

@@ -49,6 +49,7 @@ use crate::{
     block_builder::{BuilderTask, TestBuilderImplementation},
     completion_task::CompletionTaskDescription,
     spinning_task::{ChangeNode, SpinningTask, UpDown},
+    test_builder::create_test_handle,
     test_launcher::{Network, TestLauncher},
     test_task::{TestResult, TestTask},
     txn_task::TxnTaskDescription,
@@ -429,42 +430,45 @@ where
 
             networks_ready.push(networks_ready_future);
 
-            if self.launcher.metadata.skip_late && late_start.contains(&node_id) {
-                self.late_start.insert(
-                    node_id,
-                    LateStartNode {
-                        network,
-                        context: LateNodeContext::UninitializedContext(LateNodeContextParameters {
-                            storage,
-                            memberships,
-                            config,
-                            auction_results_provider,
-                        }),
-                    },
-                );
-            } else {
-                let initializer = HotShotInitializer::<TYPES>::from_genesis(TestInstanceState {})
-                    .await
-                    .unwrap();
+            if late_start.contains(&node_id) {
+                if self.launcher.metadata.skip_late {
+                    self.late_start.insert(
+                        node_id,
+                        LateStartNode {
+                            network,
+                            context: LateNodeContext::UninitializedContext(
+                                LateNodeContextParameters {
+                                    storage,
+                                    memberships,
+                                    config,
+                                    auction_results_provider,
+                                },
+                            ),
+                        },
+                    );
+                } else {
+                    let initializer =
+                        HotShotInitializer::<TYPES>::from_genesis(TestInstanceState {})
+                            .await
+                            .unwrap();
 
-                // See whether or not we should be DA
-                let is_da = node_id < config.da_staked_committee_size as u64;
+                    // See whether or not we should be DA
+                    let is_da = node_id < config.da_staked_committee_size as u64;
 
-                // We assign node's public key and stake value rather than read from config file since it's a test
-                let validator_config =
-                    ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1, is_da);
-                let hotshot = Self::add_node_with_config(
-                    node_id,
-                    network.clone(),
-                    memberships,
-                    initializer,
-                    config,
-                    validator_config,
-                    storage,
-                    auction_results_provider,
-                )
-                .await;
-                if late_start.contains(&node_id) {
+                    // We assign node's public key and stake value rather than read from config file since it's a test
+                    let validator_config =
+                        ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1, is_da);
+                    let hotshot = Self::add_node_with_config(
+                        node_id,
+                        network.clone(),
+                        memberships,
+                        initializer,
+                        config,
+                        validator_config,
+                        storage,
+                        auction_results_provider,
+                    )
+                    .await;
                     self.late_start.insert(
                         node_id,
                         LateStartNode {
@@ -472,9 +476,16 @@ where
                             context: LateNodeContext::InitializedContext(hotshot),
                         },
                     );
-                } else {
-                    uninitialized_nodes.push((node_id, network, hotshot));
                 }
+            } else {
+                uninitialized_nodes.push((
+                    node_id,
+                    network,
+                    memberships,
+                    config,
+                    storage,
+                    auction_results_provider,
+                ));
             }
 
             results.push(node_id);
@@ -484,8 +495,20 @@ where
         join_all(networks_ready).await;
 
         // Then start the necessary tasks
-        for (node_id, network, hotshot) in uninitialized_nodes {
-            let handle = hotshot.run_tasks().await;
+        for (node_id, network, memberships, config, storage, auction_results_provider) in
+            uninitialized_nodes
+        {
+            let behaviour = (self.launcher.metadata.behaviour)(node_id);
+            let handle = create_test_handle(
+                behaviour,
+                node_id,
+                network.clone(),
+                memberships,
+                config.clone(),
+                storage,
+                auction_results_provider,
+            )
+            .await;
 
             match node_id.cmp(&(config.da_staked_committee_size as u64 - 1)) {
                 std::cmp::Ordering::Less => {

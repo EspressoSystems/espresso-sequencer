@@ -582,12 +582,97 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
 
         handle
     }
+}
+
+/// An async broadcast channel
+type Channel<S> = (Sender<Arc<S>>, Receiver<Arc<S>>);
+
+#[async_trait]
+/// Trait for handling messages for a node with a twin copy of consensus
+pub trait TwinsHandlerState<TYPES, I>
+where
+    Self: std::fmt::Debug + Send + Sync,
+    TYPES: NodeType,
+    I: NodeImplementation<TYPES>,
+{
+    /// Handle a message sent to the twin from the network task, forwarding it to one of the two twins.
+    async fn send_handler(
+        &mut self,
+        event: &HotShotEvent<TYPES>,
+    ) -> Vec<Either<HotShotEvent<TYPES>, HotShotEvent<TYPES>>>;
+
+    /// Handle a message from either twin, forwarding it to the network task
+    async fn recv_handler(
+        &mut self,
+        event: &Either<HotShotEvent<TYPES>, HotShotEvent<TYPES>>,
+    ) -> Vec<HotShotEvent<TYPES>>;
+
+    /// Fuse two channels into a single channel
+    ///
+    /// Note: the channels are fused using two async loops, whose `JoinHandle`s are dropped.
+    fn fuse_channels(
+        &'static mut self,
+        left: Channel<HotShotEvent<TYPES>>,
+        right: Channel<HotShotEvent<TYPES>>,
+    ) -> Channel<HotShotEvent<TYPES>> {
+        let send_state = Arc::new(RwLock::new(self));
+        let recv_state = Arc::clone(&send_state);
+
+        let (left_sender, mut left_receiver) = (left.0, left.1);
+        let (right_sender, mut right_receiver) = (right.0, right.1);
+
+        // channel to the network task
+        let (sender_to_network, network_task_receiver) = broadcast(EVENT_CHANNEL_SIZE);
+        // channel from the network task
+        let (network_task_sender, mut receiver_from_network): Channel<HotShotEvent<TYPES>> =
+            broadcast(EVENT_CHANNEL_SIZE);
+
+        let _recv_loop_handle = async_spawn(async move {
+            loop {
+                let msg = match select(left_receiver.recv(), right_receiver.recv()).await {
+                    Either::Left(msg) => Either::Left(msg.0.unwrap().as_ref().clone()),
+                    Either::Right(msg) => Either::Right(msg.0.unwrap().as_ref().clone()),
+                };
+
+                let mut state = recv_state.write().await;
+                let mut result = state.recv_handler(&msg).await;
+
+                while let Some(event) = result.pop() {
+                    let _ = sender_to_network.broadcast(event.into()).await;
+                }
+            }
+        });
+
+        let _send_loop_handle = async_spawn(async move {
+            loop {
+                if let Ok(msg) = receiver_from_network.recv().await {
+                    let mut state = send_state.write().await;
+
+                    let mut result = state.send_handler(&msg).await;
+
+                    while let Some(event) = result.pop() {
+                        match event {
+                            Either::Left(msg) => {
+                                let _ = left_sender.broadcast(msg.into()).await;
+                            }
+                            Either::Right(msg) => {
+                                let _ = right_sender.broadcast(msg.into()).await;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        (network_task_sender, network_task_receiver)
+    }
 
     #[allow(clippy::too_many_arguments)]
     /// Spawn all tasks that operate on [`SystemContextHandle`].
     ///
     /// For a list of which tasks are being spawned, see this module's documentation.
-    pub async fn spawn_twin_handles(
+    async fn spawn_twin_handles(
+        &'static mut self,
         public_key: TYPES::SignatureKey,
         private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
         nonce: u64,
@@ -599,7 +684,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         storage: I::Storage,
         auction_results_provider: I::AuctionResultsProvider,
     ) -> (SystemContextHandle<TYPES, I>, SystemContextHandle<TYPES, I>) {
-        let left_system_context = Self::new(
+        let left_system_context = SystemContext::new(
             public_key.clone(),
             private_key.clone(),
             nonce,
@@ -611,7 +696,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             storage.clone(),
             auction_results_provider.clone(),
         );
-        let right_system_context = Self::new(
+        let right_system_context = SystemContext::new(
             public_key,
             private_key,
             nonce,
@@ -682,7 +767,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         add_consensus_tasks::<TYPES, I>(&mut right_handle).await;
 
         // fuse the event streams from both handles before initializing the network tasks
-        let fused_internal_event_stream = fuse_channels::<HotShotEvent<TYPES>, RandomTwinsHandler>(
+        let fused_internal_event_stream = self.fuse_channels(
             (left_internal_sender, left_internal_receiver),
             (right_internal_sender, right_internal_receiver),
         );
@@ -703,121 +788,62 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     }
 }
 
-/// An async broadcast channel
-type Channel<S> = (Sender<Arc<S>>, Receiver<Arc<S>>);
-
-#[async_trait]
-/// Trait for handling messages for a node with a twin copy of consensus
-pub trait TwinsHandlerState<MESSAGE>
-where
-    Self: Sync,
-    MESSAGE: Send + Sync,
-{
-    /// Initialize the state
-    fn new() -> Self;
-
-    /// Handle a message sent to the twin from the outside, forwarding it to one of the two twins.
-    async fn send_handler(&mut self, event: &MESSAGE) -> Either<MESSAGE, MESSAGE>;
-
-    /// Wrapper for `send_handler`.
-    async fn send_handler_arc(
-        lock: &Arc<RwLock<Self>>,
-        event: &MESSAGE,
-    ) -> Either<MESSAGE, MESSAGE> {
-        let mut state = lock.write().await;
-
-        state.send_handler(event).await
-    }
-
-    /// Handle a message from either twin, forwarding it to the outside
-    async fn recv_handler(&mut self, event: &Either<MESSAGE, MESSAGE>) -> MESSAGE;
-
-    /// Wrapper for `recv_handler`.
-    async fn recv_handler_arc(
-        lock: &Arc<RwLock<Self>>,
-        event: &Either<MESSAGE, MESSAGE>,
-    ) -> MESSAGE {
-        let mut state = lock.write().await;
-
-        state.recv_handler(event).await
-    }
-}
-
+#[derive(Debug)]
 /// A `TwinsHandlerState` that randomly forwards a message to either twin,
 /// and returns messages from both.
 pub struct RandomTwinsHandler;
 
 #[async_trait]
-impl<MESSAGE: Send + Sync + Clone> TwinsHandlerState<MESSAGE> for RandomTwinsHandler {
-    fn new() -> Self {
-        RandomTwinsHandler
-    }
-    async fn send_handler(&mut self, event: &MESSAGE) -> Either<MESSAGE, MESSAGE> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TwinsHandlerState<TYPES, I>
+    for RandomTwinsHandler
+{
+    async fn send_handler(
+        &mut self,
+        event: &HotShotEvent<TYPES>,
+    ) -> Vec<Either<HotShotEvent<TYPES>, HotShotEvent<TYPES>>> {
         let random: bool = rand::thread_rng().gen();
 
         #[allow(clippy::match_bool)]
         match random {
-            true => Either::Left(event.clone()),
-            false => Either::Right(event.clone()),
+            true => vec![Either::Left(event.clone())],
+            false => vec![Either::Right(event.clone())],
         }
     }
 
-    async fn recv_handler(&mut self, event: &Either<MESSAGE, MESSAGE>) -> MESSAGE {
+    async fn recv_handler(
+        &mut self,
+        event: &Either<HotShotEvent<TYPES>, HotShotEvent<TYPES>>,
+    ) -> Vec<HotShotEvent<TYPES>> {
         match event {
-            Either::Left(msg) | Either::Right(msg) => msg.clone(),
+            Either::Left(msg) | Either::Right(msg) => vec![msg.clone()],
         }
     }
 }
 
-/// Fuse two channels into a single channel, using handlers provided by the `STATE` type.
-///
-/// Note: the channels are fused using two async loops, whose `JoinHandle`s are dropped.
-fn fuse_channels<MESSAGE, STATE>(
-    left: Channel<MESSAGE>,
-    right: Channel<MESSAGE>,
-) -> Channel<MESSAGE>
-where
-    MESSAGE: Clone + std::marker::Send + std::marker::Sync + 'static,
-    STATE: TwinsHandlerState<MESSAGE> + Send + 'static,
+#[derive(Debug)]
+/// A `TwinsHandlerState` that forwards each message to both twins,
+/// and returns messages from each of them.
+pub struct DoubleTwinsHandler;
+
+#[async_trait]
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TwinsHandlerState<TYPES, I>
+    for DoubleTwinsHandler
 {
-    let send_state = Arc::new(RwLock::new(STATE::new()));
-    let recv_state = Arc::clone(&send_state);
+    async fn send_handler(
+        &mut self,
+        event: &HotShotEvent<TYPES>,
+    ) -> Vec<Either<HotShotEvent<TYPES>, HotShotEvent<TYPES>>> {
+        vec![Either::Left(event.clone()), Either::Right(event.clone())]
+    }
 
-    let (left_sender, mut left_receiver) = (left.0, left.1);
-    let (right_sender, mut right_receiver) = (right.0, right.1);
-
-    let result: Channel<MESSAGE> = broadcast(EVENT_CHANNEL_SIZE);
-    let (result_sender, mut result_receiver) = (result.0.clone(), result.1.clone());
-
-    let _recv_loop_handle = async_spawn(async move {
-        loop {
-            let msg = match select(left_receiver.recv(), right_receiver.recv()).await {
-                Either::Left(msg) => Either::Left(msg.0.unwrap().as_ref().clone()),
-                Either::Right(msg) => Either::Right(msg.0.unwrap().as_ref().clone()),
-            };
-
-            let _ = result_sender
-                .broadcast(STATE::recv_handler_arc(&recv_state, &msg).await.into())
-                .await;
+    async fn recv_handler(
+        &mut self,
+        event: &Either<HotShotEvent<TYPES>, HotShotEvent<TYPES>>,
+    ) -> Vec<HotShotEvent<TYPES>> {
+        match event {
+            Either::Left(msg) | Either::Right(msg) => vec![msg.clone()],
         }
-    });
-
-    let _send_loop_handle = async_spawn(async move {
-        loop {
-            if let Ok(msg) = result_receiver.recv().await {
-                match STATE::send_handler_arc(&send_state, &msg).await {
-                    Either::Left(msg) => {
-                        let _ = left_sender.broadcast(msg.into()).await;
-                    }
-                    Either::Right(msg) => {
-                        let _ = right_sender.broadcast(msg.into()).await;
-                    }
-                }
-            }
-        }
-    });
-
-    result
+    }
 }
 
 #[async_trait]

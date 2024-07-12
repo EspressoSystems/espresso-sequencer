@@ -17,7 +17,7 @@ use tracing::instrument;
 async fn libp2p_network() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestDescription {
+    let metadata: TestDescription<TestTypes, Libp2pImpl> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
             ..Default::default()
@@ -35,7 +35,7 @@ async fn libp2p_network() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, Libp2pImpl>(0)
+        .gen_launcher(0)
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;
@@ -48,7 +48,7 @@ async fn libp2p_network() {
 async fn libp2p_network_failures_2() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let mut metadata = TestDescription {
+    let mut metadata: TestDescription<TestTypes, Libp2pImpl> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
             ..Default::default()
@@ -82,7 +82,7 @@ async fn libp2p_network_failures_2() {
     metadata.overall_safety_properties.num_successful_views = 15;
 
     metadata
-        .gen_launcher::<TestTypes, Libp2pImpl>(0)
+        .gen_launcher(0)
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;
@@ -96,9 +96,9 @@ async fn libp2p_network_failures_2() {
 async fn test_stress_libp2p_network() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestDescription::default_stress();
+    let metadata: TestDescription<TestTypes, Libp2pImpl> = TestDescription::default_stress();
     metadata
-        .gen_launcher::<TestTypes, Libp2pImpl>(0)
+        .gen_launcher(0)
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;

@@ -40,7 +40,11 @@ use hotshot_types::{
 };
 use vbs::version::StaticVersionType;
 
-use crate::{tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi};
+use crate::{
+    tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi,
+    ConsensusMetricsValue, ConsensusTaskRegistry, HotShotConfig, HotShotInitializer, Memberships,
+    NetworkTaskRegistry, SignatureKey, SystemContext,
+};
 
 /// event for global event stream
 #[derive(Clone, Debug)]
@@ -206,49 +210,87 @@ pub async fn add_consensus_tasks<TYPES: NodeType, I: NodeImplementation<TYPES>>(
 /// Consensus <-> [Byzantine logic layer] <-> Network
 pub trait EventTransformerState<TYPES: NodeType, I: NodeImplementation<TYPES>>
 where
-    Self: Sized + Send + Sync + 'static,
+    Self: std::fmt::Debug + Send + Sync + 'static,
 {
-    /// Initialize the state
-    fn new() -> Self;
-
     /// modify incoming messages from the network
-    fn transform_in(&mut self, event: &HotShotEvent<TYPES>) -> HotShotEvent<TYPES>;
+    async fn recv_handler(&mut self, event: &HotShotEvent<TYPES>) -> Vec<HotShotEvent<TYPES>>;
 
     /// modify outgoing messages from the network
-    fn transform_out(&mut self, event: &HotShotEvent<TYPES>) -> HotShotEvent<TYPES>;
+    async fn send_handler(&mut self, event: &HotShotEvent<TYPES>) -> Vec<HotShotEvent<TYPES>>;
 
-    /// `transform_in`, but wrapping the state in an `Arc` lock
-    async fn transform_in_arc(
-        lock: Arc<RwLock<Self>>,
-        event: &HotShotEvent<TYPES>,
-    ) -> HotShotEvent<TYPES> {
-        let mut state = lock.write().await;
+    #[allow(clippy::too_many_arguments)]
+    /// Creates a `SystemContextHandle` with the given even transformer
+    async fn spawn_handle(
+        &'static mut self,
+        public_key: TYPES::SignatureKey,
+        private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+        nonce: u64,
+        config: HotShotConfig<TYPES::SignatureKey>,
+        memberships: Memberships<TYPES>,
+        network: Arc<I::Network>,
+        initializer: HotShotInitializer<TYPES>,
+        metrics: ConsensusMetricsValue,
+        storage: I::Storage,
+        auction_results_provider: I::AuctionResultsProvider,
+    ) -> SystemContextHandle<TYPES, I> {
+        let hotshot = SystemContext::new(
+            public_key,
+            private_key,
+            nonce,
+            config,
+            memberships,
+            network,
+            initializer,
+            metrics,
+            storage,
+            auction_results_provider,
+        );
+        let consensus_registry = ConsensusTaskRegistry::new();
+        let network_registry = NetworkTaskRegistry::new();
 
-        state.transform_in(event)
-    }
+        let output_event_stream = hotshot.external_event_stream.clone();
+        let internal_event_stream = hotshot.internal_event_stream.clone();
 
-    /// `transform_out`, but wrapping the state in an `Arc` lock
-    async fn transform_out_arc(
-        lock: Arc<RwLock<Self>>,
-        event: &HotShotEvent<TYPES>,
-    ) -> HotShotEvent<TYPES> {
-        let mut state = lock.write().await;
+        let mut handle = SystemContextHandle {
+            consensus_registry,
+            network_registry,
+            output_event_stream: output_event_stream.clone(),
+            internal_event_stream: internal_event_stream.clone(),
+            hotshot: Arc::clone(&hotshot),
+            storage: Arc::clone(&hotshot.storage),
+            network: Arc::clone(&hotshot.network),
+            memberships: Arc::clone(&hotshot.memberships),
+        };
 
-        state.transform_out(event)
+        add_consensus_tasks::<TYPES, I>(&mut handle).await;
+        self.add_network_tasks(&mut handle).await;
+
+        handle
     }
 
     /// Add byzantine network tasks with the trait
-    async fn add_network_tasks(handle: &mut SystemContextHandle<TYPES, I>) {
-        let state_in = Arc::new(RwLock::new(Self::new()));
+    async fn add_network_tasks(&'static mut self, handle: &mut SystemContextHandle<TYPES, I>) {
+        let state_in = Arc::new(RwLock::new(self));
         let state_out = Arc::clone(&state_in);
-
-        // channel between the task spawned in this function and the network tasks.
+        // channels between the task spawned in this function and the network tasks.
         // with this, we can control exactly what events the network tasks see.
-        let (sender, mut receiver) = broadcast(EVENT_CHANNEL_SIZE);
+
+        // channel to the network task
+        let (sender_to_network, network_task_receiver) = broadcast(EVENT_CHANNEL_SIZE);
+        // channel from the network task
+        let (network_task_sender, mut receiver_from_network) = broadcast(EVENT_CHANNEL_SIZE);
+        // create a copy of the original receiver
+        let (original_sender, mut original_receiver) = (
+            handle.internal_event_stream.0.clone(),
+            handle.internal_event_stream.1.activate_cloned(),
+        );
 
         // replace the internal event stream with the one we just created,
         // so that the network tasks are spawned with our channel.
-        let mut internal_event_stream = (sender.clone(), receiver.clone().deactivate());
+        let mut internal_event_stream = (
+            network_task_sender.clone(),
+            network_task_receiver.clone().deactivate(),
+        );
         std::mem::swap(
             &mut internal_event_stream,
             &mut handle.internal_event_stream,
@@ -257,52 +299,67 @@ where
         // spawn the network tasks with our newly-created channel
         add_network_tasks::<TYPES, I>(handle).await;
 
-        // create a copy of the original receiver
-        let (original_sender, mut original_receiver) = (
-            internal_event_stream.0.clone(),
-            internal_event_stream.1.activate_cloned(),
+        std::mem::swap(
+            &mut internal_event_stream,
+            &mut handle.internal_event_stream,
         );
 
         // spawn a task to listen on the (original) internal event stream,
         // and broadcast the transformed events to the replacement event stream we just created.
-        let out_handle = async_spawn(async move {
+        let send_handle = async_spawn(async move {
             loop {
                 if let Ok(msg) = original_receiver.recv().await {
-                    let _ = sender
-                        .broadcast(
-                            Self::transform_out_arc(Arc::clone(&state_out), &msg)
-                                .await
-                                .into(),
-                        )
-                        .await;
+                    let mut state = state_out.write().await;
+
+                    let mut results = state.send_handler(&msg).await;
+
+                    while let Some(event) = results.pop() {
+                        let _ = sender_to_network.broadcast(event.into()).await;
+                    }
                 }
             }
         });
 
         // spawn a task to listen on the newly created event stream,
         // and broadcast the transformed events to the original internal event stream
-        let in_handle = async_spawn(async move {
+        let recv_handle = async_spawn(async move {
             loop {
-                if let Ok(msg) = receiver.recv().await {
-                    let _ = original_sender
-                        .broadcast(
-                            Self::transform_in_arc(Arc::clone(&state_in), &msg)
-                                .await
-                                .into(),
-                        )
-                        .await;
+                if let Ok(msg) = receiver_from_network.recv().await {
+                    let mut state = state_in.write().await;
+
+                    let mut results = state.recv_handler(&msg).await;
+
+                    while let Some(event) = results.pop() {
+                        let _ = original_sender.broadcast(event.into()).await;
+                    }
                 }
             }
         });
 
-        handle.network_registry.register(out_handle);
-        handle.network_registry.register(in_handle);
+        handle.network_registry.register(send_handle);
+        handle.network_registry.register(recv_handle);
+    }
+}
 
-        // put the old channel back.
-        std::mem::swap(
-            &mut internal_event_stream,
-            &mut handle.internal_event_stream,
-        );
+#[derive(Debug)]
+/// An `EventHandlerState` that doubles the `QuorumVoteSend` and `QuorumProposalSend` events
+pub struct DoubleProposeVote;
+
+#[async_trait]
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> EventTransformerState<TYPES, I>
+    for DoubleProposeVote
+{
+    async fn recv_handler(&mut self, event: &HotShotEvent<TYPES>) -> Vec<HotShotEvent<TYPES>> {
+        vec![event.clone()]
+    }
+
+    async fn send_handler(&mut self, event: &HotShotEvent<TYPES>) -> Vec<HotShotEvent<TYPES>> {
+        match event {
+            HotShotEvent::QuorumProposalSend(_, _) | HotShotEvent::QuorumVoteSend(_) => {
+                vec![event.clone(), event.clone()]
+            }
+            _ => vec![event.clone()],
+        }
     }
 }
 

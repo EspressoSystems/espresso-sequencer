@@ -1,12 +1,18 @@
-use std::{collections::HashMap, num::NonZeroUsize, sync::Arc, time::Duration};
+use std::{collections::HashMap, num::NonZeroUsize, rc::Rc, sync::Arc, time::Duration};
 
-use hotshot::traits::{NetworkReliability, TestableNodeImplementation};
+use hotshot::{
+    tasks::EventTransformerState,
+    traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation},
+    types::SystemContextHandle,
+    HotShotInitializer, Memberships, SystemContext, TwinsHandlerState,
+};
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
     storage_types::TestStorage,
 };
 use hotshot_types::{
-    traits::node_implementation::NodeType, ExecutionType, HotShotConfig, ValidatorConfig,
+    consensus::ConsensusMetricsValue, traits::node_implementation::NodeType, ExecutionType,
+    HotShotConfig, ValidatorConfig,
 };
 use tide_disco::Url;
 use vec1::Vec1;
@@ -18,7 +24,7 @@ use super::{
 };
 use crate::{
     spinning_task::SpinningTaskDescription,
-    test_launcher::{ResourceGenerators, TestLauncher},
+    test_launcher::{Network, ResourceGenerators, TestLauncher},
     view_sync_task::ViewSyncTaskDescription,
 };
 /// data describing how a round should be timed.
@@ -43,8 +49,8 @@ pub struct TimingData {
 }
 
 /// metadata describing a test
-#[derive(Clone, Debug)]
-pub struct TestDescription {
+#[derive(Clone)]
+pub struct TestDescription<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Total number of staked nodes in the test
     pub num_nodes_with_stake: usize,
     /// Total number of non-staked nodes in the test
@@ -78,6 +84,97 @@ pub struct TestDescription {
     pub builders: Vec1<BuilderDescription>,
     /// description of the solver to run
     pub solver: FakeSolverApiDescription,
+    /// nodes with byzantine behaviour
+    pub behaviour: Rc<dyn Fn(u64) -> Behaviour<TYPES, I>>,
+}
+
+#[derive(Debug)]
+pub enum Behaviour<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+    ByzantineTwins(Box<dyn TwinsHandlerState<TYPES, I>>),
+    Byzantine(Box<dyn EventTransformerState<TYPES, I>>),
+    Standard,
+}
+
+pub async fn create_test_handle<
+    TYPES: NodeType<InstanceState = TestInstanceState>,
+    I: NodeImplementation<TYPES>,
+>(
+    behaviour: Behaviour<TYPES, I>,
+    node_id: u64,
+    network: Network<TYPES, I>,
+    memberships: Memberships<TYPES>,
+    config: HotShotConfig<TYPES::SignatureKey>,
+    storage: I::Storage,
+    auction_results_provider: I::AuctionResultsProvider,
+) -> SystemContextHandle<TYPES, I> {
+    let initializer = HotShotInitializer::<TYPES>::from_genesis(TestInstanceState {})
+        .await
+        .unwrap();
+
+    // See whether or not we should be DA
+    let is_da = node_id < config.da_staked_committee_size as u64;
+
+    let validator_config: ValidatorConfig<TYPES::SignatureKey> =
+        ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1, is_da);
+
+    // Get key pair for certificate aggregation
+    let private_key = validator_config.private_key.clone();
+    let public_key = validator_config.public_key.clone();
+
+    match behaviour {
+        Behaviour::ByzantineTwins(state) => {
+            let state = Box::leak(state);
+            let (left_handle, _right_handle) = state
+                .spawn_twin_handles(
+                    public_key,
+                    private_key,
+                    node_id,
+                    config,
+                    memberships,
+                    network,
+                    initializer,
+                    ConsensusMetricsValue::default(),
+                    storage,
+                    auction_results_provider,
+                )
+                .await;
+
+            left_handle
+        }
+        Behaviour::Byzantine(state) => {
+            let state = Box::leak(state);
+            state
+                .spawn_handle(
+                    public_key,
+                    private_key,
+                    node_id,
+                    config,
+                    memberships,
+                    network,
+                    initializer,
+                    ConsensusMetricsValue::default(),
+                    storage,
+                    auction_results_provider,
+                )
+                .await
+        }
+        Behaviour::Standard => {
+            let hotshot = SystemContext::<TYPES, I>::new(
+                public_key,
+                private_key,
+                node_id,
+                config,
+                memberships,
+                network,
+                initializer,
+                ConsensusMetricsValue::default(),
+                storage,
+                auction_results_provider,
+            );
+
+            hotshot.run_tasks().await
+        }
+    }
 }
 
 /// Describes a possible change to builder status during test
@@ -120,7 +217,7 @@ impl Default for TimingData {
     }
 }
 
-impl TestDescription {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TestDescription<TYPES, I> {
     /// the default metadata for a stress test
     #[must_use]
     #[allow(clippy::redundant_field_names)]
@@ -128,7 +225,7 @@ impl TestDescription {
         let num_nodes_with_stake = 100;
         let num_nodes_without_stake = 0;
 
-        TestDescription {
+        Self {
             num_bootstrap_nodes: num_nodes_with_stake,
             num_nodes_with_stake,
             num_nodes_without_stake,
@@ -149,17 +246,17 @@ impl TestDescription {
                 ..TimingData::default()
             },
             view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes_with_stake),
-            ..TestDescription::default()
+            ..Self::default()
         }
     }
 
     /// the default metadata for multiple rounds
     #[must_use]
     #[allow(clippy::redundant_field_names)]
-    pub fn default_multiple_rounds() -> TestDescription {
+    pub fn default_multiple_rounds() -> Self {
         let num_nodes_with_stake = 10;
         let num_nodes_without_stake = 0;
-        TestDescription {
+        TestDescription::<TYPES, I> {
             // TODO: remove once we have fixed the DHT timeout issue
             // https://github.com/EspressoSystems/HotShot/issues/2088
             num_bootstrap_nodes: num_nodes_with_stake,
@@ -180,17 +277,17 @@ impl TestDescription {
                 ..TimingData::default()
             },
             view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes_with_stake),
-            ..TestDescription::default()
+            ..TestDescription::<TYPES, I>::default()
         }
     }
 
     /// Default setting with 20 nodes and 8 views of successful views.
     #[must_use]
     #[allow(clippy::redundant_field_names)]
-    pub fn default_more_nodes() -> TestDescription {
+    pub fn default_more_nodes() -> Self {
         let num_nodes_with_stake = 20;
         let num_nodes_without_stake = 0;
-        TestDescription {
+        Self {
             num_nodes_with_stake,
             num_nodes_without_stake,
             start_nodes: num_nodes_with_stake,
@@ -215,12 +312,12 @@ impl TestDescription {
                 ..TimingData::default()
             },
             view_sync_properties: ViewSyncTaskDescription::Threshold(0, num_nodes_with_stake),
-            ..TestDescription::default()
+            ..Self::default()
         }
     }
 }
 
-impl Default for TestDescription {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Default for TestDescription<TYPES, I> {
     /// by default, just a single round
     #[allow(clippy::redundant_field_names)]
     fn default() -> Self {
@@ -261,23 +358,20 @@ impl Default for TestDescription {
                 // Default to a 10% error rate.
                 error_pct: 0.1,
             },
+            behaviour: Rc::new(|_| Behaviour::Standard),
         }
     }
 }
 
-impl TestDescription {
+impl<TYPES: NodeType<InstanceState = TestInstanceState>, I: TestableNodeImplementation<TYPES>>
+    TestDescription<TYPES, I>
+{
     /// turn a description of a test (e.g. a [`TestDescription`]) into
     /// a [`TestLauncher`] that can be used to launch the test.
     /// # Panics
     /// if some of the the configuration values are zero
     #[must_use]
-    pub fn gen_launcher<
-        TYPES: NodeType<InstanceState = TestInstanceState>,
-        I: TestableNodeImplementation<TYPES>,
-    >(
-        self,
-        node_id: u64,
-    ) -> TestLauncher<TYPES, I> {
+    pub fn gen_launcher(self, node_id: u64) -> TestLauncher<TYPES, I> {
         let TestDescription {
             num_nodes_with_stake,
             num_bootstrap_nodes,

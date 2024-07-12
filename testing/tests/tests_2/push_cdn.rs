@@ -17,7 +17,7 @@ use tracing::instrument;
 async fn push_cdn_network() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata = TestDescription {
+    let metadata: TestDescription<TestTypes, PushCdnImpl> = TestDescription {
         timing_data: TimingData {
             round_start_delay: 25,
             next_view_timeout: 10_000,
@@ -38,7 +38,7 @@ async fn push_cdn_network() {
         ..TestDescription::default()
     };
     metadata
-        .gen_launcher::<TestTypes, PushCdnImpl>(0)
+        .gen_launcher(0)
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;

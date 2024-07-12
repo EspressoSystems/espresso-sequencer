@@ -19,7 +19,7 @@ async fn test_catchup() {
         next_view_timeout: 2000,
         ..Default::default()
     };
-    let mut metadata = TestDescription::default();
+    let mut metadata: TestDescription<TestTypes, MemoryImpl> = TestDescription::default();
     let catchup_node = vec![ChangeNode {
         idx: 19,
         updown: UpDown::Up,
@@ -51,7 +51,7 @@ async fn test_catchup() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>(0)
+        .gen_launcher(0)
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;
@@ -78,7 +78,7 @@ async fn test_catchup_cdn() {
         next_view_timeout: 2000,
         ..Default::default()
     };
-    let mut metadata = TestDescription::default();
+    let mut metadata: TestDescription<TestTypes, PushCdnImpl> = TestDescription::default();
     let catchup_nodes = vec![ChangeNode {
         idx: 18,
         updown: UpDown::Up,
@@ -104,7 +104,7 @@ async fn test_catchup_cdn() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, PushCdnImpl>(0)
+        .gen_launcher(0)
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;
@@ -131,7 +131,7 @@ async fn test_catchup_one_node() {
         next_view_timeout: 2000,
         ..Default::default()
     };
-    let mut metadata = TestDescription::default();
+    let mut metadata: TestDescription<TestTypes, MemoryImpl> = TestDescription::default();
     let catchup_nodes = vec![ChangeNode {
         idx: 18,
         updown: UpDown::Up,
@@ -159,7 +159,7 @@ async fn test_catchup_one_node() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>(0)
+        .gen_launcher(0)
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;
@@ -186,7 +186,7 @@ async fn test_catchup_in_view_sync() {
         next_view_timeout: 2000,
         ..Default::default()
     };
-    let mut metadata = TestDescription::default();
+    let mut metadata: TestDescription<TestTypes, MemoryImpl> = TestDescription::default();
     let catchup_nodes = vec![
         ChangeNode {
             idx: 18,
@@ -220,7 +220,7 @@ async fn test_catchup_in_view_sync() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>(0)
+        .gen_launcher(0)
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;
@@ -249,7 +249,7 @@ async fn test_catchup_reload() {
         next_view_timeout: 2000,
         ..Default::default()
     };
-    let mut metadata = TestDescription::default();
+    let mut metadata: TestDescription<TestTypes, MemoryImpl> = TestDescription::default();
     let catchup_node = vec![ChangeNode {
         idx: 19,
         updown: UpDown::Up,
@@ -281,7 +281,7 @@ async fn test_catchup_reload() {
     };
 
     metadata
-        .gen_launcher::<TestTypes, MemoryImpl>(0)
+        .gen_launcher(0)
         .launch()
         .run_test::<SimpleBuilderImplementation>()
         .await;

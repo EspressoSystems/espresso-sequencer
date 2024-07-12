@@ -34,10 +34,10 @@ async fn test_network_task() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let builder = TestDescription::default_multiple_rounds();
+    let builder: TestDescription<TestTypes, MemoryImpl> = TestDescription::default_multiple_rounds();
     let node_id = 1;
 
-    let launcher = builder.gen_launcher::<TestTypes, MemoryImpl>(node_id);
+    let launcher = builder.gen_launcher(node_id);
 
     let network = (launcher.resource_generator.channel_generator)(node_id).await;
 
@@ -98,10 +98,10 @@ async fn test_network_storage_fail() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let builder = TestDescription::default_multiple_rounds();
+    let builder: TestDescription<TestTypes, MemoryImpl> = TestDescription::default_multiple_rounds();
     let node_id = 1;
 
-    let launcher = builder.gen_launcher::<TestTypes, MemoryImpl>(node_id);
+    let launcher = builder.gen_launcher(node_id);
 
     let network = (launcher.resource_generator.channel_generator)(node_id).await;
 

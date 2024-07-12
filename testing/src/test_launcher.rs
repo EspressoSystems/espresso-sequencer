@@ -37,7 +37,7 @@ pub struct TestLauncher<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     /// generator for resources
     pub resource_generator: ResourceGenerators<TYPES, I>,
     /// metadata used for tasks
-    pub metadata: TestDescription,
+    pub metadata: TestDescription<TYPES, I>,
 }
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestLauncher<TYPES, I> {
