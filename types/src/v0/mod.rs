@@ -20,6 +20,8 @@ pub use impls::{
 pub use utils::*;
 use vbs::version::StaticVersion;
 
+// TODO can we expand this documentation to include not only what this code does but why we need it?
+
 // This is the single source of truth for minor versions supported by this major version.
 //
 // It is written as a higher-level macro which takes a macro invocation as an argument and appends
@@ -69,7 +71,6 @@ reexport_unchanged_types!(
     BlockMerkleCommitment,
     BlockMerkleTree,
     BuilderSignature,
-    ChainConfig,
     ChainId,
     Delta,
     FeeAccount,
@@ -85,7 +86,6 @@ reexport_unchanged_types!(
     L1Client,
     L1Snapshot,
     NamespaceId,
-    NodeState,
     NsIndex,
     NsIter,
     NsPayload,
@@ -103,7 +103,6 @@ reexport_unchanged_types!(
     NumTxsUnchecked,
     Payload,
     PayloadByteLen,
-    ResolvableChainConfig,
     Transaction,
     TxIndex,
     TxIter,
@@ -117,7 +116,6 @@ reexport_unchanged_types!(
     UpgradeMode,
     TimeBasedUpgrade,
     ViewBasedUpgrade,
-    ValidatedState,
     BlockSize,
 );
 
@@ -137,6 +135,7 @@ impl NodeType for SeqTypes {
     type Membership = GeneralStaticCommittee<Self, PubKey>;
     type BuilderSignatureKey = FeeAccount;
     type Base = StaticVersion<0, 1>;
+    // TODO we could have comments describing the role of these types in upgrades/versioning
     type Upgrade = StaticVersion<0, 2>;
     const UPGRADE_HASH: [u8; 32] = [
         1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
@@ -151,6 +150,7 @@ pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey>;
 
+use self::impls::{NodeState, ValidatedState};
 pub use crate::v0_1::{
     BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
     NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,

@@ -97,3 +97,15 @@ impl From<ChainConfig> for ResolvableChainConfig {
         }
     }
 }
+
+impl Default for ChainConfig {
+    fn default() -> Self {
+        Self {
+            chain_id: U256::from(35353).into(), // arbitrarily chosen chain ID
+            max_block_size: 10240.into(),
+            base_fee: 0.into(),
+            fee_contract: None,
+            fee_recipient: Default::default(),
+        }
+    }
+}

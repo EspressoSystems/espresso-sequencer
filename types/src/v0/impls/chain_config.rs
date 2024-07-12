@@ -1,5 +1,4 @@
 use std::str::FromStr;
-
 use bytesize::ByteSize;
 use committable::Commitment;
 use derive_more::From;
@@ -10,7 +9,7 @@ use sequencer_utils::{
 };
 use snafu::Snafu;
 
-use crate::{BlockSize, ChainConfig, ChainId, ResolvableChainConfig};
+use crate::{BlockSize, ChainId};
 
 impl_serde_from_string_or_integer!(ChainId);
 impl_to_fixed_bytes!(ChainId, U256);
@@ -77,19 +76,6 @@ impl FromStringOrInteger for BlockSize {
     }
 }
 
-impl Default for ChainConfig {
-    fn default() -> Self {
-        Self {
-            chain_id: U256::from(35353).into(), // arbitrarily chosen chain ID
-            max_block_size: 10240.into(),
-            base_fee: 0.into(),
-            fee_contract: None,
-            fee_recipient: Default::default(),
-            bid_recipient: Default::default(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, From, Snafu)]
 pub struct ParseSizeError {
     msg: String,
@@ -101,6 +87,8 @@ pub fn parse_size(s: &str) -> Result<u64, ParseSizeError> {
 
 #[cfg(test)]
 mod tests {
+    use crate::v0_3::{ChainConfig, ResolvableChainConfig};
+
     use super::*;
 
     #[test]

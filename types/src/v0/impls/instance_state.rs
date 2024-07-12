@@ -1,15 +1,44 @@
+use hotshot_types::traits::{node_implementation::NodeType, states::InstanceState};
 use std::{collections::BTreeMap, sync::Arc};
-
-use hotshot_types::{
-    traits::{node_implementation::NodeType, states::InstanceState},
-    HotShotConfig,
-};
 use vbs::version::{StaticVersionType, Version};
 
 use crate::{
-    v0::traits::StateCatchup, ChainConfig, L1Client, NodeState, PubKey, SeqTypes, Timestamp,
-    Upgrade, UpgradeMode, ValidatedState,
+    v0::traits::StateCatchup, v0_3::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, SeqTypes,
+    Upgrade,
 };
+
+use super::state::ValidatedState;
+
+/// Represents the immutable state of a node.
+///
+/// For mutable state, use `ValidatedState`.
+#[derive(Debug, Clone)]
+pub struct NodeState {
+    pub node_id: u64,
+    pub chain_config: crate::v0_3::ChainConfig,
+    pub l1_client: L1Client,
+    pub peers: Arc<dyn StateCatchup>,
+    pub genesis_header: GenesisHeader,
+    pub genesis_state: ValidatedState,
+    pub l1_genesis: Option<L1BlockInfo>,
+
+    /// Map containing all planned and executed upgrades.
+    ///
+    /// Currently, only one upgrade can be executed at a time.
+    /// For multiple upgrades, the node needs to be restarted after each upgrade.
+    ///
+    /// This field serves as a record for planned and past upgrades,
+    /// listed in the genesis TOML file. It will be very useful if multiple upgrades
+    /// are supported in the future.
+    pub upgrades: BTreeMap<Version, Upgrade>,
+    /// Current version of the sequencer.
+    ///
+    /// This version is checked to determine if an upgrade is planned,
+    /// and which version variant for versioned types  
+    /// to use in functions such as genesis.
+    /// (example: genesis returns V2 Header if version is 0.2)
+    pub current_version: Version,
+}
 
 impl NodeState {
     pub fn new(

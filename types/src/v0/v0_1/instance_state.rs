@@ -1,16 +1,7 @@
-use std::collections::BTreeMap;
-
-use std::sync::Arc;
-
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-use crate::{
-    v0::traits::StateCatchup, ChainConfig, GenesisHeader, L1BlockInfo, Timestamp, ValidatedState,
-};
-use vbs::version::Version;
-
-use super::l1::L1Client;
+use crate::{v0::traits::StateCatchup, v0_3::ChainConfig, GenesisHeader, L1BlockInfo};
 
 /// Represents the specific type of upgrade.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -65,35 +56,4 @@ pub struct Upgrade {
     pub mode: UpgradeMode,
     /// The type of the upgrade.
     pub upgrade_type: UpgradeType,
-}
-
-/// Represents the immutable state of a node.
-///
-/// For mutable state, use `ValidatedState`.
-#[derive(Debug, Clone)]
-pub struct NodeState {
-    pub node_id: u64,
-    pub chain_config: ChainConfig,
-    pub l1_client: L1Client,
-    pub peers: Arc<dyn StateCatchup>,
-    pub genesis_header: GenesisHeader,
-    pub genesis_state: ValidatedState,
-    pub l1_genesis: Option<L1BlockInfo>,
-
-    /// Map containing all planned and executed upgrades.
-    ///
-    /// Currently, only one upgrade can be executed at a time.
-    /// For multiple upgrades, the node needs to be restarted after each upgrade.
-    ///
-    /// This field serves as a record for planned and past upgrades,
-    /// listed in the genesis TOML file. It will be very useful if multiple upgrades
-    /// are supported in the future.
-    pub upgrades: BTreeMap<Version, Upgrade>,
-    /// Current version of the sequencer.
-    ///
-    /// This version is checked to determine if an upgrade is planned,
-    /// and which version variant for versioned types  
-    /// to use in functions such as genesis.
-    /// (example: genesis returns V2 Header if version is 0.2)
-    pub current_version: Version,
 }

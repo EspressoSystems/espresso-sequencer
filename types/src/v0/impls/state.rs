@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 use anyhow::bail;
 use committable::Committable;
 use ethers::types::Address;
@@ -21,15 +19,20 @@ use jf_merkle_tree::{
 };
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
+use serde::{Deserialize, Serialize};
+use std::ops::Add;
 use thiserror::Error;
 use vbs::version::Version;
 
-use super::{auction::ExecutionError, fee_info::FeeError, header::ProposalValidationError};
+use super::{
+    auction::ExecutionError, fee_info::FeeError, header::ProposalValidationError,
+    instance_state::NodeState,
+};
 use crate::{
-    v0_3::{FullNetworkTx, IterableFeeInfo},
-    BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header,
-    Leaf, NodeState, NsTableValidationError, PayloadByteLen, ResolvableChainConfig, SeqTypes,
-    UpgradeType, ValidatedState, BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT,
+    v0_3::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
+    BlockMerkleTree, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header, Leaf,
+    NsTableValidationError, PayloadByteLen, SeqTypes, UpgradeType, BLOCK_MERKLE_TREE_HEIGHT,
+    FEE_MERKLE_TREE_HEIGHT,
 };
 
 /// Possible builder validation failures
@@ -53,6 +56,15 @@ pub enum StateValidationError {
 }
 
 impl StateDelta for Delta {}
+
+#[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ValidatedState {
+    /// Frontier of Block Merkle Tree
+    pub block_merkle_tree: BlockMerkleTree,
+    /// Fee Merkle Tree
+    pub fee_merkle_tree: FeeMerkleTree,
+    pub chain_config: ResolvableChainConfig,
+}
 
 impl Default for ValidatedState {
     fn default() -> Self {
@@ -337,7 +349,7 @@ impl ValidatedState {
         validated_state.apply_upgrade(instance, version);
 
         let chain_config = validated_state
-            .get_chain_config(instance, proposed_header.chain_config())
+            .get_chain_config(instance, &proposed_header.chain_config())
             .await?;
 
         if Some(chain_config) != validated_state.chain_config.resolve() {
@@ -627,7 +639,7 @@ impl HotShotState<SeqTypes> for ValidatedState {
         Self {
             fee_merkle_tree,
             block_merkle_tree,
-            chain_config: *block_header.chain_config(),
+            chain_config: block_header.chain_config(),
         }
     }
     /// Construct a genesis validated state.

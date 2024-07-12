@@ -1,7 +1,7 @@
 use crate::{
     eth_signature_key::{EthKeyPair, SigningError},
     v0_3::{BidTx, BidTxBody, FullNetworkTx},
-    FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId, ValidatedState,
+    FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId,
 };
 use committable::{Commitment, Committable};
 use ethers::types::Signature;
@@ -15,6 +15,8 @@ use hotshot_types::{
 use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
+
+use super::state::ValidatedState;
 
 impl FullNetworkTx {
     pub fn execute(
@@ -176,7 +178,12 @@ impl BidTx {
         let recipient = chain_config.bid_recipient;
         // Charge the bid amount
         state
-            .charge_fee(FeeInfo::new(self.account(), self.amount()), recipient)
+            .charge_fee(
+                FeeInfo::new(self.account(), self.amount()),
+                // TODO This code is only called from v0_3, so should be safe to unwrap,
+                // but maybe we should guard against the error anyway
+                recipient.unwrap(),
+            )
             .map_err(ExecutionError::from)?;
 
         // TODO are gas and bid funded to same recipient? Possibly
@@ -184,7 +191,12 @@ impl BidTx {
         // fee recipient?
         // Charge the the gas amount
         state
-            .charge_fee(FeeInfo::new(self.account(), self.gas_price()), recipient)
+            .charge_fee(
+                FeeInfo::new(self.account(), self.gas_price()),
+                // TODO This code is only called from v0_3, so should be safe to unwrap,
+                // but maybe we should guard against the error anyway
+                recipient.unwrap(),
+            )
             .map_err(ExecutionError::from)?;
 
         Ok(())

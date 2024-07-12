@@ -1,6 +1,8 @@
+use std::str::FromStr;
+
 use crate::{v0_1, BlockSize, ChainId, FeeAccount, FeeAmount};
 use committable::{Commitment, Committable};
-use ethers::types::Address;
+use ethers::types::{Address, U256};
 use itertools::Either;
 use serde::{Deserialize, Serialize};
 
@@ -31,7 +33,7 @@ pub struct ChainConfig {
     pub fee_recipient: FeeAccount,
 
     /// Account that receives sequencing bids.
-    pub bid_recipient: FeeAccount,
+    pub bid_recipient: Option<FeeAccount>,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Deserialize, Serialize, Eq, Hash)]
@@ -91,15 +93,41 @@ impl From<ChainConfig> for ResolvableChainConfig {
     }
 }
 
-impl From<ResolvableChainConfig> for v0_1::ResolvableChainConfig {
+impl From<&v0_1::ResolvableChainConfig> for ResolvableChainConfig {
     fn from(
-        ResolvableChainConfig { chain_config }: ResolvableChainConfig,
-    ) -> v0_1::ResolvableChainConfig {
+        &v0_1::ResolvableChainConfig { chain_config }: &v0_1::ResolvableChainConfig,
+    ) -> ResolvableChainConfig {
         match chain_config {
-            Either::Left(chain_config) => v0_1::ResolvableChainConfig {
-                chain_config: Either::Left(v0_1::ChainConfig::from(chain_config)),
+            Either::Left(chain_config) => ResolvableChainConfig {
+                chain_config: Either::Left(ChainConfig::from(chain_config)),
             },
-            Either::Right(_) => unimplemented!(),
+            // TODO * review how `None` is handled in (de)serialization
+            //      * is there a better way to pack an old commitment in a new one?
+            Either::Right(c) => ResolvableChainConfig {
+                chain_config: Either::Right(Commitment::from_str(&c.to_string()).unwrap()),
+            },
+        }
+    }
+}
+
+impl From<v0_1::ChainConfig> for ChainConfig {
+    fn from(chain_config: v0_1::ChainConfig) -> ChainConfig {
+        let v0_1::ChainConfig {
+            chain_id,
+            max_block_size,
+            base_fee,
+            fee_contract,
+            fee_recipient,
+            ..
+        } = chain_config;
+
+        ChainConfig {
+            chain_id,
+            max_block_size,
+            base_fee,
+            fee_contract,
+            fee_recipient,
+            bid_recipient: None,
         }
     }
 }
@@ -121,6 +149,19 @@ impl From<ChainConfig> for v0_1::ChainConfig {
             base_fee,
             fee_contract,
             fee_recipient,
+        }
+    }
+}
+
+impl Default for ChainConfig {
+    fn default() -> Self {
+        Self {
+            chain_id: U256::from(35353).into(), // arbitrarily chosen chain ID
+            max_block_size: 10240.into(),
+            base_fee: 0.into(),
+            fee_contract: None,
+            fee_recipient: Default::default(),
+            bid_recipient: Default::default(),
         }
     }
 }

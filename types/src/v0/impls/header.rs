@@ -28,11 +28,13 @@ use vbs::version::Version;
 use crate::{
     v0::header::{EitherOrVersion, VersionedHeader},
     v0_1, v0_2,
-    v0_3::{self, FullNetworkTx, IterableFeeInfo},
-    BlockMerkleCommitment, BlockSize, BuilderSignature, ChainConfig, FeeAccount, FeeAmount,
-    FeeInfo, FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NodeState,
-    NsTable, NsTableValidationError, ResolvableChainConfig, SeqTypes, UpgradeType, ValidatedState,
+    v0_3::{self, ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
+    BlockMerkleCommitment, BlockSize, BuilderSignature, FeeAccount, FeeAmount, FeeInfo,
+    FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable,
+    NsTableValidationError, SeqTypes, UpgradeType,
 };
+
+use super::{instance_state::NodeState, state::ValidatedState};
 
 /// Possible proposal validation failures
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -542,8 +544,12 @@ impl Header {
 
 impl Header {
     /// A commitment to a ChainConfig or a full ChainConfig.
-    pub fn chain_config(&self) -> &ResolvableChainConfig {
-        field!(self.chain_config)
+    pub fn chain_config(&self) -> v0_3::ResolvableChainConfig {
+        match self {
+            Self::V1(fields) => v0_3::ResolvableChainConfig::from(&fields.chain_config),
+            Self::V2(fields) => v0_3::ResolvableChainConfig::from(&fields.chain_config),
+            Self::V3(fields) => fields.chain_config,
+        }
     }
 
     pub fn height(&self) -> u64 {
@@ -958,7 +964,7 @@ mod test_headers {
     use super::*;
     use crate::{
         eth_signature_key::EthKeyPair, v0::impls::instance_state::mock::MockStateCatchup,
-        validate_proposal, NodeState,
+        validate_proposal,
     };
 
     #[derive(Debug, Default)]
