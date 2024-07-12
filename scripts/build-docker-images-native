@@ -96,12 +96,8 @@ for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequenc
 done
 
 # Copy the dev-node launch script
-cp -v scripts/launch-dev-node-with-postgres ${WORKDIR}
-
-# Download the latest foundry binary and extract anvil for the dev-node docker image.
-curl -L https://github.com/foundry-rs/foundry/releases/download/nightly/foundry_nightly_linux_${ARCH}.tar.gz -o ${WORKDIR}/foundry.tar.gz
-tar -xzvf ${WORKDIR}/foundry.tar.gz -C ${WORKDIR}/target/$ARCH/release anvil
-
+mkdir -p ${WORKDIR}/scripts
+cp -v scripts/launch-dev-node-with-postgres ${WORKDIR}/scripts
 
 export DOCKER_BUILDKIT=1
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}
