@@ -1,10 +1,14 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use hotshot_types::{traits::{node_implementation::NodeType, states::InstanceState}, HotShotConfig};
+use hotshot_types::{
+    traits::{node_implementation::NodeType, states::InstanceState},
+    HotShotConfig,
+};
 use vbs::version::{StaticVersionType, Version};
 
 use crate::{
-    v0::traits::StateCatchup, ChainConfig, L1Client, NodeState, PubKey, SeqTypes, Timestamp, Upgrade, UpgradeMode, ValidatedState
+    v0::traits::StateCatchup, ChainConfig, L1Client, NodeState, PubKey, SeqTypes, Timestamp,
+    Upgrade, UpgradeMode, ValidatedState,
 };
 
 impl NodeState {
