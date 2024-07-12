@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use bytesize::ByteSize;
-use committable::{Commitment, Committable};
+use committable::Commitment;
 use derive_more::From;
 use ethers::types::U256;
 use itertools::Either;
@@ -86,57 +86,6 @@ impl Default for ChainConfig {
             fee_contract: None,
             fee_recipient: Default::default(),
             bid_recipient: Default::default(),
-        }
-    }
-}
-
-impl Committable for ChainConfig {
-    fn tag() -> String {
-        "CHAIN_CONFIG".to_string()
-    }
-
-    fn commit(&self) -> Commitment<Self> {
-        let comm = committable::RawCommitmentBuilder::new(&Self::tag())
-            .fixed_size_field("chain_id", &self.chain_id.to_fixed_bytes())
-            .u64_field("max_block_size", *self.max_block_size)
-            .fixed_size_field("base_fee", &self.base_fee.to_fixed_bytes())
-            .fixed_size_field("fee_recipient", &self.fee_recipient.to_fixed_bytes());
-        let comm = if let Some(addr) = self.fee_contract {
-            comm.u64_field("fee_contract", 1).fixed_size_bytes(&addr.0)
-        } else {
-            comm.u64_field("fee_contract", 0)
-        };
-        comm.finalize()
-    }
-}
-
-impl ResolvableChainConfig {
-    pub fn commit(&self) -> Commitment<ChainConfig> {
-        match self.chain_config {
-            Either::Left(config) => config.commit(),
-            Either::Right(commitment) => commitment,
-        }
-    }
-    pub fn resolve(self) -> Option<ChainConfig> {
-        match self.chain_config {
-            Either::Left(config) => Some(config),
-            Either::Right(_) => None,
-        }
-    }
-}
-
-impl From<Commitment<ChainConfig>> for ResolvableChainConfig {
-    fn from(value: Commitment<ChainConfig>) -> Self {
-        Self {
-            chain_config: Either::Right(value),
-        }
-    }
-}
-
-impl From<ChainConfig> for ResolvableChainConfig {
-    fn from(value: ChainConfig) -> Self {
-        Self {
-            chain_config: Either::Left(value),
         }
     }
 }

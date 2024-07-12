@@ -289,7 +289,7 @@ impl<'de> Deserialize<'de> for Header {
 impl Header {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn create(
-        chain_config: ResolvableChainConfig,
+        chain_config: ChainConfig,
         height: u64,
         timestamp: u64,
         l1_head: u64,
@@ -302,6 +302,7 @@ impl Header {
         fee_info: Vec<FeeInfo>,
         builder_signature: Vec<BuilderSignature>,
         version: Version,
+        full_network_txs: Vec<FullNetworkTx>,
     ) -> Self {
         let Version { major, minor } = version;
 
@@ -312,7 +313,9 @@ impl Header {
 
         match minor {
             1 => Self::V1(v0_1::Header {
-                chain_config,
+                chain_config: v0_1::ResolvableChainConfig::from(v0_1::ChainConfig::from(
+                    chain_config,
+                )),
                 height,
                 timestamp,
                 l1_head,
@@ -326,7 +329,9 @@ impl Header {
                 builder_signature: builder_signature.first().copied(),
             }),
             2 => Self::V2(v0_2::Header {
-                chain_config,
+                chain_config: v0_1::ResolvableChainConfig::from(v0_1::ChainConfig::from(
+                    chain_config,
+                )),
                 height,
                 timestamp,
                 l1_head,
@@ -340,7 +345,7 @@ impl Header {
                 builder_signature: builder_signature.first().copied(),
             }),
             3 => Self::V3(v0_3::Header {
-                chain_config,
+                chain_config: v0_3::ResolvableChainConfig::from(chain_config),
                 height,
                 timestamp,
                 l1_head,
@@ -491,7 +496,7 @@ impl Header {
         let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
 
         Ok(Self::create(
-            chain_config.commit().into(),
+            chain_config,
             height,
             timestamp,
             l1.head,
@@ -847,7 +852,7 @@ impl BlockHeader<SeqTypes> for Header {
         //  The Header is versioned,
         //  so we create the genesis header for the current version of the sequencer.
         Self::create(
-            instance_state.chain_config.into(),
+            instance_state.chain_config,
             0,
             instance_state.genesis_header.timestamp.unix_timestamp(),
             instance_state
