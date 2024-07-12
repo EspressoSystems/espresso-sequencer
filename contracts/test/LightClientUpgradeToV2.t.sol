@@ -6,9 +6,9 @@ import { Test } /*, console2*/ from "forge-std/Test.sol";
 import { LightClient as LCV1 } from "../src/LightClient.sol";
 import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
 import { DeployLightClientContractScript } from "../script/LightClient.s.sol";
-import { UpgradeLightClientScript } from "../script/UpgradeLightClient.s.sol";
+import { UpgradeLightClientScript } from "../script/UpgradeLightClientToV2.s.sol";
 
-contract LightClientUpgradeTest is Test {
+contract LightClientUpgradeToV2Test is Test {
     LCV1 public lcV1Proxy;
     LCV2 public lcV2Proxy;
 

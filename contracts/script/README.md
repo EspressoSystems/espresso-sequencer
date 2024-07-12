@@ -21,6 +21,8 @@ file is used.
    1. Select the approval process created in Step 2
    1. Be sure to save `DEFENDER_SECRET` ("Team Secret key") and `DEFENDER_KEY` ("Team API Key"), that is shown at the
       end of this step, into the `.env` file. The keys won't be available later at a later point.
+4. In the home folder of this repo, you're in a nix shell: Enter `nix-shell` in the terminal
+5. If the contracts have never been compiled run, `forge build`
 
 ## Deployments
 
@@ -194,12 +196,15 @@ forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript 
 --broadcast --legacy
 ```
 
-To Upgrade
+To Upgrade (assuming it's the same LightClient.sol file being used (pre-mainnet))
 
 ```bash
-forge script contracts/script/UpgradeLightClient.s.sol:UpgradeLightClientScript $offset $mostRecentlyDeployedProxy \
+forge script contracts/script/UpgradeSameLightClient.s.sol:UpgradeLightClientScript $mnemonicOffset $mostRecentlyDeployedProxy \
 --sig 'run(uint32, address)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com \
 --broadcast --legacy
 ```
+
+Note: the `$mnemonicOffset` should be zero by default if address referenced by the `$MNEMONIC` in the `.env` is the
+first address in that wallet. Otherwise, please specify the correct `$mnemonicOffset`
