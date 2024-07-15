@@ -188,7 +188,7 @@ The circuit depicted in Figure 2 operates as follows:
 - These three gadgets above return a boolean: true if the verification succeeds and false otherwise.
 - For the circuit to accept, all these gadget outputs must be true, and thus we add an _AND_ gate.
 
-The pseudocode of the rollup contract below shows that in the case we rely on the Espresso light client contract to
+The pseudocode of the rollup contract below shows that in this case we rely on the Espresso light client contract to
 fetch the Espresso state, the only inputs to the function `updateRollupState` are `newVMState`, `commTxsRollup` and
 `snarkProof`.
 
