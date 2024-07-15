@@ -83,6 +83,7 @@ where
         private_staking_key,
         private_state_key,
         state_peers: opt.state_peers,
+        config_peers: opt.config_peers,
         catchup_backoff: opt.catchup_backoff,
     };
 

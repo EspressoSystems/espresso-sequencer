@@ -1,6 +1,6 @@
 use std::{num::NonZeroUsize, time::Duration};
 
-use anyhow::bail;
+use anyhow::{bail, Context};
 use async_trait::async_trait;
 use committable::Commitment;
 use espresso_types::{
@@ -9,6 +9,9 @@ use espresso_types::{
 };
 use ethers::prelude::Address;
 use futures::future::Future;
+use hotshot_orchestrator::config::{
+    BuilderType, CombinedNetworkConfig, Libp2pConfig, NetworkConfig, RandomBuilderConfig,
+};
 use hotshot_query_service::{
     availability::AvailabilityDataSource,
     data_source::{MetricsDataSource, UpdateDataSource, VersionedDataSource},
@@ -20,7 +23,7 @@ use hotshot_types::{
     data::ViewNumber, light_client::StateSignatureRequestBody, traits::network::ConnectedNetwork,
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tide_disco::Url;
 use vbs::version::StaticVersionType;
 use vec1::Vec1;
@@ -97,7 +100,7 @@ pub(crate) trait SubmitDataSource<N: ConnectedNetwork<PubKey>, P: SequencerPersi
 }
 
 pub(crate) trait HotShotConfigDataSource {
-    fn get_config(&self) -> impl Send + Future<Output = PublicHotShotConfig>;
+    fn get_config(&self) -> impl Send + Future<Output = PublicNetworkConfig>;
 }
 
 #[async_trait]
@@ -162,14 +165,14 @@ impl CatchupDataSource for MetricsDataSource {}
 /// This struct defines the public Hotshot validator configuration.
 /// Private key and state key pairs are excluded for security reasons.
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PublicValidatorConfig {
-    pub public_key: PubKey,
-    pub stake_value: u64,
-    pub is_da: bool,
-    pub private_key: &'static str,
-    pub state_public_key: String,
-    pub state_key_pair: &'static str,
+    public_key: PubKey,
+    stake_value: u64,
+    is_da: bool,
+    private_key: String,
+    state_public_key: String,
+    state_key_pair: String,
 }
 
 impl From<ValidatorConfig<PubKey>> for PublicValidatorConfig {
@@ -189,8 +192,8 @@ impl From<ValidatorConfig<PubKey>> for PublicValidatorConfig {
             stake_value,
             is_da,
             state_public_key: state_public_key.to_string(),
-            private_key: "*****",
-            state_key_pair: "*****",
+            private_key: "*****".into(),
+            state_key_pair: "*****".into(),
         }
     }
 }
@@ -198,36 +201,36 @@ impl From<ValidatorConfig<PubKey>> for PublicValidatorConfig {
 /// This struct defines the public Hotshot configuration parameters.
 /// Our config module features a GET endpoint accessible via the route `/hotshot` to display the hotshot config parameters.
 /// Hotshot config has sensitive information like private keys and such fields are excluded from this struct.
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PublicHotShotConfig {
-    pub execution_type: ExecutionType,
-    pub start_threshold: (u64, u64),
-    pub num_nodes_with_stake: NonZeroUsize,
-    pub num_nodes_without_stake: usize,
-    pub known_nodes_with_stake: Vec<PeerConfig<PubKey>>,
-    pub known_da_nodes: Vec<PeerConfig<PubKey>>,
-    pub known_nodes_without_stake: Vec<PubKey>,
-    pub my_own_validator_config: PublicValidatorConfig,
-    pub da_staked_committee_size: usize,
-    pub da_non_staked_committee_size: usize,
-    pub fixed_leader_for_gpuvid: usize,
-    pub next_view_timeout: u64,
-    pub view_sync_timeout: Duration,
-    pub timeout_ratio: (u64, u64),
-    pub round_start_delay: u64,
-    pub start_delay: u64,
-    pub num_bootstrap: usize,
-    pub builder_timeout: Duration,
-    pub data_request_delay: Duration,
-    pub builder_urls: Vec1<Url>,
-    pub start_proposing_view: u64,
-    pub stop_proposing_view: u64,
-    pub start_voting_view: u64,
-    pub stop_voting_view: u64,
-    pub start_proposing_time: u64,
-    pub stop_proposing_time: u64,
-    pub start_voting_time: u64,
-    pub stop_voting_time: u64,
+    execution_type: ExecutionType,
+    start_threshold: (u64, u64),
+    num_nodes_with_stake: NonZeroUsize,
+    num_nodes_without_stake: usize,
+    known_nodes_with_stake: Vec<PeerConfig<PubKey>>,
+    known_da_nodes: Vec<PeerConfig<PubKey>>,
+    known_nodes_without_stake: Vec<PubKey>,
+    my_own_validator_config: PublicValidatorConfig,
+    da_staked_committee_size: usize,
+    da_non_staked_committee_size: usize,
+    fixed_leader_for_gpuvid: usize,
+    next_view_timeout: u64,
+    view_sync_timeout: Duration,
+    timeout_ratio: (u64, u64),
+    round_start_delay: u64,
+    start_delay: u64,
+    num_bootstrap: usize,
+    builder_timeout: Duration,
+    data_request_delay: Duration,
+    builder_urls: Vec1<Url>,
+    start_proposing_view: u64,
+    stop_proposing_view: u64,
+    start_voting_view: u64,
+    stop_voting_view: u64,
+    start_proposing_time: u64,
+    stop_proposing_time: u64,
+    start_voting_time: u64,
+    stop_voting_time: u64,
 }
 
 impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
@@ -296,6 +299,138 @@ impl From<HotShotConfig<PubKey>> for PublicHotShotConfig {
             start_voting_time,
             stop_voting_time,
         }
+    }
+}
+
+impl PublicHotShotConfig {
+    pub fn into_hotshot_config(
+        self,
+        my_own_validator_config: ValidatorConfig<PubKey>,
+    ) -> HotShotConfig<PubKey> {
+        HotShotConfig {
+            execution_type: self.execution_type,
+            start_threshold: self.start_threshold,
+            num_nodes_with_stake: self.num_nodes_with_stake,
+            num_nodes_without_stake: self.num_nodes_without_stake,
+            known_nodes_with_stake: self.known_nodes_with_stake,
+            known_da_nodes: self.known_da_nodes,
+            known_nodes_without_stake: self.known_nodes_without_stake,
+            my_own_validator_config,
+            da_staked_committee_size: self.da_staked_committee_size,
+            da_non_staked_committee_size: self.da_non_staked_committee_size,
+            fixed_leader_for_gpuvid: self.fixed_leader_for_gpuvid,
+            next_view_timeout: self.next_view_timeout,
+            view_sync_timeout: self.view_sync_timeout,
+            timeout_ratio: self.timeout_ratio,
+            round_start_delay: self.round_start_delay,
+            start_delay: self.start_delay,
+            num_bootstrap: self.num_bootstrap,
+            builder_timeout: self.builder_timeout,
+            data_request_delay: self.data_request_delay,
+            builder_urls: self.builder_urls,
+            start_proposing_view: self.start_proposing_view,
+            stop_proposing_view: self.stop_proposing_view,
+            start_voting_view: self.start_voting_view,
+            stop_voting_view: self.stop_voting_view,
+            start_proposing_time: self.start_proposing_time,
+            stop_proposing_time: self.stop_proposing_time,
+            start_voting_time: self.start_voting_time,
+            stop_voting_time: self.stop_voting_time,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PublicNetworkConfig {
+    rounds: usize,
+    indexed_da: bool,
+    transactions_per_round: usize,
+    manual_start_password: Option<String>,
+    num_bootrap: usize,
+    next_view_timeout: u64,
+    view_sync_timeout: Duration,
+    builder_timeout: Duration,
+    data_request_delay: Duration,
+    node_index: u64,
+    seed: [u8; 32],
+    transaction_size: usize,
+    start_delay_seconds: u64,
+    key_type_name: String,
+    libp2p_config: Option<Libp2pConfig>,
+    config: PublicHotShotConfig,
+    cdn_marshal_address: Option<String>,
+    combined_network_config: Option<CombinedNetworkConfig>,
+    commit_sha: String,
+    builder: BuilderType,
+    random_builder: Option<RandomBuilderConfig>,
+}
+
+impl From<NetworkConfig<PubKey>> for PublicNetworkConfig {
+    fn from(cfg: NetworkConfig<PubKey>) -> Self {
+        Self {
+            rounds: cfg.rounds,
+            indexed_da: cfg.indexed_da,
+            transactions_per_round: cfg.transactions_per_round,
+            manual_start_password: cfg.manual_start_password,
+            num_bootrap: cfg.num_bootrap,
+            next_view_timeout: cfg.next_view_timeout,
+            view_sync_timeout: cfg.view_sync_timeout,
+            builder_timeout: cfg.builder_timeout,
+            data_request_delay: cfg.data_request_delay,
+            node_index: cfg.node_index,
+            seed: cfg.seed,
+            transaction_size: cfg.transaction_size,
+            start_delay_seconds: cfg.start_delay_seconds,
+            key_type_name: cfg.key_type_name,
+            libp2p_config: cfg.libp2p_config,
+            config: cfg.config.into(),
+            cdn_marshal_address: cfg.cdn_marshal_address,
+            combined_network_config: cfg.combined_network_config,
+            commit_sha: cfg.commit_sha,
+            builder: cfg.builder,
+            random_builder: cfg.random_builder,
+        }
+    }
+}
+
+impl PublicNetworkConfig {
+    pub fn into_network_config(
+        self,
+        my_own_validator_config: ValidatorConfig<PubKey>,
+    ) -> anyhow::Result<NetworkConfig<PubKey>> {
+        let node_index = self
+            .config
+            .known_nodes_with_stake
+            .iter()
+            .position(|peer| peer.stake_table_entry.stake_key == my_own_validator_config.public_key)
+            .context(format!(
+                "the node {} is not in the stake table",
+                my_own_validator_config.public_key
+            ))? as u64;
+
+        Ok(NetworkConfig {
+            rounds: self.rounds,
+            indexed_da: self.indexed_da,
+            transactions_per_round: self.transactions_per_round,
+            manual_start_password: self.manual_start_password,
+            num_bootrap: self.num_bootrap,
+            next_view_timeout: self.next_view_timeout,
+            view_sync_timeout: self.view_sync_timeout,
+            builder_timeout: self.builder_timeout,
+            data_request_delay: self.data_request_delay,
+            node_index,
+            seed: self.seed,
+            transaction_size: self.transaction_size,
+            start_delay_seconds: self.start_delay_seconds,
+            key_type_name: self.key_type_name,
+            libp2p_config: self.libp2p_config,
+            config: self.config.into_hotshot_config(my_own_validator_config),
+            cdn_marshal_address: self.cdn_marshal_address,
+            combined_network_config: self.combined_network_config,
+            commit_sha: self.commit_sha,
+            builder: self.builder,
+            random_builder: self.random_builder,
+        })
     }
 }
 
