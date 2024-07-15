@@ -763,7 +763,7 @@ consensus_libp2p_num_failed_messages 0
 consensus_node{key=\"BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U\"} 1
 # HELP consensus_node_identity_general node_identity_general
 # TYPE consensus_node_identity_general gauge
-consensus_node_identity_general{company_name=\"Espresso Systems\",name=\"sequencer0\",network_type=\"local\",node_type=\"espresso-sequencer 0.1\",operating_system=\"Linux 5.15.153.1\",wallet=\"0x00000000000000000000000000000000\"} 1
+consensus_node_identity_general{company_name=\"Espresso Systems\",name=\"sequencer0\",network_type=\"local\",node_type=\"espresso-sequencer 0.1\",operating_system=\"Linux 5.15.153.1\",wallet=\"0x0000000000000000000000000000000000000000\"} 1
 # HELP consensus_node_identity_location node_identity_location
 # TYPE consensus_node_identity_location gauge
 consensus_node_identity_location{country=\"US\",latitude=\"-40.7128\",longitude=\"-74.0060\"} 1
@@ -894,7 +894,7 @@ consensus_view_duration_as_leader_count 1"
         );
         assert_eq!(
             node_identity_general.labels.get("wallet"),
-            Some("0x00000000000000000000000000000000")
+            Some("0x0000000000000000000000000000000000000000")
         );
 
         assert_eq!(node_identity_location.labels.get("country"), Some("US"));
@@ -943,7 +943,7 @@ consensus_view_duration_as_leader_count 1"
         );
         assert_eq!(
             node_identity.wallet_address(),
-            &Some(FeeAccount::from_str("0x00000000000000000000000000000000").unwrap())
+            &Some(FeeAccount::from_str("0x0000000000000000000000000000000000000000").unwrap())
         );
 
         assert!(node_identity.location().is_some());
