@@ -186,6 +186,16 @@ pub struct Options {
     #[derivative(Debug(format_with = "fmt_urls"))]
     pub state_peers: Vec<Url>,
 
+    /// Peer nodes use to fetch missing config
+    ///
+    /// Typically, the network-wide config is fetched from the orchestrator on startup and then
+    /// persisted and loaded from local storage each time the node restarts. However, if the
+    /// persisted config is missing when the node restarts (for example, the node is being migrated
+    /// to new persistent storage), it can instead be fetched directly from a peer.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_CONFIG_PEERS", value_delimiter = ',')]
+    #[derivative(Debug(format_with = "fmt_opt_urls"))]
+    pub config_peers: Option<Vec<Url>>,
+
     /// Exponential backoff for fetching missing state from peers.
     #[clap(flatten)]
     pub catchup_backoff: BackoffParams,
@@ -226,6 +236,23 @@ fn fmt_urls(v: &[Url], fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Er
         "{:?}",
         v.iter().map(|i| i.to_string()).collect::<Vec<_>>()
     )
+}
+
+fn fmt_opt_urls(
+    v: &Option<Vec<Url>>,
+    fmt: &mut std::fmt::Formatter,
+) -> Result<(), std::fmt::Error> {
+    match v {
+        Some(urls) => {
+            write!(fmt, "Some(")?;
+            fmt_urls(urls, fmt)?;
+            write!(fmt, ")")?;
+        }
+        None => {
+            write!(fmt, "None")?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Snafu)]

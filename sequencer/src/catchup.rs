@@ -12,6 +12,11 @@ use clap::Parser;
 use committable::Commitment;
 use futures::future::{BoxFuture, FutureExt, TryFutureExt};
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
+use futures::future::FutureExt;
+use hotshot_orchestrator::config::NetworkConfig;
+use hotshot_types::{
+    data::ViewNumber, traits::node_implementation::ConsensusTime as _, ValidatorConfig,
+};
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
 use rand::Rng;
 use serde::de::DeserializeOwned;
@@ -240,6 +245,37 @@ impl<Ver: StaticVersionType> StatePeers<Ver> {
             clients: urls.into_iter().map(Client::new).collect(),
             backoff,
         }
+    }
+
+    pub async fn fetch_config(
+        &self,
+        my_own_validator_config: ValidatorConfig<PubKey>,
+    ) -> NetworkConfig<PubKey> {
+        self.backoff()
+            .retry(self, move |provider| {
+                let my_own_validator_config = my_own_validator_config.clone();
+                async move {
+                    for client in &provider.clients {
+                        tracing::info!("fetching config from {}", client.url);
+                        match client
+                            .get::<PublicNetworkConfig>("config/hotshot")
+                            .send()
+                            .await
+                        {
+                            Ok(res) => {
+                                return res.into_network_config(my_own_validator_config)
+                                    .context(format!("fetched config from {}, but failed to convert to private config", client.url));
+                            }
+                            Err(err) => {
+                                tracing::warn!("error fetching config from peer: {err:#}");
+                            }
+                        }
+                    }
+                    bail!("could not fetch config from any peer");
+                }
+                .boxed()
+            })
+            .await
     }
 }
 
