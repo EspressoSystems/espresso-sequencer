@@ -8,11 +8,10 @@ use std::{
     vec,
 };
 
-use crate::client::OrchestratorClient;
 use clap::ValueEnum;
-use hotshot_types::constants::REQUEST_DATA_DELAY;
 use hotshot_types::{
-    traits::signature_key::SignatureKey, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
+    constants::REQUEST_DATA_DELAY, traits::signature_key::SignatureKey, ExecutionType,
+    HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use libp2p::{Multiaddr, PeerId};
 use serde_inline_default::serde_inline_default;
@@ -21,6 +20,8 @@ use thiserror::Error;
 use toml;
 use tracing::{error, info};
 use vec1::Vec1;
+
+use crate::client::OrchestratorClient;
 
 /// Configuration describing a libp2p node
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]

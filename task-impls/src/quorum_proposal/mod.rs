@@ -29,7 +29,6 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, instrument, warn};
-use vbs::version::Version;
 
 use self::handlers::{ProposalDependency, ProposalDependencyHandle};
 use crate::{
@@ -85,9 +84,6 @@ pub struct QuorumProposalTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>
 
     /// The node's id
     pub id: u64,
-
-    /// Globally shared reference to the current network version.
-    pub version: Arc<RwLock<Version>>,
 
     /// The most recent upgrade certificate this node formed.
     /// Note: this is ONLY for certificates that have been formed internally,
@@ -320,7 +316,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                 round_start_delay: self.round_start_delay,
                 instance_state: Arc::clone(&self.instance_state),
                 consensus: OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
-                version: Arc::clone(&self.version),
                 formed_upgrade_certificate: self.formed_upgrade_certificate.clone(),
                 decided_upgrade_certificate: Arc::clone(&self.decided_upgrade_certificate),
                 id: self.id,

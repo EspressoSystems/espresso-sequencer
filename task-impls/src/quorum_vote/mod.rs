@@ -19,7 +19,7 @@ use hotshot_types::{
     data::{Leaf, VidDisperseShare, ViewNumber},
     event::Event,
     message::Proposal,
-    simple_certificate::UpgradeCertificate,
+    simple_certificate::{version, UpgradeCertificate},
     simple_vote::{QuorumData, QuorumVote},
     traits::{
         block_contents::BlockHeader,
@@ -37,7 +37,6 @@ use jf_vid::VidScheme;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, trace, warn};
-use vbs::version::Version;
 
 use crate::{
     events::HotShotEvent,
@@ -82,8 +81,8 @@ struct VoteDependencyHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     sender: Sender<Arc<HotShotEvent<TYPES>>>,
     /// Event receiver.
     receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
-    /// Globally shared reference to the current network version.
-    pub version: Arc<RwLock<Version>>,
+    /// An upgrade certificate that has been decided on, if any.
+    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     /// The node's id
     id: u64,
 }
@@ -130,13 +129,17 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> VoteDependencyHand
 
         drop(consensus_reader);
 
+        let version = version(
+            self.view_number,
+            &self.decided_upgrade_certificate.read().await.clone(),
+        )?;
         let (validated_state, state_delta) = parent_state
             .validate_and_apply_header(
                 &self.instance_state,
                 &parent,
                 &proposed_leaf.block_header().clone(),
                 vid_share.data.common.clone(),
-                *self.version.read().await,
+                version,
             )
             .await
             .context("Block header doesn't extend the proposal!")?;
@@ -389,9 +392,6 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Reference to the storage.
     pub storage: Arc<RwLock<I::Storage>>,
 
-    /// Globally shared reference to the current network version.
-    pub version: Arc<RwLock<Version>>,
-
     /// An upgrade certificate that has been decided on, if any.
     pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
 }
@@ -515,7 +515,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                 view_number,
                 sender: event_sender.clone(),
                 receiver: event_receiver.clone(),
-                version: Arc::clone(&self.version),
+                decided_upgrade_certificate: Arc::clone(&self.decided_upgrade_certificate),
                 id: self.id,
             },
         );

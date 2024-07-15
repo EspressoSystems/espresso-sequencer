@@ -7,11 +7,12 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{ensure, Result};
+use anyhow::{bail, ensure, Result};
 use async_lock::RwLock;
 use committable::{Commitment, Committable};
 use ethereum_types::U256;
 use serde::{Deserialize, Serialize};
+use vbs::version::{StaticVersionType, Version};
 
 use crate::{
     data::serialize_signature2,
@@ -240,3 +241,29 @@ pub type ViewSyncFinalizeCertificate2<TYPES> =
 /// Type alias for a `UpgradeCertificate`, which is a `SimpleCertificate` of `UpgradeProposalData`
 pub type UpgradeCertificate<TYPES> =
     SimpleCertificate<TYPES, UpgradeProposalData<TYPES>, UpgradeThreshold>;
+
+/// Calculate the version applied in a view, based on the provided upgrade certificate.
+///
+/// # Errors
+/// Returns an error if we do not support the version required by the upgrade certificate.
+pub fn version<TYPES: NodeType>(
+    view: TYPES::Time,
+    upgrade_certificate: &Option<UpgradeCertificate<TYPES>>,
+) -> Result<Version> {
+    let version = match upgrade_certificate {
+        Some(ref cert) => {
+            if view >= cert.data.new_version_first_view {
+                if cert.data.new_version == TYPES::Upgrade::VERSION {
+                    TYPES::Upgrade::VERSION
+                } else {
+                    bail!("The network has upgraded to a new version that we do not support!");
+                }
+            } else {
+                TYPES::Base::VERSION
+            }
+        }
+        None => TYPES::Base::VERSION,
+    };
+
+    Ok(version)
+}

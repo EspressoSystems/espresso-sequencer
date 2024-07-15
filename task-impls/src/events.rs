@@ -22,7 +22,6 @@ use hotshot_types::{
     vid::VidCommitment,
     vote::{HasViewNumber, VoteDependencyData},
 };
-use vbs::version::Version;
 
 use crate::view_sync::ViewSyncPhase;
 
@@ -173,8 +172,6 @@ pub enum HotShotEvent<TYPES: NodeType> {
     UpgradeCertificateFormed(UpgradeCertificate<TYPES>),
     /// A HotShot upgrade was decided
     UpgradeDecided(UpgradeCertificate<TYPES>),
-    /// HotShot was upgraded, with a new network version.
-    VersionUpgrade(Version),
 
     /// Initiate a vote right now for the designated view.
     VoteNow(TYPES::Time, VoteDependencyData<TYPES>),
@@ -407,7 +404,6 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                 "UpgradeCertificateFormed(view_number={:?})",
                 cert.view_number()
             ),
-            HotShotEvent::VersionUpgrade(_) => write!(f, "VersionUpgrade"),
             HotShotEvent::UpgradeDecided(cert) => {
                 write!(f, "UpgradeDecided(view_number{:?})", cert.view_number())
             }

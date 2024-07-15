@@ -18,13 +18,12 @@ use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
     data::{Leaf, QuorumProposal, VidDisperse, ViewChangeEvidence},
     message::Proposal,
-    simple_certificate::UpgradeCertificate,
+    simple_certificate::{version, UpgradeCertificate},
     traits::{
         block_contents::BlockHeader, node_implementation::NodeType, signature_key::SignatureKey,
     },
 };
 use tracing::{debug, error, instrument};
-use vbs::version::Version;
 
 use crate::{
     events::HotShotEvent,
@@ -84,9 +83,6 @@ pub struct ProposalDependencyHandle<TYPES: NodeType> {
 
     /// Shared consensus task state
     pub consensus: OuterConsensus<TYPES>,
-
-    /// Globally shared reference to the current network version.
-    pub version: Arc<RwLock<Version>>,
 
     /// The most recent upgrade certificate this node formed.
     /// Note: this is ONLY for certificates that have been formed internally,
@@ -162,6 +158,11 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
             "Cannot propose because our VID payload commitment and metadata is for an older view."
         );
 
+        let version = version(
+            self.view_number,
+            &self.decided_upgrade_certificate.read().await.clone(),
+        )?;
+
         let block_header = TYPES::BlockHeader::new(
             state.as_ref(),
             self.instance_state.as_ref(),
@@ -171,7 +172,7 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
             commitment_and_metadata.metadata,
             commitment_and_metadata.fee,
             vid_share.data.common.clone(),
-            *self.version.read().await,
+            version,
         )
         .await
         .context("Failed to construct block header")?;

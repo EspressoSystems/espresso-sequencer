@@ -17,7 +17,7 @@ use hotshot_types::{
     data::{null_block, Leaf, QuorumProposal, ViewChangeEvidence},
     event::{Event, EventType},
     message::{GeneralConsensusMessage, Proposal},
-    simple_certificate::UpgradeCertificate,
+    simple_certificate::{version, UpgradeCertificate},
     simple_vote::QuorumData,
     traits::{
         block_contents::BlockHeader,
@@ -160,7 +160,6 @@ pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
     commitment_and_metadata: Option<CommitmentAndMetadata<TYPES>>,
     proposal_cert: Option<ViewChangeEvidence<TYPES>>,
     instance_state: Arc<TYPES::InstanceState>,
-    version: Version,
     id: u64,
 ) -> Result<JoinHandle<()>> {
     let (parent_leaf, state) = parent_leaf_and_state(
@@ -209,6 +208,8 @@ pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
         "Cannot propose because our VID payload commitment and metadata is for an older view."
     );
 
+    let version = version(view, &decided_upgrade_certificate.read().await.clone())?;
+
     let create_and_send_proposal_handle = async_spawn(async move {
         create_and_send_proposal(
             public_key,
@@ -249,7 +250,6 @@ pub async fn publish_proposal_if_able<TYPES: NodeType>(
     commitment_and_metadata: Option<CommitmentAndMetadata<TYPES>>,
     proposal_cert: Option<ViewChangeEvidence<TYPES>>,
     instance_state: Arc<TYPES::InstanceState>,
-    version: Version,
     id: u64,
 ) -> Result<JoinHandle<()>> {
     publish_proposal_from_commitment_and_metadata(
@@ -265,7 +265,6 @@ pub async fn publish_proposal_if_able<TYPES: NodeType>(
         commitment_and_metadata,
         proposal_cert,
         instance_state,
-        version,
         id,
     )
     .await
@@ -281,7 +280,6 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
     sender: &TYPES::SignatureKey,
     event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     task_state: &mut ConsensusTaskState<TYPES, I>,
-    version: Version,
 ) -> Result<Option<QuorumProposal<TYPES>>> {
     let sender = sender.clone();
     debug!(
@@ -461,7 +459,6 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
                     task_state.payload_commitment_and_metadata.clone(),
                     task_state.proposal_cert.clone(),
                     Arc::clone(&task_state.instance_state),
-                    version,
                     task_state.id,
                 )
                 .await?;
@@ -642,7 +639,6 @@ pub async fn update_state_and_vote_if_able<TYPES: NodeType, I: NodeImplementatio
     quorum_membership: Arc<TYPES::Membership>,
     instance_state: Arc<TYPES::InstanceState>,
     vote_info: VoteInfo<TYPES>,
-    version: Version,
     id: u64,
 ) -> bool {
     use hotshot_types::simple_vote::QuorumVote;
@@ -720,6 +716,14 @@ pub async fn update_state_and_vote_if_able<TYPES: NodeType, I: NodeImplementatio
         return false;
     };
     drop(read_consnesus);
+
+    let version = match version(view, &vote_info.1.read().await.clone()) {
+        Ok(version) => version,
+        Err(e) => {
+            error!("Failed to calculate the version: {e:?}");
+            return false;
+        }
+    };
     let Ok((validated_state, state_delta)) = parent_state
         .validate_and_apply_header(
             instance_state.as_ref(),

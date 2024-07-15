@@ -134,20 +134,15 @@ pub(crate) async fn handle_view_change<TYPES: NodeType, I: NodeImplementation<TY
     // Move this node to the next view
     task_state.cur_view = new_view_number;
 
-    // If we have a decided upgrade certificate, we may need to upgrade the protocol version on a
-    // view change.
+    // If we have a decided upgrade certificate, the protocol version may also have been upgraded.
     let decided_upgrade_certificate_read =
         task_state.decided_upgrade_certificate.read().await.clone();
     if let Some(cert) = decided_upgrade_certificate_read {
         if new_view_number == cert.data.new_version_first_view {
             warn!(
-                "Updating version based on a decided upgrade cert: {:?}",
+                "Version upgraded based on a decided upgrade cert: {:?}",
                 cert
             );
-            let mut version = task_state.version.write().await;
-            let new_version = cert.data.new_version;
-            *version = new_version;
-            broadcast_event(Arc::new(HotShotEvent::VersionUpgrade(new_version)), sender).await;
         }
     }
 

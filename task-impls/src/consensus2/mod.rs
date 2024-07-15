@@ -20,7 +20,6 @@ use hotshot_types::{
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
 use tracing::instrument;
-use vbs::version::Version;
 
 use self::handlers::{
     handle_quorum_vote_recv, handle_timeout, handle_timeout_vote_recv, handle_view_change,
@@ -90,9 +89,6 @@ pub struct Consensus2TaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// The node's id
     pub id: u64,
-
-    /// Globally shared reference to the current network version.
-    pub version: Arc<RwLock<Version>>,
 
     /// An upgrade certificate that has been decided on, if any.
     pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
