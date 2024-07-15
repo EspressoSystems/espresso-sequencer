@@ -165,6 +165,8 @@ pub enum NetworkError {
         /// vec of errors
         errors: Vec<Box<NetworkError>>,
     },
+    /// The network is not ready yet
+    NotReady,
 }
 
 /// common traits we would like our network messages to implement

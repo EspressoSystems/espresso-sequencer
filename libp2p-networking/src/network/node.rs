@@ -392,7 +392,7 @@ impl NetworkNode {
             Ok(msg) => {
                 match msg {
                     ClientRequest::BeginBootstrap => {
-                        debug!("begin bootstrap");
+                        debug!("Beginning Libp2p bootstrap");
                         let _ = self.swarm.behaviour_mut().dht.bootstrap();
                     }
                     ClientRequest::LookupPeer(pid, chan) => {

@@ -1,6 +1,10 @@
 /// Task for doing bootstraps at a regular interval
 pub mod bootstrap;
-use std::{collections::HashMap, num::NonZeroUsize, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    num::NonZeroUsize,
+    time::Duration,
+};
 
 use async_compatibility_layer::{art, channel::UnboundedSender};
 /// a local caching layer for the DHT key value pairs
@@ -43,6 +47,8 @@ pub struct DHTBehaviour {
     pub in_progress_get_closest_peers: HashMap<QueryId, Sender<()>>,
     /// List of in-progress get requests
     in_progress_record_queries: HashMap<QueryId, KadGetQuery>,
+    /// The lookup keys for all outstanding DHT queries
+    outstanding_dht_query_keys: HashSet<Vec<u8>>,
     /// List of in-progress put requests
     in_progress_put_record_queries: HashMap<QueryId, KadPutQuery>,
     /// State of bootstrapping
@@ -103,6 +109,7 @@ impl DHTBehaviour {
             peer_id: pid,
             in_progress_record_queries: HashMap::default(),
             in_progress_put_record_queries: HashMap::default(),
+            outstanding_dht_query_keys: HashSet::default(),
             bootstrap_state: Bootstrap {
                 state: State::NotStarted,
                 backoff: ExponentialBackoff::new(2, Duration::from_secs(1)),
@@ -161,26 +168,28 @@ impl DHTBehaviour {
             return;
         }
 
-        // check cache before making the request
+        // Check the cache before making the (expensive) query
         if let Some(entry) = kad.store_mut().get(&key.clone().into()) {
-            // exists in cache
+            // The key already exists in the cache
             if chan.send(entry.value.clone()).is_err() {
                 error!("Get DHT: channel closed before get record request result could be sent");
             }
         } else {
-            tracing::debug!("DHT cache miss, key: {:?}", key);
-            // doesn't exist in cache, actually propagate request
-            let qid = kad.get_record(key.clone().into());
-            let query = KadGetQuery {
-                backoff,
-                progress: DHTProgress::InProgress(qid),
-                notify: chan,
-                num_replicas: factor,
-                key,
-                retry_count: retry_count - 1,
-                records: HashMap::default(),
-            };
-            self.in_progress_record_queries.insert(qid, query);
+            // Check if the key is already being queried
+            if self.outstanding_dht_query_keys.insert(key.clone()) {
+                // The key was not already being queried and was not in the cache. Start a new query.
+                let qid = kad.get_record(key.clone().into());
+                let query = KadGetQuery {
+                    backoff,
+                    progress: DHTProgress::InProgress(qid),
+                    notify: chan,
+                    num_replicas: factor,
+                    key,
+                    retry_count: retry_count - 1,
+                    records: HashMap::default(),
+                };
+                self.in_progress_record_queries.insert(qid, query);
+            }
         }
     }
 
@@ -275,6 +284,9 @@ impl DHTBehaviour {
                 records,
             }) = self.in_progress_record_queries.remove(&id)
             {
+                // Remove the key from the outstanding queries so we are in sync
+                self.outstanding_dht_query_keys.remove(&key);
+
                 // if channel has been dropped, cancel request
                 if notify.is_canceled() {
                     return;

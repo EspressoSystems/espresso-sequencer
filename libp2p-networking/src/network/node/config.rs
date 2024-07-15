@@ -5,8 +5,8 @@ use libp2p_identity::PeerId;
 
 use crate::network::NetworkNodeType;
 
-/// replication factor for kademlia
-pub const DEFAULT_REPLICATION_FACTOR: Option<NonZeroUsize> = NonZeroUsize::new(20);
+/// The default Kademlia replication factor
+pub const DEFAULT_REPLICATION_FACTOR: Option<NonZeroUsize> = NonZeroUsize::new(10);
 
 /// describe the configuration of the network
 #[derive(Clone, Default, derive_builder::Builder, custom_debug::Debug)]
@@ -21,8 +21,7 @@ pub struct NetworkNodeConfig {
     /// address to bind to
     #[builder(default)]
     pub bound_addr: Option<Multiaddr>,
-    /// replication factor for entries in the DHT
-    /// default is [`libp2p::kad::K_VALUE`] which is 20
+    /// Replication factor for entries in the DHT
     #[builder(setter(into, strip_option), default = "DEFAULT_REPLICATION_FACTOR")]
     pub replication_factor: Option<NonZeroUsize>,
 
