@@ -125,10 +125,10 @@ portpicker = "0.1.1"
 pretty_assertions = "1.4"
 
 [patch."https://github.com/EspressoSystems/HotShot.git"]
-hotshot = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
-hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
-hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
-hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
-hotshot-task = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
-hotshot-testing = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
-hotshot-types = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
+hotshot = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3" }
+hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3" }
+hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3" }
+hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3" }
+hotshot-task = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3" }
+hotshot-testing = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3" }
+hotshot-types = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3" }
