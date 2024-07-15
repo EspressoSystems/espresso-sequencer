@@ -853,6 +853,30 @@
 <a href="#853" id="853">853</a>
 <a href="#854" id="854">854</a>
 <a href="#855" id="855">855</a>
+<a href="#856" id="856">856</a>
+<a href="#857" id="857">857</a>
+<a href="#858" id="858">858</a>
+<a href="#859" id="859">859</a>
+<a href="#860" id="860">860</a>
+<a href="#861" id="861">861</a>
+<a href="#862" id="862">862</a>
+<a href="#863" id="863">863</a>
+<a href="#864" id="864">864</a>
+<a href="#865" id="865">865</a>
+<a href="#866" id="866">866</a>
+<a href="#867" id="867">867</a>
+<a href="#868" id="868">868</a>
+<a href="#869" id="869">869</a>
+<a href="#870" id="870">870</a>
+<a href="#871" id="871">871</a>
+<a href="#872" id="872">872</a>
+<a href="#873" id="873">873</a>
+<a href="#874" id="874">874</a>
+<a href="#875" id="875">875</a>
+<a href="#876" id="876">876</a>
+<a href="#877" id="877">877</a>
+<a href="#878" id="878">878</a>
+<a href="#879" id="879">879</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
@@ -957,6 +981,7 @@
     <span class="kw">pub </span>private_staking_key: BLSPrivKey,
     <span class="kw">pub </span>private_state_key: StateSignKey,
     <span class="kw">pub </span>state_peers: Vec&lt;Url&gt;,
+    <span class="kw">pub </span>config_peers: <span class="prelude-ty">Option</span>&lt;Vec&lt;Url&gt;&gt;,
     <span class="kw">pub </span>catchup_backoff: BackoffParams,
 
     <span class="doccomment">/// The address to send to other Libp2p nodes to contact us
@@ -1023,12 +1048,30 @@
             .with_context(|| <span class="string">"Failed to derive Libp2p peer ID"</span>)<span class="question-mark">?</span>;
 
     <span class="kw">let </span><span class="kw-2">mut </span>persistence = persistence_opt.clone().create().<span class="kw">await</span><span class="question-mark">?</span>;
-    <span class="kw">let </span>(<span class="kw-2">mut </span>config, wait_for_orchestrator) = <span class="kw">match </span>persistence.load_config().<span class="kw">await</span><span class="question-mark">? </span>{
-        <span class="prelude-val">Some</span>(config) =&gt; {
+    <span class="kw">let </span>(<span class="kw-2">mut </span>config, wait_for_orchestrator) = <span class="kw">match </span>(
+        persistence.load_config().<span class="kw">await</span><span class="question-mark">?</span>,
+        network_params.config_peers,
+    ) {
+        (<span class="prelude-val">Some</span>(config), <span class="kw">_</span>) =&gt; {
             <span class="macro">tracing::info!</span>(<span class="string">"loaded network config from storage, rejoining existing network"</span>);
             (config, <span class="bool-val">false</span>)
         }
-        <span class="prelude-val">None </span>=&gt; {
+        <span class="comment">// If we were told to fetch the config from an already-started peer, do so.
+        </span>(<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(peers)) =&gt; {
+            <span class="macro">tracing::info!</span>(<span class="question-mark">?</span>peers, <span class="string">"loading network config from peers"</span>);
+            <span class="kw">let </span>peers = StatePeers::&lt;Ver&gt;::from_urls(peers, network_params.catchup_backoff);
+            <span class="kw">let </span>config = peers.fetch_config(my_config.clone()).<span class="kw">await</span>;
+
+            <span class="macro">tracing::info!</span>(
+                node_id = config.node_index,
+                stake_table = <span class="question-mark">?</span>config.config.known_nodes_with_stake,
+                <span class="string">"loaded config"</span>,
+            );
+            persistence.save_config(<span class="kw-2">&amp;</span>config).<span class="kw">await</span><span class="question-mark">?</span>;
+            (config, <span class="bool-val">false</span>)
+        }
+        <span class="comment">// Otherwise, this is a fresh network; load from the orchestrator.
+        </span>(<span class="prelude-val">None</span>, <span class="prelude-val">None</span>) =&gt; {
             <span class="macro">tracing::info!</span>(<span class="string">"loading network config from orchestrator"</span>);
             <span class="macro">tracing::error!</span>(
                 <span class="string">"waiting for other nodes to connect, DO NOT RESTART until fully connected"
@@ -1183,7 +1226,7 @@
     };
 
     <span class="kw">let </span><span class="kw-2">mut </span>ctx = SequencerContext::init(
-        config.config,
+        config,
         instance_state,
         persistence,
         network,
@@ -1514,7 +1557,12 @@
                 <span class="string">"starting node"</span>,
             );
             SequencerContext::init(
-                config,
+                NetworkConfig {
+                    config,
+                    <span class="comment">// For testing, we use a fake network, so the rest of the network config beyond
+                    // the base consensus config does not matter.
+                    </span>..Default::default()
+                },
                 node_state,
                 persistence_opt.create().<span class="kw">await</span>.unwrap(),
                 network,

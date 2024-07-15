@@ -234,6 +234,47 @@
 <a href="#234" id="234">234</a>
 <a href="#235" id="235">235</a>
 <a href="#236" id="236">236</a>
+<a href="#237" id="237">237</a>
+<a href="#238" id="238">238</a>
+<a href="#239" id="239">239</a>
+<a href="#240" id="240">240</a>
+<a href="#241" id="241">241</a>
+<a href="#242" id="242">242</a>
+<a href="#243" id="243">243</a>
+<a href="#244" id="244">244</a>
+<a href="#245" id="245">245</a>
+<a href="#246" id="246">246</a>
+<a href="#247" id="247">247</a>
+<a href="#248" id="248">248</a>
+<a href="#249" id="249">249</a>
+<a href="#250" id="250">250</a>
+<a href="#251" id="251">251</a>
+<a href="#252" id="252">252</a>
+<a href="#253" id="253">253</a>
+<a href="#254" id="254">254</a>
+<a href="#255" id="255">255</a>
+<a href="#256" id="256">256</a>
+<a href="#257" id="257">257</a>
+<a href="#258" id="258">258</a>
+<a href="#259" id="259">259</a>
+<a href="#260" id="260">260</a>
+<a href="#261" id="261">261</a>
+<a href="#262" id="262">262</a>
+<a href="#263" id="263">263</a>
+<a href="#264" id="264">264</a>
+<a href="#265" id="265">265</a>
+<a href="#266" id="266">266</a>
+<a href="#267" id="267">267</a>
+<a href="#268" id="268">268</a>
+<a href="#269" id="269">269</a>
+<a href="#270" id="270">270</a>
+<a href="#271" id="271">271</a>
+<a href="#272" id="272">272</a>
+<a href="#273" id="273">273</a>
+<a href="#274" id="274">274</a>
+<a href="#275" id="275">275</a>
+<a href="#276" id="276">276</a>
+<a href="#277" id="277">277</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::sync::Arc;
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -244,7 +285,11 @@
     v0::traits::{PersistenceOptions, StateCatchup},
     AccountQueryData, BackoffParams, BlockMerkleTree, ChainConfig, FeeAccount, FeeMerkleCommitment,
 };
-<span class="kw">use </span>hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime <span class="kw">as _</span>};
+<span class="kw">use </span>futures::future::FutureExt;
+<span class="kw">use </span>hotshot_orchestrator::config::NetworkConfig;
+<span class="kw">use </span>hotshot_types::{
+    data::ViewNumber, traits::node_implementation::ConsensusTime <span class="kw">as _</span>, ValidatorConfig,
+};
 <span class="kw">use </span>jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
 <span class="kw">use </span>serde::de::DeserializeOwned;
 <span class="kw">use </span>surf_disco::Request;
@@ -252,7 +297,13 @@
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
-<span class="kw">use </span><span class="kw">crate</span>::api::{data_source::CatchupDataSource, BlocksFrontier};
+<span class="kw">use crate</span>::{
+    api::{
+        data_source::{CatchupDataSource, PublicNetworkConfig},
+        BlocksFrontier,
+    },
+    PubKey,
+};
 
 <span class="comment">// This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.
@@ -307,6 +358,37 @@
             backoff,
         }
     }
+
+    <span class="kw">pub async fn </span>fetch_config(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        my_own_validator_config: ValidatorConfig&lt;PubKey&gt;,
+    ) -&gt; NetworkConfig&lt;PubKey&gt; {
+        <span class="self">self</span>.backoff()
+            .retry(<span class="self">self</span>, <span class="kw">move </span>|provider| {
+                <span class="kw">let </span>my_own_validator_config = my_own_validator_config.clone();
+                <span class="kw">async move </span>{
+                    <span class="kw">for </span>client <span class="kw">in </span><span class="kw-2">&amp;</span>provider.clients {
+                        <span class="macro">tracing::info!</span>(<span class="string">"fetching config from {}"</span>, client.url);
+                        <span class="kw">match </span>client
+                            .get::&lt;PublicNetworkConfig&gt;(<span class="string">"config/hotshot"</span>)
+                            .send()
+                            .<span class="kw">await
+                        </span>{
+                            <span class="prelude-val">Ok</span>(res) =&gt; {
+                                <span class="kw">return </span>res.into_network_config(my_own_validator_config)
+                                    .context(<span class="macro">format!</span>(<span class="string">"fetched config from {}, but failed to convert to private config"</span>, client.url));
+                            }
+                            <span class="prelude-val">Err</span>(err) =&gt; {
+                                <span class="macro">tracing::warn!</span>(<span class="string">"error fetching config from peer: {err:#}"</span>);
+                            }
+                        }
+                    }
+                    <span class="macro">bail!</span>(<span class="string">"could not fetch config from any peer"</span>);
+                }
+                .boxed()
+            })
+            .<span class="kw">await
+    </span>}
 }
 
 <span class="attr">#[async_trait]

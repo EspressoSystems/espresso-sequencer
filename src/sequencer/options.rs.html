@@ -489,6 +489,33 @@
 <a href="#489" id="489">489</a>
 <a href="#490" id="490">490</a>
 <a href="#491" id="491">491</a>
+<a href="#492" id="492">492</a>
+<a href="#493" id="493">493</a>
+<a href="#494" id="494">494</a>
+<a href="#495" id="495">495</a>
+<a href="#496" id="496">496</a>
+<a href="#497" id="497">497</a>
+<a href="#498" id="498">498</a>
+<a href="#499" id="499">499</a>
+<a href="#500" id="500">500</a>
+<a href="#501" id="501">501</a>
+<a href="#502" id="502">502</a>
+<a href="#503" id="503">503</a>
+<a href="#504" id="504">504</a>
+<a href="#505" id="505">505</a>
+<a href="#506" id="506">506</a>
+<a href="#507" id="507">507</a>
+<a href="#508" id="508">508</a>
+<a href="#509" id="509">509</a>
+<a href="#510" id="510">510</a>
+<a href="#511" id="511">511</a>
+<a href="#512" id="512">512</a>
+<a href="#513" id="513">513</a>
+<a href="#514" id="514">514</a>
+<a href="#515" id="515">515</a>
+<a href="#516" id="516">516</a>
+<a href="#517" id="517">517</a>
+<a href="#518" id="518">518</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt::Display;
 <span class="kw">use </span>std::{
     cmp::Ordering,
@@ -679,6 +706,16 @@
     #[derivative(Debug(format_with = <span class="string">"fmt_urls"</span>))]
     </span><span class="kw">pub </span>state_peers: Vec&lt;Url&gt;,
 
+    <span class="doccomment">/// Peer nodes use to fetch missing config
+    ///
+    /// Typically, the network-wide config is fetched from the orchestrator on startup and then
+    /// persisted and loaded from local storage each time the node restarts. However, if the
+    /// persisted config is missing when the node restarts (for example, the node is being migrated
+    /// to new persistent storage), it can instead be fetched directly from a peer.
+    </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_CONFIG_PEERS"</span>, value_delimiter = <span class="string">','</span>)]
+    #[derivative(Debug(format_with = <span class="string">"fmt_opt_urls"</span>))]
+    </span><span class="kw">pub </span>config_peers: <span class="prelude-ty">Option</span>&lt;Vec&lt;Url&gt;&gt;,
+
     <span class="doccomment">/// Exponential backoff for fetching missing state from peers.
     </span><span class="attr">#[clap(flatten)]
     </span><span class="kw">pub </span>catchup_backoff: BackoffParams,
@@ -719,6 +756,23 @@
         <span class="string">"{:?}"</span>,
         v.iter().map(|i| i.to_string()).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
     )
+}
+
+<span class="kw">fn </span>fmt_opt_urls(
+    v: <span class="kw-2">&amp;</span><span class="prelude-ty">Option</span>&lt;Vec&lt;Url&gt;&gt;,
+    fmt: <span class="kw-2">&amp;mut </span>std::fmt::Formatter,
+) -&gt; <span class="prelude-ty">Result</span>&lt;(), std::fmt::Error&gt; {
+    <span class="kw">match </span>v {
+        <span class="prelude-val">Some</span>(urls) =&gt; {
+            <span class="macro">write!</span>(fmt, <span class="string">"Some("</span>)<span class="question-mark">?</span>;
+            fmt_urls(urls, fmt)<span class="question-mark">?</span>;
+            <span class="macro">write!</span>(fmt, <span class="string">")"</span>)<span class="question-mark">?</span>;
+        }
+        <span class="prelude-val">None </span>=&gt; {
+            <span class="macro">write!</span>(fmt, <span class="string">"None"</span>)<span class="question-mark">?</span>;
+        }
+    }
+    <span class="prelude-val">Ok</span>(())
 }
 
 <span class="attr">#[derive(Clone, Debug, Snafu)]

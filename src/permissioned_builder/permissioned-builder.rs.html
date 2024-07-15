@@ -295,6 +295,7 @@
 <a href="#295" id="295">295</a>
 <a href="#296" id="296">296</a>
 <a href="#297" id="297">297</a>
+<a href="#298" id="298">298</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     collections::HashMap, net::ToSocketAddrs, num::NonZeroUsize, path::PathBuf, time::Duration,
 };
@@ -552,6 +553,7 @@
         private_staking_key: private_staking_key.clone(),
         private_state_key,
         state_peers: opt.state_peers,
+        config_peers: <span class="prelude-val">None</span>,
         catchup_backoff: Default::default(),
     };
 
