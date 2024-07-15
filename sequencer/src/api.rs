@@ -1699,6 +1699,7 @@ mod test {
         let mut config = peers.fetch_config(validator.clone()).await;
 
         // Check the node-specific information in the recovered config is correct.
+        assert_eq!(config.node_index, 1);
         assert_eq!(
             config.config.my_own_validator_config.public_key,
             validator.public_key
