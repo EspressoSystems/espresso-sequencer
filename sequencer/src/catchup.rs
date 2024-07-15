@@ -8,7 +8,11 @@ use espresso_types::{
     v0::traits::{PersistenceOptions, StateCatchup},
     AccountQueryData, BackoffParams, BlockMerkleTree, ChainConfig, FeeAccount, FeeMerkleCommitment,
 };
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
+use futures::future::FutureExt;
+use hotshot_orchestrator::config::NetworkConfig;
+use hotshot_types::{
+    data::ViewNumber, traits::node_implementation::ConsensusTime as _, ValidatorConfig,
+};
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
 use serde::de::DeserializeOwned;
 use surf_disco::Request;
@@ -16,7 +20,13 @@ use tide_disco::error::ServerError;
 use url::Url;
 use vbs::version::StaticVersionType;
 
-use crate::api::{data_source::CatchupDataSource, BlocksFrontier};
+use crate::{
+    api::{
+        data_source::{CatchupDataSource, PublicNetworkConfig},
+        BlocksFrontier,
+    },
+    PubKey,
+};
 
 // This newtype is probably not worth having. It's only used to be able to log
 // URLs before doing requests.
@@ -70,6 +80,37 @@ impl<Ver: StaticVersionType> StatePeers<Ver> {
             clients: urls.into_iter().map(Client::new).collect(),
             backoff,
         }
+    }
+
+    pub async fn fetch_config(
+        &self,
+        my_own_validator_config: ValidatorConfig<PubKey>,
+    ) -> NetworkConfig<PubKey> {
+        self.backoff()
+            .retry(self, move |provider| {
+                let my_own_validator_config = my_own_validator_config.clone();
+                async move {
+                    for client in &provider.clients {
+                        tracing::info!("fetching config from {}", client.url);
+                        match client
+                            .get::<PublicNetworkConfig>("config/hotshot")
+                            .send()
+                            .await
+                        {
+                            Ok(res) => {
+                                return res.into_network_config(my_own_validator_config)
+                                    .context(format!("fetched config from {}, but failed to convert to private config", client.url));
+                            }
+                            Err(err) => {
+                                tracing::warn!("error fetching config from peer: {err:#}");
+                            }
+                        }
+                    }
+                    bail!("could not fetch config from any peer");
+                }
+                .boxed()
+            })
+            .await
     }
 }
 
