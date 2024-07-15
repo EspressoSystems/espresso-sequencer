@@ -1,9 +1,12 @@
 use crate::{
-    api::{data_source::CatchupDataSource, AccountQueryData, BlocksFrontier},
+    api::{
+        data_source::{CatchupDataSource, PublicNetworkConfig},
+        AccountQueryData, BlocksFrontier,
+    },
     options::{parse_duration, Ratio},
     persistence::PersistenceOptions,
     state::{BlockMerkleTree, FeeAccount, FeeMerkleCommitment},
-    ChainConfig,
+    ChainConfig, PubKey,
 };
 use anyhow::{bail, Context};
 use async_std::{sync::RwLock, task::sleep};
@@ -11,12 +14,9 @@ use async_trait::async_trait;
 use clap::Parser;
 use committable::Commitment;
 use futures::future::{BoxFuture, FutureExt, TryFutureExt};
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
-use futures::future::FutureExt;
 use hotshot_orchestrator::config::NetworkConfig;
-use hotshot_types::{
-    data::ViewNumber, traits::node_implementation::ConsensusTime as _, ValidatorConfig,
-};
+use hotshot_types::ValidatorConfig;
+use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime as _};
 use jf_merkle_tree::{prelude::MerkleNode, ForgetableMerkleTreeScheme, MerkleTreeScheme};
 use rand::Rng;
 use serde::de::DeserializeOwned;
