@@ -29,7 +29,7 @@ ark-ff = "0.4"
 ark-poly = "0.4"
 ark-serialize = "0.4"
 ark-srs = "0.3.1"
-async-compatibility-layer = { version = "1.1", default-features = false, features = [
+async-compatibility-layer = { version = "1.2.1", default-features = false, features = [
   "logging-utils",
 ] }
 async-once-cell = "0.5"
@@ -123,3 +123,12 @@ zeroize = "1.7"
 committable = "0.2"
 portpicker = "0.1.1"
 pretty_assertions = "1.4"
+
+[patch."https://github.com/EspressoSystems/HotShot.git"]
+hotshot = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
+hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
+hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
+hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
+hotshot-task = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
+hotshot-testing = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
+hotshot-types = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/libp2p-patch-all" }
