@@ -18,16 +18,16 @@ use futures::{
 };
 use hotshot::types::{Event, SystemContextHandle};
 use hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
+use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber, light_client::StateSignatureRequestBody, traits::network::ConnectedNetwork,
-    HotShotConfig,
 };
 use jf_merkle_tree::MerkleTreeScheme;
 use vbs::version::StaticVersionType;
 
-use self::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
+use self::data_source::{HotShotConfigDataSource, PublicNetworkConfig, StateSignatureDataSource};
 use crate::{
     network, persistence::ChainConfigPersistence, state_signature::StateSigner, Node, SeqTypes,
     SequencerContext,
@@ -53,6 +53,7 @@ struct ConsensusState<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver:
     state_signer: Arc<StateSigner<Ver>>,
     event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
     node_state: NodeState,
+    config: NetworkConfig<PubKey>,
 
     #[derivative(Debug = "ignore")]
     handle: Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>>>>,
@@ -66,6 +67,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             state_signer: ctx.state_signer(),
             event_streamer: ctx.event_streamer(),
             node_state: ctx.node_state(),
+            config: ctx.config(),
             handle: ctx.consensus(),
         }
     }
@@ -114,18 +116,8 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         &self.consensus.as_ref().get().await.get_ref().node_state
     }
 
-    async fn hotshot_config(&self) -> HotShotConfig<PubKey> {
-        self.consensus
-            .as_ref()
-            .get()
-            .await
-            .get_ref()
-            .handle
-            .read()
-            .await
-            .hotshot
-            .config
-            .clone()
+    async fn network_config(&self) -> NetworkConfig<PubKey> {
+        self.consensus.as_ref().get().await.get_ref().config.clone()
     }
 }
 
@@ -314,16 +306,16 @@ impl<
         P: SequencerPersistence,
     > HotShotConfigDataSource for StorageState<N, P, D, Ver>
 {
-    async fn get_config(&self) -> PublicHotShotConfig {
-        self.as_ref().hotshot_config().await.into()
+    async fn get_config(&self) -> PublicNetworkConfig {
+        self.as_ref().network_config().await.into()
     }
 }
 
 impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
     HotShotConfigDataSource for ApiState<N, P, Ver>
 {
-    async fn get_config(&self) -> PublicHotShotConfig {
-        self.hotshot_config().await.into()
+    async fn get_config(&self) -> PublicNetworkConfig {
+        self.network_config().await.into()
     }
 }
 

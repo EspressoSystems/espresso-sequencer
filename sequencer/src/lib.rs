@@ -328,7 +328,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     };
 
     let mut ctx = SequencerContext::init(
-        config.config,
+        config,
         instance_state,
         persistence,
         network,
@@ -659,7 +659,12 @@ pub mod testing {
                 "starting node",
             );
             SequencerContext::init(
-                config,
+                NetworkConfig {
+                    config,
+                    // For testing, we use a fake network, so the rest of the network config beyond
+                    // the base consensus config does not matter.
+                    ..Default::default()
+                },
                 node_state,
                 persistence_opt.create().await.unwrap(),
                 network,
