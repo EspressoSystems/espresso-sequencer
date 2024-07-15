@@ -156,3 +156,6 @@ impl NsProof {
         self.ns_payload.export_all_txs(ns_id)
     }
 }
+
+#[cfg(test)]
+mod test;

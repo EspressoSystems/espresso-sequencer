@@ -38,14 +38,14 @@ for ARCH in "amd64" "arm64"; do
   for binary in "orchestrator" "cdn-broker" "cdn-marshal" "cdn-whitelist" "sequencer" "commitment-task" "submit-transactions" "reset-storage" "state-relay-server" "state-prover" "deploy" "keygen" "permissionless-builder" "nasty-client" "pub-key" "espresso-bridge" "espresso-dev-node"; do
     cp -v "${CARGO_TARGET_DIR}/${TARGET}/release/$binary" ${WORKDIR}/target/$ARCH/release
   done
-
-  # Download the latest foundry binary and extract anvil for the dev-node docker image.
-  curl -L https://github.com/foundry-rs/foundry/releases/download/nightly/foundry_nightly_linux_${ARCH}.tar.gz -o ${WORKDIR}/foundry.tar.gz
-  tar -xzvf ${WORKDIR}/foundry.tar.gz -C ${WORKDIR}/target/$ARCH/release anvil
 done
 
+mkdir -p ${WORKDIR}/docker/scripts
+cp -v docker/scripts/sequencer-awssecretsmanager.sh ${WORKDIR}/docker/scripts
+
 # Copy the dev-node launch script
-cp -v scripts/launch-dev-node-with-postgres ${WORKDIR}
+mkdir -p ${WORKDIR}/scripts
+cp -v scripts/launch-dev-node-with-postgres ${WORKDIR}/scripts
 
 export DOCKER_BUILDKIT=1
 docker build -t ghcr.io/espressosystems/espresso-sequencer/orchestrator:main -f docker/orchestrator.Dockerfile ${WORKDIR}
