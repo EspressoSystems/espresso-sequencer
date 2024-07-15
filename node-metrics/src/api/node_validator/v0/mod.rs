@@ -523,7 +523,7 @@ pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scra
                 .map(|s| s.parse::<f64>());
             let longitude = node_identity_location_sample
                 .labels
-                .get("latitude")
+                .get("longitude")
                 .map(|s| s.parse::<f64>());
 
             if let (Some(Ok(latitude)), Some(Ok(longitude))) = (latitude, longitude) {
