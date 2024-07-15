@@ -182,6 +182,13 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             tracing::info!(?peers, "loading network config from peers");
             let peers = StatePeers::<Ver>::from_urls(peers, network_params.catchup_backoff);
             let config = peers.fetch_config(my_config.clone()).await;
+
+            tracing::info!(
+                node_id = config.node_index,
+                stake_table = ?config.config.known_nodes_with_stake,
+                "loaded config",
+            );
+            persistence.save_config(&config).await?;
             (config, false)
         }
         // Otherwise, this is a fresh network; load from the orchestrator.
