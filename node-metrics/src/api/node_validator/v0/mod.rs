@@ -13,9 +13,11 @@ use hotshot_types::traits::signature_key::SignatureKey;
 use hotshot_types::traits::{signature_key::StakeTableEntryType, stake_table::StakeTableScheme};
 use hotshot_types::PeerConfig;
 use prometheus_parse::Scrape;
+use sequencer::state::FeeAccount;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::io::BufRead;
+use std::str::FromStr;
 use tide_disco::socket::Connection;
 use tide_disco::{api::ApiError, Api};
 use vbs::version::{StaticVersion, StaticVersionType, Version};
@@ -473,8 +475,21 @@ pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scra
                 .labels
                 .get("operating_system")
                 .map(|s| s.into());
+            // Wallet Address
+            let parsed_wallet_address_result = node_identity_general_sample
+                .labels
+                .get("wallet")
+                .map(FeeAccount::from_str);
 
-            // node_identity.wallet_address = node_identity_general.labels.get("wallet").map(|s| s.into());
+            match parsed_wallet_address_result {
+                Some(Ok(parsed_wallet_address)) => {
+                    node_identity.wallet_address = Some(parsed_wallet_address);
+                }
+                Some(Err(err)) => {
+                    tracing::info!("parsing wallet address failed: {}", err);
+                }
+                None => {}
+            }
         }
     }
 
@@ -589,8 +604,10 @@ mod tests {
         channel::mpsc::{self, Sender},
         SinkExt, StreamExt,
     };
+    use sequencer::state::FeeAccount;
     use std::{
         io::{BufRead, BufReader},
+        str::FromStr,
         sync::Arc,
     };
     use tide_disco::App;
@@ -908,5 +925,31 @@ consensus_view_duration_as_leader_count 1"
         let node_identity = super::node_identity_from_scrape(scrape);
 
         assert!(node_identity.is_some());
+        let node_identity = node_identity.unwrap();
+
+        assert_eq!(
+            node_identity.company(),
+            &Some("Espresso Systems".to_string())
+        );
+        assert_eq!(node_identity.name(), &Some("sequencer0".to_string()));
+        assert_eq!(node_identity.network_type(), &Some("local".to_string()));
+        assert_eq!(
+            node_identity.node_type(),
+            &Some("espresso-sequencer 0.1".to_string())
+        );
+        assert_eq!(
+            node_identity.operating_system(),
+            &Some("Linux 5.15.153.1".to_string())
+        );
+        assert_eq!(
+            node_identity.wallet_address(),
+            &Some(FeeAccount::from_str("0x00000000000000000000000000000000").unwrap())
+        );
+
+        assert!(node_identity.location().is_some());
+        let node_identity_location = node_identity.location().unwrap();
+
+        assert_eq!(node_identity_location.country(), &Some("US".to_string()));
+        assert_eq!(node_identity_location.coords, Some((-40.7128, -74.0060)));
     }
 }
