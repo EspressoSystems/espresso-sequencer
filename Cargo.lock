@@ -1334,7 +1334,7 @@ dependencies = [
  "hotshot-builder-api",
  "hotshot-builder-core",
  "hotshot-events-service",
- "hotshot-example-types 0.5.60 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.60)",
+ "hotshot-example-types 0.5.60 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.60-patch3)",
  "hotshot-orchestrator",
  "hotshot-stake-table",
  "hotshot-state-prover",
@@ -4272,6 +4272,38 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.60"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.60-patch3#9ee6caa58a151d0f6f4e5191c774baa49631bfa2"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "bitvec",
+ "committable",
+ "either",
+ "ethereum-types",
+ "futures",
+ "hotshot",
+ "hotshot-task",
+ "hotshot-task-impls 0.5.60 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.60-patch3)",
+ "hotshot-types",
+ "rand 0.8.5",
+ "serde",
+ "sha2 0.10.8",
+ "sha3",
+ "snafu 0.8.3",
+ "time 0.3.36",
+ "tokio",
+ "tracing",
+ "url",
+ "vbs",
+]
+
+[[package]]
+name = "hotshot-example-types"
+version = "0.5.60"
 source = "git+https://www.github.com/EspressoSystems/hotshot?branch=rm/libp2p-patch-all#9ee6caa58a151d0f6f4e5191c774baa49631bfa2"
 dependencies = [
  "anyhow",
@@ -4489,6 +4521,41 @@ dependencies = [
 name = "hotshot-task-impls"
 version = "0.5.60"
 source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.60#24597f75f7ddb439959e4aff584ec934dcdc1388"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "bincode",
+ "bitvec",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.0)",
+ "chrono",
+ "committable",
+ "either",
+ "futures",
+ "hotshot-builder-api",
+ "hotshot-task",
+ "hotshot-types",
+ "jf-signature",
+ "jf-vid",
+ "rand 0.8.5",
+ "serde",
+ "sha2 0.10.8",
+ "snafu 0.8.3",
+ "surf-disco",
+ "tagged-base64",
+ "time 0.3.36",
+ "tokio",
+ "tracing",
+ "vbs",
+]
+
+[[package]]
+name = "hotshot-task-impls"
+version = "0.5.60"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.60-patch3#9ee6caa58a151d0f6f4e5191c774baa49631bfa2"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -8742,7 +8809,7 @@ dependencies = [
  "hotshot",
  "hotshot-contract-adapter",
  "hotshot-events-service",
- "hotshot-example-types 0.5.60 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.60)",
+ "hotshot-example-types 0.5.60 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.60-patch3)",
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
