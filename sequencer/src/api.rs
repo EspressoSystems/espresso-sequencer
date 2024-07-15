@@ -1071,10 +1071,7 @@ mod test {
     };
     use hotshot_types::{
         event::LeafInfo,
-        traits::{
-            metrics::NoMetrics,
-            node_implementation::{ConsensusTime, NodeType},
-        },
+        traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
         ValidatorConfig,
     };
     use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
@@ -1088,16 +1085,7 @@ mod test {
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     use vbs::version::Version;
 
-    use self::{
-        data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
-        sql::DataSource as SqlDataSource,
-    };
-    use super::*;
-    use crate::{
-        catchup::StatePeers,
-        persistence::no_storage,
-        testing::{TestConfig, TestConfigBuilder},
-    };
+    use self::data_source::PublicHotShotConfig;
 
     #[async_std::test]
     async fn test_healthcheck() {
