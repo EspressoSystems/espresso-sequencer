@@ -5,6 +5,17 @@ Hotshot protocol supports upgrades through an Upgrade proposal mechanism. The Up
 
 After enough votes have been collected on the `UpgradeProposal`, an `UpgradeCertificate` is formed. This is attached to the next `QuorumProposal`, and any node that receives an `UpgradeCertificate` in this way re-attaches it to its own `QuorumProposal` until the network has upgraded, or (in rare cases) we failed to reach consensus on the `UpgradeCertificate`.
 
+
+
+An upgrade consists of two parts:
+
+- **Version Bump:** The version bump initiates a change in the protocol, which can involve logic updates (e.g., new rules or modifications to existing rules within the protocol, such as blocks executing new logic if the version is greater than or equal to the specified NEXT_VERSION) and type changes (e.g., using a new type variant for a particular version, such as using V2 for ValidatedState if the version is 0.2).
+- **Migration:** Migration involves updating existing data to align with the new version, such as updating the chain config
+
+
+
+Note: We currently support only chain config migration.
+
 ## Enabling an Upgrade
 
 To enable an upgrade in Hotshot protocol, it is essential to define the base version, the upgrade version, and a upgrade hash:
@@ -25,18 +36,30 @@ impl NodeType for SeqTypes {
 }
 ```
 
-These parameters are fetched from the genesis TOML file and set in Hotshot config:
+Hotshot provides two modes for upgrades: view-based and time-based.
 
-- **start_voting_view:**  view at which voting for the upgrade proposal starts. In our implementation, this is set to 1 so that voting is enabled as soon as the node is started.
+View-based parameters allow nodes to vote and propose an upgrade based on the current node's view, while time-based parameters use Unix timestamps for the same purpose.
+
+To simplify configuration, these parameters are fetched from the genesis TOML file and set in the Hotshot config. The TOML file can include either view-based parameters or time-based parameters, but not both.
+Furthermore, The start and stop voting parameters for both time-based and view-based upgrades are optional. Start parameter is set 0 so that voting begins as soon as node is started  while the stop parameter is set to a maximum value so that the nodes keep voting until enough votes are collected.
+
+View based:
+- **start_voting_view:**  view at which voting for the upgrade proposal starts.
 - **stop_voting_view:**  view at which voting for the upgrade proposal stops. To disable an upgrade, set this parameter to 0 or ensure `stop_voting_view` is less than `start_voting_view`.
 - **start_proposing_view:** the earliest view in which the node can propose an upgrade. This should be set to when an upgrade is intended. If the current view > `start_proposing_view`, the node will send out an `UpgradeProposal`.
 - **stop_proposing_view:** view after which the node stops proposing an upgrade. If the upgrade proposal fails and the current view > stop_proposing_view then the upgrade is never proposed again.
 
-The window between `start_proposing_view` and `stop_proposing_view` should provide sufficient time for nodes to continue proposing the upgrade until successful.
+Time based:
+- **start_voting_time:**  UNIX timestamp at which voting for the upgrade proposal starts.
+- **stop_voting_time:**  UNIX timestamp at which voting for the upgrade proposal stops.
+- **start_proposing_time:** the earliest UNIX timestamnp in which the node can propose an upgrade.
+- **stop_proposing_time:** UNIX timestamp after which the node stops proposing an upgrade.
+
+
+The window between `start_proposing_view/time` and `stop_proposing_view/time` should provide sufficient time for nodes to continue proposing the upgrade until successful.
 
 Ensure that the `ESPRESSO_SEQUENCER_GENESIS_FILE` environment variable is defined to point to the path of the genesis TOML file. For an example with upgrades enabled, refer to [`data/genesis/demo.toml`](../data/genesis/demo.toml).
 
-Note: We currently support only chain config upgrade.
 ### Example TOML Configuration
 
 ```toml
