@@ -1,0 +1,29 @@
+[meta]
+NAME = "espresso_dev_node_server"
+DESCRIPTION = "A server for debugging and developing with the espresso dev node"
+FORMAT_VERSION = "0.1.0"
+
+[route.devinfo]
+PATH = ["/dev-info"]
+DOC = """
+Get the debug info
+"""
+
+[route.freeze]
+PATH = ["mock-contract/freeze/:height"]
+":height" = "Integer"
+DOC = """
+Freeze the L1 height in the light client contract.
+
+By doing this, the L1 height in the light contract will be frozen and rollups will detect
+the HotShot failure. This is intended to be used when testing the rollups' functionalities.
+"""
+
+[route.unfreeze]
+PATH = ["mock-contract/unfreeze"]
+DOC = """
+Unfreeze the L1 height in the light client contract.
+
+This is intended to be used when `freeze` has been called previously. By unfreezing the L1 height,
+rollups will detect the reactivity of HotShot.
+"""

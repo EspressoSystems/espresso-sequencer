@@ -409,7 +409,14 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
             .await
             .with_context(|| "Failed to initialize stake table")?,
     );
+    run_prover_service_with_stake_table(config, bind_version, st).await
+}
 
+pub async fn run_prover_service_with_stake_table<Ver: StaticVersionType + 'static>(
+    config: StateProverConfig,
+    bind_version: Ver,
+    st: Arc<StakeTable<BLSPubKey, StateVerKey, CircuitField>>,
+) -> Result<()> {
     tracing::info!("Light client address: {:?}", config.light_client_address);
     let relay_server_client =
         Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
@@ -422,7 +429,7 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
     }
 
     let proving_key =
-        spawn_blocking(move || Arc::new(load_proving_key(stake_table_capacity))).await;
+        spawn_blocking(move || Arc::new(load_proving_key(config.stake_table_capacity))).await;
 
     let update_interval = config.update_interval;
     let retry_interval = config.retry_interval;
