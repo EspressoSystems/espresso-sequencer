@@ -12,7 +12,7 @@ use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::signature_key::SignatureKey;
 use hotshot_types::traits::{signature_key::StakeTableEntryType, stake_table::StakeTableScheme};
 use hotshot_types::PeerConfig;
-use prometheus_parse::Scrape;
+use prometheus_parse::{Sample, Scrape};
 use sequencer::state::FeeAccount;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -438,10 +438,153 @@ pub async fn stream_leaves_from_hotshot_query_service(
     Ok(leaves_stream)
 }
 
+/// [populate_node_identity_general_from_scrape] populates the general
+/// information of a [NodeIdentity] from a [Sample] that is expected to be
+/// the "consensus_node_identity_general" sample.
+fn populate_node_identity_general_from_scrape(
+    node_identity: &mut NodeIdentity,
+    node_identity_general_sample: &Sample,
+) {
+    node_identity.name = node_identity_general_sample
+        .labels
+        .get("name")
+        .map(|s| s.into());
+    node_identity.company = node_identity_general_sample
+        .labels
+        .get("company_name")
+        .map(|s| s.into());
+    node_identity.network_type = node_identity_general_sample
+        .labels
+        .get("network_type")
+        .map(|s| s.into());
+    node_identity.node_type = node_identity_general_sample
+        .labels
+        .get("node_type")
+        .map(|s| s.into());
+    node_identity.operating_system = node_identity_general_sample
+        .labels
+        .get("operating_system")
+        .map(|s| s.into());
+    // Wallet Address
+    let parsed_wallet_address_result = node_identity_general_sample
+        .labels
+        .get("wallet")
+        .map(FeeAccount::from_str);
+
+    match parsed_wallet_address_result {
+        Some(Ok(parsed_wallet_address)) => {
+            node_identity.wallet_address = Some(parsed_wallet_address);
+        }
+        Some(Err(err)) => {
+            tracing::info!("parsing wallet address failed: {}", err);
+        }
+        None => {}
+    }
+}
+
+/// [populate_node_location_from_scrape] populates the location information of a
+/// [NodeIdentity] from a [Sample] that is expected to be the
+/// "consensus_node_identity_location" sample.
+fn populate_node_location_from_scrape(
+    node_identity: &mut NodeIdentity,
+    node_identity_location_sample: &Sample,
+) {
+    let mut location = node_identity
+        .location
+        .take()
+        .unwrap_or(LocationDetails::new(None, None));
+    location.country = node_identity_location_sample
+        .labels
+        .get("country")
+        .map(|s| s.into());
+
+    let latitude = node_identity_location_sample
+        .labels
+        .get("latitude")
+        .map(|s| s.parse::<f64>());
+    let longitude = node_identity_location_sample
+        .labels
+        .get("longitude")
+        .map(|s| s.parse::<f64>());
+
+    if let (Some(Ok(latitude)), Some(Ok(longitude))) = (latitude, longitude) {
+        location.coords = Some((latitude, longitude));
+    }
+
+    // Are there any details populated?
+    if location.country.is_some() || location.coords.is_some() {
+        node_identity.location = Some(location);
+    } else {
+        node_identity.location = None;
+    }
+}
+
+/// [populate_node_identity_from_scrape] populates a [NodeIdentity] from a
+/// [Scrape] that is expected to contain the necessary information to populate
+/// the [NodeIdentity].
 pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scrape: Scrape) {
     // Handle General Information Population
 
+    // Let's verify that the scrape information contains and matches our node
+    // identity's public key.
+    {
+        let node_key = scrape
+            .docs
+            .iter()
+            .find(|(_, key)| key == &"node")
+            .map(|(key, _)| key);
+
+        let node_key = if let Some(node_key) = node_key {
+            node_key
+        } else {
+            // We were unable to find the key for the public key on the metrics
+            // scrape result.
+            tracing::warn!("scrape result doesn't seem to contain 'node' key, preventing us from verifying the public key");
+            return;
+        };
+
+        let node_sample = scrape
+            .samples
+            .iter()
+            .find(|sample| &sample.metric == node_key);
+
+        let node_sample = if let Some(node_sample) = node_sample {
+            node_sample
+        } else {
+            // We were unable to find the sample for the public key on the metrics
+            // scrape result.
+            tracing::warn!("scrape result doesn't seem to contain 'node' sample, preventing us from verifying the public key. This is especially odd considering that we found the 'node' key already.");
+            return;
+        };
+
+        let public_key_string = node_sample.labels.get("key");
+
+        let public_key_from_scrape = if let Some(public_key_string) = public_key_string {
+            if let Ok(public_key) = BLSPubKey::from_str(public_key_string) {
+                public_key
+            } else {
+                // We were unable to parse the public key from the scrape result.
+                tracing::warn!(
+                    "parsing public key failed, preventing us from verifying the public key"
+                );
+                return;
+            }
+        } else {
+            // We were unable to find the public key in the scrape result.
+            tracing::warn!("scrape result doesn't seem to contain 'key' label in the 'node' sample, preventing us from verifying the public key. This is especially odd considering that we found the 'node' key and sample already.");
+            return;
+        };
+
+        if &public_key_from_scrape != node_identity.public_key() {
+            tracing::warn!("node identity public key doesn't match public key in scrape, are we hitting the wrong URL, or is it behind a load balancer between multiple nodes?");
+            return;
+        }
+
+        debug_assert_eq!(&public_key_from_scrape, node_identity.public_key());
+    }
+
     // Determine the key for the "consensus_node_identity_general" sample
+    // so we can populate the general information concerning node identity.
     let node_identity_general_key = scrape
         .docs
         .iter()
@@ -455,44 +598,11 @@ pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scra
             .find(|sample| &sample.metric == node_identity_general_key);
 
         if let Some(node_identity_general_sample) = node_identity_general_sample {
-            node_identity.name = node_identity_general_sample
-                .labels
-                .get("name")
-                .map(|s| s.into());
-            node_identity.company = node_identity_general_sample
-                .labels
-                .get("company_name")
-                .map(|s| s.into());
-            node_identity.network_type = node_identity_general_sample
-                .labels
-                .get("network_type")
-                .map(|s| s.into());
-            node_identity.node_type = node_identity_general_sample
-                .labels
-                .get("node_type")
-                .map(|s| s.into());
-            node_identity.operating_system = node_identity_general_sample
-                .labels
-                .get("operating_system")
-                .map(|s| s.into());
-            // Wallet Address
-            let parsed_wallet_address_result = node_identity_general_sample
-                .labels
-                .get("wallet")
-                .map(FeeAccount::from_str);
-
-            match parsed_wallet_address_result {
-                Some(Ok(parsed_wallet_address)) => {
-                    node_identity.wallet_address = Some(parsed_wallet_address);
-                }
-                Some(Err(err)) => {
-                    tracing::info!("parsing wallet address failed: {}", err);
-                }
-                None => {}
-            }
+            populate_node_identity_general_from_scrape(node_identity, node_identity_general_sample);
         }
     }
 
+    // Lookup node identity location information, so we can populate it.
     let node_identity_location_key = scrape
         .docs
         .iter()
@@ -504,38 +614,8 @@ pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scra
             .iter()
             .find(|sample| &sample.metric == node_identity_location_key);
 
-        // We either have an existing location, or we'd potentially like to create
-        // one.
-
         if let Some(node_identity_location_sample) = node_identity_location_sample {
-            let mut location = node_identity
-                .location
-                .take()
-                .unwrap_or(LocationDetails::new(None, None));
-            location.country = node_identity_location_sample
-                .labels
-                .get("country")
-                .map(|s| s.into());
-
-            let latitude = node_identity_location_sample
-                .labels
-                .get("latitude")
-                .map(|s| s.parse::<f64>());
-            let longitude = node_identity_location_sample
-                .labels
-                .get("longitude")
-                .map(|s| s.parse::<f64>());
-
-            if let (Some(Ok(latitude)), Some(Ok(longitude))) = (latitude, longitude) {
-                location.coords = Some((latitude, longitude));
-            }
-
-            // Are there any details populated?
-            if location.country.is_some() || location.coords.is_some() {
-                node_identity.location = Some(location);
-            } else {
-                node_identity.location = None;
-            }
+            populate_node_location_from_scrape(node_identity, node_identity_location_sample);
         }
     }
 }
