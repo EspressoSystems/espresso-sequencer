@@ -39,6 +39,12 @@ impl Timestamp {
     pub fn unix_timestamp(&self) -> u64 {
         self.0.unix_timestamp() as u64
     }
+
+    pub fn max() -> anyhow::Result<Self> {
+        Ok(Self(
+            OffsetDateTime::from_unix_timestamp(i64::MAX).context("overflow")?,
+        ))
+    }
 }
 
 impl FromStringOrInteger for Timestamp {

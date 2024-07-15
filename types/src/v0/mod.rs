@@ -114,6 +114,9 @@ reexport_unchanged_types!(
     TxTableEntriesRange,
     Upgrade,
     UpgradeType,
+    UpgradeMode,
+    TimeBasedUpgrade,
+    ViewBasedUpgrade,
     ValidatedState,
     BlockSize,
 );

@@ -5,13 +5,15 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
-use crate::{v0::traits::StateCatchup, ChainConfig, GenesisHeader, L1BlockInfo, ValidatedState};
+use crate::{
+    v0::traits::StateCatchup, ChainConfig, GenesisHeader, L1BlockInfo, Timestamp, ValidatedState,
+};
 use vbs::version::Version;
 
 use super::l1::L1Client;
 
 /// Represents the specific type of upgrade.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 #[serde(rename_all = "snake_case")]
 pub enum UpgradeType {
@@ -20,27 +22,48 @@ pub enum UpgradeType {
     ChainConfig { chain_config: ChainConfig },
 }
 
-/// Represents the  upgrade config including the type of upgrade and upgrade parameters for hotshot config.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Upgrade {
-    /// The view at which the upgrade is proposed.
-    ///
-    /// Note: Voting for the proposal begins before the upgrade is formally proposed.
-    /// In our implementation, `start_proposing_view` is set to `1`` for all upgrades,
-    /// so if an upgrade is planned then the voting starts as soon as node is started.
-    #[serde(rename = "view")]
+/// Represents an upgrade based on time (unix timestamp).
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct TimeBasedUpgrade {
+    /// the earliest unix timestamp in which the node can propose an upgrade
+    pub start_proposing_time: Timestamp,
+    /// timestamp after which the node stops proposing an upgrade
+    pub stop_proposing_time: Timestamp,
+    /// The timestamp at which voting for the upgrade proposal starts
+    pub start_voting_time: Option<Timestamp>,
+    /// The timestamp at which voting for the upgrade proposal stops
+    pub stop_voting_time: Option<Timestamp>,
+}
+
+/// Represents an upgrade based on view.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ViewBasedUpgrade {
+    /// the earliest view in which the node can propose an upgrade
     pub start_proposing_view: u64,
+    /// view after which the node stops proposing an upgrade
+    pub stop_proposing_view: u64,
+    /// The view at which voting for the upgrade proposal starts
+    pub start_voting_view: Option<u64>,
+    /// The view at which voting for the upgrade proposal stops
+    pub stop_voting_view: Option<u64>,
+}
 
-    /// The time window during which the upgrade can be proposed.
-    ///
-    /// This parameter is used for setting the `stop_propose_window_view`.
-    /// `stop_proposing_view` is calculated as `start_proposing_view + propose_window`.
-    pub propose_window: u64,
+/// Represents the specific type of upgrade.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum UpgradeMode {
+    /// Upgrade based on unix timestamp.
+    Time(TimeBasedUpgrade),
+    /// Upgrade based on view.
+    View(ViewBasedUpgrade),
+}
 
-    /// The specific type of upgrade configuration.
-    ///
-    /// Currently, we only support chain configuration upgrades (`upgrade.chain_config` in genesis toml file).
-    #[serde(flatten)]
+/// Represents a general upgrade with mode and type.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Upgrade {
+    /// The mode of the upgrade (time-based or view-based).
+    pub mode: UpgradeMode,
+    /// The type of the upgrade.
     pub upgrade_type: UpgradeType,
 }
 
@@ -71,6 +94,6 @@ pub struct NodeState {
     /// This version is checked to determine if an upgrade is planned,
     /// and which version variant for versioned types  
     /// to use in functions such as genesis.
-    /// (example: genesis returns V2 Header if version is 0.2) 
+    /// (example: genesis returns V2 Header if version is 0.2)
     pub current_version: Version,
 }
