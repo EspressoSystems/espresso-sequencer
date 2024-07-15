@@ -40,6 +40,9 @@ for ARCH in "amd64" "arm64"; do
   done
 done
 
+mkdir -p ${WORKDIR}/docker/scripts
+cp -v docker/scripts/sequencer-awssecretsmanager.sh ${WORKDIR}/docker/scripts
+
 # Copy the dev-node launch script
 mkdir -p ${WORKDIR}/scripts
 cp -v scripts/launch-dev-node-with-postgres ${WORKDIR}/scripts
