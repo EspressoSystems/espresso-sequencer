@@ -86,9 +86,20 @@ pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// Unix time in seconds at which we stop voting on an upgrade
     pub stop_voting_time: u64,
+
+    /// Upgrade certificate that has been decided on, if any
+    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
+    /// Check if the version has been upgraded.
+    async fn upgraded(&self) -> bool {
+        if let Some(cert) = self.decided_upgrade_certificate.read().await.clone() {
+            return cert.data.new_version == TYPES::Upgrade::VERSION;
+        }
+        false
+    }
+
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Upgrade Task", level = "error")]
     pub async fn handle(
@@ -101,6 +112,16 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
                 info!("Received upgrade proposal: {:?}", proposal);
 
                 let view = *proposal.data.view_number();
+
+                // Skip voting if the version has already been upgraded.
+                if self.upgraded().await {
+                    info!(
+                        "Already upgraded to {:?}, skip voting.",
+                        TYPES::Upgrade::VERSION
+                    );
+                    return None;
+                }
+
                 let time = SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .ok()?
@@ -241,6 +262,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
                 }
 
                 self.cur_view = *new_view;
+
+                // Skip proposing if the version has already been upgraded.
+                if self.upgraded().await {
+                    info!(
+                        "Already upgraded to {:?}, skip proposing.",
+                        TYPES::Upgrade::VERSION
+                    );
+                    return None;
+                }
 
                 let view: u64 = *self.cur_view;
                 let time = SystemTime::now()
