@@ -703,7 +703,7 @@ async fn collect_garbage(
             // Include the VID share if available.
             let vid_share = vid_shares.remove(&view);
             if vid_share.is_none() {
-                tracing::warn!(view, "VID share not available at decide");
+                tracing::debug!(view, "VID share not available at decide");
             }
 
             // Fill in the full block payload using the DA proposals we had persisted.
@@ -712,7 +712,7 @@ async fn collect_garbage(
                     Payload::from_bytes(&proposal.encoded_transactions, &proposal.metadata);
                 leaf.fill_block_payload_unchecked(payload);
             } else {
-                tracing::warn!(view, "DA proposal not available at decide");
+                tracing::debug!(view, "DA proposal not available at decide");
             }
 
             (
@@ -731,7 +731,10 @@ async fn collect_garbage(
         .unzip();
 
     // Generate decide event for the consumer.
-    let final_qc = qcs.into_iter().next().unwrap();
+    let Some(final_qc) = qcs.into_iter().next() else {
+        tracing::info!(?view, "no new leaves at decide");
+        return Ok(());
+    };
     consumer
         .handle_event(&Event {
             view_number: view,

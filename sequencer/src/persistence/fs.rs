@@ -489,6 +489,9 @@ impl SequencerPersistence for Persistence {
     ) -> anyhow::Result<BTreeMap<ViewNumber, Proposal<SeqTypes, QuorumProposal<SeqTypes>>>> {
         // First, get the proposal directory.
         let dir_path = self.quorum_proposals_dir_path();
+        if !dir_path.is_dir() {
+            return Ok(Default::default());
+        }
 
         // Then, we want to get the entries in this directory since they'll be the
         // key/value pairs for our map.
@@ -499,12 +502,6 @@ impl SequencerPersistence for Persistence {
                     .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
             })
             .collect();
-
-        // Do we have any entries?
-        if files.is_empty() {
-            // Don't bother continuing if we don't have any data.
-            return Ok(Default::default());
-        }
 
         // Read all of the files
         let proposal_files = files
@@ -609,7 +606,7 @@ impl Persistence {
                 .await?
                 .map(|proposal| proposal.data);
             if vid_share.is_none() {
-                tracing::warn!(view = v, "VID share not available at decide");
+                tracing::debug!(view = v, "VID share not available at decide");
             }
 
             // Fill in the full block payload using the DA proposals we had persisted.
@@ -620,7 +617,7 @@ impl Persistence {
                 );
                 leaf.fill_block_payload_unchecked(payload);
             } else {
-                tracing::warn!(view = v, "DA proposal not available at decide");
+                tracing::debug!(view = v, "DA proposal not available at decide");
             }
 
             let info = LeafInfo {

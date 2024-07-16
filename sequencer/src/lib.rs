@@ -320,7 +320,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         },
         CdnMetricsValue::new(metrics),
     )
-    .with_context(|| "Failed to create CDN network")?;
+    .with_context(|| format!("Failed to create CDN network {node_index}"))?;
 
     // Initialize the Libp2p network (if enabled)
     #[cfg(feature = "libp2p")]
@@ -335,7 +335,12 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             hotshot::traits::implementations::Libp2pMetricsValue::new(metrics),
         )
         .await
-        .with_context(|| "Failed to create libp2p network")?;
+        .with_context(|| {
+            format!(
+                "Failed to create libp2p network on node {node_index}; binding to {:?}",
+                network_params.libp2p_bind_address
+            )
+        })?;
 
         tracing::warn!("Waiting for at least one connection to be initialized");
         futures::select! {
