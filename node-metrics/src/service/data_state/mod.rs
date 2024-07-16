@@ -327,16 +327,108 @@ pub async fn process_leaf_stream<S>(
     }
 }
 
+/// [ProcessNodeIdentityError] represents the error that can occur when processing
+/// a [NodeIdentity].
+#[derive(Debug)]
+pub enum ProcessNodeIdentityError {
+    SendError(SendError),
+}
+
+impl std::fmt::Display for ProcessNodeIdentityError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProcessNodeIdentityError::SendError(err) => {
+                write!(f, "error sending node identity to sender: {}", err)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ProcessNodeIdentityError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ProcessNodeIdentityError::SendError(err) => Some(err),
+        }
+    }
+}
+
+impl From<SendError> for ProcessNodeIdentityError {
+    fn from(err: SendError) -> Self {
+        ProcessNodeIdentityError::SendError(err)
+    }
+}
+
+/// [process_incoming_node_identity] is a helper function that will process an
+/// incoming [NodeIdentity] and update the [DataState] with the new information.
+/// Additionally, the [NodeIdentity] will be sent to the [Sender] so that it can
+/// be processed for real-time considerations.
+async fn process_incoming_node_identity(
+    node_identity: NodeIdentity,
+    data_state: Arc<RwLock<DataState>>,
+    mut node_identity_sender: Sender<NodeIdentity>,
+) -> Result<(), ProcessNodeIdentityError> {
+    let mut data_state_write_lock_guard = data_state.write().await;
+    data_state_write_lock_guard.add_node_identity(node_identity.clone());
+    node_identity_sender.send(node_identity).await?;
+
+    Ok(())
+}
+
+/// [process_node_identity_stream] allows for the consumption of a [Stream] when
+/// attempting to process new incoming [NodeIdentity]s.
+/// This function will process the incoming [NodeIdentity] and update the
+/// [DataState] with the new information.
+/// Additionally, the [NodeIdentity] will be sent to the [Sender] so that it can
+/// be processed for real-time considerations.
+pub async fn process_node_identity_stream<S>(
+    mut stream: S,
+    data_state: Arc<RwLock<DataState>>,
+    node_identity_sender: Sender<NodeIdentity>,
+) where
+    S: Stream<Item = NodeIdentity> + Unpin,
+{
+    loop {
+        let node_identity_result = stream.next().await;
+        let node_identity = if let Some(node_identity) = node_identity_result {
+            node_identity
+        } else {
+            // We have reached the end of the stream
+            tracing::info!(
+                "process node identity stream: end of stream reached for node identity stream."
+            );
+            return;
+        };
+
+        if let Err(err) = process_incoming_node_identity(
+            node_identity,
+            data_state.clone(),
+            node_identity_sender.clone(),
+        )
+        .await
+        {
+            // We have an error that prevents us from continuing
+            tracing::info!(
+                "process node identity stream: error processing node identity: {}",
+                err
+            );
+            break;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{process_leaf_stream, DataState};
+    use crate::service::data_state::{process_node_identity_stream, LocationDetails, NodeIdentity};
     use async_std::{prelude::FutureExt, sync::RwLock};
     use futures::{channel::mpsc, SinkExt, StreamExt};
+    use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use sequencer::{
-        state::{BlockMerkleTree, FeeMerkleTree},
+        state::{BlockMerkleTree, FeeAccount, FeeMerkleTree},
         ChainConfig, Leaf, NodeState, ValidatedState,
     };
     use std::{sync::Arc, time::Duration};
+    use url::Url;
 
     #[async_std::test]
     async fn test_process_leaf_error_debug() {
@@ -419,6 +511,136 @@ mod tests {
 
         assert_eq!(
             process_leaf_stream_task_handle
+                .timeout(Duration::from_millis(200))
+                .await,
+            Ok(())
+        );
+    }
+
+    #[async_std::test]
+    async fn test_process_node_identity_stream() {
+        let data_state: DataState = Default::default();
+        let data_state = Arc::new(RwLock::new(data_state));
+        let (node_identity_sender_1, node_identity_receiver_1) = futures::channel::mpsc::channel(1);
+        let (node_identity_sender_2, node_identity_receiver_2) = futures::channel::mpsc::channel(1);
+
+        let process_node_identity_task_handle =
+            async_std::task::spawn(process_node_identity_stream(
+                node_identity_receiver_1,
+                data_state.clone(),
+                node_identity_sender_2,
+            ));
+
+        {
+            let data_state = data_state.read().await;
+            // Latest blocks should be empty
+            assert_eq!(data_state.node_identity().count(), 0);
+        }
+
+        // Send a node update to the Stream
+        let public_key_1 = BLSPubKey::generated_from_seed_indexed([0; 32], 0).0;
+        let node_identity_1 = NodeIdentity::from_public_key(public_key_1);
+
+        let mut node_identity_sender_1 = node_identity_sender_1;
+        let mut node_identity_receiver_2 = node_identity_receiver_2;
+
+        assert_eq!(
+            node_identity_sender_1.send(node_identity_1.clone()).await,
+            Ok(())
+        );
+
+        assert_eq!(
+            node_identity_receiver_2.next().await,
+            Some(node_identity_1.clone())
+        );
+
+        {
+            let data_state = data_state.read().await;
+            // Latest blocks should now have a single entry
+            assert_eq!(data_state.node_identity().count(), 1);
+            assert_eq!(data_state.node_identity().next(), Some(&node_identity_1));
+        }
+
+        // If we send the same node identity again, we should not have a new entry.
+        assert_eq!(
+            node_identity_sender_1.send(node_identity_1.clone()).await,
+            Ok(())
+        );
+
+        assert_eq!(
+            node_identity_receiver_2.next().await,
+            Some(node_identity_1.clone())
+        );
+
+        {
+            let data_state = data_state.read().await;
+            // Latest blocks should now have a single entry
+            assert_eq!(data_state.node_identity().count(), 1);
+            assert_eq!(data_state.node_identity().next(), Some(&node_identity_1));
+        }
+
+        // If we send an update for that node instead, it should update the
+        // entry.
+        let node_identity_1 = NodeIdentity::new(
+            public_key_1,
+            Some("name".to_string()),
+            Some(FeeAccount::default()),
+            Some(Url::parse("https://example.com/").unwrap()),
+            Some("company".to_string()),
+            Some(LocationDetails::new(
+                Some((40.7128, -74.0060)),
+                Some("US".to_string()),
+            )),
+            Some("operating_system".to_string()),
+            Some("node_type".to_string()),
+            Some("network_type".to_string()),
+        );
+        assert_eq!(
+            node_identity_sender_1.send(node_identity_1.clone()).await,
+            Ok(())
+        );
+
+        assert_eq!(
+            node_identity_receiver_2.next().await,
+            Some(node_identity_1.clone())
+        );
+
+        {
+            let data_state = data_state.read().await;
+            // Latest blocks should now have a single entry
+            assert_eq!(data_state.node_identity().count(), 1);
+            assert_eq!(data_state.node_identity().next(), Some(&node_identity_1));
+        }
+
+        // If we send a new node identity, it should result in a new node
+        // identity
+
+        let public_key_2 = BLSPubKey::generated_from_seed_indexed([0; 32], 1).0;
+        let node_identity_2 = NodeIdentity::from_public_key(public_key_2);
+
+        assert_eq!(
+            node_identity_sender_1.send(node_identity_2.clone()).await,
+            Ok(())
+        );
+
+        assert_eq!(
+            node_identity_receiver_2.next().await,
+            Some(node_identity_2.clone())
+        );
+
+        {
+            let data_state = data_state.read().await;
+            // Latest blocks should now have a single entry
+            assert_eq!(data_state.node_identity().count(), 2);
+            assert_eq!(data_state.node_identity().next(), Some(&node_identity_1));
+            assert_eq!(data_state.node_identity().last(), Some(&node_identity_2));
+        }
+
+        // We explicitly drop these, as it should make the task clean up.
+        drop(node_identity_sender_1);
+
+        assert_eq!(
+            process_node_identity_task_handle
                 .timeout(Duration::from_millis(200))
                 .await,
             Ok(())
