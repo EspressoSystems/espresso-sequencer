@@ -1,20 +1,13 @@
-
 # Upgrades
 
 Hotshot protocol supports upgrades through an Upgrade proposal mechanism. The Upgrade proposal is broadcast separately from the `QuorumProposal`, typically several views in advance of its attachment. The goal is to ensure ample time for nodes to receive and prepare for the upgrade process.
 
 After enough votes have been collected on the `UpgradeProposal`, an `UpgradeCertificate` is formed. This is attached to the next `QuorumProposal`, and any node that receives an `UpgradeCertificate` in this way re-attaches it to its own `QuorumProposal` until the network has upgraded, or (in rare cases) we failed to reach consensus on the `UpgradeCertificate`.
 
-
-
 An upgrade consists of two parts:
 
-- **Version Bump:** The version bump initiates a change in the protocol, which can involve logic updates (e.g., new rules or modifications to existing rules within the protocol, such as blocks executing new logic if the version is greater than or equal to the specified NEXT_VERSION) and type changes (e.g., using a new type variant for a particular version, such as using V2 for ValidatedState if the version is 0.2).
-- **Migration:** Migration involves updating existing data to align with the new version, such as updating the chain config
-
-
-
-Note: We currently support only chain config migration.
+- **Version Bump:** The version bump initiates a change in the protocol, which can involve logic updates and type changes. Logic updates topically involve adding or modifying the criteria or consequences of block execution. This new behavior will be enabled at runtime if sequencer version is greater than or equal to the version behind which they are gated. In addition, an upgrade may change the shape of a type. A field of `BlockHeader` might become a `u64` where it was before a `u8`. A field may be added to `ChainConfig`. In such cases a new version of these types is added and a version of the sequencer designated to incorporate them.
+- **Migration:** Migration involves updating existing data to align with the new version, such as updating chain-config values. Since these values are immutable in normal operation, an upgrade is required to modify them. Note that the only currently supported upgrade of this kind is the migration of chain-config.
 
 ## Enabling an Upgrade
 
@@ -27,12 +20,12 @@ To enable an upgrade in Hotshot protocol, it is essential to define the base ver
 These are defined in [NodeType implementation](../types/src/v0/mod.rs) for the Types (`SeqTypes` in our case).
 ```rust
 impl NodeType for SeqTypes {
-    type Base = StaticVersion<0, 1>;
-    type Upgrade = StaticVersion<0, 2>;
-    const UPGRADE_HASH: [u8; 32] = [
-        1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
-    ], 
-    ..
+	type Base = StaticVersion<0, 1>;
+	type Upgrade = StaticVersion<0, 2>;
+	const UPGRADE_HASH: [u8; 32] = [
+		1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+	],
+	..
 }
 ```
 
