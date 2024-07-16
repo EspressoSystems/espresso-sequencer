@@ -718,6 +718,13 @@
 <a href="#718" id="718">718</a>
 <a href="#719" id="719">719</a>
 <a href="#720" id="720">720</a>
+<a href="#721" id="721">721</a>
+<a href="#722" id="722">722</a>
+<a href="#723" id="723">723</a>
+<a href="#724" id="724">724</a>
+<a href="#725" id="725">725</a>
+<a href="#726" id="726">726</a>
+<a href="#727" id="727">727</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! A light client prover service
 
 </span><span class="kw">use </span>std::{
@@ -1129,7 +1136,14 @@
             .<span class="kw">await
             </span>.with_context(|| <span class="string">"Failed to initialize stake table"</span>)<span class="question-mark">?</span>,
     );
+    run_prover_service_with_stake_table(config, bind_version, st).<span class="kw">await
+</span>}
 
+<span class="kw">pub async fn </span>run_prover_service_with_stake_table&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+    config: StateProverConfig,
+    bind_version: Ver,
+    st: Arc&lt;StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt;&gt;,
+) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     <span class="macro">tracing::info!</span>(<span class="string">"Light client address: {:?}"</span>, config.light_client_address);
     <span class="kw">let </span>relay_server_client =
         Arc::new(Client::&lt;ServerError, Ver&gt;::new(config.relay_server.clone()));
@@ -1142,7 +1156,7 @@
     }
 
     <span class="kw">let </span>proving_key =
-        spawn_blocking(<span class="kw">move </span>|| Arc::new(load_proving_key(stake_table_capacity))).<span class="kw">await</span>;
+        spawn_blocking(<span class="kw">move </span>|| Arc::new(load_proving_key(config.stake_table_capacity))).<span class="kw">await</span>;
 
     <span class="kw">let </span>update_interval = config.update_interval;
     <span class="kw">let </span>retry_interval = config.retry_interval;
