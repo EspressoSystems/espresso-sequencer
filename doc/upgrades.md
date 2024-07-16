@@ -6,8 +6,8 @@ After enough votes have been collected on the `UpgradeProposal`, an `UpgradeCert
 
 An upgrade consists of two parts:
 
-- **Version Bump:** The version bump initiates a change in the protocol, which can involve logic updates and type changes. Logic updates topically involve adding or modifying the criteria or consequences of block execution. This new behavior will be enabled at runtime if sequencer version is greater than or equal to the version behind which they are gated. In addition, an upgrade may change the shape of a type. A field of `BlockHeader` might become a `u64` where it was before a `u8`. A field may be added to `ChainConfig`. In such cases a new version of these types is added and a version of the sequencer designated to incorporate them.
-- **Migration:** Migration involves updating existing data to align with the new version, such as updating chain-config values. Since these values are immutable in normal operation, an upgrade is required to modify them. Note that the only currently supported upgrade of this kind is the migration of chain-config.
+- **Version Bump:** The version bump initiates a change in the protocol, which can involve logic updates and type changes. Logic updates typically involve adding or modifying the criteria or consequences of block execution. This new behavior will be enabled at runtime if sequencer version is greater than or equal to the version behind which they are gated. In addition, an upgrade may change the shape of a type. A field of `BlockHeader` might become a `u64` where it was before a `u8`. A field may be added to `ChainConfig`. In such cases a new version of these types is added and a version of the sequencer designated to incorporate them.
+- **Migration:** Migration involves updating existing data to align with the new version, such as updating `ChainConfig` values. Since these values are immutable in normal operation, an upgrade is required to modify them. Note that the only currently supported upgrade of this kind is the migration of `ChainConfig`.
 
 ## Enabling an Upgrade
 
