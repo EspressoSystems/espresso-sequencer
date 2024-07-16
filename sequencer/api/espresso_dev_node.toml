@@ -7,22 +7,39 @@ FORMAT_VERSION = "0.1.0"
 PATH = ["/dev-info"]
 DOC = """
 Get the debug info
+
+Returns
+```
+{
+    "builder_url": string,
+    "prover_port": integer,
+    "l1_url": string,
+    "light_client_address:" address,
+}
+```
 """
 
-[route.freeze]
-PATH = ["mock-contract/freeze/:height"]
-":height" = "Integer"
+[route.sethotshotdown]
+PATH = ["set-hotshot-down"]
+METHOD = "POST"
 DOC = """
-Freeze the L1 height in the light client contract.
+Set the hotshot down since the given L1 height.
 
+Body:
+```
+{
+    "height": integer,
+}
+```
 By doing this, the L1 height in the light contract will be frozen and rollups will detect
 the HotShot failure. This is intended to be used when testing the rollups' functionalities.
 """
 
-[route.unfreeze]
-PATH = ["mock-contract/unfreeze"]
+[route.sethotshotup]
+PATH = ["set-hotshot-up"]
+METHOD = "POST"
 DOC = """
-Unfreeze the L1 height in the light client contract.
+Set the hotshot up in the light client contract.
 
 This is intended to be used when `freeze` has been called previously. By unfreezing the L1 height,
 rollups will detect the reactivity of HotShot.

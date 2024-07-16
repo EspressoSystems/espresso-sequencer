@@ -177,7 +177,7 @@ async fn main() -> anyhow::Result<()> {
     let retry_interval = Duration::from_secs(2);
     let prover_port = cli_params
         .prover_port
-        .unwrap_or(pick_unused_port().unwrap());
+        .unwrap_or_else(|| pick_unused_port().unwrap());
     let light_client_address = contracts
         .get_contract_address(Contract::LightClientProxy)
         .unwrap();
@@ -241,31 +241,32 @@ async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone
     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     let contract = mock_contract.clone();
-    api.get("freeze", move |req, _| {
+    api.post("sethotshotdown", move |req, _| {
         let contract = contract.clone();
         async move {
-            let height: u64 = req
-                .integer_param("height")
-                .map_err(ServerError::from_request_error)?;
+            let height = req
+                .body_auto::<SetHotshotUpBody, Ver>(Ver::instance())
+                .map_err(ServerError::from_request_error)?
+                .height;
             contract
                 .set_hot_shot_down_since(U256::from(height))
                 .send()
                 .await
-                .map_err(|err| ServerError::catch_all(StatusCode::FORBIDDEN, err.to_string()))?;
+                .map_err(|err| {
+                    ServerError::catch_all(StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+                })?;
             Ok(())
         }
         .boxed()
     })
     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    api.get("unfreeze", move |_, _| {
+    api.post("sethotshotup", move |_, _| {
         let contract = mock_contract.clone();
         async move {
-            contract
-                .set_hot_shot_up()
-                .send()
-                .await
-                .map_err(|err| ServerError::catch_all(StatusCode::FORBIDDEN, err.to_string()))?;
+            contract.set_hot_shot_up().send().await.map_err(|err| {
+                ServerError::catch_all(StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+            })?;
             Ok(())
         }
         .boxed()
@@ -280,12 +281,17 @@ async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone
     Ok(())
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct DevInfo {
     pub builder_url: Url,
     pub prover_port: u16,
     pub l1_url: Url,
     pub light_client_address: Address,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SetHotshotUpBody {
+    pub height: u64,
 }
 
 #[cfg(test)]
@@ -299,7 +305,10 @@ mod tests {
     use es_version::SequencerVersion;
     use escargot::CargoBuild;
     use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
-    use ethers::types::{Address, U256};
+    use ethers::{
+        providers::Middleware,
+        types::{Address, U256},
+    };
     use futures::TryStreamExt;
     use hotshot_query_service::{
         availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
@@ -312,7 +321,7 @@ mod tests {
     use surf_disco::Client;
     use tide_disco::error::ServerError;
 
-    use crate::DevInfo;
+    use crate::{DevInfo, SetHotshotUpBody};
 
     const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
@@ -436,7 +445,7 @@ mod tests {
         let signer = init_signer(&l1_url, TEST_MNEMONIC, 0).await.unwrap();
         let light_client = LightClient::new(
             light_client_address.parse::<Address>().unwrap(),
-            Arc::new(signer),
+            Arc::new(signer.clone()),
         );
 
         while light_client
@@ -498,23 +507,47 @@ mod tests {
 
         // Check the dev node api
         {
+            tracing::info!("checking the dev node api");
             dev_node_client
                 .get::<DevInfo>("api/dev-info")
                 .send()
                 .await
                 .unwrap();
 
+            let height = signer.get_block_number().await.unwrap().as_u64();
             dev_node_client
-                .get::<()>("api/mock-contract/freeze/3")
+                .post::<()>("api/set-hotshot-down")
+                .body_json(&SetHotshotUpBody { height: height - 1 })
+                .unwrap()
                 .send()
                 .await
                 .unwrap();
 
+            while !light_client
+                .lag_over_escape_hatch_threshold(U256::from(height), U256::from(0))
+                .call()
+                .await
+                .unwrap_or(false)
+            {
+                tracing::info!("waiting for setting hotshot down");
+                sleep(Duration::from_secs(3)).await;
+            }
+
             dev_node_client
-                .get::<()>("api/mock-contract/unfreeze")
+                .post::<()>("api/set-hotshot-up")
                 .send()
                 .await
                 .unwrap();
+
+            while light_client
+                .lag_over_escape_hatch_threshold(U256::from(height), U256::from(0))
+                .call()
+                .await
+                .unwrap_or(true)
+            {
+                tracing::info!("waiting for setting hotshot up");
+                sleep(Duration::from_secs(3)).await;
+            }
         }
 
         drop(db);
