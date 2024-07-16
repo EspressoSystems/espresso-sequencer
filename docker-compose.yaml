@@ -239,6 +239,14 @@ services:
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
+      - IDENTITY_NODE_NAME=sequencer0
+      - IDENTITY_WALLET_ADDRESS=0x0000000000000000000000000000000000000000
+      - IDENTITY_COMPANY_NAME=Espresso Systems
+      - IDENTITY_OPERATING_SYSTEM=Linux 5.15.153.1
+      - IDENTITY_NETWORK_TYPE=local
+      - IDENTITY_COUNTRY_CODE=US
+      - IDENTITY_LATITUDE=40.7128
+      - IDENTITY_LONGITUDE=-74.0060
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -285,6 +293,14 @@ services:
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
+      - IDENTITY_NODE_NAME=sequencer1
+      - IDENTITY_WALLET_ADDRESS=0x0000000000000000000000000000000000000001
+      - IDENTITY_COMPANY_NAME=Espresso Systems
+      - IDENTITY_OPERATING_SYSTEM=Darwin 23.5.0
+      - IDENTITY_NETWORK_TYPE=local
+      - IDENTITY_COUNTRY_CODE=GR
+      - IDENTITY_LATITUDE=39.0742
+      - IDENTITY_LONGITUDE=21.8243
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -327,6 +343,14 @@ services:
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
+      - IDENTITY_NODE_NAME=sequencer2
+      - IDENTITY_WALLET_ADDRESS=0x0000000000000000000000000000000000000002
+      - IDENTITY_COMPANY_NAME=Espresso Systems
+      - IDENTITY_OPERATING_SYSTEM=Darwin 23.5.0
+      - IDENTITY_NETWORK_TYPE=local
+      - IDENTITY_COUNTRY_CODE=CN
+      - IDENTITY_LATITUDE=35.8617
+      - IDENTITY_LONGITUDE=104.1954
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -365,6 +389,15 @@ services:
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
+      - IDENTITY_NODE_NAME=sequencer3
+      - IDENTITY_WALLET_ADDRESS=0x0000000000000000000000000000000000000003
+      - IDENTITY_COMPANY_NAME=Espresso Systems
+      - IDENTITY_OPERATING_SYSTEM=Microsoft Windows NT 10.0.22621.0
+      - IDENTITY_E=espresso-sequencer@0.1.0
+      - IDENTITY_NETWORK_TYPE=local
+      - IDENTITY_COUNTRY_CODE=CN
+      - IDENTITY_LATITUDE=35.8617
+      - IDENTITY_LONGITUDE=104.1954
     depends_on:
       orchestrator:
         condition: service_healthy
@@ -403,6 +436,14 @@ services:
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
+      - IDENTITY_NODE_NAME=sequencer4
+      - IDENTITY_WALLET_ADDRESS=0x0000000000000000000000000000000000000004
+      - IDENTITY_COMPANY_NAME=Espresso Systems
+      - IDENTITY_OPERATING_SYSTEM=TempleOS 5.03
+      - IDENTITY_NETWORK_TYPE=local
+      - IDENTITY_COUNTRY_CODE=AU
+      - IDENTITY_LATITUDE=-25.2744
+      - IDENTITY_LONGITUDE=133.7751
     depends_on:
       orchestrator:
         condition: service_healthy

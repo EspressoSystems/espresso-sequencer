@@ -143,6 +143,41 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             env!("VERGEN_GIT_COMMIT_TIMESTAMP").into(),
         ]);
 
+    // Expose Node Entity Information via the status/metrics API
+    metrics
+        .text_family(
+            "node_identity_general".into(),
+            vec![
+                "name".into(),
+                "wallet".into(),
+                "company_name".into(),
+                "operating_system".into(),
+                "node_type".into(),
+                "network_type".into(),
+            ],
+        )
+        .create(vec![
+            std::env::var("IDENTITY_NODE_NAME").unwrap_or("".into()),
+            std::env::var("IDENTITY_WALLET_ADDRESS").unwrap_or("".into()),
+            std::env::var("IDENTITY_COMPANY_NAME").unwrap_or("".into()),
+            std::env::var("IDENTITY_OPERATING_SYSTEM").unwrap_or("".into()),
+            std::env::var("IDENTITY_NODE_TYPE")
+                .unwrap_or(format!("espresso-sequencer {}", Ver::VERSION)),
+            std::env::var("IDENTITY_NETWORK_TYPE").unwrap_or("".into()),
+        ]);
+
+    // Expose Node Identity Location via the status/metrics API
+    metrics
+        .text_family(
+            "node_identity_location".into(),
+            vec!["country".into(), "latitude".into(), "longitude".into()],
+        )
+        .create(vec![
+            std::env::var("IDENTITY_COUNTRY_CODE").unwrap_or("".into()),
+            std::env::var("IDENTITY_LATITUDE").unwrap_or("".into()),
+            std::env::var("IDENTITY_LONGITUDE").unwrap_or("".into()),
+        ]);
+
     // Stick our public key in `metrics` so it is easily accessible via the status API.
     let pub_key = BLSPubKey::from_private(&network_params.private_staking_key);
     metrics
