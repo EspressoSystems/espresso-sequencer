@@ -2,6 +2,7 @@ use crate::service::client_message::{ClientMessage, InternalClientMessage};
 use crate::service::data_state::{LocationDetails, NodeIdentity};
 use crate::service::server_message::ServerMessage;
 use futures::future::Either;
+use futures::Sink;
 use futures::{
     channel::mpsc::{self, Sender},
     FutureExt, SinkExt, StreamExt,
@@ -20,6 +21,7 @@ use std::io::BufRead;
 use std::str::FromStr;
 use tide_disco::socket::Connection;
 use tide_disco::{api::ApiError, Api};
+use url::Url;
 use vbs::version::{StaticVersion, StaticVersionType, Version};
 
 /// CONSTANT for protocol major version
@@ -351,6 +353,17 @@ pub enum GetNodeIdentityFromUrlError {
     NoNodeIdentity,
 }
 
+impl std::fmt::Display for GetNodeIdentityFromUrlError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GetNodeIdentityFromUrlError::Url(err) => write!(f, "url: {}", err),
+            GetNodeIdentityFromUrlError::Reqwest(err) => write!(f, "reqwest error: {}", err),
+            GetNodeIdentityFromUrlError::Io(err) => write!(f, "io error: {}", err),
+            GetNodeIdentityFromUrlError::NoNodeIdentity => write!(f, "no node identity"),
+        }
+    }
+}
+
 impl From<url::ParseError> for GetNodeIdentityFromUrlError {
     fn from(err: url::ParseError) -> Self {
         GetNodeIdentityFromUrlError::Url(err)
@@ -369,6 +382,12 @@ impl From<std::io::Error> for GetNodeIdentityFromUrlError {
     }
 }
 
+/// [get_node_identity_from_url] retrieves a [NodeIdentity] from a URL.  It
+/// expects a [url::Url] to be provided so that it can make the request to the
+/// Sequencer status metrics API. It will return a [NodeIdentity] that is
+/// populated with the data retrieved from the Sequencer status metrics API.
+/// If no [NodeIdentity] is found, it will return a
+/// [GetNodeIdentityFromUrlError::NoNodeIdentity] error.
 pub async fn get_node_identity_from_url(
     url: url::Url,
 ) -> Result<NodeIdentity, GetNodeIdentityFromUrlError> {
@@ -620,6 +639,10 @@ pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scra
     }
 }
 
+/// [node_identity_from_scrape] creates a [NodeIdentity] from a [Scrape].  It
+/// expects the [Scrape] to contain the necessary information to populate the
+/// [NodeIdentity].  If the [Scrape] doesn't contain the necessary information
+/// to populate the [NodeIdentity], then it will return [None].
 pub fn node_identity_from_scrape(scrape: Scrape) -> Option<NodeIdentity> {
     let node_key = scrape
         .docs
@@ -662,11 +685,53 @@ pub fn node_identity_from_scrape(scrape: Scrape) -> Option<NodeIdentity> {
     Some(node_identity)
 }
 
+/// [process_node_identity_url_stream] processes a stream of [Url]s that are
+/// expected to contain a Node Identity.  It will attempt to retrieve the Node
+/// Identity from the [Url] and then send it to the [Sink] provided.  If the
+/// [Sink] is closed, then the function will return.
+pub async fn process_node_identity_url_stream<T, K>(
+    node_identity_url_stream: T,
+    node_identity_sink: K,
+) where
+    T: futures::Stream<Item = Url> + Unpin,
+    K: Sink<NodeIdentity, Error = futures::channel::mpsc::SendError> + Unpin,
+{
+    let mut node_identity_url_stream = node_identity_url_stream;
+    let mut node_identity_sender = node_identity_sink;
+    loop {
+        let node_identity_url_result = node_identity_url_stream.next().await;
+        let node_identity_url = match node_identity_url_result {
+            Some(node_identity_url) => node_identity_url,
+            None => {
+                tracing::info!("node identity url stream closed");
+                return;
+            }
+        };
+
+        // Alright we have a new Url to try and scrape for a Node Identity.
+        // Let's attempt to do that.
+        let node_identity_result = get_node_identity_from_url(node_identity_url).await;
+
+        let node_identity = match node_identity_result {
+            Ok(node_identity) => node_identity,
+            Err(err) => {
+                tracing::warn!("get node identity from url failed.  bad base url?: {}", err);
+                continue;
+            }
+        };
+
+        let send_result = node_identity_sender.send(node_identity).await;
+        if let Err(err) = send_result {
+            tracing::info!("node identity sender closed: {}", err);
+            return;
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::{
-        get_stake_table_from_sequencer, stream_leaves_from_hotshot_query_service, Error,
-        StateClientMessageSender, STATIC_VER_0_1,
+        get_stake_table_from_sequencer, process_node_identity_url_stream,
+        stream_leaves_from_hotshot_query_service, Error, StateClientMessageSender, STATIC_VER_0_1,
     };
     use crate::service::{
         client_id::ClientId,
@@ -677,7 +742,7 @@ mod tests {
             process_distribute_voters_handling_stream, process_internal_client_message_stream,
             ClientThreadState,
         },
-        data_state::{process_leaf_stream, DataState},
+        data_state::{process_leaf_stream, process_node_identity_stream, DataState},
     };
     use async_std::sync::RwLock;
     use futures::{
@@ -702,7 +767,7 @@ mod tests {
 
     #[async_std::test]
     #[ignore]
-    async fn test_api_creation() {
+    async fn test_full_setup_example() {
         let node_validator_api_result = super::define_api::<TestState>();
 
         let node_validator_api = match node_validator_api_result {
@@ -736,9 +801,8 @@ mod tests {
         );
 
         let client = surf_disco::Client::new(
-            "https://query.cappuccino.testnet.espresso.network/v0"
-                .parse()
-                .unwrap(),
+            // "https://query.cappuccino.testnet.espresso.network/v0"
+            "http://localhost:24000/v0".parse().unwrap(),
         );
 
         let get_stake_table_result = get_stake_table_from_sequencer(client.clone()).await;
@@ -749,8 +813,10 @@ mod tests {
         let client_thread_state = Arc::new(RwLock::new(client_thread_state));
         let (block_detail_sender, block_detail_receiver) = mpsc::channel(32);
         let (leaf_sender, leaf_receiver) = mpsc::channel(32);
-        let (_node_identity_sender, node_identity_receiver) = mpsc::channel(32);
+        let (node_identity_sender_1, node_identity_receiver_1) = mpsc::channel(32);
+        let (node_identity_sender_2, node_identity_receiver_2) = mpsc::channel(32);
         let (voters_sender, voters_receiver) = mpsc::channel(32);
+        let (mut url_sender, url_receiver) = mpsc::channel(32);
 
         let _process_internal_client_message_handle =
             async_std::task::spawn(process_internal_client_message_stream(
@@ -768,7 +834,7 @@ mod tests {
         let _process_distribute_node_identity_handle =
             async_std::task::spawn(process_distribute_node_identity_handling_stream(
                 client_thread_state.clone(),
-                node_identity_receiver,
+                node_identity_receiver_2,
             ));
 
         let _process_distribute_voters_handle = async_std::task::spawn(
@@ -780,6 +846,18 @@ mod tests {
             data_state.clone(),
             block_detail_sender,
             voters_sender,
+        ));
+
+        let _process_node_identity_stream_handle =
+            async_std::task::spawn(process_node_identity_stream(
+                node_identity_receiver_1,
+                data_state.clone(),
+                node_identity_sender_2,
+            ));
+
+        let _process_url_stream_handle = async_std::task::spawn(process_node_identity_url_stream(
+            url_receiver,
+            node_identity_sender_1,
         ));
 
         let _leaf_retriever_handle = async_std::task::spawn(async move {
@@ -809,6 +887,28 @@ mod tests {
                 }
             }
         });
+
+        // send the original three node base urls
+        // This is assuming that demo-native is running, as such those Urls
+        // should be used / match
+        {
+            let urls = vec![
+                "http://localhost:24000/",
+                "http://localhost:24001",
+                "http://localhost:24002",
+                "http://localhost:24003",
+                "http://localhost:24004",
+            ];
+
+            for url in urls {
+                let url = url.parse().unwrap();
+                let send_result = url_sender.send(url).await;
+                if let Err(err) = send_result {
+                    tracing::info!("url sender closed: {}", err);
+                    break;
+                }
+            }
+        }
 
         let _app_serve_result = app.serve("0.0.0.0:9000", STATIC_VER_0_1).await;
     }
