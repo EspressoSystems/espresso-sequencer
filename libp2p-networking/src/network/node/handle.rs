@@ -97,8 +97,6 @@ pub async fn spawn_network_node(
         recv_kill: None,
     };
 
-    info!("LISTEN ADDRESS IS {:?}", listen_addr);
-
     let handle = NetworkNodeHandle {
         network_config: config,
         send_network: send_chan,
@@ -430,7 +428,7 @@ impl NetworkNodeHandle {
         &self,
         known_peers: Vec<(PeerId, Multiaddr)>,
     ) -> Result<(), NetworkNodeHandleError> {
-        info!("ADDING KNOWN PEERS TO {:?}", self.peer_id);
+        debug!("Adding {} known peers", known_peers.len());
         let req = ClientRequest::AddKnownPeers(known_peers);
         self.send_request(req).await
     }
@@ -440,7 +438,6 @@ impl NetworkNodeHandle {
     /// # Errors
     /// - Will return [`NetworkNodeHandleError::SendError`] when underlying `NetworkNode` has been killed
     async fn send_request(&self, req: ClientRequest) -> Result<(), NetworkNodeHandleError> {
-        debug!("peerid {:?}\t\tsending message {:?}", self.peer_id, req);
         self.send_network
             .send(req)
             .await

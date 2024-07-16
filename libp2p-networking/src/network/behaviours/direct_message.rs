@@ -6,7 +6,7 @@ use async_compatibility_layer::{
 };
 use libp2p::request_response::{Event, Message, OutboundRequestId, ResponseChannel};
 use libp2p_identity::PeerId;
-use tracing::{error, info};
+use tracing::{debug, error, warn};
 
 use super::exponential_backoff::ExponentialBackoff;
 use crate::network::{ClientRequest, NetworkEvent};
@@ -54,10 +54,7 @@ impl DMBehaviour {
                 request_id: _,
                 error,
             } => {
-                error!(
-                    "inbound failure to send message to {:?} with error {:?}",
-                    peer, error
-                );
+                error!("Inbound message failure from {:?}: {:?}", peer, error);
                 None
             }
             Event::OutboundFailure {
@@ -65,10 +62,7 @@ impl DMBehaviour {
                 request_id,
                 error,
             } => {
-                error!(
-                    "outbound failure to send message to {:?} with error {:?}",
-                    peer, error
-                );
+                error!("Outbound message failure to {:?}: {:?}", peer, error);
                 if let Some(mut req) = self.in_progress_rr.remove(&request_id) {
                     if req.retry_count == 0 {
                         return None;
@@ -95,7 +89,7 @@ impl DMBehaviour {
                     channel,
                     ..
                 } => {
-                    info!("recv-ed DIRECT REQUEST {:?}", msg);
+                    debug!("Received direct request {:?}", msg);
                     // receiver, not initiator.
                     // don't track. If we are disconnected, sender will reinitiate
                     Some(NetworkEvent::DirectRequest(msg, peer, channel))
@@ -106,16 +100,16 @@ impl DMBehaviour {
                 } => {
                     // success, finished.
                     if let Some(req) = self.in_progress_rr.remove(&request_id) {
-                        info!("recv-ed DIRECT RESPONSE {:?}", msg);
+                        debug!("Received direct response {:?}", msg);
                         Some(NetworkEvent::DirectResponse(msg, req.peer_id))
                     } else {
-                        error!("recv-ed a direct response, but is no longer tracking message!");
+                        warn!("Received response for unknown request id {:?}", request_id);
                         None
                     }
                 }
             },
             e @ Event::ResponseSent { .. } => {
-                info!(?e, " sending response");
+                debug!("Response sent {:?}", e);
                 None
             }
         }
@@ -131,7 +125,7 @@ impl DMBehaviour {
 
         req.retry_count -= 1;
 
-        info!("direct message request with id {:?}", request_id);
+        debug!("Adding direct request {:?}", req);
 
         self.in_progress_rr.insert(request_id, req);
     }
