@@ -681,6 +681,11 @@ async fn collect_garbage(
         // The only exception is when the oldest leaf is the genesis leaf; then there was no
         // previous decide event.
         if *oldest_view > 0 {
+            tracing::debug!(
+                oldest_view,
+                remaining_leaves = leaves.len() - 1,
+                "excluding previously processed view from decide event"
+            );
             leaves.pop_first();
         }
     }
@@ -735,6 +740,8 @@ async fn collect_garbage(
         tracing::info!(?view, "no new leaves at decide");
         return Ok(());
     };
+    tracing::debug!(?final_qc, ?leaf_chain, "generating decide event");
+
     consumer
         .handle_event(&Event {
             view_number: view,
