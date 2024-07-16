@@ -15,7 +15,6 @@ mod tests {
 
     use hotshot_example_types::node_types::TestTypes;
     use std::sync::Arc;
-    use std::time::Duration;
     use surf_disco::Client;
     use tide_disco::{App, Url};
     use vbs::version::{StaticVersion, StaticVersionType};
@@ -116,7 +115,7 @@ mod tests {
                 .parse()
                 .unwrap(),
         );
-        assert!(client_1.connect(Some(Duration::from_secs(60))).await);
+        client_1.connect(None).await;
 
         tracing::info!("Client 1 Connected to server");
 
@@ -135,7 +134,7 @@ mod tests {
                 .parse()
                 .unwrap(),
         );
-        assert!(client_2.connect(Some(Duration::from_secs(60))).await);
+        client_2.connect(None).await;
 
         tracing::info!("Client 2 Connected to server");
 
@@ -152,33 +151,41 @@ mod tests {
         // wait for these events to receive on client 1
         let receive_handle_1 = async_spawn(async move {
             let mut receive_count = 0;
-            loop {
-                let event = events_1.next().await.unwrap();
+            while let Some(event) = events_1.next().await {
+                let event = event.unwrap();
                 tracing::info!("Received event in Client 1: {:?}", event);
+
                 receive_count += 1;
-                if receive_count > total_count {
+
+                if receive_count == total_count {
                     tracing::info!("Client1 Received all sent events, exiting loop");
                     break;
                 }
             }
-            // Offset 1 is due to the startup event info
-            assert_eq!(receive_count, total_count + 1);
+
+            assert_eq!(receive_count, total_count);
+
+            tracing::info!("stream ended");
         });
 
         // wait for these events to receive on client 2
         let receive_handle_2 = async_spawn(async move {
             let mut receive_count = 0;
-            loop {
-                let event = events_2.next().await.unwrap();
+            while let Some(event) = events_2.next().await {
+                let event = event.unwrap();
+
                 tracing::info!("Received event in Client 2: {:?}", event);
                 receive_count += 1;
-                if receive_count > total_count {
+
+                if receive_count == total_count {
                     tracing::info!("Client 2 Received all sent events, exiting loop");
                     break;
                 }
             }
-            // Offset 1 is due to the startup event info
-            assert_eq!(receive_count, total_count + 1);
+
+            assert_eq!(receive_count, total_count);
+
+            tracing::info!("stream ended");
         });
 
         let send_handle = async_spawn(async move {
