@@ -1732,14 +1732,14 @@ pub mod tests {
 
         assert_eq!(
             internal_client_message_sender_1
-                .send(InternalClientMessage::SubscribeNodeIdentity(client_1_id))
+                .send(InternalClientMessage::SubscribeVoters(client_1_id))
                 .await,
             Ok(()),
         );
 
         assert_eq!(
             internal_client_message_sender_1
-                .send(InternalClientMessage::SubscribeNodeIdentity(client_2_id))
+                .send(InternalClientMessage::SubscribeVoters(client_2_id))
                 .await,
             Ok(()),
         );
