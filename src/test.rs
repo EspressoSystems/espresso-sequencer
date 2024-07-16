@@ -1,14 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use crate::events_source::{BuilderEvent, EventConsumer, EventsStreamer}; // EventsUpdater};
-                                                                             //use crate::fetch::Fetch;
+    use crate::events_source::{EventConsumer, EventsStreamer}; // EventsUpdater};
+                                                               //use crate::fetch::Fetch;
     use crate::events::{define_api, Error, Options};
     use async_compatibility_layer::art::async_spawn;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::sync::RwLock;
     use futures::stream::StreamExt;
     use hotshot_types::{
-        constants::{Version01, STATIC_VER_0_1},
         data::ViewNumber,
         event::{Event, EventType},
         traits::node_implementation::{ConsensusTime, NodeType},
@@ -19,6 +18,7 @@ mod tests {
     use std::time::Duration;
     use surf_disco::Client;
     use tide_disco::{App, Url};
+    use vbs::version::{StaticVersion, StaticVersionType};
 
     // return a empty transaction event
     fn generate_event<Types: NodeType<Time = ViewNumber>>(view_number: u64) -> Event<Types> {
@@ -49,7 +49,7 @@ mod tests {
         let mut app = App::<_, Error>::with_state(events_streamer.clone());
 
         let hotshot_events_api =
-            define_api::<Arc<RwLock<EventsStreamer<TestTypes>>>, TestTypes, Version01>(
+            define_api::<Arc<RwLock<EventsStreamer<TestTypes>>>, TestTypes, StaticVersion<0, 1>>(
                 &Options::default(),
             )
             .expect("Failed to define hotshot eventsAPI");
@@ -57,7 +57,7 @@ mod tests {
         app.register_module("hotshot_events", hotshot_events_api)
             .expect("Failed to register hotshot events API");
 
-        async_spawn(app.serve(api_url, STATIC_VER_0_1));
+        async_spawn(app.serve(api_url, StaticVersion::<0, 1>::instance()));
         let total_count = 5;
         let send_handle = async_spawn(async move {
             let mut send_count = 0;
@@ -100,7 +100,7 @@ mod tests {
         let mut app = App::<_, Error>::with_state(events_streamer.clone());
 
         let hotshot_events_api =
-            define_api::<Arc<RwLock<EventsStreamer<TestTypes>>>, TestTypes, Version01>(
+            define_api::<Arc<RwLock<EventsStreamer<TestTypes>>>, TestTypes, StaticVersion<0, 1>>(
                 &Options::default(),
             )
             .expect("Failed to define hotshot eventsAPI");
@@ -108,10 +108,10 @@ mod tests {
         app.register_module("hotshot_events", hotshot_events_api)
             .expect("Failed to register hotshot events API");
 
-        async_spawn(app.serve(api_url, STATIC_VER_0_1));
+        async_spawn(app.serve(api_url, StaticVersion::<0, 1>::instance()));
 
         // Start Client 1
-        let client_1 = Client::<Error, Version01>::new(
+        let client_1 = Client::<Error, StaticVersion<0, 1>>::new(
             format!("http://localhost:{}/hotshot_events", port)
                 .parse()
                 .unwrap(),
@@ -123,14 +123,14 @@ mod tests {
         // client 1 subscribe to hotshot events
         let mut events_1 = client_1
             .socket("events")
-            .subscribe::<BuilderEvent<TestTypes>>()
+            .subscribe::<Event<TestTypes>>()
             .await
             .unwrap();
 
         tracing::info!("Client 1 Subscribed to events");
 
         // Start Client 2
-        let client_2 = Client::<Error, Version01>::new(
+        let client_2 = Client::<Error, StaticVersion<0, 1>>::new(
             format!("http://localhost:{}/hotshot_events", port)
                 .parse()
                 .unwrap(),
@@ -142,7 +142,7 @@ mod tests {
         // client 2 subscrive to hotshot events
         let mut events_2 = client_2
             .socket("events")
-            .subscribe::<BuilderEvent<TestTypes>>()
+            .subscribe::<Event<TestTypes>>()
             .await
             .unwrap();
 
