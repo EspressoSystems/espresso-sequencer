@@ -62,7 +62,7 @@ mod tests {
         assert_eq!(
             format!("{:?}", location_details),
             format!(
-                "LocationDetails {{ coords: {:?}, country: {:?} }}",
+                "LocationDetails {{ coords: Some({:?}), country: Some({:?}) }}",
                 coords, country
             )
         );
