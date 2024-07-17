@@ -102,7 +102,6 @@ impl Default for BidTxBody {
         let key = FeeAccount::test_key_pair();
         let nsid = NamespaceId::from(999u64);
         Self {
-            // TODO url will be builder_url, needs to be passed in from somewhere
             url: Url::from_str("https://sequencer:3939").unwrap(),
             account: key.fee_account(),
             public_key: FeeAccount::default(),
