@@ -97,7 +97,9 @@ where
             async move {
                 tracing::info!("client subscribed to events");
                 state
-                    .read(|state| async move { Ok(state.subscribe_events().await.map(Ok)) }.boxed())
+                    .read(|state| {
+                        async move { Ok(state.get_event_stream(None).await.map(Ok)) }.boxed()
+                    })
                     .await
             }
             .try_flatten_stream()

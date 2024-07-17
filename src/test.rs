@@ -42,7 +42,6 @@ mod tests {
         let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
             known_nodes_with_stake,
             non_staked_node_count,
-            None,
         )));
 
         // Start the web server.
@@ -94,7 +93,6 @@ mod tests {
         let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
             known_nodes_with_stake,
             non_staked_node_count,
-            None,
         )));
 
         // Start the web server.
