@@ -4,10 +4,7 @@ pub mod node_identity;
 use async_std::sync::RwLock;
 use bitvec::vec::BitVec;
 use circular_buffer::CircularBuffer;
-use futures::{
-    channel::mpsc::{SendError, Sender},
-    SinkExt, Stream, StreamExt,
-};
+use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
 use hotshot_query_service::{
     availability::QueryableHeader,
     explorer::{BlockDetail, ExplorerHeader, Timestamp},
@@ -193,17 +190,19 @@ impl std::error::Error for ProcessLeafError {
 /// [process_incoming_leaf] is a helper function that will process an incoming
 /// [Leaf] and update the [DataState] with the new information.
 /// Additionally, the block that is contained within the [Leaf] will be
-/// computed into a [BlockDetail] and sent to the [Sender] so that it can be
+/// computed into a [BlockDetail] and sent to the [Sink] so that it can be
 /// processed for real-time considerations.
-async fn process_incoming_leaf(
+async fn process_incoming_leaf<BDSink, BVSink>(
     leaf: Leaf<SeqTypes>,
     data_state: Arc<RwLock<DataState>>,
-    mut block_sender: Sender<BlockDetail<SeqTypes>>,
-    mut voters_sender: Sender<BitVec<u16>>,
+    mut block_sender: BDSink,
+    mut voters_sender: BVSink,
 ) -> Result<(), ProcessLeafError>
 where
     Header: BlockHeader<SeqTypes> + QueryableHeader<SeqTypes> + ExplorerHeader<SeqTypes>,
     Payload: BlockPayload<SeqTypes>,
+    BDSink: Sink<BlockDetail<SeqTypes>, Error = SendError> + Unpin,
+    BVSink: Sink<BitVec<u16>, Error = SendError> + Unpin,
 {
     let block_detail = create_block_detail_from_leaf(&leaf);
     let block_detail_copy = create_block_detail_from_leaf(&leaf);
@@ -292,15 +291,17 @@ where
 
 /// [process_leaf_stream] allows for the consumption of a [Stream] when
 /// attempting to process new incoming [Leaf]s.
-pub async fn process_leaf_stream<S>(
+pub async fn process_leaf_stream<S, BDSink, BVSink>(
     mut stream: S,
     data_state: Arc<RwLock<DataState>>,
-    block_sender: Sender<BlockDetail<SeqTypes>>,
-    voters_senders: Sender<BitVec<u16>>,
+    block_sender: BDSink,
+    voters_senders: BVSink,
 ) where
     S: Stream<Item = Leaf<SeqTypes>> + Unpin,
     Header: BlockHeader<SeqTypes> + QueryableHeader<SeqTypes> + ExplorerHeader<SeqTypes>,
     Payload: BlockPayload<SeqTypes>,
+    BDSink: Sink<BlockDetail<SeqTypes>, Error = SendError> + Clone + Unpin,
+    BVSink: Sink<BitVec<u16>, Error = SendError> + Clone + Unpin,
 {
     loop {
         let leaf_result = stream.next().await;
@@ -360,13 +361,16 @@ impl From<SendError> for ProcessNodeIdentityError {
 
 /// [process_incoming_node_identity] is a helper function that will process an
 /// incoming [NodeIdentity] and update the [DataState] with the new information.
-/// Additionally, the [NodeIdentity] will be sent to the [Sender] so that it can
+/// Additionally, the [NodeIdentity] will be sent to the [Sink] so that it can
 /// be processed for real-time considerations.
-async fn process_incoming_node_identity(
+async fn process_incoming_node_identity<NISink>(
     node_identity: NodeIdentity,
     data_state: Arc<RwLock<DataState>>,
-    mut node_identity_sender: Sender<NodeIdentity>,
-) -> Result<(), ProcessNodeIdentityError> {
+    mut node_identity_sender: NISink,
+) -> Result<(), ProcessNodeIdentityError>
+where
+    NISink: Sink<NodeIdentity, Error = SendError> + Unpin,
+{
     let mut data_state_write_lock_guard = data_state.write().await;
     data_state_write_lock_guard.add_node_identity(node_identity.clone());
     node_identity_sender.send(node_identity).await?;
@@ -378,14 +382,15 @@ async fn process_incoming_node_identity(
 /// attempting to process new incoming [NodeIdentity]s.
 /// This function will process the incoming [NodeIdentity] and update the
 /// [DataState] with the new information.
-/// Additionally, the [NodeIdentity] will be sent to the [Sender] so that it can
+/// Additionally, the [NodeIdentity] will be sent to the [Sink] so that it can
 /// be processed for real-time considerations.
-pub async fn process_node_identity_stream<S>(
+pub async fn process_node_identity_stream<S, NISink>(
     mut stream: S,
     data_state: Arc<RwLock<DataState>>,
-    node_identity_sender: Sender<NodeIdentity>,
+    node_identity_sender: NISink,
 ) where
     S: Stream<Item = NodeIdentity> + Unpin,
+    NISink: Sink<NodeIdentity, Error = SendError> + Clone + Unpin,
 {
     loop {
         let node_identity_result = stream.next().await;

@@ -1,6 +1,4 @@
 use super::client_id::ClientId;
-use super::server_message::ServerMessage;
-use futures::channel::mpsc::Sender;
 use serde::{Deserialize, Serialize};
 
 /// [ClientMessage] represents the messages that the client can send to the
@@ -23,8 +21,8 @@ pub enum ClientMessage {
 /// in order for the server to send back responses that correspond to the
 /// request.
 #[derive(Debug)]
-pub enum InternalClientMessage {
-    Connected(Sender<ServerMessage>),
+pub enum InternalClientMessage<K> {
+    Connected(K),
     Disconnected(ClientId),
 
     SubscribeLatestBlock(ClientId),
@@ -37,7 +35,7 @@ pub enum InternalClientMessage {
     RequestVotersSnapshot(ClientId),
 }
 
-impl PartialEq for InternalClientMessage {
+impl<K> PartialEq for InternalClientMessage<K> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             // We don't care about the [Sender] here, as it is unable to be
@@ -63,7 +61,7 @@ impl PartialEq for InternalClientMessage {
 impl ClientMessage {
     /// [to_internal_with_client_id] converts the [ClientMessage] into an
     /// [InternalClientMessage] with the given [ClientId].
-    pub fn to_internal_with_client_id(&self, client_id: ClientId) -> InternalClientMessage {
+    pub fn to_internal_with_client_id<K>(&self, client_id: ClientId) -> InternalClientMessage<K> {
         match self {
             ClientMessage::SubscribeLatestBlock => {
                 InternalClientMessage::SubscribeLatestBlock(client_id)
@@ -92,6 +90,8 @@ impl ClientMessage {
 mod tests {
     use super::InternalClientMessage;
     use super::*;
+    use crate::service::server_message::ServerMessage;
+    use futures::channel::mpsc::Sender;
     use std::iter::zip;
 
     #[test]
@@ -170,7 +170,8 @@ mod tests {
         for message in messages {
             for i in 0..10 {
                 let client_id = ClientId::from_count(i);
-                let internal_client_message = message.to_internal_with_client_id(client_id);
+                let internal_client_message =
+                    message.to_internal_with_client_id::<Sender<ServerMessage>>(client_id);
                 match internal_client_message {
                     InternalClientMessage::SubscribeLatestBlock(id) => {
                         assert_eq!(id, client_id);
@@ -198,7 +199,7 @@ mod tests {
 
     #[test]
     fn test_internal_client_message_partial_eq() {
-        let (sender, _) = futures::channel::mpsc::channel(1);
+        let (sender, _) = futures::channel::mpsc::channel::<ServerMessage>(1);
         let messages = [
             InternalClientMessage::Connected(sender),
             InternalClientMessage::Disconnected(ClientId::from_count(1)),

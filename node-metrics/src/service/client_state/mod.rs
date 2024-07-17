@@ -6,10 +6,7 @@ use super::{
 };
 use async_std::sync::{RwLock, RwLockWriteGuard};
 use bitvec::vec::BitVec;
-use futures::{
-    channel::mpsc::{SendError, Sender},
-    SinkExt, Stream, StreamExt,
-};
+use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
 use hotshot_query_service::explorer::{BlockDetail, ExplorerHistograms};
 use sequencer::SeqTypes;
 use std::{
@@ -21,14 +18,14 @@ use std::{
 /// It maintains and represents the connected clients, and their subscriptions.
 // This state is meant to be managed in a separate thread that assists with
 // processing and updating of individual client states.
-pub struct ClientState {
+pub struct ClientState<K> {
     client_id: ClientId,
-    sender: Sender<ServerMessage>,
+    sender: K,
 }
 
-impl ClientState {
+impl<K> ClientState<K> {
     /// Create a new ClientState with the given client_id and receiver.
-    pub fn new(client_id: ClientId, sender: Sender<ServerMessage>) -> Self {
+    pub fn new(client_id: ClientId, sender: K) -> Self {
         Self { client_id, sender }
     }
 
@@ -36,7 +33,7 @@ impl ClientState {
         self.client_id
     }
 
-    pub fn sender(&self) -> &Sender<ServerMessage> {
+    pub fn sender(&self) -> &K {
         &self.sender
     }
 }
@@ -44,17 +41,17 @@ impl ClientState {
 /// [ClientThreadState] represents the state of all of the active client
 /// connections connected to the service. This state governs which clients
 /// are connected, and what subscriptions they have setup.
-pub struct ClientThreadState {
-    clients: HashMap<ClientId, ClientState>,
+pub struct ClientThreadState<K> {
+    clients: HashMap<ClientId, ClientState<K>>,
     subscribed_latest_block: HashSet<ClientId>,
     subscribed_node_identity: HashSet<ClientId>,
     subscribed_voters: HashSet<ClientId>,
     connection_id_counter: ClientId,
 }
 
-impl ClientThreadState {
+impl<K> ClientThreadState<K> {
     pub fn new(
-        clients: HashMap<ClientId, ClientState>,
+        clients: HashMap<ClientId, ClientState<K>>,
         subscribed_latest_block: HashSet<ClientId>,
         subscribed_node_identity: HashSet<ClientId>,
         subscribed_voters: HashSet<ClientId>,
@@ -72,10 +69,10 @@ impl ClientThreadState {
 
 /// [drop_client_client_thread_state_write_guard] is a utility function for
 /// cleaning up the [ClientThreadState]
-fn drop_client_client_thread_state_write_guard(
+fn drop_client_client_thread_state_write_guard<K>(
     client_id: &ClientId,
-    client_thread_state_write_guard: &mut RwLockWriteGuard<ClientThreadState>,
-) -> Option<ClientState> {
+    client_thread_state_write_guard: &mut RwLockWriteGuard<ClientThreadState<K>>,
+) -> Option<ClientState<K>> {
     let client = client_thread_state_write_guard.clients.remove(client_id);
     client_thread_state_write_guard
         .subscribed_latest_block
@@ -89,10 +86,10 @@ fn drop_client_client_thread_state_write_guard(
 
 /// [drop_client_no_lock_guard] is a utility function for cleaning up the [ClientThreadState]
 /// when a client is detected as disconnected.
-async fn drop_client_no_lock_guard(
+async fn drop_client_no_lock_guard<K>(
     client_id: &ClientId,
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
-) -> Option<ClientState> {
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+) -> Option<ClientState<K>> {
     let mut client_thread_state_write_lock_guard = client_thread_state.write().await;
 
     drop_client_client_thread_state_write_guard(
@@ -128,10 +125,13 @@ impl std::error::Error for HandleConnectedError {
 
 /// [handle_client_message_connected] is a function that processes the client
 /// message to connect a client to the service.
-pub async fn handle_client_message_connected(
-    mut sender: Sender<ServerMessage>,
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
-) -> Result<ClientId, HandleConnectedError> {
+pub async fn handle_client_message_connected<K>(
+    mut sender: K,
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+) -> Result<ClientId, HandleConnectedError>
+where
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+{
     let mut client_thread_state_write_lock_guard = client_thread_state.write().await;
 
     client_thread_state_write_lock_guard.connection_id_counter += 1;
@@ -160,9 +160,9 @@ pub async fn handle_client_message_connected(
 
 /// [handle_client_message_disconnected] is a function that processes the client
 /// message to disconnect a client from the service.
-pub async fn handle_client_message_disconnected(
+pub async fn handle_client_message_disconnected<K>(
     client_id: ClientId,
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
 ) {
     // We might receive an implicit disconnect when attempting to
     // send a message, as the receiving channel might be closed.
@@ -171,9 +171,9 @@ pub async fn handle_client_message_disconnected(
 
 /// [handle_client_message_subscribe_latest_block] is a function that processes
 /// the client message to subscribe to the latest block stream.
-pub async fn handle_client_message_subscribe_latest_block(
+pub async fn handle_client_message_subscribe_latest_block<K>(
     client_id: ClientId,
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
 ) {
     let mut client_thread_state_write_lock_guard = client_thread_state.write().await;
 
@@ -187,9 +187,9 @@ pub async fn handle_client_message_subscribe_latest_block(
 
 /// [handle_client_message_subscribe_node_identity] is a function that processes
 /// the client message to subscribe to the node identity stream.
-pub async fn handle_client_message_subscribe_node_identity(
+pub async fn handle_client_message_subscribe_node_identity<K>(
     client_id: ClientId,
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
 ) {
     let mut client_thread_state_write_lock_guard = client_thread_state.write().await;
 
@@ -203,9 +203,9 @@ pub async fn handle_client_message_subscribe_node_identity(
 
 /// [handle_client_message_subscribe_voters] is a function that processes
 /// the client message to subscribe to the voters bitvecs.
-pub async fn handle_client_message_subscribe_voters(
+pub async fn handle_client_message_subscribe_voters<K>(
     client_id: ClientId,
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
 ) {
     let mut client_thread_state_write_lock_guard = client_thread_state.write().await;
 
@@ -248,11 +248,14 @@ impl std::error::Error for HandleRequestBlocksSnapshotsError {
 
 /// [handle_client_message_request_blocks_snapshot] is a function that processes
 /// the client message request for a blocks snapshot.
-pub async fn handle_client_message_request_blocks_snapshot(
+pub async fn handle_client_message_request_blocks_snapshot<K>(
     client_id: ClientId,
     data_state: Arc<RwLock<DataState>>,
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
-) -> Result<(), HandleRequestBlocksSnapshotsError> {
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+) -> Result<(), HandleRequestBlocksSnapshotsError>
+where
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+{
     let (client_thread_state_read_lock_guard, data_state_read_lock_guard) =
         futures::join!(client_thread_state.read(), data_state.read());
 
@@ -316,11 +319,14 @@ impl std::error::Error for HandleRequestNodeIdentitySnapshotError {
 
 /// [handle_client_message_request_node_identity_snapshot] is a function that
 /// processes the client message request for a node identity snapshot.
-pub async fn handle_client_message_request_node_identity_snapshot(
+pub async fn handle_client_message_request_node_identity_snapshot<K>(
     client_id: ClientId,
     data_state: Arc<RwLock<DataState>>,
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
-) -> Result<(), HandleRequestNodeIdentitySnapshotError> {
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+) -> Result<(), HandleRequestNodeIdentitySnapshotError>
+where
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+{
     // Let's send the current Blocks Snapshot to the client
     let (client_thread_state_read_lock_guard, data_state_read_lock_guard) =
         futures::join!(client_thread_state.read(), data_state.read());
@@ -381,11 +387,14 @@ impl std::error::Error for HandleRequestHistogramSnapshotError {
 
 /// [handle_client_message_request_histogram_snapshot] is a function that
 /// processes the client message request for a histogram snapshot.
-pub async fn handle_client_message_request_histogram_snapshot(
+pub async fn handle_client_message_request_histogram_snapshot<K>(
     client_id: ClientId,
     data_state: Arc<RwLock<DataState>>,
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
-) -> Result<(), HandleRequestHistogramSnapshotError> {
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+) -> Result<(), HandleRequestHistogramSnapshotError>
+where
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+{
     // Let's send the current histogram data snapshot to the client
     let (client_thread_state_read_lock_guard, data_state_read_lock_guard) =
         futures::join!(client_thread_state.read(), data_state.read());
@@ -465,11 +474,14 @@ impl std::error::Error for HandleRequestVotersSnapshotError {
 
 /// [handle_client_message_request_voters_snapshot] is a function that processes
 /// the client message request for a voters snapshot.
-pub async fn handle_client_message_request_voters_snapshot(
+pub async fn handle_client_message_request_voters_snapshot<K>(
     client_id: ClientId,
     data_state: Arc<RwLock<DataState>>,
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
-) -> Result<(), HandleRequestVotersSnapshotError> {
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+) -> Result<(), HandleRequestVotersSnapshotError>
+where
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+{
     let (client_thread_state_read_lock_guard, data_state_read_lock_guard) =
         futures::join!(client_thread_state.read(), data_state.read());
 
@@ -589,11 +601,14 @@ impl std::error::Error for ProcessClientMessageError {
 /// The [ClientThreadState] is provided as it needs to be updated with new
 /// subscriptions / new connections depending on the incoming
 /// [InternalClientMessage]
-pub async fn process_client_message(
-    message: InternalClientMessage,
+pub async fn process_client_message<K>(
+    message: InternalClientMessage<K>,
     data_state: Arc<RwLock<DataState>>,
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
-) -> Result<(), ProcessClientMessageError> {
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+) -> Result<(), ProcessClientMessageError>
+where
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+{
     match message {
         InternalClientMessage::Connected(sender) => {
             handle_client_message_connected(sender, client_thread_state).await?;
@@ -679,8 +694,8 @@ pub fn clone_block_detail(input: &BlockDetail<SeqTypes>) -> BlockDetail<SeqTypes
 
 /// [drop_failed_client_sends] is a function that will drop all of the failed
 /// client sends from the client thread state.
-async fn drop_failed_client_sends(
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
+async fn drop_failed_client_sends<K>(
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
     failed_client_sends: Vec<ClientId>,
 ) {
     // Let's acquire our write lock
@@ -699,10 +714,12 @@ async fn drop_failed_client_sends(
 /// [handle_received_block_detail] is a function that processes received Block
 /// details and will attempt to distribute the message to all of the clients
 /// that are subscribed to the latest block stream.
-async fn handle_received_block_detail(
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
+async fn handle_received_block_detail<K>(
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
     block_detail: BlockDetail<SeqTypes>,
-) {
+) where
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+{
     let client_thread_state_read_lock_guard = client_thread_state.read().await;
 
     // These are the clients who are subscribed to the latest blocks, that
@@ -757,10 +774,12 @@ async fn handle_received_block_detail(
 /// [handle_received_node_identity] is a function that processes received
 /// NodeIdentity and will attempt to distribute the message to all of the
 /// clients that are subscribed to the node identity stream.
-async fn handle_received_node_identity(
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
+async fn handle_received_node_identity<K>(
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
     node_identity: NodeIdentity,
-) {
+) where
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+{
     let client_thread_state_read_lock_guard = client_thread_state.read().await;
 
     // These are the clients who are subscribed to the node identities, that
@@ -815,10 +834,12 @@ async fn handle_received_node_identity(
 /// [handle_received_voters] is a function that processes received voters and
 /// will attempt to distribute the message to all of the clients that are
 /// subscribed to the voters stream.
-async fn handle_received_voters(
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
+async fn handle_received_voters<K>(
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
     voters: BitVec<u16>,
-) {
+) where
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+{
     let client_thread_state_read_lock_guard = client_thread_state.read().await;
 
     // These are the clients who are subscribed to the node identities, that
@@ -870,12 +891,13 @@ async fn handle_received_voters(
 /// [process_internal_client_message_stream] is a function that processes the
 /// client handling stream. This stream is responsible for managing the state
 /// of the connected clients, and their subscriptions.
-pub async fn process_internal_client_message_stream<S>(
+pub async fn process_internal_client_message_stream<S, K>(
     mut stream: S,
     data_state: Arc<RwLock<DataState>>,
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
 ) where
-    S: Stream<Item = InternalClientMessage> + Unpin,
+    S: Stream<Item = InternalClientMessage<K>> + Unpin,
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
 {
     loop {
         let message_result = stream.next().await;
@@ -901,11 +923,12 @@ pub async fn process_internal_client_message_stream<S>(
 /// [process_distribute_block_detail_handling_stream] is a function that
 /// processes the the [Stream] of incoming [BlockDetail] and distributes them
 /// to all subscribed clients.
-pub async fn process_distribute_block_detail_handling_stream<S>(
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
+pub async fn process_distribute_block_detail_handling_stream<S, K>(
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
     mut stream: S,
 ) where
     S: Stream<Item = BlockDetail<SeqTypes>> + Unpin,
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
 {
     loop {
         let block_detail_result = stream.next().await;
@@ -924,11 +947,12 @@ pub async fn process_distribute_block_detail_handling_stream<S>(
 /// [process_distribute_node_identity_handling_stream] is a function that
 /// processes the the [Stream] of incoming [NodeIdentity] and distributes them
 /// to all subscribed clients.
-pub async fn process_distribute_node_identity_handling_stream<S>(
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
+pub async fn process_distribute_node_identity_handling_stream<S, K>(
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
     mut stream: S,
 ) where
     S: Stream<Item = NodeIdentity> + Unpin,
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
 {
     loop {
         let node_identity_result = stream.next().await;
@@ -947,11 +971,12 @@ pub async fn process_distribute_node_identity_handling_stream<S>(
 /// [process_distribute_voters_handling_stream] is a function that processes
 /// the the [Stream] of incoming [BitVec] and distributes them to all
 /// subscribed clients.
-pub async fn process_distribute_voters_handling_stream<S>(
-    client_thread_state: Arc<RwLock<ClientThreadState>>,
+pub async fn process_distribute_voters_handling_stream<S, K>(
+    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
     mut stream: S,
 ) where
     S: Stream<Item = BitVec<u16>> + Unpin,
+    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
 {
     loop {
         let voters_result = stream.next().await;
@@ -986,12 +1011,15 @@ pub mod tests {
     };
     use async_std::{prelude::FutureExt, sync::RwLock};
     use bitvec::vec::BitVec;
-    use futures::{channel::mpsc, SinkExt, StreamExt};
+    use futures::{
+        channel::mpsc::{self, Sender},
+        SinkExt, StreamExt,
+    };
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
     use sequencer::{Leaf, NodeState, ValidatedState};
     use std::{sync::Arc, time::Duration};
 
-    pub fn create_test_client_thread_state() -> ClientThreadState {
+    pub fn create_test_client_thread_state() -> ClientThreadState<Sender<ServerMessage>> {
         ClientThreadState {
             clients: Default::default(),
             subscribed_latest_block: Default::default(),
@@ -1797,7 +1825,7 @@ pub mod tests {
         }
     }
 
-    // The following tests codify assumptions being bad on behalf of the Sender
+    // The following tests codify assumptions being bad on behalf of the Sink
     // and Receivers provided by the async_std library.  The purpose of these
     // tests are to document these assumptions, and add a test to ensure that
     // they behave as expected.  If they ever do not behave as expected, then
@@ -1837,7 +1865,7 @@ pub mod tests {
     }
 
     /// Tests the behavior of the sender and receiver when the receiver is
-    /// dropped before anything is sent across the Sender.
+    /// dropped before anything is sent across the Sink.
     ///
     /// This is a separate library test to ensure that the behavior that this
     /// library is built on top of does not introduce a change that would

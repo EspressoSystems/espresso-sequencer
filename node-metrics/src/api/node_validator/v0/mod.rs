@@ -163,8 +163,8 @@ impl From<ApiError> for DefineApiError {
 
 /// [StateClientMessageSender] allows for the retrieval of a [Sender] for sending
 /// messages received from the client to the Server for request processing.
-pub trait StateClientMessageSender {
-    fn sender(&self) -> Sender<InternalClientMessage>;
+pub trait StateClientMessageSender<K> {
+    fn sender(&self) -> Sender<InternalClientMessage<K>>;
 }
 
 #[derive(Debug)]
@@ -172,7 +172,7 @@ pub enum EndpointError {}
 
 pub fn define_api<State>() -> Result<Api<State, Error, Version01>, DefineApiError>
 where
-    State: StateClientMessageSender + Send + Sync + 'static,
+    State: StateClientMessageSender<Sender<ServerMessage>> + Send + Sync + 'static,
 {
     let mut api = load_api::<State, Version01>(include_str!("./node_validator.toml"))?;
 
@@ -414,7 +414,7 @@ pub async fn get_node_identity_from_url(
 /// block height to begin streaming from.  No matter what the value of
 /// [current_block_height] is the stream will always check what the latest
 /// block height is on the hotshot query service.  It will then attempt to
-/// pull as few Leafs as it needs from the stream.
+/// pull as few Leaves as it needs from the stream.
 pub async fn stream_leaves_from_hotshot_query_service(
     current_block_height: Option<u64>,
     client: surf_disco::Client<hotshot_query_service::Error, Version01>,
@@ -743,6 +743,7 @@ mod tests {
             ClientThreadState,
         },
         data_state::{process_leaf_stream, process_node_identity_stream, DataState},
+        server_message::ServerMessage,
     };
     use async_std::sync::RwLock;
     use futures::{
@@ -757,10 +758,10 @@ mod tests {
     };
     use tide_disco::App;
 
-    struct TestState(Sender<InternalClientMessage>);
+    struct TestState(Sender<InternalClientMessage<Sender<ServerMessage>>>);
 
-    impl StateClientMessageSender for TestState {
-        fn sender(&self) -> Sender<InternalClientMessage> {
+    impl StateClientMessageSender<Sender<ServerMessage>> for TestState {
+        fn sender(&self) -> Sender<InternalClientMessage<Sender<ServerMessage>>> {
             self.0.clone()
         }
     }
@@ -792,7 +793,7 @@ mod tests {
             Default::default(),
         );
 
-        let client_thread_state = ClientThreadState::new(
+        let client_thread_state = ClientThreadState::<Sender<ServerMessage>>::new(
             Default::default(),
             Default::default(),
             Default::default(),
