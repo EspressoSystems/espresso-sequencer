@@ -20,3 +20,7 @@ total_nodes,da_committee_size,block_range,transaction_size_range_in_bytes,transa
 5,5,50~150,1~1000,1~40,public,4,0,9,215,33,536,82
 total_nodes,da_committee_size,block_range,transaction_size_range_in_bytes,transaction_per_batch_range,pub_or_priv_pool,avg_latency_in_sec,minimum_latency_in_sec,maximum_latency_in_sec,avg_throughput_bytes_per_sec,total_transactions,avg_transaction_size_in_bytes,total_time_elapsed_in_sec
 5,5,50~150,1~1000,1~50,private,11,0,11,54,18,616,204
+total_nodes,da_committee_size,block_range,transaction_size_range_in_bytes,transaction_per_batch_range,pub_or_priv_pool,avg_latency_in_sec,minimum_latency_in_sec,maximum_latency_in_sec,avg_throughput_bytes_per_sec,total_transactions,avg_transaction_size_in_bytes,total_time_elapsed_in_sec
+5,5,50~150,1~1000,1~1,private,1,0,1,227,14,665,41
+total_nodes,da_committee_size,block_range,transaction_size_range_in_bytes,transaction_per_batch_range,pub_or_priv_pool,avg_latency_in_sec,minimum_latency_in_sec,maximum_latency_in_sec,avg_throughput_bytes_per_sec,total_transactions,avg_transaction_size_in_bytes,total_time_elapsed_in_sec
+5,5,50~150,1~1000,1~1,public,1,0,1,293,20,601,41
