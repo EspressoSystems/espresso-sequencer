@@ -1,7 +1,8 @@
-use crate::ResolvableChainConfig;
+use crate::{Header, ResolvableChainConfig};
 
 use super::{FeeAccount, FeeAmount};
 
+use committable::Commitment;
 use jf_merkle_tree::{
     prelude::{LightWeightSHA3MerkleTree, Sha3Digest, Sha3Node},
     universal_merkle_tree::UniversalMerkleTree,
@@ -12,7 +13,7 @@ use serde::{Deserialize, Serialize};
 // The block merkle tree accumulates header commitments. However, since the underlying
 // representation of the commitment type remains the same even while the header itself changes,
 // using the underlying type `[u8; 32]` allows us to use the same state type across minor versions.
-pub type BlockMerkleTree = LightWeightSHA3MerkleTree<[u8; 32]>;
+pub type BlockMerkleTree = LightWeightSHA3MerkleTree<Commitment<Header>>;
 pub type BlockMerkleCommitment = <BlockMerkleTree as MerkleTreeScheme>::Commitment;
 
 pub type FeeMerkleTree = UniversalMerkleTree<FeeAmount, Sha3Digest, FeeAccount, 256, Sha3Node>;
