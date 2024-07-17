@@ -6,7 +6,7 @@ use hotshot_types::{
     vid::VidCommitment,
 };
 
-use crate::{
+use super::{
     block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
     builder::BuildError,
 };

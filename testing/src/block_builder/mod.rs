@@ -5,7 +5,7 @@ use async_compatibility_layer::art::async_spawn;
 use async_trait::async_trait;
 use futures::Stream;
 use hotshot::{traits::BlockPayload, types::Event};
-use hotshot_builder_api::{
+use hotshot_builder_api::v0_1::{
     block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
     builder::{Error, Options},
     data_source::BuilderDataSource,
@@ -72,11 +72,10 @@ pub fn run_builder_source<TYPES, Source>(
 {
     async_spawn(async move {
         let start_builder = |url: Url, source: Source| -> _ {
-            let builder_api =
-                hotshot_builder_api::builder::define_api::<Source, TYPES, TYPES::Base>(
-                    &Options::default(),
-                )
-                .expect("Failed to construct the builder API");
+            let builder_api = hotshot_builder_api::v0_1::builder::define_api::<Source, TYPES>(
+                &Options::default(),
+            )
+            .expect("Failed to construct the builder API");
             let mut app: App<Source, Error> = App::with_state(source);
             app.register_module("block_info", builder_api)
                 .expect("Failed to register the builder API");

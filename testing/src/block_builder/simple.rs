@@ -18,7 +18,7 @@ use hotshot::{
     traits::BlockPayload,
     types::{Event, EventType, SignatureKey},
 };
-use hotshot_builder_api::{
+use hotshot_builder_api::v0_1::{
     block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
     builder::{BuildError, Error, Options},
     data_source::BuilderDataSource,
@@ -237,14 +237,13 @@ impl<TYPES: NodeType> SimpleBuilderSource<TYPES> {
     where
         <TYPES as NodeType>::InstanceState: Default,
     {
-        let builder_api = hotshot_builder_api::builder::define_api::<
+        let builder_api = hotshot_builder_api::v0_1::builder::define_api::<
             SimpleBuilderSource<TYPES>,
             TYPES,
-            TYPES::Base,
         >(&Options::default())
         .expect("Failed to construct the builder API");
         let mut app: App<SimpleBuilderSource<TYPES>, Error> = App::with_state(self);
-        app.register_module::<Error, TYPES::Base>("block_info", builder_api)
+        app.register_module::<Error, _>("block_info", builder_api)
             .expect("Failed to register the builder API");
 
         async_spawn(app.serve(url, TYPES::Base::instance()));

@@ -1,13 +1,12 @@
 use std::time::{Duration, Instant};
 
 use async_compatibility_layer::art::async_sleep;
-use hotshot_builder_api::{
-    block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
+use hotshot_builder_api::v0_1::{
+    block_info::AvailableBlockInfo,
     builder::{BuildError, Error as BuilderApiError},
 };
 use hotshot_types::{
     traits::{node_implementation::NodeType, signature_key::SignatureKey},
-    utils::BuilderCommitment,
     vid::VidCommitment,
 };
 use serde::{Deserialize, Serialize};
@@ -120,48 +119,119 @@ impl<TYPES: NodeType, Ver: StaticVersionType> BuilderClient<TYPES, Ver> {
             .await
             .map_err(Into::into)
     }
+}
 
-    /// Claim block
-    ///
-    /// # Errors
-    /// - [`BuilderClientError::NotFound`] if block isn't available
-    /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
-    pub async fn claim_block(
-        &self,
-        block_hash: BuilderCommitment,
-        view_number: u64,
-        sender: TYPES::SignatureKey,
-        signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<AvailableBlockData<TYPES>, BuilderClientError> {
-        let encoded_signature: TaggedBase64 = signature.clone().into();
-        self.inner
-            .get(&format!(
-                "claimblock/{block_hash}/{view_number}/{sender}/{encoded_signature}"
-            ))
-            .send()
-            .await
-            .map_err(Into::into)
+/// Version 0.1
+pub mod v0_1 {
+
+    use hotshot_builder_api::v0_1::block_info::{AvailableBlockData, AvailableBlockHeaderInput};
+    pub use hotshot_builder_api::v0_1::Version;
+    use hotshot_types::{
+        traits::{node_implementation::NodeType, signature_key::SignatureKey},
+        utils::BuilderCommitment,
+    };
+    use tagged_base64::TaggedBase64;
+
+    use super::BuilderClientError;
+
+    /// Client for builder API
+    pub type BuilderClient<TYPES> = super::BuilderClient<TYPES, Version>;
+
+    impl<TYPES: NodeType> BuilderClient<TYPES> {
+        /// Claim block header input
+        ///
+        /// # Errors
+        /// - [`BuilderClientError::NotFound`] if block isn't available
+        /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
+        pub async fn claim_block_header_input(
+            &self,
+            block_hash: BuilderCommitment,
+            view_number: u64,
+            sender: TYPES::SignatureKey,
+            signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+        ) -> Result<AvailableBlockHeaderInput<TYPES>, BuilderClientError> {
+            let encoded_signature: TaggedBase64 = signature.clone().into();
+            self.inner
+                .get(&format!(
+                    "claimheaderinput/{block_hash}/{view_number}/{sender}/{encoded_signature}"
+                ))
+                .send()
+                .await
+                .map_err(Into::into)
+        }
+
+        /// Claim block
+        ///
+        /// # Errors
+        /// - [`BuilderClientError::NotFound`] if block isn't available
+        /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
+        pub async fn claim_block(
+            &self,
+            block_hash: BuilderCommitment,
+            view_number: u64,
+            sender: TYPES::SignatureKey,
+            signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+        ) -> Result<AvailableBlockData<TYPES>, BuilderClientError> {
+            let encoded_signature: TaggedBase64 = signature.clone().into();
+            self.inner
+                .get(&format!(
+                    "claimblock/{block_hash}/{view_number}/{sender}/{encoded_signature}"
+                ))
+                .send()
+                .await
+                .map_err(Into::into)
+        }
     }
+}
 
-    /// Claim block header input
-    ///
-    /// # Errors
-    /// - [`BuilderClientError::NotFound`] if block isn't available
-    /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
-    pub async fn claim_block_header_input(
-        &self,
-        block_hash: BuilderCommitment,
-        view_number: u64,
-        sender: TYPES::SignatureKey,
-        signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<AvailableBlockHeaderInput<TYPES>, BuilderClientError> {
-        let encoded_signature: TaggedBase64 = signature.clone().into();
-        self.inner
-            .get(&format!(
-                "claimheaderinput/{block_hash}/{view_number}/{sender}/{encoded_signature}"
-            ))
-            .send()
-            .await
-            .map_err(Into::into)
+/// Version 0.2. No changes in API
+pub mod v0_2 {
+    use vbs::version::StaticVersion;
+
+    pub use super::v0_1::*;
+
+    /// Builder API version
+    pub type Version = StaticVersion<0, 2>;
+}
+
+/// Version 0.3. Removes `claim_block_header_input` endpoint, adds fee information
+/// to `claim_block` endpoint.
+pub mod v0_3 {
+    use hotshot_builder_api::v0_3::block_info::AvailableBlockData;
+    pub use hotshot_builder_api::v0_3::Version;
+    use hotshot_types::{
+        traits::{node_implementation::NodeType, signature_key::SignatureKey},
+        utils::BuilderCommitment,
+    };
+    use tagged_base64::TaggedBase64;
+    use vbs::version::StaticVersion;
+
+    pub use super::BuilderClientError;
+
+    /// Client for builder API
+    pub type BuilderClient<TYPES> = super::BuilderClient<TYPES, StaticVersion<0, 3>>;
+
+    impl<TYPES: NodeType> BuilderClient<TYPES> {
+        /// Claim block
+        ///
+        /// # Errors
+        /// - [`BuilderClientError::NotFound`] if block isn't available
+        /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
+        pub async fn claim_block(
+            &self,
+            block_hash: BuilderCommitment,
+            view_number: u64,
+            sender: TYPES::SignatureKey,
+            signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
+        ) -> Result<AvailableBlockData<TYPES>, BuilderClientError> {
+            let encoded_signature: TaggedBase64 = signature.clone().into();
+            self.inner
+                .get(&format!(
+                    "claimblock/{block_hash}/{view_number}/{sender}/{encoded_signature}"
+                ))
+                .send()
+                .await
+                .map_err(Into::into)
+        }
     }
 }

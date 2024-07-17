@@ -42,6 +42,16 @@ pub type WebServerVersion = StaticVersion<WEB_SERVER_MAJOR_VERSION, WEB_SERVER_M
 /// Constant for Web Server CDN Version
 pub const WEB_SERVER_VERSION: WebServerVersion = StaticVersion {};
 
+/// Type for semver representation of "Base" version
+pub type BaseVersion = StaticVersion<0, 1>;
+/// Constant for semver representation of "Base" version
+pub const BASE_VERSION: BaseVersion = StaticVersion {};
+
+/// Type for semver representation of "Marketplace" version
+pub type MarketplaceVersion = StaticVersion<0, 3>;
+/// Constant for semver representation of "Marketplace" version
+pub const MARKETPLACE_VERSION: MarketplaceVersion = StaticVersion {};
+
 /// The offset for how far in the future we will send out a `QuorumProposal` with an `UpgradeCertificate` we form. This is also how far in advance of sending a `QuorumProposal` we begin collecting votes on an `UpgradeProposal`.
 pub const UPGRADE_PROPOSE_OFFSET: u64 = 5;
 

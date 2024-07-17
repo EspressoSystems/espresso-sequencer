@@ -16,13 +16,15 @@ use hotshot_testing::{
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
-    data::{null_block, ViewNumber, PackedBundle},
+    constants::BaseVersion,
+    data::{null_block, PackedBundle, ViewNumber},
     simple_vote::DaData,
     traits::{
         block_contents::precompute_vid_commitment, election::Membership,
         node_implementation::ConsensusTime,
     },
 };
+use vbs::version::StaticVersionType;
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
@@ -73,16 +75,22 @@ async fn test_da_task() {
         serial![
             ViewChange(ViewNumber::new(1)),
             ViewChange(ViewNumber::new(2)),
-            BlockRecv(
-                PackedBundle::new(
+            BlockRecv(PackedBundle::new(
                 encoded_transactions,
                 TestMetadata,
                 ViewNumber::new(2),
-                vec1::vec1![null_block::builder_fee(quorum_membership.total_nodes()).unwrap()],
-                vec1::vec1![null_block::builder_fee(quorum_membership.total_nodes()).unwrap()],
-                precompute,
+                vec1::vec1![null_block::builder_fee(
+                    quorum_membership.total_nodes(),
+                    BaseVersion::version()
                 )
-            ),
+                .unwrap()],
+                vec1::vec1![null_block::builder_fee(
+                    quorum_membership.total_nodes(),
+                    BaseVersion::version()
+                )
+                .unwrap()],
+                Some(precompute),
+            )),
         ],
         serial![DaProposalRecv(proposals[1].clone(), leaders[1])],
     ];
@@ -158,16 +166,22 @@ async fn test_da_task_storage_failure() {
         serial![
             ViewChange(ViewNumber::new(1)),
             ViewChange(ViewNumber::new(2)),
-            BlockRecv(
-                PackedBundle::new(
+            BlockRecv(PackedBundle::new(
                 encoded_transactions,
                 TestMetadata,
                 ViewNumber::new(2),
-                vec1::vec1![null_block::builder_fee(quorum_membership.total_nodes()).unwrap()],
-                vec1::vec1![null_block::builder_fee(quorum_membership.total_nodes()).unwrap()],
-                precompute,
-                ),
-            ),
+                vec1::vec1![null_block::builder_fee(
+                    quorum_membership.total_nodes(),
+                    BaseVersion::version()
+                )
+                .unwrap()],
+                vec1::vec1![null_block::builder_fee(
+                    quorum_membership.total_nodes(),
+                    BaseVersion::version()
+                )
+                .unwrap()],
+                Some(precompute),
+            ),)
         ],
         serial![DaProposalRecv(proposals[1].clone(), leaders[1])],
         serial![DaProposalValidated(proposals[1].clone(), leaders[1])],

@@ -1,5 +1,4 @@
 #![cfg(not(feature = "dependency-tasks"))]
-
 // TODO: Remove after integration of dependency-tasks
 #![cfg(not(feature = "dependency-tasks"))]
 #![allow(unused_imports)]
@@ -15,7 +14,7 @@ use hotshot_example_types::{
 };
 use hotshot_macros::test_scripts;
 use hotshot_task_impls::{
-    consensus::ConsensusTaskState, events::HotShotEvent::*, upgrade::UpgradeTaskState
+    consensus::ConsensusTaskState, events::HotShotEvent::*, upgrade::UpgradeTaskState,
 };
 use hotshot_testing::{
     helpers::{build_fake_view_with_leaf, vid_share},
@@ -24,12 +23,13 @@ use hotshot_testing::{
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
+    constants::BaseVersion,
     data::{null_block, ViewNumber},
     simple_vote::UpgradeProposalData,
     traits::{election::Membership, node_implementation::ConsensusTime},
     vote::HasViewNumber,
 };
-use vbs::version::Version;
+use vbs::version::{StaticVersionType, Version};
 
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
@@ -272,7 +272,8 @@ async fn test_upgrade_task_propose() {
                 proposals[2].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(3),
-                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+                null_block::builder_fee(quorum_membership.total_nodes(), BaseVersion::version())
+                    .unwrap(),
             ),
             QcFormed(either::Either::Left(proposals[2].data.justify_qc.clone())),
         ],
@@ -360,6 +361,9 @@ async fn test_upgrade_task_blank_blocks() {
 
     let old_version = Version { major: 0, minor: 1 };
     let new_version = Version { major: 0, minor: 2 };
+
+    let builder_fee =
+        null_block::builder_fee(quorum_membership.total_nodes(), BaseVersion::version()).unwrap();
 
     let upgrade_data: UpgradeProposalData<TestTypes> = UpgradeProposalData {
         old_version,
@@ -455,7 +459,7 @@ async fn test_upgrade_task_blank_blocks() {
                 proposals[1].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(2),
-                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+                builder_fee.clone(),
             ),
         ],
         vec![
@@ -466,7 +470,7 @@ async fn test_upgrade_task_blank_blocks() {
                 proposals[2].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(3),
-                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+                builder_fee.clone(),
             ),
             QuorumProposalRecv(proposals[2].clone(), leaders[2]),
         ],
@@ -478,7 +482,7 @@ async fn test_upgrade_task_blank_blocks() {
                 proposals[3].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(4),
-                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+                builder_fee.clone(),
             ),
             QuorumProposalRecv(proposals[3].clone(), leaders[3]),
         ],
@@ -490,7 +494,7 @@ async fn test_upgrade_task_blank_blocks() {
                 proposals[4].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(5),
-                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+                builder_fee.clone(),
             ),
             QuorumProposalRecv(proposals[4].clone(), leaders[4]),
         ],
@@ -502,7 +506,7 @@ async fn test_upgrade_task_blank_blocks() {
                 proposals[5].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(6),
-                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+                builder_fee.clone(),
             ),
             QuorumProposalRecv(proposals[5].clone(), leaders[5]),
             QcFormed(either::Either::Left(proposals[5].data.justify_qc.clone())),
@@ -515,7 +519,7 @@ async fn test_upgrade_task_blank_blocks() {
                 proposals[6].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(7),
-                null_block::builder_fee(quorum_membership.total_nodes()).unwrap(),
+                builder_fee,
             ),
             QuorumProposalRecv(proposals[6].clone(), leaders[6]),
         ],
@@ -579,9 +583,7 @@ async fn test_upgrade_task_blank_blocks() {
                     exact(ViewChange(ViewNumber::new(6))),
                     validated_state_updated(),
                     quorum_proposal_validated(),
-                    quorum_proposal_send_with_null_block(
-                    quorum_membership.total_nodes(),
-                    ),
+                    quorum_proposal_send_with_null_block(quorum_membership.total_nodes()),
                     leaf_decided(),
                     quorum_vote_send(),
                 ],

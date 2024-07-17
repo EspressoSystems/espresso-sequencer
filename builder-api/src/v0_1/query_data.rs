@@ -1,7 +1,7 @@
 use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 
-use crate::block_info::AvailableBlockInfo;
+use super::block_info::AvailableBlockInfo;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq, Hash)]
 #[serde(bound = "")]

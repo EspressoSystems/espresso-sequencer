@@ -203,7 +203,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
                 .cloned()
                 .map(BuilderClient::new)
                 .collect(),
-            decided_upgrade_certificate: None,
+            builder_clients_marketplace: Vec::new(),
+            decided_upgrade_certificate: Arc::clone(&handle.hotshot.decided_upgrade_certificate),
         }
     }
 }
