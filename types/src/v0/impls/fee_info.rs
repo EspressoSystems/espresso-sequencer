@@ -32,11 +32,13 @@ use thiserror::Error;
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum FeeError {
     #[error("Insuficcient Funds: have {balance:?}, required {amount:?}")]
+    /// Charged account does not posses sufficient funds to pay the fee.
     InsufficientFunds {
         balance: Option<FeeAmount>,
         amount: FeeAmount,
     },
     #[error("Merkle Tree Error: {0}")]
+    /// Error looking up or updating account in the MerkleTree.
     MerkleTreeError(MerkleTreeError),
 }
 

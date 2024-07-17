@@ -19,6 +19,7 @@ use url::Url;
 use super::state::ValidatedState;
 
 impl FullNetworkTx {
+    /// Proxy for `execute` method of each transaction variant.
     pub fn execute(
         &self,
         state: &mut ValidatedState,
@@ -125,12 +126,16 @@ impl Default for BidTx {
 /// Failure cases of transaction execution
 pub enum ExecutionError {
     #[error("Invalid Signature")]
+    /// Transaction Signature could not be verified.
     InvalidSignature,
     #[error("Invalid Phase")]
+    /// Transaction submitted during incorrect Marketplace Phase
     InvalidPhase,
     #[error("FeeError: {0}")]
+    /// Insufficient funds or MerkleTree error.
     FeeError(FeeError),
     #[error("Could not resolve `ChainConfig`")]
+    /// Could not resolve `ChainConfig`.
     UnresolvableChainConfig,
 }
 
@@ -144,7 +149,8 @@ impl From<FeeError> for ExecutionError {
 impl BidTx {
     /// Execute `BidTx`.
     /// * verify signature
-    /// * charge fee
+    /// * charge bid amount
+    /// * charge gas
     // The rational behind the `Err` is to provide not only what
     // failed, but for which variant. The entire Tx is probably
     // overkill, but we can narrow down how much we want to know about
@@ -165,7 +171,7 @@ impl BidTx {
         // TODO what do we return in good result?
         Ok(())
     }
-    /// Charge Bid. Only winning bids are charged in JIT (I think).
+    /// Charge Bid. Only winning bids are charged in JIT.
     fn charge(&self, state: &mut ValidatedState) -> Result<(), ExecutionError> {
         // As the code is currently organized, I think chain_config
         // will always be resolved here. But let's guard against the
