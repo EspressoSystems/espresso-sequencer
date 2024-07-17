@@ -2180,7 +2180,7 @@
         .context(<span class="string">"malformed merkle proof"</span>)<span class="question-mark">?
         </span>.or_else(|<span class="kw">_</span>| <span class="macro">bail!</span>(<span class="string">"invalid merkle proof"</span>))<span class="question-mark">?</span>;
         <span class="macro">ensure!</span>(
-            proof.elem() == <span class="prelude-val">Some</span>(index_header.commit().as_ref()),
+            proof.elem() == <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>index_header.commit()),
             <span class="string">"merkle proof is for wrong element: {:?} != {:?}"</span>,
             proof.elem(),
             index_header.commit()

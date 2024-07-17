@@ -38,10 +38,12 @@
 <a href="#38" id="38">38</a>
 <a href="#39" id="39">39</a>
 <a href="#40" id="40">40</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::ResolvableChainConfig;
+<a href="#41" id="41">41</a>
+</pre></div><pre class="rust"><code><span class="kw">use crate</span>::{Header, ResolvableChainConfig};
 
 <span class="kw">use super</span>::{FeeAccount, FeeAmount};
 
+<span class="kw">use </span>committable::Commitment;
 <span class="kw">use </span>jf_merkle_tree::{
     prelude::{LightWeightSHA3MerkleTree, Sha3Digest, Sha3Node},
     universal_merkle_tree::UniversalMerkleTree,
@@ -52,7 +54,7 @@
 <span class="comment">// The block merkle tree accumulates header commitments. However, since the underlying
 // representation of the commitment type remains the same even while the header itself changes,
 // using the underlying type `[u8; 32]` allows us to use the same state type across minor versions.
-</span><span class="kw">pub type </span>BlockMerkleTree = LightWeightSHA3MerkleTree&lt;[u8; <span class="number">32</span>]&gt;;
+</span><span class="kw">pub type </span>BlockMerkleTree = LightWeightSHA3MerkleTree&lt;Commitment&lt;Header&gt;&gt;;
 <span class="kw">pub type </span>BlockMerkleCommitment = &lt;BlockMerkleTree <span class="kw">as </span>MerkleTreeScheme&gt;::Commitment;
 
 <span class="kw">pub type </span>FeeMerkleTree = UniversalMerkleTree&lt;FeeAmount, Sha3Digest, FeeAccount, <span class="number">256</span>, Sha3Node&gt;;

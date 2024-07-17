@@ -1500,10 +1500,6 @@
 <a href="#1500" id="1500">1500</a>
 <a href="#1501" id="1501">1501</a>
 <a href="#1502" id="1502">1502</a>
-<a href="#1503" id="1503">1503</a>
-<a href="#1504" id="1504">1504</a>
-<a href="#1505" id="1505">1505</a>
-<a href="#1506" id="1506">1506</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt;
 
 <span class="kw">use </span>anyhow::{ensure, Context};
@@ -1945,7 +1941,7 @@
 
         state
             .block_merkle_tree
-            .push(parent_header.commit().as_ref())
+            .push(parent_header.commit())
             .context(<span class="string">"missing blocks frontier"</span>)<span class="question-mark">?</span>;
         <span class="kw">let </span>block_merkle_tree_root = state.block_merkle_tree.commitment();
 
@@ -2454,7 +2450,7 @@
             <span class="kw-2">*</span>parent_leaf.block_header_mut() = parent.clone();
 
             <span class="kw">let </span>block_merkle_tree =
-                BlockMerkleTree::from_elems(<span class="prelude-val">Some</span>(<span class="number">32</span>), Vec::&lt;[u8; <span class="number">32</span>]&gt;::new()).unwrap();
+                BlockMerkleTree::from_elems(<span class="prelude-val">Some</span>(<span class="number">32</span>), Vec::&lt;Commitment&lt;Header&gt;&gt;::new()).unwrap();
 
             <span class="kw">let </span>fee_info = FeeInfo::genesis();
             <span class="kw">let </span>fee_merkle_tree = FeeMerkleTree::from_kv_set(
@@ -2515,7 +2511,7 @@
 
             <span class="macro">assert_eq!</span>(
                 block_merkle_tree,
-                BlockMerkleTree::from_elems(<span class="prelude-val">Some</span>(<span class="number">32</span>), Vec::&lt;[u8; <span class="number">32</span>]&gt;::new()).unwrap()
+                BlockMerkleTree::from_elems(<span class="prelude-val">Some</span>(<span class="number">32</span>), Vec::&lt;Commitment&lt;Header&gt;&gt;::new()).unwrap()
             );
         }
     }
@@ -2712,9 +2708,7 @@
         <span class="kw-2">*</span>parent_leaf.block_header_mut() = parent_header.clone();
 
         <span class="comment">// Populate the tree with an initial `push`.
-        </span>block_merkle_tree
-            .push(genesis.header.commit().as_ref())
-            .unwrap();
+        </span>block_merkle_tree.push(genesis.header.commit()).unwrap();
         <span class="kw">let </span>block_merkle_tree_root = block_merkle_tree.commitment();
         validated_state.block_merkle_tree = block_merkle_tree.clone();
         <span class="kw-2">*</span>parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
@@ -2812,9 +2806,7 @@
         <span class="kw">let </span>fee_merkle_tree = parent_state.fee_merkle_tree.clone();
 
         <span class="comment">// Populate the tree with an initial `push`.
-        </span>block_merkle_tree
-            .push(genesis.header.commit().as_ref())
-            .unwrap();
+        </span>block_merkle_tree.push(genesis.header.commit()).unwrap();
         <span class="kw">let </span>block_merkle_tree_root = block_merkle_tree.commitment();
         <span class="kw">let </span>fee_merkle_tree_root = fee_merkle_tree.commitment();
         parent_state.block_merkle_tree = block_merkle_tree.clone();
@@ -2873,7 +2865,7 @@
         }
 
         <span class="kw">let </span><span class="kw-2">mut </span>block_merkle_tree = proposal_state.block_merkle_tree.clone();
-        block_merkle_tree.push(proposal.commit().as_ref()).unwrap();
+        block_merkle_tree.push(proposal.commit()).unwrap();
 
         <span class="kw">let </span>proposal_state = proposal_state
             .apply_header(

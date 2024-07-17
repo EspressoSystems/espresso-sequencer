@@ -916,10 +916,12 @@
 <a href="#916" id="916">916</a>
 <a href="#917" id="917">917</a>
 <a href="#918" id="918">918</a>
+<a href="#919" id="919">919</a>
+<a href="#920" id="920">920</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::ops::Add;
 
 <span class="kw">use </span>anyhow::bail;
-<span class="kw">use </span>committable::Committable;
+<span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>ethers::types::Address;
 <span class="kw">use </span>hotshot_query_service::merklized_state::MerklizedState;
 <span class="kw">use </span>hotshot_types::{
@@ -973,9 +975,11 @@
 
 <span class="kw">impl </span>Default <span class="kw">for </span>ValidatedState {
     <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
-        <span class="kw">let </span>block_merkle_tree =
-            BlockMerkleTree::from_elems(<span class="prelude-val">Some</span>(BLOCK_MERKLE_TREE_HEIGHT), Vec::&lt;[u8; <span class="number">32</span>]&gt;::new())
-                .unwrap();
+        <span class="kw">let </span>block_merkle_tree = BlockMerkleTree::from_elems(
+            <span class="prelude-val">Some</span>(BLOCK_MERKLE_TREE_HEIGHT),
+            Vec::&lt;Commitment&lt;Header&gt;&gt;::new(),
+        )
+        .unwrap();
 
         <span class="comment">// Words of wisdom from @mrain: "capacity = arity^height"
         // "For index space 2^160, arity 256 (2^8),
@@ -1419,7 +1423,7 @@
     <span class="comment">// pushing a block into merkle tree shouldn't fail
     </span>validated_state
         .block_merkle_tree
-        .push(parent_leaf.block_header().commit().as_ref())
+        .push(parent_leaf.block_header().commit())
         .unwrap();
 
     <span class="kw">for </span>FeeInfo { account, amount } <span class="kw">in </span>l1_deposits.iter() {
@@ -1550,7 +1554,7 @@
 
 <span class="kw">impl </span>MerklizedState&lt;SeqTypes, { <span class="self">Self</span>::ARITY }&gt; <span class="kw">for </span>BlockMerkleTree {
     <span class="kw">type </span>Key = <span class="self">Self</span>::Index;
-    <span class="kw">type </span>Entry = [u8; <span class="number">32</span>];
+    <span class="kw">type </span>Entry = Commitment&lt;Header&gt;;
     <span class="kw">type </span>T = Sha3Node;
     <span class="kw">type </span>Commit = <span class="self">Self</span>::Commitment;
     <span class="kw">type </span>Digest = Sha3Digest;

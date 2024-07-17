@@ -37,7 +37,7 @@
     &amp;'life0 self,
     height: <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.u64.html">u64</a>,
     view: ViewNumber,
-    mt: &amp;'life1 mut LightWeightMerkleTree&lt;[<a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.u8.html">u8</a>; <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.array.html">32</a>], Sha3Digest, <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.u64.html">u64</a>, 3, Sha3Node&gt;
+    mt: &amp;'life1 mut LightWeightMerkleTree&lt;Commitment&lt;Header&gt;, Sha3Digest, <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.u64.html">u64</a>, 3, Sha3Node&gt;
 ) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.79.0/core/pin/struct.Pin.html" title="struct core::pin::Pin">Pin</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.79.0/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn <a class="trait" href="https://doc.rust-lang.org/1.79.0/core/future/future/trait.Future.html" title="trait core::future::future::Future">Future</a>&lt;Output = <a class="enum" href="https://doc.rust-lang.org/1.79.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.unit.html">()</a>, <a class="struct" href="https://docs.rs/anyhow/1.0.85/anyhow/struct.Error.html" title="struct anyhow::Error">Error</a>&gt;&gt; + <a class="trait" href="https://doc.rust-lang.org/1.79.0/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + 'async_trait&gt;&gt;<div class="where">where
     'life0: 'async_trait,
     'life1: 'async_trait,
