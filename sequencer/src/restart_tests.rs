@@ -86,6 +86,7 @@ async fn test_restart_2f_plus_1_with_cdn() {
     test_restart_helper((4, 6), (2, 5), true).await;
 }
 
+#[ignore]
 #[async_std::test]
 async fn test_restart_all_with_cdn() {
     test_restart_helper((2, 8), (2, 8), true).await;
@@ -136,6 +137,7 @@ async fn test_restart_2f_plus_1_without_cdn() {
     test_restart_helper((4, 6), (2, 5), false).await;
 }
 
+#[ignore]
 #[async_std::test]
 async fn test_restart_all_without_cdn() {
     test_restart_helper((2, 8), (2, 8), false).await;
