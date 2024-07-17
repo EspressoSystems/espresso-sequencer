@@ -22,9 +22,11 @@ use hotshot_types::{
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    AccountQueryData, BackoffParams, BlockMerkleTree, ChainConfig, Event, FeeAccount,
-    FeeMerkleCommitment, Leaf, NetworkConfig, NodeState, SeqTypes, ValidatedState,
+    v0::impls::ValidatedState, v0_3::ChainConfig, AccountQueryData, BackoffParams, BlockMerkleTree,
+    Event, FeeAccount, FeeMerkleCommitment, Leaf, NetworkConfig, SeqTypes,
 };
+
+use super::impls::NodeState;
 
 #[async_trait]
 pub trait StateCatchup: Send + Sync + std::fmt::Debug {

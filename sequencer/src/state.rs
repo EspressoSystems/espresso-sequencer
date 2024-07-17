@@ -412,7 +412,7 @@ mod test {
             ProposalValidationError::InsufficientFee {
                 max_block_size: instance.chain_config.max_block_size,
                 base_fee: instance.chain_config.base_fee,
-                proposed_fee: header.fee_info().amount()
+                proposed_fee: header.fee_info().amount().unwrap()
             },
             err
         );

@@ -99,6 +99,7 @@ fn reference_chain_config() -> ChainConfig {
         base_fee: 0.into(),
         fee_contract: Some(Default::default()),
         fee_recipient: Default::default(),
+        bid_recipient: Default::default(),
     }
 }
 
@@ -142,9 +143,10 @@ async fn reference_header(version: Version) -> Header {
         ns_table,
         state.fee_merkle_tree.commitment(),
         state.block_merkle_tree.commitment(),
-        fee_info,
-        Some(builder_signature),
+        vec![fee_info],
+        vec![builder_signature],
         version,
+        vec![],
     )
 }
 

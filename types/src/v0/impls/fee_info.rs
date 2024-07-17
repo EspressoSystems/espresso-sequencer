@@ -1,7 +1,8 @@
-// use crate::SeqTypes;
-
-use std::str::FromStr;
-
+use crate::{
+    eth_signature_key::EthKeyPair, v0_3::IterableFeeInfo, AccountQueryData, FeeAccount,
+    FeeAccountProof, FeeAmount, FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree,
+    SeqTypes,
+};
 use anyhow::{bail, ensure, Context};
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, Read, SerializationError, Valid, Validate,
@@ -14,6 +15,7 @@ use ethers::{
 };
 use hotshot_query_service::explorer::MonetaryValue;
 use hotshot_types::traits::block_contents::BuilderFee;
+use itertools::Itertools;
 use jf_merkle_tree::{
     ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme, LookupResult,
     MerkleCommitment, MerkleTreeError, MerkleTreeScheme, ToTraversalPath,
@@ -23,22 +25,20 @@ use num_traits::CheckedSub;
 use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
+use std::str::FromStr;
 use thiserror::Error;
-
-use crate::{
-    eth_signature_key::EthKeyPair, AccountQueryData, FeeAccount, FeeAccountProof, FeeAmount,
-    FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree, SeqTypes,
-};
 
 /// Possible charge fee failures
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum FeeError {
     #[error("Insuficcient Funds: have {balance:?}, required {amount:?}")]
+    /// Charged account does not posses sufficient funds to pay the fee.
     InsufficientFunds {
         balance: Option<FeeAmount>,
         amount: FeeAmount,
     },
     #[error("Merkle Tree Error: {0}")]
+    /// Error looking up or updating account in the MerkleTree.
     MerkleTreeError(MerkleTreeError),
 }
 
@@ -59,11 +59,12 @@ impl FeeInfo {
         }
     }
 
-    pub fn genesis() -> Self {
-        Self {
+    pub fn genesis() -> Vec<Self> {
+        let info = Self {
             account: Default::default(),
             amount: Default::default(),
-        }
+        };
+        vec![info]
     }
 
     pub fn account(&self) -> FeeAccount {
@@ -72,6 +73,48 @@ impl FeeInfo {
 
     pub fn amount(&self) -> FeeAmount {
         self.amount
+    }
+    /// Get a `Vec<FeeInfo>` from `Vec<BuilderFee>`
+    pub fn from_builder_fees(fees: Vec<BuilderFee<SeqTypes>>) -> Vec<FeeInfo> {
+        fees.into_iter().map(FeeInfo::from).collect()
+    }
+}
+
+impl IterableFeeInfo for Vec<FeeInfo> {
+    /// Get sum of fee amounts
+    fn amount(&self) -> Option<FeeAmount> {
+        self.iter()
+            // getting the u64 tests that the value fits
+            .map(|fee_info| fee_info.amount.as_u64())
+            .collect::<Option<Vec<u64>>>()
+            .and_then(|amounts| amounts.iter().try_fold(0u64, |acc, n| acc.checked_add(*n)))
+            .map(FeeAmount::from)
+    }
+
+    /// Get a `Vec` of all unique fee accounts
+    fn accounts(&self) -> Vec<FeeAccount> {
+        self.iter()
+            .unique_by(|entry| &entry.account)
+            .map(|entry| entry.account)
+            .collect()
+    }
+}
+
+impl IterableFeeInfo for Vec<BuilderFee<SeqTypes>> {
+    /// Get sum of amounts
+    fn amount(&self) -> Option<FeeAmount> {
+        self.iter()
+            .map(|fee_info| fee_info.fee_amount)
+            .try_fold(0u64, |acc, n| acc.checked_add(n))
+            .map(FeeAmount::from)
+    }
+
+    /// Get a `Vec` of all unique fee accounts
+    fn accounts(&self) -> Vec<FeeAccount> {
+        self.iter()
+            .unique_by(|entry| &entry.fee_account)
+            .map(|entry| entry.fee_account)
+            .collect()
     }
 }
 
@@ -373,5 +416,29 @@ impl FeeAccountProof {
 impl From<(FeeAccountProof, U256)> for AccountQueryData {
     fn from((proof, balance): (FeeAccountProof, U256)) -> Self {
         Self { balance, proof }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use ethers::abi::Address;
+
+    use crate::{FeeAccount, FeeAmount, FeeInfo};
+
+    use super::IterableFeeInfo;
+
+    // TODO find out where this test should go in versioned code
+    #[test]
+    fn test_iterable_fee_info() {
+        let addr = Address::zero();
+        let fee = FeeInfo::new(addr, FeeAmount::from(1));
+        let fees = vec![fee, fee, fee];
+        // check the sum of amounts
+        let sum = fees.amount().unwrap();
+        assert_eq!(FeeAmount::from(3), sum);
+
+        // check acounts collector
+        let accounts = fees.accounts();
+        assert_eq!(vec![FeeAccount::from(Address::zero())], accounts);
     }
 }

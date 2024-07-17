@@ -12,9 +12,10 @@ use jf_vid::VidScheme;
 use sha2::Digest;
 
 use crate::{
-    ChainConfig, Index, Iter, NamespaceId, NodeState, NsIndex, NsPayload, NsPayloadBuilder,
-    NsPayloadRange, NsTable, NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction,
-    TxProof, ValidatedState,
+    v0::impls::{instance_state::NodeState, state::ValidatedState},
+    v0_3::ChainConfig,
+    Index, Iter, NamespaceId, NsIndex, NsPayload, NsPayloadBuilder, NsPayloadRange, NsTable,
+    NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction, TxProof,
 };
 
 impl Payload {
