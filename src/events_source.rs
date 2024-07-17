@@ -5,7 +5,7 @@ use futures::stream::{BoxStream, Stream, StreamExt};
 use hotshot_types::{
     data::{DaProposal, QuorumProposal},
     error::HotShotError,
-    event::{error_adaptor, Event, EventType},
+    event::{error_adaptor, Event},
     message::Proposal,
     traits::node_implementation::NodeType,
     PeerConfig,
@@ -103,27 +103,8 @@ impl<Types: NodeType> EventsStreamer<Types> {
 #[async_trait]
 impl<Types: NodeType> EventConsumer<Types> for EventsStreamer<Types> {
     async fn handle_event(&mut self, event: Event<Types>) {
-        let filter = match event {
-            Event {
-                event: EventType::DaProposal { .. },
-                ..
-            } => true,
-            Event {
-                event: EventType::QuorumProposal { .. },
-                ..
-            } => true,
-            Event {
-                event: EventType::Transactions { .. },
-                ..
-            } => true,
-            Event {
-                event: EventType::Decide { .. },
-                ..
-            } => true,
-            Event { .. } => false,
-        };
-        if filter {
-            let _status = self.subscriber_send_channel.broadcast(event.into()).await;
+        if let Err(e) = self.subscriber_send_channel.broadcast(event.into()).await {
+            tracing::error!("error broadcasting the event {e:?}")
         }
     }
 }
