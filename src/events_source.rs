@@ -2,6 +2,7 @@ use async_broadcast::{broadcast, InactiveReceiver, Sender as BroadcastSender};
 use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::{BoxStream, Stream, StreamExt};
+use hotshot_types::event::EventType;
 use hotshot_types::{
     data::{DaProposal, QuorumProposal},
     error::HotShotError,
@@ -11,6 +12,7 @@ use hotshot_types::{
     PeerConfig,
 };
 use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
 use std::sync::Arc;
 use tide_disco::method::ReadState;
 const RETAINED_EVENTS_COUNT: usize = 4096;
@@ -88,6 +90,7 @@ pub struct EventsStreamer<Types: NodeType> {
     // required for sending startup info
     known_nodes_with_stake: Vec<PeerConfig<Types::SignatureKey>>,
     non_staked_node_count: usize,
+    filter: Option<EventFilterSet<Types>>,
 }
 
 impl<Types: NodeType> EventsStreamer<Types> {
@@ -98,15 +101,83 @@ impl<Types: NodeType> EventsStreamer<Types> {
     pub fn non_staked_node_count(&self) -> usize {
         self.non_staked_node_count
     }
+
+    pub fn filter(&self) -> Option<&EventFilterSet<Types>> {
+        self.filter.as_ref()
+    }
 }
 
 #[async_trait]
 impl<Types: NodeType> EventConsumer<Types> for EventsStreamer<Types> {
     async fn handle_event(&mut self, event: Event<Types>) {
-        if let Err(e) = self.subscriber_send_channel.broadcast(event.into()).await {
-            tracing::error!("error broadcasting the event {e:?}")
+        let should_broadcast = self
+            .filter()
+            .map_or(true, |filter| filter.should_broadcast(&event.event));
+
+        if should_broadcast {
+            if let Err(e) = self.subscriber_send_channel.broadcast(event.into()).await {
+                tracing::error!("Error broadcasting the event: {:?}", e);
+            }
         }
     }
+}
+
+/// Wrapper struct representing a set of event filters.
+#[derive(Clone, Debug)]
+pub struct EventFilterSet<Types: NodeType>(pub(crate) Vec<EventFilter<Types>>);
+
+/// `From` trait impl to create an `EventFilterSet` from a vector of `EventFilter`s.
+impl<Types: NodeType> From<Vec<EventFilter<Types>>> for EventFilterSet<Types> {
+    fn from(filters: Vec<EventFilter<Types>>) -> Self {
+        EventFilterSet(filters)
+    }
+}
+
+/// `From` trait impl to create an `EventFilterSet` from a single `EventFilter`.
+impl<Types: NodeType> From<EventFilter<Types>> for EventFilterSet<Types> {
+    fn from(filter: EventFilter<Types>) -> Self {
+        EventFilterSet(vec![filter])
+    }
+}
+
+impl<Types: NodeType> EventFilterSet<Types> {
+    /// Determines whether the given hotshot event should be broadcast based on the filters in the set.
+    ///
+    ///  Returns `true` if the event should be broadcast, `false` otherwise.
+    pub(crate) fn should_broadcast(&self, hotshot_event: &EventType<Types>) -> bool {
+        let filter = &self.0;
+
+        match hotshot_event {
+            EventType::Error { .. } => filter.contains(&EventFilter::Error),
+            EventType::Decide { .. } => filter.contains(&EventFilter::Decide),
+            EventType::ReplicaViewTimeout { .. } => {
+                filter.contains(&EventFilter::ReplicaViewTimeout)
+            }
+            EventType::ViewFinished { .. } => filter.contains(&EventFilter::ViewFinished),
+            EventType::ViewTimeout { .. } => filter.contains(&EventFilter::ViewTimeout),
+            EventType::Transactions { .. } => filter.contains(&EventFilter::Transactions),
+            EventType::DaProposal { .. } => filter.contains(&EventFilter::DaProposal),
+            EventType::QuorumProposal { .. } => filter.contains(&EventFilter::QuorumProposal),
+            EventType::UpgradeProposal { .. } => filter.contains(&EventFilter::UpgradeProposal),
+            _ => false,
+        }
+    }
+}
+
+/// Possible event filters
+/// If the hotshot`EventType` enum is modified, this enum should also be updated
+#[derive(Clone, Debug, PartialEq)]
+pub enum EventFilter<Types: NodeType> {
+    Error,
+    Decide,
+    ReplicaViewTimeout,
+    ViewFinished,
+    ViewTimeout,
+    Transactions,
+    DaProposal,
+    QuorumProposal,
+    UpgradeProposal,
+    Pd(PhantomData<Types>),
 }
 
 #[async_trait]
@@ -123,6 +194,7 @@ impl<Types: NodeType> EventsStreamer<Types> {
     pub fn new(
         known_nodes_with_stake: Vec<PeerConfig<Types::SignatureKey>>,
         non_staked_node_count: usize,
+        filter: Option<EventFilterSet<Types>>,
     ) -> Self {
         let (mut subscriber_send_channel, to_subscribe_clone_recv) =
             broadcast::<Arc<Event<Types>>>(RETAINED_EVENTS_COUNT);
@@ -136,6 +208,7 @@ impl<Types: NodeType> EventsStreamer<Types> {
             inactive_to_subscribe_clone_recv,
             known_nodes_with_stake,
             non_staked_node_count,
+            filter,
         }
     }
 }
