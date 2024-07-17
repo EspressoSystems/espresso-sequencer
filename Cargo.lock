@@ -8705,6 +8705,7 @@ dependencies = [
  "cld",
  "committable",
  "contract-bindings",
+ "csv",
  "derivative",
  "derive_more",
  "dotenvy",
