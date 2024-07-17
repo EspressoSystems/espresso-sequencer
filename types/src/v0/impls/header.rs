@@ -439,7 +439,7 @@ impl Header {
 
         state
             .block_merkle_tree
-            .push(parent_header.commit().as_ref())
+            .push(parent_header.commit())
             .context("missing blocks frontier")?;
         let block_merkle_tree_root = state.block_merkle_tree.commitment();
 
@@ -948,7 +948,7 @@ mod test_headers {
             *parent_leaf.block_header_mut() = parent.clone();
 
             let block_merkle_tree =
-                BlockMerkleTree::from_elems(Some(32), Vec::<[u8; 32]>::new()).unwrap();
+                BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap();
 
             let fee_info = FeeInfo::genesis();
             let fee_merkle_tree = FeeMerkleTree::from_kv_set(
@@ -1009,7 +1009,7 @@ mod test_headers {
 
             assert_eq!(
                 block_merkle_tree,
-                BlockMerkleTree::from_elems(Some(32), Vec::<[u8; 32]>::new()).unwrap()
+                BlockMerkleTree::from_elems(Some(32), Vec::<Commitment<Header>>::new()).unwrap()
             );
         }
     }
@@ -1206,9 +1206,7 @@ mod test_headers {
         *parent_leaf.block_header_mut() = parent_header.clone();
 
         // Populate the tree with an initial `push`.
-        block_merkle_tree
-            .push(genesis.header.commit().as_ref())
-            .unwrap();
+        block_merkle_tree.push(genesis.header.commit()).unwrap();
         let block_merkle_tree_root = block_merkle_tree.commitment();
         validated_state.block_merkle_tree = block_merkle_tree.clone();
         *parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
@@ -1306,9 +1304,7 @@ mod test_headers {
         let fee_merkle_tree = parent_state.fee_merkle_tree.clone();
 
         // Populate the tree with an initial `push`.
-        block_merkle_tree
-            .push(genesis.header.commit().as_ref())
-            .unwrap();
+        block_merkle_tree.push(genesis.header.commit()).unwrap();
         let block_merkle_tree_root = block_merkle_tree.commitment();
         let fee_merkle_tree_root = fee_merkle_tree.commitment();
         parent_state.block_merkle_tree = block_merkle_tree.clone();
@@ -1367,7 +1363,7 @@ mod test_headers {
         }
 
         let mut block_merkle_tree = proposal_state.block_merkle_tree.clone();
-        block_merkle_tree.push(proposal.commit().as_ref()).unwrap();
+        block_merkle_tree.push(proposal.commit()).unwrap();
 
         let proposal_state = proposal_state
             .apply_header(
