@@ -58,6 +58,16 @@ impl Committable for ChainConfig {
         } else {
             comm.u64_field("fee_contract", 0)
         };
+
+        // With `ChainConfig` upgrades we want commitments w/out
+        // fields added >= v0_3 to have the same commitment as <= v0_3
+        // commitment. Therefore `None` values a simply ignored.
+        let comm = if let Some(bid_recipient) = self.bid_recipient {
+            comm.fixed_size_field("bid_recipient", &bid_recipient.to_fixed_bytes())
+        } else {
+            comm
+        };
+
         comm.finalize()
     }
 }
@@ -101,8 +111,7 @@ impl From<&v0_1::ResolvableChainConfig> for ResolvableChainConfig {
             Either::Left(chain_config) => ResolvableChainConfig {
                 chain_config: Either::Left(ChainConfig::from(chain_config)),
             },
-            // TODO * review how `None` is handled in (de)serialization
-            //      * is there a better way to pack an old commitment in a new one?
+            // TODO does this work? is there a better way?
             Either::Right(c) => ResolvableChainConfig {
                 chain_config: Either::Right(Commitment::from_str(&c.to_string()).unwrap()),
             },
