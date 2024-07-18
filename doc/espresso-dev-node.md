@@ -50,7 +50,7 @@ An example response is like this:
 
 ### POST /api/set-hotshot-down
 
-This endpoint sets the hotshot down at the given L1 height.
+This endpoint simulates the effect of a liveness failure of the hotshot consensus protocol in the Light Client smart contract.  
 
 By calling this, the L1 height in the light contract will be frozen, and rollups will detect the HotShot failure. This
 is intended for testing rollups' functionalities when HotShot is down.
