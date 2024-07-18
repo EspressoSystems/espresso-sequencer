@@ -31,9 +31,6 @@ pub struct BidTxBody {
     /// The bid amount designated in Wei.  This is different than
     /// the sequencing fee (gas price) for this transaction
     pub(crate) bid_amount: FeeAmount,
-    // TODO I think this will end up being a `FeeAccount`
-    /// The public key of this sequencer
-    pub(crate) public_key: FeeAccount,
     /// The URL the HotShot leader will use to request a bundle
     /// from this sequencer if they win the auction
     pub(crate) url: Url,

@@ -103,7 +103,6 @@ impl Default for BidTxBody {
         Self {
             url: Url::from_str("https://sequencer:3939").unwrap(),
             account: key.fee_account(),
-            public_key: FeeAccount::default(),
             gas_price: FeeAmount::default(),
             bid_amount: FeeAmount::default(),
             view: ViewNumber::genesis(),
@@ -143,7 +142,6 @@ impl From<FeeError> for ExecutionError {
     }
 }
 
-// TODO consider moving common functionality to trait.
 impl BidTx {
     /// Execute `BidTx`.
     /// * verify signature
@@ -161,7 +159,6 @@ impl BidTx {
         // any case we can charge the bids and gas during execution.
         self.charge(state)?;
 
-        // TODO what do we return in good result?
         Ok(())
     }
     /// Charge Bid. Only winning bids are charged in JIT.
