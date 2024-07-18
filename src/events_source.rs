@@ -1,13 +1,18 @@
+use std::{marker::PhantomData, sync::Arc};
+
 use async_broadcast::{broadcast, InactiveReceiver, Sender as BroadcastSender};
 use async_std::future;
 use async_trait::async_trait;
-use futures::future::BoxFuture;
-use futures::stream::{BoxStream, Stream, StreamExt};
-use hotshot_types::event::EventType;
-use hotshot_types::{event::Event, traits::node_implementation::NodeType, PeerConfig};
+use futures::{
+    future::BoxFuture,
+    stream::{BoxStream, Stream, StreamExt},
+};
+use hotshot_types::{
+    event::{Event, EventType},
+    traits::node_implementation::NodeType,
+    PeerConfig,
+};
 use serde::{Deserialize, Serialize};
-use std::marker::PhantomData;
-use std::sync::Arc;
 use tide_disco::method::ReadState;
 const RETAINED_EVENTS_COUNT: usize = 4096;
 
