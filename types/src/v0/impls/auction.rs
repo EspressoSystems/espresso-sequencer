@@ -93,7 +93,8 @@ impl BidTxBody {
     pub fn amount(&self) -> FeeAmount {
         self.bid_amount
     }
-    /// Update `url` field on a previously instantiated `BidTxBody`.
+    /// Instantiate a `BidTxBody` containing the values of `self`
+    /// with a new `url` field.
     pub fn with_url(self, url: Url) -> Self {
         Self { url, ..self }
     }
@@ -194,7 +195,8 @@ impl BidTx {
     pub fn body(self) -> BidTxBody {
         self.body
     }
-    /// Update `url` field on a previously instantiated `BidTxBody`.
+    /// Instantiate a `BidTx` containing the values of `self`
+    /// with a new `url` field on `body`.
     pub fn with_url(self, url: Url) -> Self {
         let body = self.body.with_url(url);
         Self { body, ..self }
@@ -207,7 +209,7 @@ impl BidTx {
     pub fn amount(&self) -> FeeAmount {
         self.body.bid_amount
     }
-    /// get bid amount
+    /// get bid account
     pub fn account(&self) -> FeeAccount {
         self.body.account
     }
