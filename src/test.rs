@@ -1,23 +1,32 @@
 #[cfg(test)]
 mod tests {
-    use crate::events_source::{EventConsumer, EventsStreamer}; // EventsUpdater};
-                                                               //use crate::fetch::Fetch;
-    use crate::events::{define_api, Error, Options};
-    use async_compatibility_layer::art::async_spawn;
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use std::sync::Arc;
+
+    use async_compatibility_layer::{
+        art::async_spawn,
+        logging::{setup_backtrace, setup_logging},
+    };
     use async_std::sync::RwLock;
     use futures::stream::StreamExt;
+    use hotshot_example_types::node_types::TestTypes;
     use hotshot_types::{
         data::ViewNumber,
         event::{Event, EventType},
-        traits::node_implementation::{ConsensusTime, NodeType},
+        light_client::StateKeyPair,
+        signature_key::BLSPubKey,
+        traits::{
+            node_implementation::{ConsensusTime, NodeType},
+            signature_key::SignatureKey,
+        },
+        PeerConfig,
     };
-
-    use hotshot_example_types::node_types::TestTypes;
-    use std::sync::Arc;
     use surf_disco::Client;
     use tide_disco::{App, Url};
     use vbs::version::{StaticVersion, StaticVersionType};
+
+    //use crate::fetch::Fetch;
+    use crate::events::{define_api, Error, Options};
+    use crate::events_source::{EventConsumer, EventsStreamer, StartupInfo}; // EventsUpdater};
 
     // return a empty transaction event
     fn generate_event<Types: NodeType<Time = ViewNumber>>(view_number: u64) -> Event<Types> {
@@ -77,6 +86,61 @@ mod tests {
         });
 
         send_handle.await;
+    }
+
+    #[async_std::test]
+    async fn test_startup_info_endpoint() {
+        setup_logging();
+        setup_backtrace();
+
+        let port = portpicker::pick_unused_port().expect("Could not find an open port");
+        let api_url = Url::parse(format!("http://localhost:{port}").as_str()).unwrap();
+
+        let private_key =
+            <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
+        let pub_key = BLSPubKey::from_private(&private_key);
+        let state_key_pair = StateKeyPair::generate();
+
+        let peer_config = PeerConfig::<BLSPubKey> {
+            stake_table_entry: pub_key.stake_table_entry(1),
+            state_ver_key: state_key_pair.ver_key(),
+        };
+
+        let known_nodes_with_stake = vec![peer_config];
+        let non_staked_node_count = 10;
+
+        let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
+            known_nodes_with_stake.clone(),
+            non_staked_node_count,
+        )));
+
+        // Start the web server.
+        let mut app = App::<_, Error>::with_state(events_streamer.clone());
+
+        let hotshot_events_api =
+            define_api::<Arc<RwLock<EventsStreamer<TestTypes>>>, TestTypes, StaticVersion<0, 1>>(
+                &Options::default(),
+            )
+            .expect("Failed to define hotshot eventsAPI");
+
+        app.register_module("api", hotshot_events_api)
+            .expect("Failed to register hotshot events API");
+
+        async_spawn(app.serve(api_url.clone(), StaticVersion::<0, 1>::instance()));
+
+        let client = Client::<Error, StaticVersion<0, 1>>::new(
+            format!("http://localhost:{}/api", port).parse().unwrap(),
+        );
+        client.connect(None).await;
+
+        let startup_info: StartupInfo<TestTypes> = client
+            .get("startup_info")
+            .send()
+            .await
+            .expect("failed to get startup_info");
+
+        assert_eq!(startup_info.known_node_with_stake, known_nodes_with_stake);
+        assert_eq!(startup_info.non_staked_node_count, non_staked_node_count);
     }
 
     #[async_std::test]

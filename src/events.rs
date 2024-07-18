@@ -104,6 +104,9 @@ where
             }
             .try_flatten_stream()
             .boxed()
+        })?
+        .get("startup_info", |_, state| {
+            async move { Ok(state.get_startup_info().await) }.boxed()
         })?;
 
     Ok(api)

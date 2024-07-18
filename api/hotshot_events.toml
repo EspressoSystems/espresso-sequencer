@@ -32,3 +32,14 @@ METHOD = "SOCKET"
 DOC = """
 Get hotshot events starting now.
 """
+
+[route.startup_info]
+PATH = ["startup_info"]
+METHOD = "GET"
+DOC = """
+Get the startup info.
+
+Response contains:
+  - known_node_with_stake: List of known node's public keys and stake value
+  - non_staked_node_count: Count of nodes without stake.
+"""
