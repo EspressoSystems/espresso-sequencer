@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["VERSION"],"mod":["header"],"struct":["Header"]};
+window.SIDEBAR_ITEMS = {"constant":["VERSION"],"enum":["FullNetworkTx"],"mod":["auction","header"],"struct":["AuctionResults","BidTx","BidTxBody","Header"]};

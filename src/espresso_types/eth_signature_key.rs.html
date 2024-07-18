@@ -208,6 +208,9 @@
 <a href="#208" id="208">208</a>
 <a href="#209" id="209">209</a>
 <a href="#210" id="210">210</a>
+<a href="#211" id="211">211</a>
+<a href="#212" id="212">212</a>
+<a href="#213" id="213">213</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     fmt::{Display, Formatter},
     hash::Hash,
@@ -257,6 +260,9 @@
             mnemonic.derive_key(derivation_path.as_str(), <span class="comment">/* password */ </span><span class="prelude-val">None</span>)<span class="question-mark">?</span>;
         <span class="kw">let </span>signing_key: <span class="kw-2">&amp;</span>SigningKey = derived_priv_key.as_ref();
         <span class="prelude-val">Ok</span>(signing_key.clone().into())
+    }
+    <span class="kw">pub fn </span>random() -&gt; EthKeyPair {
+        SigningKey::random(<span class="kw-2">&amp;mut </span>rand::thread_rng()).into()
     }
 
     <span class="kw">pub fn </span>fee_account(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; FeeAccount {
