@@ -107,8 +107,13 @@ pub fn init_stake_table(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct PublicHotShotConfig {
-    pub known_nodes_with_stake: Vec<PeerConfig<BLSPubKey>>,
+struct PublicHotShotConfig {
+    known_nodes_with_stake: Vec<PeerConfig<BLSPubKey>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PublicNetworkConfig {
+    config: PublicHotShotConfig,
 }
 
 /// Initialize the stake table from a sequencer node that
@@ -129,8 +134,8 @@ async fn init_stake_table_from_sequencer(
     // Request the configuration until it is successful
     let network_config: PublicHotShotConfig = loop {
         match reqwest::get(config_url.clone()).await {
-            Ok(resp) => match resp.json::<PublicHotShotConfig>().await {
-                Ok(config) => break config,
+            Ok(resp) => match resp.json::<PublicNetworkConfig>().await {
+                Ok(config) => break config.config,
                 Err(e) => {
                     tracing::error!("Failed to parse the network config: {e}");
                     sleep(Duration::from_secs(5)).await;

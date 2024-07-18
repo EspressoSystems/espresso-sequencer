@@ -68,11 +68,11 @@ hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", ta
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
   "runtime-async-std",
   "global-permits",
-], tag = "0.4.2", package = "cdn-broker" }
+], tag = "0.4.3", package = "cdn-broker" }
 cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
   "runtime-async-std",
   "global-permits",
-], tag = "0.4.2", package = "cdn-marshal" }
+], tag = "0.4.3", package = "cdn-marshal" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
   "test-apis",

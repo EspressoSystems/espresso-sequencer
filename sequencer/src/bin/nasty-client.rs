@@ -883,7 +883,7 @@ impl ResourceManager<Header> {
         .context("malformed merkle proof")?
         .or_else(|_| bail!("invalid merkle proof"))?;
         ensure!(
-            proof.elem() == Some(index_header.commit().as_ref()),
+            proof.elem() == Some(&index_header.commit()),
             "merkle proof is for wrong element: {:?} != {:?}",
             proof.elem(),
             index_header.commit()

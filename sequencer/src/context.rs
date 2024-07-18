@@ -257,6 +257,8 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             orchestrator_client
                 .wait_for_all_nodes_ready(self.node_state.node_id)
                 .await;
+        } else {
+            tracing::error!("Cannot get info from orchestrator client");
         }
         tracing::warn!("starting consensus");
         self.handle.read().await.hotshot.start_consensus().await;
