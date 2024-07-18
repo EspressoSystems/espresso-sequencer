@@ -1,5 +1,3 @@
-version: "3"
-
 networks:
   default:
     name: espresso-sequencer
@@ -81,11 +79,11 @@ services:
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
 
-  # We use KeyDB (a Redis variant) to maintain consistency between 
+  # We use KeyDB (a Redis variant) to maintain consistency between
   # different parts of the CDN
   keydb:
     image: docker.io/eqalpha/keydb:latest
-    command: [ "--requirepass", "changemeplease!!" ]
+    command: ["--requirepass", "changemeplease!!"]
     healthcheck:
       # Attempt to PING the database
       test: keydb-cli --pass changemeplease!! --raw incr PING
