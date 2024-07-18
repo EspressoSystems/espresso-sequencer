@@ -111,7 +111,7 @@ mod tests {
 
         let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
             known_nodes_with_stake.clone(),
-            non_staked_node_count.clone(),
+            non_staked_node_count,
         )));
 
         // Start the web server.
@@ -155,8 +155,8 @@ mod tests {
         let known_nodes_with_stake = vec![];
         let non_staked_node_count = 0;
         let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
-            known_nodes_with_stake.clone(),
-            non_staked_node_count.clone(),
+            known_nodes_with_stake,
+            non_staked_node_count,
         )));
 
         // Start the web server.
