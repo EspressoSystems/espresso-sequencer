@@ -70,6 +70,9 @@ impl BidTxBody {
     }
     /// Sign Body and return a `BidTx`. This is the expected way to obtain a `BidTx`.
     /// ```
+    /// # use espresso_types::FeeAccount;
+    /// # use espresso_types::v0_3::BidTxBody;
+    ///
     /// let key = FeeAccount::test_key_pair();
     /// BidTxBody::default().signed(&key).unwrap();
     /// ```
