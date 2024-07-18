@@ -11,8 +11,22 @@ export POSTGRES_PASSWORD=$ESPRESSO_SEQUENCER_POSTGRES_PASSWORD
 
 export RUST_LOG=${RUST_LOG:-info}
 
+# Function to handle SIGTERM and SIGINT
+cleanup() {
+    echo "Received SIGTERM or SIGINT. Exiting..."
+    kill -TERM "$postgres_pid" 2>/dev/null
+    kill -TERM "$dev_node_pid" 2>/dev/null
+    wait "$postgres_pid"
+    wait "$dev_node_pid"
+    exit 0
+}
+
+# Trap SIGTERM and SIGINT signals
+trap cleanup SIGTERM SIGINT
+
 # Start postgres in the background
 docker-entrypoint.sh postgres &
+postgres_pid=$!
 
 # Wait (twice) for postgres to be ready
 # Postgres can be falsely "ready" once before running init scripts.
@@ -22,4 +36,9 @@ until pg_isready && sleep 1 && pg_isready; do
 done
 
 # Start the dev node
-espresso-dev-node
+espresso-dev-node &
+dev_node_pid=$!
+
+# Wait for child processes to exit
+wait "$postgres_pid"
+wait "$dev_node_pid"
