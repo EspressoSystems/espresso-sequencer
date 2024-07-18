@@ -115,10 +115,9 @@ impl Default for BidTxBody {
 }
 impl Default for BidTx {
     fn default() -> Self {
-        let body = BidTxBody::default();
-        let key = FeeAccount::test_key_pair();
-        let signature = FeeAccount::sign_builder_message(&key, body.commit().as_ref()).unwrap();
-        Self { signature, body }
+        BidTxBody::default()
+            .signed(&FeeAccount::test_key_pair())
+            .unwrap()
     }
 }
 
