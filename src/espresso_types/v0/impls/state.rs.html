@@ -918,6 +918,10 @@
 <a href="#918" id="918">918</a>
 <a href="#919" id="919">919</a>
 <a href="#920" id="920">920</a>
+<a href="#921" id="921">921</a>
+<a href="#922" id="922">922</a>
+<a href="#923" id="923">923</a>
+<a href="#924" id="924">924</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::ops::Add;
 
 <span class="kw">use </span>anyhow::bail;
@@ -1061,6 +1065,10 @@
 
     <span class="doccomment">/// Charge a fee to an account, transferring the funds to the fee recipient account.
     </span><span class="kw">pub fn </span>charge_fee(<span class="kw-2">&amp;mut </span><span class="self">self</span>, fee_info: FeeInfo, recipient: FeeAccount) -&gt; <span class="prelude-ty">Result</span>&lt;(), FeeError&gt; {
+        <span class="kw">if </span>fee_info.amount == <span class="number">0</span>.into() {
+            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+        }
+
         <span class="kw">let </span>fee_state = <span class="self">self</span>.fee_merkle_tree.clone();
 
         <span class="comment">// Deduct the fee from the paying account.

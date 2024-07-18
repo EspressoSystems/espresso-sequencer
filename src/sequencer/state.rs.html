@@ -516,12 +516,6 @@
 <a href="#516" id="516">516</a>
 <a href="#517" id="517">517</a>
 <a href="#518" id="518">518</a>
-<a href="#519" id="519">519</a>
-<a href="#520" id="520">520</a>
-<a href="#521" id="521">521</a>
-<a href="#522" id="522">522</a>
-<a href="#523" id="523">523</a>
-<a href="#524" id="524">524</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>core::fmt::Debug;
 <span class="kw">use </span>std::{sync::Arc, time::Duration};
 
@@ -539,7 +533,6 @@
     types::HeightIndexed,
 };
 <span class="kw">use </span>jf_merkle_tree::{LookupResult, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme};
-<span class="kw">use </span>vbs::version::Version;
 
 <span class="kw">use crate</span>::{
     api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
@@ -551,7 +544,6 @@
     instance: <span class="kw-2">&amp;</span>NodeState,
     parent_leaf: <span class="kw-2">&amp;</span>LeafQueryData&lt;SeqTypes&gt;,
     proposed_leaf: <span class="kw-2">&amp;</span>LeafQueryData&lt;SeqTypes&gt;,
-    version: Version,
 ) -&gt; anyhow::Result&lt;(ValidatedState, Delta)&gt; {
     <span class="kw">let </span>proposed_leaf = proposed_leaf.leaf();
     <span class="kw">let </span>parent_leaf = parent_leaf.leaf();
@@ -559,6 +551,12 @@
 
     <span class="comment">// Check internal consistency.
     </span><span class="kw">let </span>parent_header = parent_leaf.block_header();
+    <span class="macro">ensure!</span>(
+        state.chain_config.commit() == parent_header.chain_config().commit(),
+        <span class="string">"internal error! in-memory chain config {:?} does not match parent header {:?}"</span>,
+        state.chain_config,
+        parent_header.chain_config(),
+    );
     <span class="macro">ensure!</span>(
         state.block_merkle_tree.commitment() == parent_header.block_merkle_tree_root(),
         <span class="string">"internal error! in-memory block tree {:?} does not match parent header {:?}"</span>,
@@ -573,7 +571,7 @@
     );
 
     state
-        .apply_header(instance, parent_leaf, header, version)
+        .apply_header(instance, parent_leaf, header, header.version())
         .<span class="kw">await
 </span>}
 
@@ -656,14 +654,12 @@
     instance: <span class="kw-2">&amp;</span>NodeState,
     parent_leaf: <span class="kw-2">&amp;</span>LeafQueryData&lt;SeqTypes&gt;,
     proposed_leaf: <span class="kw-2">&amp;</span>LeafQueryData&lt;SeqTypes&gt;,
-    version: Version,
 ) -&gt; anyhow::Result&lt;ValidatedState&gt; {
     <span class="kw">let </span>parent_chain_config = parent_state.chain_config;
 
-    <span class="kw">let </span>(state, delta) =
-        compute_state_update(parent_state, instance, parent_leaf, proposed_leaf, version)
-            .<span class="kw">await
-            </span>.context(<span class="string">"computing state update"</span>)<span class="question-mark">?</span>;
+    <span class="kw">let </span>(state, delta) = compute_state_update(parent_state, instance, parent_leaf, proposed_leaf)
+        .<span class="kw">await
+        </span>.context(<span class="string">"computing state update"</span>)<span class="question-mark">?</span>;
 
     <span class="kw">let </span><span class="kw-2">mut </span>storage = storage.write().<span class="kw">await</span>;
     <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = store_state_update(<span class="kw-2">&amp;mut *</span>storage, proposed_leaf.height(), <span class="kw-2">&amp;</span>state, delta).<span class="kw">await
@@ -723,7 +719,6 @@
 <span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>update_state_storage_loop(
     storage: Arc&lt;RwLock&lt;<span class="kw">impl </span>SequencerStateDataSource&gt;&gt;,
     instance: <span class="kw">impl </span>Future&lt;Output = NodeState&gt;,
-    version: Version,
 ) -&gt; anyhow::Result&lt;()&gt; {
     <span class="kw">let </span><span class="kw-2">mut </span>instance = instance.<span class="kw">await</span>;
     instance.peers = Arc::new(SqlStateCatchup::new(storage.clone(), Default::default()));
@@ -764,15 +759,8 @@
 
     <span class="kw">while let </span><span class="prelude-val">Some</span>(leaf) = leaves.next().<span class="kw">await </span>{
         <span class="kw">loop </span>{
-            <span class="kw">match </span>update_state_storage(
-                <span class="kw-2">&amp;</span>parent_state,
-                <span class="kw-2">&amp;</span>storage,
-                <span class="kw-2">&amp;</span>instance,
-                <span class="kw-2">&amp;</span>parent_leaf,
-                <span class="kw-2">&amp;</span>leaf,
-                version,
-            )
-            .<span class="kw">await
+            <span class="kw">match </span>update_state_storage(<span class="kw-2">&amp;</span>parent_state, <span class="kw-2">&amp;</span>storage, <span class="kw-2">&amp;</span>instance, <span class="kw-2">&amp;</span>parent_leaf, <span class="kw-2">&amp;</span>leaf)
+                .<span class="kw">await
             </span>{
                 <span class="prelude-val">Ok</span>(state) =&gt; {
                     parent_leaf = leaf;

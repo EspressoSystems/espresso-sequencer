@@ -942,7 +942,7 @@
             <span class="kw">let </span>get_node_state = <span class="kw">async move </span>{ state.node_state().<span class="kw">await</span>.clone() };
             tasks.spawn(
                 <span class="string">"merklized state storage update loop"</span>,
-                update_state_storage_loop(ds, get_node_state, Ver::version()),
+                update_state_storage_loop(ds, get_node_state),
             );
         }
 
