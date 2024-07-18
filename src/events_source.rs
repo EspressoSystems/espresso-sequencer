@@ -5,6 +5,7 @@ use futures::future::BoxFuture;
 use futures::stream::{BoxStream, Stream, StreamExt};
 use hotshot_types::event::EventType;
 use hotshot_types::{event::Event, traits::node_implementation::NodeType, PeerConfig};
+use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tide_disco::method::ReadState;
@@ -17,6 +18,13 @@ where
 {
     type EventStream: Stream<Item = Arc<Event<Types>>> + Unpin + Send + 'static;
     async fn get_event_stream(&self, filter: Option<EventFilterSet<Types>>) -> Self::EventStream;
+    async fn get_startup_info(&self) -> StartupInfo<Types>;
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StartupInfo<Types: NodeType> {
+    pub known_node_with_stake: Vec<PeerConfig<Types::SignatureKey>>,
+    pub non_staked_node_count: usize,
 }
 
 #[async_trait]
@@ -128,6 +136,13 @@ impl<Types: NodeType> EventsSource<Types> for EventsStreamer<Types> {
                 .boxed()
         } else {
             receiver.boxed()
+        }
+    }
+
+    async fn get_startup_info(&self) -> StartupInfo<Types> {
+        StartupInfo {
+            known_node_with_stake: self.known_node_with_stake(),
+            non_staked_node_count: self.non_staked_node_count(),
         }
     }
 }
