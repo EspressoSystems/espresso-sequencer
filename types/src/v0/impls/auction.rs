@@ -150,10 +150,6 @@ impl BidTx {
     /// * verify signature
     /// * charge bid amount
     /// * charge gas
-    // The rational behind the `Err` is to provide not only what
-    // failed, but for which variant. The entire Tx is probably
-    // overkill, but we can narrow down how much we want to know about
-    // Failed Tx in the future. Maybe we just want its name.
     pub fn execute(&self, state: &mut ValidatedState) -> Result<(), ExecutionError> {
         self.verify()?;
 
