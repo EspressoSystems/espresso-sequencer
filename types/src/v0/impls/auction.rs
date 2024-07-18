@@ -65,7 +65,7 @@ impl BidTxBody {
     }
 
     /// Sign `BidTxBody` and return the signature.
-    pub fn sign(&self, key: &EthKeyPair) -> Result<Signature, SigningError> {
+    fn sign(&self, key: &EthKeyPair) -> Result<Signature, SigningError> {
         FeeAccount::sign_builder_message(key, self.commit().as_ref())
     }
     /// Sign Body and return a `BidTx`. This is the expected way to obtain a `BidTx`.
