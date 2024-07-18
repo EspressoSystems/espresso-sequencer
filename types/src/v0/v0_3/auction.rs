@@ -42,3 +42,14 @@ pub struct BidTxBody {
     /// The set of namespace ids the sequencer is bidding for
     pub(crate) namespaces: Vec<NamespaceId>,
 }
+
+/// The results of an Auction
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, Hash)]
+pub struct AuctionResults {
+    /// view number the results are for
+    pub(crate) view_number: ViewNumber,
+    /// A list of the bid txs that won
+    pub(crate) winning_bids: Vec<BidTx>,
+    /// A list of reserve sequencers being used
+    pub(crate) reserve_bids: Vec<(NamespaceId, Url)>,
+}

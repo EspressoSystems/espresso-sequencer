@@ -20,5 +20,5 @@ pub const VERSION: Version = Version { major: 0, minor: 3 };
 mod auction;
 mod header;
 
-pub use auction::{BidTx, BidTxBody, FullNetworkTx};
+pub use auction::{AuctionResults, BidTx, BidTxBody, FullNetworkTx};
 pub use header::Header;
