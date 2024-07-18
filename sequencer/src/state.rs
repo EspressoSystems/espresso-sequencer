@@ -15,7 +15,6 @@ use hotshot_query_service::{
     types::HeightIndexed,
 };
 use jf_merkle_tree::{LookupResult, MerkleTreeScheme, ToTraversalPath, UniversalMerkleTreeScheme};
-use vbs::version::Version;
 
 use crate::{
     api::data_source::CatchupDataSource, catchup::SqlStateCatchup,
@@ -27,7 +26,6 @@ async fn compute_state_update(
     instance: &NodeState,
     parent_leaf: &LeafQueryData<SeqTypes>,
     proposed_leaf: &LeafQueryData<SeqTypes>,
-    version: Version,
 ) -> anyhow::Result<(ValidatedState, Delta)> {
     let proposed_leaf = proposed_leaf.leaf();
     let parent_leaf = parent_leaf.leaf();
@@ -35,6 +33,12 @@ async fn compute_state_update(
 
     // Check internal consistency.
     let parent_header = parent_leaf.block_header();
+    ensure!(
+        state.chain_config.commit() == parent_header.chain_config().commit(),
+        "internal error! in-memory chain config {:?} does not match parent header {:?}",
+        state.chain_config,
+        parent_header.chain_config(),
+    );
     ensure!(
         state.block_merkle_tree.commitment() == parent_header.block_merkle_tree_root(),
         "internal error! in-memory block tree {:?} does not match parent header {:?}",
@@ -49,7 +53,7 @@ async fn compute_state_update(
     );
 
     state
-        .apply_header(instance, parent_leaf, header, version)
+        .apply_header(instance, parent_leaf, header, header.version())
         .await
 }
 
@@ -132,14 +136,12 @@ async fn update_state_storage(
     instance: &NodeState,
     parent_leaf: &LeafQueryData<SeqTypes>,
     proposed_leaf: &LeafQueryData<SeqTypes>,
-    version: Version,
 ) -> anyhow::Result<ValidatedState> {
     let parent_chain_config = parent_state.chain_config;
 
-    let (state, delta) =
-        compute_state_update(parent_state, instance, parent_leaf, proposed_leaf, version)
-            .await
-            .context("computing state update")?;
+    let (state, delta) = compute_state_update(parent_state, instance, parent_leaf, proposed_leaf)
+        .await
+        .context("computing state update")?;
 
     let mut storage = storage.write().await;
     if let Err(err) = store_state_update(&mut *storage, proposed_leaf.height(), &state, delta).await
@@ -199,7 +201,6 @@ async fn store_genesis_state(
 pub(crate) async fn update_state_storage_loop(
     storage: Arc<RwLock<impl SequencerStateDataSource>>,
     instance: impl Future<Output = NodeState>,
-    version: Version,
 ) -> anyhow::Result<()> {
     let mut instance = instance.await;
     instance.peers = Arc::new(SqlStateCatchup::new(storage.clone(), Default::default()));
@@ -240,15 +241,8 @@ pub(crate) async fn update_state_storage_loop(
 
     while let Some(leaf) = leaves.next().await {
         loop {
-            match update_state_storage(
-                &parent_state,
-                &storage,
-                &instance,
-                &parent_leaf,
-                &leaf,
-                version,
-            )
-            .await
+            match update_state_storage(&parent_state, &storage, &instance, &parent_leaf, &leaf)
+                .await
             {
                 Ok(state) => {
                     parent_leaf = leaf;
