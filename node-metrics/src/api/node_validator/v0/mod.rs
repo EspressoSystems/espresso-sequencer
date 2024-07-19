@@ -578,15 +578,14 @@ pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scra
 
         let public_key_string = node_sample.labels.get("key");
 
-        let public_key_from_scrape = if let Some(public_key_string) = public_key_string {
-            if let Ok(public_key) = BLSPubKey::from_str(public_key_string) {
-                public_key
-            } else {
-                // We were unable to parse the public key from the scrape result.
-                tracing::warn!(
-                    "parsing public key failed, preventing us from verifying the public key"
-                );
-                return;
+        let public_key_from_scrape: BLSPubKey = if let Some(public_key_string) = public_key_string {
+            match BLSPubKey::from_str(public_key_string) {
+                Ok(public_key) => public_key,
+                Err(err) => {
+                    // We couldn't parse the public key, so we can't create a NodeIdentity.
+                    tracing::info!("parsing public key failed: {}", err);
+                    return;
+                }
             }
         } else {
             // We were unable to find the public key in the scrape result.
@@ -594,7 +593,10 @@ pub fn populate_node_identity_from_scrape(node_identity: &mut NodeIdentity, scra
             return;
         };
 
-        if &public_key_from_scrape != node_identity.public_key() {
+        let public_key_from_scrape_string = public_key_from_scrape.to_string();
+        let node_identity_public_key_string = node_identity.public_key().to_string();
+
+        if public_key_from_scrape_string != node_identity_public_key_string {
             tracing::warn!("node identity public key doesn't match public key in scrape, are we hitting the wrong URL, or is it behind a load balancer between multiple nodes?");
             return;
         }
@@ -661,19 +663,9 @@ pub fn node_identity_from_scrape(scrape: Scrape) -> Option<NodeIdentity> {
 
     let public_key_string = node_sample.labels.get("key")?;
 
-    //  create the Tagged Base 64 Public Key representation
-    let tagged_base64 =
-        if let Ok(tagged_base64) = tagged_base64::TaggedBase64::parse(public_key_string) {
-            tagged_base64
-        } else {
-            return None;
-        };
-
-    // Now we can take those bytes and we can create a Public Key from them.
-    let public_key = match BLSPubKey::from_bytes(tagged_base64.value().as_ref()) {
+    let public_key = match BLSPubKey::from_str(public_key_string) {
         Ok(public_key) => public_key,
         Err(err) => {
-            // We couldn't parse the public key, so we can't create a NodeIdentity.
             tracing::info!("parsing public key failed: {}", err);
             return None;
         }
