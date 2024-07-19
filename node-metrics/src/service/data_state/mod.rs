@@ -6,7 +6,7 @@ use bitvec::vec::BitVec;
 use circular_buffer::CircularBuffer;
 use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
 use hotshot_query_service::{
-    availability::QueryableHeader,
+    availability::{QueryableHeader, QueryablePayload},
     explorer::{BlockDetail, ExplorerHeader, Timestamp},
     Leaf, Resolvable,
 };
@@ -143,7 +143,24 @@ impl DataState {
 /// [BlockDetail] from the reference to [Leaf].
 pub fn create_block_detail_from_leaf(leaf: &Leaf<SeqTypes>) -> BlockDetail<SeqTypes> {
     let block_header = leaf.block_header();
-    let block_payload = leaf.block_payload().unwrap_or(Payload::empty().0);
+    let block_payload = &leaf.block_payload().unwrap_or(Payload::empty().0);
+
+    let transaction_iter = block_payload.iter(block_header.metadata());
+
+    // Calculate the number of transactions and the total payload size of the
+    // transactions contained within the Payload.
+    let (num_transactions, total_payload_size) = transaction_iter.fold(
+        (0u64, 0u64),
+        |(num_transactions, total_payload_size), tx_index| {
+            (
+                num_transactions + 1,
+                total_payload_size
+                    + block_payload
+                        .transaction(&tx_index)
+                        .map_or(0u64, |tx| tx.payload().len() as u64),
+            )
+        },
+    );
 
     BlockDetail::<SeqTypes> {
         hash: block_header.commitment(),
@@ -153,12 +170,10 @@ pub fn create_block_detail_from_leaf(leaf: &Leaf<SeqTypes>) -> BlockDetail<SeqTy
                 .unwrap_or(OffsetDateTime::UNIX_EPOCH),
         ),
         proposer_id: block_header.proposer_id(),
-        num_transactions: block_payload.num_transactions(block_header.metadata()) as u64,
+        num_transactions,
         block_reward: vec![block_header.fee_info_balance().into()],
         fee_recipient: block_header.fee_info_account(),
-        size: block_payload
-            .transactions(block_header.metadata())
-            .fold(0, |acc, tx| acc + tx.payload().len() as u64),
+        size: total_payload_size,
     }
 }
 
