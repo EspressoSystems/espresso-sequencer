@@ -141,6 +141,10 @@ impl ValidatedState {
 
     /// Charge a fee to an account, transferring the funds to the fee recipient account.
     pub fn charge_fee(&mut self, fee_info: FeeInfo, recipient: FeeAccount) -> Result<(), FeeError> {
+        if fee_info.amount == 0.into() {
+            return Ok(());
+        }
+
         let fee_state = self.fee_merkle_tree.clone();
 
         // Deduct the fee from the paying account.
