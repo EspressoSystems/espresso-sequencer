@@ -1,21 +1,26 @@
 use crate::{
     eth_signature_key::{EthKeyPair, SigningError},
     v0_1::ValidatedState,
-    v0_3::{BidTx, BidTxBody, FullNetworkTx},
+    v0_3::{
+        AuctionResults, AuctionResultsProvider, BidTx, BidTxBody, FullNetworkTx, HasUrls,
+        SolverClient,
+    },
     FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId,
 };
+use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use ethers::types::Signature;
 use hotshot_types::{
     data::ViewNumber,
     traits::{
-        auction_results_provider::HasUrl, node_implementation::ConsensusTime,
+        node_implementation::{ConsensusTime, NodeType},
         signature_key::BuilderSignatureKey,
     },
 };
 use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
+use vbs::version::StaticVersion;
 
 impl FullNetworkTx {
     /// Proxy for `execute` method of each transaction variant.
@@ -97,6 +102,11 @@ impl BidTxBody {
     /// with a new `url` field.
     pub fn with_url(self, url: Url) -> Self {
         Self { url, ..self }
+    }
+
+    /// Get the cloned `url` field.
+    fn url(&self) -> Url {
+        self.url.clone()
     }
 }
 
@@ -213,19 +223,49 @@ impl BidTx {
     pub fn account(&self) -> FeeAccount {
         self.body.account
     }
-}
-
-impl HasUrl for BidTx {
     /// Get the `url` field from the body.
     fn url(&self) -> Url {
         self.body.url()
     }
 }
 
-impl HasUrl for BidTxBody {
-    /// Get the cloned `url` field.
-    fn url(&self) -> Url {
-        self.url.clone()
+impl AuctionResults {
+    pub fn winning_bids(&self) -> Vec<BidTx> {
+        self.winning_bids.clone()
+    }
+    pub fn reserve_bids(&self) -> Vec<(NamespaceId, Url)> {
+        self.reserve_bids.clone()
+    }
+}
+
+impl HasUrls for AuctionResults {
+    fn urls(&self) -> Vec<Url> {
+        self.winning_bids
+            .iter()
+            .map(|bid| bid.url())
+            .chain(self.reserve_bids.iter().map(|bid| bid.1.clone()))
+            .collect()
+    }
+}
+
+const SOLVER_URL: &str = "https://solver:1234";
+type Ver = StaticVersion<0, 3>;
+
+#[async_trait]
+impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for AuctionResults {
+    type AuctionResult = AuctionResults;
+
+    /// Fetch the auction results.
+    async fn fetch_auction_result(
+        &self,
+        view_number: TYPES::Time,
+    ) -> anyhow::Result<Self::AuctionResult> {
+        let resp = SolverClient::<Ver>::new(Url::from_str(SOLVER_URL).unwrap())
+            .get::<AuctionResults>(&format!("/v0/api/auction_results/{}", *view_number))
+            .send()
+            .await
+            .unwrap();
+        Ok(resp)
     }
 }
 
