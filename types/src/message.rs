@@ -6,7 +6,7 @@
 use std::{fmt, fmt::Debug, marker::PhantomData};
 
 use anyhow::{bail, ensure, Context, Result};
-use cdn_proto::mnemonic;
+use cdn_proto::util::mnemonic;
 use committable::Committable;
 use derivative::Derivative;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};

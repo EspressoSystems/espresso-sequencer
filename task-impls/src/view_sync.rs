@@ -424,7 +424,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncTaskState<TYPES, I> 
                 let leader = self.membership.leader(view_number);
                 error!(
                     %leader,
-                    leader_mnemonic = cdn_proto::mnemonic(&leader),
+                    leader_mnemonic = cdn_proto::util::mnemonic(&leader),
                     view_number = *view_number,
                     num_timeouts_tracked = self.num_timeouts_tracked,
                     "view timed out",
