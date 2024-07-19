@@ -887,10 +887,10 @@ mod tests {
         {
             let urls = vec![
                 "http://localhost:24000/",
-                "http://localhost:24001",
-                "http://localhost:24002",
-                "http://localhost:24003",
-                "http://localhost:24004",
+                "http://localhost:24001/",
+                "http://localhost:24002/",
+                "http://localhost:24003/",
+                "http://localhost:24004/",
             ];
 
             for url in urls {
