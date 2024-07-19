@@ -48,7 +48,7 @@ use hotshot::{
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, SystemContext,
 };
-use hotshot_builder_api::v0_2::builder::{
+use hotshot_builder_api::v0_1::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::{
@@ -550,7 +550,7 @@ mod test {
     use async_std::task;
     use es_version::SequencerVersion;
     use espresso_types::{FeeAccount, NamespaceId, Transaction};
-    use hotshot_builder_api::v0_2::{
+    use hotshot_builder_api::v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
@@ -625,7 +625,7 @@ mod test {
 
         // Start a builder api client
         let builder_client = Client::<
-            hotshot_builder_api::v0_2::builder::Error,
+            hotshot_builder_api::v0_1::builder::Error,
             <SeqTypes as NodeType>::Base,
         >::new(hotshot_builder_api_url.clone());
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
