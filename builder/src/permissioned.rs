@@ -48,7 +48,7 @@ use hotshot::{
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, SystemContext,
 };
-use hotshot_builder_api::builder::{
+use hotshot_builder_api::v0_2::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::{
@@ -64,7 +64,7 @@ use hotshot_builder_core::{
 };
 use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
-    events_source::{BuilderEvent, EventConsumer, EventsStreamer},
+    events_source::{EventConsumer, EventsStreamer},
 };
 use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 use hotshot_orchestrator::{
@@ -241,7 +241,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     let network = Arc::new(CombinedNetworks::new(
         cdn_network,
         p2p_network,
-        Duration::from_secs(1),
+        Some(Duration::from_secs(1)),
     ));
 
     #[cfg(not(feature = "libp2p"))]
@@ -550,7 +550,7 @@ mod test {
     use async_std::task;
     use es_version::SequencerVersion;
     use espresso_types::{FeeAccount, NamespaceId, Transaction};
-    use hotshot_builder_api::{
+    use hotshot_builder_api::v0_2::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
@@ -563,7 +563,7 @@ mod test {
     };
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
-        events_source::{BuilderEvent, EventConsumer, EventsStreamer},
+        events_source::{EventConsumer, EventsStreamer},
     };
     use hotshot_types::{
         signature_key::BLSPubKey,
@@ -625,7 +625,7 @@ mod test {
 
         // Start a builder api client
         let builder_client = Client::<
-            hotshot_builder_api::builder::Error,
+            hotshot_builder_api::v0_2::builder::Error,
             <SeqTypes as NodeType>::Base,
         >::new(hotshot_builder_api_url.clone());
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);

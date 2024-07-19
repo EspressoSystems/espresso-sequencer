@@ -17,7 +17,9 @@ use futures::{
     stream::{BoxStream, Stream},
 };
 use hotshot::types::{Event, SystemContextHandle};
-use hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
+use hotshot_events_service::events_source::{
+    EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
+};
 use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_state_prover::service::light_client_genesis_from_stake_table;
@@ -127,14 +129,25 @@ type StorageState<N, P, D, Ver> = ExtensibleDataSource<D, ApiState<N, P, Ver>>;
 impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
     EventsSource<SeqTypes> for ApiState<N, P, Ver>
 {
-    type EventStream = BoxStream<'static, Arc<BuilderEvent<SeqTypes>>>;
+    type EventStream = BoxStream<'static, Arc<Event<SeqTypes>>>;
 
-    async fn get_event_stream(&self) -> Self::EventStream {
+    async fn get_event_stream(
+        &self,
+        _filter: Option<EventFilterSet<SeqTypes>>,
+    ) -> Self::EventStream {
         self.event_streamer()
             .await
             .read()
             .await
-            .get_event_stream()
+            .get_event_stream(None)
+            .await
+    }
+    async fn get_startup_info(&self) -> StartupInfo<SeqTypes> {
+        self.event_streamer()
+            .await
+            .read()
+            .await
+            .get_startup_info()
             .await
     }
 }
@@ -964,7 +977,6 @@ mod api_tests {
 
     #[async_std::test]
     pub(crate) async fn test_hotshot_event_streaming<D: TestableSequencerDataSource>() {
-        use hotshot_events_service::events_source::BuilderEvent;
         use HotshotEvents;
 
         setup_logging();
@@ -998,7 +1010,7 @@ mod api_tests {
 
         let mut subscribed_events = client
             .socket("hotshot-events/events")
-            .subscribe::<BuilderEvent<SeqTypes>>()
+            .subscribe::<Event<SeqTypes>>()
             .await
             .unwrap();
 
@@ -1017,8 +1029,7 @@ mod api_tests {
                 break;
             }
         }
-        // Offset 1 is due to the startup event info
-        assert_eq!(receive_count, total_count + 1);
+        assert_eq!(receive_count, total_count);
     }
 }
 
