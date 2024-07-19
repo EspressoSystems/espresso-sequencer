@@ -10,7 +10,6 @@ use futures::{
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::light_client::{CircuitField, StateVerKey};
 use hotshot_types::signature_key::BLSPubKey;
-use hotshot_types::traits::signature_key::SignatureKey;
 use hotshot_types::traits::{signature_key::StakeTableEntryType, stake_table::StakeTableScheme};
 use hotshot_types::PeerConfig;
 use prometheus_parse::{Sample, Scrape};
