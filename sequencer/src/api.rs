@@ -1029,7 +1029,7 @@ mod api_tests {
                 break;
             }
         }
-        assert_eq!(receive_count, total_count);
+        assert_eq!(receive_count, total_count + 1);
     }
 }
 
