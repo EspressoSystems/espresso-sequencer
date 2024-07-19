@@ -13,7 +13,7 @@ use hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::{null_block, Leaf, PackedBundle},
+    data::{null_block, PackedBundle},
     event::{Event, EventType},
     simple_certificate::UpgradeCertificate,
     traits::{
@@ -50,6 +50,8 @@ const BUILDER_ADDITIONAL_TIME_MULTIPLIER: f32 = 0.2;
 /// Minimum amount of time allotted to both batches, cannot be cut shorter if the first batch
 /// responds extremely fast.
 const BUILDER_MINIMUM_QUERY_TIME: Duration = Duration::from_millis(300);
+/// Delay between re-tries on unsuccessful calls
+const RETRY_DELAY: Duration = Duration::from_millis(100);
 
 /// The version of the builder API used by the marketplace
 type MarketplaceVersion = crate::builder::v0_3::Version;
@@ -275,38 +277,44 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
         None
     }
 
-    /// Get last known builder commitment from consensus.
+    /// Get VID commitment for the last successful view before `block_view`.
+    /// Returns None if we don't have said commitment recorded.
     #[instrument(skip_all, target = "TransactionTaskState", fields(id = self.id, cur_view = *self.cur_view, block_view = *block_view))]
-    async fn latest_known_vid_commitment(
+    async fn last_vid_commitment(
         &self,
         block_view: TYPES::Time,
-    ) -> (TYPES::Time, VidCommitment) {
+    ) -> Option<(TYPES::Time, VidCommitment)> {
         let consensus = self.consensus.read().await;
-        let mut prev_view = TYPES::Time::new(block_view.saturating_sub(1));
+        let mut target_view = TYPES::Time::new(block_view.saturating_sub(1));
 
-        // Search through all previous views...
-        while prev_view != TYPES::Time::genesis() {
-            if let Some(commitment) =
-                consensus
-                    .validated_state_map()
-                    .get(&prev_view)
-                    .and_then(|view| match view.view_inner {
-                        // For a view for which we have a Leaf stored
-                        ViewInner::Da { payload_commitment } => Some(payload_commitment),
-                        ViewInner::Leaf { leaf, .. } => consensus
-                            .saved_leaves()
-                            .get(&leaf)
-                            .map(Leaf::payload_commitment),
-                        ViewInner::Failed => None,
-                    })
-            {
-                return (prev_view, commitment);
+        while target_view != TYPES::Time::genesis() {
+            let Some(view_data) = consensus.validated_state_map().get(&target_view) else {
+                tracing::warn!(?target_view, "Missing record for view in validated state");
+                return None;
+            };
+            match view_data.view_inner {
+                ViewInner::Da { payload_commitment } => {
+                    return Some((target_view, payload_commitment))
+                }
+                ViewInner::Leaf {
+                    leaf: leaf_commitment,
+                    ..
+                } => {
+                    let Some(leaf) = consensus.saved_leaves().get(&leaf_commitment) else {
+                        tracing::warn!(?target_view, %leaf_commitment, "Missing leaf in saved_leaves");
+                        return None;
+                    };
+                    return Some((target_view, leaf.payload_commitment()));
+                }
+                ViewInner::Failed => {
+                    // For failed views, backtrack
+                    target_view = target_view - 1;
+                    continue;
+                }
             }
-            prev_view = prev_view - 1;
         }
 
-        // If not found, return commitment for last decided block
-        (prev_view, consensus.decided_leaf().payload_commitment())
+        None
     }
 
     #[instrument(skip_all, fields(id = self.id, cur_view = *self.cur_view, block_view = *block_view), name = "wait_for_block", level = "error")]
@@ -318,7 +326,21 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
         let task_start_time = Instant::now();
 
         // Find commitment to the block we want to build upon
-        let (view_num, parent_comm) = self.latest_known_vid_commitment(block_view).await;
+        let (parent_view, parent_comm) = loop {
+            match self.last_vid_commitment(block_view).await {
+                Some((view, comm)) => break (view, comm),
+                None if task_start_time.elapsed() < self.builder_timeout => {
+                    // We still have time, will re-try in a bit
+                    async_sleep(RETRY_DELAY).await;
+                    continue;
+                }
+                _ => {
+                    tracing::warn!("Failed to find commitment in time");
+                    return None;
+                }
+            }
+        };
+
         let parent_comm_sig = match <<TYPES as NodeType>::SignatureKey as SignatureKey>::sign(
             &self.private_key,
             parent_comm.as_ref(),
@@ -334,7 +356,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
             match async_compatibility_layer::art::async_timeout(
                 self.builder_timeout
                     .saturating_sub(task_start_time.elapsed()),
-                self.block_from_builder(parent_comm, view_num, &parent_comm_sig, version),
+                self.block_from_builder(parent_comm, parent_view, &parent_comm_sig, version),
             )
             .await
             {
@@ -347,7 +369,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
                 Ok(Err(err)) => {
                     tracing::warn!("Couldn't get a block: {err:#}");
                     // pause a bit
-                    async_sleep(Duration::from_millis(100)).await;
+                    async_sleep(RETRY_DELAY).await;
                     continue;
                 }
 
