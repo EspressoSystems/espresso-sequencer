@@ -3,8 +3,8 @@ use hotshot_fakeapi::fake_solver::FakeSolverState;
 use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 
 use hotshot_example_types::node_types::TestTypes;
+use hotshot_example_types::auction_results_provider_types::TestAuctionResult;
 use hotshot_testing::helpers::key_pair_for_id;
-use std::collections::HashMap;
 use tracing::instrument;
 use url::Url;
 
@@ -13,6 +13,7 @@ use url::Url;
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_fake_solver_fetch_non_permissioned_no_error() {
+
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -45,7 +46,7 @@ async fn test_fake_solver_fetch_non_permissioned_no_error() {
         .send()
         .await
         .unwrap()
-        .json::<Vec<HashMap<String, String>>>()
+        .json::<TestAuctionResult>()
         .await
         .unwrap();
 
@@ -54,9 +55,9 @@ async fn test_fake_solver_fetch_non_permissioned_no_error() {
     #[cfg(async_executor_impl = "tokio")]
     solver_handle.abort();
 
-    assert_eq!(resp[0]["url"], "http://localhost:1111/");
-    assert_eq!(resp[1]["url"], "http://localhost:1112/");
-    assert_eq!(resp[2]["url"], "http://localhost:1113/");
+    assert_eq!(resp.urls[0], Url::parse("http://localhost:1111/").unwrap());
+    assert_eq!(resp.urls[1], Url::parse("http://localhost:1112/").unwrap());
+    assert_eq!(resp.urls[2], Url::parse("http://localhost:1113/").unwrap());
 }
 
 #[cfg(test)]
@@ -64,6 +65,7 @@ async fn test_fake_solver_fetch_non_permissioned_no_error() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_fake_solver_fetch_non_permissioned_with_errors() {
+
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -127,7 +129,7 @@ async fn test_fake_solver_fetch_non_permissioned_with_errors() {
                 return;
             }
 
-            let payload = resp.json::<Vec<HashMap<String, String>>>().await.unwrap();
+            let payload = resp.json::<TestAuctionResult>().await.unwrap();
             payloads.push(payload);
         }
     }
@@ -139,7 +141,7 @@ async fn test_fake_solver_fetch_non_permissioned_with_errors() {
 
     // Assert over the payloads with a 50% error rate.
     for payload in payloads {
-        assert_eq!(payload[0]["url"], "http://localhost:1111/");
+        assert_eq!(payload.urls[0], Url::parse("http://localhost:1111/").unwrap());
     }
 }
 
@@ -148,6 +150,7 @@ async fn test_fake_solver_fetch_non_permissioned_with_errors() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_fake_solver_fetch_permissioned_no_error() {
+
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -191,7 +194,7 @@ async fn test_fake_solver_fetch_permissioned_no_error() {
         .send()
         .await
         .unwrap()
-        .json::<Vec<HashMap<String, String>>>()
+        .json::<TestAuctionResult>()
         .await
         .unwrap();
 
@@ -200,9 +203,9 @@ async fn test_fake_solver_fetch_permissioned_no_error() {
     #[cfg(async_executor_impl = "tokio")]
     solver_handle.abort();
 
-    assert_eq!(resp[0]["url"], "http://localhost:1111/");
-    assert_eq!(resp[1]["url"], "http://localhost:1112/");
-    assert_eq!(resp[2]["url"], "http://localhost:1113/");
+    assert_eq!(resp.urls[0], Url::parse("http://localhost:1111/").unwrap());
+    assert_eq!(resp.urls[1], Url::parse("http://localhost:1112/").unwrap());
+    assert_eq!(resp.urls[2], Url::parse("http://localhost:1113/").unwrap());
 }
 
 #[cfg(test)]
@@ -210,6 +213,7 @@ async fn test_fake_solver_fetch_permissioned_no_error() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_fake_solver_fetch_permissioned_with_errors() {
+
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -280,7 +284,7 @@ async fn test_fake_solver_fetch_permissioned_with_errors() {
                 return;
             }
 
-            let payload = resp.json::<Vec<HashMap<String, String>>>().await.unwrap();
+            let payload = resp.json::<TestAuctionResult>().await.unwrap();
             payloads.push(payload);
         }
     }
@@ -292,6 +296,6 @@ async fn test_fake_solver_fetch_permissioned_with_errors() {
 
     // Assert over the payloads with a 50% error rate.
     for payload in payloads {
-        assert_eq!(payload[0]["url"], "http://localhost:1111/");
+        assert_eq!(payload.urls[0], Url::parse("http://localhost:1111/").unwrap());
     }
 }

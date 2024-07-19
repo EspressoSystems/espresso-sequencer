@@ -164,7 +164,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
                 }
                 let block_view = if make_block { view } else { view + 1 };
 
-                let version = match hotshot_types::message::version(
+                let version = match hotshot_types::simple_certificate::version(
                     block_view,
                     &self
                         .decided_upgrade_certificate

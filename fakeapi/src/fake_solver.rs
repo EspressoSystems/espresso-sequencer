@@ -83,7 +83,7 @@ impl FakeSolverState {
     ///
     /// # Errors
     /// Returns an error if the `should_fault` method is `Some`.
-    fn dump_builders(&self) -> Result<Vec<TestAuctionResult>, ServerError> {
+    fn dump_builders(&self) -> Result<TestAuctionResult, ServerError> {
         if let Some(fault) = self.should_fault() {
             match fault {
                 FakeSolverFaultType::InternalServerFault => {
@@ -99,12 +99,9 @@ impl FakeSolverState {
             }
         }
 
-        // Now just send the builder urls
-        Ok(self
-            .available_builders
-            .iter()
-            .map(|url| TestAuctionResult { url: url.clone() })
-            .collect())
+        Ok(TestAuctionResult {
+            urls: self.available_builders.clone(),
+        })
     }
 }
 
@@ -116,14 +113,14 @@ pub trait FakeSolverApi<TYPES: NodeType> {
     async fn get_auction_results_non_permissioned(
         &self,
         _view_number: u64,
-    ) -> Result<Vec<TestAuctionResult>, ServerError>;
+    ) -> Result<TestAuctionResult, ServerError>;
 
     /// Get the auction results with a valid signature.
     async fn get_auction_results_permissioned(
         &self,
         _view_number: u64,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<Vec<TestAuctionResult>, ServerError>;
+    ) -> Result<TestAuctionResult, ServerError>;
 }
 
 #[async_trait::async_trait]
@@ -132,7 +129,7 @@ impl<TYPES: NodeType> FakeSolverApi<TYPES> for FakeSolverState {
     async fn get_auction_results_non_permissioned(
         &self,
         _view_number: u64,
-    ) -> Result<Vec<TestAuctionResult>, ServerError> {
+    ) -> Result<TestAuctionResult, ServerError> {
         self.dump_builders()
     }
 
@@ -141,7 +138,7 @@ impl<TYPES: NodeType> FakeSolverApi<TYPES> for FakeSolverState {
         &self,
         _view_number: u64,
         _signature: &<TYPES::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-    ) -> Result<Vec<TestAuctionResult>, ServerError> {
+    ) -> Result<TestAuctionResult, ServerError> {
         self.dump_builders()
     }
 }

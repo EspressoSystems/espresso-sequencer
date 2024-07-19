@@ -1,22 +1,22 @@
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use hotshot_types::traits::{
-    auction_results_provider::{AuctionResultsProvider, HasUrl},
+    auction_results_provider::{AuctionResultsProvider, HasUrls},
     node_implementation::NodeType,
 };
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// A mock result for the auction solver. This type is just a pointer to a URL.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TestAuctionResult {
     /// The URL of the builder to reach out to.
-    pub url: Url,
+    pub urls: Vec<Url>,
 }
 
-impl HasUrl for TestAuctionResult {
-    fn url(&self) -> Url {
-        self.url.clone()
+impl HasUrls for TestAuctionResult {
+    fn urls(&self) -> Vec<Url> {
+        self.urls.clone()
     }
 }
 
@@ -25,7 +25,7 @@ impl HasUrl for TestAuctionResult {
 pub struct TestAuctionResultsProvider {
     /// We intentionally allow for the results to be pre-cooked for the unit test to gurantee a
     /// particular outcome is met.
-    pub solver_results: Vec<TestAuctionResult>,
+    pub solver_results: TestAuctionResult,
 
     /// A canned type to ensure that an error is thrown in absence of a true fault-injectible
     /// system for logical tests. This will guarantee that `fetch_auction_result` always throws an
@@ -44,15 +44,12 @@ impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for TestAuctionResultsProvid
 
     /// Mock fetching the auction results, with optional error injection to simulate failure cases
     /// in the solver.
-    async fn fetch_auction_result(
-        &self,
-        view_number: TYPES::Time,
-    ) -> Result<Vec<Self::AuctionResult>> {
+    async fn fetch_auction_result(&self, view_number: TYPES::Time) -> Result<Self::AuctionResult> {
         if let Some(url) = &self.broadcast_url {
             let resp =
                 reqwest::get(url.join(&format!("/v0/api/auction_results/{}", *view_number))?)
                     .await?
-                    .json::<Vec<TestAuctionResult>>()
+                    .json::<TestAuctionResult>()
                     .await?;
 
             Ok(resp)
