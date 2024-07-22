@@ -485,7 +485,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                 // been upgraded.
                 if let Some(cert) = self.decided_upgrade_certificate.read().await.clone() {
                     if new_view == cert.data.new_version_first_view {
-                        warn!(
+                        error!(
                             "Version upgraded based on a decided upgrade cert: {:?}",
                             cert
                         );
