@@ -23,7 +23,7 @@ struct Args {
     #[clap(short, long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_PORT")]
     solver_api_port: u16,
 
-    /// Port to run the server on.
+    /// Hotshot events service api URL
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_API_URL")]
     events_api_url: String,
 
@@ -76,7 +76,6 @@ async fn main() -> anyhow::Result<()> {
     let _ = spawn(handle_events(event_stream, global_state.clone()));
 
     let mut app = App::<_, SolverError>::with_state(global_state);
-    app.with_version(env!("CARGO_PKG_VERSION").parse().unwrap());
 
     let mut api = define_api(Default::default()).unwrap();
     api.with_version(env!("CARGO_PKG_VERSION").parse().unwrap());
