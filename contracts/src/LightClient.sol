@@ -135,9 +135,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice Simplified HotShot commitment struct
     /// @param l1BlockHeight the block height of l1 when this state update was stored
-    /// @param hotshotBlockHeight The block height of the latest finalized HotShot block
-    /// @param hotShotBlockCommRoot The merkle root of historical block commitments
-    /// (BN254::ScalarField)
+    /// @param hotShotCommitment The HotShot commitment info of the latest finalized HotShot block
     struct StateHistoryCommitment {
         uint256 l1BlockHeight;
         HotShotCommitment hotShotCommitment;
@@ -180,6 +178,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice This contract is called by the proxy when you deploy this contract
+    /// @param genesis The initial state of the light client
+    /// @param numBlocksPerEpoch The number of blocks per epoch
+    /// @param owner The address of the contract owner
     function initialize(LightClientState memory genesis, uint32 numBlocksPerEpoch, address owner)
         public
         initializer
@@ -192,6 +193,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice Use this to get the implementation contract version
+    /// @return majorVersion The major version of the contract
+    /// @return minorVersion The minor version of the contract
+    /// @return patchVersion The patch version of the contract
     function getVersion()
         public
         pure
@@ -205,8 +209,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit Upgrade(newImplementation);
     }
 
-    // @dev Initialization of contract variables happens in this method because the LightClient
-    // contract is upgradable and thus has its constructor method disabled.
+    /// @dev Initialization of contract variables happens in this method because the LightClient
+    /// contract is upgradable and thus has its constructor method disabled.
+    /// @param genesis The initial state of the light client
+    /// @param numBlockPerEpoch The number of blocks per epoch
     function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch) internal {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
@@ -468,7 +474,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice get the HotShot commitment that represents the Merkle root containing the leaf at
     /// the provided HotShot height
-    /// @param hotShotBlockHeight hotShotBlockHeight
+    /// @param hotShotBlockHeight the HotShot block height
+    /// @return HotShotCommitment the HotShot commitment
     function getHotShotCommitment(uint256 hotShotBlockHeight)
         public
         view
@@ -493,12 +500,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice get the number of state history commitments
+    /// @return uint256 The number of state history commitments
     function getStateHistoryCount() public view returns (uint256) {
         return stateHistoryCommitments.length;
     }
 
     /// @notice set Max Block States allowed
-    function setMaxStateHIstoryAllowed(uint64 numBlocks) public onlyOwner {
+    /// @param numBlocks The maximum number of block states allowed to be stored
+    function setMaxStateHistoryAllowed(uint64 numBlocks) public onlyOwner {
         if (numBlocks == 0) revert InvalidMaxStateHistory();
 
         maxStateHistoryAllowed = numBlocks;

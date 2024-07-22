@@ -682,7 +682,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         // set the new max block states allowed to half of the number of states available
         vm.prank(admin);
-        lc.setMaxStateHIstoryAllowed(uint64(states.length / 2)); //2
+        lc.setMaxStateHistoryAllowed(uint64(states.length / 2)); //2
 
         // Update the states to double the max block states allowed
         for (uint256 i = 0; i < states.length; i++) {
@@ -878,7 +878,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     function test_revertWhenSetZeroMaxStateUpdatesAllowed() public {
         vm.prank(admin);
         vm.expectRevert(LC.InvalidMaxStateHistory.selector);
-        lc.setMaxStateHIstoryAllowed(0);
+        lc.setMaxStateHistoryAllowed(0);
     }
 
     function test_hotShotIsDownWhenBlockIsHigherThanLastRecordedAndTheDelayThresholdHasPassed()
