@@ -122,6 +122,7 @@ url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
 zeroize = { workspace = true }
+marketplace-solver = { git = "https://github.com/EspressoSystems/marketplace-solver.git", branch = "main" }
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]
