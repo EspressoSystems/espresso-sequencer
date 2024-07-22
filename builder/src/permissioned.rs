@@ -25,7 +25,7 @@ use async_std::{
 use espresso_types::{
     eth_signature_key::EthKeyPair,
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
-    L1Client, NodeState, Payload, PubKey, SeqTypes, ValidatedState,
+    FeeAmount, L1Client, NodeState, Payload, PubKey, SeqTypes, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -247,6 +247,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     #[cfg(not(feature = "libp2p"))]
     let network = Arc::from(cdn_network.clone());
 
+    let base_fee = genesis.max_base_fee();
     let mut genesis_state = ValidatedState {
         chain_config: genesis.chain_config.into(),
         ..Default::default()
@@ -311,6 +312,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         max_api_timeout_duration,
         buffered_view_num_count,
         maximize_txns_count_timeout_duration,
+        base_fee,
     )
     .await?;
 
@@ -411,6 +413,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
+        base_fee: FeeAmount,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (mut tx_sender, tx_receiver) =
@@ -476,9 +479,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             global_state_clone,
             NonZeroUsize::new(1).unwrap(),
             maximize_txns_count_timeout_duration,
-            instance_state
-                .chain_config
-                .base_fee
+                              base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),

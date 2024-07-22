@@ -10,7 +10,7 @@ use async_compatibility_layer::{
 };
 use async_std::sync::{Arc, RwLock};
 use espresso_types::{
-    eth_signature_key::EthKeyPair, ChainConfig, L1Client, NodeState, Payload, SeqTypes,
+    eth_signature_key::EthKeyPair, ChainConfig, FeeAmount, L1Client, NodeState, Payload, SeqTypes,
     ValidatedState,
 };
 use ethers::{
@@ -94,6 +94,7 @@ impl BuilderConfig {
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
+        base_fee: FeeAmount,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
@@ -168,9 +169,7 @@ impl BuilderConfig {
             global_state_clone,
             node_count,
             maximize_txns_count_timeout_duration,
-            instance_state
-                .chain_config
-                .base_fee
+            base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
