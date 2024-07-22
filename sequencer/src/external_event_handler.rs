@@ -56,7 +56,7 @@ impl ExternalEventHandler {
     ) -> Result<Self> {
         // Create the outbound message queue
         let (outbound_message_sender, outbound_message_receiver) =
-            async_compatibility_layer::channel::bounded(50);
+            async_compatibility_layer::channel::bounded(10);
 
         // Spawn the outbound message handling loop
         let outbound_message_loop = async_std::task::spawn(Self::outbound_message_loop(
@@ -64,13 +64,15 @@ impl ExternalEventHandler {
             network,
         ));
 
-        // We just started, so queue an outbound RollCall message
-        let roll_call_message = ExternalMessage::RollCallResponse(roll_call_info.clone());
-        let roll_call_message_bytes = bincode::serialize(&roll_call_message)
-            .with_context(|| "Failed to serialize roll call message for initial broadcast")?;
-        outbound_message_sender
-            .try_send(OutboundMessage::Broadcast(roll_call_message_bytes))
-            .with_context(|| "External outbound message queue is somehow full")?;
+        // We just started, so queue an outbound RollCall message (if we have a public API URL)
+        if roll_call_info.public_api_url.is_some() {
+            let roll_call_message = ExternalMessage::RollCallResponse(roll_call_info.clone());
+            let roll_call_message_bytes = bincode::serialize(&roll_call_message)
+                .with_context(|| "Failed to serialize roll call message for initial broadcast")?;
+            outbound_message_sender
+                .try_send(OutboundMessage::Broadcast(roll_call_message_bytes))
+                .with_context(|| "External outbound message queue is somehow full")?;
+        }
 
         Ok(Self {
             roll_call_info,
@@ -91,7 +93,12 @@ impl ExternalEventHandler {
         // Match the type
         match external_message {
             ExternalMessage::RollCallRequest(pub_key) => {
-                // If it's a roll call request, send our information
+                if self.roll_call_info.public_api_url.is_none() {
+                    // We don't have a public API URL, so we can't respond to the roll call
+                    return Ok(());
+                }
+
+                // If it's a roll call request, send our information (if we have a public API URL)
                 let response = ExternalMessage::RollCallResponse(self.roll_call_info.clone());
 
                 // Serialize the response
@@ -112,7 +119,6 @@ impl ExternalEventHandler {
     }
 
     /// The main loop for sending outbound messages.
-    /// This is a queue so that we don't block the main event loop when sending messages.
     async fn outbound_message_loop<N: ConnectedNetwork<PubKey>>(
         mut receiver: Receiver<OutboundMessage>,
         network: Arc<N>,
