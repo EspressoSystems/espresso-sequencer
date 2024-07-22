@@ -24,12 +24,8 @@ struct Args {
     solver_api_port: u16,
 
     /// Port to run the server on.
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT"
-    )]
-    events_api_port: u16,
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_API_URL")]
+    events_api_url: String,
 
     #[clap(flatten)]
     database_options: DatabaseOptions,
@@ -43,12 +39,11 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let Args {
         solver_api_port,
-        events_api_port,
+        events_api_url,
         database_options,
     } = args;
 
-    let events_api_url =
-        Url::from_str(&format!("http://0.0.0.0:{events_api_port}/hotshot-events")).unwrap();
+    let events_api_url = Url::from_str(&format!("{events_api_url}/hotshot-events")).unwrap();
 
     let events_client = EventsServiceClient::new(events_api_url.clone()).await;
 

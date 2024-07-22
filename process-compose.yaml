@@ -452,9 +452,8 @@ processes:
     command: marketplace-solver
     environment:
       - ESPRESSO_MARKETPLACE_SOLVER_API_PORT=$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
-      - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
+      - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
       - MARKETPLACE_SOLVER_POSTGRES_HOST=localhost
-      - MARKETPLACE_SOLVER_POSTGRES_PORT=$ESPRESSO_MARKETPLACE_SOLVER_DB_PORT
       - MARKETPLACE_SOLVER_POSTGRES_USER=root
       - MARKETPLACE_SOLVER_POSTGRES_PASSWORD=password
       - MARKETPLACE_SOLVER_POSTGRES_DATABASE_NAME=solver
@@ -507,14 +506,14 @@ processes:
       failure_threshold: 20
   
   solver-db:
-    command: docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $ESPRESSO_MARKETPLACE_SOLVER_DB_PORT:5432 postgres
+    command: docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $MARKETPLACE_SOLVER_POSTGRES_PORT:5432 postgres
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=root
       - POSTGRES_DB=solver
     readiness_probe:
       exec:
-        command: pg_isready -h localhost -p $ESPRESSO_MARKETPLACE_SOLVER_DB_PORT
+        command: pg_isready -h localhost -p $MARKETPLACE_SOLVER_POSTGRES_PORT
       initial_delay_seconds: 5
       period_seconds: 5
       timeout_seconds: 4
