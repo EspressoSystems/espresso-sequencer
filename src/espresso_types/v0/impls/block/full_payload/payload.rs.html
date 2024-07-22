@@ -280,6 +280,14 @@
 <a href="#280" id="280">280</a>
 <a href="#281" id="281">281</a>
 <a href="#282" id="282">282</a>
+<a href="#283" id="283">283</a>
+<a href="#284" id="284">284</a>
+<a href="#285" id="285">285</a>
+<a href="#286" id="286">286</a>
+<a href="#287" id="287">287</a>
+<a href="#288" id="288">288</a>
+<a href="#289" id="289">289</a>
+<a href="#290" id="290">290</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, sync::Arc};
 
 <span class="kw">use </span>async_trait::async_trait;
@@ -500,6 +508,14 @@
             .common;
 
         TxProof::new(index, <span class="self">self</span>, <span class="kw-2">&amp;</span>common)
+    }
+
+    <span class="kw">fn </span>transaction(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        _meta: <span class="kw-2">&amp;</span><span class="self">Self</span>::Metadata,
+        index: <span class="kw-2">&amp;</span><span class="self">Self</span>::TransactionIndex,
+    ) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Transaction&gt; {
+        <span class="self">self</span>.transaction(index)
     }
 }
 
