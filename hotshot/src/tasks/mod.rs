@@ -98,7 +98,8 @@ pub fn add_network_message_task<
     channel: &Arc<NET>,
 ) {
     let network_state: NetworkMessageTaskState<_> = NetworkMessageTaskState {
-        event_stream: handle.internal_event_stream.0.clone(),
+        internal_event_stream: handle.internal_event_stream.0.clone(),
+        external_event_stream: handle.output_event_stream.0.clone(),
     };
 
     let decided_upgrade_certificate = Arc::clone(&handle.hotshot.decided_upgrade_certificate);

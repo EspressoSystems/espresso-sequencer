@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     data::{VidDisperse, VidDisperseShare},
-    event::HotShotAction,
+    event::{Event, EventType, HotShotAction},
     message::{
         DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message, MessageKind, Proposal,
         SequencingMessage, VersionedMessage,
@@ -92,7 +92,10 @@ pub fn view_sync_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bo
 #[derive(Clone)]
 pub struct NetworkMessageTaskState<TYPES: NodeType> {
     /// Sender to send internal events this task generates to other tasks
-    pub event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+    pub internal_event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+
+    /// Sender to send external events this task generates to the event stream
+    pub external_event_stream: Sender<Event<TYPES>>,
 }
 
 impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
@@ -164,7 +167,7 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                     // TODO (Keyao benchmarking) Update these event variants (similar to the
                     // `TransactionsRecv` event) so we can send one event for a vector of messages.
                     // <https://github.com/EspressoSystems/HotShot/issues/1428>
-                    broadcast_event(Arc::new(event), &self.event_stream).await;
+                    broadcast_event(Arc::new(event), &self.internal_event_stream).await;
                 }
                 MessageKind::Data(message) => match message {
                     DataMessage::SubmitTransaction(transaction, _) => {
@@ -174,12 +177,24 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                         warn!("Request and Response messages should not be received in the NetworkMessage task");
                     }
                 },
+
+                MessageKind::External(data) => {
+                    // Send the external message to the external event stream so it can be processed
+                    broadcast_event(
+                        Event {
+                            view_number: TYPES::Time::new(1),
+                            event: EventType::ExternalMessageReceived(data),
+                        },
+                        &self.external_event_stream,
+                    )
+                    .await;
+                }
             };
         }
         if !transactions.is_empty() {
             broadcast_event(
                 Arc::new(HotShotEvent::TransactionsRecv(transactions)),
-                &self.event_stream,
+                &self.internal_event_stream,
             )
             .await;
         }

@@ -7,6 +7,7 @@ use async_compatibility_layer::art::{async_sleep, async_spawn, async_timeout};
 use async_std::task::{spawn, JoinHandle};
 use async_trait::async_trait;
 use futures::future::select_all;
+use hotshot::types::Event;
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkMessageTaskState};
 use hotshot_types::{
     message::{Messages, VersionedMessage},
@@ -104,12 +105,14 @@ pub async fn add_network_message_test_task<
     TYPES: NodeType,
     NET: ConnectedNetwork<TYPES::SignatureKey>,
 >(
-    event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+    internal_event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+    external_event_stream: Sender<Event<TYPES>>,
     channel: Arc<NET>,
 ) -> JoinHandle<()> {
     let net = Arc::clone(&channel);
     let network_state: NetworkMessageTaskState<_> = NetworkMessageTaskState {
-        event_stream: event_stream.clone(),
+        internal_event_stream: internal_event_stream.clone(),
+        external_event_stream: external_event_stream.clone(),
     };
 
     let network = Arc::clone(&net);

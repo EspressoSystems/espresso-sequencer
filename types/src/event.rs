@@ -163,6 +163,9 @@ pub enum EventType<TYPES: NodeType> {
         /// Public key of the leader submitting the proposal
         sender: TYPES::SignatureKey,
     },
+
+    /// A message destined for external listeners was received
+    ExternalMessageReceived(Vec<u8>),
 }
 #[derive(Debug, Serialize, Deserialize, Clone)]
 /// A list of actions that we track for nodes
