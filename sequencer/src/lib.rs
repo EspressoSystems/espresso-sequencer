@@ -6,6 +6,7 @@ pub mod genesis;
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
+mod roll_call;
 
 mod message_compat_tests;
 

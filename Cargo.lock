@@ -4152,7 +4152,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+source = "git+https://www.github.com/EspressoSystems/hotshot?branch=rm/external-message-test#bbb3585dea770f0fcdbfdc7d73dd52db5d74ba3c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4198,7 +4198,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+source = "git+https://www.github.com/EspressoSystems/hotshot?branch=rm/external-message-test#bbb3585dea770f0fcdbfdc7d73dd52db5d74ba3c"
 dependencies = [
  "async-trait",
  "clap",
@@ -4295,7 +4295,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+source = "git+https://www.github.com/EspressoSystems/hotshot?branch=rm/external-message-test#bbb3585dea770f0fcdbfdc7d73dd52db5d74ba3c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4327,7 +4327,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+source = "git+https://www.github.com/EspressoSystems/hotshot?branch=rm/external-message-test#bbb3585dea770f0fcdbfdc7d73dd52db5d74ba3c"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4338,7 +4338,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+source = "git+https://www.github.com/EspressoSystems/hotshot?branch=rm/external-message-test#bbb3585dea770f0fcdbfdc7d73dd52db5d74ba3c"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4424,7 +4424,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+source = "git+https://www.github.com/EspressoSystems/hotshot?branch=rm/external-message-test#bbb3585dea770f0fcdbfdc7d73dd52db5d74ba3c"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4496,7 +4496,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+source = "git+https://www.github.com/EspressoSystems/hotshot?branch=rm/external-message-test#bbb3585dea770f0fcdbfdc7d73dd52db5d74ba3c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4511,7 +4511,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+source = "git+https://www.github.com/EspressoSystems/hotshot?branch=rm/external-message-test#bbb3585dea770f0fcdbfdc7d73dd52db5d74ba3c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4547,7 +4547,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+source = "git+https://www.github.com/EspressoSystems/hotshot?branch=rm/external-message-test#bbb3585dea770f0fcdbfdc7d73dd52db5d74ba3c"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4589,7 +4589,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+source = "git+https://www.github.com/EspressoSystems/hotshot?branch=rm/external-message-test#bbb3585dea770f0fcdbfdc7d73dd52db5d74ba3c"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -5870,7 +5870,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+source = "git+https://www.github.com/EspressoSystems/hotshot?branch=rm/external-message-test#bbb3585dea770f0fcdbfdc7d73dd52db5d74ba3c"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
