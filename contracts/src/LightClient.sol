@@ -90,9 +90,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ///@notice Max number of blockStates to record
     uint64 public maxStateHistoryAllowed;
 
-    ///@notice number of block states recorded
-    uint64 public stateHistoryCount;
-
     ///@notice index of first block in block state series
     ///@dev use this instead of index 0 since old states would be set to zero to keep storage costs
     /// constant to maxStateHistoryAllowed
@@ -400,7 +397,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function updateStateHistory(uint256 blockNumber, LightClientState memory state) internal {
         if (maxStateHistoryAllowed == 0) revert InvalidMaxStateHistory();
 
-        if (stateHistoryCount == maxStateHistoryAllowed) {
+        if (stateHistoryCommitments.length - stateHistoryFirstIndex >= maxStateHistoryAllowed) {
             // the arrays already has the max block states allowed so we clear the first non-empty
             // element
             // the arrays are cleared from a FIFO approach
@@ -408,10 +405,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             // and increment the first index so that you know where the first non-zero element is in
             // the affected arrays
             stateHistoryFirstIndex++;
-        } else {
-            // increment the num block states recorded, this increment stops when stateHistoryCount
-            // == maxStateHistoryAllowed
-            stateHistoryCount++;
         }
         // //add the L1 Block to stateUpdateBlockNumbers &  HotShot commitment for the genesis state
         stateHistoryCommitments.push(

@@ -663,7 +663,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertEq(lc.getStateHistoryCount(), blockUpdatesCount + 1);
     }
 
-    function test_1lBlockUpdatesIsUpdatedOverMaxButOnlyMaxNonZeroElements() public {
+    function test_1lBlockUpdatesIsUpdatedOverMaxButStateHistoryLimitNotSurpassed() public {
         string[] memory cmds = new string[](6);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
@@ -691,8 +691,6 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
             lc.newFinalizedState(states[i], proofs[i]);
         }
-        // assert that the number of blocks recorded is the same as maxStateHistoryAllowed
-        assertEq(lc.stateHistoryCount(), lc.maxStateHistoryAllowed());
 
         // because we recorded more blocks than the maxStateHistoryAllowed, the
         // stateHistoryFirstIndex can't be zero
