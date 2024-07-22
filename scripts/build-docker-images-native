@@ -117,3 +117,4 @@ docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/nasty-client:main -f docker/nasty-client.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:main -f docker/espresso-dev-node.Dockerfile ${WORKDIR}
 docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/bridge:main -f docker/espresso-bridge.Dockerfile ${WORKDIR}
+docker build --platform $PLATFORM -t ghcr.io/espressosystems/espresso-sequencer/marketplace-solver:main -f docker/marketplace-solver.Dockerfile ${WORKDIR}

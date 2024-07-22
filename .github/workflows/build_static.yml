@@ -208,6 +208,13 @@ jobs:
           images: ghcr.io/espressosystems/espresso-sequencer/bridge
           flavor: suffix=musl
 
+      - name: Generate marketplace-solver metadata
+        uses: docker/metadata-action@v5
+        id: marketplace-solver
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/marketplace-solver
+          flavor: suffix=musl
+
       - name: Build and push sequencer docker
         uses: docker/build-push-action@v6
         with:
@@ -327,3 +334,13 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.bridge.outputs.tags }}
           labels: ${{ steps.bridge.outputs.labels }}
+
+      - name: Build and push marketplace-solver docker
+        uses: docker/build-push-action@v6
+        with:
+          context: ./
+          file: ./docker/marketplace-solver.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.marketplace-solver.outputs.tags }}
+          labels: ${{ steps.marketplace-solver.outputs.labels }}
