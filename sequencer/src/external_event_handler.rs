@@ -31,10 +31,7 @@ pub struct RollCallInfo {
 }
 
 /// The external event handler state
-pub struct ExternalEventHandler<N: ConnectedNetwork<PubKey>> {
-    // The network to respond over
-    pub network: Arc<N>,
-
+pub struct ExternalEventHandler {
     // The `RollCallInfo` of the node (used in the roll call response)
     pub roll_call_info: RollCallInfo,
 
@@ -51,9 +48,12 @@ pub enum OutboundMessage {
     Broadcast(Vec<u8>),
 }
 
-impl<N: ConnectedNetwork<PubKey>> ExternalEventHandler<N> {
+impl ExternalEventHandler {
     /// Creates a new `ExternalEventHandler` with the given network and roll call info
-    pub fn new(network: Arc<N>, roll_call_info: RollCallInfo) -> Result<Self> {
+    pub fn new<N: ConnectedNetwork<PubKey>>(
+        network: Arc<N>,
+        roll_call_info: RollCallInfo,
+    ) -> Result<Self> {
         // Create the outbound message queue
         let (outbound_message_sender, outbound_message_receiver) =
             async_compatibility_layer::channel::bounded(50);
@@ -61,7 +61,7 @@ impl<N: ConnectedNetwork<PubKey>> ExternalEventHandler<N> {
         // Spawn the outbound message handling loop
         let outbound_message_loop = async_std::task::spawn(Self::outbound_message_loop(
             outbound_message_receiver,
-            network.clone(),
+            network,
         ));
 
         // We just started, so queue an outbound RollCall message
@@ -73,7 +73,6 @@ impl<N: ConnectedNetwork<PubKey>> ExternalEventHandler<N> {
             .with_context(|| "External outbound message queue is somehow full")?;
 
         Ok(Self {
-            network,
             roll_call_info,
             tasks: vec![outbound_message_loop],
             outbound_message_sender,
@@ -114,7 +113,10 @@ impl<N: ConnectedNetwork<PubKey>> ExternalEventHandler<N> {
 
     /// The main loop for sending outbound messages.
     /// This is a queue so that we don't block the main event loop when sending messages.
-    async fn outbound_message_loop(mut receiver: Receiver<OutboundMessage>, network: Arc<N>) {
+    async fn outbound_message_loop<N: ConnectedNetwork<PubKey>>(
+        mut receiver: Receiver<OutboundMessage>,
+        network: Arc<N>,
+    ) {
         while let Ok(message) = receiver.recv().await {
             // Match the message type
             match message {
@@ -139,7 +141,7 @@ impl<N: ConnectedNetwork<PubKey>> ExternalEventHandler<N> {
     }
 }
 
-impl<N: ConnectedNetwork<PubKey>> Drop for ExternalEventHandler<N> {
+impl Drop for ExternalEventHandler {
     fn drop(&mut self) {
         // Cancel all tasks
         for task in self.tasks.drain(..) {

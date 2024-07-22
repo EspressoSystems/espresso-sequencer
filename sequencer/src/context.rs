@@ -177,7 +177,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         handle: Consensus<N, P>,
         persistence: Arc<RwLock<P>>,
         state_signer: StateSigner<Ver>,
-        external_event_handler: ExternalEventHandler<N>,
+        external_event_handler: ExternalEventHandler,
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
         node_state: NodeState,
         config: NetworkConfig<PubKey>,
@@ -323,11 +323,11 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     }
 }
 
-async fn handle_events<Ver: StaticVersionType, N: ConnectedNetwork<PubKey>>(
+async fn handle_events<Ver: StaticVersionType>(
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
     persistence: Arc<RwLock<impl SequencerPersistence>>,
     state_signer: Arc<StateSigner<Ver>>,
-    external_event_handler: ExternalEventHandler<N>,
+    external_event_handler: ExternalEventHandler,
     events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
 ) {
     while let Some(event) = events.next().await {
