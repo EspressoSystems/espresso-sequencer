@@ -75,6 +75,11 @@ pub struct Options {
     )]
     pub libp2p_bind_address: String,
 
+    /// The URL we advertise to other nodes as being for our public API.
+    /// Should be supplied in `http://host:port` form.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_PUBLIC_API_URL")]
+    pub public_api_url: Option<Url>,
+
     /// The address we advertise to other nodes as being a Libp2p endpoint.
     /// Should be supplied in `host:port` form.
     #[clap(

@@ -255,6 +255,7 @@ async fn main() -> anyhow::Result<()> {
         private_staking_key: private_staking_key.clone(),
         private_state_key,
         state_peers: opt.state_peers,
+        public_api_url: None,
         config_peers: None,
         catchup_backoff: Default::default(),
     };
