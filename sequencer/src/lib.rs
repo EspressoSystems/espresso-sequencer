@@ -300,7 +300,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         Arc::from(CombinedNetworks::new(
             cdn_network,
             p2p_network,
-            Duration::from_secs(1),
+            Some(Duration::from_secs(1)),
         ))
     };
 

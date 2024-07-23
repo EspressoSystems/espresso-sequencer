@@ -458,7 +458,8 @@ impl Header {
                 &ns_table,
                 &payload_commitment,
             ),
-            "invalid builder signature"
+            "invalid builder signature, account: {}, fee: {builder_fee:?}, ns_table: {ns_table:?}, payload_commitment: {payload_commitment}",
+            builder_fee.fee_account,
         );
         let builder_signature = Some(builder_fee.fee_signature);
         let fee_info = builder_fee.into();
