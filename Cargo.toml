@@ -132,13 +132,3 @@ rand = "0.8.5"
 time = "0.3"
 trait-set = "0.3.0"
 
-
-[patch."https://github.com/EspressoSystems/HotShot.git"]
-hotshot = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/external-message-test" }
-hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/external-message-test" }
-hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/external-message-test" }
-hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/external-message-test" }
-hotshot-task = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/external-message-test" }
-hotshot-testing = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/external-message-test" }
-hotshot-example-types = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/external-message-test" }
-hotshot-types = { git = "https://www.github.com/EspressoSystems/hotshot", branch = "rm/external-message-test" }
