@@ -608,9 +608,9 @@ dependencies = [
 
 [[package]]
 name = "async-compatibility-layer"
-version = "1.2.0"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c928880329566b45c159fca61fbc2a1d301a7e5fd2a0e94c17476bb1a3ea526"
+checksum = "32dd1dfd4a05a197583e51036d9615f04a4d851089dc119ee965d440d0bcaa39"
 dependencies = [
  "async-lock 3.4.0",
  "async-std",
@@ -1286,13 +1286,13 @@ checksum = "066fce287b1d4eafef758e89e09d724a24808a9196fe9756b8ca90e86d0719a2"
 [[package]]
 name = "cdn-broker"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.2#09389360284c51dd44a3dae1f1c3b395125abe82"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4#398b77fb2f461218a611294e1484b7e0bd571d64"
 dependencies = [
  "async-std",
  "cdn-proto",
  "clap",
  "console-subscriber 0.3.0",
- "dashmap 5.5.3",
+ "dashmap",
  "derivative",
  "jf-signature",
  "lazy_static",
@@ -1310,7 +1310,7 @@ dependencies = [
 [[package]]
 name = "cdn-client"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.2#09389360284c51dd44a3dae1f1c3b395125abe82"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4#398b77fb2f461218a611294e1484b7e0bd571d64"
 dependencies = [
  "async-std",
  "cdn-proto",
@@ -1325,7 +1325,7 @@ dependencies = [
 [[package]]
 name = "cdn-marshal"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.2#09389360284c51dd44a3dae1f1c3b395125abe82"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4#398b77fb2f461218a611294e1484b7e0bd571d64"
 dependencies = [
  "async-std",
  "cdn-proto",
@@ -1339,7 +1339,7 @@ dependencies = [
 [[package]]
 name = "cdn-proto"
 version = "0.4.0"
-source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.2#09389360284c51dd44a3dae1f1c3b395125abe82"
+source = "git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4#398b77fb2f461218a611294e1484b7e0bd571d64"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -1994,19 +1994,6 @@ dependencies = [
  "darling_core",
  "quote",
  "syn 2.0.69",
-]
-
-[[package]]
-name = "dashmap"
-version = "5.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "978747c1d849a7d2ee5e8adc0159961c48fb7e5db2f06af6723b80123bb53856"
-dependencies = [
- "cfg-if",
- "hashbrown 0.14.5",
- "lock_api",
- "once_cell",
- "parking_lot_core",
 ]
 
 [[package]]
@@ -3071,8 +3058,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot"
-version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+version = "0.5.63"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.63#86aac47dcdc39e826bedda83e222895c04d87889"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3089,7 +3076,7 @@ dependencies = [
  "chrono",
  "committable",
  "custom_debug",
- "dashmap 6.0.1",
+ "dashmap",
  "derive_more",
  "either",
  "ethereum-types",
@@ -3118,7 +3105,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.63#86aac47dcdc39e826bedda83e222895c04d87889"
 dependencies = [
  "async-trait",
  "clap",
@@ -3136,7 +3123,7 @@ dependencies = [
 
 [[package]]
 name = "hotshot-events-service"
-version = "0.1.27"
+version = "0.1.33"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -3164,8 +3151,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-example-types"
-version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+version = "0.5.63"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.63#86aac47dcdc39e826bedda83e222895c04d87889"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3183,6 +3170,7 @@ dependencies = [
  "hotshot-task-impls",
  "hotshot-types",
  "rand 0.8.5",
+ "reqwest",
  "serde",
  "sha2 0.10.8",
  "sha3",
@@ -3196,8 +3184,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-orchestrator"
-version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+version = "0.5.63"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.63#86aac47dcdc39e826bedda83e222895c04d87889"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -3226,8 +3214,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task"
-version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+version = "0.5.63"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.63#86aac47dcdc39e826bedda83e222895c04d87889"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3241,8 +3229,8 @@ dependencies = [
 
 [[package]]
 name = "hotshot-task-impls"
-version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+version = "0.5.63"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.63#86aac47dcdc39e826bedda83e222895c04d87889"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -3278,7 +3266,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.63#86aac47dcdc39e826bedda83e222895c04d87889"
 dependencies = [
  "anyhow",
  "ark-bls12-381",
@@ -4401,8 +4389,8 @@ dependencies = [
 
 [[package]]
 name = "libp2p-networking"
-version = "0.5.60"
-source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.61#b7f5fa34f22df7af6fcfde92caa1b2153102d1df"
+version = "0.5.63"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=rc-0.5.63#86aac47dcdc39e826bedda83e222895c04d87889"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
