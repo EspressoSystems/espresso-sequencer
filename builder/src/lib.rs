@@ -574,6 +574,7 @@ pub mod testing {
                 Duration::from_millis(2000),
                 15,
                 Duration::from_millis(500),
+                ChainConfig::default().base_fee,
             )
             .await
             .unwrap();
@@ -640,6 +641,7 @@ pub mod testing {
                 Duration::from_millis(2000),
                 15,
                 Duration::from_millis(500),
+                ChainConfig::default().base_fee,
             )
             .await
             .unwrap();
