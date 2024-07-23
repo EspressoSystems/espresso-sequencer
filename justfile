@@ -94,9 +94,11 @@ lc-contract-profiling-sepolia:
     echo $LC_CONTRACT_ADDRESS
     forge script contracts/script/LightClientCallNewFinalizedState.s.sol --sig "run(uint32 numBlocksPerEpoch, uint32 numInitValidators, address lcContractAddress)" {{NUM_BLOCKS_PER_EPOCH}} {{NUM_INIT_VALIDATORS}} $LC_CONTRACT_ADDRESS --fork-url ${SEPOLIA_RPC_URL}  --broadcast  --chain-id sepolia
 
-lc-contract-benchmark:
+gas-benchmarks:
     cargo build --bin diff-test --release
-    forge test --mt testCorrectUpdateBench | grep testCorrectUpdateBench
+    forge test --mt test_verify_succeeds | grep test_verify_succeeds > gas-benchmarks.txt
+    forge test --mt testCorrectUpdateBench | grep testCorrectUpdateBench >> gas-benchmarks.txt
+
 
 # This is meant for local development and produces HTML output. In CI
 # the lcov output is pushed to coveralls.
