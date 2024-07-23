@@ -56,7 +56,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> VidTaskState<TYPES, I> {
                     encoded_transactions,
                     metadata,
                     view_number,
-                    bid_fees,
+                    sequencing_fees,
                     vid_precompute,
                     ..
                 } = packed_bundle;
@@ -87,7 +87,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> VidTaskState<TYPES, I> {
                         builder_commitment,
                         metadata.clone(),
                         *view_number,
-                        bid_fees.first().clone(),
+                        sequencing_fees.first().clone(),
                     )),
                     &event_stream,
                 )
