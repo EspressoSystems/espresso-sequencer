@@ -230,20 +230,20 @@ impl BidTx {
 }
 
 impl AuctionResults {
-    pub fn winning_bids(&self) -> Vec<BidTx> {
-        self.winning_bids.clone()
+    pub fn winning_bids(&self) -> &[BidTx] {
+        &self.winning_bids
     }
-    pub fn reserve_bids(&self) -> Vec<(NamespaceId, Url)> {
-        self.reserve_bids.clone()
+    pub fn reserve_bids(&self) -> &[(NamespaceId, Url)] {
+        &self.reserve_bids
     }
 }
 
 impl HasUrls for AuctionResults {
     fn urls(&self) -> Vec<Url> {
-        self.winning_bids
+        self.winning_bids()
             .iter()
             .map(|bid| bid.url())
-            .chain(self.reserve_bids.iter().map(|bid| bid.1.clone()))
+            .chain(self.reserve_bids().iter().map(|bid| bid.1.clone()))
             .collect()
     }
 }
