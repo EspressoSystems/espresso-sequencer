@@ -1686,6 +1686,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "circular-buffer"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da987586004ae7c43b7df5e3f7693775068522e1086f8d9b2d74c778a0f43313"
+
+[[package]]
 name = "clap"
 version = "4.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6430,6 +6436,27 @@ dependencies = [
  "bitflags 1.3.2",
  "cfg-if",
  "libc",
+]
+
+[[package]]
+name = "node-metrics"
+version = "0.1.0"
+dependencies = [
+ "async-compatibility-layer",
+ "async-std",
+ "bitvec",
+ "circular-buffer",
+ "futures",
+ "hotshot-query-service",
+ "hotshot-stake-table",
+ "hotshot-testing",
+ "hotshot-types",
+ "sequencer",
+ "serde",
+ "tide-disco",
+ "time 0.3.36",
+ "toml",
+ "vbs",
 ]
 
 [[package]]
