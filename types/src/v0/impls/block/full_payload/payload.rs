@@ -219,6 +219,14 @@ impl QueryablePayload<SeqTypes> for Payload {
 
         TxProof::new(index, self, &common)
     }
+
+    fn transaction(
+        &self,
+        _meta: &Self::Metadata,
+        index: &Self::TransactionIndex,
+    ) -> Option<Self::Transaction> {
+        self.transaction(index)
+    }
 }
 
 impl std::fmt::Display for Payload {
