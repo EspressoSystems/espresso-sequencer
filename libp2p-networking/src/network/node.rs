@@ -45,6 +45,7 @@ use tracing::{debug, error, info, info_span, instrument, warn, Instrument};
 pub use self::{
     config::{
         MeshParams, NetworkNodeConfig, NetworkNodeConfigBuilder, NetworkNodeConfigBuilderError,
+        DEFAULT_REPLICATION_FACTOR,
     },
     handle::{
         network_node_handle_error, spawn_network_node, NetworkNodeHandle, NetworkNodeHandleError,
@@ -351,11 +352,17 @@ impl NetworkNode {
     /// Once replicated upon all nodes, the caller is notified over
     /// `chan`. If there is an error, a [`super::error::DHTError`] is
     /// sent instead.
+    ///
+    /// # Panics
+    /// If the default replication factor is `None`
     pub fn put_record(&mut self, mut query: KadPutQuery) {
         let record = Record::new(query.key.clone(), query.value.clone());
         match self.swarm.behaviour_mut().dht.put_record(
             record,
-            libp2p::kad::Quorum::N(self.dht_handler.replication_factor()),
+            libp2p::kad::Quorum::N(
+                NonZeroUsize::try_from(self.dht_handler.replication_factor().get() / 2)
+                    .expect("replication factor should be bigger than 0"),
+            ),
         ) {
             Err(e) => {
                 // failed try again later

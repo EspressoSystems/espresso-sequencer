@@ -4,6 +4,7 @@
 #[cfg(feature = "hotshot-testing")]
 use std::str::FromStr;
 use std::{
+    cmp::min,
     collections::{BTreeSet, HashSet},
     fmt::Debug,
     net::SocketAddr,
@@ -15,7 +16,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use async_compatibility_layer::{
     art::{async_sleep, async_spawn},
     channel::{
@@ -60,7 +61,7 @@ use libp2p_networking::{
         spawn_network_node, MeshParams,
         NetworkEvent::{self, DirectRequest, DirectResponse, GossipMsg},
         NetworkNodeConfig, NetworkNodeConfigBuilder, NetworkNodeHandle, NetworkNodeHandleError,
-        NetworkNodeReceiver, NetworkNodeType,
+        NetworkNodeReceiver, NetworkNodeType, DEFAULT_REPLICATION_FACTOR,
     },
     reexport::{Multiaddr, ResponseChannel},
 };
@@ -397,11 +398,23 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         .parse()?;
 
         // Build our libp2p configuration from our global, network configuration
-        let mut config_builder = NetworkNodeConfigBuilder::default();
+        let mut config_builder: NetworkNodeConfigBuilder = NetworkNodeConfigBuilder::default();
+
+        // The replication factor is the minimum of [the default and 2/3 the number of nodes]
+        let Some(default_replication_factor) = DEFAULT_REPLICATION_FACTOR else {
+            return Err(anyhow!("Default replication factor not supplied"));
+        };
+
+        let replication_factor = NonZeroUsize::new(min(
+            default_replication_factor.get(),
+            config.config.num_nodes_with_stake.get() * 2 / 3,
+        ))
+        .with_context(|| "Failed to calculate replication factor")?;
 
         config_builder
             .server_mode(libp2p_config.server_mode)
             .identity(keypair)
+            .replication_factor(replication_factor)
             .bound_addr(Some(bind_address.clone()))
             .mesh_params(Some(MeshParams {
                 mesh_n_high: libp2p_config.mesh_n_high,

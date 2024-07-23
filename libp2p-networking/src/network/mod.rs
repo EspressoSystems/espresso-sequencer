@@ -39,7 +39,7 @@ pub use self::{
     node::{
         network_node_handle_error, spawn_network_node, MeshParams, NetworkNode, NetworkNodeConfig,
         NetworkNodeConfigBuilder, NetworkNodeConfigBuilderError, NetworkNodeHandle,
-        NetworkNodeHandleError, NetworkNodeReceiver,
+        NetworkNodeHandleError, NetworkNodeReceiver, DEFAULT_REPLICATION_FACTOR,
     },
 };
 #[cfg(not(any(async_executor_impl = "async-std", async_executor_impl = "tokio")))]
