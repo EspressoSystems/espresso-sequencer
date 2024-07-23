@@ -436,7 +436,6 @@
 <a href="#436" id="436">436</a>
 <a href="#437" id="437">437</a>
 <a href="#438" id="438">438</a>
-<a href="#439" id="439">439</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
@@ -449,7 +448,7 @@
 };
 <span class="kw">use </span>async_std::sync::{Arc, RwLock};
 <span class="kw">use </span>espresso_types::{
-    eth_signature_key::EthKeyPair, ChainConfig, L1Client, NodeState, Payload, SeqTypes,
+    eth_signature_key::EthKeyPair, ChainConfig, FeeAmount, L1Client, NodeState, Payload, SeqTypes,
     ValidatedState,
 };
 <span class="kw">use </span>ethers::{
@@ -533,6 +532,7 @@
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
+        base_fee: FeeAmount,
     ) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
         <span class="macro">tracing::info!</span>(
             address = %builder_key_pair.fee_account(),
@@ -607,9 +607,7 @@
             global_state_clone,
             node_count,
             maximize_txns_count_timeout_duration,
-            instance_state
-                .chain_config
-                .base_fee
+            base_fee
                 .as_u64()
                 .context(<span class="string">"the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)"</span>)<span class="question-mark">?</span>,
             Arc::new(instance_state),
