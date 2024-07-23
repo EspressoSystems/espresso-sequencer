@@ -302,22 +302,22 @@ library PlonkVerifier {
             {
                 let w0 := mload(add(proof, 0x1a0))
                 let sigma0 := mload(add(proof, 0x240))
-                perm := mulmod(perm, addmod(add(w0, gamma), mulmod(beta, sigma0, p), p), p)
+                perm := mulmod(perm, addmod(addmod(w0, gamma, p), mulmod(beta, sigma0, p), p), p)
             }
             {
                 let w1 := mload(add(proof, 0x1c0))
                 let sigma1 := mload(add(proof, 0x260))
-                perm := mulmod(perm, addmod(add(w1, gamma), mulmod(beta, sigma1, p), p), p)
+                perm := mulmod(perm, addmod(addmod(w1, gamma, p), mulmod(beta, sigma1, p), p), p)
             }
             {
                 let w2 := mload(add(proof, 0x1e0))
                 let sigma2 := mload(add(proof, 0x280))
-                perm := mulmod(perm, addmod(add(w2, gamma), mulmod(beta, sigma2, p), p), p)
+                perm := mulmod(perm, addmod(addmod(w2, gamma, p), mulmod(beta, sigma2, p), p), p)
             }
             {
                 let w3 := mload(add(proof, 0x200))
                 let sigma3 := mload(add(proof, 0x2a0))
-                perm := mulmod(perm, addmod(add(w3, gamma), mulmod(beta, sigma3, p), p), p)
+                perm := mulmod(perm, addmod(addmod(w3, gamma, p), mulmod(beta, sigma3, p), p), p)
             }
 
             // \prod_i=1..m-1 (w_i + beta * sigma_i + gamma) * (w_m + gamma) * z(xw)
