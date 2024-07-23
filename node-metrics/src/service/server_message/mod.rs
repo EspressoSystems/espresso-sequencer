@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use super::{client_id::ClientId, data_state::NodeIdentity};
 use bitvec::vec::BitVec;
+use espresso_types::SeqTypes;
 use hotshot_query_service::explorer::{BlockDetail, ExplorerHistograms};
-use sequencer::SeqTypes;
 use serde::{Deserialize, Serialize};
 
 /// [ServerMessage] represents the messages that the server can send to the

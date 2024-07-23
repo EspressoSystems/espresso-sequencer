@@ -6,9 +6,9 @@ use super::{
 };
 use async_std::sync::{RwLock, RwLockWriteGuard};
 use bitvec::vec::BitVec;
+use espresso_types::SeqTypes;
 use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
 use hotshot_query_service::explorer::{BlockDetail, ExplorerHistograms};
-use sequencer::SeqTypes;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -1011,12 +1011,12 @@ pub mod tests {
     };
     use async_std::{prelude::FutureExt, sync::RwLock};
     use bitvec::vec::BitVec;
+    use espresso_types::{Leaf, NodeState, ValidatedState};
     use futures::{
         channel::mpsc::{self, Sender},
         SinkExt, StreamExt,
     };
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-    use sequencer::{Leaf, NodeState, ValidatedState};
     use std::{sync::Arc, time::Duration};
 
     pub fn create_test_client_thread_state() -> ClientThreadState<Sender<ServerMessage>> {

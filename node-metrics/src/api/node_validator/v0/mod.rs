@@ -1,6 +1,7 @@
 use crate::service::client_message::{ClientMessage, InternalClientMessage};
 use crate::service::data_state::{LocationDetails, NodeIdentity};
 use crate::service::server_message::ServerMessage;
+use espresso_types::FeeAccount;
 use futures::future::Either;
 use futures::Sink;
 use futures::{
@@ -13,7 +14,6 @@ use hotshot_types::signature_key::BLSPubKey;
 use hotshot_types::traits::{signature_key::StakeTableEntryType, stake_table::StakeTableScheme};
 use hotshot_types::PeerConfig;
 use prometheus_parse::{Sample, Scrape};
-use sequencer::state::FeeAccount;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::io::BufRead;
@@ -72,16 +72,6 @@ impl tide_disco::Error for Error {
 
     fn status(&self) -> tide_disco::StatusCode {
         tide_disco::StatusCode::INTERNAL_SERVER_ERROR
-    }
-}
-
-impl surf_disco::Error for Error {
-    fn catch_all(status: surf_disco::StatusCode, msg: String) -> Self {
-        Self::UnhandledSurfDisco(status, msg)
-    }
-
-    fn status(&self) -> surf_disco::StatusCode {
-        surf_disco::StatusCode::INTERNAL_SERVER_ERROR
     }
 }
 
@@ -418,7 +408,7 @@ pub async fn stream_leaves_from_hotshot_query_service(
     current_block_height: Option<u64>,
     client: surf_disco::Client<hotshot_query_service::Error, Version01>,
 ) -> Result<
-    impl futures::Stream<Item = Result<sequencer::Leaf, hotshot_query_service::Error>> + Unpin,
+    impl futures::Stream<Item = Result<espresso_types::Leaf, hotshot_query_service::Error>> + Unpin,
     hotshot_query_service::Error,
 > {
     let block_height_result = client.get("status/block-height").send().await;
@@ -442,7 +432,7 @@ pub async fn stream_leaves_from_hotshot_query_service(
             "availability/stream/leaves/{}",
             start_block_height
         ))
-        .subscribe::<sequencer::Leaf>()
+        .subscribe::<espresso_types::Leaf>()
         .await;
 
     let leaves_stream = match leaves_stream_result {
@@ -737,11 +727,11 @@ mod tests {
         server_message::ServerMessage,
     };
     use async_std::sync::RwLock;
+    use espresso_types::FeeAccount;
     use futures::{
         channel::mpsc::{self, Sender},
         SinkExt, StreamExt,
     };
-    use sequencer::state::FeeAccount;
     use std::{
         io::{BufRead, BufReader},
         str::FromStr,
@@ -932,7 +922,7 @@ consensus_libp2p_num_connected_peers 4
 consensus_libp2p_num_failed_messages 0
 # HELP consensus_node node
 # TYPE consensus_node gauge
-consensus_node{key=\"BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U\"} 1
+consensus_node{key=\"BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDUseTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spfAnd5MA1Mw5U\"} 1
 # HELP consensus_node_identity_general node_identity_general
 # TYPE consensus_node_identity_general gauge
 consensus_node_identity_general{company_name=\"Espresso Systems\",name=\"sequencer0\",network_type=\"local\",node_type=\"espresso-sequencer 0.1\",operating_system=\"Linux 5.15.153.1\",wallet=\"0x0000000000000000000000000000000000000000\"} 1

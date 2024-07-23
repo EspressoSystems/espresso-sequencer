@@ -4,6 +4,7 @@ pub mod node_identity;
 use async_std::sync::RwLock;
 use bitvec::vec::BitVec;
 use circular_buffer::CircularBuffer;
+use espresso_types::{Header, Payload, SeqTypes};
 use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
 use hotshot_query_service::{
     availability::{QueryableHeader, QueryablePayload},
@@ -22,7 +23,6 @@ use hotshot_types::{
 };
 pub use location_details::LocationDetails;
 pub use node_identity::NodeIdentity;
-use sequencer::{Header, Payload, SeqTypes};
 use std::{collections::HashSet, iter::zip, sync::Arc};
 use time::OffsetDateTime;
 
@@ -164,9 +164,9 @@ pub fn create_block_detail_from_leaf(leaf: &Leaf<SeqTypes>) -> BlockDetail<SeqTy
 
     BlockDetail::<SeqTypes> {
         hash: block_header.commitment(),
-        height: block_header.height,
+        height: block_header.height(),
         time: Timestamp(
-            OffsetDateTime::from_unix_timestamp(block_header.timestamp as i64)
+            OffsetDateTime::from_unix_timestamp(block_header.timestamp() as i64)
                 .unwrap_or(OffsetDateTime::UNIX_EPOCH),
         ),
         proposer_id: block_header.proposer_id(),
@@ -441,12 +441,11 @@ mod tests {
     use super::{process_leaf_stream, DataState};
     use crate::service::data_state::{process_node_identity_stream, LocationDetails, NodeIdentity};
     use async_std::{prelude::FutureExt, sync::RwLock};
+    use espresso_types::{
+        BlockMerkleTree, ChainConfig, FeeAccount, FeeMerkleTree, Leaf, NodeState, ValidatedState,
+    };
     use futures::{channel::mpsc, SinkExt, StreamExt};
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-    use sequencer::{
-        state::{BlockMerkleTree, FeeAccount, FeeMerkleTree},
-        ChainConfig, Leaf, NodeState, ValidatedState,
-    };
     use std::{sync::Arc, time::Duration};
     use url::Url;
 

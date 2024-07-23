@@ -1,6 +1,6 @@
 use super::LocationDetails;
+use espresso_types::FeeAccount;
 use hotshot_types::signature_key::BLSPubKey;
-use sequencer::state::FeeAccount;
 use serde::{Deserialize, Serialize};
 use surf_disco::Url;
 
