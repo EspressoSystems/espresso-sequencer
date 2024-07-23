@@ -1,16 +1,19 @@
-use std::{sync::Arc, time::Duration};
+use std::{io, sync::Arc, time::Duration};
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-use async_std::task::{sleep, spawn, spawn_blocking};
+use async_std::task::spawn;
 use clap::Parser;
-use es_version::{SequencerVersion, SEQUENCER_VERSION};
+use contract_bindings::light_client_mock::LightClientMock;
+use es_version::SEQUENCER_VERSION;
 use ethers::{
+    middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
+    types::{Address, U256},
 };
 use futures::FutureExt;
 use hotshot_state_prover::service::{
-    load_proving_key, one_honest_threshold, sync_state, StateProverConfig,
+    one_honest_threshold, run_prover_service_with_stake_table, StateProverConfig,
 };
 use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
 use portpicker::pick_unused_port;
@@ -27,9 +30,10 @@ use sequencer_utils::{
     deployer::{deploy, Contract, Contracts},
     AnvilOptions,
 };
-use surf_disco::Client;
-use tide_disco::error::ServerError;
+use serde::{Deserialize, Serialize};
+use tide_disco::{error::ServerError, Api, Error as _, StatusCode};
 use url::Url;
+use vbs::version::StaticVersionType;
 
 #[derive(Clone, Debug, Parser)]
 struct Args {
@@ -68,6 +72,16 @@ struct Args {
     /// Port for connecting to the builder.
     #[clap(short, long, env = "ESPRESSO_BUILDER_PORT")]
     builder_port: Option<u16>,
+
+    /// Port for connecting to the prover.
+    #[clap(short, long, env = "ESPRESSO_PROVER_PORT")]
+    prover_port: Option<u16>,
+
+    /// Port for the dev node.
+    ///
+    /// This is used to provide tools and information to facilitate developers debugging.
+    #[clap(short, long, env = "ESPRESSO_DEV_NODE_PORT", default_value = "20000")]
+    dev_node_port: u16,
 
     #[clap(flatten)]
     sql: persistence::sql::Options,
@@ -148,52 +162,136 @@ async fn main() -> anyhow::Result<()> {
         SEQUENCER_VERSION,
     ));
 
-    // Run the prover service. These code are basically from `hotshot-state-prover`. The difference
-    // is that here we don't need to fetch the `stake table` from other entities.
-    // TODO: Remove the redundant code.
-    let proving_key =
-        spawn_blocking(move || Arc::new(load_proving_key(STAKE_TABLE_CAPACITY_FOR_TEST as usize)))
-            .await;
-    let relay_server_client =
-        Client::<ServerError, SequencerVersion>::new(relay_server_url.clone());
-
-    let provider = Provider::<Http>::try_from(url.to_string()).unwrap();
+    let provider = Provider::<Http>::try_from(url.as_str()).unwrap();
     let chain_id = provider.get_chainid().await.unwrap().as_u64();
+
+    let wallet = MnemonicBuilder::<English>::default()
+        .phrase(cli_params.mnemonic.as_str())
+        .index(cli_params.account_index)
+        .expect("error building wallet")
+        .build()
+        .expect("error opening wallet")
+        .with_chain_id(chain_id);
 
     let update_interval = Duration::from_secs(20);
     let retry_interval = Duration::from_secs(2);
+    let prover_port = cli_params
+        .prover_port
+        .unwrap_or_else(|| pick_unused_port().unwrap());
+    let light_client_address = contracts
+        .get_contract_address(Contract::LightClientProxy)
+        .unwrap();
     let config = StateProverConfig {
         relay_server: relay_server_url,
         update_interval,
         retry_interval,
-        l1_provider: url,
-        light_client_address: contracts
-            .get_contract_address(Contract::LightClientProxy)
-            .unwrap(),
-        eth_signing_key: MnemonicBuilder::<English>::default()
-            .phrase(cli_params.mnemonic.as_str())
-            .index(cli_params.account_index)
-            .expect("error building wallet")
-            .build()
-            .expect("error opening wallet")
-            .with_chain_id(chain_id)
-            .signer()
-            .clone(),
+        l1_provider: url.clone(),
+        light_client_address,
+        eth_signing_key: wallet.signer().clone(),
         sequencer_url: "http://localhost".parse().unwrap(), // This should not be used in dev-node
-        port: None,
+        port: Some(prover_port),
         stake_table_capacity: STAKE_TABLE_CAPACITY_FOR_TEST as usize,
     };
 
-    loop {
-        if let Err(err) = sync_state(&st, proving_key.clone(), &relay_server_client, &config).await
-        {
-            tracing::error!("Cannot sync the light client state, will retry: {}", err);
-            sleep(retry_interval).await;
-        } else {
-            tracing::info!("Sleeping for {:?}", update_interval);
-            sleep(update_interval).await;
+    spawn(run_prover_service_with_stake_table(
+        config,
+        SEQUENCER_VERSION,
+        Arc::new(st),
+    ));
+
+    let dev_info = DevInfo {
+        builder_url: network.cfg.hotshot_config().builder_urls[0].clone(),
+        prover_port,
+        l1_url: url,
+        light_client_address,
+    };
+
+    let mock_contract =
+        LightClientMock::new(light_client_address, Arc::new(provider.with_signer(wallet)));
+
+    run_dev_node_server(
+        cli_params.dev_node_port,
+        mock_contract,
+        dev_info,
+        SEQUENCER_VERSION,
+    )
+    .await?;
+
+    Ok(())
+}
+
+async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone + 'static>(
+    port: u16,
+    mock_contract: LightClientMock<SignerMiddleware<Provider<Http>, S>>,
+    dev_info: DevInfo,
+    bind_version: Ver,
+) -> anyhow::Result<()> {
+    let mut app = tide_disco::App::<(), ServerError>::with_state(());
+    let toml =
+        toml::from_str::<toml::value::Value>(include_str!("../../api/espresso_dev_node.toml"))
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    let mut api = Api::<(), ServerError, Ver>::new(toml)
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    api.get("devinfo", move |_, _| {
+        let info = dev_info.clone();
+        async move { Ok(info.clone()) }.boxed()
+    })
+    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    let contract = mock_contract.clone();
+    api.post("sethotshotdown", move |req, _| {
+        let contract = contract.clone();
+        async move {
+            let height = req
+                .body_auto::<SetHotshotUpBody, Ver>(Ver::instance())
+                .map_err(ServerError::from_request_error)?
+                .height;
+            contract
+                .set_hot_shot_down_since(U256::from(height))
+                .send()
+                .await
+                .map_err(|err| {
+                    ServerError::catch_all(StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+                })?;
+            Ok(())
         }
-    }
+        .boxed()
+    })
+    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    api.post("sethotshotup", move |_, _| {
+        let contract = mock_contract.clone();
+        async move {
+            contract.set_hot_shot_up().send().await.map_err(|err| {
+                ServerError::catch_all(StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+            })?;
+            Ok(())
+        }
+        .boxed()
+    })
+    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    app.register_module("api", api)
+        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+
+    app.serve(format!("0.0.0.0:{port}"), bind_version).await?;
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DevInfo {
+    pub builder_url: Url,
+    pub prover_port: u16,
+    pub l1_url: Url,
+    pub light_client_address: Address,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SetHotshotUpBody {
+    pub height: u64,
 }
 
 #[cfg(test)]
@@ -206,7 +304,11 @@ mod tests {
     use contract_bindings::light_client::LightClient;
     use es_version::SequencerVersion;
     use escargot::CargoBuild;
-    use ethers::types::{Address, U256};
+    use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
+    use ethers::{
+        providers::Middleware,
+        types::{Address, U256},
+    };
     use futures::TryStreamExt;
     use hotshot_query_service::{
         availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
@@ -214,13 +316,12 @@ mod tests {
     };
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
-    use sequencer::{
-        api::endpoints::NamespaceProofQueryData, state::BlockMerkleTree, Header, SeqTypes,
-        Transaction,
-    };
+    use sequencer::api::endpoints::NamespaceProofQueryData;
     use sequencer_utils::{init_signer, AnvilOptions};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
+
+    use crate::{DevInfo, SetHotshotUpBody};
 
     const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
@@ -246,6 +347,8 @@ mod tests {
 
         let api_port = pick_unused_port().unwrap();
 
+        let dev_node_port = pick_unused_port().unwrap();
+
         let instance = AnvilOptions::default().spawn().await;
         let l1_url = instance.url();
 
@@ -265,6 +368,7 @@ mod tests {
             .env("ESPRESSO_SEQUENCER_POSTGRES_HOST", "localhost")
             .env("ESPRESSO_SEQUENCER_ETH_MNEMONIC", TEST_MNEMONIC)
             .env("ESPRESSO_DEPLOYER_ACCOUNT_INDEX", "0")
+            .env("ESPRESSO_DEV_NODE_PORT", dev_node_port.to_string())
             .env(
                 "ESPRESSO_SEQUENCER_POSTGRES_PORT",
                 postgres_port.to_string(),
@@ -303,7 +407,7 @@ mod tests {
 
         assert!(!builder_address.is_empty());
 
-        let tx = Transaction::new(100.into(), vec![1, 2, 3]);
+        let tx = Transaction::new(100_u32.into(), vec![1, 2, 3]);
 
         let hash: Commitment<Transaction> = api_client
             .post("submit/submit")
@@ -341,7 +445,7 @@ mod tests {
         let signer = init_signer(&l1_url, TEST_MNEMONIC, 0).await.unwrap();
         let light_client = LightClient::new(
             light_client_address.parse::<Address>().unwrap(),
-            Arc::new(signer),
+            Arc::new(signer.clone()),
         );
 
         while light_client
@@ -393,6 +497,55 @@ mod tests {
                 .await
                 .is_err()
             {
+                sleep(Duration::from_secs(3)).await;
+            }
+        }
+
+        let dev_node_client: Client<ServerError, SequencerVersion> =
+            Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
+        dev_node_client.connect(None).await;
+
+        // Check the dev node api
+        {
+            tracing::info!("checking the dev node api");
+            dev_node_client
+                .get::<DevInfo>("api/dev-info")
+                .send()
+                .await
+                .unwrap();
+
+            let height = signer.get_block_number().await.unwrap().as_u64();
+            dev_node_client
+                .post::<()>("api/set-hotshot-down")
+                .body_json(&SetHotshotUpBody { height: height - 1 })
+                .unwrap()
+                .send()
+                .await
+                .unwrap();
+
+            while !light_client
+                .lag_over_escape_hatch_threshold(U256::from(height), U256::from(0))
+                .call()
+                .await
+                .unwrap_or(false)
+            {
+                tracing::info!("waiting for setting hotshot down");
+                sleep(Duration::from_secs(3)).await;
+            }
+
+            dev_node_client
+                .post::<()>("api/set-hotshot-up")
+                .send()
+                .await
+                .unwrap();
+
+            while light_client
+                .lag_over_escape_hatch_threshold(U256::from(height), U256::from(0))
+                .call()
+                .await
+                .unwrap_or(true)
+            {
+                tracing::info!("waiting for setting hotshot up");
                 sleep(Duration::from_secs(3)).await;
             }
         }

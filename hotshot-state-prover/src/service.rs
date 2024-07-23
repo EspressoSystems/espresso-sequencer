@@ -1,6 +1,10 @@
 //! A light client prover service
 
-use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
+use std::{
+    iter,
+    time::{Duration, Instant},
+};
+
 use anyhow::{anyhow, Context, Result};
 use async_std::{
     io,
@@ -12,40 +16,40 @@ use displaydoc::Display;
 use ethers::{
     core::k256::ecdsa::SigningKey,
     middleware::SignerMiddleware,
-    providers::Http,
-    providers::{Middleware, Provider, ProviderError},
+    providers::{Http, Middleware, Provider, ProviderError},
     signers::{LocalWallet, Signer, Wallet},
     types::{Address, U256},
 };
 use futures::FutureExt;
-use hotshot_contract_adapter::jellyfish::{u256_to_field, ParsedPlonkProof};
-use hotshot_contract_adapter::light_client::ParsedLightClientState;
-use hotshot_stake_table::vec_based::config::FieldType;
-use hotshot_stake_table::vec_based::StakeTable;
-use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _};
+use hotshot_contract_adapter::{
+    jellyfish::{u256_to_field, ParsedPlonkProof},
+    light_client::ParsedLightClientState,
+};
+use hotshot_stake_table::vec_based::{config::FieldType, StakeTable};
 use hotshot_types::{
     light_client::{
         CircuitField, GenericPublicInput, LightClientState, PublicInput, StateSignaturesBundle,
         StateVerKey,
     },
-    traits::signature_key::StakeTableEntryType,
+    signature_key::BLSPubKey,
+    traits::{
+        signature_key::StakeTableEntryType,
+        stake_table::{SnapshotVersion, StakeTableError, StakeTableScheme as _},
+    },
+    PeerConfig,
 };
-use hotshot_types::{signature_key::BLSPubKey, PeerConfig};
-
 use jf_pcs::prelude::UnivariateUniversalParams;
 use jf_plonk::errors::PlonkError;
 use jf_relation::Circuit as _;
 use jf_signature::constants::CS_ID_SCHNORR;
 use serde::Deserialize;
-use std::{
-    iter,
-    time::{Duration, Instant},
-};
 use surf_disco::Client;
 use tide_disco::{error::ServerError, Api};
 use time::ext::InstantExt;
 use url::Url;
 use vbs::version::StaticVersionType;
+
+use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
 
 type F = ark_ed_on_bn254::Fq;
 
@@ -103,8 +107,13 @@ pub fn init_stake_table(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct PublicHotShotConfig {
-    pub known_nodes_with_stake: Vec<PeerConfig<BLSPubKey>>,
+struct PublicHotShotConfig {
+    known_nodes_with_stake: Vec<PeerConfig<BLSPubKey>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PublicNetworkConfig {
+    config: PublicHotShotConfig,
 }
 
 /// Initialize the stake table from a sequencer node that
@@ -125,8 +134,8 @@ async fn init_stake_table_from_sequencer(
     // Request the configuration until it is successful
     let network_config: PublicHotShotConfig = loop {
         match reqwest::get(config_url.clone()).await {
-            Ok(resp) => match resp.json::<PublicHotShotConfig>().await {
-                Ok(config) => break config,
+            Ok(resp) => match resp.json::<PublicNetworkConfig>().await {
+                Ok(config) => break config.config,
                 Err(e) => {
                     tracing::error!("Failed to parse the network config: {e}");
                     sleep(Duration::from_secs(5)).await;
@@ -405,7 +414,14 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
             .await
             .with_context(|| "Failed to initialize stake table")?,
     );
+    run_prover_service_with_stake_table(config, bind_version, st).await
+}
 
+pub async fn run_prover_service_with_stake_table<Ver: StaticVersionType + 'static>(
+    config: StateProverConfig,
+    bind_version: Ver,
+    st: Arc<StakeTable<BLSPubKey, StateVerKey, CircuitField>>,
+) -> Result<()> {
     tracing::info!("Light client address: {:?}", config.light_client_address);
     let relay_server_client =
         Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
@@ -418,7 +434,7 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
     }
 
     let proving_key =
-        spawn_blocking(move || Arc::new(load_proving_key(stake_table_capacity))).await;
+        spawn_blocking(move || Arc::new(load_proving_key(config.stake_table_capacity))).await;
 
     let update_interval = config.update_interval;
     let retry_interval = config.retry_interval;
@@ -499,8 +515,6 @@ impl std::error::Error for ProverError {}
 #[cfg(test)]
 mod test {
 
-    use super::*;
-    use crate::mock_ledger::{MockLedger, MockSystemParam};
     use anyhow::Result;
     use ark_ed_on_bn254::EdwardsConfig;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -513,6 +527,9 @@ mod test {
     use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
     use sequencer_utils::deployer;
+
+    use super::*;
+    use crate::mock_ledger::{MockLedger, MockSystemParam};
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
     const BLOCKS_PER_EPOCH: u32 = 10;

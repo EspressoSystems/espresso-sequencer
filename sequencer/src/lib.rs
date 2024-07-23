@@ -1,52 +1,45 @@
 pub mod api;
-pub mod block;
 pub mod catchup;
-mod chain_config;
 pub mod context;
-pub mod eth_signature_key;
 pub mod genesis;
-mod header;
+
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
 
 mod message_compat_tests;
-mod reference_tests;
 
-use crate::catchup::BackoffParams;
 use anyhow::Context;
 use async_std::sync::RwLock;
-use async_trait::async_trait;
-use catchup::{StateCatchup, StatePeers};
+use catchup::StatePeers;
 use context::SequencerContext;
+use espresso_types::{BackoffParams, L1Client, NodeState, PubKey, SeqTypes, ValidatedState};
 use ethers::types::U256;
 #[cfg(feature = "libp2p")]
 use futures::FutureExt;
-use genesis::{GenesisHeader, L1Finalized, Upgrade};
-
-// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
-
+use genesis::L1Finalized;
 use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
-use l1_client::L1Client;
-
+// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
 use network::libp2p::split_off_peer_id;
-use state::FeeAccount;
 use state_signature::static_stake_table_commitment;
 use url::Url;
-pub mod l1_client;
 pub mod persistence;
 pub mod state;
-pub mod transaction;
+
+#[cfg(feature = "libp2p")]
+use std::time::Duration;
+use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc};
 
 use derivative::Derivative;
+use espresso_types::v0::traits::{PersistenceOptions, SequencerPersistence};
+pub use genesis::Genesis;
+#[cfg(feature = "libp2p")]
+use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
 use hotshot::{
-    traits::{
-        election::static_committee::GeneralStaticCommittee,
-        implementations::{
-            derive_libp2p_peer_id, CdnMetricsValue, KeyPair, MemoryNetwork, PushCdnNetwork, Topic,
-            WrappedSignatureKey,
-        },
+    traits::implementations::{
+        derive_libp2p_peer_id, CdnMetricsValue, KeyPair, MemoryNetwork, PushCdnNetwork, Topic,
+        WrappedSignatureKey,
     },
     types::SignatureKey,
 };
@@ -55,44 +48,21 @@ use hotshot_orchestrator::{
     config::NetworkConfig,
 };
 use hotshot_types::{
-    consensus::CommitmentMap,
-    data::{DaProposal, QuorumProposal, VidDisperseShare, ViewNumber},
-    event::HotShotAction,
+    data::ViewNumber,
     light_client::{StateKeyPair, StateSignKey},
-    message::Proposal,
     signature_key::{BLSPrivKey, BLSPubKey},
-    simple_certificate::QuorumCertificate,
     traits::{
         metrics::Metrics,
         network::ConnectedNetwork,
         node_implementation::{NodeImplementation, NodeType},
         signature_key::{BuilderSignatureKey, StakeTableEntryType},
-        states::InstanceState,
-        storage::Storage,
     },
-    utils::{BuilderCommitment, View},
+    utils::BuilderCommitment,
     ValidatorConfig,
 };
-use persistence::{PersistenceOptions, SequencerPersistence};
-use serde::{Deserialize, Serialize};
-use snafu::Snafu;
-use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc};
-use vbs::version::{StaticVersion, StaticVersionType, Version};
-
-#[cfg(feature = "libp2p")]
-use std::time::Duration;
-
-#[cfg(feature = "libp2p")]
-use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
-
-pub use block::Payload;
-pub use chain_config::ChainConfig;
-pub use genesis::Genesis;
-pub use header::Header;
-pub use l1_client::L1BlockInfo;
 pub use options::Options;
-pub use state::ValidatedState;
-pub use transaction::{NamespaceId, Transaction};
+use serde::{Deserialize, Serialize};
+use vbs::version::StaticVersionType;
 pub mod network;
 
 /// The Sequencer node is generic over the hotshot CommChannel.
@@ -115,190 +85,12 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> Clone for Node<N, P> 
     }
 }
 
-#[derive(
-    Clone, Copy, Debug, Default, Hash, Eq, PartialEq, PartialOrd, Ord, Deserialize, Serialize,
-)]
-pub struct SeqTypes;
-
-pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
-pub type Event = hotshot::types::Event<SeqTypes>;
-
-pub type PubKey = BLSPubKey;
-pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
-
 impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> NodeImplementation<SeqTypes>
     for Node<N, P>
 {
     type Network = N;
     type Storage = Arc<RwLock<P>>;
     type AuctionResultsProvider = TestAuctionResultsProvider;
-}
-
-#[async_trait]
-impl<P: SequencerPersistence> Storage<SeqTypes> for Arc<RwLock<P>> {
-    async fn append_vid(
-        &self,
-        proposal: &Proposal<SeqTypes, VidDisperseShare<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        self.write().await.append_vid(proposal).await
-    }
-
-    async fn append_da(
-        &self,
-        proposal: &Proposal<SeqTypes, DaProposal<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        self.write().await.append_da(proposal).await
-    }
-    async fn record_action(&self, view: ViewNumber, action: HotShotAction) -> anyhow::Result<()> {
-        self.write().await.record_action(view, action).await
-    }
-    async fn update_high_qc(&self, _high_qc: QuorumCertificate<SeqTypes>) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    async fn update_undecided_state(
-        &self,
-        leaves: CommitmentMap<Leaf>,
-        state: BTreeMap<ViewNumber, View<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        self.write()
-            .await
-            .update_undecided_state(leaves, state)
-            .await
-    }
-
-    async fn append_proposal(
-        &self,
-        proposal: &Proposal<SeqTypes, QuorumProposal<SeqTypes>>,
-    ) -> anyhow::Result<()> {
-        self.write().await.append_quorum_proposal(proposal).await
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct NodeState {
-    pub node_id: u64,
-    pub chain_config: ChainConfig,
-    pub l1_client: L1Client,
-    pub peers: Arc<dyn StateCatchup>,
-    pub genesis_header: GenesisHeader,
-    pub genesis_state: ValidatedState,
-    pub l1_genesis: Option<L1BlockInfo>,
-    pub upgrades: BTreeMap<Version, Upgrade>,
-    pub current_version: Version,
-}
-
-impl NodeState {
-    pub fn new(
-        node_id: u64,
-        chain_config: ChainConfig,
-        l1_client: L1Client,
-        catchup: impl StateCatchup + 'static,
-    ) -> Self {
-        Self {
-            node_id,
-            chain_config,
-            l1_client,
-            peers: Arc::new(catchup),
-            genesis_header: Default::default(),
-            genesis_state: ValidatedState {
-                chain_config: chain_config.into(),
-                ..Default::default()
-            },
-            l1_genesis: None,
-            upgrades: Default::default(),
-            current_version: <SeqTypes as NodeType>::Base::version(),
-        }
-    }
-
-    #[cfg(any(test, feature = "testing"))]
-    pub fn mock() -> Self {
-        Self::new(
-            0,
-            ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
-            catchup::mock::MockStateCatchup::default(),
-        )
-    }
-
-    pub fn with_l1(mut self, l1_client: L1Client) -> Self {
-        self.l1_client = l1_client;
-        self
-    }
-
-    pub fn with_genesis(mut self, state: ValidatedState) -> Self {
-        self.genesis_state = state;
-        self
-    }
-
-    pub fn with_chain_config(mut self, cfg: ChainConfig) -> Self {
-        self.chain_config = cfg;
-        self
-    }
-
-    pub fn with_upgrades(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
-        self.upgrades = upgrades;
-        self
-    }
-}
-
-// This allows us to turn on `Default` on InstanceState trait
-// which is used in `HotShot` by `TestBuilderImplementation`.
-#[cfg(any(test, feature = "testing"))]
-impl Default for NodeState {
-    fn default() -> Self {
-        Self::new(
-            1u64,
-            ChainConfig::default(),
-            L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
-            catchup::mock::MockStateCatchup::default(),
-        )
-    }
-}
-
-impl InstanceState for NodeState {}
-
-impl NodeType for SeqTypes {
-    type Time = ViewNumber;
-    type BlockHeader = Header;
-    type BlockPayload = Payload;
-    type SignatureKey = PubKey;
-    type Transaction = Transaction;
-    type InstanceState = NodeState;
-    type ValidatedState = ValidatedState;
-    type Membership = GeneralStaticCommittee<Self, PubKey>;
-    type BuilderSignatureKey = FeeAccount;
-    type Base = StaticVersion<0, 1>;
-    type Upgrade = StaticVersion<0, 2>;
-    const UPGRADE_HASH: [u8; 32] = [
-        1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-        0, 0,
-    ];
-}
-
-#[derive(Clone, Debug, Snafu, Deserialize, Serialize)]
-pub enum Error {
-    // TODO: Can we nest these errors in a `ValidationError` to group them?
-
-    // Parent state commitment of block doesn't match current state commitment
-    IncorrectParent,
-
-    // New view number isn't strictly after current view
-    IncorrectView,
-
-    // Genesis block either has zero or more than one transaction
-    GenesisWrongSize,
-
-    // Genesis transaction not present in genesis block
-    MissingGenesis,
-
-    // Genesis transaction in non-genesis block
-    UnexpectedGenesis,
-
-    // Merkle tree error
-    MerkleTreeError { error: String },
-
-    BlockBuilding,
 }
 
 #[derive(Clone, Debug)]
@@ -310,6 +102,7 @@ pub struct NetworkParams {
     pub private_staking_key: BLSPrivKey,
     pub private_state_key: StateSignKey,
     pub state_peers: Vec<Url>,
+    pub config_peers: Option<Vec<Url>>,
     pub catchup_backoff: BackoffParams,
 
     /// The address to send to other Libp2p nodes to contact us
@@ -376,12 +169,30 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
     let mut persistence = persistence_opt.clone().create().await?;
-    let (mut config, wait_for_orchestrator) = match persistence.load_config().await? {
-        Some(config) => {
+    let (mut config, wait_for_orchestrator) = match (
+        persistence.load_config().await?,
+        network_params.config_peers,
+    ) {
+        (Some(config), _) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
             (config, false)
         }
-        None => {
+        // If we were told to fetch the config from an already-started peer, do so.
+        (None, Some(peers)) => {
+            tracing::info!(?peers, "loading network config from peers");
+            let peers = StatePeers::<Ver>::from_urls(peers, network_params.catchup_backoff);
+            let config = peers.fetch_config(my_config.clone()).await;
+
+            tracing::info!(
+                node_id = config.node_index,
+                stake_table = ?config.config.known_nodes_with_stake,
+                "loaded config",
+            );
+            persistence.save_config(&config).await?;
+            (config, false)
+        }
+        // Otherwise, this is a fresh network; load from the orchestrator.
+        (None, None) => {
             tracing::info!("loading network config from orchestrator");
             tracing::error!(
                 "waiting for other nodes to connect, DO NOT RESTART until fully connected"
@@ -408,13 +219,11 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         }
     };
 
-    let version = Ver::version();
-    if let Some(upgrade) = genesis.upgrades.get(&version) {
-        let view = upgrade.view;
-        config.config.start_proposing_view = view;
-        config.config.stop_proposing_view = view + upgrade.propose_window;
-        config.config.start_voting_view = 1;
-        config.config.stop_voting_view = u64::MAX;
+    if let Some(upgrade) = genesis
+        .upgrades
+        .get(&<SeqTypes as NodeType>::Upgrade::VERSION)
+    {
+        upgrade.set_hotshot_config_parameters(&mut config.config);
     }
 
     // If the `Libp2p` bootstrap nodes were supplied via the command line, override those
@@ -538,7 +347,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     };
 
     let mut ctx = SequencerContext::init(
-        config.config,
+        config,
         instance_state,
         persistence,
         network,
@@ -560,24 +369,26 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use super::*;
-    use crate::{
-        catchup::mock::MockStateCatchup,
-        eth_signature_key::EthKeyPair,
-        persistence::no_storage::{self, NoStorage},
-    };
-    use api::test_helpers::TestNetworkUpgrades;
+    use std::{collections::HashMap, time::Duration};
+
     use committable::Committable;
+    use espresso_types::{
+        eth_signature_key::EthKeyPair,
+        mock::MockStateCatchup,
+        v0::traits::{PersistenceOptions, StateCatchup},
+        ChainConfig, Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade,
+    };
     use futures::{
         future::join_all,
         stream::{Stream, StreamExt},
     };
-    use genesis::Upgrade;
-    use hotshot::traits::{
-        implementations::{MasterMap, MemoryNetwork},
-        BlockPayload,
+    use hotshot::{
+        traits::{
+            implementations::{MasterMap, MemoryNetwork},
+            BlockPayload,
+        },
+        types::EventType::Decide,
     };
-    use hotshot::types::EventType::Decide;
     use hotshot_stake_table::vec_based::StakeTable;
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
@@ -589,9 +400,10 @@ pub mod testing {
         ExecutionType, HotShotConfig, PeerConfig,
     };
     use portpicker::pick_unused_port;
-    use std::collections::HashMap;
-    use std::time::Duration;
     use vbs::version::Version;
+
+    use super::*;
+    use crate::persistence::no_storage::{self, NoStorage};
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
@@ -625,7 +437,7 @@ pub mod testing {
         l1_url: Url,
         state_relay_url: Option<Url>,
         builder_port: Option<u16>,
-        upgrades: Option<TestNetworkUpgrades>,
+        upgrades: BTreeMap<Version, Upgrade>,
     }
 
     impl<const NUM_NODES: usize> TestConfigBuilder<NUM_NODES> {
@@ -644,21 +456,14 @@ pub mod testing {
             self
         }
 
-        pub fn upgrades(mut self, upgrades: TestNetworkUpgrades) -> Self {
-            self.upgrades = Some(upgrades);
+        pub fn upgrades(mut self, upgrades: BTreeMap<Version, Upgrade>) -> Self {
+            self.upgrades = upgrades;
             self
         }
 
         pub fn build(mut self) -> TestConfig<NUM_NODES> {
-            if let Some(upgrades) = &self.upgrades {
-                self.config.start_proposing_view = upgrades.start_proposing_view;
-                self.config.stop_proposing_view = upgrades.stop_proposing_view;
-                self.config.start_voting_view = upgrades.start_voting_view;
-                self.config.stop_voting_view = upgrades.stop_voting_view;
-                self.config.start_proposing_time = 0;
-                self.config.stop_proposing_time = u64::MAX;
-                self.config.start_voting_time = 0;
-                self.config.stop_voting_time = u64::MAX;
+            if let Some(upgrade) = self.upgrades.get(&<SeqTypes as NodeType>::Upgrade::VERSION) {
+                upgrade.set_hotshot_config_parameters(&mut self.config)
             }
 
             TestConfig {
@@ -743,7 +548,7 @@ pub mod testing {
                 l1_url: "http://localhost:8545".parse().unwrap(),
                 state_relay_url: None,
                 builder_port: None,
-                upgrades: None,
+                upgrades: Default::default(),
             }
         }
     }
@@ -757,7 +562,7 @@ pub mod testing {
         l1_url: Url,
         state_relay_url: Option<Url>,
         builder_port: Option<u16>,
-        upgrades: Option<TestNetworkUpgrades>,
+        upgrades: BTreeMap<Version, Upgrade>,
     }
 
     impl<const NUM_NODES: usize> TestConfig<NUM_NODES> {
@@ -781,7 +586,7 @@ pub mod testing {
             self.l1_url.clone()
         }
 
-        pub fn upgrades(&self) -> Option<TestNetworkUpgrades> {
+        pub fn upgrades(&self) -> BTreeMap<Version, Upgrade> {
             self.upgrades.clone()
         }
 
@@ -873,7 +678,12 @@ pub mod testing {
                 "starting node",
             );
             SequencerContext::init(
-                config,
+                NetworkConfig {
+                    config,
+                    // For testing, we use a fake network, so the rest of the network config beyond
+                    // the base consensus config does not matter.
+                    ..Default::default()
+                },
                 node_state,
                 persistence_opt.create().await.unwrap(),
                 network,
@@ -929,12 +739,9 @@ pub mod testing {
 #[cfg(test)]
 mod test {
 
-    use self::testing::run_test_builder;
-
-    use super::*;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-
     use es_version::SequencerVersion;
+    use espresso_types::{Header, NamespaceId, Payload, Transaction};
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
     use hotshot_types::{
@@ -945,6 +752,9 @@ mod test {
     };
     use sequencer_utils::AnvilOptions;
     use testing::{wait_for_decide_on_handle, TestConfigBuilder};
+
+    use self::testing::run_test_builder;
+    use super::*;
 
     #[async_std::test]
     async fn test_skeleton_instantiation() {
@@ -977,7 +787,7 @@ mod test {
         }
 
         // Submit target transaction to handle
-        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3]);
+        let txn = Transaction::new(NamespaceId::from(1_u32), vec![1, 2, 3]);
         handles[0]
             .submit_transaction(txn.clone())
             .await
@@ -1050,18 +860,18 @@ mod test {
             // the fields which should be monotonic are.
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
                 let header = leaf.block_header().clone();
-                if header.height == 0 {
+                if header.height() == 0 {
                     parent = header;
                     continue;
                 }
-                assert_eq!(header.height, parent.height + 1);
-                assert!(header.timestamp >= parent.timestamp);
-                assert!(header.l1_head >= parent.l1_head);
-                assert!(header.l1_finalized >= parent.l1_finalized);
+                assert_eq!(header.height(), parent.height() + 1);
+                assert!(header.timestamp() >= parent.timestamp());
+                assert!(header.l1_head() >= parent.l1_head());
+                assert!(header.l1_finalized() >= parent.l1_finalized());
                 parent = header;
             }
 
-            if parent.height >= success_height {
+            if parent.height() >= success_height {
                 break;
             }
         }

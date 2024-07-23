@@ -1,16 +1,17 @@
+use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, time::Duration};
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use cld::ClDuration;
-use es_version::SEQUENCER_VERSION;
+use espresso_types::{eth_signature_key::EthKeyPair, SeqTypes};
 use hotshot::traits::ValidatedState;
-use hotshot_types::data::ViewNumber;
-use hotshot_types::traits::node_implementation::ConsensusTime;
-use sequencer::{eth_signature_key::EthKeyPair, Genesis, L1Params};
+use hotshot_builder_core::testing::basic_test::NodeType;
+use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use sequencer::{Genesis, L1Params};
 use snafu::Snafu;
-use std::num::NonZeroUsize;
-use std::{path::PathBuf, str::FromStr, time::Duration};
 use url::Url;
+use vbs::version::StaticVersionType;
 
 #[derive(Parser, Clone, Debug)]
 struct NonPermissionedBuilderOptions {
@@ -106,8 +107,6 @@ async fn main() -> anyhow::Result<()> {
     let opt = NonPermissionedBuilderOptions::parse();
     let genesis = Genesis::from_file(&opt.genesis_file)?;
 
-    let sequencer_version = SEQUENCER_VERSION;
-
     let l1_params = L1Params {
         url: opt.l1_provider_url,
         events_max_block_range: 10000,
@@ -122,9 +121,11 @@ async fn main() -> anyhow::Result<()> {
         genesis.chain_config,
         l1_params,
         opt.state_peers,
-        sequencer_version,
+        <SeqTypes as NodeType>::Base::instance(),
     )
     .unwrap();
+
+    let base_fee = genesis.max_base_fee();
 
     let validated_state = ValidatedState::genesis(&instance_state).0;
 
@@ -148,6 +149,7 @@ async fn main() -> anyhow::Result<()> {
         api_response_timeout_duration,
         buffer_view_num_count,
         txn_timeout_duration,
+        base_fee,
     )
     .await;
 

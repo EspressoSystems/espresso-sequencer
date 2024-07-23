@@ -1,9 +1,14 @@
+use std::fmt::Display;
+
 use anyhow::Context;
 use async_std::{
     sync::{Arc, RwLock},
     task::{spawn, JoinHandle},
 };
 use derivative::Derivative;
+use espresso_types::{
+    v0::traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
+};
 use futures::{
     future::{join_all, Future},
     stream::{Stream, StreamExt},
@@ -13,24 +18,19 @@ use hotshot::{
     types::{Event, SystemContextHandle},
     Memberships, SystemContext,
 };
+use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
-use hotshot_orchestrator::client::OrchestratorClient;
+use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
 use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
     traits::{election::Membership, metrics::Metrics, network::ConnectedNetwork},
-    HotShotConfig,
 };
-use std::fmt::Display;
 use url::Url;
 use vbs::version::StaticVersionType;
 
-use crate::{
-    persistence::SequencerPersistence, state_signature::StateSigner, static_stake_table_commitment,
-    Node, NodeState, PubKey, SeqTypes, Transaction, ValidatedState,
-};
-use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
+use crate::{state_signature::StateSigner, static_stake_table_commitment, Node, SeqTypes};
 /// The consensus handle
 pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>>;
 
@@ -62,6 +62,8 @@ pub struct SequencerContext<
     detached: bool,
 
     node_state: NodeState,
+
+    config: NetworkConfig<PubKey>,
 }
 
 impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType + 'static>
@@ -70,7 +72,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     #[tracing::instrument(skip_all, fields(node_id = instance_state.node_id))]
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
-        config: HotShotConfig<PubKey>,
+        network_config: NetworkConfig<PubKey>,
         instance_state: NodeState,
         persistence: P,
         network: Arc<N>,
@@ -79,6 +81,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         stake_table_capacity: u64,
         _: Ver,
     ) -> anyhow::Result<Self> {
+        let config = &network_config.config;
         let pub_key = config.my_own_validator_config.public_key;
         tracing::info!(%pub_key, "initializing consensus");
 
@@ -130,7 +133,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             config.my_own_validator_config.public_key,
             config.my_own_validator_config.private_key.clone(),
             instance_state.node_id,
-            config,
+            config.clone(),
             memberships,
             network,
             initializer,
@@ -152,6 +155,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             state_signer,
             event_streamer,
             instance_state,
+            network_config,
         ))
     }
 
@@ -162,6 +166,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         state_signer: StateSigner<Ver>,
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
         node_state: NodeState,
+        config: NetworkConfig<PubKey>,
     ) -> Self {
         let events = handle.event_stream();
 
@@ -173,6 +178,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             wait_for_orchestrator: None,
             events_streamer: event_streamer.clone(),
             node_state,
+            config,
         };
         ctx.spawn(
             "main event handler",
@@ -251,6 +257,8 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             orchestrator_client
                 .wait_for_all_nodes_ready(self.node_state.node_id)
                 .await;
+        } else {
+            tracing::error!("Cannot get info from orchestrator client");
         }
         tracing::warn!("starting consensus");
         self.handle.read().await.hotshot.start_consensus().await;
@@ -283,6 +291,10 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     pub fn detach(&mut self) {
         // Set `detached` so the drop handler doesn't call `shut_down`.
         self.detached = true;
+    }
+
+    pub fn config(&self) -> NetworkConfig<PubKey> {
+        self.config.clone()
     }
 }
 

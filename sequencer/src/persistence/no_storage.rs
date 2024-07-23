@@ -1,9 +1,13 @@
 //! Mock implementation of persistence, for testing.
 #![cfg(any(test, feature = "testing"))]
 
-use super::{NetworkConfig, PersistenceOptions, SequencerPersistence};
-use crate::{Leaf, SeqTypes, ViewNumber};
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
+use espresso_types::{
+    v0::traits::{PersistenceOptions, SequencerPersistence},
+    Leaf, NetworkConfig,
+};
 use hotshot_types::{
     consensus::CommitmentMap,
     data::{DaProposal, QuorumProposal, VidDisperseShare},
@@ -12,7 +16,8 @@ use hotshot_types::{
     simple_certificate::QuorumCertificate,
     utils::View,
 };
-use std::collections::BTreeMap;
+
+use crate::{SeqTypes, ViewNumber};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Options;

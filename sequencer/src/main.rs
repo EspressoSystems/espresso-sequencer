@@ -83,6 +83,7 @@ where
         private_staking_key,
         private_state_key,
         state_peers: opt.state_peers,
+        config_peers: opt.config_peers,
         catchup_backoff: opt.catchup_backoff,
     };
 
@@ -163,20 +164,22 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use std::time::Duration;
+
     use async_std::task::spawn;
     use es_version::SequencerVersion;
+    use espresso_types::PubKey;
     use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey};
     use portpicker::pick_unused_port;
     use sequencer::{
         api::options::{Http, Status},
         genesis::StakeTableConfig,
         persistence::fs,
-        PubKey,
     };
-    use std::time::Duration;
     use surf_disco::{error::ClientError, Client, Url};
     use tempfile::TempDir;
+
+    use super::*;
 
     #[async_std::test]
     async fn test_startup_before_orchestrator() {

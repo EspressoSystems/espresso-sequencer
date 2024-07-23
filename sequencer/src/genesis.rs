@@ -1,17 +1,13 @@
-use crate::{
-    l1_client::L1BlockInfo,
-    state::{FeeAccount, FeeAmount},
-    ChainConfig,
-};
-use anyhow::Context;
-use derive_more::{Display, From, Into};
-use sequencer_utils::{impl_serde_from_string_or_integer, ser::FromStringOrInteger};
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
     path::Path,
 };
-use time::{format_description::well_known::Rfc3339 as TimestampFormat, OffsetDateTime};
+
+use anyhow::Context;
+use espresso_types::{
+    ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade, UpgradeType,
+};
+use serde::{Deserialize, Serialize};
 use vbs::version::Version;
 
 /// Initial configuration of an Espresso stake table.
@@ -39,60 +35,6 @@ pub enum L1Finalized {
     Number { number: u64 },
 }
 
-#[derive(Hash, Copy, Clone, Debug, Display, PartialEq, Eq, From, Into)]
-#[display(fmt = "{}", "_0.format(&TimestampFormat).unwrap()")]
-pub struct Timestamp(OffsetDateTime);
-
-impl_serde_from_string_or_integer!(Timestamp);
-
-impl Default for Timestamp {
-    fn default() -> Self {
-        Self::from_integer(0).unwrap()
-    }
-}
-
-impl Timestamp {
-    pub fn unix_timestamp(&self) -> u64 {
-        self.0.unix_timestamp() as u64
-    }
-}
-
-impl FromStringOrInteger for Timestamp {
-    type Binary = u64;
-    type Integer = u64;
-
-    fn from_binary(b: Self::Binary) -> anyhow::Result<Self> {
-        Self::from_integer(b)
-    }
-
-    fn from_integer(i: Self::Integer) -> anyhow::Result<Self> {
-        let unix = i.try_into().context("timestamp out of range")?;
-        Ok(Self(
-            OffsetDateTime::from_unix_timestamp(unix).context("invalid timestamp")?,
-        ))
-    }
-
-    fn from_string(s: String) -> anyhow::Result<Self> {
-        Ok(Self(
-            OffsetDateTime::parse(&s, &TimestampFormat).context("invalid timestamp")?,
-        ))
-    }
-
-    fn to_binary(&self) -> anyhow::Result<Self::Binary> {
-        Ok(self.unix_timestamp())
-    }
-
-    fn to_string(&self) -> anyhow::Result<String> {
-        Ok(format!("{self}"))
-    }
-}
-
-/// Information about the genesis state which feeds into the genesis block header.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-pub struct GenesisHeader {
-    pub timestamp: Timestamp,
-}
-
 /// Genesis of an Espresso chain.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Genesis {
@@ -107,45 +49,59 @@ pub struct Genesis {
     pub upgrades: BTreeMap<Version, Upgrade>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(untagged)]
-#[serde(rename_all = "snake_case")]
-pub enum UpgradeType {
-    // Note: Wrapping this in a tuple variant causes deserialization to fail because
-    // the 'chain_config' name is also provided in the TOML input.
-    ChainConfig { chain_config: ChainConfig },
-}
+impl Genesis {
+    pub fn max_base_fee(&self) -> FeeAmount {
+        let mut base_fee = self.chain_config.base_fee;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Upgrade {
-    pub view: u64,
-    pub propose_window: u64,
-    #[serde(flatten)]
-    pub upgrade_type: UpgradeType,
+        let upgrades: Vec<&Upgrade> = self.upgrades.values().collect();
+
+        for upgrade in upgrades {
+            match upgrade.upgrade_type {
+                UpgradeType::ChainConfig { chain_config } => {
+                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
+                }
+            }
+        }
+
+        base_fee
+    }
 }
 
 mod upgrade_serialization {
-    use crate::genesis::{Upgrade, UpgradeType};
-    use serde::ser::SerializeSeq;
-    use serde::{
-        de::{SeqAccess, Visitor},
-        Deserialize, Deserializer, Serializer,
-    };
+
     use std::{collections::BTreeMap, fmt};
+
+    use espresso_types::{
+        v0_1::{TimeBasedUpgrade, UpgradeMode, ViewBasedUpgrade},
+        Upgrade, UpgradeType,
+    };
+    use serde::{
+        de::{self, SeqAccess, Visitor},
+        ser::SerializeSeq,
+        Deserialize, Deserializer, Serialize, Serializer,
+    };
     use vbs::version::Version;
 
     pub fn serialize<S>(map: &BTreeMap<Version, Upgrade>, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
+        #[derive(Debug, Clone, Serialize, Deserialize)]
+        pub struct Fields {
+            pub version: String,
+            #[serde(flatten)]
+            pub mode: UpgradeMode,
+            #[serde(flatten)]
+            pub upgrade_type: UpgradeType,
+        }
+
         let mut seq = serializer.serialize_seq(Some(map.len()))?;
         for (version, upgrade) in map {
-            seq.serialize_element(&(
-                version.to_string(),
-                upgrade.view,
-                upgrade.propose_window,
-                upgrade.upgrade_type.clone(),
-            ))?;
+            seq.serialize_element(&Fields {
+                version: version.to_string(),
+                mode: upgrade.mode.clone(),
+                upgrade_type: upgrade.upgrade_type.clone(),
+            })?
         }
         seq.end()
     }
@@ -155,6 +111,20 @@ mod upgrade_serialization {
         D: Deserializer<'de>,
     {
         struct VecToHashMap;
+
+        #[derive(Debug, Clone, Serialize, Deserialize)]
+        pub struct Fields {
+            pub version: String,
+            // If both `time_based` and `view_based` fields are provided
+            // and we use an enum for deserialization, then one of the variant fields will be ignored.
+            // We want to raise an error in such a case to avoid ambiguity
+            #[serde(flatten)]
+            pub time_based: Option<TimeBasedUpgrade>,
+            #[serde(flatten)]
+            pub view_based: Option<ViewBasedUpgrade>,
+            #[serde(flatten)]
+            pub upgrade_type: UpgradeType,
+        }
 
         impl<'de> Visitor<'de> for VecToHashMap {
             type Value = BTreeMap<Version, Upgrade>;
@@ -169,16 +139,7 @@ mod upgrade_serialization {
             {
                 let mut map = BTreeMap::new();
 
-                #[derive(Deserialize)]
-                struct UpgradeFields {
-                    version: String,
-                    view: u64,
-                    propose_window: u64,
-                    #[serde(flatten)]
-                    upgrade_type: UpgradeType,
-                }
-
-                while let Some(fields) = seq.next_element::<UpgradeFields>()? {
+                while let Some(fields) = seq.next_element::<Fields>()? {
                     // add try_from in Version
                     let version: Vec<_> = fields.version.split('.').collect();
 
@@ -187,14 +148,50 @@ mod upgrade_serialization {
                         minor: version[1].parse().expect("invalid version"),
                     };
 
-                    map.insert(
-                        version,
-                        Upgrade {
-                            view: fields.view,
-                            propose_window: fields.propose_window,
-                            upgrade_type: fields.upgrade_type,
-                        },
-                    );
+                    match (fields.time_based, fields.view_based) {
+                        (Some(_), Some(_)) => {
+                            return Err(de::Error::custom(
+                                "both view and time mode parameters are set",
+                            ))
+                        }
+                        (None, None) => {
+                            return Err(de::Error::custom(
+                                "no view or time mode parameters provided",
+                            ))
+                        }
+                        (None, Some(v)) => {
+                            if v.start_proposing_view > v.stop_proposing_view {
+                                return Err(de::Error::custom(
+                                    "stop_proposing_view is less than start_proposing_view",
+                                ));
+                            }
+
+                            map.insert(
+                                version,
+                                Upgrade {
+                                    mode: UpgradeMode::View(v),
+                                    upgrade_type: fields.upgrade_type,
+                                },
+                            );
+                        }
+                        (Some(t), None) => {
+                            if t.start_proposing_time.unix_timestamp()
+                                > t.stop_proposing_time.unix_timestamp()
+                            {
+                                return Err(de::Error::custom(
+                                    "stop_proposing_time is less than start_proposing_time",
+                                ));
+                            }
+
+                            map.insert(
+                                version,
+                                Upgrade {
+                                    mode: UpgradeMode::Time(t),
+                                    upgrade_type: fields.upgrade_type.clone(),
+                                },
+                            );
+                        }
+                    }
                 }
 
                 Ok(map)
@@ -223,10 +220,14 @@ impl Genesis {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
+    use espresso_types::{
+        L1BlockInfo, TimeBasedUpgrade, Timestamp, UpgradeMode, UpgradeType, ViewBasedUpgrade,
+    };
     use ethers::prelude::{Address, H160, H256};
+    use sequencer_utils::ser::FromStringOrInteger;
     use toml::toml;
+
+    use super::*;
 
     #[test]
     fn test_genesis_from_toml_with_optional_fields() {
@@ -252,18 +253,6 @@ mod test {
             number = 64
             timestamp = "0x123def"
             hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
-
-            [[upgrade]]
-            version = "1.0"
-            view = 1
-            propose_window = 10
-
-            [upgrade.chain_config]
-            chain_id = 12345
-            max_block_size = 30000
-            base_fee = 1
-            fee_recipient = "0x0000000000000000000000000000000000000000"
-            fee_contract = "0x0000000000000000000000000000000000000000"
         }
         .to_string();
 
@@ -407,5 +396,177 @@ mod test {
                 timestamp: Timestamp::from_integer(1715872828).unwrap(),
             }
         )
+    }
+
+    #[test]
+    fn test_genesis_toml_upgrade_view_mode() {
+        // without optional fields
+        // with view settings
+        let toml = toml! {
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [accounts]
+            "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f" = 100000
+            "0x0000000000000000000000000000000000000000" = 42
+
+            [l1_finalized]
+            number = 64
+            timestamp = "0x123def"
+            hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 1
+            stop_proposing_view = 15
+
+            [upgrade.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+
+        let (version, genesis_upgrade) = genesis.upgrades.last_key_value().unwrap();
+
+        assert_eq!(*version, Version { major: 0, minor: 2 });
+
+        let upgrade = Upgrade {
+            mode: UpgradeMode::View(ViewBasedUpgrade {
+                start_voting_view: None,
+                stop_voting_view: None,
+                start_proposing_view: 1,
+                stop_proposing_view: 15,
+            }),
+            upgrade_type: UpgradeType::ChainConfig {
+                chain_config: genesis.chain_config,
+            },
+        };
+
+        assert_eq!(*genesis_upgrade, upgrade);
+    }
+
+    #[test]
+    fn test_genesis_toml_upgrade_time_mode() {
+        // without optional fields
+        // with time settings
+        let toml = toml! {
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [accounts]
+            "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f" = 100000
+            "0x0000000000000000000000000000000000000000" = 42
+
+            [l1_finalized]
+            number = 64
+            timestamp = "0x123def"
+            hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_time = "2024-01-01T00:00:00Z"
+            stop_proposing_time = "2024-01-02T00:00:00Z"
+
+            [upgrade.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+        }
+        .to_string();
+
+        let genesis: Genesis = toml::from_str(&toml).unwrap_or_else(|err| panic!("{err:#}"));
+
+        let (version, genesis_upgrade) = genesis.upgrades.last_key_value().unwrap();
+
+        assert_eq!(*version, Version { major: 0, minor: 2 });
+
+        let upgrade = Upgrade {
+            mode: UpgradeMode::Time(TimeBasedUpgrade {
+                start_voting_time: None,
+                stop_voting_time: None,
+                start_proposing_time: Timestamp::from_string("2024-01-01T00:00:00Z".to_string())
+                    .unwrap(),
+                stop_proposing_time: Timestamp::from_string("2024-01-02T00:00:00Z".to_string())
+                    .unwrap(),
+            }),
+            upgrade_type: UpgradeType::ChainConfig {
+                chain_config: genesis.chain_config,
+            },
+        };
+
+        assert_eq!(*genesis_upgrade, upgrade);
+    }
+
+    #[test]
+    fn test_genesis_toml_upgrade_view_and_time_mode() {
+        // set both time and view parameters
+        // this should err
+        let toml = toml! {
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [accounts]
+            "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f" = 100000
+            "0x0000000000000000000000000000000000000000" = 42
+
+            [l1_finalized]
+            number = 64
+            timestamp = "0x123def"
+            hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 1
+            stop_proposing_view = 10
+            start_proposing_time = 1
+            stop_proposing_time = 10
+
+            [upgrade.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+        }
+        .to_string();
+
+        toml::from_str::<Genesis>(&toml).unwrap_err();
     }
 }

@@ -1,4 +1,32 @@
+use std::{
+    alloc::System,
+    any,
+    fmt::{Debug, Display},
+    marker::PhantomData,
+    mem,
+    net::{IpAddr, Ipv4Addr},
+    num::NonZeroUsize,
+    thread::Builder,
+    time::Duration,
+};
+
 use anyhow::Context;
+use async_broadcast::{
+    broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender, TryRecvError,
+};
+use async_compatibility_layer::{
+    art::{async_sleep, async_spawn},
+    channel::{unbounded, UnboundedReceiver, UnboundedSender},
+};
+use async_std::{
+    sync::{Arc, RwLock},
+    task::{spawn, JoinHandle},
+};
+use espresso_types::{
+    eth_signature_key::EthKeyPair,
+    v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
+    FeeAmount, L1Client, NodeState, Payload, PubKey, SeqTypes, ValidatedState,
+};
 use ethers::{
     core::k256::ecdsa::SigningKey,
     signers::{coins_bip39::English, MnemonicBuilder, Signer as _, Wallet},
@@ -15,41 +43,11 @@ use hotshot::{
             derive_libp2p_peer_id, CdnMetricsValue, CombinedNetworks, KeyPair, Libp2pNetwork,
             PushCdnNetwork, Topic, WrappedSignatureKey,
         },
+        BlockPayload,
     },
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, SystemContext,
 };
-use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
-use hotshot_orchestrator::{
-    client::{OrchestratorClient, ValidatorArgs},
-    config::NetworkConfig,
-};
-use hotshot_types::{
-    consensus::ConsensusMetricsValue,
-    event::Event,
-    light_client::StateKeyPair,
-    signature_key::{BLSPrivKey, BLSPubKey},
-    traits::{election::Membership, metrics::Metrics, network::ConnectedNetwork, EncodeBytes},
-    utils::BuilderCommitment,
-    HotShotConfig, PeerConfig, ValidatorConfig,
-};
-use std::fmt::Display;
-// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
-use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
-
-use async_broadcast::{
-    broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender, TryRecvError,
-};
-use async_compatibility_layer::{
-    art::{async_sleep, async_spawn},
-    channel::{unbounded, UnboundedReceiver, UnboundedSender},
-};
-use async_std::sync::RwLock;
-use async_std::{
-    sync::Arc,
-    task::{spawn, JoinHandle},
-};
-use hotshot::traits::BlockPayload;
 use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
@@ -64,46 +62,51 @@ use hotshot_builder_core::{
         ReceivedTransaction,
     },
 };
-use hotshot_state_prover;
-use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
-use jf_signature::bls_over_bn254::VerKey;
-use sequencer::{
-    catchup::{mock::MockStateCatchup, StatePeers},
-    context::{Consensus, SequencerContext},
-    eth_signature_key::EthKeyPair,
-    genesis::L1Finalized,
-    l1_client::L1Client,
-    network,
-    network::libp2p::split_off_peer_id,
-    persistence::SequencerPersistence,
-    state::FeeAccount,
-    state::ValidatedState,
-    state_signature::StakeTableCommitmentType,
-    state_signature::{static_stake_table_commitment, StateSigner},
-    ChainConfig, Genesis, L1Params, NetworkParams, Node, NodeState, Payload, PrivKey, PubKey,
-    SeqTypes,
-};
-use std::{alloc::System, any, fmt::Debug, mem};
-use std::{marker::PhantomData, net::IpAddr};
-use std::{net::Ipv4Addr, thread::Builder};
-use tide_disco::{app, method::ReadState, App, Url};
-use vbs::version::StaticVersionType;
-
-use hotshot_types::{
-    data::{fake_commitment, Leaf, ViewNumber},
-    traits::{
-        block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-        node_implementation::{ConsensusTime, NodeType},
-    },
-};
-
-use crate::run_builder_api_service;
 use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
     events_source::{BuilderEvent, EventConsumer, EventsStreamer},
 };
-use std::{num::NonZeroUsize, time::Duration};
+use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
+use hotshot_orchestrator::{
+    client::{OrchestratorClient, ValidatorArgs},
+    config::NetworkConfig,
+};
+// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
+use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
+use hotshot_state_prover;
+use hotshot_types::{
+    consensus::ConsensusMetricsValue,
+    data::{fake_commitment, Leaf, ViewNumber},
+    event::Event,
+    light_client::StateKeyPair,
+    signature_key::{BLSPrivKey, BLSPubKey},
+    traits::{
+        block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
+        election::Membership,
+        metrics::Metrics,
+        network::ConnectedNetwork,
+        node_implementation::{ConsensusTime, NodeType},
+        EncodeBytes,
+    },
+    utils::BuilderCommitment,
+    HotShotConfig, PeerConfig, ValidatorConfig,
+};
+use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
+use jf_signature::bls_over_bn254::VerKey;
+use sequencer::{
+    catchup::StatePeers,
+    context::{Consensus, SequencerContext},
+    genesis::L1Finalized,
+    network,
+    network::libp2p::split_off_peer_id,
+    state_signature::{static_stake_table_commitment, StakeTableCommitmentType, StateSigner},
+    Genesis, L1Params, NetworkParams, Node,
+};
 use surf_disco::Client;
+use tide_disco::{app, method::ReadState, App, Url};
+use vbs::version::StaticVersionType;
+
+use crate::run_builder_api_service;
 
 pub struct BuilderContext<
     N: ConnectedNetwork<PubKey>,
@@ -244,6 +247,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     #[cfg(not(feature = "libp2p"))]
     let network = Arc::from(cdn_network.clone());
 
+    let base_fee = genesis.max_base_fee();
     let mut genesis_state = ValidatedState {
         chain_config: genesis.chain_config.into(),
         ..Default::default()
@@ -308,6 +312,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
         max_api_timeout_duration,
         buffered_view_num_count,
         maximize_txns_count_timeout_duration,
+        base_fee,
     )
     .await?;
 
@@ -408,6 +413,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
+        base_fee: FeeAmount,
     ) -> anyhow::Result<Self> {
         // tx channel
         let (mut tx_sender, tx_receiver) =
@@ -473,9 +479,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             global_state_clone,
             NonZeroUsize::new(1).unwrap(),
             maximize_txns_count_timeout_duration,
-            instance_state
-                .chain_config
-                .base_fee
+                              base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
@@ -537,23 +541,26 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::non_permissioned;
-    use crate::testing::{hotshot_builder_url, PermissionedBuilderTestConfig};
-    use crate::testing::{HotShotTestConfig, NonPermissionedBuilderTestConfig};
-    use async_compatibility_layer::art::{async_sleep, async_spawn};
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
+    use std::time::Duration;
+
+    use async_compatibility_layer::{
+        art::{async_sleep, async_spawn},
+        logging::{setup_backtrace, setup_logging},
+    };
     use async_lock::RwLock;
     use async_std::task;
     use es_version::SequencerVersion;
+    use espresso_types::{FeeAccount, NamespaceId, Transaction};
     use hotshot_builder_api::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
-    use hotshot_builder_core::builder_state::BuilderProgress;
-    use hotshot_builder_core::service::{
-        run_non_permissioned_standalone_builder_service,
-        run_permissioned_standalone_builder_service,
+    use hotshot_builder_core::{
+        builder_state::BuilderProgress,
+        service::{
+            run_non_permissioned_standalone_builder_service,
+            run_permissioned_standalone_builder_service,
+        },
     };
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -567,12 +574,17 @@ mod test {
             signature_key::SignatureKey,
         },
     };
-    use sequencer::{
-        persistence::no_storage::{self, NoStorage},
-        NamespaceId, Payload, Transaction,
-    };
-    use std::time::Duration;
+    use sequencer::persistence::no_storage::{self, NoStorage};
     use surf_disco::Client;
+
+    use super::*;
+    use crate::{
+        non_permissioned,
+        testing::{
+            hotshot_builder_url, HotShotTestConfig, NonPermissionedBuilderTestConfig,
+            PermissionedBuilderTestConfig,
+        },
+    };
 
     #[async_std::test]
     async fn test_permissioned_builder() {
@@ -716,7 +728,7 @@ mod test {
             }
         }
 
-        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3]);
+        let txn = Transaction::new(NamespaceId::from(1_u32), vec![1, 2, 3]);
         match builder_client
             .post::<()>("txn_submit/submit")
             .body_json(&txn)

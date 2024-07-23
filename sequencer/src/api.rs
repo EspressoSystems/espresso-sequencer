@@ -1,11 +1,5 @@
-use self::data_source::{HotShotConfigDataSource, PublicHotShotConfig, StateSignatureDataSource};
-use crate::{
-    network,
-    persistence::{ChainConfigPersistence, SequencerPersistence},
-    state::{BlockMerkleTree, FeeAccountProof},
-    state_signature::StateSigner,
-    ChainConfig, NamespaceId, Node, NodeState, PubKey, SeqTypes, SequencerContext, Transaction,
-};
+use std::pin::Pin;
+
 use anyhow::{bail, Context};
 use async_once_cell::Lazy;
 use async_std::sync::{Arc, RwLock};
@@ -13,23 +7,31 @@ use async_trait::async_trait;
 use committable::Commitment;
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
-use ethers::prelude::{Address, U256};
+use espresso_types::{
+    v0::traits::SequencerPersistence, AccountQueryData, BlockMerkleTree, ChainConfig,
+    FeeAccountProof, NodeState, PubKey, Transaction,
+};
+use ethers::prelude::Address;
 use futures::{
     future::{BoxFuture, Future, FutureExt},
     stream::{BoxStream, Stream},
 };
 use hotshot::types::{Event, SystemContextHandle};
 use hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
+use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
     data::ViewNumber, light_client::StateSignatureRequestBody, traits::network::ConnectedNetwork,
-    HotShotConfig,
 };
 use jf_merkle_tree::MerkleTreeScheme;
-use serde::{Deserialize, Serialize};
-use std::pin::Pin;
 use vbs::version::StaticVersionType;
+
+use self::data_source::{HotShotConfigDataSource, PublicNetworkConfig, StateSignatureDataSource};
+use crate::{
+    network, persistence::ChainConfigPersistence, state_signature::StateSigner, Node, SeqTypes,
+    SequencerContext,
+};
 
 pub mod data_source;
 pub mod endpoints;
@@ -39,18 +41,6 @@ pub mod sql;
 mod update;
 
 pub use options::Options;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AccountQueryData {
-    pub balance: U256,
-    pub proof: FeeAccountProof,
-}
-
-impl From<(FeeAccountProof, U256)> for AccountQueryData {
-    fn from((proof, balance): (FeeAccountProof, U256)) -> Self {
-        Self { balance, proof }
-    }
-}
 
 pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
 
@@ -63,6 +53,7 @@ struct ConsensusState<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver:
     state_signer: Arc<StateSigner<Ver>>,
     event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
     node_state: NodeState,
+    config: NetworkConfig<PubKey>,
 
     #[derivative(Debug = "ignore")]
     handle: Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>>>>,
@@ -76,6 +67,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             state_signer: ctx.state_signer(),
             event_streamer: ctx.event_streamer(),
             node_state: ctx.node_state(),
+            config: ctx.config(),
             handle: ctx.consensus(),
         }
     }
@@ -124,18 +116,8 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         &self.consensus.as_ref().get().await.get_ref().node_state
     }
 
-    async fn hotshot_config(&self) -> HotShotConfig<PubKey> {
-        self.consensus
-            .as_ref()
-            .get()
-            .await
-            .get_ref()
-            .handle
-            .read()
-            .await
-            .hotshot
-            .config
-            .clone()
+    async fn network_config(&self) -> NetworkConfig<PubKey> {
+        self.consensus.as_ref().get().await.get_ref().config.clone()
     }
 }
 
@@ -324,16 +306,16 @@ impl<
         P: SequencerPersistence,
     > HotShotConfigDataSource for StorageState<N, P, D, Ver>
 {
-    async fn get_config(&self) -> PublicHotShotConfig {
-        self.as_ref().hotshot_config().await.into()
+    async fn get_config(&self) -> PublicNetworkConfig {
+        self.as_ref().network_config().await.into()
     }
 }
 
 impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
     HotShotConfigDataSource for ApiState<N, P, Ver>
 {
-    async fn get_config(&self) -> PublicHotShotConfig {
-        self.hotshot_config().await.into()
+    async fn get_config(&self) -> PublicNetworkConfig {
+        self.network_config().await.into()
     }
 }
 
@@ -361,25 +343,23 @@ impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: Sequencer
 
 #[cfg(any(test, feature = "testing"))]
 pub mod test_helpers {
-    use super::*;
-    use crate::{
-        catchup::{mock::MockStateCatchup, StateCatchup},
-        genesis::Upgrade,
-        persistence::{no_storage, PersistenceOptions},
-        state::{BlockMerkleTree, ValidatedState},
-        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig, TestConfigBuilder},
-    };
+    use std::time::Duration;
+
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use committable::Committable;
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
+    use espresso_types::{
+        mock::MockStateCatchup,
+        v0::traits::{PersistenceOptions, StateCatchup},
+        NamespaceId, ValidatedState,
+    };
     use ethers::{prelude::Address, utils::Anvil};
     use futures::{
         future::{join_all, FutureExt},
         stream::StreamExt,
     };
     use hotshot::types::{Event, EventType};
-
     use hotshot_contract_adapter::light_client::ParsedLightClientState;
     use hotshot_types::{
         event::LeafInfo,
@@ -388,10 +368,14 @@ pub mod test_helpers {
     use itertools::izip;
     use jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
-    use std::{collections::BTreeMap, time::Duration};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
-    use vbs::version::Version;
+
+    use super::*;
+    use crate::{
+        persistence::no_storage,
+        testing::{run_test_builder, wait_for_decide_on_handle, TestConfig, TestConfigBuilder},
+    };
 
     pub const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
@@ -510,15 +494,6 @@ pub mod test_helpers {
         }
     }
 
-    #[derive(Clone, Debug)]
-    pub struct TestNetworkUpgrades {
-        pub upgrades: BTreeMap<Version, Upgrade>,
-        pub start_proposing_view: u64,
-        pub stop_proposing_view: u64,
-        pub start_voting_view: u64,
-        pub stop_voting_view: u64,
-    }
-
     impl<P: PersistenceOptions, const NUM_NODES: usize> TestNetwork<P, { NUM_NODES }> {
         pub async fn new<C: StateCatchup + 'static>(
             cfg: TestNetworkConfig<{ NUM_NODES }, P, C>,
@@ -536,7 +511,7 @@ pub mod test_helpers {
                     .map(|(i, (state, persistence, catchup))| {
                         let opt = cfg.api_config.clone();
                         let cfg = &cfg.network_config;
-                        let upgrades_map = cfg.upgrades().map(|e| e.upgrades).unwrap_or_default();
+                        let upgrades_map = cfg.upgrades();
                         async move {
                             if i == 0 {
                                 opt.serve(
@@ -673,7 +648,7 @@ pub mod test_helpers {
         setup_logging();
         setup_backtrace();
 
-        let txn = Transaction::new(NamespaceId::from(1), vec![1, 2, 3, 4]);
+        let txn = Transaction::new(NamespaceId::from(1_u32), vec![1, 2, 3, 4]);
 
         let port = pick_unused_port().expect("No ports free");
 
@@ -780,7 +755,7 @@ pub mod test_helpers {
             {
                 if leaf_chain
                     .iter()
-                    .any(|LeafInfo { leaf, .. }| leaf.block_header().height > 2)
+                    .any(|LeafInfo { leaf, .. }| leaf.block_header().height() > 2)
                 {
                     break;
                 }
@@ -844,18 +819,12 @@ pub mod test_helpers {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod api_tests {
-    use self::options::HotshotEvents;
-
-    use super::*;
-    use crate::{
-        testing::{wait_for_decide_on_handle, TestConfigBuilder},
-        Header, NamespaceId,
-    };
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
     use es_version::SequencerVersion;
+    use espresso_types::{Header, NamespaceId};
     use ethers::utils::Anvil;
     use futures::stream::StreamExt;
     use hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
@@ -866,6 +835,10 @@ mod api_tests {
         TestNetwork, TestNetworkConfigBuilder,
     };
     use tide_disco::error::ServerError;
+
+    use self::options::HotshotEvents;
+    use super::*;
+    use crate::testing::{wait_for_decide_on_handle, TestConfigBuilder};
 
     #[async_std::test]
     pub(crate) async fn submit_test_with_query_module<D: TestableSequencerDataSource>() {
@@ -891,7 +864,7 @@ mod api_tests {
         setup_backtrace();
 
         // Arbitrary transaction, arbitrary namespace ID
-        let ns_id = NamespaceId::from(42);
+        let ns_id = NamespaceId::from(42_u32);
         let txn = Transaction::new(ns_id, vec![1, 2, 3, 4]);
 
         // Start query service.
@@ -959,14 +932,14 @@ mod api_tests {
 
                 ns_proof
                     .verify(
-                        &header.ns_table,
-                        &header.payload_commitment,
+                        header.ns_table(),
+                        &header.payload_commitment(),
                         vid_common.common(),
                     )
                     .unwrap();
             } else {
                 // Namespace proof should be present if ns_id exists in ns_table
-                assert!(header.ns_table.find_ns_id(&ns_id).is_none());
+                assert!(header.ns_table().find_ns_id(&ns_id).is_none());
                 assert!(ns_query_res.transactions.is_empty());
             }
 
@@ -1051,25 +1024,22 @@ mod api_tests {
 
 #[cfg(test)]
 mod test {
-    use self::{
-        data_source::testing::TestableSequencerDataSource, sql::DataSource as SqlDataSource,
-    };
-    use super::*;
-    use crate::{
-        catchup::{mock::MockStateCatchup, StatePeers},
-        genesis::{Upgrade, UpgradeType},
-        persistence::no_storage,
-        state::{FeeAccount, FeeAmount, ValidatedState},
-        testing::{TestConfig, TestConfigBuilder},
-        Header,
-    };
+    use std::time::Duration;
+
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use committable::{Commitment, Committable};
     use es_version::{SequencerVersion, SEQUENCER_VERSION};
+    use espresso_types::{
+        mock::MockStateCatchup,
+        v0_1::{UpgradeMode, ViewBasedUpgrade},
+        FeeAccount, FeeAmount, Header, Upgrade, UpgradeType, ValidatedState,
+    };
     use ethers::utils::Anvil;
-    use futures::future::{self, join_all};
-    use futures::stream::{StreamExt, TryStreamExt};
+    use futures::{
+        future::{self, join_all},
+        stream::{StreamExt, TryStreamExt},
+    };
     use hotshot::types::EventType;
     use hotshot_query_service::{
         availability::{BlockQueryData, LeafQueryData},
@@ -1077,18 +1047,32 @@ mod test {
     };
     use hotshot_types::{
         event::LeafInfo,
-        traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
+        traits::{
+            metrics::NoMetrics,
+            node_implementation::{ConsensusTime, NodeType},
+        },
+        ValidatorConfig,
     };
     use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     use portpicker::pick_unused_port;
-    use std::time::Duration;
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
-        TestNetwork, TestNetworkConfigBuilder, TestNetworkUpgrades,
+        TestNetwork, TestNetworkConfigBuilder,
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
     use vbs::version::Version;
+
+    use self::{
+        data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
+        sql::DataSource as SqlDataSource,
+    };
+    use super::*;
+    use crate::{
+        catchup::StatePeers,
+        persistence::no_storage,
+        testing::{TestConfig, TestConfigBuilder},
+    };
 
     #[async_std::test]
     async fn test_healthcheck() {
@@ -1451,28 +1435,24 @@ mod test {
             base_fee: 1.into(),
             ..Default::default()
         };
-        let mut map = std::collections::BTreeMap::new();
-        let view = 5;
-        let propose_window = 10;
-        map.insert(
-            Version { major: 0, minor: 2 },
+        let mut upgrades = std::collections::BTreeMap::new();
+
+        upgrades.insert(
+            <SeqTypes as NodeType>::Upgrade::VERSION,
             Upgrade {
-                view,
-                propose_window,
+                mode: UpgradeMode::View(ViewBasedUpgrade {
+                    start_voting_view: None,
+                    stop_voting_view: None,
+                    start_proposing_view: 1,
+                    stop_proposing_view: 10,
+                }),
                 upgrade_type: UpgradeType::ChainConfig {
                     chain_config: chain_config_upgrade,
                 },
             },
         );
 
-        let stop_voting_view = 100;
-        let upgrades = TestNetworkUpgrades {
-            upgrades: map,
-            start_proposing_view: view,
-            stop_proposing_view: view + propose_window,
-            start_voting_view: 1,
-            stop_voting_view,
-        };
+        let stop_voting_view = u64::MAX;
 
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
@@ -1685,5 +1665,60 @@ mod test {
             .await
             .unwrap();
         assert_eq!(chain, new_chain);
+    }
+
+    #[async_std::test]
+    async fn test_fetch_config() {
+        setup_logging();
+        setup_backtrace();
+
+        let port = pick_unused_port().expect("No ports free");
+        let url: surf_disco::Url = format!("http://localhost:{port}").parse().unwrap();
+        let client: Client<ServerError, SequencerVersion> = Client::new(url.clone());
+
+        let options = Options::with_port(port).config(Default::default());
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(options)
+            .network_config(network_config)
+            .build();
+        let network = TestNetwork::new(config).await;
+        client.connect(None).await;
+
+        // Fetch a network config from the API server. The first peer URL is bogus, to test the
+        // failure/retry case.
+        let peers = StatePeers::<SequencerVersion>::from_urls(
+            vec!["https://notarealnode.network".parse().unwrap(), url],
+            Default::default(),
+        );
+
+        // Fetch the config from node 1, a different node than the one running the service.
+        let validator = ValidatorConfig::generated_from_seed_indexed([0; 32], 1, 1, false);
+        let mut config = peers.fetch_config(validator.clone()).await;
+
+        // Check the node-specific information in the recovered config is correct.
+        assert_eq!(config.node_index, 1);
+        assert_eq!(
+            config.config.my_own_validator_config.public_key,
+            validator.public_key
+        );
+        assert_eq!(
+            config.config.my_own_validator_config.private_key,
+            validator.private_key
+        );
+
+        // Check the public information is also correct (with respect to the node that actually
+        // served the config, for public keys).
+        config.config.my_own_validator_config =
+            ValidatorConfig::generated_from_seed_indexed([0; 32], 0, 1, true);
+        pretty_assertions::assert_eq!(
+            serde_json::to_value(PublicHotShotConfig::from(config.config)).unwrap(),
+            serde_json::to_value(PublicHotShotConfig::from(
+                network.cfg.hotshot_config().clone()
+            ))
+            .unwrap()
+        );
     }
 }

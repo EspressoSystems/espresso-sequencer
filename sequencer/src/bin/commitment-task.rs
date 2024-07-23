@@ -1,15 +1,16 @@
+use std::{io, time::Duration};
+
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::spawn;
 use clap::Parser;
 use es_version::SEQUENCER_VERSION;
 use ethers::prelude::*;
 use futures::FutureExt;
-use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
-use sequencer::options::parse_duration;
-use std::io;
-use std::time::Duration;
-use tide_disco::error::ServerError;
-use tide_disco::Api;
+use sequencer::{
+    hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
+    options::parse_duration,
+};
+use tide_disco::{error::ServerError, Api};
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -114,9 +115,7 @@ mod test {
     use portpicker::pick_unused_port;
     use surf_disco::Client;
 
-    use super::start_http_server;
-    use super::Address;
-    use super::ServerError;
+    use super::{start_http_server, Address, ServerError};
 
     #[async_std::test]
     async fn test_get_hotshot_contract() {
