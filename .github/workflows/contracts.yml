@@ -72,6 +72,10 @@ jobs:
           git diff
 
       - name: Build diff-test
+        # workaround for `gcc: error: unrecognized command-line option '-fuse-ld=/nix/store/b7hb6xpazdnidp0s87fain2im6lk4f4r-mold-2.30.0/bin/mold'`
+        # https://github.com/EspressoSystems/espresso-sequencer/actions/runs/10062088424/job/27813743953
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: "clang"
         run: |
           nix develop --accept-flake-config -c cargo build --locked --bin diff-test --release
 

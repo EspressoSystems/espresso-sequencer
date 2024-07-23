@@ -15,7 +15,7 @@ echo 'rustfmt --version:      ' $(rustfmt --version)
 echo 'cargo fmt --version:    ' $(cargo fmt --version)
 echo 'cargo clippy --version: ' $(cargo clippy --version)
 echo 'gcc --version:          ' $(gcc --version)
-echo 'gcc -V:                 ' $(gcc -V)
+echo 'gcc -v:                 ' $(gcc -V)
 echo
 
 forge --version
