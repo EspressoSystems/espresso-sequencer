@@ -48,7 +48,7 @@
     let
       # Mold linker is faster, but is not supported on MacOS.
       moldLinker = !pkgs.stdenv.isDarwin;
-
+      rustDeps = [];
       # node=error: disable noisy anvil output
       RUST_LOG = "info,libp2p=off,isahc=error,surf=error,node=error";
       RUST_BACKTRACE = 1;
