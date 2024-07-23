@@ -74,8 +74,10 @@ pub async fn create_and_send_proposal<TYPES: NodeType>(
         error!("Cannot propopse without our VID share, view {:?}", view);
         return;
     };
+    // TODO ED: This will need to be version-gated to use the appropriate `BlockHeader::new` function.
+    // Pre-marketplace versions will use `new_legacy` and post-marketplace versions will use `new_marketplace`
     drop(consensus_read);
-    let block_header = match TYPES::BlockHeader::new(
+    let block_header = match TYPES::BlockHeader::new_legacy(
         state.as_ref(),
         instance_state.as_ref(),
         &parent_leaf,

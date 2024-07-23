@@ -9,6 +9,7 @@ use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{
     data::{BlockError, Leaf},
     traits::{
+        auction_results_provider::HasUrls,
         block_contents::{BlockHeader, BuilderFee, EncodeBytes, TestableBlock, Transaction},
         node_implementation::NodeType,
         BlockPayload, ValidatedState,
@@ -244,7 +245,7 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
 {
     type Error = std::convert::Infallible;
 
-    async fn new(
+    async fn new_legacy(
         _parent_state: &TYPES::ValidatedState,
         _instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
         parent_leaf: &Leaf<TYPES>,
@@ -269,6 +270,20 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
             builder_commitment,
             timestamp,
         })
+    }
+
+    async fn new_marketplace<AuctionResult: HasUrls + Send>(
+        _parent_state: &TYPES::ValidatedState,
+        _instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
+        _parent_leaf: &Leaf<TYPES>,
+        _payload_commitment: VidCommitment,
+        _metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
+        _builder_fee: Vec<BuilderFee<TYPES>>,
+        _vid_common: VidCommon,
+        _auction_results: Option<AuctionResult>,
+        _version: Version,
+    ) -> Result<Self, Self::Error> {
+        unimplemented!()
     }
 
     fn genesis(
@@ -299,6 +314,10 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
 
     fn builder_commitment(&self) -> BuilderCommitment {
         self.builder_commitment.clone()
+    }
+
+    fn get_auction_results<AuctionResults: HasUrls>(&self) -> Option<AuctionResults> {
+        unimplemented!()
     }
 }
 
