@@ -84,7 +84,7 @@ pub struct SolverClient<Ver: StaticVersionType> {
 impl<Ver: StaticVersionType> SolverClient<Ver> {
     pub fn new(url: Url) -> Self {
         Self {
-            agent: surf_disco::Client::new(url.clone()),
+            agent: SurfClient::new(url.clone()),
             _url: url,
         }
     }
