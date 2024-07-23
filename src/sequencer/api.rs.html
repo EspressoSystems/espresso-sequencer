@@ -1722,6 +1722,17 @@
 <a href="#1722" id="1722">1722</a>
 <a href="#1723" id="1723">1723</a>
 <a href="#1724" id="1724">1724</a>
+<a href="#1725" id="1725">1725</a>
+<a href="#1726" id="1726">1726</a>
+<a href="#1727" id="1727">1727</a>
+<a href="#1728" id="1728">1728</a>
+<a href="#1729" id="1729">1729</a>
+<a href="#1730" id="1730">1730</a>
+<a href="#1731" id="1731">1731</a>
+<a href="#1732" id="1732">1732</a>
+<a href="#1733" id="1733">1733</a>
+<a href="#1734" id="1734">1734</a>
+<a href="#1735" id="1735">1735</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::pin::Pin;
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -1741,7 +1752,9 @@
     stream::{BoxStream, Stream},
 };
 <span class="kw">use </span>hotshot::types::{Event, SystemContextHandle};
-<span class="kw">use </span>hotshot_events_service::events_source::{BuilderEvent, EventsSource, EventsStreamer};
+<span class="kw">use </span>hotshot_events_service::events_source::{
+    EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
+};
 <span class="kw">use </span>hotshot_orchestrator::config::NetworkConfig;
 <span class="kw">use </span>hotshot_query_service::data_source::ExtensibleDataSource;
 <span class="kw">use </span>hotshot_state_prover::service::light_client_genesis_from_stake_table;
@@ -1851,14 +1864,25 @@
 </span><span class="kw">impl</span>&lt;N: ConnectedNetwork&lt;PubKey&gt;, Ver: StaticVersionType + <span class="lifetime">'static</span>, P: SequencerPersistence&gt;
     EventsSource&lt;SeqTypes&gt; <span class="kw">for </span>ApiState&lt;N, P, Ver&gt;
 {
-    <span class="kw">type </span>EventStream = BoxStream&lt;<span class="lifetime">'static</span>, Arc&lt;BuilderEvent&lt;SeqTypes&gt;&gt;&gt;;
+    <span class="kw">type </span>EventStream = BoxStream&lt;<span class="lifetime">'static</span>, Arc&lt;Event&lt;SeqTypes&gt;&gt;&gt;;
 
-    <span class="kw">async fn </span>get_event_stream(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="self">Self</span>::EventStream {
+    <span class="kw">async fn </span>get_event_stream(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        _filter: <span class="prelude-ty">Option</span>&lt;EventFilterSet&lt;SeqTypes&gt;&gt;,
+    ) -&gt; <span class="self">Self</span>::EventStream {
         <span class="self">self</span>.event_streamer()
             .<span class="kw">await
             </span>.read()
             .<span class="kw">await
-            </span>.get_event_stream()
+            </span>.get_event_stream(<span class="prelude-val">None</span>)
+            .<span class="kw">await
+    </span>}
+    <span class="kw">async fn </span>get_startup_info(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; StartupInfo&lt;SeqTypes&gt; {
+        <span class="self">self</span>.event_streamer()
+            .<span class="kw">await
+            </span>.read()
+            .<span class="kw">await
+            </span>.get_startup_info()
             .<span class="kw">await
     </span>}
 }
@@ -2688,7 +2712,6 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>test_hotshot_event_streaming&lt;D: TestableSequencerDataSource&gt;() {
-        <span class="kw">use </span>hotshot_events_service::events_source::BuilderEvent;
         <span class="kw">use </span>HotshotEvents;
 
         setup_logging();
@@ -2722,7 +2745,7 @@
 
         <span class="kw">let </span><span class="kw-2">mut </span>subscribed_events = client
             .socket(<span class="string">"hotshot-events/events"</span>)
-            .subscribe::&lt;BuilderEvent&lt;SeqTypes&gt;&gt;()
+            .subscribe::&lt;Event&lt;SeqTypes&gt;&gt;()
             .<span class="kw">await
             </span>.unwrap();
 
@@ -2741,8 +2764,7 @@
                 <span class="kw">break</span>;
             }
         }
-        <span class="comment">// Offset 1 is due to the startup event info
-        </span><span class="macro">assert_eq!</span>(receive_count, total_count + <span class="number">1</span>);
+        <span class="macro">assert_eq!</span>(receive_count, total_count + <span class="number">1</span>);
     }
 }
 

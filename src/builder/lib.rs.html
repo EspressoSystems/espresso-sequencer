@@ -766,7 +766,6 @@
 <a href="#766" id="766">766</a>
 <a href="#767" id="767">767</a>
 <a href="#768" id="768">768</a>
-<a href="#769" id="769">769</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
 </span><span class="kw">use </span>std::{
     alloc::System,
@@ -801,7 +800,7 @@
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, SystemContext,
 };
-<span class="kw">use </span>hotshot_builder_api::builder::{
+<span class="kw">use </span>hotshot_builder_api::v0_1::builder::{
     BuildError, Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
 };
 <span class="kw">use </span>hotshot_builder_core::service::{GlobalState, ProxyGlobalState};
@@ -845,15 +844,14 @@
 <span class="comment">// It runs the api service for the builder
 </span><span class="kw">pub fn </span>run_builder_api_service(url: Url, source: ProxyGlobalState&lt;SeqTypes&gt;) {
     <span class="comment">// it is to serve hotshot
-    </span><span class="kw">let </span>builder_api = hotshot_builder_api::builder::define_api::&lt;
+    </span><span class="kw">let </span>builder_api = hotshot_builder_api::v0_1::builder::define_api::&lt;
         ProxyGlobalState&lt;SeqTypes&gt;,
         SeqTypes,
-        &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base,
     &gt;(<span class="kw-2">&amp;</span>HotshotBuilderApiOptions::default())
     .expect(<span class="string">"Failed to construct the builder APIs"</span>);
 
     <span class="comment">// it enables external clients to submit txn to the builder's private mempool
-    </span><span class="kw">let </span>private_mempool_api = hotshot_builder_api::builder::submit_api::&lt;
+    </span><span class="kw">let </span>private_mempool_api = hotshot_builder_api::v0_1::builder::submit_api::&lt;
         ProxyGlobalState&lt;SeqTypes&gt;,
         SeqTypes,
         &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base,
@@ -907,7 +905,7 @@
         },
         types::{EventType::Decide, Message},
     };
-    <span class="kw">use </span>hotshot_builder_api::builder::{
+    <span class="kw">use </span>hotshot_builder_api::v0_1::builder::{
         BuildError, Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
     };
     <span class="kw">use </span>hotshot_builder_core::{
@@ -1447,7 +1445,7 @@
     <span class="kw">use </span>ethers::providers::Quorum;
     <span class="kw">use </span>futures::StreamExt;
     <span class="kw">use </span>hotshot::types::EventType::Decide;
-    <span class="kw">use </span>hotshot_builder_api::block_info::AvailableBlockData;
+    <span class="kw">use </span>hotshot_builder_api::v0_1::block_info::AvailableBlockData;
     <span class="kw">use </span>hotshot_builder_core::service::GlobalState;
     <span class="kw">use </span>sequencer::{
         empty_builder_commitment,

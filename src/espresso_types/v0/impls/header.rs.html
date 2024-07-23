@@ -1500,6 +1500,7 @@
 <a href="#1500" id="1500">1500</a>
 <a href="#1501" id="1501">1501</a>
 <a href="#1502" id="1502">1502</a>
+<a href="#1503" id="1503">1503</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt;
 
 <span class="kw">use </span>anyhow::{ensure, Context};
@@ -1960,8 +1961,9 @@
                 <span class="kw-2">&amp;</span>ns_table,
                 <span class="kw-2">&amp;</span>payload_commitment,
             ),
-            <span class="string">"invalid builder signature"
-        </span>);
+            <span class="string">"invalid builder signature, account: {}, fee: {builder_fee:?}, ns_table: {ns_table:?}, payload_commitment: {payload_commitment}"</span>,
+            builder_fee.fee_account,
+        );
         <span class="kw">let </span>builder_signature = <span class="prelude-val">Some</span>(builder_fee.fee_signature);
         <span class="kw">let </span>fee_info = builder_fee.into();
         state

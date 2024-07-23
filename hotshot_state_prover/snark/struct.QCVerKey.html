@@ -26,7 +26,13 @@ Signature public verification key</p>
     metadata: <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.reference.html">&amp;Metadata</a>,
     vid_commitment: &amp;&lt;VidSchemeType as VidScheme&gt;::Commit
 ) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.bool.html">bool</a><div class="where">where
-    Metadata: EncodeBytes,</div></h4></section></summary><div class='docblock'>validate signature over fee information with the builder’s public key</div></details><details class="toggle method-toggle" open><summary><section id="method.validate_block_info_signature" class="method trait-impl"><a href="#method.validate_block_info_signature" class="anchor">§</a><h4 class="code-header">fn <a class="fn">validate_block_info_signature</a>(
+    Metadata: EncodeBytes,</div></h4></section></summary><div class='docblock'>validate signature over sequencing fee information
+with the builder’s public key</div></details><details class="toggle method-toggle" open><summary><section id="method.validate_sequencing_fee_signature_marketplace" class="method trait-impl"><a href="#method.validate_sequencing_fee_signature_marketplace" class="anchor">§</a><h4 class="code-header">fn <a class="fn">validate_sequencing_fee_signature_marketplace</a>(
+    &amp;self,
+    signature: &amp;Self::BuilderSignature,
+    fee_amount: <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.u64.html">u64</a>
+) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.bool.html">bool</a></h4></section></summary><div class='docblock'>validate signature over sequencing fee information
+with the builder’s public key (marketplace version)</div></details><details class="toggle method-toggle" open><summary><section id="method.validate_block_info_signature" class="method trait-impl"><a href="#method.validate_block_info_signature" class="anchor">§</a><h4 class="code-header">fn <a class="fn">validate_block_info_signature</a>(
     &amp;self,
     signature: &amp;Self::BuilderSignature,
     block_size: <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.u64.html">u64</a>,
@@ -38,7 +44,10 @@ Signature public verification key</p>
     metadata: <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.reference.html">&amp;Metadata</a>,
     vid_commitment: &amp;&lt;VidSchemeType as VidScheme&gt;::Commit
 ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.79.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;Self::BuilderSignature, Self::SignError&gt;<div class="where">where
-    Metadata: EncodeBytes,</div></h4></section></summary><div class='docblock'>sign fee offer for proposed payload <a>Read more</a></div></details><details class="toggle method-toggle" open><summary><section id="method.sign_block_info" class="method trait-impl"><a href="#method.sign_block_info" class="anchor">§</a><h4 class="code-header">fn <a class="fn">sign_block_info</a>(
+    Metadata: EncodeBytes,</div></h4></section></summary><div class='docblock'>sign sequencing fee offer for proposed payload <a>Read more</a></div></details><details class="toggle method-toggle" open><summary><section id="method.sign_sequencing_fee_marketplace" class="method trait-impl"><a href="#method.sign_sequencing_fee_marketplace" class="anchor">§</a><h4 class="code-header">fn <a class="fn">sign_sequencing_fee_marketplace</a>(
+    private_key: &amp;Self::BuilderPrivateKey,
+    fee_amount: <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.u64.html">u64</a>
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.79.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;Self::BuilderSignature, Self::SignError&gt;</h4></section></summary><div class='docblock'>sign fee offer for proposed payload (marketplace version) <a>Read more</a></div></details><details class="toggle method-toggle" open><summary><section id="method.sign_block_info" class="method trait-impl"><a href="#method.sign_block_info" class="anchor">§</a><h4 class="code-header">fn <a class="fn">sign_block_info</a>(
     private_key: &amp;Self::BuilderPrivateKey,
     block_size: <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.u64.html">u64</a>,
     fee_amount: <a class="primitive" href="https://doc.rust-lang.org/1.79.0/std/primitive.u64.html">u64</a>,

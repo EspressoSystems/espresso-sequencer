@@ -796,7 +796,7 @@
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, SystemContext,
 };
-<span class="kw">use </span>hotshot_builder_api::builder::{
+<span class="kw">use </span>hotshot_builder_api::v0_1::builder::{
     BuildError, Error <span class="kw">as </span>BuilderApiError, Options <span class="kw">as </span>HotshotBuilderApiOptions,
 };
 <span class="kw">use </span>hotshot_builder_core::{
@@ -812,7 +812,7 @@
 };
 <span class="kw">use </span>hotshot_events_service::{
     events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
-    events_source::{BuilderEvent, EventConsumer, EventsStreamer},
+    events_source::{EventConsumer, EventsStreamer},
 };
 <span class="kw">use </span>hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 <span class="kw">use </span>hotshot_orchestrator::{
@@ -989,7 +989,7 @@
     </span><span class="kw">let </span>network = Arc::new(CombinedNetworks::new(
         cdn_network,
         p2p_network,
-        Duration::from_secs(<span class="number">1</span>),
+        <span class="prelude-val">Some</span>(Duration::from_secs(<span class="number">1</span>)),
     ));
 
     <span class="attr">#[cfg(not(feature = <span class="string">"libp2p"</span>))]
@@ -1299,7 +1299,7 @@
     <span class="kw">use </span>async_std::task;
     <span class="kw">use </span>es_version::SequencerVersion;
     <span class="kw">use </span>espresso_types::{FeeAccount, NamespaceId, Transaction};
-    <span class="kw">use </span>hotshot_builder_api::{
+    <span class="kw">use </span>hotshot_builder_api::v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
@@ -1312,7 +1312,7 @@
     };
     <span class="kw">use </span>hotshot_events_service::{
         events::{Error <span class="kw">as </span>EventStreamApiError, Options <span class="kw">as </span>EventStreamingApiOptions},
-        events_source::{BuilderEvent, EventConsumer, EventsStreamer},
+        events_source::{EventConsumer, EventsStreamer},
     };
     <span class="kw">use </span>hotshot_types::{
         signature_key::BLSPubKey,
@@ -1374,7 +1374,7 @@
 
         <span class="comment">// Start a builder api client
         </span><span class="kw">let </span>builder_client = Client::&lt;
-            hotshot_builder_api::builder::Error,
+            hotshot_builder_api::v0_1::builder::Error,
             &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base,
         &gt;::new(hotshot_builder_api_url.clone());
         <span class="macro">assert!</span>(builder_client.connect(<span class="prelude-val">Some</span>(Duration::from_secs(<span class="number">60</span>))).<span class="kw">await</span>);

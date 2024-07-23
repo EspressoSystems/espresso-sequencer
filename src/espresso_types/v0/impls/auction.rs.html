@@ -280,7 +280,7 @@
 <span class="kw">use </span>hotshot_types::{
     data::ViewNumber,
     traits::{
-        auction_results_provider::HasUrl, node_implementation::ConsensusTime,
+        auction_results_provider::HasUrls, node_implementation::ConsensusTime,
         signature_key::BuilderSignatureKey,
     },
 };
@@ -486,17 +486,17 @@
     }
 }
 
-<span class="kw">impl </span>HasUrl <span class="kw">for </span>BidTx {
+<span class="kw">impl </span>HasUrls <span class="kw">for </span>BidTx {
     <span class="doccomment">/// Get the `url` field from the body.
-    </span><span class="kw">fn </span>url(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Url {
-        <span class="self">self</span>.body.url()
+    </span><span class="kw">fn </span>urls(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Url&gt; {
+        <span class="self">self</span>.body.urls()
     }
 }
 
-<span class="kw">impl </span>HasUrl <span class="kw">for </span>BidTxBody {
+<span class="kw">impl </span>HasUrls <span class="kw">for </span>BidTxBody {
     <span class="doccomment">/// Get the cloned `url` field.
-    </span><span class="kw">fn </span>url(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Url {
-        <span class="self">self</span>.url.clone()
+    </span><span class="kw">fn </span>urls(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Url&gt; {
+        <span class="macro">vec!</span>[<span class="self">self</span>.url.clone()]
     }
 }
 
