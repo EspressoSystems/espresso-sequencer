@@ -292,6 +292,11 @@ pub struct PublishHotShotConfig {
     pub known_nodes_with_stake: Vec<PeerConfig<BLSPubKey>>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SequencerConfig {
+    pub config: PublishHotShotConfig,
+}
+
 /// [get_stake_table_from_sequencer] retrieves the stake table from the
 /// Sequencer.  It expects a [surf_disco::Client] to be provided so that it can
 /// make the request to the Hotshot Query Service.  It will return a
@@ -308,13 +313,15 @@ pub async fn get_stake_table_from_sequencer(
         .header("Accept", "application/json");
     let stake_table_result = request.send().await;
 
-    let public_hot_shot_config: PublishHotShotConfig = match stake_table_result {
+    let sequencer_config: SequencerConfig = match stake_table_result {
         Ok(public_hot_shot_config) => public_hot_shot_config,
         Err(err) => {
             tracing::info!("retrieve stake table request failed: {}", err);
             return Err(err);
         }
     };
+
+    let public_hot_shot_config = sequencer_config.config;
 
     let mut stake_table = StakeTable::<BLSPubKey, StateVerKey, CircuitField>::new(
         public_hot_shot_config.known_nodes_with_stake.len(),
