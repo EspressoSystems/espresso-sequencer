@@ -1,7 +1,7 @@
 use std::ops::Add;
 
 use anyhow::bail;
-use committable::Committable;
+use committable::{Commitment, Committable};
 use ethers::types::Address;
 use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::{
@@ -55,9 +55,11 @@ impl StateDelta for Delta {}
 
 impl Default for ValidatedState {
     fn default() -> Self {
-        let block_merkle_tree =
-            BlockMerkleTree::from_elems(Some(BLOCK_MERKLE_TREE_HEIGHT), Vec::<[u8; 32]>::new())
-                .unwrap();
+        let block_merkle_tree = BlockMerkleTree::from_elems(
+            Some(BLOCK_MERKLE_TREE_HEIGHT),
+            Vec::<Commitment<Header>>::new(),
+        )
+        .unwrap();
 
         // Words of wisdom from @mrain: "capacity = arity^height"
         // "For index space 2^160, arity 256 (2^8),
@@ -139,6 +141,10 @@ impl ValidatedState {
 
     /// Charge a fee to an account, transferring the funds to the fee recipient account.
     pub fn charge_fee(&mut self, fee_info: FeeInfo, recipient: FeeAccount) -> Result<(), FeeError> {
+        if fee_info.amount == 0.into() {
+            return Ok(());
+        }
+
         let fee_state = self.fee_merkle_tree.clone();
 
         // Deduct the fee from the paying account.
@@ -501,7 +507,7 @@ fn apply_proposal(
     // pushing a block into merkle tree shouldn't fail
     validated_state
         .block_merkle_tree
-        .push(parent_leaf.block_header().commit().as_ref())
+        .push(parent_leaf.block_header().commit())
         .unwrap();
 
     for FeeInfo { account, amount } in l1_deposits.iter() {
@@ -632,7 +638,7 @@ impl hotshot_types::traits::states::TestableState<SeqTypes> for ValidatedState {
 
 impl MerklizedState<SeqTypes, { Self::ARITY }> for BlockMerkleTree {
     type Key = Self::Index;
-    type Entry = [u8; 32];
+    type Entry = Commitment<Header>;
     type T = Sha3Node;
     type Commit = Self::Commitment;
     type Digest = Sha3Digest;

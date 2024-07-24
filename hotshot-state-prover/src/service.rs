@@ -107,8 +107,13 @@ pub fn init_stake_table(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct PublicHotShotConfig {
-    pub known_nodes_with_stake: Vec<PeerConfig<BLSPubKey>>,
+struct PublicHotShotConfig {
+    known_nodes_with_stake: Vec<PeerConfig<BLSPubKey>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PublicNetworkConfig {
+    config: PublicHotShotConfig,
 }
 
 /// Initialize the stake table from a sequencer node that
@@ -129,8 +134,8 @@ async fn init_stake_table_from_sequencer(
     // Request the configuration until it is successful
     let network_config: PublicHotShotConfig = loop {
         match reqwest::get(config_url.clone()).await {
-            Ok(resp) => match resp.json::<PublicHotShotConfig>().await {
-                Ok(config) => break config,
+            Ok(resp) => match resp.json::<PublicNetworkConfig>().await {
+                Ok(config) => break config.config,
                 Err(e) => {
                     tracing::error!("Failed to parse the network config: {e}");
                     sleep(Duration::from_secs(5)).await;
@@ -409,7 +414,14 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
             .await
             .with_context(|| "Failed to initialize stake table")?,
     );
+    run_prover_service_with_stake_table(config, bind_version, st).await
+}
 
+pub async fn run_prover_service_with_stake_table<Ver: StaticVersionType + 'static>(
+    config: StateProverConfig,
+    bind_version: Ver,
+    st: Arc<StakeTable<BLSPubKey, StateVerKey, CircuitField>>,
+) -> Result<()> {
     tracing::info!("Light client address: {:?}", config.light_client_address);
     let relay_server_client =
         Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
@@ -422,7 +434,7 @@ pub async fn run_prover_service<Ver: StaticVersionType + 'static>(
     }
 
     let proving_key =
-        spawn_blocking(move || Arc::new(load_proving_key(stake_table_capacity))).await;
+        spawn_blocking(move || Arc::new(load_proving_key(config.stake_table_capacity))).await;
 
     let update_interval = config.update_interval;
     let retry_interval = config.retry_interval;

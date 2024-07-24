@@ -102,6 +102,7 @@ pub struct NetworkParams {
     pub private_staking_key: BLSPrivKey,
     pub private_state_key: StateSignKey,
     pub state_peers: Vec<Url>,
+    pub config_peers: Option<Vec<Url>>,
     pub catchup_backoff: BackoffParams,
 
     /// The address to send to other Libp2p nodes to contact us
@@ -168,12 +169,30 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             .with_context(|| "Failed to derive Libp2p peer ID")?;
 
     let mut persistence = persistence_opt.clone().create().await?;
-    let (mut config, wait_for_orchestrator) = match persistence.load_config().await? {
-        Some(config) => {
+    let (mut config, wait_for_orchestrator) = match (
+        persistence.load_config().await?,
+        network_params.config_peers,
+    ) {
+        (Some(config), _) => {
             tracing::info!("loaded network config from storage, rejoining existing network");
             (config, false)
         }
-        None => {
+        // If we were told to fetch the config from an already-started peer, do so.
+        (None, Some(peers)) => {
+            tracing::info!(?peers, "loading network config from peers");
+            let peers = StatePeers::<Ver>::from_urls(peers, network_params.catchup_backoff);
+            let config = peers.fetch_config(my_config.clone()).await;
+
+            tracing::info!(
+                node_id = config.node_index,
+                stake_table = ?config.config.known_nodes_with_stake,
+                "loaded config",
+            );
+            persistence.save_config(&config).await?;
+            (config, false)
+        }
+        // Otherwise, this is a fresh network; load from the orchestrator.
+        (None, None) => {
             tracing::info!("loading network config from orchestrator");
             tracing::error!(
                 "waiting for other nodes to connect, DO NOT RESTART until fully connected"
@@ -328,7 +347,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     };
 
     let mut ctx = SequencerContext::init(
-        config.config,
+        config,
         instance_state,
         persistence,
         network,
@@ -659,7 +678,12 @@ pub mod testing {
                 "starting node",
             );
             SequencerContext::init(
-                config,
+                NetworkConfig {
+                    config,
+                    // For testing, we use a fake network, so the rest of the network config beyond
+                    // the base consensus config does not matter.
+                    ..Default::default()
+                },
                 node_state,
                 persistence_opt.create().await.unwrap(),
                 network,
