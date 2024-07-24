@@ -32,7 +32,7 @@ use hotshot::{
     types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, SystemContext,
 };
-use hotshot_builder_api::builder::{
+use hotshot_builder_api::v0_1::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::service::{GlobalState, ProxyGlobalState};
@@ -76,15 +76,14 @@ pub mod permissioned;
 // It runs the api service for the builder
 pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     // it is to serve hotshot
-    let builder_api = hotshot_builder_api::builder::define_api::<
+    let builder_api = hotshot_builder_api::v0_1::builder::define_api::<
         ProxyGlobalState<SeqTypes>,
         SeqTypes,
-        <SeqTypes as NodeType>::Base,
     >(&HotshotBuilderApiOptions::default())
     .expect("Failed to construct the builder APIs");
 
     // it enables external clients to submit txn to the builder's private mempool
-    let private_mempool_api = hotshot_builder_api::builder::submit_api::<
+    let private_mempool_api = hotshot_builder_api::v0_1::builder::submit_api::<
         ProxyGlobalState<SeqTypes>,
         SeqTypes,
         <SeqTypes as NodeType>::Base,
@@ -138,7 +137,7 @@ pub mod testing {
         },
         types::{EventType::Decide, Message},
     };
-    use hotshot_builder_api::builder::{
+    use hotshot_builder_api::v0_1::builder::{
         BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
     };
     use hotshot_builder_core::{
@@ -574,6 +573,7 @@ pub mod testing {
                 Duration::from_millis(2000),
                 15,
                 Duration::from_millis(500),
+                ChainConfig::default().base_fee,
             )
             .await
             .unwrap();
@@ -640,6 +640,7 @@ pub mod testing {
                 Duration::from_millis(2000),
                 15,
                 Duration::from_millis(500),
+                ChainConfig::default().base_fee,
             )
             .await
             .unwrap();
@@ -676,7 +677,7 @@ mod test {
     use ethers::providers::Quorum;
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
-    use hotshot_builder_api::block_info::AvailableBlockData;
+    use hotshot_builder_api::v0_1::block_info::AvailableBlockData;
     use hotshot_builder_core::service::GlobalState;
     use sequencer::{
         empty_builder_commitment,

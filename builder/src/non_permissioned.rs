@@ -10,7 +10,7 @@ use async_compatibility_layer::{
 };
 use async_std::sync::{Arc, RwLock};
 use espresso_types::{
-    eth_signature_key::EthKeyPair, ChainConfig, L1Client, NodeState, Payload, SeqTypes,
+    eth_signature_key::EthKeyPair, ChainConfig, FeeAmount, L1Client, NodeState, Payload, SeqTypes,
     ValidatedState,
 };
 use ethers::{
@@ -19,7 +19,7 @@ use ethers::{
     types::{Address, U256},
 };
 use hotshot::traits::BlockPayload;
-use hotshot_builder_api::builder::{
+use hotshot_builder_api::v0_1::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::{
@@ -34,7 +34,7 @@ use hotshot_builder_core::{
 };
 use hotshot_events_service::{
     events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
-    events_source::{BuilderEvent, EventConsumer, EventsStreamer},
+    events_source::{EventConsumer, EventsStreamer},
 };
 use hotshot_types::{
     data::{fake_commitment, Leaf, ViewNumber},
@@ -94,6 +94,7 @@ impl BuilderConfig {
         max_api_timeout_duration: Duration,
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
+        base_fee: FeeAmount,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
@@ -168,9 +169,7 @@ impl BuilderConfig {
             global_state_clone,
             node_count,
             maximize_txns_count_timeout_duration,
-            instance_state
-                .chain_config
-                .base_fee
+            base_fee
                 .as_u64()
                 .context("the base fee exceeds the maximum amount that a builder can pay (defined by u64::MAX)")?,
             Arc::new(instance_state),
@@ -232,7 +231,7 @@ mod test {
     use async_std::task;
     use es_version::SequencerVersion;
     use espresso_types::{FeeAccount, NamespaceId, Transaction};
-    use hotshot_builder_api::{
+    use hotshot_builder_api::v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
@@ -245,7 +244,7 @@ mod test {
     };
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
-        events_source::{BuilderEvent, EventConsumer, EventsStreamer},
+        events_source::{EventConsumer, EventsStreamer},
     };
     use hotshot_types::{
         signature_key::BLSPubKey,
@@ -318,7 +317,7 @@ mod test {
 
         // Start a builder api client
         let builder_client = Client::<
-            hotshot_builder_api::builder::Error,
+            hotshot_builder_api::v0_1::builder::Error,
             <SeqTypes as NodeType>::Base,
         >::new(hotshot_builder_api_url.clone());
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);

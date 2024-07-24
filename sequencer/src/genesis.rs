@@ -4,7 +4,9 @@ use std::{
 };
 
 use anyhow::Context;
-use espresso_types::{ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade};
+use espresso_types::{
+    ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade, UpgradeType,
+};
 use serde::{Deserialize, Serialize};
 use vbs::version::Version;
 
@@ -45,6 +47,24 @@ pub struct Genesis {
     #[serde(rename = "upgrade", with = "upgrade_serialization")]
     #[serde(default)]
     pub upgrades: BTreeMap<Version, Upgrade>,
+}
+
+impl Genesis {
+    pub fn max_base_fee(&self) -> FeeAmount {
+        let mut base_fee = self.chain_config.base_fee;
+
+        let upgrades: Vec<&Upgrade> = self.upgrades.values().collect();
+
+        for upgrade in upgrades {
+            match upgrade.upgrade_type {
+                UpgradeType::ChainConfig { chain_config } => {
+                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
+                }
+            }
+        }
+
+        base_fee
+    }
 }
 
 mod upgrade_serialization {
