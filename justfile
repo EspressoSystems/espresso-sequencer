@@ -96,9 +96,7 @@ lc-contract-profiling-sepolia:
 
 gas-benchmarks:
     cargo build --bin diff-test --release
-    forge test --mt test_verify_succeeds | grep test_verify_succeeds > gas-benchmarks.txt
-    forge test --mt testCorrectUpdateBench | grep testCorrectUpdateBench >> gas-benchmarks.txt
-
+    forge snapshot --mt "test_verify_succeeds|testCorrectUpdateBench"
 
 # This is meant for local development and produces HTML output. In CI
 # the lcov output is pushed to coveralls.

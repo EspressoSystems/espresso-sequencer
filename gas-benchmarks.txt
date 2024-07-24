@@ -1,2 +1,0 @@
-[32m[PASS][0m test_verify_succeeds() (gas: 507806)
-[32m[PASS][0m testCorrectUpdateBench() (gas: 594565)
