@@ -438,6 +438,39 @@ mod tests {
                 .await;
         }
 
+        println!("sending large tx");
+        let large_tx = Transaction::new(100_u32.into(), vec![0; 20000]);
+        let large_hash: Commitment<Transaction> = api_client
+            .post("submit/submit")
+            .body_json(&large_tx)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+
+        let tx_hash = large_tx.commit();
+        assert_eq!(large_hash, tx_hash);
+
+        let mut tx_result = api_client
+            .get::<TransactionQueryData<SeqTypes>>(&format!(
+                "availability/transaction/hash/{tx_hash}",
+            ))
+            .send()
+            .await;
+        while tx_result.is_err() {
+            tracing::info!("waiting for large tx");
+            sleep(Duration::from_secs(3)).await;
+
+            tx_result = api_client
+                .get::<TransactionQueryData<SeqTypes>>(&format!(
+                    "availability/transaction/hash/{}",
+                    tx_hash
+                ))
+                .send()
+                .await;
+        }
+        println!("finish sending large tx");
+
         let tx_block_height = tx_result.unwrap().block_height();
 
         let light_client_address = "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9";
