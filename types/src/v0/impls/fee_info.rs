@@ -26,8 +26,9 @@ use sequencer_utils::{
 use thiserror::Error;
 
 use crate::{
-    eth_signature_key::EthKeyPair, AccountQueryData, FeeAccount, FeeAccountProof, FeeAmount,
-    FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree, SeqTypes,
+    eth_signature_key::EthKeyPair, v0_3::IterableFeeInfo, AccountQueryData, FeeAccount,
+    FeeAccountProof, FeeAmount, FeeInfo, FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree,
+    SeqTypes,
 };
 
 /// Possible charge fee failures
@@ -72,6 +73,44 @@ impl FeeInfo {
 
     pub fn amount(&self) -> FeeAmount {
         self.amount
+    }
+}
+
+impl IterableFeeInfo for Vec<FeeInfo> {
+    /// Get sum of fee amounts
+    fn amount(&self) -> Option<FeeAmount> {
+        self.iter()
+            // getting the u64 tests that the value fits
+            .map(|fee_info| fee_info.amount.as_u64())
+            .collect::<Option<Vec<u64>>>()
+            .and_then(|amounts| amounts.iter().try_fold(0u64, |acc, n| acc.checked_add(*n)))
+            .map(FeeAmount::from)
+    }
+
+    /// Get a `Vec` of all unique fee accounts
+    fn accounts(&self) -> Vec<FeeAccount> {
+        self.iter()
+            .unique_by(|entry| &entry.account)
+            .map(|entry| entry.account)
+            .collect()
+    }
+}
+
+impl IterableFeeInfo for Vec<BuilderFee<SeqTypes>> {
+    /// Get sum of amounts
+    fn amount(&self) -> Option<FeeAmount> {
+        self.iter()
+            .map(|fee_info| fee_info.fee_amount)
+            .try_fold(0u64, |acc, n| acc.checked_add(n))
+            .map(FeeAmount::from)
+    }
+
+    /// Get a `Vec` of all unique fee accounts
+    fn accounts(&self) -> Vec<FeeAccount> {
+        self.iter()
+            .unique_by(|entry| &entry.fee_account)
+            .map(|entry| entry.fee_account)
+            .collect()
     }
 }
 
