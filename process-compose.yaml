@@ -125,6 +125,7 @@ processes:
       - ESPRESSO_SEQUENCER_IDENTITY_COUNTRY_CODE=US
       - ESPRESSO_SEQUENCER_IDENTITY_LATITUDE=40.7128
       - ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE=-74.0060
+      - ESPRESSO_SEQUENCER_PUBLIC_API_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT/
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -175,6 +176,7 @@ processes:
       - ESPRESSO_SEQUENCER_IDENTITY_COUNTRY_CODE=GR
       - ESPRESSO_SEQUENCER_IDENTITY_LATITUDE=39.0742
       - ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE=21.8243
+      - ESPRESSO_SEQUENCER_PUBLIC_API_URL=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT/
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -219,6 +221,7 @@ processes:
       - ESPRESSO_SEQUENCER_IDENTITY_COUNTRY_CODE=CN
       - ESPRESSO_SEQUENCER_IDENTITY_LATITUDE=35.8617
       - ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE=104.1954
+      - ESPRESSO_SEQUENCER_PUBLIC_API_URL=http://localhost:$ESPRESSO_SEQUENCER2_API_PORT/
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -261,6 +264,7 @@ processes:
       - ESPRESSO_SEQUENCER_IDENTITY_COUNTRY_CODE=CN
       - ESPRESSO_SEQUENCER_IDENTITY_LATITUDE=35.8617
       - ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE=104.1954
+      - ESPRESSO_SEQUENCER_PUBLIC_API_URL=http://localhost:$ESPRESSO_SEQUENCER3_API_PORT/
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -300,6 +304,7 @@ processes:
       - ESPRESSO_SEQUENCER_IDENTITY_COUNTRY_CODE=AU
       - ESPRESSO_SEQUENCER_IDENTITY_LATITUDE=-25.2744
       - ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE=133.7751
+      - ESPRESSO_SEQUENCER_PUBLIC_API_URL=http://localhost:$ESPRESSO_SEQUENCER4_API_PORT/
     depends_on:
       orchestrator:
         condition: process_healthy
