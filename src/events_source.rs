@@ -65,7 +65,7 @@ impl<Types: NodeType> EventsStreamer<Types> {
 impl<Types: NodeType> EventConsumer<Types> for EventsStreamer<Types> {
     async fn handle_event(&mut self, event: Event<Types>) {
         if let Err(e) = self.subscriber_send_channel.broadcast(event.into()).await {
-            tracing::error!("Error broadcasting the event: {:?}", e);
+            tracing::debug!("Error broadcasting the event: {:?}", e);
         }
     }
 }
