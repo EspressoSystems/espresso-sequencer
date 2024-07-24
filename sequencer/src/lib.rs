@@ -376,7 +376,7 @@ pub mod testing {
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        ChainConfig, Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade,
+        Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade,
     };
     use futures::{
         future::join_all,
@@ -664,7 +664,7 @@ pub mod testing {
             state.prefund_account(builder_account, U256::max_value().into());
             let node_state = NodeState::new(
                 i as u64,
-                ChainConfig::default(),
+                state.chain_config.resolve().unwrap_or_default(),
                 L1Client::new(self.l1_url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
             )

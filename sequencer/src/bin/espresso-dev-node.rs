@@ -5,6 +5,7 @@ use async_std::task::spawn;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
 use es_version::SEQUENCER_VERSION;
+use espresso_types::{ChainConfig, ResolvableChainConfig, ValidatedState};
 use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
@@ -122,10 +123,23 @@ async fn main() -> anyhow::Result<()> {
         .state_relay_url(relay_server_url.clone())
         .l1_url(url.clone())
         .build();
+
+    // Set the max_block_size
+    let states = std::array::from_fn(|_| {
+        let mut s = ValidatedState::default();
+        let chain_config = ChainConfig {
+            max_block_size: 30000.into(),
+            ..Default::default()
+        };
+        s.chain_config = ResolvableChainConfig::from(chain_config);
+        s
+    });
+
     const NUM_NODES: usize = 2;
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(api_options)
         .network_config(network_config)
+        .states(states)
         .build();
 
     let network = TestNetwork::new(config).await;
@@ -438,7 +452,6 @@ mod tests {
                 .await;
         }
 
-        println!("sending large tx");
         let large_tx = Transaction::new(100_u32.into(), vec![0; 20000]);
         let large_hash: Commitment<Transaction> = api_client
             .post("submit/submit")
@@ -469,7 +482,6 @@ mod tests {
                 .send()
                 .await;
         }
-        println!("finish sending large tx");
 
         let tx_block_height = tx_result.unwrap().block_height();
 
