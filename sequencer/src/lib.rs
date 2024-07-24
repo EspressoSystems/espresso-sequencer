@@ -157,13 +157,13 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             ],
         )
         .create(vec![
-            std::env::var("IDENTITY_NODE_NAME").unwrap_or("".into()),
-            std::env::var("IDENTITY_WALLET_ADDRESS").unwrap_or("".into()),
-            std::env::var("IDENTITY_COMPANY_NAME").unwrap_or("".into()),
-            std::env::var("IDENTITY_OPERATING_SYSTEM").unwrap_or("".into()),
-            std::env::var("IDENTITY_NODE_TYPE")
+            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_NODE_NAME").unwrap_or("".into()),
+            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_WALLET_ADDRESS").unwrap_or("".into()),
+            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_COMPANY_NAME").unwrap_or("".into()),
+            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_OPERATING_SYSTEM").unwrap_or("".into()),
+            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_NODE_TYPE")
                 .unwrap_or(format!("espresso-sequencer {}", Ver::VERSION)),
-            std::env::var("IDENTITY_NETWORK_TYPE").unwrap_or("".into()),
+            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_NETWORK_TYPE").unwrap_or("".into()),
         ]);
 
     // Expose Node Identity Location via the status/metrics API
@@ -173,9 +173,9 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             vec!["country".into(), "latitude".into(), "longitude".into()],
         )
         .create(vec![
-            std::env::var("IDENTITY_COUNTRY_CODE").unwrap_or("".into()),
-            std::env::var("IDENTITY_LATITUDE").unwrap_or("".into()),
-            std::env::var("IDENTITY_LONGITUDE").unwrap_or("".into()),
+            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_COUNTRY_CODE").unwrap_or("".into()),
+            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_LATITUDE").unwrap_or("".into()),
+            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE").unwrap_or("".into()),
         ]);
 
     // Stick our public key in `metrics` so it is easily accessible via the status API.
