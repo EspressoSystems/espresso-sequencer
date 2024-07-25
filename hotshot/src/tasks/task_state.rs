@@ -205,6 +205,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
                 .collect(),
             builder_clients_marketplace: Vec::new(),
             decided_upgrade_certificate: Arc::clone(&handle.hotshot.decided_upgrade_certificate),
+            auction_results_provider: Arc::clone(&handle.hotshot.auction_results_provider),
         }
     }
 }

@@ -84,11 +84,6 @@ async fn test_da_task() {
                     BaseVersion::version()
                 )
                 .unwrap()],
-                vec1::vec1![null_block::builder_fee(
-                    quorum_membership.total_nodes(),
-                    BaseVersion::version()
-                )
-                .unwrap()],
                 Some(precompute),
             )),
         ],
@@ -170,11 +165,6 @@ async fn test_da_task_storage_failure() {
                 encoded_transactions,
                 TestMetadata,
                 ViewNumber::new(2),
-                vec1::vec1![null_block::builder_fee(
-                    quorum_membership.total_nodes(),
-                    BaseVersion::version()
-                )
-                .unwrap()],
                 vec1::vec1![null_block::builder_fee(
                     quorum_membership.total_nodes(),
                     BaseVersion::version()

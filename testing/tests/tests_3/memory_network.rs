@@ -11,10 +11,10 @@ use hotshot::{
     types::SignatureKey,
 };
 use hotshot_example_types::{
+    auction_results_provider_types::TestAuctionResultsProvider,
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
-    auction_results_provider_types::TestAuctionResultsProvider,
 };
 use hotshot_types::{
     data::ViewNumber,
@@ -48,7 +48,10 @@ pub struct Test;
 impl NodeType for Test {
     type Base = StaticVersion<0, 1>;
     type Upgrade = StaticVersion<0, 2>;
-    const UPGRADE_HASH: [u8; 32] = [1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,];
+    const UPGRADE_HASH: [u8; 32] = [
+        1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+        0, 0,
+    ];
     type Time = ViewNumber;
     type BlockHeader = TestBlockHeader;
     type BlockPayload = TestBlockPayload;

@@ -21,7 +21,7 @@ async fn test_timeout() {
         ..Default::default()
     };
 
-    let mut metadata: TestDescription<TestTypes,MemoryImpl> = TestDescription {
+    let mut metadata: TestDescription<TestTypes, MemoryImpl> = TestDescription {
         num_nodes_with_stake: 10,
         start_nodes: 10,
         ..Default::default()

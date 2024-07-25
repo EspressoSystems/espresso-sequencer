@@ -96,11 +96,6 @@ async fn test_vid_task() {
                     BaseVersion::version()
                 )
                 .unwrap()],
-                vec1::vec1![null_block::builder_fee(
-                    quorum_membership.total_nodes(),
-                    BaseVersion::version()
-                )
-                .unwrap()],
                 Some(vid_precompute),
             )),
         ],

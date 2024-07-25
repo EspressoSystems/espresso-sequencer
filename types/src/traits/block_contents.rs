@@ -65,7 +65,7 @@ pub trait BlockPayload<TYPES: NodeType>:
     /// The type of the instance-level state this state is associated with
     type Instance: InstanceState;
     /// The type of the transitions we are applying
-    type Transaction: Transaction;
+    type Transaction: Transaction + Serialize + DeserializeOwned;
     /// Validated State
     type ValidatedState: ValidatedState<TYPES>;
     /// Data created during block building which feeds into the block header

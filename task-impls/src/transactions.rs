@@ -13,10 +13,12 @@ use hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
+    constants::MarketplaceVersion,
     data::{null_block, PackedBundle},
     event::{Event, EventType},
-    simple_certificate::UpgradeCertificate,
+    simple_certificate::{version, UpgradeCertificate},
     traits::{
+        auction_results_provider::AuctionResultsProvider,
         block_contents::{precompute_vid_commitment, BuilderFee, EncodeBytes},
         election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
@@ -28,6 +30,7 @@ use hotshot_types::{
 };
 use tracing::{debug, error, instrument, warn};
 use vbs::version::{StaticVersionType, Version};
+use vec1::Vec1;
 
 use crate::{
     builder::{
@@ -53,9 +56,6 @@ const BUILDER_MINIMUM_QUERY_TIME: Duration = Duration::from_millis(300);
 /// Delay between re-tries on unsuccessful calls
 const RETRY_DELAY: Duration = Duration::from_millis(100);
 
-/// The version of the builder API used by the marketplace
-type MarketplaceVersion = crate::builder::v0_3::Version;
-
 /// Builder Provided Responses
 pub struct BuilderResponse<TYPES: NodeType> {
     /// Fee information
@@ -66,22 +66,6 @@ pub struct BuilderResponse<TYPES: NodeType> {
     pub metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     /// Optional precomputed commitment
     pub precompute_data: Option<VidPrecomputeData>,
-}
-
-/// The Bundle for a portion of a block, provided by a downstream builder that exists in a bundle
-/// auction.
-pub struct Bundle<TYPES: NodeType> {
-    /// The bundle transactions sent by the builder.
-    pub transactions: Vec<<TYPES::BlockPayload as BlockPayload<TYPES>>::Transaction>,
-
-    /// The signature over the bundle.
-    pub signature: TYPES::SignatureKey,
-
-    /// The fee for submitting a bid.
-    pub bid_fee: BuilderFee<TYPES>,
-
-    /// The fee for sequencing
-    pub sequencing_fee: BuilderFee<TYPES>,
 }
 
 /// Tracks state of a Transaction task
@@ -120,9 +104,226 @@ pub struct TransactionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub id: u64,
     /// Decided upgrade certificate
     pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
+    /// auction results provider
+    pub auction_results_provider: Arc<I::AuctionResultsProvider>,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, I> {
+    /// legacy view change handler
+    #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction task", level = "error", target = "TransactionTaskState")]
+    pub async fn handle_view_change_legacy(
+        &mut self,
+        event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+        block_view: TYPES::Time,
+    ) -> Option<HotShotTaskCompleted> {
+        let version = match hotshot_types::simple_certificate::version(
+            block_view,
+            &self
+                .decided_upgrade_certificate
+                .read()
+                .await
+                .as_ref()
+                .cloned(),
+        ) {
+            Ok(v) => v,
+            Err(err) => {
+                error!("Upgrade certificate requires unsupported version, refusing to request blocks: {}", err);
+                return None;
+            }
+        };
+
+        // Request a block from the builder unless we are between versions.
+        let block = {
+            if self
+                .decided_upgrade_certificate
+                .read()
+                .await
+                .as_ref()
+                .is_some_and(|cert| cert.upgrading_in(block_view))
+            {
+                None
+            } else {
+                self.wait_for_block(block_view, version).await
+            }
+        };
+
+        if let Some(BuilderResponse {
+            block_payload,
+            metadata,
+            fee,
+            precompute_data,
+        }) = block
+        {
+            broadcast_event(
+                Arc::new(HotShotEvent::BlockRecv(PackedBundle::new(
+                    block_payload.encode(),
+                    metadata,
+                    block_view,
+                    vec1::vec1![fee],
+                    precompute_data,
+                ))),
+                &event_stream,
+            )
+            .await;
+        } else {
+            // If we couldn't get a block, send an empty block
+            warn!(
+                "Failed to get a block for view {:?}, proposing empty block",
+                block_view
+            );
+
+            // Increment the metric for number of empty blocks proposed
+            self.consensus
+                .write()
+                .await
+                .metrics
+                .number_of_empty_blocks_proposed
+                .add(1);
+
+            let membership_total_nodes = self.membership.total_nodes();
+            let Some(null_fee) = null_block::builder_fee(self.membership.total_nodes(), version)
+            else {
+                error!("Failed to get null fee");
+                return None;
+            };
+
+            // Create an empty block payload and metadata
+            let (_, metadata) = <TYPES as NodeType>::BlockPayload::empty();
+
+            let (_, precompute_data) = precompute_vid_commitment(&[], membership_total_nodes);
+
+            // Broadcast the empty block
+            broadcast_event(
+                Arc::new(HotShotEvent::BlockRecv(PackedBundle::new(
+                    vec![].into(),
+                    metadata,
+                    block_view,
+                    vec1::vec1![null_fee],
+                    Some(precompute_data),
+                ))),
+                &event_stream,
+            )
+            .await;
+        };
+
+        return None;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    /// marketplace view change handler
+    pub async fn handle_view_change_marketplace(
+        &mut self,
+        event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+        block_view: TYPES::Time,
+    ) -> Option<HotShotTaskCompleted> {
+        let version = match hotshot_types::simple_certificate::version(
+            block_view,
+            &self
+                .decided_upgrade_certificate
+                .read()
+                .await
+                .as_ref()
+                .cloned(),
+        ) {
+            Ok(v) => v,
+            Err(err) => {
+                error!("Upgrade certificate requires unsupported version, refusing to request blocks: {}", err);
+                return None;
+            }
+        };
+
+        // Only request bundles and propose with a nonempty block if we are not between versions.
+        if !self
+            .decided_upgrade_certificate
+            .read()
+            .await
+            .as_ref()
+            .is_some_and(|cert| cert.upgrading_in(block_view))
+        {
+            if let Ok(bundles) = self
+                .auction_results_provider
+                .fetch_bundles(block_view)
+                .await
+            {
+                let mut sequencing_fees = Vec::new();
+                let mut transactions: Vec<
+                    <TYPES::BlockPayload as BlockPayload<TYPES>>::Transaction,
+                > = Vec::new();
+
+                for bundle in bundles {
+                    sequencing_fees.push(bundle.sequencing_fee);
+                    transactions.extend(bundle.transactions);
+                }
+
+                let validated_state = self.consensus.read().await.decided_state();
+
+                if let (Ok(sequencing_fees), Ok((block_payload, metadata))) = (
+                    Vec1::try_from_vec(sequencing_fees),
+                    TYPES::BlockPayload::from_transactions(
+                        transactions,
+                        &validated_state,
+                        &Arc::clone(&self.instance_state),
+                    )
+                    .await,
+                ) {
+                    broadcast_event(
+                        Arc::new(HotShotEvent::BlockRecv(PackedBundle::new(
+                            block_payload.encode(),
+                            metadata,
+                            block_view,
+                            sequencing_fees,
+                            None,
+                        ))),
+                        &event_stream,
+                    )
+                    .await;
+
+                    return None;
+                }
+            }
+        }
+
+        // If we couldn't get any bundles (due to either the builders or solver failing to return a result), send an empty block
+        warn!(
+            "Failed to get a block for view {:?}, proposing empty block",
+            block_view
+        );
+
+        // Increment the metric for number of empty blocks proposed
+        self.consensus
+            .write()
+            .await
+            .metrics
+            .number_of_empty_blocks_proposed
+            .add(1);
+
+        let membership_total_nodes = self.membership.total_nodes();
+        let Some(null_fee) = null_block::builder_fee(self.membership.total_nodes(), version) else {
+            error!("Failed to get null fee");
+            return None;
+        };
+
+        // Create an empty block payload and metadata
+        let (_, metadata) = <TYPES as NodeType>::BlockPayload::empty();
+
+        let (_, precompute_data) = precompute_vid_commitment(&[], membership_total_nodes);
+
+        // Broadcast the empty block
+        broadcast_event(
+            Arc::new(HotShotEvent::BlockRecv(PackedBundle::new(
+                vec![].into(),
+                metadata,
+                block_view,
+                vec1::vec1![null_fee],
+                Some(precompute_data),
+            ))),
+            &event_stream,
+        )
+        .await;
+
+        None
+    }
+
     /// main task event handler
     #[instrument(skip_all, fields(id = self.id, view = *self.cur_view), name = "Transaction task", level = "error", target = "TransactionTaskState")]
     pub async fn handle(
@@ -166,108 +367,24 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
                 }
                 let block_view = if make_block { view } else { view + 1 };
 
-                let version = match hotshot_types::simple_certificate::version(
+                let version = match version(
                     block_view,
-                    &self
-                        .decided_upgrade_certificate
-                        .read()
-                        .await
-                        .as_ref()
-                        .cloned(),
+                    &self.decided_upgrade_certificate.read().await.clone(),
                 ) {
                     Ok(v) => v,
-                    Err(err) => {
-                        error!("Upgrade certificate requires unsupported version, refusing to request blocks: {}", err);
+                    Err(e) => {
+                        tracing::error!("Failed to calculate version: {:?}", e);
                         return None;
                     }
                 };
 
-                // Request a block from the builder unless we are between versions.
-                let block = {
-                    if self
-                        .decided_upgrade_certificate
-                        .read()
-                        .await
-                        .as_ref()
-                        .is_some_and(|cert| cert.upgrading_in(block_view))
-                    {
-                        None
-                    } else {
-                        self.wait_for_block(block_view, version).await
-                    }
-                };
-
-                if let Some(BuilderResponse {
-                    block_payload,
-                    metadata,
-                    fee,
-                    precompute_data,
-                }) = block
-                {
-                    let Some(bid_fee) =
-                        null_block::builder_fee(self.membership.total_nodes(), version)
-                    else {
-                        error!("Failed to get bid fee");
-                        return None;
-                    };
-
-                    broadcast_event(
-                        Arc::new(HotShotEvent::BlockRecv(PackedBundle::new(
-                            block_payload.encode(),
-                            metadata,
-                            block_view,
-                            vec1::vec1![bid_fee],
-                            vec1::vec1![fee],
-                            precompute_data,
-                        ))),
-                        &event_stream,
-                    )
-                    .await;
+                if version < MarketplaceVersion::VERSION {
+                    self.handle_view_change_legacy(event_stream, block_view)
+                        .await;
                 } else {
-                    // If we couldn't get a block, send an empty block
-                    warn!(
-                        "Failed to get a block for view {:?}, proposing empty block",
-                        view
-                    );
-
-                    // Increment the metric for number of empty blocks proposed
-                    self.consensus
-                        .write()
-                        .await
-                        .metrics
-                        .number_of_empty_blocks_proposed
-                        .add(1);
-
-                    let membership_total_nodes = self.membership.total_nodes();
-                    let Some(null_fee) =
-                        null_block::builder_fee(self.membership.total_nodes(), version)
-                    else {
-                        error!("Failed to get null fee");
-                        return None;
-                    };
-
-                    // Create an empty block payload and metadata
-                    let (_, metadata) = <TYPES as NodeType>::BlockPayload::empty();
-
-                    let (_, precompute_data) =
-                        precompute_vid_commitment(&[], membership_total_nodes);
-
-                    // Broadcast the empty block
-                    broadcast_event(
-                        Arc::new(HotShotEvent::BlockRecv(PackedBundle::new(
-                            vec![].into(),
-                            metadata,
-                            block_view,
-                            vec1::vec1![null_fee.clone()],
-                            vec1::vec1![null_fee],
-                            Some(precompute_data),
-                        ))),
-                        &event_stream,
-                    )
-                    .await;
-                };
-
-                return None;
+                    self.handle_view_change_marketplace(event_stream, block_view)
+                        .await;
+                }
             }
             HotShotEvent::Shutdown => {
                 return Some(HotShotTaskCompleted);

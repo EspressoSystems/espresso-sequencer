@@ -11,6 +11,7 @@ use url::Url;
 use vec1::Vec1;
 
 use crate::utils::bincode_opts;
+pub mod bundle;
 pub mod consensus;
 pub mod constants;
 pub mod data;

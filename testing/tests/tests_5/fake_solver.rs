@@ -1,10 +1,10 @@
 use async_compatibility_layer::art::async_spawn;
+use hotshot_example_types::{
+    auction_results_provider_types::TestAuctionResult, node_types::TestTypes,
+};
 use hotshot_fakeapi::fake_solver::FakeSolverState;
-use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
-
-use hotshot_example_types::node_types::TestTypes;
-use hotshot_example_types::auction_results_provider_types::TestAuctionResult;
 use hotshot_testing::helpers::key_pair_for_id;
+use hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
 use tracing::instrument;
 use url::Url;
 
@@ -13,7 +13,6 @@ use url::Url;
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_fake_solver_fetch_non_permissioned_no_error() {
-
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -65,7 +64,6 @@ async fn test_fake_solver_fetch_non_permissioned_no_error() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_fake_solver_fetch_non_permissioned_with_errors() {
-
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -141,7 +139,10 @@ async fn test_fake_solver_fetch_non_permissioned_with_errors() {
 
     // Assert over the payloads with a 50% error rate.
     for payload in payloads {
-        assert_eq!(payload.urls[0], Url::parse("http://localhost:1111/").unwrap());
+        assert_eq!(
+            payload.urls[0],
+            Url::parse("http://localhost:1111/").unwrap()
+        );
     }
 }
 
@@ -150,7 +151,6 @@ async fn test_fake_solver_fetch_non_permissioned_with_errors() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_fake_solver_fetch_permissioned_no_error() {
-
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -213,7 +213,6 @@ async fn test_fake_solver_fetch_permissioned_no_error() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn test_fake_solver_fetch_permissioned_with_errors() {
-
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
@@ -296,6 +295,9 @@ async fn test_fake_solver_fetch_permissioned_with_errors() {
 
     // Assert over the payloads with a 50% error rate.
     for payload in payloads {
-        assert_eq!(payload.urls[0], Url::parse("http://localhost:1111/").unwrap());
+        assert_eq!(
+            payload.urls[0],
+            Url::parse("http://localhost:1111/").unwrap()
+        );
     }
 }

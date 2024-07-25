@@ -1,6 +1,8 @@
 #![allow(clippy::panic)]
 #![cfg(feature = "dependency-tasks")]
 
+use std::time::Duration;
+
 use futures::StreamExt;
 use hotshot::tasks::task_state::CreateTaskState;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
@@ -16,8 +18,6 @@ use hotshot_testing::{
 use hotshot_types::{
     data::ViewNumber, traits::node_implementation::ConsensusTime, vote::HasViewNumber,
 };
-
-use std::time::Duration;
 
 const TIMEOUT: Duration = Duration::from_millis(35);
 
@@ -52,10 +52,12 @@ async fn test_quorum_vote_task_success() {
         leaves.push(view.leaf.clone());
         dacs.push(view.da_certificate.clone());
         vids.push(view.vid_proposal.clone());
-        consensus_writer.update_validated_state_map(
-            view.quorum_proposal.data.view_number(),
-            build_fake_view_with_leaf(view.leaf.clone()),
-        ).unwrap();
+        consensus_writer
+            .update_validated_state_map(
+                view.quorum_proposal.data.view_number(),
+                build_fake_view_with_leaf(view.leaf.clone()),
+            )
+            .unwrap();
         consensus_writer.update_saved_leaves(view.leaf.clone());
     }
     drop(consensus_writer);
@@ -172,10 +174,12 @@ async fn test_quorum_vote_task_miss_dependency() {
         vids.push(view.vid_proposal.clone());
         leaves.push(view.leaf.clone());
 
-        consensus_writer.update_validated_state_map(
-            view.quorum_proposal.data.view_number(),
-            build_fake_view_with_leaf(view.leaf.clone()),
-        ).unwrap();
+        consensus_writer
+            .update_validated_state_map(
+                view.quorum_proposal.data.view_number(),
+                build_fake_view_with_leaf(view.leaf.clone()),
+            )
+            .unwrap();
         consensus_writer.update_saved_leaves(view.leaf.clone());
     }
     drop(consensus_writer);
@@ -197,9 +201,9 @@ async fn test_quorum_vote_task_miss_dependency() {
     ];
 
     let expectations = vec![
-        Expectations::from_outputs(all_predicates![
-            exact(VidShareValidated(vids[1].0[0].clone()))
-        ]),
+        Expectations::from_outputs(all_predicates![exact(VidShareValidated(
+            vids[1].0[0].clone()
+        ))]),
         Expectations::from_outputs(all_predicates![
             exact(LockedViewUpdated(ViewNumber::new(1))),
             exact(DaCertificateValidated(dacs[2].clone()))

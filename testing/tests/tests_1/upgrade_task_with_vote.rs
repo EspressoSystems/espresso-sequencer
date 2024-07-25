@@ -1,5 +1,4 @@
 #![cfg(feature = "dependency-tasks")]
-
 // TODO: Remove after integration of dependency-tasks
 #![allow(unused_imports)]
 
@@ -14,14 +13,16 @@ use hotshot_example_types::{
 };
 use hotshot_macros::{run_test, test_scripts};
 use hotshot_task_impls::{
-    consensus2::Consensus2TaskState, events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState, upgrade::UpgradeTaskState
+    consensus2::Consensus2TaskState, events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState,
+    upgrade::UpgradeTaskState,
 };
 use hotshot_testing::{
+    all_predicates,
     helpers::{build_fake_view_with_leaf, vid_share},
     predicates::{event::*, upgrade_with_vote::*},
-    script::{Expectations, TaskScript, InputOrder},
+    random,
+    script::{Expectations, InputOrder, TaskScript},
     view_generator::TestViewGenerator,
-    random, all_predicates
 };
 use hotshot_types::{
     data::{null_block, ViewNumber},
@@ -77,10 +78,12 @@ async fn test_upgrade_task_with_vote() {
         vids.push(view.vid_proposal.clone());
         leaders.push(view.leader_public_key);
         leaves.push(view.leaf.clone());
-        consensus_writer.update_validated_state_map(
-            view.quorum_proposal.data.view_number(),
-            build_fake_view_with_leaf(view.leaf.clone()),
-        ).unwrap();
+        consensus_writer
+            .update_validated_state_map(
+                view.quorum_proposal.data.view_number(),
+                build_fake_view_with_leaf(view.leaf.clone()),
+            )
+            .unwrap();
         consensus_writer.update_saved_leaves(view.leaf.clone());
     }
     drop(consensus_writer);
@@ -117,9 +120,10 @@ async fn test_upgrade_task_with_vote() {
             DaCertificateRecv(dacs[4].clone()),
             VidShareRecv(vids[4].0[0].clone()),
         ],
-        random![
-            QuorumProposalValidated(proposals[5].data.clone(), leaves[5].clone()),
-        ],
+        random![QuorumProposalValidated(
+            proposals[5].data.clone(),
+            leaves[5].clone()
+        ),],
     ];
 
     let expectations = vec![
@@ -184,7 +188,6 @@ async fn test_upgrade_task_with_vote() {
         state: vote_state,
         expectations,
     };
-
 
     run_test![inputs, vote_script].await;
 }

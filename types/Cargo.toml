@@ -27,6 +27,7 @@ espresso-systems-common = { workspace = true }
 ethereum-types = { workspace = true }
 futures = { workspace = true }
 cdn-proto = { workspace = true }
+reqwest = { workspace = true }
 
 generic-array = { workspace = true }
 

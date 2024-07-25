@@ -14,12 +14,15 @@ use hotshot_task_impls::{
 };
 use hotshot_testing::{
     helpers::{build_fake_view_with_leaf_and_state, build_system_handle},
-    predicates::event::{all_predicates, quorum_proposal_missing, exact, vote_now},
+    predicates::event::{all_predicates, exact, quorum_proposal_missing, vote_now},
     script::InputOrder,
     serial,
     view_generator::TestViewGenerator,
 };
-use hotshot_types::{data::ViewNumber, traits::{node_implementation::ConsensusTime,ValidatedState}};
+use hotshot_types::{
+    data::ViewNumber,
+    traits::{node_implementation::ConsensusTime, ValidatedState},
+};
 
 #[cfg(test)]
 #[cfg(feature = "dependency-tasks")]
@@ -62,10 +65,12 @@ async fn test_quorum_proposal_recv_task() {
         // to that, we'll just put them in here.
         consensus_writer
             .update_saved_leaves(Leaf::from_quorum_proposal(&view.quorum_proposal.data));
-        consensus_writer.update_validated_state_map(
-            view.quorum_proposal.data.view_number,
-            build_fake_view_with_leaf(view.leaf.clone()),
-        ).unwrap();
+        consensus_writer
+            .update_validated_state_map(
+                view.quorum_proposal.data.view_number,
+                build_fake_view_with_leaf(view.leaf.clone()),
+            )
+            .unwrap();
     }
     drop(consensus_writer);
 
@@ -152,10 +157,12 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
         // we don't have access to that, we'll just put them in here. We
         // specifically ignore writing the saved leaves so that way
         // the parent lookup fails and we trigger a view liveness check.
-        consensus_writer.update_validated_state_map(
-            inserted_view_number,
-            build_fake_view_with_leaf(view.leaf.clone()),
-        ).unwrap();
+        consensus_writer
+            .update_validated_state_map(
+                inserted_view_number,
+                build_fake_view_with_leaf(view.leaf.clone()),
+            )
+            .unwrap();
 
         // The index here is important. Since we're proposing for view 4, we need the
         // value from entry 2 to align the public key from the shares map.
