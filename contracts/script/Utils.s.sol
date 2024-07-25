@@ -32,7 +32,7 @@ contract UtilsScript is Script {
         return Strings.toHexString(uint256(uint160(address(addr))));
     }
 
-    function generateDeploymentOutput(
+    function generateProxyDeploymentOutput(
         string memory contractName,
         uint256 contractSalt,
         address proxy,
@@ -54,6 +54,36 @@ contract UtilsScript is Script {
 
         string memory obj1 = "object";
         vm.serializeAddress(obj1, "proxyAddress", proxy);
+        vm.serializeAddress(obj1, "multisig", multisig);
+        vm.serializeString(obj1, "approvalProcessId", approvalProcessId);
+        vm.serializeString(obj1, "approvalType", viaType);
+        string memory obj3 = vm.serializeUint(obj1, "salt", contractSalt);
+
+        return (filePath, obj3);
+    }
+
+    function generateDeploymentOutput(
+        string memory contractName,
+        uint256 contractSalt,
+        address contractAddress,
+        address multisig,
+        string memory approvalProcessId,
+        string memory viaType
+    ) external returns (string memory filePath, string memory data) {
+        string memory outputDir = string.concat(
+            vm.projectRoot(),
+            "/contracts/script/output/defenderDeployments/",
+            contractName,
+            "/",
+            vm.toString(block.chainid),
+            "/"
+        );
+        filePath = string.concat(outputDir, Strings.toString(contractSalt), ".json");
+
+        createDir(outputDir);
+
+        string memory obj1 = "object";
+        vm.serializeAddress(obj1, "contractAddress", contractAddress);
         vm.serializeAddress(obj1, "multisig", multisig);
         vm.serializeString(obj1, "approvalProcessId", approvalProcessId);
         vm.serializeString(obj1, "approvalType", viaType);
