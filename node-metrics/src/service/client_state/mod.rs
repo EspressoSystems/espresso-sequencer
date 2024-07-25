@@ -4,7 +4,10 @@ use super::{
     data_state::{DataState, NodeIdentity},
     server_message::ServerMessage,
 };
-use async_std::sync::{RwLock, RwLockWriteGuard};
+use async_std::{
+    sync::{RwLock, RwLockWriteGuard},
+    task::JoinHandle,
+};
 use bitvec::vec::BitVec;
 use espresso_types::SeqTypes;
 use futures::{channel::mpsc::SendError, Sink, SinkExt, Stream, StreamExt};
@@ -888,124 +891,309 @@ async fn handle_received_voters<K>(
     drop_failed_client_sends(client_thread_state, failed_client_sends).await;
 }
 
-/// [process_internal_client_message_stream] is a function that processes the
-/// client handling stream. This stream is responsible for managing the state
-/// of the connected clients, and their subscriptions.
-pub async fn process_internal_client_message_stream<S, K>(
-    mut stream: S,
-    data_state: Arc<RwLock<DataState>>,
-    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
-) where
-    S: Stream<Item = InternalClientMessage<K>> + Unpin,
-    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
-{
-    loop {
-        let message_result = stream.next().await;
-        let message = if let Some(message) = message_result {
-            message
-        } else {
-            tracing::info!("internal client message handler closed.");
-            return;
-        };
+/// InternalClientMessageProcessingTask represents an async task for
+/// InternalClientMessages, and making the appropriate updates to the
+/// [ClientThreadState] and [DataState].
+pub struct InternalClientMessageProcessingTask {
+    pub task_handle: Option<JoinHandle<()>>,
+}
 
-        if let Err(err) =
-            process_client_message(message, data_state.clone(), client_thread_state.clone()).await
-        {
-            tracing::info!(
-                "internal client message processing encountered an error: {}",
-                err,
-            );
-            return;
+impl InternalClientMessageProcessingTask {
+    /// new creates a new [InternalClientMessageProcessingTask] with the
+    /// given internal_client_message_receiver, data_state, and
+    /// client_thread_state.
+    ///
+    /// Calling this function will start an async task that will start
+    /// processing.  The handle for the async task is stored within the
+    /// returned state.
+    pub fn new<S, K>(
+        internal_client_message_receiver: S,
+        data_state: Arc<RwLock<DataState>>,
+        client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+    ) -> Self
+    where
+        S: Stream<Item = InternalClientMessage<K>> + Send + Sync + Unpin + 'static,
+        K: Sink<ServerMessage, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+    {
+        let task_handle = async_std::task::spawn(Self::process_internal_client_message_stream(
+            internal_client_message_receiver,
+            data_state.clone(),
+            client_thread_state.clone(),
+        ));
+
+        Self {
+            task_handle: Some(task_handle),
+        }
+    }
+
+    /// [process_internal_client_message_stream] is a function that processes the
+    /// client handling stream. This stream is responsible for managing the state
+    /// of the connected clients, and their subscriptions.
+    async fn process_internal_client_message_stream<S, K>(
+        mut stream: S,
+        data_state: Arc<RwLock<DataState>>,
+        client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+    ) where
+        S: Stream<Item = InternalClientMessage<K>> + Unpin,
+        K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+    {
+        loop {
+            let message_result = stream.next().await;
+            let message = if let Some(message) = message_result {
+                message
+            } else {
+                tracing::info!("internal client message handler closed.");
+                return;
+            };
+
+            if let Err(err) =
+                process_client_message(message, data_state.clone(), client_thread_state.clone())
+                    .await
+            {
+                tracing::info!(
+                    "internal client message processing encountered an error: {}",
+                    err,
+                );
+                return;
+            }
         }
     }
 }
 
-/// [process_distribute_block_detail_handling_stream] is a function that
-/// processes the the [Stream] of incoming [BlockDetail] and distributes them
-/// to all subscribed clients.
-pub async fn process_distribute_block_detail_handling_stream<S, K>(
-    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
-    mut stream: S,
-) where
-    S: Stream<Item = BlockDetail<SeqTypes>> + Unpin,
-    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
-{
-    loop {
-        let block_detail_result = stream.next().await;
-
-        let block_detail = if let Some(block_detail) = block_detail_result {
-            block_detail
-        } else {
-            tracing::info!("block detail stream closed.  shutting down client handling stream.",);
-            return;
-        };
-
-        handle_received_block_detail(client_thread_state.clone(), block_detail).await
+/// [drop] implementation for [InternalClientMessageProcessingTask] that will
+/// cancel the task if it is still running.
+impl Drop for InternalClientMessageProcessingTask {
+    fn drop(&mut self) {
+        let task_handle = self.task_handle.take();
+        if let Some(task_handle) = task_handle {
+            async_std::task::block_on(task_handle.cancel());
+        }
     }
 }
 
-/// [process_distribute_node_identity_handling_stream] is a function that
-/// processes the the [Stream] of incoming [NodeIdentity] and distributes them
-/// to all subscribed clients.
-pub async fn process_distribute_node_identity_handling_stream<S, K>(
-    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
-    mut stream: S,
-) where
-    S: Stream<Item = NodeIdentity> + Unpin,
-    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
-{
-    loop {
-        let node_identity_result = stream.next().await;
-
-        let node_identity = if let Some(node_identity) = node_identity_result {
-            node_identity
-        } else {
-            tracing::info!("node identity stream closed.  shutting down client handling stream.",);
-            return;
-        };
-
-        handle_received_node_identity(client_thread_state.clone(), node_identity).await
-    }
-}
-
-/// [process_distribute_voters_handling_stream] is a function that processes
-/// the the [Stream] of incoming [BitVec] and distributes them to all
+/// [ProcessDistributeBlockDetailHandlingTask] represents an async task for
+/// processing the incoming [BlockDetail] and distributing them to all
 /// subscribed clients.
-pub async fn process_distribute_voters_handling_stream<S, K>(
-    client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
-    mut stream: S,
-) where
-    S: Stream<Item = BitVec<u16>> + Unpin,
-    K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
-{
-    loop {
-        let voters_result = stream.next().await;
+pub struct ProcessDistributeBlockDetailHandlingTask {
+    pub task_handle: Option<JoinHandle<()>>,
+}
 
-        let voters = if let Some(voters) = voters_result {
-            voters
-        } else {
-            tracing::info!("voters stream closed.  shutting down client handling stream.",);
-            return;
-        };
+impl ProcessDistributeBlockDetailHandlingTask {
+    /// [new] creates a new [ProcessDistributeBlockDetailHandlingTask] with the
+    /// given client_thread_state and block_detail_receiver.
+    ///
+    /// Calling this function will start an async task that will start
+    /// processing.  The handle for the async task is stored within the
+    /// returned state.
+    pub fn new<S, K>(
+        client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+        block_detail_receiver: S,
+    ) -> Self
+    where
+        S: Stream<Item = BlockDetail<SeqTypes>> + Send + Sync + Unpin + 'static,
+        K: Sink<ServerMessage, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+    {
+        let task_handle =
+            async_std::task::spawn(Self::process_distribute_block_detail_handling_stream(
+                client_thread_state.clone(),
+                block_detail_receiver,
+            ));
 
-        handle_received_voters(client_thread_state.clone(), voters).await
+        Self {
+            task_handle: Some(task_handle),
+        }
+    }
+
+    /// [process_distribute_block_detail_handling_stream] is a function that
+    /// processes the the [Stream] of incoming [BlockDetail] and distributes them
+    /// to all subscribed clients.
+    async fn process_distribute_block_detail_handling_stream<S, K>(
+        client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+        mut stream: S,
+    ) where
+        S: Stream<Item = BlockDetail<SeqTypes>> + Unpin,
+        K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+    {
+        loop {
+            let block_detail_result = stream.next().await;
+
+            let block_detail = if let Some(block_detail) = block_detail_result {
+                block_detail
+            } else {
+                tracing::info!(
+                    "block detail stream closed.  shutting down client handling stream.",
+                );
+                return;
+            };
+
+            handle_received_block_detail(client_thread_state.clone(), block_detail).await
+        }
+    }
+}
+
+/// [drop] implementation for [ProcessDistributeBlockDetailHandlingTask] that will
+/// cancel the task if it is still running.
+impl Drop for ProcessDistributeBlockDetailHandlingTask {
+    fn drop(&mut self) {
+        let task_handle = self.task_handle.take();
+        if let Some(task_handle) = task_handle {
+            async_std::task::block_on(task_handle.cancel());
+        }
+    }
+}
+
+/// [ProcessDistributeNodeIdentityHandlingTask] represents an async task for
+/// processing the incoming [NodeIdentity] and distributing them to all
+/// subscribed clients.
+pub struct ProcessDistributeNodeIdentityHandlingTask {
+    pub task_handle: Option<JoinHandle<()>>,
+}
+
+impl ProcessDistributeNodeIdentityHandlingTask {
+    /// [new] creates a new [ProcessDistributeNodeIdentityHandlingTask] with the
+    /// given client_thread_state and node_identity_receiver.
+    ///
+    /// Calling this function will start an async task that will start
+    /// processing.  The handle for the async task is stored within the
+    /// returned state.
+    pub fn new<S, K>(
+        client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+        node_identity_receiver: S,
+    ) -> Self
+    where
+        S: Stream<Item = NodeIdentity> + Send + Sync + Unpin + 'static,
+        K: Sink<ServerMessage, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+    {
+        let task_handle =
+            async_std::task::spawn(Self::process_distribute_node_identity_handling_stream(
+                client_thread_state.clone(),
+                node_identity_receiver,
+            ));
+
+        Self {
+            task_handle: Some(task_handle),
+        }
+    }
+
+    /// [process_distribute_node_identity_handling_stream] is a function that
+    /// processes the the [Stream] of incoming [NodeIdentity] and distributes them
+    /// to all subscribed clients.
+    async fn process_distribute_node_identity_handling_stream<S, K>(
+        client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+        mut stream: S,
+    ) where
+        S: Stream<Item = NodeIdentity> + Unpin,
+        K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+    {
+        loop {
+            let node_identity_result = stream.next().await;
+
+            let node_identity = if let Some(node_identity) = node_identity_result {
+                node_identity
+            } else {
+                tracing::info!(
+                    "node identity stream closed.  shutting down client handling stream.",
+                );
+                return;
+            };
+
+            handle_received_node_identity(client_thread_state.clone(), node_identity).await
+        }
+    }
+}
+
+/// [drop] implementation for [ProcessDistributeNodeIdentityHandlingTask] that
+/// will cancel the task if it is still running.
+impl Drop for ProcessDistributeNodeIdentityHandlingTask {
+    fn drop(&mut self) {
+        let task_handle = self.task_handle.take();
+        if let Some(task_handle) = task_handle {
+            async_std::task::block_on(task_handle.cancel());
+        }
+    }
+}
+
+/// [ProcessDistributeVotersHandlingTask] represents an async task for
+/// processing the incoming [BitVec] and distributing them to all
+/// subscribed clients.
+pub struct ProcessDistributeVotersHandlingTask {
+    pub task_handle: Option<JoinHandle<()>>,
+}
+
+impl ProcessDistributeVotersHandlingTask {
+    /// [new] creates a new [ProcessDistributeVotersHandlingTask] with the
+    /// given client_thread_state and voters_receiver.
+    ///
+    /// Calling this function will start an async task that will start
+    /// processing.  The handle for the async task is stored within the
+    /// returned state.
+    pub fn new<S, K>(
+        client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+        voters_receiver: S,
+    ) -> Self
+    where
+        S: Stream<Item = BitVec<u16>> + Send + Sync + Unpin + 'static,
+        K: Sink<ServerMessage, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+    {
+        let task_handle = async_std::task::spawn(Self::process_distribute_voters_handling_stream(
+            client_thread_state.clone(),
+            voters_receiver,
+        ));
+
+        Self {
+            task_handle: Some(task_handle),
+        }
+    }
+
+    /// [process_distribute_voters_handling_stream] is a function that processes
+    /// the the [Stream] of incoming [BitVec] and distributes them to all
+    /// subscribed clients.
+    async fn process_distribute_voters_handling_stream<S, K>(
+        client_thread_state: Arc<RwLock<ClientThreadState<K>>>,
+        mut stream: S,
+    ) where
+        S: Stream<Item = BitVec<u16>> + Unpin,
+        K: Sink<ServerMessage, Error = SendError> + Clone + Unpin,
+    {
+        loop {
+            let voters_result = stream.next().await;
+
+            let voters = if let Some(voters) = voters_result {
+                voters
+            } else {
+                tracing::info!("voters stream closed.  shutting down client handling stream.",);
+                return;
+            };
+
+            handle_received_voters(client_thread_state.clone(), voters).await
+        }
+    }
+}
+
+/// [drop] implementation for [ProcessDistributeVotersHandlingTask] that will
+/// cancel the task if it is still running.
+impl Drop for ProcessDistributeVotersHandlingTask {
+    fn drop(&mut self) {
+        let task_handle = self.task_handle.take();
+        if let Some(task_handle) = task_handle {
+            async_std::task::block_on(task_handle.cancel());
+        }
     }
 }
 
 #[cfg(test)]
 pub mod tests {
-    use super::{process_internal_client_message_stream, ClientThreadState};
+    use super::{ClientThreadState, InternalClientMessageProcessingTask};
     use crate::service::{
         client_id::ClientId,
         client_message::InternalClientMessage,
         client_state::{
-            process_distribute_block_detail_handling_stream,
-            process_distribute_node_identity_handling_stream,
-            process_distribute_voters_handling_stream,
+            ProcessDistributeBlockDetailHandlingTask, ProcessDistributeNodeIdentityHandlingTask,
+            ProcessDistributeVotersHandlingTask,
         },
         data_state::{
-            create_block_detail_from_leaf, process_leaf_stream, DataState, LocationDetails,
-            NodeIdentity,
+            create_block_detail_from_leaf, DataState, LocationDetails, NodeIdentity,
+            ProcessLeafStreamTask,
         },
         server_message::ServerMessage,
     };
@@ -1103,18 +1291,20 @@ pub mod tests {
 
         let (mut internal_client_message_sender, internal_client_message_receiver) =
             mpsc::channel(1);
-        let process_internal_client_message_handle: async_std::task::JoinHandle<()> =
-            async_std::task::spawn(process_internal_client_message_stream(
-                internal_client_message_receiver,
-                data_state,
-                client_thread_state,
-            ));
+        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+            internal_client_message_receiver,
+            data_state,
+            client_thread_state,
+        );
 
         // disconnect the last internal client message sender
         internal_client_message_sender.disconnect();
 
         // Join the async task.
         if let Err(timeout_error) = process_internal_client_message_handle
+            .task_handle
+            .take()
+            .unwrap()
             .timeout(Duration::from_millis(200))
             .await
         {
@@ -1139,12 +1329,11 @@ pub mod tests {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
-        let process_internal_client_message_handle =
-            async_std::task::spawn(process_internal_client_message_stream(
-                internal_client_message_receiver,
-                data_state,
-                client_thread_state,
-            ));
+        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+            internal_client_message_receiver,
+            data_state,
+            client_thread_state,
+        );
 
         // Send a Connected Message to the server
         let mut internal_client_message_sender_1 = internal_client_message_sender.clone();
@@ -1199,6 +1388,9 @@ pub mod tests {
         assert_eq!(server_message_receiver_2.next().await, None);
 
         if let Err(timeout_error) = process_internal_client_message_handle
+            .task_handle
+            .take()
+            .unwrap()
             .timeout(Duration::from_millis(200))
             .await
         {
@@ -1226,12 +1418,11 @@ pub mod tests {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
-        let process_internal_client_message_handle =
-            async_std::task::spawn(process_internal_client_message_stream(
-                internal_client_message_receiver,
-                data_state,
-                client_thread_state,
-            ));
+        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+            internal_client_message_receiver,
+            data_state,
+            client_thread_state,
+        );
 
         // Send a Connected Message to the server
         let mut internal_client_message_sender_1 = internal_client_message_sender.clone();
@@ -1285,6 +1476,9 @@ pub mod tests {
 
         // Join the async task.
         if let Err(timeout_error) = process_internal_client_message_handle
+            .task_handle
+            .take()
+            .unwrap()
             .timeout(Duration::from_millis(200))
             .await
         {
@@ -1304,12 +1498,11 @@ pub mod tests {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
-        let process_internal_client_message_handle: async_std::task::JoinHandle<()> =
-            async_std::task::spawn(process_internal_client_message_stream(
-                internal_client_message_receiver,
-                data_state,
-                client_thread_state,
-            ));
+        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+            internal_client_message_receiver,
+            data_state,
+            client_thread_state,
+        );
 
         // Send a Connected Message to the server
         let mut internal_client_message_sender_1 = internal_client_message_sender.clone();
@@ -1370,6 +1563,9 @@ pub mod tests {
 
         // Join the async task.
         if let Err(timeout_error) = process_internal_client_message_handle
+            .task_handle
+            .take()
+            .unwrap()
             .timeout(Duration::from_millis(200))
             .await
         {
@@ -1393,29 +1589,27 @@ pub mod tests {
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
         let (server_message_sender_3, mut server_message_receiver_3) = mpsc::channel(1);
-        let process_internal_client_message_handle =
-            async_std::task::spawn(process_internal_client_message_stream(
-                internal_client_message_receiver,
-                data_state.clone(),
-                client_thread_state.clone(),
-            ));
-
-        let process_distribute_block_detail_handle =
-            async_std::task::spawn(process_distribute_block_detail_handling_stream(
-                client_thread_state.clone(),
-                block_detail_receiver,
-            ));
-
-        let process_distribute_voters_handle = async_std::task::spawn(
-            process_distribute_voters_handling_stream(client_thread_state, voters_receiver),
+        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+            internal_client_message_receiver,
+            data_state.clone(),
+            client_thread_state.clone(),
         );
 
-        let process_leaf_stream_handle = async_std::task::spawn(process_leaf_stream(
+        let mut process_distribute_block_detail_handle =
+            ProcessDistributeBlockDetailHandlingTask::new(
+                client_thread_state.clone(),
+                block_detail_receiver,
+            );
+
+        let mut process_distribute_voters_handle =
+            ProcessDistributeVotersHandlingTask::new(client_thread_state, voters_receiver);
+
+        let mut process_leaf_stream_handle = ProcessLeafStreamTask::new(
             leaf_receiver,
             data_state,
             block_detail_sender,
             voters_sender,
-        ));
+        );
 
         // Send a Connected Message to the server
         let mut internal_client_message_sender_1 = internal_client_message_sender.clone();
@@ -1500,6 +1694,9 @@ pub mod tests {
 
         // Join the async task.
         if let Err(timeout_error) = process_leaf_stream_handle
+            .task_handle
+            .take()
+            .unwrap()
             .timeout(Duration::from_millis(200))
             .await
         {
@@ -1511,6 +1708,9 @@ pub mod tests {
 
         // Join the async task.
         if let Err(timeout_error) = process_distribute_block_detail_handle
+            .task_handle
+            .take()
+            .unwrap()
             .timeout(Duration::from_millis(200))
             .await
         {
@@ -1521,6 +1721,9 @@ pub mod tests {
         }
 
         if let Err(timeout_error) = process_distribute_voters_handle
+            .task_handle
+            .take()
+            .unwrap()
             .timeout(Duration::from_millis(200))
             .await
         {
@@ -1543,6 +1746,9 @@ pub mod tests {
 
         // Join the async task.
         if let Err(timeout_error) = process_internal_client_message_handle
+            .task_handle
+            .take()
+            .unwrap()
             .timeout(Duration::from_millis(200))
             .await
         {
@@ -1564,18 +1770,17 @@ pub mod tests {
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
         let (server_message_sender_3, mut server_message_receiver_3) = mpsc::channel(1);
-        let process_internal_client_message_handle =
-            async_std::task::spawn(process_internal_client_message_stream(
-                internal_client_message_receiver,
-                data_state.clone(),
-                client_thread_state.clone(),
-            ));
+        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+            internal_client_message_receiver,
+            data_state.clone(),
+            client_thread_state.clone(),
+        );
 
-        let process_distribute_node_identity_handle =
-            async_std::task::spawn(process_distribute_node_identity_handling_stream(
+        let mut process_distribute_node_identity_handle =
+            ProcessDistributeNodeIdentityHandlingTask::new(
                 client_thread_state,
                 node_identity_receiver,
-            ));
+            );
 
         // Send a Connected Message to the server
         let mut internal_client_message_sender_1 = internal_client_message_sender.clone();
@@ -1662,6 +1867,9 @@ pub mod tests {
 
         // Join the async task.
         if let Err(timeout_error) = process_distribute_node_identity_handle
+            .task_handle
+            .take()
+            .unwrap()
             .timeout(Duration::from_millis(200))
             .await
         {
@@ -1684,6 +1892,9 @@ pub mod tests {
 
         // Join the async task.
         if let Err(timeout_error) = process_internal_client_message_handle
+            .task_handle
+            .take()
+            .unwrap()
             .timeout(Duration::from_millis(200))
             .await
         {
@@ -1705,16 +1916,14 @@ pub mod tests {
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
         let (server_message_sender_3, mut server_message_receiver_3) = mpsc::channel(1);
-        let process_internal_client_message_handle =
-            async_std::task::spawn(process_internal_client_message_stream(
-                internal_client_message_receiver,
-                data_state.clone(),
-                client_thread_state.clone(),
-            ));
-
-        let process_distribute_voters_handle = async_std::task::spawn(
-            process_distribute_voters_handling_stream(client_thread_state, voters_receiver),
+        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+            internal_client_message_receiver,
+            data_state.clone(),
+            client_thread_state.clone(),
         );
+
+        let mut process_distribute_voters_handle =
+            ProcessDistributeVotersHandlingTask::new(client_thread_state, voters_receiver);
 
         // Send a Connected Message to the server
         let mut internal_client_message_sender_1 = internal_client_message_sender.clone();
@@ -1796,6 +2005,9 @@ pub mod tests {
 
         // Join the async task.
         if let Err(timeout_error) = process_distribute_voters_handle
+            .task_handle
+            .take()
+            .unwrap()
             .timeout(Duration::from_millis(200))
             .await
         {
@@ -1818,6 +2030,9 @@ pub mod tests {
 
         // Join the async task.
         if let Err(timeout_error) = process_internal_client_message_handle
+            .task_handle
+            .take()
+            .unwrap()
             .timeout(Duration::from_millis(200))
             .await
         {

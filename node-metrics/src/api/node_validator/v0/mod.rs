@@ -2,13 +2,16 @@ pub mod create_node_validator_api;
 use crate::service::client_message::{ClientMessage, InternalClientMessage};
 use crate::service::data_state::{LocationDetails, NodeIdentity};
 use crate::service::server_message::ServerMessage;
-use espresso_types::FeeAccount;
+use async_std::task::JoinHandle;
+use espresso_types::{FeeAccount, SeqTypes};
+use futures::channel::mpsc::SendError;
 use futures::future::Either;
-use futures::Sink;
 use futures::{
     channel::mpsc::{self, Sender},
     FutureExt, SinkExt, StreamExt,
 };
+use futures::{Sink, Stream};
+use hotshot_query_service::Leaf;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::light_client::{CircuitField, StateVerKey};
 use hotshot_types::signature_key::BLSPubKey;
@@ -405,53 +408,139 @@ pub async fn get_node_identity_from_url(
     }
 }
 
-/// [stream_leaves_from_hotshot_query_service] retrieves a stream of
-/// [sequencer::Leaf]s from the Hotshot Query Service.  It expects a
-/// [current_block_height] to be provided so that it can determine the starting
-/// block height to begin streaming from.  No matter what the value of
-/// [current_block_height] is the stream will always check what the latest
-/// block height is on the hotshot query service.  It will then attempt to
-/// pull as few Leaves as it needs from the stream.
-pub async fn stream_leaves_from_hotshot_query_service(
-    current_block_height: Option<u64>,
-    client: surf_disco::Client<hotshot_query_service::Error, Version01>,
-) -> Result<
-    impl futures::Stream<Item = Result<espresso_types::Leaf, hotshot_query_service::Error>> + Unpin,
-    hotshot_query_service::Error,
-> {
-    let block_height_result = client.get("status/block-height").send().await;
-    let block_height: u64 = match block_height_result {
-        Ok(block_height) => block_height,
-        Err(err) => {
-            tracing::info!("retrieve block height request failed: {}", err);
-            return Err(err);
+/// [ProcessProduceLeafStreamTask] is a task that produce a stream of [Leaf]s
+/// from the Hotshot Query Service.  It will attempt to retrieve the [Leaf]s
+/// from the Hotshot Query Service and then send them to the [Sink] provided.
+pub struct ProcessProduceLeafStreamTask {
+    pub task_handle: Option<JoinHandle<()>>,
+}
+
+impl ProcessProduceLeafStreamTask {
+    /// [new] creates a new [ProcessConsumeLeafStreamTask] that produces a
+    /// stream of [Leaf]s from the Hotshot Query Service.
+    ///
+    /// Calling this function will create an async task that will start
+    /// processing immediately.  The task's handle will be stored in the
+    /// returned state.
+    pub fn new<K>(
+        client: surf_disco::Client<hotshot_query_service::Error, Version01>,
+        leaf_sender: K,
+    ) -> Self
+    where
+        K: Sink<Leaf<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+    {
+        let task_handle =
+            async_std::task::spawn(Self::process_consume_leaf_stream(client, leaf_sender));
+
+        Self {
+            task_handle: Some(task_handle),
         }
-    };
+    }
 
-    let latest_block_start = block_height.saturating_sub(50);
-    let start_block_height = if let Some(known_height) = current_block_height {
-        std::cmp::min(known_height, latest_block_start)
-    } else {
-        latest_block_start
-    };
+    /// [process_consume_leaf_stream] produces a stream of [Leaf]s from the
+    /// Hotshot Query Service.  It will attempt to retrieve the [Leaf]s from the
+    /// Hotshot Query Service and then send them to the [Sink] provided.  If the
+    /// [Sink] is closed, or if the Stream ends prematurely, then the function
+    /// will return.
+    async fn process_consume_leaf_stream<K>(
+        client: surf_disco::Client<hotshot_query_service::Error, Version01>,
+        leaf_sender: K,
+    ) where
+        K: Sink<Leaf<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+    {
+        // Alright, let's start processing leaves
+        // TODO: We should move this into its own function that can respond
+        //       and react appropriately when a service or sequencer does down
+        //       so that it can gracefully re-establish the stream as necessary.
 
-    let leaves_stream_result = client
-        .socket(&format!(
-            "availability/stream/leaves/{}",
-            start_block_height
-        ))
-        .subscribe::<espresso_types::Leaf>()
-        .await;
+        let client = client;
 
-    let leaves_stream = match leaves_stream_result {
-        Ok(leaves_stream) => leaves_stream,
-        Err(err) => {
-            tracing::info!("retrieve leaves stream failed: {}", err);
-            return Err(err);
+        let mut leaf_stream =
+            match Self::stream_leaves_from_hotshot_query_service(None, client).await {
+                Ok(leaf_stream) => leaf_stream,
+                Err(err) => {
+                    tracing::info!("error getting leaf stream: {}", err);
+                    return;
+                }
+            };
+
+        let mut leaf_sender = leaf_sender;
+
+        loop {
+            let leaf_result = leaf_stream.next().await;
+            let leaf = if let Some(Ok(leaf)) = leaf_result {
+                leaf
+            } else {
+                tracing::info!("leaf stream closed");
+                break;
+            };
+
+            let leaf_send_result = leaf_sender.send(leaf).await;
+            if let Err(err) = leaf_send_result {
+                tracing::info!("leaf sender closed: {}", err);
+                break;
+            }
         }
-    };
+    }
 
-    Ok(leaves_stream)
+    /// [stream_leaves_from_hotshot_query_service] retrieves a stream of
+    /// [sequencer::Leaf]s from the Hotshot Query Service.  It expects a
+    /// [current_block_height] to be provided so that it can determine the starting
+    /// block height to begin streaming from.  No matter what the value of
+    /// [current_block_height] is the stream will always check what the latest
+    /// block height is on the hotshot query service.  It will then attempt to
+    /// pull as few Leaves as it needs from the stream.
+    async fn stream_leaves_from_hotshot_query_service(
+        current_block_height: Option<u64>,
+        client: surf_disco::Client<hotshot_query_service::Error, Version01>,
+    ) -> Result<
+        impl futures::Stream<Item = Result<espresso_types::Leaf, hotshot_query_service::Error>> + Unpin,
+        hotshot_query_service::Error,
+    > {
+        let block_height_result = client.get("status/block-height").send().await;
+        let block_height: u64 = match block_height_result {
+            Ok(block_height) => block_height,
+            Err(err) => {
+                tracing::info!("retrieve block height request failed: {}", err);
+                return Err(err);
+            }
+        };
+
+        let latest_block_start = block_height.saturating_sub(50);
+        let start_block_height = if let Some(known_height) = current_block_height {
+            std::cmp::min(known_height, latest_block_start)
+        } else {
+            latest_block_start
+        };
+
+        let leaves_stream_result = client
+            .socket(&format!(
+                "availability/stream/leaves/{}",
+                start_block_height
+            ))
+            .subscribe::<espresso_types::Leaf>()
+            .await;
+
+        let leaves_stream = match leaves_stream_result {
+            Ok(leaves_stream) => leaves_stream,
+            Err(err) => {
+                tracing::info!("retrieve leaves stream failed: {}", err);
+                return Err(err);
+            }
+        };
+
+        Ok(leaves_stream)
+    }
+}
+
+/// [Drop] implementation for [ProcessConsumeLeafStreamTask] that will cancel
+/// the task if it hasn't already been completed.
+impl Drop for ProcessProduceLeafStreamTask {
+    fn drop(&mut self) {
+        if let Some(task_handle) = self.task_handle.take() {
+            async_std::task::block_on(task_handle.cancel());
+        }
+    }
 }
 
 /// [populate_node_identity_general_from_scrape] populates the general
@@ -683,48 +772,90 @@ pub fn node_identity_from_scrape(scrape: Scrape) -> Option<NodeIdentity> {
     Some(node_identity)
 }
 
-/// [process_node_identity_url_stream] processes a stream of [Url]s that are
-/// expected to contain a Node Identity.  It will attempt to retrieve the Node
-/// Identity from the [Url] and then send it to the [Sink] provided.  If the
-/// [Sink] is closed, then the function will return.
-pub async fn process_node_identity_url_stream<T, K>(
-    node_identity_url_stream: T,
-    node_identity_sink: K,
-) where
-    T: futures::Stream<Item = Url> + Unpin,
-    K: Sink<NodeIdentity, Error = futures::channel::mpsc::SendError> + Unpin,
-{
-    let mut node_identity_url_stream = node_identity_url_stream;
-    let mut node_identity_sender = node_identity_sink;
-    loop {
-        let node_identity_url_result = node_identity_url_stream.next().await;
-        let node_identity_url = match node_identity_url_result {
-            Some(node_identity_url) => node_identity_url,
-            None => {
-                tracing::info!("node identity url stream closed");
+/// [ProcessNodeIdentityUrlStreamTask] is a task that processes a stream of
+/// [Url]s that are expected to contain a Node Identity.  It will attempt to
+/// retrieve the Node Identity from the [Url] and then send it to the [Sink]
+/// provided.
+pub struct ProcessNodeIdentityUrlStreamTask {
+    pub task_handle: Option<JoinHandle<()>>,
+}
+
+impl ProcessNodeIdentityUrlStreamTask {
+    /// [new] creates a new [ProcessNodeIdentityUrlStreamTask] that processes a
+    /// stream of [Url]s that are expected to contain a Node Identity.
+    ///
+    /// Calling this function will spawn a new task that will start processing
+    /// immediately.  The tasks' handle will be stored in the returned
+    /// state.
+    pub fn new<S, K>(url_receiver: S, node_identity_sender: K) -> Self
+    where
+        S: Stream<Item = Url> + Send + Sync + Unpin + 'static,
+        K: Sink<NodeIdentity, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+    {
+        let task_handle = async_std::task::spawn(Self::process_node_identity_url_stream(
+            url_receiver,
+            node_identity_sender,
+        ));
+
+        Self {
+            task_handle: Some(task_handle),
+        }
+    }
+
+    /// [process_node_identity_url_stream] processes a stream of [Url]s that are
+    /// expected to contain a Node Identity.  It will attempt to retrieve the Node
+    /// Identity from the [Url] and then send it to the [Sink] provided.  If the
+    /// [Sink] is closed, then the function will return.
+    async fn process_node_identity_url_stream<T, K>(
+        node_identity_url_stream: T,
+        node_identity_sink: K,
+    ) where
+        T: futures::Stream<Item = Url> + Unpin,
+        K: Sink<NodeIdentity, Error = futures::channel::mpsc::SendError> + Unpin,
+    {
+        let mut node_identity_url_stream = node_identity_url_stream;
+        let mut node_identity_sender = node_identity_sink;
+        loop {
+            let node_identity_url_result = node_identity_url_stream.next().await;
+            let node_identity_url = match node_identity_url_result {
+                Some(node_identity_url) => node_identity_url,
+                None => {
+                    tracing::info!("node identity url stream closed");
+                    return;
+                }
+            };
+
+            // Alright we have a new Url to try and scrape for a Node Identity.
+            // Let's attempt to do that.
+            let node_identity_result = get_node_identity_from_url(node_identity_url).await;
+
+            let node_identity = match node_identity_result {
+                Ok(node_identity) => node_identity,
+                Err(err) => {
+                    tracing::warn!("get node identity from url failed.  bad base url?: {}", err);
+                    continue;
+                }
+            };
+
+            let send_result = node_identity_sender.send(node_identity).await;
+            if let Err(err) = send_result {
+                tracing::info!("node identity sender closed: {}", err);
                 return;
             }
-        };
-
-        // Alright we have a new Url to try and scrape for a Node Identity.
-        // Let's attempt to do that.
-        let node_identity_result = get_node_identity_from_url(node_identity_url).await;
-
-        let node_identity = match node_identity_result {
-            Ok(node_identity) => node_identity,
-            Err(err) => {
-                tracing::warn!("get node identity from url failed.  bad base url?: {}", err);
-                continue;
-            }
-        };
-
-        let send_result = node_identity_sender.send(node_identity).await;
-        if let Err(err) = send_result {
-            tracing::info!("node identity sender closed: {}", err);
-            return;
         }
     }
 }
+
+/// [ProcessNodeIdentityUrlStreamTask] will cancel the task when it is dropped.
+impl Drop for ProcessNodeIdentityUrlStreamTask {
+    fn drop(&mut self) {
+        let task_handle = self.task_handle.take();
+        if let Some(task_handle) = task_handle {
+            async_std::task::block_on(task_handle.cancel());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use espresso_types::FeeAccount;

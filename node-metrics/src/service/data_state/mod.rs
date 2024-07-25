@@ -1,7 +1,7 @@
 pub mod location_details;
 pub mod node_identity;
 
-use async_std::sync::RwLock;
+use async_std::{sync::RwLock, task::JoinHandle};
 use bitvec::vec::BitVec;
 use circular_buffer::CircularBuffer;
 use espresso_types::{Header, Payload, SeqTypes};
@@ -304,41 +304,89 @@ where
     Ok(())
 }
 
-/// [process_leaf_stream] allows for the consumption of a [Stream] when
-/// attempting to process new incoming [Leaf]s.
-pub async fn process_leaf_stream<S, BDSink, BVSink>(
-    mut stream: S,
-    data_state: Arc<RwLock<DataState>>,
-    block_sender: BDSink,
-    voters_senders: BVSink,
-) where
-    S: Stream<Item = Leaf<SeqTypes>> + Unpin,
-    Header: BlockHeader<SeqTypes> + QueryableHeader<SeqTypes> + ExplorerHeader<SeqTypes>,
-    Payload: BlockPayload<SeqTypes>,
-    BDSink: Sink<BlockDetail<SeqTypes>, Error = SendError> + Clone + Unpin,
-    BVSink: Sink<BitVec<u16>, Error = SendError> + Clone + Unpin,
-{
-    loop {
-        let leaf_result = stream.next().await;
-        let leaf = if let Some(leaf) = leaf_result {
-            leaf
-        } else {
-            // We have reached the end of the stream
-            tracing::info!("process leaf stream: end of stream reached for leaf stream.");
-            return;
-        };
+/// [ProcessLeafStreamTask] represents the task that is responsible for
+/// processing a stream of incoming [Leaf]s.
+pub struct ProcessLeafStreamTask {
+    pub task_handle: Option<JoinHandle<()>>,
+}
 
-        if let Err(err) = process_incoming_leaf(
-            leaf,
+impl ProcessLeafStreamTask {
+    /// [new] creates a new [ProcessLeafStreamTask] that will process a stream
+    /// of incoming [Leaf]s.
+    ///
+    /// Calling this function will create an asynchronous task that will start
+    /// processing immediately. The handle for the task will be stored within
+    /// the returned structure.
+    pub fn new<S, K1, K2>(
+        leaf_receiver: S,
+        data_state: Arc<RwLock<DataState>>,
+        block_detail_sender: K1,
+        voters_sender: K2,
+    ) -> Self
+    where
+        S: Stream<Item = Leaf<SeqTypes>> + Send + Sync + Unpin + 'static,
+        K1: Sink<BlockDetail<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+        K2: Sink<BitVec<u16>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+    {
+        let task_handle = async_std::task::spawn(Self::process_leaf_stream(
+            leaf_receiver,
             data_state.clone(),
-            block_sender.clone(),
-            voters_senders.clone(),
-        )
-        .await
-        {
-            // We have an error that prevents us from continuing
-            tracing::info!("process leaf stream: error processing leaf: {}", err);
-            break;
+            block_detail_sender,
+            voters_sender,
+        ));
+
+        Self {
+            task_handle: Some(task_handle),
+        }
+    }
+
+    /// [process_leaf_stream] allows for the consumption of a [Stream] when
+    /// attempting to process new incoming [Leaf]s.
+    async fn process_leaf_stream<S, BDSink, BVSink>(
+        mut stream: S,
+        data_state: Arc<RwLock<DataState>>,
+        block_sender: BDSink,
+        voters_senders: BVSink,
+    ) where
+        S: Stream<Item = Leaf<SeqTypes>> + Unpin,
+        Header: BlockHeader<SeqTypes> + QueryableHeader<SeqTypes> + ExplorerHeader<SeqTypes>,
+        Payload: BlockPayload<SeqTypes>,
+        BDSink: Sink<BlockDetail<SeqTypes>, Error = SendError> + Clone + Unpin,
+        BVSink: Sink<BitVec<u16>, Error = SendError> + Clone + Unpin,
+    {
+        loop {
+            let leaf_result = stream.next().await;
+            let leaf = if let Some(leaf) = leaf_result {
+                leaf
+            } else {
+                // We have reached the end of the stream
+                tracing::info!("process leaf stream: end of stream reached for leaf stream.");
+                return;
+            };
+
+            if let Err(err) = process_incoming_leaf(
+                leaf,
+                data_state.clone(),
+                block_sender.clone(),
+                voters_senders.clone(),
+            )
+            .await
+            {
+                // We have an error that prevents us from continuing
+                tracing::info!("process leaf stream: error processing leaf: {}", err);
+                break;
+            }
+        }
+    }
+}
+
+/// [Drop] implementation for [ProcessLeafStreamTask] that will cancel the
+/// task if it is dropped.
+impl Drop for ProcessLeafStreamTask {
+    fn drop(&mut self) {
+        let task_handle = self.task_handle.take();
+        if let Some(task_handle) = task_handle {
+            async_std::task::block_on(task_handle.cancel());
         }
     }
 }
@@ -393,53 +441,101 @@ where
     Ok(())
 }
 
-/// [process_node_identity_stream] allows for the consumption of a [Stream] when
-/// attempting to process new incoming [NodeIdentity]s.
-/// This function will process the incoming [NodeIdentity] and update the
-/// [DataState] with the new information.
-/// Additionally, the [NodeIdentity] will be sent to the [Sink] so that it can
-/// be processed for real-time considerations.
-pub async fn process_node_identity_stream<S, NISink>(
-    mut stream: S,
-    data_state: Arc<RwLock<DataState>>,
-    node_identity_sender: NISink,
-) where
-    S: Stream<Item = NodeIdentity> + Unpin,
-    NISink: Sink<NodeIdentity, Error = SendError> + Clone + Unpin,
-{
-    loop {
-        let node_identity_result = stream.next().await;
-        let node_identity = if let Some(node_identity) = node_identity_result {
-            node_identity
-        } else {
-            // We have reached the end of the stream
-            tracing::info!(
-                "process node identity stream: end of stream reached for node identity stream."
-            );
-            return;
-        };
+/// [ProcessNodeIdentityStreamTask] represents the task that is responsible for
+/// processing a stream of incoming [NodeIdentity]s and updating the [DataState]
+/// with the new information.
+pub struct ProcessNodeIdentityStreamTask {
+    pub task_handle: Option<JoinHandle<()>>,
+}
 
-        if let Err(err) = process_incoming_node_identity(
-            node_identity,
+impl ProcessNodeIdentityStreamTask {
+    /// [new] creates a new [ProcessNodeIdentityStreamTask] that will process a
+    /// stream of incoming [NodeIdentity]s.
+    ///
+    /// Calling this function will create an asynchronous task that will start
+    /// processing immediately. The handle for the task will be stored within
+    /// the returned structure.
+    pub fn new<S, K>(
+        node_identity_receiver: S,
+        data_state: Arc<RwLock<DataState>>,
+        node_identity_sender: K,
+    ) -> Self
+    where
+        S: Stream<Item = NodeIdentity> + Send + Sync + Unpin + 'static,
+        K: Sink<NodeIdentity, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
+    {
+        let task_handle = async_std::task::spawn(Self::process_node_identity_stream(
+            node_identity_receiver,
             data_state.clone(),
-            node_identity_sender.clone(),
-        )
-        .await
-        {
-            // We have an error that prevents us from continuing
-            tracing::info!(
-                "process node identity stream: error processing node identity: {}",
-                err
-            );
-            break;
+            node_identity_sender,
+        ));
+
+        Self {
+            task_handle: Some(task_handle),
+        }
+    }
+
+    /// [process_node_identity_stream] allows for the consumption of a [Stream] when
+    /// attempting to process new incoming [NodeIdentity]s.
+    /// This function will process the incoming [NodeIdentity] and update the
+    /// [DataState] with the new information.
+    /// Additionally, the [NodeIdentity] will be sent to the [Sink] so that it can
+    /// be processed for real-time considerations.
+    async fn process_node_identity_stream<S, NISink>(
+        mut stream: S,
+        data_state: Arc<RwLock<DataState>>,
+        node_identity_sender: NISink,
+    ) where
+        S: Stream<Item = NodeIdentity> + Unpin,
+        NISink: Sink<NodeIdentity, Error = SendError> + Clone + Unpin,
+    {
+        loop {
+            let node_identity_result = stream.next().await;
+            let node_identity = if let Some(node_identity) = node_identity_result {
+                node_identity
+            } else {
+                // We have reached the end of the stream
+                tracing::info!(
+                    "process node identity stream: end of stream reached for node identity stream."
+                );
+                return;
+            };
+
+            if let Err(err) = process_incoming_node_identity(
+                node_identity,
+                data_state.clone(),
+                node_identity_sender.clone(),
+            )
+            .await
+            {
+                // We have an error that prevents us from continuing
+                tracing::info!(
+                    "process node identity stream: error processing node identity: {}",
+                    err
+                );
+                break;
+            }
+        }
+    }
+}
+
+/// [Drop] implementation for [ProcessNodeIdentityStreamTask] that will cancel
+/// the task if it is dropped.
+impl Drop for ProcessNodeIdentityStreamTask {
+    fn drop(&mut self) {
+        let task_handle = self.task_handle.take();
+        if let Some(task_handle) = task_handle {
+            async_std::task::block_on(task_handle.cancel());
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{process_leaf_stream, DataState};
-    use crate::service::data_state::{process_node_identity_stream, LocationDetails, NodeIdentity};
+    use super::{DataState, ProcessLeafStreamTask};
+    use crate::service::data_state::{
+        LocationDetails, NodeIdentity, ProcessNodeIdentityStreamTask,
+    };
     use async_std::{prelude::FutureExt, sync::RwLock};
     use espresso_types::{
         BlockMerkleTree, ChainConfig, FeeAccount, FeeMerkleTree, Leaf, NodeState, ValidatedState,
@@ -477,12 +573,12 @@ mod tests {
         let (voters_sender, voters_receiver) = futures::channel::mpsc::channel(1);
         let (leaf_sender, leaf_receiver) = futures::channel::mpsc::channel(1);
 
-        let process_leaf_stream_task_handle = async_std::task::spawn(process_leaf_stream(
+        let mut process_leaf_stream_task_handle = ProcessLeafStreamTask::new(
             leaf_receiver,
             data_state.clone(),
             block_sender,
             voters_sender,
-        ));
+        );
 
         {
             let data_state = data_state.read().await;
@@ -530,6 +626,9 @@ mod tests {
 
         assert_eq!(
             process_leaf_stream_task_handle
+                .task_handle
+                .take()
+                .unwrap()
                 .timeout(Duration::from_millis(200))
                 .await,
             Ok(())
@@ -543,12 +642,11 @@ mod tests {
         let (node_identity_sender_1, node_identity_receiver_1) = futures::channel::mpsc::channel(1);
         let (node_identity_sender_2, node_identity_receiver_2) = futures::channel::mpsc::channel(1);
 
-        let process_node_identity_task_handle =
-            async_std::task::spawn(process_node_identity_stream(
-                node_identity_receiver_1,
-                data_state.clone(),
-                node_identity_sender_2,
-            ));
+        let mut process_node_identity_task_handle = ProcessNodeIdentityStreamTask::new(
+            node_identity_receiver_1,
+            data_state.clone(),
+            node_identity_sender_2,
+        );
 
         {
             let data_state = data_state.read().await;
@@ -661,6 +759,9 @@ mod tests {
 
         assert_eq!(
             process_node_identity_task_handle
+                .task_handle
+                .take()
+                .unwrap()
                 .timeout(Duration::from_millis(200))
                 .await,
             Ok(())
