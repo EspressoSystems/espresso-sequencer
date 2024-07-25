@@ -519,7 +519,7 @@ impl SqlStorage {
     /// * makes it easier to specify types since the type parameter is on the function and not on a
     ///   trait impl
     /// * allows type conversions for the `id` parameter
-    /// 
+    ///
     /// This more ergonomic interface is useful as loading headers is important for many SQL storage
     /// functions, not just the `AvailabilityStorage` interface.
     async fn load_header<Types: NodeType>(
