@@ -420,7 +420,9 @@ pub mod testing {
         (
             <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
                 NUM_NODES,
-                url.clone(),
+                format!("http://0.0.0.0:{port}")
+                    .parse()
+                    .expect("Failed to parse builder listener"),
                 (),
                 HashMap::new(),
             )
