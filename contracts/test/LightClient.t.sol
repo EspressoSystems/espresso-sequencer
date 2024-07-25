@@ -663,6 +663,24 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertEq(lc.getStateHistoryCount(), blockUpdatesCount + 1);
     }
 
+    function testFuzz_setMaxStateHistoryAllowed(uint64 maxBlocksAllowed) public {
+        vm.prank(admin);
+        vm.assume(maxBlocksAllowed > 0);
+        lc.setMaxStateHistoryAllowed(maxBlocksAllowed);
+        assertEq(maxBlocksAllowed, lc.maxStateHistoryAllowed());
+    }
+
+    function test_revertNonAdminSetMaxStateHistoryAllowed() public {
+        vm.expectRevert();
+        lc.setMaxStateHistoryAllowed(1);
+    }
+
+    function test_revertSetMaxStateHistoryAllowedWhenInvalidValueSent() public {
+        vm.prank(admin);
+        vm.expectRevert(LC.InvalidMaxStateHistory.selector);
+        lc.setMaxStateHistoryAllowed(0);
+    }
+
     function test_stateHistoryHandling() public {
         string[] memory cmds = new string[](6);
         cmds[0] = "diff-test";
@@ -688,7 +706,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertEq(lc.maxStateHistoryAllowed(), uint64(states.length / 2));
 
         // Update the states to max state history allowed
-        for (uint256 i = 0; i < lc.maxStateHistoryAllowed() - lc.getStateHistoryCount(); i++) {
+        uint256 i;
+        for (i = 0; i < lc.maxStateHistoryAllowed() - lc.getStateHistoryCount(); i++) {
             vm.prank(permissionedProver);
             vm.expectEmit(true, true, true, true);
             emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
@@ -706,17 +725,82 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         );
 
         // Add a new state
-        for (uint256 i = lc.maxStateHistoryAllowed() - 1; i < lc.maxStateHistoryAllowed(); i++) {
+        vm.prank(permissionedProver);
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
+        lc.newFinalizedState(states[i], proofs[i]);
+
+        // the number of updates are equal to the max state history + 1  so the first index should
+        // be one
+        assertEq(lc.stateHistoryFirstIndex(), 1);
+        assertEq(lc.getStateHistoryCount(), lc.maxStateHistoryAllowed() + 1);
+    }
+
+    function test_stateHistoryHandlingMaxOneBlock() public {
+        string[] memory cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-consecutive-finalized-states";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[4] = vm.toString(uint64(5));
+        cmds[5] = vm.toString(uint64(5));
+
+        // assert initial conditions
+        // assert that stateHistoryFirstIndex starts at 0.
+        assertEq(lc.stateHistoryFirstIndex(), 0);
+        // asset maxStateHistoryAllowed is greater than zero.
+        assertGt(lc.maxStateHistoryAllowed(), 0);
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        // set the new max block states allowed to half of the number of states available
+        vm.prank(admin);
+        lc.setMaxStateHistoryAllowed(1);
+        assertEq(lc.maxStateHistoryAllowed(), 1);
+
+        // Update the states to max state history allowed
+        uint256 i;
+        for (i = 0; i < lc.maxStateHistoryAllowed() - lc.getStateHistoryCount(); i++) {
             vm.prank(permissionedProver);
             vm.expectEmit(true, true, true, true);
             emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
             lc.newFinalizedState(states[i], proofs[i]);
         }
 
+        // the number of elements are equal to the max state history so the first index should still
+        // be zero
+        assertEq(lc.stateHistoryFirstIndex(), 0);
+        // assert that the offset, stateHistoryFirstIndex, is accurately recorded
+        // so that the array elements used in further analysis are no more than
+        // maxStateHistoryAllowed
+        assertEq(
+            lc.getStateHistoryCount() - lc.maxStateHistoryAllowed(), lc.stateHistoryFirstIndex()
+        );
+
+        // Add a new state
+        vm.prank(permissionedProver);
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
+        lc.newFinalizedState(states[i], proofs[i]);
+
         // the number of updates are equal to the max state history + 1  so the first index should
         // be one
         assertEq(lc.stateHistoryFirstIndex(), 1);
         assertEq(lc.getStateHistoryCount(), lc.maxStateHistoryAllowed() + 1);
+
+        // Add a new state
+        i++;
+        vm.prank(permissionedProver);
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
+        lc.newFinalizedState(states[i], proofs[i]);
+
+        // the number of updates are equal to the max state history + 1  so the first index should
+        // be one
+        assertEq(lc.stateHistoryFirstIndex(), 2);
+        assertEq(lc.getStateHistoryCount(), lc.maxStateHistoryAllowed() + 2);
     }
 
     function test_l1BlockUpdatesIsUpdatedOverMaxButStateHistoryLimitNotSurpassed() public {
