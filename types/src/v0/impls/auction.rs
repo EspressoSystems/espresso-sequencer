@@ -176,7 +176,7 @@ impl BidTx {
             .charge_fee(FeeInfo::new(self.account(), self.amount()), recipient)
             .map_err(ExecutionError::from)?;
 
-        // Charge the the gas amount
+        // Charge the gas amount
         state
             .charge_fee(FeeInfo::new(self.account(), self.gas_price()), recipient)
             .map_err(ExecutionError::from)?;
