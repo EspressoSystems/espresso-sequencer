@@ -76,7 +76,10 @@ impl Payload {
             }
 
             if tx_size > max_block_byte_len {
-                // Skip this transaction since it excceds the block size limit
+                // skip this transaction since it excceds the block size limit
+                tracing::warn!(
+                    "skip the transaction to fit in maximum block byte length {max_block_byte_len}, transaction size {tx_size}"
+                );
                 continue;
             }
 
