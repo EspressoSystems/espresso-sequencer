@@ -6,7 +6,7 @@ authors = { workspace = true }
 edition = { workspace = true }
 
 [features]
-testing = ["sequencer/testing", "serde_json", "espresso-types/testing"]
+testing = ["serde_json", "espresso-types/testing"]
 
 [dependencies]
 async-compatibility-layer = { workspace = true } 
@@ -20,7 +20,6 @@ hotshot-stake-table = { workspace = true }
 hotshot-types = { workspace = true }
 prometheus-parse = { version = "^0.2.5" }
 reqwest = { workspace = true }
-sequencer = { path = "../sequencer" }
 serde = { workspace = true }
 serde_json = { version = "^1.0.113", optional = true }
 surf-disco = { workspace = true }

@@ -6454,7 +6454,6 @@ dependencies = [
  "hotshot-types",
  "prometheus-parse",
  "reqwest 0.12.5",
- "sequencer",
  "serde",
  "serde_json",
  "surf-disco",
