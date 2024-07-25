@@ -1038,6 +1038,7 @@ pub mod tests {
                 Some(Default::default()),
                 Some("http://localhost/".parse().unwrap()),
                 Some("company".to_string()),
+                Some("https://example.com/".parse().unwrap()),
                 Some(LocationDetails::new(
                     Some((0.0, 0.0)),
                     Some("US".to_string()),
@@ -1056,6 +1057,7 @@ pub mod tests {
                 Some(Default::default()),
                 Some("http://localhost/".parse().unwrap()),
                 Some("company".to_string()),
+                Some("https://example.com/".parse().unwrap()),
                 Some(LocationDetails::new(
                     Some((0.0, 0.0)),
                     Some("US".to_string()),
@@ -1074,6 +1076,7 @@ pub mod tests {
                 Some(Default::default()),
                 Some("http://localhost/".parse().unwrap()),
                 Some("company".to_string()),
+                Some("https://example.com/".parse().unwrap()),
                 Some(LocationDetails::new(
                     Some((0.0, 0.0)),
                     Some("US".to_string()),

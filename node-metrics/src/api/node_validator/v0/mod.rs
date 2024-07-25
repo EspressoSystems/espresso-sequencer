@@ -469,6 +469,15 @@ fn populate_node_identity_general_from_scrape(
         .labels
         .get("company_name")
         .map(|s| s.into());
+    let company_website = match node_identity_general_sample
+        .labels
+        .get("company_website")
+        .map(Url::parse)
+    {
+        Some(Ok(url)) => Some(url),
+        _ => None,
+    };
+    node_identity.company_website = company_website;
     node_identity.network_type = node_identity_general_sample
         .labels
         .get("network_type")

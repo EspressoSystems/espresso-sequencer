@@ -151,6 +151,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
                 "name".into(),
                 "wallet".into(),
                 "company_name".into(),
+                "company_website".into(),
                 "operating_system".into(),
                 "node_type".into(),
                 "network_type".into(),
@@ -160,6 +161,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             std::env::var("ESPRESSO_SEQUENCER_IDENTITY_NODE_NAME").unwrap_or("".into()),
             std::env::var("ESPRESSO_SEQUENCER_IDENTITY_WALLET_ADDRESS").unwrap_or("".into()),
             std::env::var("ESPRESSO_SEQUENCER_IDENTITY_COMPANY_NAME").unwrap_or("".into()),
+            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_COMPANY_WEBSITE").unwrap_or("".into()),
             std::env::var("ESPRESSO_SEQUENCER_IDENTITY_OPERATING_SYSTEM").unwrap_or("".into()),
             std::env::var("ESPRESSO_SEQUENCER_IDENTITY_NODE_TYPE")
                 .unwrap_or(format!("espresso-sequencer {}", Ver::VERSION)),

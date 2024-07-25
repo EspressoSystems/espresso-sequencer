@@ -13,6 +13,7 @@ pub struct NodeIdentity {
     pub(crate) wallet_address: Option<FeeAccount>,
     pub(crate) public_url: Option<Url>,
     pub(crate) company: Option<String>,
+    pub(crate) company_website: Option<Url>,
     pub(crate) location: Option<LocationDetails>,
     pub(crate) operating_system: Option<String>,
     pub(crate) node_type: Option<String>,
@@ -27,6 +28,7 @@ impl NodeIdentity {
         wallet_address: Option<FeeAccount>,
         public_url: Option<Url>,
         company: Option<String>,
+        company_website: Option<Url>,
         location: Option<LocationDetails>,
         operating_system: Option<String>,
         node_type: Option<String>,
@@ -38,6 +40,7 @@ impl NodeIdentity {
             wallet_address,
             public_url,
             company,
+            company_website,
             location,
             operating_system,
             node_type,
@@ -65,6 +68,10 @@ impl NodeIdentity {
         &self.company
     }
 
+    pub fn company_website(&self) -> &Option<Url> {
+        &self.company_website
+    }
+
     pub fn location(&self) -> Option<&LocationDetails> {
         self.location.as_ref()
     }
@@ -88,6 +95,7 @@ impl NodeIdentity {
             wallet_address: None,
             public_url: None,
             company: None,
+            company_website: None,
             location: None,
             operating_system: None,
             node_type: None,
@@ -112,6 +120,7 @@ pub mod tests {
             Some(Default::default()),
             Some("https://espressosys.com/".parse().unwrap()),
             Some("company".to_string()),
+            Some("https://example.com/".parse().unwrap()),
             Some(LocationDetails::new(
                 Some((0.0, 0.0)),
                 Some("US".to_string()),

@@ -606,6 +606,7 @@ mod tests {
             Some(FeeAccount::default()),
             Some(Url::parse("https://example.com/").unwrap()),
             Some("company".to_string()),
+            Some(Url::parse("https://example.com/").unwrap()),
             Some(LocationDetails::new(
                 Some((40.7128, -74.0060)),
                 Some("US".to_string()),
