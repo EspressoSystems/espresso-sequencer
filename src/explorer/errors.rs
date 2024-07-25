@@ -23,8 +23,7 @@ use tide_disco::StatusCode;
 pub trait ExplorerAPIError: Display + Debug {
     /// The code for this error will uniquely identify this specific error.
     ///
-    /// > This value **SHOULD** match the rename field for the `serde` tag,
-    ///   if applicable.
+    /// > This value **SHOULD** match the rename field for the `serde` tag, if applicable.
     fn code(&self) -> &str;
 }
 
