@@ -470,6 +470,50 @@ mod tests {
                 .await;
         }
 
+        // Now the `submit/submit` endpoint allows the extremely large transactions to be in the mempool.
+        // And we need to check whether this extremely large transaction blocks the building process.
+        // Currently the default value of `max_block_size` is 30720, and this transaction exceeds the limit.
+        // TODO: https://github.com/EspressoSystems/espresso-sequencer/issues/1777
+        {
+            let extremely_large_tx = Transaction::new(100_u32.into(), vec![0; 50120]);
+            let extremely_large_hash: Commitment<Transaction> = api_client
+                .post("submit/submit")
+                .body_json(&extremely_large_tx)
+                .unwrap()
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(extremely_large_tx.commit(), extremely_large_hash);
+
+            // Now we send a small transaction to make sure this transaction can be included in a hotshot block.
+            let tx = Transaction::new(100_u32.into(), vec![0; 3]);
+            let tx_hash: Commitment<Transaction> = api_client
+                .post("submit/submit")
+                .body_json(&tx)
+                .unwrap()
+                .send()
+                .await
+                .unwrap();
+
+            let mut result = api_client
+                .get::<TransactionQueryData<SeqTypes>>(&format!(
+                    "availability/transaction/hash/{tx_hash}",
+                ))
+                .send()
+                .await;
+            while result.is_err() {
+                sleep(Duration::from_secs(3)).await;
+
+                result = api_client
+                    .get::<TransactionQueryData<SeqTypes>>(&format!(
+                        "availability/transaction/hash/{}",
+                        tx_hash
+                    ))
+                    .send()
+                    .await;
+            }
+        }
+
         let tx_block_height = tx_result.unwrap().block_height();
 
         let light_client_address = "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9";
