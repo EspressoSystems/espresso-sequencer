@@ -56,6 +56,22 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice mapping to store light client states in order to simplify upgrades
     mapping(uint32 index => LightClientState value) public states;
 
+    /// @notice the address of the prover that can call the newFinalizedState function when the
+    /// contract is
+    /// in permissioned prover mode. This address is address(0) when the contract is not in the
+    /// permissioned prover mode
+    address public permissionedProver;
+
+    /// @notice a flag that indicates when a permissioned provrer is needed
+    bool public permissionedProverEnabled;
+
+    /// @notice an array to store the L1 Block Heights where the finalizedState was updated
+    uint256[] public stateUpdateBlockNumbers;
+
+    /// @notice an array to store the HotShot Block Heights and their respective HotShot
+    /// commitments
+    HotShotCommitment[] public hotShotCommitments;
+
     /// @notice new field for testing purposes
     /// @dev In order to add a field to LightClientState struct one can: add a new contract variable
     /// that has the new struct type, or put the struct inside a map.
@@ -82,6 +98,14 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         BN254.ScalarField stakeTableAmountComm;
         uint256 threshold;
         uint32 extraField; // New field for testing purposes
+    }
+
+    /// @notice Simplified HotShot commitment struct
+    /// @param blockHeight The block height of the latest finalized HotShot block
+    /// @param blockCommRoot The merkle root of historical block commitments (BN254::ScalarField)
+    struct HotShotCommitment {
+        uint64 blockHeight;
+        BN254.ScalarField blockCommRoot;
     }
 
     /// @notice Event that a new finalized state has been successfully verified and updated
