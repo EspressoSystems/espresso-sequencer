@@ -5,6 +5,8 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 contract UtilsScript is Script {
     string public constant SALT_HISTORY_FILE_NAME = "saltHistory.json";
+    string public constant DEFENDER_OUTPUT_FILE_PATH =
+        "/contracts/script/output/defenderDeployments/";
 
     function readFile(string memory path) external returns (bool, string memory) {
         if (vm.exists(path)) {
@@ -42,7 +44,7 @@ contract UtilsScript is Script {
     ) external returns (string memory filePath, string memory data) {
         string memory outputDir = string.concat(
             vm.projectRoot(),
-            "/contracts/script/output/defenderDeployments/",
+            DEFENDER_OUTPUT_FILE_PATH,
             contractName,
             "/",
             vm.toString(block.chainid),
@@ -72,7 +74,7 @@ contract UtilsScript is Script {
     ) external returns (string memory filePath, string memory data) {
         string memory outputDir = string.concat(
             vm.projectRoot(),
-            "/contracts/script/output/defenderDeployments/",
+            DEFENDER_OUTPUT_FILE_PATH,
             contractName,
             "/",
             vm.toString(block.chainid),
@@ -103,7 +105,7 @@ contract UtilsScript is Script {
     ) external returns (string memory filePath, string memory data) {
         string memory outputDir = string.concat(
             vm.projectRoot(),
-            "/contracts/script/output/defenderDeployments/",
+            DEFENDER_OUTPUT_FILE_PATH,
             originalContractName,
             "/",
             vm.toString(block.chainid),
@@ -133,7 +135,7 @@ contract UtilsScript is Script {
     {
         outputDir = string.concat(
             vm.projectRoot(),
-            "/contracts/script/output/defenderDeployments/",
+            DEFENDER_OUTPUT_FILE_PATH,
             contractName,
             "/",
             vm.toString(block.chainid),
@@ -167,7 +169,7 @@ contract UtilsScript is Script {
     {
         outputDir = string.concat(
             vm.projectRoot(),
-            "/contracts/script/output/defenderDeployments/",
+            DEFENDER_OUTPUT_FILE_PATH,
             contractName,
             "/",
             vm.toString(block.chainid),
