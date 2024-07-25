@@ -6444,6 +6444,7 @@ version = "0.1.0"
 dependencies = [
  "async-compatibility-layer",
  "async-std",
+ "bincode",
  "bitvec",
  "circular-buffer",
  "espresso-types",

@@ -14,11 +14,14 @@ use crate::service::{
     data_state::{DataState, ProcessLeafStreamTask, ProcessNodeIdentityStreamTask},
     server_message::ServerMessage,
 };
-use async_std::sync::RwLock;
+use async_std::{sync::RwLock, task::JoinHandle};
+use espresso_types::{PubKey, SeqTypes};
 use futures::{
-    channel::mpsc::{self, Receiver, Sender},
-    SinkExt,
+    channel::mpsc::{self, Receiver, SendError, Sender},
+    Sink, SinkExt, Stream, StreamExt,
 };
+use hotshot_types::event::{Event, EventType};
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 pub struct NodeValidatorAPI {
@@ -30,10 +33,10 @@ pub struct NodeValidatorAPI {
     pub process_node_identity_stream_handle: Option<ProcessNodeIdentityStreamTask>,
     pub process_url_stream_handle: Option<ProcessNodeIdentityUrlStreamTask>,
     pub process_consume_leaves: Option<ProcessProduceLeafStreamTask>,
+    pub hotshot_event_processing_task: Option<HotShotEventProcessingTask>,
 }
 
 pub struct NodeValidatorConfig {
-    pub bind_address: String,
     pub stake_table_url_base: Url,
     pub initial_node_public_base_urls: Vec<Url>,
 }
@@ -43,6 +46,97 @@ pub enum CreateNodeValidatorProcessingError {
     FailedToGetStakeTable(hotshot_query_service::Error),
 }
 
+/// An external message that can be sent to or received from a node
+#[derive(Serialize, Deserialize, Clone)]
+pub enum ExternalMessage {
+    /// A request for a node to respond with its identifier
+    /// Contains the public key of the node that is requesting the roll call
+    RollCallRequest(PubKey),
+
+    /// A response to a roll call request
+    /// Contains the identifier of the node
+    RollCallResponse(RollCallInfo),
+}
+
+/// Information about a node that is used in a roll call response
+#[derive(Serialize, Deserialize, Clone)]
+pub struct RollCallInfo {
+    // The public API URL of the node
+    pub public_api_url: Url,
+}
+
+pub struct HotShotEventProcessingTask {
+    pub task_handle: Option<JoinHandle<()>>,
+}
+
+impl HotShotEventProcessingTask {
+    pub fn new<S, K>(event_stream: S, url_sender: K) -> Self
+    where
+        S: Stream<Item = Event<SeqTypes>> + Send + Unpin + 'static,
+        K: Sink<Url, Error = SendError> + Send + Unpin + 'static,
+    {
+        let task_handle = async_std::task::spawn(Self::process_messages(event_stream, url_sender));
+
+        Self {
+            task_handle: Some(task_handle),
+        }
+    }
+
+    async fn process_messages<S, K>(event_receiver: S, url_sender: K)
+    where
+        S: Stream<Item = Event<SeqTypes>> + Send + Unpin + 'static,
+        K: Sink<Url, Error = SendError> + Unpin,
+    {
+        let mut event_stream = event_receiver;
+        let mut url_sender = url_sender;
+        loop {
+            let event_result = event_stream.next().await;
+            let event = match event_result {
+                Some(event) => event,
+                None => {
+                    tracing::info!("event stream closed");
+                    break;
+                }
+            };
+
+            let Event { event, .. } = event;
+
+            let external_message_deserialize_result =
+                if let EventType::ExternalMessageReceived(external_message_bytes) = event {
+                    bincode::deserialize(&external_message_bytes)
+                } else {
+                    // Ignore all events that are not external messages
+                    continue;
+                };
+
+            let external_message: ExternalMessage = match external_message_deserialize_result {
+                Ok(external_message) => external_message,
+                Err(err) => {
+                    tracing::info!(
+                        "failed to deserialize external message, unrecognized: {}",
+                        err
+                    );
+                    continue;
+                }
+            };
+
+            let public_api_url = match external_message {
+                ExternalMessage::RollCallResponse(roll_call_response) => {
+                    roll_call_response.public_api_url
+                }
+                _ => continue,
+            };
+
+            // Send the the discovered public url to the sink
+            let send_result = url_sender.send(public_api_url).await;
+            if let Err(err) = send_result {
+                tracing::info!("url sender closed: {}", err);
+                break;
+            }
+        }
+    }
+}
+
 /**
  * create_node_validator_processing is a function that creates a node validator
  * processing environment.  This function will create a number of tasks that
@@ -50,10 +144,17 @@ pub enum CreateNodeValidatorProcessingError {
  * the various sources.  This function will also create the data state that
  * will be used to store the state of the network.
  */
-pub async fn create_node_validator_processing(
+pub async fn create_node_validator_processing<M, K>(
     config: NodeValidatorConfig,
     internal_client_message_receiver: Receiver<InternalClientMessage<Sender<ServerMessage>>>,
-) -> Result<NodeValidatorAPI, CreateNodeValidatorProcessingError> {
+    public_key: PubKey,
+    event_stream: Option<M>,
+    external_message_sink: Option<K>,
+) -> Result<NodeValidatorAPI, CreateNodeValidatorProcessingError>
+where
+    M: Stream<Item = Event<SeqTypes>> + Send + Unpin + 'static,
+    K: Sink<ExternalMessage, Error = SendError> + Send + Unpin + 'static,
+{
     let mut data_state = DataState::new(
         Default::default(),
         Default::default(),
@@ -124,6 +225,28 @@ pub async fn create_node_validator_processing(
 
     let process_consume_leaves = ProcessProduceLeafStreamTask::new(client_leaf_stream, leaf_sender);
 
+    let hotshot_event_processing_task = match (event_stream, external_message_sink) {
+        (Some(event_stream), Some(mut external_message_sink)) => {
+            let hotshot_event_processing_task =
+                HotShotEventProcessingTask::new(event_stream, url_sender.clone());
+
+            let send_roll_call_result = external_message_sink
+                .send(ExternalMessage::RollCallRequest(public_key))
+                .await;
+
+            if let Err(err) = send_roll_call_result {
+                tracing::info!("external message sink closed: {}", err);
+            }
+
+            Some(hotshot_event_processing_task)
+        }
+        _ => {
+            // It doesn't make sne to send out a RollCall message if we don't
+            // have the ability to receive the response.
+            None
+        }
+    };
+
     // Send any initial URLS to the url sender for immediate processing.
     // These urls are supplied by the configuration of this function
     {
@@ -147,6 +270,7 @@ pub async fn create_node_validator_processing(
         process_node_identity_stream_handle: Some(process_node_identity_stream_handle),
         process_url_stream_handle: Some(process_url_stream_handle),
         process_consume_leaves: Some(process_consume_leaves),
+        hotshot_event_processing_task,
     })
 }
 
@@ -156,7 +280,9 @@ mod test {
         api::node_validator::v0::{StateClientMessageSender, STATIC_VER_0_1},
         service::{client_message::InternalClientMessage, server_message::ServerMessage},
     };
+    use espresso_types::PubKey;
     use futures::channel::mpsc::{self, Sender};
+    use hotshot_types::traits::signature_key::BuilderSignatureKey;
     use tide_disco::App;
 
     struct TestState(Sender<InternalClientMessage<Sender<ServerMessage>>>);
@@ -172,7 +298,6 @@ mod test {
     async fn test_full_setup_example() {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(32);
         let state = TestState(internal_client_message_sender);
-        // let state = Arc::new(state);
 
         let mut app: App<_, crate::api::node_validator::v0::Error> = App::with_state(state);
         let node_validator_api_result = super::super::define_api::<TestState>();
@@ -190,9 +315,12 @@ mod test {
             }
         }
 
+        let public_key = PubKey::generated_from_seed_indexed([0; 32], 0).0;
+        let (external_message_sender, _external_message_receiver) = mpsc::channel(10);
+        let (_event_sender, event_receiver) = mpsc::channel(10);
+
         let node_validator_task_state = match super::create_node_validator_processing(
             super::NodeValidatorConfig {
-                bind_address: "0.0.0.0:9000".to_string(),
                 stake_table_url_base: "http://localhost:24000/v0".parse().unwrap(),
                 initial_node_public_base_urls: vec![
                     "http://localhost:24000/".parse().unwrap(),
@@ -203,6 +331,9 @@ mod test {
                 ],
             },
             internal_client_message_receiver,
+            public_key,
+            Some(event_receiver),
+            Some(external_message_sender),
         )
         .await
         {
@@ -218,6 +349,7 @@ mod test {
             let app_serve_result = app.serve("0.0.0.0:9000", STATIC_VER_0_1).await;
             tracing::info!("app serve result: {:?}", app_serve_result);
         });
+        tracing::info!("now listening on port 9000");
 
         app_serve_handle.await;
 
