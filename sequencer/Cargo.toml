@@ -89,6 +89,7 @@ jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
 libp2p = { workspace = true } 
+marketplace-solver = { git = "https://github.com/EspressoSystems/marketplace-solver.git", tag = "0.1.1" }
 num-traits = "0.2.18"
 num_enum = "0.7"
 paste = { workspace = true }
@@ -122,7 +123,6 @@ url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
 zeroize = { workspace = true }
-marketplace-solver = { git = "https://github.com/EspressoSystems/marketplace-solver.git", branch = "main" }
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]
