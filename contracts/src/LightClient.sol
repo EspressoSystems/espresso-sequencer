@@ -231,7 +231,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         blocksPerEpoch = numBlockPerEpoch;
 
-        maxStateHistoryAllowed = 10 * 7166; //set the max block states recorded to be 10 days of
+        maxStateHistoryAllowed = 10 * 7200; //set the max block states recorded to be 10 days of
             // ethereum blocks
 
         bytes32 initStakeTableComm = computeStakeTableComm(genesis);
@@ -252,7 +252,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// become the snapshots used for vote verifications later on.
     /// @dev in this version, only a permissioned prover doing the computations
     /// can call this function
-    ///
+    /// @dev the state history for `maxStateHistoryAllowed` L1 blocks are also recorded in the
+    /// `stateHistoryCommitments` array
     /// @notice While `newState.stakeTable*` refers to the (possibly) new stake table states,
     /// the entire `newState` needs to be signed by stakers in `finalizedState`
     /// @param newState new light client state
@@ -389,15 +390,21 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    /// @notice update the stateUpdateBlockNumbers and hotShotCommitments arrays each time a new
-    /// finalized state is added
+    /// @notice update the stateHistoryCommitments array each time a new
+    /// finalized state is added to the LightClient contract
     /// @dev only maintains maxStateHistoryAllowed non-zero elements in these arrays
     /// @dev using a FIFO approach to delete elements at the start of the array and storing the new
-    /// initial index in stateHistoryFirstIndex
+    /// initial index in stateHistoryFirstIndex so that the offset from the usual index of 0 is
+    /// clearly known
+    /// This offset is required since the `delete` method does not reduce the array length
+    /// `delete` only resets the storage at that index to the zero value for each data type
     function updateStateHistory(uint256 blockNumber, LightClientState memory state) internal {
         if (maxStateHistoryAllowed == 0) revert InvalidMaxStateHistory();
 
-        if (stateHistoryCommitments.length - stateHistoryFirstIndex >= maxStateHistoryAllowed) {
+        if (
+            stateHistoryCommitments.length >= maxStateHistoryAllowed
+                && stateHistoryCommitments.length - maxStateHistoryAllowed <= stateHistoryFirstIndex
+        ) {
             // the arrays already has the max block states allowed so we clear the first non-empty
             // element
             // the arrays are cleared from a FIFO approach
