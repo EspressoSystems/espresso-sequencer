@@ -2,16 +2,17 @@ use crate::NsTable;
 
 use super::{
     BlockMerkleCommitment, BuilderSignature, FeeInfo, FeeMerkleCommitment, L1BlockInfo,
-    ResolvableChainConfig,
+    ResolvableChainConfig, SolverAuctionResults,
 };
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{utils::BuilderCommitment, vid::VidCommitment};
 use serde::{Deserialize, Serialize};
 
-// TODO : marketplace header
 #[derive(Clone, Debug, Deserialize, Serialize, Hash, PartialEq, Eq)]
+/// A header is like a [`Block`] with the body replaced by a digest.
 pub struct Header {
+    /// A commitment to a ChainConfig or a full ChainConfig.
     pub(crate) chain_config: ResolvableChainConfig,
     pub(crate) height: u64,
     pub(crate) timestamp: u64,
@@ -22,8 +23,9 @@ pub struct Header {
     pub(crate) ns_table: NsTable,
     pub(crate) block_merkle_tree_root: BlockMerkleCommitment,
     pub(crate) fee_merkle_tree_root: FeeMerkleCommitment,
-    pub(crate) fee_info: FeeInfo,
-    pub(crate) builder_signature: Option<BuilderSignature>,
+    pub(crate) fee_info: Vec<FeeInfo>,
+    pub(crate) builder_signature: Vec<BuilderSignature>,
+    pub(crate) auction_results: SolverAuctionResults,
 }
 
 impl Committable for Header {
@@ -50,11 +52,15 @@ impl Committable for Header {
             .field("ns_table", self.ns_table.commit())
             .var_size_field("block_merkle_tree_root", &bmt_bytes)
             .var_size_field("fee_merkle_tree_root", &fmt_bytes)
-            .field("fee_info", self.fee_info.commit())
+            .var_size_field("fee_info", &bincode::serialize(&self.fee_info).unwrap())
+            .var_size_field(
+                "auction_results",
+                &bincode::serialize(&self.auction_results).unwrap(),
+            )
             .finalize()
     }
 
     fn tag() -> String {
-        "BLOCK".into()
+        crate::v0_1::Header::tag()
     }
 }

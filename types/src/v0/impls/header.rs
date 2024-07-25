@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
@@ -6,7 +6,6 @@ use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
     traits::{
-        auction_results_provider::HasUrls,
         block_contents::{BlockHeader, BuilderFee},
         node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
@@ -29,11 +28,16 @@ use vbs::version::Version;
 use crate::{
     v0::header::{EitherOrVersion, VersionedHeader},
     v0_1, v0_2,
-    v0_3::{self, IterableFeeInfo},
-    BlockMerkleCommitment, BlockSize, BuilderSignature, ChainConfig, FeeAccount, FeeAmount,
-    FeeInfo, FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NodeState,
-    NsTable, NsTableValidationError, ResolvableChainConfig, SeqTypes, UpgradeType, ValidatedState,
+    v0_3::{
+        self, ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig,
+        SolverAuctionResults,
+    },
+    BlockMerkleCommitment, BlockSize, BuilderSignature, FeeAccount, FeeAmount, FeeInfo,
+    FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable,
+    NsTableValidationError, SeqTypes, UpgradeType,
 };
+
+use super::{instance_state::NodeState, state::ValidatedState};
 
 /// Possible proposal validation failures
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -71,6 +75,8 @@ pub enum ProposalValidationError {
     },
     #[error("Invalid namespace table: {err}")]
     InvalidNsTable { err: NsTableValidationError },
+    #[error("Some fee amount or their sum total out of range")]
+    SomeFeeAmountOutOfRange,
 }
 
 impl v0_1::Header {
@@ -283,7 +289,7 @@ impl<'de> Deserialize<'de> for Header {
 impl Header {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn create(
-        chain_config: ResolvableChainConfig,
+        chain_config: ChainConfig,
         height: u64,
         timestamp: u64,
         l1_head: u64,
@@ -293,18 +299,22 @@ impl Header {
         ns_table: NsTable,
         fee_merkle_tree_root: FeeMerkleCommitment,
         block_merkle_tree_root: BlockMerkleCommitment,
-        fee_info: FeeInfo,
-        builder_signature: Option<BuilderSignature>,
+        fee_info: Vec<FeeInfo>,
+        builder_signature: Vec<BuilderSignature>,
         version: Version,
     ) -> Self {
         let Version { major, minor } = version;
 
         // Ensure the major version is 0, otherwise panic
         assert!(major == 0, "Invalid major version {major}");
+        // Ensure FeeInfo contains at least 1 element
+        assert!(fee_info.len() > 0, "Invalid fee_info length: 0");
 
         match minor {
             1 => Self::V1(v0_1::Header {
-                chain_config,
+                chain_config: v0_1::ResolvableChainConfig::from(v0_1::ChainConfig::from(
+                    chain_config,
+                )),
                 height,
                 timestamp,
                 l1_head,
@@ -314,11 +324,13 @@ impl Header {
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
-                fee_info,
-                builder_signature,
+                fee_info: fee_info[0], // NOTE this is asserted to exist above
+                builder_signature: builder_signature.first().copied(),
             }),
             2 => Self::V2(v0_2::Header {
-                chain_config,
+                chain_config: v0_1::ResolvableChainConfig::from(v0_1::ChainConfig::from(
+                    chain_config,
+                )),
                 height,
                 timestamp,
                 l1_head,
@@ -328,11 +340,11 @@ impl Header {
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
-                fee_info,
-                builder_signature,
+                fee_info: fee_info[0], // NOTE this is asserted to exist above
+                builder_signature: builder_signature.first().copied(),
             }),
             3 => Self::V3(v0_3::Header {
-                chain_config,
+                chain_config: v0_3::ResolvableChainConfig::from(chain_config),
                 height,
                 timestamp,
                 l1_head,
@@ -344,6 +356,7 @@ impl Header {
                 fee_merkle_tree_root,
                 fee_info,
                 builder_signature,
+                auction_results: SolverAuctionResults::genesis(),
             }),
             // This case should never occur
             // but if it does, we must panic
@@ -388,6 +401,7 @@ impl Header {
         mut state: ValidatedState,
         chain_config: ChainConfig,
         version: Version,
+        auction_results: Option<SolverAuctionResults>,
     ) -> anyhow::Result<Self> {
         ensure!(
             version.major == 0,
@@ -452,73 +466,87 @@ impl Header {
                 .context(format!("missing fee account {}", fee_info.account()))?;
         }
 
-        // Charge the builder fee.
-        ensure!(
-            builder_fee.fee_account.validate_fee_signature(
-                &builder_fee.fee_signature,
-                builder_fee.fee_amount,
-                &ns_table,
-                &payload_commitment,
-            ),
-            "invalid builder signature, account: {}, fee: {builder_fee:?}, ns_table: {ns_table:?}, payload_commitment: {payload_commitment}",
-            builder_fee.fee_account,
-        );
-        let builder_signature = Some(builder_fee.fee_signature);
-        let fee_info = builder_fee.into();
-        state
-            .charge_fee(fee_info, chain_config.fee_recipient)
-            .context(format!("invalid builder fee {fee_info:?}"))?;
+        // Validate and charge the builder fee.
+        for BuilderFee {
+            fee_account,
+            fee_signature,
+            fee_amount,
+        } in &builder_fee
+        {
+            ensure!(
+                fee_account.validate_fee_signature(
+                    fee_signature,
+                    *fee_amount,
+                    &ns_table,
+                    &payload_commitment,
+                ),
+                "invalid builder signature"
+            );
+
+            let fee_info = FeeInfo::new(*fee_account, *fee_amount);
+            state
+                .charge_fee(fee_info, chain_config.fee_recipient)
+                .context(format!("invalid builder fee {fee_info:?}"))?;
+        }
+
+        let fee_info = FeeInfo::from_builder_fees(builder_fee.clone());
+
+        let builder_signature: Vec<BuilderSignature> =
+            builder_fee.iter().map(|e| e.fee_signature).collect();
 
         let fee_merkle_tree_root = state.fee_merkle_tree.commitment();
 
-        // return a versioned `Header`
         let Version { major, minor } = version;
 
-        // Ensure the major version is 0, otherwise panic
         assert!(major == 0, "Invalid major version {major}");
 
         let header = match minor {
             1 => Self::V1(v0_1::Header {
-                chain_config,
+                chain_config: v0_1::ResolvableChainConfig::from(v0_1::ChainConfig::from(
+                    chain_config,
+                )),
                 height,
                 timestamp,
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment,
+                builder_commitment: builder_commitment.unwrap(),
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
-                fee_info,
-                builder_signature,
+                fee_info: fee_info[0],
+                builder_signature: builder_signature.first().copied(),
             }),
             2 => Self::V2(v0_2::Header {
-                chain_config,
+                chain_config: v0_1::ResolvableChainConfig::from(v0_1::ChainConfig::from(
+                    chain_config,
+                )),
                 height,
                 timestamp,
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment,
+                builder_commitment: builder_commitment.unwrap(),
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
-                fee_info,
-                builder_signature,
+                fee_info: fee_info[0],
+                builder_signature: builder_signature.first().copied(),
             }),
             3 => Self::V3(v0_3::Header {
-                chain_config,
+                chain_config: chain_config.into(),
                 height,
                 timestamp,
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment,
+                builder_commitment: builder_commitment.unwrap(),
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
                 fee_info,
                 builder_signature,
+                auction_results: auction_results.unwrap(),
             }),
             // This case should never occur
             // but if it does, we must panic
@@ -556,8 +584,12 @@ impl Header {
 
 impl Header {
     /// A commitment to a ChainConfig or a full ChainConfig.
-    pub fn chain_config(&self) -> &ResolvableChainConfig {
-        field!(self.chain_config)
+    pub fn chain_config(&self) -> v0_3::ResolvableChainConfig {
+        match self {
+            Self::V1(fields) => v0_3::ResolvableChainConfig::from(&fields.chain_config),
+            Self::V2(fields) => v0_3::ResolvableChainConfig::from(&fields.chain_config),
+            Self::V3(fields) => fields.chain_config,
+        }
     }
 
     pub fn height(&self) -> u64 {
@@ -669,8 +701,12 @@ impl Header {
     }
 
     /// Fee paid by the block builder
-    pub fn fee_info(&self) -> FeeInfo {
-        *field!(self.fee_info)
+    pub fn fee_info(&self) -> Vec<FeeInfo> {
+        match self {
+            Self::V1(fields) => vec![fields.fee_info],
+            Self::V2(fields) => vec![fields.fee_info],
+            Self::V3(fields) => fields.fee_info.clone(),
+        }
     }
 
     /// Account (etheruem address) of builder
@@ -681,8 +717,16 @@ impl Header {
     /// checked during consensus, any downstream client who has a proof of consensus finality of a
     /// header can trust that [`fee_info`](Self::fee_info) is correct without relying on the
     /// signature. Thus, this signature is not included in the header commitment.
-    pub fn builder_signature(&self) -> Option<BuilderSignature> {
-        *field!(self.builder_signature)
+    pub fn builder_signature(&self) -> Vec<BuilderSignature> {
+        match self {
+            // Previously we used `Option<BuilderSignature>` to
+            // represent presence/absence of signature.  The simplest
+            // way to represent the same now that we have a `Vec` is
+            // empty/non-empty
+            Self::V1(fields) => fields.builder_signature.as_slice().to_vec(),
+            Self::V2(fields) => fields.builder_signature.as_slice().to_vec(),
+            Self::V3(fields) => fields.builder_signature.clone(),
+        }
     }
 }
 
@@ -705,6 +749,16 @@ impl From<anyhow::Error> for InvalidBlockHeader {
 
 impl BlockHeader<SeqTypes> for Header {
     type Error = InvalidBlockHeader;
+    type AuctionResult = SolverAuctionResults;
+
+    /// Get the results of the auction for this Header. Only used in post-marketplace versions
+    fn get_auction_results(&self) -> Option<SolverAuctionResults> {
+        match self {
+            Self::V1(fields) => None,
+            Self::V2(fields) => None,
+            Self::V3(fields) => Some(fields.auction_results.clone()),
+        }
+    }
 
     #[tracing::instrument(
         skip_all,
@@ -715,7 +769,9 @@ impl BlockHeader<SeqTypes> for Header {
         ),
     )]
 
-    async fn new_marketplace<AuctionResults: HasUrls + Send>(
+    /// Build a header with the parent validate state, instance-level state, parent leaf, payload
+    /// commitment, metadata, and auction results. This is only used in post-marketplace versions
+    async fn new_marketplace(
         parent_state: &<SeqTypes as NodeType>::ValidatedState,
         instance_state: &<<SeqTypes as NodeType>::ValidatedState as hotshot_types::traits::ValidatedState<SeqTypes>>::Instance,
         parent_leaf: &hotshot_types::data::Leaf<SeqTypes>,
@@ -723,7 +779,7 @@ impl BlockHeader<SeqTypes> for Header {
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: Vec<BuilderFee<SeqTypes>>,
         vid_common: VidCommon,
-        auction_results: Option<AuctionResults>,
+        auction_results: Option<SolverAuctionResults>,
         version: Version,
     ) -> Result<Self, Self::Error> {
         let height = parent_leaf.height();
@@ -830,6 +886,7 @@ impl BlockHeader<SeqTypes> for Header {
             validated_state,
             chain_config,
             version,
+            auction_results,
         )?)
     }
 
@@ -945,6 +1002,7 @@ impl BlockHeader<SeqTypes> for Header {
             validated_state,
             chain_config,
             version,
+            None,
         )?)
     }
 
@@ -978,8 +1036,8 @@ impl BlockHeader<SeqTypes> for Header {
             ns_table.clone(),
             fee_merkle_tree_root,
             block_merkle_tree_root,
-            FeeInfo::genesis(),
-            None,
+            vec![FeeInfo::genesis()],
+            vec![],
             instance_state.current_version,
         )
     }
@@ -1012,20 +1070,22 @@ impl QueryableHeader<SeqTypes> for Header {
 
 impl ExplorerHeader<SeqTypes> for Header {
     type BalanceAmount = FeeAmount;
-    type WalletAddress = FeeAccount;
-    type ProposerId = FeeAccount;
+    type WalletAddress = Vec<FeeAccount>;
+    type ProposerId = Vec<FeeAccount>;
     type NamespaceId = NamespaceId;
 
+    // TODO what are these expected values w/ multiple Fees
     fn proposer_id(&self) -> Self::ProposerId {
-        self.fee_info().account()
+        self.fee_info().accounts()
     }
 
     fn fee_info_account(&self) -> Self::WalletAddress {
-        self.fee_info().account()
+        self.fee_info().accounts()
     }
 
     fn fee_info_balance(&self) -> Self::BalanceAmount {
-        self.fee_info().amount()
+        // TODO this will panic if some amount or total does not fit in a u64
+        self.fee_info().amount().unwrap()
     }
 
     /// reward_balance at the moment is only implemented as a stub, as block
@@ -1066,7 +1126,7 @@ mod test_headers {
     use super::*;
     use crate::{
         eth_signature_key::EthKeyPair, v0::impls::instance_state::mock::MockStateCatchup,
-        validate_proposal, NodeState,
+        validate_proposal,
     };
 
     #[derive(Debug, Default)]
@@ -1135,7 +1195,7 @@ mod test_headers {
 
             let header = Header::from_info(
                 genesis.header.payload_commitment(),
-                genesis.header.builder_commitment().clone(),
+                Some(genesis.header.builder_commitment().clone()),
                 genesis.ns_table,
                 &parent_leaf,
                 L1Snapshot {
@@ -1143,15 +1203,16 @@ mod test_headers {
                     finalized: self.l1_finalized,
                 },
                 &self.l1_deposits,
-                BuilderFee {
+                vec![BuilderFee {
                     fee_account,
                     fee_amount,
                     fee_signature,
-                },
+                }],
                 self.timestamp,
                 validated_state.clone(),
                 genesis.instance_state.chain_config,
                 Version { major: 0, minor: 1 },
+                None,
             )
             .unwrap();
             assert_eq!(header.height(), parent.height() + 1);
@@ -1500,7 +1561,7 @@ mod test_headers {
             fee_account: key_pair.fee_account(),
             fee_signature,
         };
-        let proposal = Header::new(
+        let proposal = Header::new_legacy(
             &forgotten_state,
             &genesis_state,
             &parent_leaf,
@@ -1587,10 +1648,10 @@ mod test_headers {
             ns_table.clone(),
             header.fee_merkle_tree_root(),
             header.block_merkle_tree_root(),
-            FeeInfo {
+            vec![FeeInfo {
                 amount: 0.into(),
                 account: fee_account,
-            },
+            }],
             Default::default(),
             Version { major: 0, minor: 1 },
         );
@@ -1610,10 +1671,10 @@ mod test_headers {
             ns_table.clone(),
             header.fee_merkle_tree_root(),
             header.block_merkle_tree_root(),
-            FeeInfo {
+            vec![FeeInfo {
                 amount: 0.into(),
                 account: fee_account,
-            },
+            }],
             Default::default(),
             Version { major: 0, minor: 2 },
         );
@@ -1633,10 +1694,10 @@ mod test_headers {
             ns_table.clone(),
             header.fee_merkle_tree_root(),
             header.block_merkle_tree_root(),
-            FeeInfo {
+            vec![FeeInfo {
                 amount: 0.into(),
                 account: fee_account,
-            },
+            }],
             Default::default(),
             Version { major: 0, minor: 3 },
         );

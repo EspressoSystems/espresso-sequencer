@@ -14,6 +14,7 @@ use ethers::{
 };
 use hotshot_query_service::explorer::MonetaryValue;
 use hotshot_types::traits::block_contents::BuilderFee;
+use itertools::Itertools;
 use jf_merkle_tree::{
     ForgetableMerkleTreeScheme, ForgetableUniversalMerkleTreeScheme, LookupResult,
     MerkleCommitment, MerkleTreeError, MerkleTreeScheme, ToTraversalPath,
@@ -73,6 +74,10 @@ impl FeeInfo {
 
     pub fn amount(&self) -> FeeAmount {
         self.amount
+    }
+    /// Get a `Vec<FeeInfo>` from `Vec<BuilderFee>`
+    pub fn from_builder_fees(fees: Vec<BuilderFee<SeqTypes>>) -> Vec<FeeInfo> {
+        fees.into_iter().map(FeeInfo::from).collect()
     }
 }
 
@@ -412,5 +417,28 @@ impl FeeAccountProof {
 impl From<(FeeAccountProof, U256)> for AccountQueryData {
     fn from((proof, balance): (FeeAccountProof, U256)) -> Self {
         Self { balance, proof }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use ethers::abi::Address;
+
+    use crate::{FeeAccount, FeeAmount, FeeInfo};
+
+    use super::IterableFeeInfo;
+
+    #[test]
+    fn test_iterable_fee_info() {
+        let addr = Address::zero();
+        let fee = FeeInfo::new(addr, FeeAmount::from(1));
+        let fees = vec![fee, fee, fee];
+        // check the sum of amounts
+        let sum = fees.amount().unwrap();
+        assert_eq!(FeeAmount::from(3), sum);
+
+        // check accounts collector
+        let accounts = fees.accounts();
+        assert_eq!(vec![FeeAccount::from(Address::zero())], accounts);
     }
 }
