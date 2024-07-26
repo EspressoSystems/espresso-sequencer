@@ -5,8 +5,8 @@ use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::{
     data::{BlockError, ViewNumber},
     traits::{
-        block_contents::BlockHeader, node_implementation::ConsensusTime,
-        signature_key::BuilderSignatureKey, states::StateDelta, ValidatedState as HotShotState,
+        node_implementation::ConsensusTime, signature_key::BuilderSignatureKey, states::StateDelta,
+        ValidatedState as HotShotState,
     },
     vid::{VidCommon, VidSchemeType},
 };
@@ -20,7 +20,7 @@ use jf_merkle_tree::{
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
-use std::ops::Add;
+use std::{borrow::Borrow, ops::Add};
 use thiserror::Error;
 use vbs::version::Version;
 
