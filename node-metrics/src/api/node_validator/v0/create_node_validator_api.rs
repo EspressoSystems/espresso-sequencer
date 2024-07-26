@@ -23,7 +23,7 @@ use hotshot_types::event::{Event, EventType};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-pub struct NodeValidatorAPI {
+pub struct NodeValidatorAPI<K> {
     pub process_internal_client_message_handle: Option<InternalClientMessageProcessingTask>,
     pub process_distribute_block_detail_handle: Option<ProcessDistributeBlockDetailHandlingTask>,
     pub process_distribute_node_identity_handle: Option<ProcessDistributeNodeIdentityHandlingTask>,
@@ -31,6 +31,7 @@ pub struct NodeValidatorAPI {
     pub process_leaf_stream_handle: Option<ProcessLeafStreamTask>,
     pub process_node_identity_stream_handle: Option<ProcessNodeIdentityStreamTask>,
     pub process_url_stream_handle: Option<ProcessNodeIdentityUrlStreamTask>,
+    pub url_sender: K,
 }
 
 pub struct NodeValidatorConfig {
@@ -278,7 +279,7 @@ pub async fn create_node_validator_processing(
     config: NodeValidatorConfig,
     internal_client_message_receiver: Receiver<InternalClientMessage<Sender<ServerMessage>>>,
     leaf_receiver: Receiver<Leaf<SeqTypes>>,
-) -> Result<NodeValidatorAPI, CreateNodeValidatorProcessingError> {
+) -> Result<NodeValidatorAPI<Sender<Url>>, CreateNodeValidatorProcessingError> {
     let mut data_state = DataState::new(
         Default::default(),
         Default::default(),
@@ -367,6 +368,7 @@ pub async fn create_node_validator_processing(
         process_leaf_stream_handle: Some(process_leaf_stream_handle),
         process_node_identity_stream_handle: Some(process_node_identity_stream_handle),
         process_url_stream_handle: Some(process_url_stream_handle),
+        url_sender: url_sender.clone(),
     })
 }
 
@@ -374,7 +376,8 @@ pub async fn create_node_validator_processing(
 mod test {
     use crate::{
         api::node_validator::v0::{
-            ProcessProduceLeafStreamTask, StateClientMessageSender, STATIC_VER_0_1,
+            HotshotQueryServiceLeafStreamRetriever, ProcessProduceLeafStreamTask,
+            StateClientMessageSender, STATIC_VER_0_1,
         },
         service::{client_message::InternalClientMessage, server_message::ServerMessage},
     };
@@ -413,13 +416,14 @@ mod test {
 
         let (leaf_sender, leaf_receiver) = mpsc::channel(10);
 
-        let client_leaf_stream = surf_disco::Client::new(
-            "https://query.cappuccino.testnet.espresso.network/v0"
-                .parse()
-                .unwrap(),
+        let process_consume_leaves = ProcessProduceLeafStreamTask::new(
+            HotshotQueryServiceLeafStreamRetriever::new(
+                "https://query.cappuccino.testnet.espresso.network/v0"
+                    .parse()
+                    .unwrap(),
+            ),
+            leaf_sender,
         );
-        let process_consume_leaves =
-            ProcessProduceLeafStreamTask::new(client_leaf_stream, leaf_sender);
 
         let node_validator_task_state = match super::create_node_validator_processing(
             super::NodeValidatorConfig {

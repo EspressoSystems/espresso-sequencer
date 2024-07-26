@@ -97,3 +97,220 @@
 
 pub mod api;
 pub mod service;
+
+use crate::{
+    api::node_validator::v0::{
+        create_node_validator_api::{create_node_validator_processing, NodeValidatorConfig},
+        HotshotQueryServiceLeafStreamRetriever, ProcessProduceLeafStreamTask,
+        StateClientMessageSender, STATIC_VER_0_1,
+    },
+    service::{client_message::InternalClientMessage, server_message::ServerMessage},
+};
+use api::node_validator::v0::create_node_validator_api::ExternalMessage;
+use clap::Parser;
+use espresso_types::{PubKey, SeqTypes};
+use futures::{
+    channel::mpsc::{self, Sender},
+    SinkExt,
+};
+use hotshot::traits::implementations::{
+    CdnMetricsValue, PushCdnNetwork, Topic, WrappedSignatureKey,
+};
+use hotshot_query_service::metrics::PrometheusMetrics;
+use hotshot_types::traits::{network::ConnectedNetwork, signature_key::BuilderSignatureKey};
+use tide_disco::App;
+use url::Url;
+
+/// Options represents the configuration options that are available for running
+/// the node validator service via the [run_standalone_service] function.
+/// These options are configurable via command line arguments or environment
+/// variables.
+#[derive(Parser, Clone, Debug)]
+pub struct Options {
+    #[clap(long, env = "ESPRESSO_NODE_VALIDATOR_STAKE_TABLE_SOURCE_BASE_URL")]
+    stake_table_source_base_url: Url,
+
+    #[clap(long, env = "ESPRESSO_NODE_VALIDATOR_LEAF_STREAM_SOURCE_BASE_URL")]
+    leaf_stream_base_url: Url,
+
+    #[clap(
+        long,
+        env = "ESPRESSO_NODE_VALIDATOR_INITIAL_NODE_PUBLIC_BASE_URLS",
+        value_delimiter = ','
+    )]
+    initial_node_public_base_urls: Vec<Url>,
+
+    #[clap(
+        long,
+        value_parser,
+        env = "ESPRESSO_NODE_VALIDATOR_PORT",
+        default_value = "9000"
+    )]
+    port: u16,
+
+    #[clap(long, env = "ESPRESSO_NODE_VALIDATOR_CDN_MARSHAL_ENDPOINT")]
+    cdn_marshal_endpoint: String,
+}
+
+impl Options {
+    fn stake_table_source_base_url(&self) -> &Url {
+        &self.stake_table_source_base_url
+    }
+
+    fn leaf_stream_base_url(&self) -> &Url {
+        &self.leaf_stream_base_url
+    }
+
+    fn initial_node_public_base_urls(&self) -> &[Url] {
+        &self.initial_node_public_base_urls
+    }
+
+    fn port(&self) -> u16 {
+        self.port
+    }
+
+    fn cdn_marshal_endpoint(&self) -> &str {
+        &self.cdn_marshal_endpoint
+    }
+}
+
+/// MainState represents the State of the application this is available to
+/// tide_disco.
+struct MainState {
+    internal_client_message_sender: Sender<InternalClientMessage<Sender<ServerMessage>>>,
+}
+
+impl StateClientMessageSender<Sender<ServerMessage>> for MainState {
+    fn sender(&self) -> Sender<InternalClientMessage<Sender<ServerMessage>>> {
+        self.internal_client_message_sender.clone()
+    }
+}
+
+/// Run the service by itself.
+///
+/// This function will run the node validator as its own service.  It has some
+/// options that allow it to be configured in order for it to operate
+/// effectively.
+pub async fn run_standalone_service(options: Options) {
+    let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(32);
+    let state = MainState {
+        internal_client_message_sender,
+    };
+
+    let mut app: App<_, api::node_validator::v0::Error> = App::with_state(state);
+    let node_validator_api_result = api::node_validator::v0::define_api();
+    let node_validator_api = match node_validator_api_result {
+        Ok(node_validator_api) => node_validator_api,
+        Err(err) => {
+            panic!("error defining node validator api: {:?}", err);
+        }
+    };
+
+    match app.register_module("node-validator", node_validator_api) {
+        Ok(_) => {}
+        Err(err) => {
+            panic!("error registering node validator api: {:?}", err);
+        }
+    }
+
+    let (leaf_sender, leaf_receiver) = mpsc::channel(10);
+
+    let process_consume_leaves = ProcessProduceLeafStreamTask::new(
+        HotshotQueryServiceLeafStreamRetriever::new(options.leaf_stream_base_url().clone()),
+        leaf_sender,
+    );
+
+    let node_validator_task_state = match create_node_validator_processing(
+        NodeValidatorConfig {
+            stake_table_url_base: options.stake_table_source_base_url().clone(),
+            initial_node_public_base_urls: options.initial_node_public_base_urls().to_vec(),
+        },
+        internal_client_message_receiver,
+        leaf_receiver,
+    )
+    .await
+    {
+        Ok(node_validator_task_state) => node_validator_task_state,
+
+        Err(err) => {
+            panic!("error defining node validator api: {:?}", err);
+        }
+    };
+
+    let (public_key, private_key) = PubKey::generated_from_seed_indexed([1; 32], 0);
+    let cdn_network_result = PushCdnNetwork::<SeqTypes>::new(
+        options.cdn_marshal_endpoint().to_string(),
+        vec![Topic::Global],
+        hotshot::traits::implementations::KeyPair {
+            public_key: WrappedSignatureKey(public_key),
+            private_key: private_key.clone(),
+        },
+        CdnMetricsValue::new(&PrometheusMetrics::default()),
+    );
+    let cdn_network = match cdn_network_result {
+        Ok(cdn_network) => cdn_network,
+        Err(err) => {
+            panic!("error creating cdn network: {:?}", err);
+        }
+    };
+
+    let url_sender = node_validator_task_state.url_sender.clone();
+
+    let cdn_task_handle = async_std::task::spawn(async move {
+        let mut url_sender = url_sender;
+
+        loop {
+            let messages_result = cdn_network.recv_msgs().await;
+            let messages = match messages_result {
+                Ok(message) => message,
+                Err(err) => {
+                    tracing::error!("error receiving message: {:?}", err);
+                    continue;
+                }
+            };
+
+            for message in messages {
+                // We want to try and decode this message.
+                let message_deserialize_result = bincode::deserialize::<ExternalMessage>(&message);
+                let external_message = match message_deserialize_result {
+                    Ok(external_message) => external_message,
+                    Err(err) => {
+                        tracing::error!("error deserializing message: {:?}", err);
+                        continue;
+                    }
+                };
+
+                match external_message {
+                    ExternalMessage::RollCallResponse(roll_call_info) => {
+                        let public_api_url = roll_call_info.public_api_url;
+
+                        // We have a public api url, so we can process this url.
+
+                        if let Err(err) = url_sender.send(public_api_url).await {
+                            tracing::error!("error sending public api url: {:?}", err);
+                        }
+                    }
+
+                    _ => {
+                        // We're not concerned about other message types
+                    }
+                }
+            }
+        }
+    });
+
+    let port = options.port();
+    // We would like to wait until being signaled
+    let app_serve_handle = async_std::task::spawn(async move {
+        let app_serve_result = app.serve(format!("0.0.0.0:{}", port), STATIC_VER_0_1).await;
+        tracing::info!("app serve result: {:?}", app_serve_result);
+    });
+
+    tracing::info!("now listening on port {:?}", port);
+
+    app_serve_handle.await;
+
+    drop(cdn_task_handle);
+    drop(node_validator_task_state);
+    drop(process_consume_leaves);
+}

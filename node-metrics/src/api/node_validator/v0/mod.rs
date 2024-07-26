@@ -8,9 +8,8 @@ use futures::channel::mpsc::SendError;
 use futures::future::Either;
 use futures::{
     channel::mpsc::{self, Sender},
-    FutureExt, SinkExt, StreamExt,
+    FutureExt, Sink, SinkExt, Stream, StreamExt,
 };
-use futures::{Sink, Stream};
 use hotshot_query_service::Leaf;
 use hotshot_stake_table::vec_based::StakeTable;
 use hotshot_types::light_client::{CircuitField, StateVerKey};
@@ -20,7 +19,9 @@ use hotshot_types::PeerConfig;
 use prometheus_parse::{Sample, Scrape};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::future::Future;
 use std::io::BufRead;
+use std::pin::Pin;
 use std::str::FromStr;
 use tide_disco::socket::Connection;
 use tide_disco::{api::ApiError, Api};
@@ -402,9 +403,108 @@ pub async fn get_node_identity_from_url(
     let scrape = prometheus_parse::Scrape::parse(buffered_response.lines())?;
 
     if let Some(node_identity) = node_identity_from_scrape(scrape) {
+        let mut node_identity = node_identity;
+        node_identity.public_url = Some(url);
         Ok(node_identity)
     } else {
         Err(GetNodeIdentityFromUrlError::NoNodeIdentity)
+    }
+}
+
+/// LeafStreamRetriever is a general trait that allows for the retrieval of a
+/// list of Leaves from a source. The specific implementation doesn't care about
+/// the source, only that it is able to retrieve a stream of Leaves.
+///
+/// This allows us to swap the implementation of the [LeafStreamRetriever] for
+/// testing purposes, or for newer sources in the future.
+pub trait LeafStreamRetriever: Send {
+    type Item;
+    type ItemError: std::error::Error + Send;
+    type Error: std::error::Error + Send;
+    type Stream: Stream<Item = Result<Self::Item, Self::ItemError>> + Send + Unpin;
+    type Future: Future<Output = Result<Self::Stream, Self::Error>> + Send;
+
+    /// [retrieve_stream] retrieves a stream of [Leaf]s from the source.  It
+    /// expects the current block height to be provided so that it can determine
+    /// the starting block height to retrieve the stream of [Leaf]s from.
+    ///
+    /// It should check the current height of the chain so that it only needs
+    /// to retrieve the number of older blocks that are needed, instead of
+    /// starting from the beginning of time.
+    fn retrieve_stream(&self, current_block_height: Option<u64>) -> Self::Future;
+}
+
+/// [HotshotQueryServiceLeafStreamRetriever] is a [LeafStreamRetriever] that
+/// retrieves a stream of [Leaf]s from the Hotshot Query Service.  It expects
+/// the base URL of the Hotshot Query Service to be provided so that it can
+/// make the request to the Hotshot Query Service.
+pub struct HotshotQueryServiceLeafStreamRetriever {
+    base_url: Url,
+}
+
+impl HotshotQueryServiceLeafStreamRetriever {
+    /// [new] creates a new [HotshotQueryServiceLeafStreamRetriever] that
+    /// will use the given base [Url] to be able to retrieve the stream of
+    /// [Leaf]s from the Hotshot Query Service.
+    ///
+    /// The [Url] is expected to point to the the API version root of the
+    /// Hotshot Query Service.  Example:
+    ///   https://example.com/v0
+    pub fn new(base_url: Url) -> Self {
+        Self { base_url }
+    }
+}
+
+impl LeafStreamRetriever for HotshotQueryServiceLeafStreamRetriever {
+    type Item = Leaf<SeqTypes>;
+    type ItemError = hotshot_query_service::Error;
+    type Error = hotshot_query_service::Error;
+    type Stream = surf_disco::socket::Connection<
+        Leaf<SeqTypes>,
+        surf_disco::socket::Unsupported,
+        Self::ItemError,
+        Version01,
+    >;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Stream, Self::Error>> + Send>>;
+
+    fn retrieve_stream(&self, current_block_height: Option<u64>) -> Self::Future {
+        let client = surf_disco::Client::new(self.base_url.clone());
+        async move {
+            let block_height_result = client.get("status/block-height").send().await;
+            let block_height: u64 = match block_height_result {
+                Ok(block_height) => block_height,
+                Err(err) => {
+                    tracing::info!("retrieve block height request failed: {}", err);
+                    return Err(err);
+                }
+            };
+
+            let latest_block_start = block_height.saturating_sub(50);
+            let start_block_height = if let Some(known_height) = current_block_height {
+                std::cmp::min(known_height, latest_block_start)
+            } else {
+                latest_block_start
+            };
+
+            let leaves_stream_result = client
+                .socket(&format!(
+                    "availability/stream/leaves/{}",
+                    start_block_height
+                ))
+                .subscribe::<espresso_types::Leaf>()
+                .await;
+
+            let leaves_stream = match leaves_stream_result {
+                Ok(leaves_stream) => leaves_stream,
+                Err(err) => {
+                    tracing::info!("retrieve leaves stream failed: {}", err);
+                    return Err(err);
+                }
+            };
+
+            Ok(leaves_stream)
+        }
+        .boxed()
     }
 }
 
@@ -422,15 +522,16 @@ impl ProcessProduceLeafStreamTask {
     /// Calling this function will create an async task that will start
     /// processing immediately.  The task's handle will be stored in the
     /// returned state.
-    pub fn new<K>(
-        client: surf_disco::Client<hotshot_query_service::Error, Version01>,
-        leaf_sender: K,
-    ) -> Self
+    pub fn new<R, K>(leaf_stream_retriever: R, leaf_sender: K) -> Self
     where
+        R: LeafStreamRetriever<Item = Leaf<SeqTypes>> + 'static,
         K: Sink<Leaf<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
-        let task_handle =
-            async_std::task::spawn(Self::process_consume_leaf_stream(client, leaf_sender));
+        // let future = Self::process_consume_leaf_stream(leaf_stream_retriever, leaf_sender);
+        let task_handle = async_std::task::spawn(Self::process_consume_leaf_stream(
+            leaf_stream_retriever,
+            leaf_sender,
+        ));
 
         Self {
             task_handle: Some(task_handle),
@@ -442,32 +543,28 @@ impl ProcessProduceLeafStreamTask {
     /// Hotshot Query Service and then send them to the [Sink] provided.  If the
     /// [Sink] is closed, or if the Stream ends prematurely, then the function
     /// will return.
-    async fn process_consume_leaf_stream<K>(
-        client: surf_disco::Client<hotshot_query_service::Error, Version01>,
-        leaf_sender: K,
-    ) where
+    async fn process_consume_leaf_stream<R, K>(leaf_stream_retriever: R, leaf_sender: K)
+    where
+        R: LeafStreamRetriever<Item = Leaf<SeqTypes>>,
         K: Sink<Leaf<SeqTypes>, Error = SendError> + Clone + Send + Sync + Unpin + 'static,
     {
         // Alright, let's start processing leaves
-        // TODO: We should move this into its own function that can respond
-        //       and react appropriately when a service or sequencer does down
-        //       so that it can gracefully re-establish the stream as necessary.
-
-        let client = client;
-
-        let mut leaf_stream =
-            match Self::stream_leaves_from_hotshot_query_service(None, client).await {
-                Ok(leaf_stream) => leaf_stream,
-                Err(err) => {
-                    tracing::info!("error getting leaf stream: {}", err);
-                    return;
-                }
-            };
+        // TODO: implement retry logic with backoff and ultimately fail if
+        //       unable to retrieve the stream within a time frame.
+        let leaves_stream_result = leaf_stream_retriever.retrieve_stream(None).await;
+        let leaves_stream = match leaves_stream_result {
+            Ok(leaves_stream) => leaves_stream,
+            Err(err) => {
+                tracing::info!("retrieve leaves stream failed: {}", err);
+                return;
+            }
+        };
 
         let mut leaf_sender = leaf_sender;
+        let mut leaves_stream = leaves_stream;
 
         loop {
-            let leaf_result = leaf_stream.next().await;
+            let leaf_result = leaves_stream.next().await;
             let leaf = if let Some(Ok(leaf)) = leaf_result {
                 leaf
             } else {
@@ -481,55 +578,6 @@ impl ProcessProduceLeafStreamTask {
                 break;
             }
         }
-    }
-
-    /// [stream_leaves_from_hotshot_query_service] retrieves a stream of
-    /// [sequencer::Leaf]s from the Hotshot Query Service.  It expects a
-    /// [current_block_height] to be provided so that it can determine the starting
-    /// block height to begin streaming from.  No matter what the value of
-    /// [current_block_height] is the stream will always check what the latest
-    /// block height is on the hotshot query service.  It will then attempt to
-    /// pull as few Leaves as it needs from the stream.
-    async fn stream_leaves_from_hotshot_query_service(
-        current_block_height: Option<u64>,
-        client: surf_disco::Client<hotshot_query_service::Error, Version01>,
-    ) -> Result<
-        impl futures::Stream<Item = Result<espresso_types::Leaf, hotshot_query_service::Error>> + Unpin,
-        hotshot_query_service::Error,
-    > {
-        let block_height_result = client.get("status/block-height").send().await;
-        let block_height: u64 = match block_height_result {
-            Ok(block_height) => block_height,
-            Err(err) => {
-                tracing::info!("retrieve block height request failed: {}", err);
-                return Err(err);
-            }
-        };
-
-        let latest_block_start = block_height.saturating_sub(50);
-        let start_block_height = if let Some(known_height) = current_block_height {
-            std::cmp::min(known_height, latest_block_start)
-        } else {
-            latest_block_start
-        };
-
-        let leaves_stream_result = client
-            .socket(&format!(
-                "availability/stream/leaves/{}",
-                start_block_height
-            ))
-            .subscribe::<espresso_types::Leaf>()
-            .await;
-
-        let leaves_stream = match leaves_stream_result {
-            Ok(leaves_stream) => leaves_stream,
-            Err(err) => {
-                tracing::info!("retrieve leaves stream failed: {}", err);
-                return Err(err);
-            }
-        };
-
-        Ok(leaves_stream)
     }
 }
 
