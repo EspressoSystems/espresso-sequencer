@@ -43,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
         database_options,
     } = args;
 
-    let events_api_url = Url::from_str(&format!("{events_api_url}/hotshot-events")).unwrap();
+    let events_api_url = Url::from_str(&format!("{events_api_url}/hotshot-events"))?;
 
     let events_client = EventsServiceClient::new(events_api_url.clone()).await;
 
@@ -69,22 +69,21 @@ async fn main() -> anyhow::Result<()> {
         bid_txs: Default::default(),
     };
 
-    let global_state = Arc::new(RwLock::new(
-        GlobalState::new(database, solver_state).unwrap(),
-    ));
+    let global_state = Arc::new(RwLock::new(GlobalState::new(database, solver_state)?));
 
-    let _ = spawn(handle_events(event_stream, global_state.clone()));
+    let event_handler = spawn(handle_events(event_stream, global_state.clone()));
 
     let mut app = App::<_, SolverError>::with_state(global_state);
 
-    let mut api = define_api(Default::default()).unwrap();
-    api.with_version(env!("CARGO_PKG_VERSION").parse().unwrap());
+    let mut api = define_api(Default::default())?;
+    api.with_version(env!("CARGO_PKG_VERSION").parse()?);
 
-    app.register_module::<SolverError, Version>("marketplace-solver", api)
-        .unwrap();
-    let _ = app
-        .serve(format!("0.0.0.0:{}", solver_api_port), Version::instance())
-        .await;
+    app.register_module::<SolverError, Version>("marketplace-solver", api)?;
+
+    app.serve(format!("0.0.0.0:{}", solver_api_port), Version::instance())
+        .await?;
+
+    event_handler.cancel().await;
 
     Ok(())
 }
