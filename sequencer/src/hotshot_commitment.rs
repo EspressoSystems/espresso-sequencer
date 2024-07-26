@@ -275,7 +275,7 @@ fn build_sequence_batches_txn<M: ethers::prelude::Middleware>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{l1_client::L1Client, Leaf, NodeState};
+    use crate::{l1_client::L1Client, Leaf, NodeState, ValidatedState};
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
     use committable::Committable;
@@ -320,17 +320,17 @@ mod test {
                 .flatten()
                 .ok_or_else(|| {
                     Self::Error::catch_all(
-                        StatusCode::NotFound,
+                        StatusCode::NOT_FOUND,
                         format!("no leaf for height {height}"),
                     )
                 })
         }
     }
 
-    fn mock_leaf(height: u64, node_state: &NodeState) -> LeafQueryData<SeqTypes> {
-        let mut leaf = Leaf::genesis(node_state);
-        let mut qc = QuorumCertificate::genesis(node_state);
-        leaf.get_block_header_mut().height = height;
+    async fn mock_leaf(height: u64, node_state: &NodeState) -> LeafQueryData<SeqTypes> {
+        let mut leaf = Leaf::genesis(&ValidatedState::default(), node_state).await;
+        let mut qc = QuorumCertificate::genesis(&ValidatedState::default(), node_state).await;
+        leaf.block_header_mut().height = height;
         qc.data.leaf_commit = leaf.commit();
         LeafQueryData::new(leaf, qc).unwrap()
     }
@@ -375,13 +375,12 @@ mod test {
         let num_batches = l1.hotshot.max_blocks().call().await.unwrap().as_usize();
         let mut data = MockDataSource::default();
 
-        let node_state = NodeState::mock().with_l1(L1Client::new(
-            anvil.provider().url().clone(),
-            Address::default(),
-        ));
+        let node_state =
+            NodeState::mock().with_l1(L1Client::new(anvil.provider().url().clone(), 1));
 
         for i in 0..num_batches {
-            data.leaves.push(Some(mock_leaf(i as u64, &node_state)));
+            data.leaves
+                .push(Some(mock_leaf(i as u64, &node_state).await));
         }
         tracing::info!("sequencing batches: {:?}", data.leaves);
 
@@ -447,11 +446,9 @@ mod test {
         // Create a test batch.
         let mut data = MockDataSource::default();
 
-        let node_state = NodeState::mock().with_l1(L1Client::new(
-            anvil.provider().url().clone(),
-            Address::default(),
-        ));
-        data.leaves.push(Some(mock_leaf(0, &node_state)));
+        let node_state =
+            NodeState::mock().with_l1(L1Client::new(anvil.provider().url().clone(), 1));
+        data.leaves.push(Some(mock_leaf(0, &node_state).await));
 
         // Connect to the HotShot contract with the expected L1 client.
         let hotshot = HotShot::new(l1.hotshot.address(), adaptor_l1_signer);
@@ -476,7 +473,7 @@ mod test {
         assert_eq!(l1.hotshot.block_height().call().await.unwrap().as_u64(), 1);
 
         // Once a new batch is available, we can sequence it.
-        data.leaves.push(Some(mock_leaf(1, &node_state)));
+        data.leaves.push(Some(mock_leaf(1, &node_state).await));
         sync_with_l1(1, &data, &hotshot).await.unwrap();
         let (event, _) = wait_for_new_batches(&l1, from_block.as_u64()).await;
         assert_eq!(event.first_block_number.as_u64(), 1);
@@ -511,15 +508,13 @@ mod test {
                 .unwrap(),
         );
 
-        let node_state = NodeState::mock().with_l1(L1Client::new(
-            anvil.provider().url().clone(),
-            Address::default(),
-        ));
+        let node_state =
+            NodeState::mock().with_l1(L1Client::new(anvil.provider().url().clone(), 1));
 
         // Create a sequence of leaves, some of which are missing.
         let mut data = MockDataSource::default();
         data.leaves
-            .extend([None, Some(mock_leaf(1, &node_state)), None]);
+            .extend([None, Some(mock_leaf(1, &node_state).await), None]);
 
         // Connect to the HotShot contract with the expected L1 client.
         let hotshot = HotShot::new(l1.hotshot.address(), adaptor_l1_signer);
@@ -530,7 +525,7 @@ mod test {
         // If the first leaf is present but subsequent leaves are missing, we should sequence the
         // leaves that are available.
 
-        data.leaves[0] = Some(mock_leaf(0, &node_state));
+        data.leaves[0] = Some(mock_leaf(0, &node_state).await);
         sync_with_l1(3, &data, &hotshot).await.unwrap();
 
         // Check the NewBatches event.

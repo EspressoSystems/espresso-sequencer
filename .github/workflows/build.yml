@@ -52,6 +52,11 @@ jobs:
         run: |
           cargo build --locked --release --workspace
 
+      - name: Build Espresso Dev Node
+        # Espresso Dev Node currently requires testing feature, so it is built separately.
+        run: |
+          cargo build --locked --release --features testing --bin espresso-dev-node
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -72,7 +77,9 @@ jobs:
             target/release/keygen
             target/release/permissionless-builder
             target/release/nasty-client
+            target/release/espresso-dev-node
             target/release/pub-key
+            target/release/espresso-bridge
 
   build-arm:
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
@@ -96,6 +103,11 @@ jobs:
         run: |
           cargo build --locked --release --workspace
 
+      - name: Build Espresso Dev Node
+        # Espresso Dev Node currently requires testing feature, so it is built separately.
+        run: |
+          cargo build --locked --release --features testing --bin espresso-dev-node
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -116,7 +128,9 @@ jobs:
             target/release/keygen
             target/release/permissionless-builder
             target/release/nasty-client
+            target/release/espresso-dev-node
             target/release/pub-key
+            target/release/espresso-bridge
 
   build-dockers:
     runs-on: ubuntu-latest
@@ -134,6 +148,8 @@ jobs:
       deploy-tag: ${{ steps.deploy.outputs.tags }}
       builder-tag: ${{ steps.builder.outputs.tags }}
       nasty-client-tag: ${{ steps.nasty-client.outputs.tags }}
+      espresso-dev-node-tag: ${{ steps.espresso-dev-node.outputs.tags }}
+      bridge-tag: ${{ steps.bridge.outputs.tags }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -235,8 +251,20 @@ jobs:
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/nasty-client
 
+      - name: Generate espresso-dev-node metadata
+        uses: docker/metadata-action@v5
+        id: espresso-dev-node
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node
+
+      - name: Generate bridge metadata
+        uses: docker/metadata-action@v5
+        id: bridge
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/bridge
+
       - name: Build and push sequencer docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/sequencer.Dockerfile
@@ -246,7 +274,7 @@ jobs:
           labels: ${{ steps.sequencer.outputs.labels }}
 
       - name: Build and push cdn-broker docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/cdn-broker.Dockerfile
@@ -256,7 +284,7 @@ jobs:
           labels: ${{ steps.cdn-broker.outputs.labels }}
 
       - name: Build and push cdn-marshal docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/cdn-marshal.Dockerfile
@@ -266,7 +294,7 @@ jobs:
           labels: ${{ steps.cdn-marshal.outputs.labels }}
 
       - name: Build and push cdn-whitelist docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/cdn-whitelist.Dockerfile
@@ -276,7 +304,7 @@ jobs:
           labels: ${{ steps.cdn-whitelist.outputs.labels }}
 
       - name: Build and push state-relay-server docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/state-relay-server.Dockerfile
@@ -286,7 +314,7 @@ jobs:
           labels: ${{ steps.state-relay-server.outputs.labels }}
 
       - name: Build and push prover-service docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/prover-service.Dockerfile
@@ -296,7 +324,7 @@ jobs:
           labels: ${{ steps.prover-service.outputs.labels }}
 
       - name: Build and push orchestrator docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/orchestrator.Dockerfile
@@ -306,7 +334,7 @@ jobs:
           labels: ${{ steps.orchestrator.outputs.labels }}
 
       - name: Build and push commitment-task docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/commitment-task.Dockerfile
@@ -316,7 +344,7 @@ jobs:
           labels: ${{ steps.commitment-task.outputs.labels }}
 
       - name: Build and push submit-transactions docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/submit-transactions.Dockerfile
@@ -326,7 +354,7 @@ jobs:
           labels: ${{ steps.submit-transactions.outputs.labels }}
 
       - name: Build and push deploy docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/deploy.Dockerfile
@@ -336,7 +364,7 @@ jobs:
           labels: ${{ steps.deploy.outputs.labels }}
 
       - name: Build and push builder docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/permissionless-builder.Dockerfile
@@ -346,7 +374,7 @@ jobs:
           labels: ${{ steps.builder.outputs.labels }}
 
       - name: Build and push nasty-client docker
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./
           file: ./docker/nasty-client.Dockerfile
@@ -354,6 +382,25 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.nasty-client.outputs.tags }}
           labels: ${{ steps.nasty-client.outputs.labels }}
+
+      - name: Build and push espresso-dev-node docker
+        uses: docker/build-push-action@v6
+        with:
+          context: ./
+          file: ./docker/espresso-dev-node.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.espresso-dev-node.outputs.tags }}
+          labels: ${{ steps.espresso-dev-node.outputs.labels }}
+      - name: Build and push bridge docker
+        uses: docker/build-push-action@v6
+        with:
+          context: ./
+          file: ./docker/espresso-bridge.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.bridge.outputs.tags }}
+          labels: ${{ steps.bridge.outputs.labels }}
 
   test-demo:
     if: ${{ github.event_name != 'pull_request' }}
@@ -382,6 +429,7 @@ jobs:
           docker pull ${{ needs.build-dockers.outputs.deploy-tag }}
           docker pull ${{ needs.build-dockers.outputs.builder-tag }}
           docker pull ${{ needs.build-dockers.outputs.nasty-client-tag }}
+          docker pull ${{ needs.build-dockers.outputs.bridge-tag }}
       - name: Tag new docker images
         run: |
           docker tag ${{ needs.build-dockers.outputs.sequencer-tag }} ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -396,8 +444,9 @@ jobs:
           docker tag ${{ needs.build-dockers.outputs.deploy-tag }} ghcr.io/espressosystems/espresso-sequencer/deploy:main
           docker tag ${{ needs.build-dockers.outputs.builder-tag }} ghcr.io/espressosystems/espresso-sequencer/builder:main
           docker tag ${{ needs.build-dockers.outputs.nasty-client-tag }} ghcr.io/espressosystems/espresso-sequencer/nasty-client:main
+          docker tag ${{ needs.build-dockers.outputs.bridge-tag }} ghcr.io/espressosystems/espresso-sequencer/bridge:main
 
       - name: Test docker demo
         run: |
           just demo &
-          timeout 600 scripts/smoke-test-demo
+          timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'

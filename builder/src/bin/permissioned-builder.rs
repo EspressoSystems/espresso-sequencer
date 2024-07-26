@@ -10,9 +10,10 @@ use hotshot_types::light_client::StateSignKey;
 use hotshot_types::signature_key::BLSPrivKey;
 use hotshot_types::traits::metrics::NoMetrics;
 use hotshot_types::traits::node_implementation::ConsensusTime;
-use sequencer::eth_signature_key::EthKeyPair;
+use libp2p::Multiaddr;
 use sequencer::persistence::no_storage::NoStorage;
-use sequencer::{BuilderParams, L1Params, NetworkParams};
+use sequencer::{eth_signature_key::EthKeyPair, Genesis};
+use sequencer::{L1Params, NetworkParams};
 use snafu::Snafu;
 use std::net::ToSocketAddrs;
 use std::num::NonZeroUsize;
@@ -21,10 +22,6 @@ use url::Url;
 
 #[derive(Parser, Clone, Debug)]
 pub struct PermissionedBuilderOptions {
-    /// Unique identifier for this instance of the sequencer network.
-    #[clap(long, env = "ESPRESSO_SEQUENCER_CHAIN_ID", default_value = "0")]
-    pub chain_id: u16,
-
     /// URL of the HotShot orchestrator.
     #[clap(
         short,
@@ -46,7 +43,6 @@ pub struct PermissionedBuilderOptions {
 
     /// The address to bind to for Libp2p (in `host:port` form)
     #[clap(
-        short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS",
         default_value = "0.0.0.0:1769"
@@ -56,16 +52,26 @@ pub struct PermissionedBuilderOptions {
     /// The address we advertise to other nodes as being a Libp2p endpoint.
     /// Should be supplied in `host:port` form.
     #[clap(
-        short,
         long,
         env = "ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS",
         default_value = "localhost:1769"
     )]
     pub libp2p_advertise_address: String,
 
+    /// A comma-separated list of Libp2p multiaddresses to use as bootstrap
+    /// nodes.
+    ///
+    /// Overrides those loaded from the `HotShot` config.
+    #[clap(
+        long,
+        env = "ESPRESSO_SEQUENCER_LIBP2P_BOOTSTRAP_NODES",
+        value_delimiter = ',',
+        num_args = 1..
+    )]
+    pub libp2p_bootstrap_nodes: Option<Vec<Multiaddr>>,
+
     /// URL of the Light Client State Relay Server
     #[clap(
-        short,
         long,
         env = "ESPRESSO_STATE_RELAY_SERVER_URL",
         default_value = "http://localhost:8083"
@@ -83,6 +89,10 @@ pub struct PermissionedBuilderOptions {
     )]
     pub webserver_poll_interval: Duration,
 
+    /// Path to TOML file containing genesis state.
+    #[clap(long, name = "GENESIS_FILE", env = "ESPRESSO_BUILDER_GENESIS_FILE")]
+    pub genesis_file: PathBuf,
+
     /// Path to file containing private keys.
     ///
     /// The file should follow the .env format, with two keys:
@@ -99,7 +109,7 @@ pub struct PermissionedBuilderOptions {
     #[clap(
         long,
         env = "ESPRESSO_BUILDER_PRIVATE_STAKING_KEY",
-        conflicts_with = "key_file"
+        conflicts_with = "KEY_FILE"
     )]
     pub private_staking_key: Option<BLSPrivKey>,
 
@@ -109,7 +119,7 @@ pub struct PermissionedBuilderOptions {
     #[clap(
         long,
         env = "ESPRESSO_BUILDER_PRIVATE_STATE_KEY",
-        conflicts_with = "key_file"
+        conflicts_with = "KEY_FILE"
     )]
     pub private_state_key: Option<StateSignKey>,
 
@@ -144,9 +154,13 @@ pub struct PermissionedBuilderOptions {
     #[clap(short, long, env = "ESPRESSO_BUILDER_BOOTSTRAPPED_VIEW")]
     pub view_number: u64,
 
-    /// BUILDER CHANNEL CAPACITY
-    #[clap(long, env = "ESPRESSO_BUILDER_CHANNEL_CAPACITY")]
-    pub channel_capacity: NonZeroUsize,
+    /// BUILDER TRANSACTIONS CHANNEL CAPACITY
+    #[clap(long, env = "ESPRESSO_BUILDER_TX_CHANNEL_CAPACITY")]
+    pub tx_channel_capacity: NonZeroUsize,
+
+    /// BUILDER HS EVENTS CHANNEL CAPACITY
+    #[clap(long, env = "ESPRESSO_BUILDER_EVENT_CHANNEL_CAPACITY")]
+    pub event_channel_capacity: NonZeroUsize,
 
     /// Url a sequencer can use to stream hotshot events
     #[clap(long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENTS_PROVIDER")]
@@ -164,7 +178,6 @@ pub struct PermissionedBuilderOptions {
 
     /// The number of views to buffer before a builder garbage collects its state
     #[clap(
-        short,
         long,
         env = "ESPRESSO_BUILDER_BUFFER_VIEW_NUM_COUNT",
         default_value = "15"
@@ -174,15 +187,6 @@ pub struct PermissionedBuilderOptions {
     /// Whether or not we are a DA node.
     #[clap(long, env = "ESPRESSO_SEQUENCER_IS_DA", action)]
     pub is_da: bool,
-
-    /// Base Fee for a block
-    #[clap(
-        short,
-        long,
-        env = "ESPRESSO_BUILDER_BLOCK_BASE_FEE",
-        default_value = "0"
-    )]
-    base_fee: u64,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -231,13 +235,10 @@ async fn main() -> anyhow::Result<()> {
 
     let l1_params = L1Params {
         url: opt.l1_provider_url,
+        events_max_block_range: 10000,
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
-
-    let builder_params = BuilderParams {
-        prefunded_accounts: vec![],
-    };
 
     // Parse supplied Libp2p addresses to their socket form
     // We expect all nodes to be reachable via IPv4, so we filter out any IPv6 addresses.
@@ -259,11 +260,13 @@ async fn main() -> anyhow::Result<()> {
         cdn_endpoint: opt.cdn_endpoint,
         libp2p_advertise_address,
         libp2p_bind_address,
+        libp2p_bootstrap_nodes: opt.libp2p_bootstrap_nodes,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
         private_staking_key: private_staking_key.clone(),
         private_state_key,
         state_peers: opt.state_peers,
+        catchup_backoff: Default::default(),
     };
 
     let sequencer_version = SEQUENCER_VERSION;
@@ -280,21 +283,21 @@ async fn main() -> anyhow::Result<()> {
 
     // it will internally spawn the builder web server
     let ctx = init_node(
+        Genesis::from_file(&opt.genesis_file)?,
         network_params,
         &NoMetrics,
-        builder_params,
         l1_params,
         builder_server_url.clone(),
         builder_key_pair,
         bootstrapped_view,
-        opt.channel_capacity,
+        opt.tx_channel_capacity,
+        opt.event_channel_capacity,
         sequencer_version,
         NoStorage,
         max_api_response_timeout_duration,
         buffer_view_num_count,
         opt.is_da,
         txn_timeout_duration,
-        opt.base_fee,
     )
     .await?;
 

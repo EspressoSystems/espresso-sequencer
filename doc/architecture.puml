@@ -1,82 +1,150 @@
 @startuml
-component "HotShot Sequencer" as Seq
-package "Layer 2s" as L2 {
-    component "Rollup 1" as L2_1 {
-        component "API (e.g. JSON-RPC)" as L2_1_RPC
-        component Executor as L2_1_Exec
-        component Prover as L2_1_Prover
-        component "State DB" as L2_1_State
+
+package "Espresso Sequencer Network" as Network #MistyRose {
+    component "Other\nSequencer\nNodes" as Nodes
+    package CDN {
+        component Broker
+        component Marshal
+        database KeyDB
     }
-    component "Rollup 2" as L2_2
-    component "Rollup N" as L2_N
-}
-package "Layer 1" as L1 {
-    component "Sequencer Contract" as Seq_L1
-    package "Rollup Contracts" as L2_L1 {
-        component "Rollup 1\nContract" as L2_1_L1
-        component "Rollup 2\nContract" as L2_2_L1
-        component "Rollup N\nContract" as L2_N_L1
+
+    'CDN Layout
+    Broker -> KeyDB: state
+    KeyDB -> Marshal: state
+
+    component "Sequencer Node" as Seq #Bisque {
+        database "Postgres" as DB
+        package APIs #LightCyan {
+            component "Submit" as Submit
+            component "Hotshot\nEvents\nStream\n" as EventsStream
+            component "Catchup" as Catchup
+            component "Status"
+            component "Query" as Query
+        }
+        package HotShot {
+            component "Networking"{
+                component Libp2p
+                component "CDN Client"
+            }
+            component "HotShot Events" as Events
+        }
+
+        package State as State {
+            component "State Signer" as Signer
+            component "ValidatedState" as Validated
+        }
     }
+    component "HotShot state\nprover service" as HSProver
+    component "HotShot state\nrelay service" as Relay
+    component "Builder" as Builder
 }
 
-Client -up-> L2_1_RPC : Transactions\nState queries
-note right of link
-1. Many clients submit transactions
-    to each L2 simultaneously (for
-    clarity only one is shown)
-end note
-
-L2_1_RPC -> Seq : Transaction\nRollup 1 ID
+' Network
+Nodes <-up- Catchup: "missing\nstate" " "
+Nodes <-> Libp2p: consensus\nmessages
+"CDN Client" <--> CDN: consensus\nmessages
+Nodes <--> CDN: consensus\nmessages
 note top of link
-2. L2s forward transactions to sequencer.
+    4. HotShot consensus
 end note
 
-Seq -down-> L2_1_Exec : Block
-Seq -down-> L2_2 : Block
-Seq -down-> L2_N : Block
-note right of link
-3. Sequencer produces blocks --
-    ordered lists of transactions.
-    L2s receive blocks and execute
-    transactions for their rollup.
+' HotShot state
+Signer --> Relay: state, signature
+note top of link
+    6. HotShot proving
+end note
+Relay -> HSProver: state,\nsignature bundle
+
+' Builder
+Builder --> HotShot: Espresso block
+note top of link
+    3. Leader
+    obtains
+    Espresso
+    block
+end note
+EventsStream -> Builder: transactions
+
+' Events
+Networking <-up-> Events
+Events -up-> EventsStream: events
+Events -down-> Validated
+
+' Storage
+Query --> DB
+Validated -up-> DB
+DB --> Catchup: missing\nstate
+
+package "Layer 2s / Rollups" as L2s #LightYellow {
+    component "zk Rollup Z" as ZK #LightBlue {
+        component "API (e.g. JSON-RPC)" as ZK_RPC
+        component Executor as ZK_Exec
+        component Prover as ZK_Prover
+        ZK_RPC --[hidden]> ZK_Exec
+        ZK_RPC --[hidden]> ZK_Prover
+    }
+    component "Optimistic Rollup O" #LightGreen {
+        component "API (e.g. JSON-RPC)" as OR_RPC
+        component Proposer
+        component Challenger
+        OR_RPC --[hidden]> Proposer
+        OR_RPC --[hidden]> Challenger
+    }
+}
+package "Ethereum Layer 1" as L1 #LightGray {
+    package "Espresso Contracts" as Esp_L1 {
+        component "Light Client\nContract" as LC_L1
+        component "Fee\nContract" as Fee_L1
+    }
+    package "Rollup Contracts" {
+        component "zk Rollup Z\nContract" as ZK_L1
+        component "OR Rollup O\nContract" as OR_L1
+    }
+}
+
+' Transaction submission
+entity User
+User --> ZK_RPC : rollup transaction,\nstate queries
+note top of link
+    2. Transaction submission
+end note
+User --> OR_RPC
+
+ZK_RPC --> Submit : "transaction" " "
+Submit -> Events: transaction
+Query -up-> ZK_Exec : " " "Espresso\nheader,\nnamespace\ntransactions"
+note top of link
+    5. Rollup
+    block
+    production
+end note
+Query -up-> Proposer: " " "Espresso\nheader,\nnamespace\ntransactions"
+
+
+' L1 details
+HSProver -up-> LC_L1 : HotShot\nstate\nproof
+LC_L1 -up-> ZK_L1 : " " "HotShot\ncommitment"
+LC_L1 -up-> OR_L1 : " " "HotShot\ncommitment"
+
+' ZK proof
+ZK_Prover --> ZK_L1 : rollup state proof
+note top of link
+    7. ZK Rollup
+    proving
 end note
 
-Seq -down-> Seq_L1 : Block Commitment\nQC
-note right of link
-4. Sequencer posts succinct commitment
-    to block to L1. Contract verifies proof
-    of sequencing (Quorum Certificate)
-    then stores the block commitment.
+' OR dispute
+Proposer --> OR_L1: respond
+Challenger --> OR_L1: challenge
+note top of link
+    8. OR dispute
 end note
 
-L2_1_Prover -> L2_1_L1 : State\nProof
-L2_2 -down-> L2_2_L1 : State\nProof
-L2_N -down-> L2_N_L1 : State\nProof
-note right of link
-5. Rollups post updated state to L1.
-    ZK-rollups include a proof.
+Builder -> Fee_L1: deposit\nether
+note top of link
+    1. Fee
+    deposit
 end note
+Fee_L1 --> Validated: fee\ndeposits
 
-Seq_L1 -> L2_L1
-note bottom of link
-6. Rollup contracts read certified sequence
-    of block commitments from sequencer
-    contract. Verify state transition proofs
-    against this sequence (ZKR) or wait for
-    fraud proof against this sequence (ORU).
-end note
-
-' L2 1 details
-L2_1_RPC <-down- L2_1_State : Read state
-L2_1_Exec -down-> L2_1_State : Write state
-L2_1_Prover <-down- L2_1_State : Read State
-
-' Layout
-L2_1_RPC -[hidden]r-> L2_1_Exec
-L2_1 -[hidden]r-> L2_2
-L2_2 -[hidden]r-> L2_N
-L2_1_L1 -[hidden]r-> L2_2_L1
-L2_2_L1 -[hidden]r-> L2_N_L1
-L2 -[hidden]d-> L1
-Seq -[hidden]d-> L2
 @enduml

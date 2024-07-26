@@ -8,7 +8,7 @@ use hotshot_stake_table::vec_based::config::FieldType;
 use hotshot_types::light_client::{
     StateSignature, StateSignatureScheme, StateSignaturesBundle, StateVerKey,
 };
-use jf_primitives::signatures::SignatureScheme;
+use jf_signature::SignatureScheme;
 use std::{
     collections::{BTreeSet, HashMap},
     path::PathBuf,
@@ -88,7 +88,7 @@ impl StateRelayServerDataSource for StateRelayServerState {
         match &self.latest_available_bundle {
             Some(bundle) => Ok(bundle.clone()),
             None => Err(tide_disco::error::ServerError::catch_all(
-                StatusCode::NotFound,
+                StatusCode::NOT_FOUND,
                 "The light client state signatures are not ready.".to_owned(),
             )),
         }
@@ -115,7 +115,7 @@ impl StateRelayServerDataSource for StateRelayServerState {
         let state_msg: [FieldType; 7] = (&state).into();
         if StateSignatureScheme::verify(&(), &key, state_msg, &signature).is_err() {
             return Err(tide_disco::error::ServerError::catch_all(
-                StatusCode::BadRequest,
+                StatusCode::BAD_REQUEST,
                 "The posted signature is not valid.".to_owned(),
             ));
         }
@@ -141,7 +141,7 @@ impl StateRelayServerDataSource for StateRelayServerState {
             std::collections::hash_map::Entry::Occupied(_) => {
                 // A signature is already posted for this key with this state
                 return Err(tide_disco::error::ServerError::catch_all(
-                    StatusCode::BadRequest,
+                    StatusCode::BAD_REQUEST,
                     "A signature of this light client state is already posted at this block height for this key.".to_owned(),
                 ));
             }
@@ -224,7 +224,7 @@ where
 
 pub async fn run_relay_server<Ver: StaticVersionType + 'static>(
     shutdown_listener: Option<OneShotReceiver<()>>,
-    threshold: u64,
+    threshold: U256,
     url: Url,
     bind_version: Ver,
 ) -> std::io::Result<()> {
@@ -234,7 +234,6 @@ pub async fn run_relay_server<Ver: StaticVersionType + 'static>(
 
     // We don't have a stake table yet, putting some temporary value here.
     // Related issue: [https://github.com/EspressoSystems/espresso-sequencer/issues/1022]
-    let threshold = U256::from(threshold);
     let state =
         State::new(StateRelayServerState::new(threshold).with_shutdown_signal(shutdown_listener));
     let mut app = App::<State, Error>::with_state(state);
