@@ -415,11 +415,11 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./
-          file: ./docker/espresso-marketplace-solver.Dockerfile
+          file: ./docker/marketplace-solver.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.-marketplace-solver.outputs.tags }}
-          labels: ${{ steps.-marketplace-solver.outputs.labels }}
+          tags: ${{ steps.marketplace-solver.outputs.tags }}
+          labels: ${{ steps.marketplace-solver.outputs.labels }}
 
   test-demo:
     if: ${{ github.event_name != 'pull_request' }}
