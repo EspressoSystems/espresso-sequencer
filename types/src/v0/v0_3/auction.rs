@@ -1,11 +1,8 @@
 use crate::{FeeAccount, FeeAmount, NamespaceId};
 use ethers::types::Signature;
 use hotshot_types::data::ViewNumber;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use surf_disco::Request;
-use tide_disco::error::ServerError;
+use serde::{Deserialize, Serialize};
 use url::Url;
-use vbs::version::StaticVersionType;
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, Hash)]
 /// Wrapper enum for Full Network Transactions. Each transaction type

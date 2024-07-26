@@ -27,10 +27,7 @@ use vbs::version::Version;
 use crate::{
     v0::header::{EitherOrVersion, VersionedHeader},
     v0_1, v0_2,
-    v0_3::{
-        self, ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig,
-        SolverAuctionResults,
-    },
+    v0_3::{self, ChainConfig, IterableFeeInfo, SolverAuctionResults},
     BlockMerkleCommitment, BlockSize, BuilderSignature, FeeAccount, FeeAmount, FeeInfo,
     FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable,
     NsTableValidationError, SeqTypes, UpgradeType,
@@ -307,7 +304,7 @@ impl Header {
         // Ensure the major version is 0, otherwise panic
         assert!(major == 0, "Invalid major version {major}");
         // Ensure FeeInfo contains at least 1 element
-        assert!(fee_info.len() > 0, "Invalid fee_info length: 0");
+        assert!(!fee_info.is_empty(), "Invalid fee_info length: 0");
 
         match minor {
             1 => Self::V1(v0_1::Header {
@@ -753,8 +750,8 @@ impl BlockHeader<SeqTypes> for Header {
     /// Get the results of the auction for this Header. Only used in post-marketplace versions
     fn get_auction_results(&self) -> Option<SolverAuctionResults> {
         match self {
-            Self::V1(fields) => None,
-            Self::V2(fields) => None,
+            Self::V1(_) => None,
+            Self::V2(_) => None,
             Self::V3(fields) => Some(fields.auction_results.clone()),
         }
     }
@@ -777,7 +774,7 @@ impl BlockHeader<SeqTypes> for Header {
         payload_commitment: VidCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: Vec<BuilderFee<SeqTypes>>,
-        vid_common: VidCommon,
+        _vid_common: VidCommon,
         auction_results: Option<SolverAuctionResults>,
         version: Version,
     ) -> Result<Self, Self::Error> {
@@ -1022,7 +1019,7 @@ impl BlockHeader<SeqTypes> for Header {
         //  The Header is versioned,
         //  so we create the genesis header for the current version of the sequencer.
         Self::create(
-            instance_state.chain_config.into(),
+            instance_state.chain_config,
             0,
             instance_state.genesis_header.timestamp.unix_timestamp(),
             instance_state

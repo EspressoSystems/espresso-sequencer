@@ -500,7 +500,7 @@ impl ValidatedState {
     }
 }
 
-fn apply_full_transactions(
+fn _apply_full_transactions(
     validated_state: &mut ValidatedState,
     full_network_txs: Vec<FullNetworkTx>,
 ) -> Result<(), ExecutionError> {
@@ -755,13 +755,13 @@ mod test {
         let mut state = ValidatedState::default();
         let txs = mock_full_network_txs(None);
         // Default key can be verified b/c it is the same that signs the mock tx
-        apply_full_transactions(&mut state, txs).unwrap();
+        _apply_full_transactions(&mut state, txs).unwrap();
 
         // Tx will be invalid if it is signed by a different key than
         // set in `account` field.
         let key = FeeAccount::generated_from_seed_indexed([1; 32], 0).1;
         let invalid = mock_full_network_txs(Some(key));
-        let err = apply_full_transactions(&mut state, invalid).unwrap_err();
+        let err = _apply_full_transactions(&mut state, invalid).unwrap_err();
         assert_eq!(ExecutionError::InvalidSignature, err);
     }
 
