@@ -9,7 +9,7 @@ use ethers::types::Signature;
 use hotshot_types::{
     data::ViewNumber,
     traits::{
-        auction_results_provider::HasUrl, node_implementation::ConsensusTime,
+        auction_results_provider::HasUrls, node_implementation::ConsensusTime,
         signature_key::BuilderSignatureKey,
     },
 };
@@ -215,17 +215,17 @@ impl BidTx {
     }
 }
 
-impl HasUrl for BidTx {
+impl HasUrls for BidTx {
     /// Get the `url` field from the body.
-    fn url(&self) -> Url {
-        self.body.url()
+    fn urls(&self) -> Vec<Url> {
+        self.body.urls()
     }
 }
 
-impl HasUrl for BidTxBody {
+impl HasUrls for BidTxBody {
     /// Get the cloned `url` field.
-    fn url(&self) -> Url {
-        self.url.clone()
+    fn urls(&self) -> Vec<Url> {
+        vec![self.url.clone()]
     }
 }
 
