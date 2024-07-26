@@ -6,6 +6,7 @@ use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
     traits::{
+        auction_results_provider::HasUrls,
         block_contents::{BlockHeader, BuilderFee},
         node_implementation::NodeType,
         signature_key::BuilderSignatureKey,
@@ -23,6 +24,7 @@ use serde_json::{Map, Value};
 use snafu::Snafu;
 use thiserror::Error;
 use time::OffsetDateTime;
+use url::Url;
 use vbs::version::Version;
 
 use crate::{
@@ -661,8 +663,25 @@ impl From<anyhow::Error> for InvalidBlockHeader {
     }
 }
 
+// TODO: Remove after `SolverAuctionResults` is added.
+pub struct DummyAuctionResult;
+impl HasUrls for DummyAuctionResult {
+    /// Get the `url` field from the body.
+    fn urls(&self) -> Vec<Url> {
+        unimplemented!()
+    }
+}
+
 impl BlockHeader<SeqTypes> for Header {
     type Error = InvalidBlockHeader;
+    // TODO: Update after `SolverAuctionResults` is added.
+    type AuctionResult = DummyAuctionResult;
+
+    /// Get the results of the auction for this Header. Only used in post-marketplace versions
+    fn get_auction_results(&self) -> Option<Self::AuctionResult> {
+        // TODO: Update after `SolverAuctionResults` is added.
+        None
+    }
 
     #[tracing::instrument(
         skip_all,
@@ -673,7 +692,24 @@ impl BlockHeader<SeqTypes> for Header {
         ),
     )]
 
-    async fn new(
+    /// Build a header with the parent validate state, instance-level state, parent leaf, payload
+    /// commitment, metadata, and auction results. This is only used in post-marketplace versions
+    async fn new_marketplace(
+        _parent_state: &<SeqTypes as NodeType>::ValidatedState,
+        instance_state: &<<SeqTypes as NodeType>::ValidatedState as hotshot_types::traits::ValidatedState<SeqTypes>>::Instance,
+        parent_leaf: &hotshot_types::data::Leaf<SeqTypes>,
+        _payload_commitment: VidCommitment,
+        _metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
+        _builder_fee: Vec<BuilderFee<SeqTypes>>,
+        _vid_common: VidCommon,
+        _auction_results: Option<Self::AuctionResult>,
+        _version: Version,
+    ) -> Result<Self, Self::Error> {
+        // TODO: Update after `SolverAuctionResults` is added.
+        unimplemented!()
+    }
+
+    async fn new_legacy(
         parent_state: &ValidatedState,
         instance_state: &NodeState,
         parent_leaf: &Leaf,
@@ -1340,7 +1376,7 @@ mod test_headers {
             fee_account: key_pair.fee_account(),
             fee_signature,
         };
-        let proposal = Header::new(
+        let proposal = Header::new_legacy(
             &forgotten_state,
             &genesis_state,
             &parent_leaf,
