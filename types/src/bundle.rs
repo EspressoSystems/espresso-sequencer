@@ -2,7 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::traits::{block_contents::BuilderFee, node_implementation::NodeType, BlockPayload};
+use crate::traits::{
+    block_contents::BuilderFee, node_implementation::NodeType, signature_key::BuilderSignatureKey,
+    BlockPayload,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "TYPES: NodeType")]
@@ -14,7 +17,7 @@ pub struct Bundle<TYPES: NodeType> {
     pub transactions: Vec<<TYPES::BlockPayload as BlockPayload<TYPES>>::Transaction>,
 
     /// The signature over the bundle.
-    pub signature: TYPES::SignatureKey,
+    pub signature: <TYPES::BuilderSignatureKey as BuilderSignatureKey>::BuilderSignature,
 
     /// The fee for sequencing
     pub sequencing_fee: BuilderFee<TYPES>,

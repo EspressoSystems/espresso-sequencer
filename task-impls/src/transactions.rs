@@ -5,10 +5,10 @@ use std::{
 
 use anyhow::{bail, Result};
 use async_broadcast::{Receiver, Sender};
-use async_compatibility_layer::art::async_sleep;
+use async_compatibility_layer::art::{async_sleep, async_timeout};
 use async_lock::RwLock;
 use async_trait::async_trait;
-use futures::{stream::FuturesUnordered, StreamExt};
+use futures::{future::join_all, stream::FuturesUnordered, StreamExt};
 use hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
@@ -18,7 +18,7 @@ use hotshot_types::{
     event::{Event, EventType},
     simple_certificate::{version, UpgradeCertificate},
     traits::{
-        auction_results_provider::AuctionResultsProvider,
+        auction_results_provider::{AuctionResultsProvider, HasUrls},
         block_contents::{precompute_vid_commitment, BuilderFee, EncodeBytes},
         election::Membership,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
@@ -29,7 +29,7 @@ use hotshot_types::{
     vid::{VidCommitment, VidPrecomputeData},
 };
 use tracing::{debug, error, instrument, warn};
-use vbs::version::{StaticVersionType, Version};
+use vbs::version::StaticVersionType;
 use vec1::Vec1;
 
 use crate::{
@@ -143,7 +143,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
             {
                 None
             } else {
-                self.wait_for_block(block_view, version).await
+                self.wait_for_block(block_view).await
             }
         };
 
@@ -240,11 +240,36 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
             .as_ref()
             .is_some_and(|cert| cert.upgrading_in(block_view))
         {
-            if let Ok(bundles) = self
-                .auction_results_provider
-                .fetch_bundles(block_view)
-                .await
+            let start = Instant::now();
+
+            if let Ok(Ok(urls)) = async_timeout(
+                self.builder_timeout,
+                self.auction_results_provider
+                    .fetch_auction_result(block_view),
+            )
+            .await
             {
+                let mut futures = Vec::new();
+
+                for url in urls.urls() {
+                    futures.push(async_timeout(
+                        self.builder_timeout.saturating_sub(start.elapsed()),
+                        async {
+                            let client = crate::builder::v0_3::BuilderClient::new(url);
+                            client.bundle(*block_view).await
+                        },
+                    ));
+                }
+
+                let mut bundles = Vec::new();
+
+                for bundle in join_all(futures).await {
+                    match bundle {
+                        Ok(Ok(b)) => bundles.push(b),
+                        _ => continue,
+                    }
+                }
+
                 let mut sequencing_fees = Vec::new();
                 let mut transactions: Vec<
                     <TYPES::BlockPayload as BlockPayload<TYPES>>::Transaction,
@@ -435,11 +460,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
     }
 
     #[instrument(skip_all, fields(id = self.id, cur_view = *self.cur_view, block_view = *block_view), name = "wait_for_block", level = "error")]
-    async fn wait_for_block(
-        &self,
-        block_view: TYPES::Time,
-        version: Version,
-    ) -> Option<BuilderResponse<TYPES>> {
+    async fn wait_for_block(&self, block_view: TYPES::Time) -> Option<BuilderResponse<TYPES>> {
         let task_start_time = Instant::now();
 
         // Find commitment to the block we want to build upon
@@ -470,10 +491,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
         };
 
         while task_start_time.elapsed() < self.builder_timeout {
-            match async_compatibility_layer::art::async_timeout(
+            match async_timeout(
                 self.builder_timeout
                     .saturating_sub(task_start_time.elapsed()),
-                self.block_from_builder(parent_comm, parent_view, &parent_comm_sig, version),
+                self.block_from_builder(parent_comm, parent_view, &parent_comm_sig),
             )
             .await
             {
@@ -509,87 +530,60 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
         parent_comm: VidCommitment,
         view_number: TYPES::Time,
         parent_comm_sig: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-        version: Version,
     ) -> Vec<(AvailableBlockInfo<TYPES>, usize)> {
-        /// Implementations between versions are essentially the same except for the builder
-        /// clients used. The most conscise way to express this is with a macro.
-        macro_rules! inner_impl {
-            ($clients:ident) => {{
-                // Create a collection of futures that call available_blocks endpoint for every builder
-                let tasks = self
-                    .$clients
-                    .iter()
-                    .enumerate()
-                    .map(|(builder_idx, client)| async move {
-                        client
-                            .available_blocks(
-                                parent_comm,
-                                view_number.u64(),
-                                self.public_key.clone(),
-                                parent_comm_sig,
-                            )
-                            .await
-                            .map(move |blocks| {
-                                // Add index into `self.builder_clients` for each block so that we know
-                                // where to claim it from later
-                                blocks
-                                    .into_iter()
-                                    .map(move |block_info| (block_info, builder_idx))
-                            })
+        let tasks = self
+            .builder_clients
+            .iter()
+            .enumerate()
+            .map(|(builder_idx, client)| async move {
+                client
+                    .available_blocks(
+                        parent_comm,
+                        view_number.u64(),
+                        self.public_key.clone(),
+                        parent_comm_sig,
+                    )
+                    .await
+                    .map(move |blocks| {
+                        blocks
+                            .into_iter()
+                            .map(move |block_info| (block_info, builder_idx))
                     })
-                    .collect::<FuturesUnordered<_>>();
-
-                // A vector of resolved builder responses
-                let mut results = Vec::with_capacity(self.$clients.len());
-
-                // Instant we start querying builders for available blocks
-                let query_start = Instant::now();
-
-                // First we complete the query to the fastest fraction of the builders
-                let threshold = (self.$clients.len() * BUILDER_MAIN_BATCH_THRESHOLD_DIVIDEND)
-                    .div_ceil(BUILDER_MAIN_BATCH_THRESHOLD_DIVISOR);
-                let mut tasks = tasks.take(threshold);
-                while let Some(result) = tasks.next().await {
-                    results.push(result);
-                    if query_start.elapsed() > BUILDER_MAIN_BATCH_CUTOFF {
-                        break;
-                    }
-                }
-
-                // Then we query the rest, alotting additional `elapsed * BUILDER_ADDITIONAL_TIME_MULTIPLIER`
-                // for them to respond. There's a fixed floor of `BUILDER_MINIMUM_QUERY_TIME` for both
-                // phases
-                let timeout = async_sleep(std::cmp::max(
-                    query_start
-                        .elapsed()
-                        .mul_f32(BUILDER_ADDITIONAL_TIME_MULTIPLIER),
-                    BUILDER_MINIMUM_QUERY_TIME.saturating_sub(query_start.elapsed()),
-                ));
-                futures::pin_mut!(timeout); // Stream::next requires Self::Unpin
-                let mut tasks = tasks.into_inner().take_until(timeout);
-                while let Some(result) = tasks.next().await {
-                    results.push(result);
-                }
-
-                results
-                    .into_iter()
-                    .filter_map(|result| match result {
-                        Ok(value) => Some(value),
-                        Err(err) => {
-                            tracing::warn!(%err, "Error getting available blocks");
-                            None
-                        }
-                    })
-                    .flatten()
-                    .collect::<Vec<_>>()
-            }}
+            })
+            .collect::<FuturesUnordered<_>>();
+        let mut results = Vec::with_capacity(self.builder_clients.len());
+        let query_start = Instant::now();
+        let threshold = (self.builder_clients.len() * BUILDER_MAIN_BATCH_THRESHOLD_DIVIDEND)
+            .div_ceil(BUILDER_MAIN_BATCH_THRESHOLD_DIVISOR);
+        let mut tasks = tasks.take(threshold);
+        while let Some(result) = tasks.next().await {
+            results.push(result);
+            if query_start.elapsed() > BUILDER_MAIN_BATCH_CUTOFF {
+                break;
+            }
         }
-
-        if version >= MarketplaceVersion::version() {
-            inner_impl!(builder_clients_marketplace)
-        } else {
-            inner_impl!(builder_clients)
+        let timeout = async_sleep(std::cmp::max(
+            query_start
+                .elapsed()
+                .mul_f32(BUILDER_ADDITIONAL_TIME_MULTIPLIER),
+            BUILDER_MINIMUM_QUERY_TIME.saturating_sub(query_start.elapsed()),
+        ));
+        futures::pin_mut!(timeout);
+        let mut tasks = tasks.into_inner().take_until(timeout);
+        while let Some(result) = tasks.next().await {
+            results.push(result);
         }
+        results
+            .into_iter()
+            .filter_map(|result| match result {
+                Ok(value) => Some(value),
+                Err(err) => {
+                    tracing::warn!(%err,"Error getting available blocks");
+                    None
+                }
+            })
+            .flatten()
+            .collect::<Vec<_>>()
     }
 
     /// Get a block from builder.
@@ -605,10 +599,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
         parent_comm: VidCommitment,
         view_number: TYPES::Time,
         parent_comm_sig: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-        version: Version,
     ) -> anyhow::Result<BuilderResponse<TYPES>> {
         let mut available_blocks = self
-            .get_available_blocks(parent_comm, view_number, parent_comm_sig, version)
+            .get_available_blocks(parent_comm, view_number, parent_comm_sig)
             .await;
 
         available_blocks.sort_by(|(l, _), (r, _)| {
@@ -650,53 +643,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
                 }
             };
 
-            let response = if version >= MarketplaceVersion::version() {
-                let client = &self.builder_clients_marketplace[builder_idx];
-
-                let block = client
-                    .claim_block(
-                        block_info.block_hash.clone(),
-                        view_number.u64(),
-                        self.public_key.clone(),
-                        &request_signature,
-                    )
-                    .await;
-
-                let block_data = match block {
-                    Ok(block_data) => block_data,
-                    Err(err) => {
-                        tracing::warn!(%err, "Error claiming block data");
-                        continue;
-                    }
-                };
-
-                // verify the signature over the message, construct the builder commitment
-                let builder_commitment = block_data
-                    .block_payload
-                    .builder_commitment(&block_data.metadata);
-                if !block_data
-                    .sender
-                    .validate_builder_signature(&block_data.signature, builder_commitment.as_ref())
-                {
-                    tracing::warn!(
-                        "Failed to verify available block data response message signature"
-                    );
-                    continue;
-                }
-
-                let fee = BuilderFee {
-                    fee_amount: block_info.offered_fee,
-                    fee_account: block_data.sender,
-                    fee_signature: block_data.signature,
-                };
-
-                BuilderResponse {
-                    fee,
-                    block_payload: block_data.block_payload,
-                    metadata: block_data.metadata,
-                    precompute_data: None,
-                }
-            } else {
+            let response = {
                 let client = &self.builder_clients[builder_idx];
 
                 let (block, header_input) = futures::join! {

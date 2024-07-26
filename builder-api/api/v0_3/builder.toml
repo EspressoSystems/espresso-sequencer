@@ -26,37 +26,12 @@ NAME = "hs-builder-get"
 DESCRIPTION = ""
 FORMAT_VERSION = "0.1.0"
 
-[route.available_blocks]
-PATH = ["availableblocks/:parent_hash/:view_number/:sender/:signature"]
-":parent_hash" = "TaggedBase64"
+[route.bundle]
+PATH = ["bundle/:view_number"]
 ":view_number" = "Integer"
-":sender" = "TaggedBase64"
-":signature" = "TaggedBase64"
+METHOD = "POST"
 DOC = """
-Get descriptions for all block candidates based on a specific parent block.
-
-Returns
-```
-[
-    "block_metadata": {
-        "block_hash":  TaggedBase64,
-        "block_size":  integer,
-        "offered_fee": integer,
-    },
-]
-```
-"""
-
-[route.claim_block]
-PATH = ["claimblock/:block_hash/:view_number/:sender/:signature"]
-":block_hash" = "TaggedBase64"
-":view_number" = "Integer"
-":sender" = "TaggedBase64"
-":signature" = "TaggedBase64"
-DOC = """
-Get the specified block candidate.
-
-Returns application-specific encoded transactions type
+Fetch the bundle from the builder for the specified view.
 """
 
 [route.builder_address]

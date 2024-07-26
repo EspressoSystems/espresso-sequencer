@@ -194,16 +194,10 @@ pub mod v0_2 {
     pub type Version = StaticVersion<0, 2>;
 }
 
-/// Version 0.3. Removes `claim_block_header_input` endpoint, adds fee information
-/// to `claim_block` endpoint.
+/// Version 0.3: marketplace. Bundles.
 pub mod v0_3 {
-    use hotshot_builder_api::v0_3::block_info::AvailableBlockData;
     pub use hotshot_builder_api::v0_3::Version;
-    use hotshot_types::{
-        traits::{node_implementation::NodeType, signature_key::SignatureKey},
-        utils::BuilderCommitment,
-    };
-    use tagged_base64::TaggedBase64;
+    use hotshot_types::{bundle::Bundle, traits::node_implementation::NodeType};
     use vbs::version::StaticVersion;
 
     pub use super::BuilderClientError;
@@ -217,18 +211,9 @@ pub mod v0_3 {
         /// # Errors
         /// - [`BuilderClientError::NotFound`] if block isn't available
         /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
-        pub async fn claim_block(
-            &self,
-            block_hash: BuilderCommitment,
-            view_number: u64,
-            sender: TYPES::SignatureKey,
-            signature: &<<TYPES as NodeType>::SignatureKey as SignatureKey>::PureAssembledSignatureType,
-        ) -> Result<AvailableBlockData<TYPES>, BuilderClientError> {
-            let encoded_signature: TaggedBase64 = signature.clone().into();
+        pub async fn bundle(&self, view_number: u64) -> Result<Bundle<TYPES>, BuilderClientError> {
             self.inner
-                .get(&format!(
-                    "claimblock/{block_hash}/{view_number}/{sender}/{encoded_signature}"
-                ))
+                .get(&format!("bundle/{view_number}"))
                 .send()
                 .await
                 .map_err(Into::into)
