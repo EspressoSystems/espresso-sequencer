@@ -761,7 +761,7 @@ mod test {
         // set in `account` field.
         let key = FeeAccount::generated_from_seed_indexed([1; 32], 0).1;
         let invalid = mock_full_network_txs(Some(key));
-        let (err, _) = apply_full_transactions(&mut state, invalid).unwrap_err();
+        let err = apply_full_transactions(&mut state, invalid).unwrap_err();
         assert_eq!(ExecutionError::InvalidSignature, err);
     }
 
