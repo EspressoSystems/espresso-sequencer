@@ -43,6 +43,7 @@ pub fn preprocess(
 /// - updated light client state (`(view_number, block_height, block_comm_root, fee_ledger_comm, stake_table_comm)`)
 /// - a bit vector indicates the signers
 /// - a quorum threshold
+///
 /// Returns error or a pair `(proof, public_inputs)` asserting that
 /// - the signer's accumulated weight exceeds the quorum threshold
 /// - the stake table corresponds to the one committed in the light client state
