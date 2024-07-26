@@ -1,4 +1,5 @@
-use super::{FeeAccount, FeeAmount, Header};
+use super::{FeeAccount, FeeAmount};
+use crate::Header;
 use committable::Commitment;
 use jf_merkle_tree::{
     prelude::{LightWeightSHA3MerkleTree, Sha3Digest, Sha3Node},

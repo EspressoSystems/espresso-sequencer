@@ -1,5 +1,3 @@
-use std::{fmt, str::FromStr};
-
 use anyhow::{ensure, Context};
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
@@ -21,6 +19,7 @@ use serde::{
 };
 use serde_json::{Map, Value};
 use snafu::Snafu;
+use std::fmt;
 use thiserror::Error;
 use time::OffsetDateTime;
 use vbs::version::Version;

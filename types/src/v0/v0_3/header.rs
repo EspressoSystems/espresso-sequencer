@@ -1,9 +1,8 @@
-use crate::NsTable;
-
 use super::{
     BlockMerkleCommitment, BuilderSignature, FeeInfo, FeeMerkleCommitment, L1BlockInfo,
     ResolvableChainConfig, SolverAuctionResults,
 };
+use crate::NsTable;
 use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_types::{utils::BuilderCommitment, vid::VidCommitment};
