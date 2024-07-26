@@ -4,7 +4,7 @@ use std::{sync::Arc, time::Duration};
 use anyhow::{bail, ensure, Context};
 use async_std::{stream::StreamExt, sync::RwLock};
 use espresso_types::{
-    BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeMerkleTree, ValidatedState,
+    v0_3::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree, ValidatedState,
 };
 use futures::future::Future;
 use hotshot::traits::ValidatedState as HotShotState;

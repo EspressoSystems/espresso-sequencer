@@ -10,8 +10,8 @@ use async_compatibility_layer::{
 };
 use async_std::sync::{Arc, RwLock};
 use espresso_types::{
-    eth_signature_key::EthKeyPair, ChainConfig, FeeAmount, L1Client, NodeState, Payload, SeqTypes,
-    ValidatedState,
+    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NodeState, Payload,
+    SeqTypes, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,

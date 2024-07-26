@@ -20,7 +20,7 @@ use jf_merkle_tree::{
 use jf_vid::VidScheme;
 use num_traits::CheckedSub;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Borrow, ops::Add};
+use std::ops::Add;
 use thiserror::Error;
 use vbs::version::Version;
 
