@@ -80,6 +80,7 @@ jobs:
             target/release/espresso-dev-node
             target/release/pub-key
             target/release/espresso-bridge
+            target/release/marketplace-solver
 
   build-arm:
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
@@ -131,6 +132,7 @@ jobs:
             target/release/espresso-dev-node
             target/release/pub-key
             target/release/espresso-bridge
+            target/release/marketplace-solver
 
   build-dockers:
     runs-on: ubuntu-latest
@@ -150,6 +152,7 @@ jobs:
       nasty-client-tag: ${{ steps.nasty-client.outputs.tags }}
       espresso-dev-node-tag: ${{ steps.espresso-dev-node.outputs.tags }}
       bridge-tag: ${{ steps.bridge.outputs.tags }}
+      marketplace-solver-tag: ${{ steps.marketplace-solver.outputs.tags }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -446,6 +449,8 @@ jobs:
           docker pull ${{ needs.build-dockers.outputs.builder-tag }}
           docker pull ${{ needs.build-dockers.outputs.nasty-client-tag }}
           docker pull ${{ needs.build-dockers.outputs.bridge-tag }}
+          docker pull ${{ needs.build-dockers.outputs.marketplace-solver-tag }}
+          
       - name: Tag new docker images
         run: |
           docker tag ${{ needs.build-dockers.outputs.sequencer-tag }} ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -461,6 +466,7 @@ jobs:
           docker tag ${{ needs.build-dockers.outputs.builder-tag }} ghcr.io/espressosystems/espresso-sequencer/builder:main
           docker tag ${{ needs.build-dockers.outputs.nasty-client-tag }} ghcr.io/espressosystems/espresso-sequencer/nasty-client:main
           docker tag ${{ needs.build-dockers.outputs.bridge-tag }} ghcr.io/espressosystems/espresso-sequencer/bridge:main
+          docker tag ${{ needs.build-dockers.outputs.marketplace-solver-tag }} ghcr.io/espressosystems/espresso-sequencer/marketplace-solver:main
 
       - name: Test docker demo
         run: |

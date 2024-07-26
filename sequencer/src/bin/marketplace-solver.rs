@@ -81,7 +81,8 @@ async fn main() -> anyhow::Result<()> {
     app.register_module::<SolverError, Version>("marketplace-solver", api)?;
 
     app.serve(format!("0.0.0.0:{}", solver_api_port), Version::instance())
-        .await?;
+        .await
+        .unwrap();
 
     event_handler.cancel().await;
 
