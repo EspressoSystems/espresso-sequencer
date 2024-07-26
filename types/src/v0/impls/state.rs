@@ -747,8 +747,15 @@ mod test {
 
     use super::*;
     use crate::{
-        v0::impls::auction::mock_full_network_txs, BlockSize, FeeAccountProof, FeeMerkleProof,
+        eth_signature_key::EthKeyPair, v0_3::BidTx, BlockSize, FeeAccountProof, FeeMerkleProof,
     };
+
+    pub fn mock_full_network_txs(key: Option<EthKeyPair>) -> Vec<FullNetworkTx> {
+        // if no key is supplied, use `test_key_pair`. Since default `BidTxBody` is
+        // signed with `test_key_pair`, it will verify successfully
+        let key = key.unwrap_or_else(FeeAccount::test_key_pair);
+        vec![FullNetworkTx::Bid(BidTx::mock(key))]
+    }
 
     #[test]
     fn test_apply_full_tx() {

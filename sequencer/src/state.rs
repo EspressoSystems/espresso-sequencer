@@ -291,8 +291,8 @@ impl<T> SequencerStateDataSource for T where
 mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use espresso_types::{
-        validate_proposal, BlockSize, FeeAccount, FeeAccountProof, FeeAmount, FeeError, FeeInfo,
-        FeeMerkleProof, Leaf, ProposalValidationError,
+        v0_3::IterableFeeInfo, validate_proposal, BlockSize, FeeAccount, FeeAccountProof,
+        FeeAmount, FeeError, FeeInfo, FeeMerkleProof, Leaf, ProposalValidationError,
     };
     use ethers::{abi::Address, types::U256};
     use hotshot_types::{
@@ -406,7 +406,7 @@ mod test {
             ProposalValidationError::InsufficientFee {
                 max_block_size: instance.chain_config.max_block_size,
                 base_fee: instance.chain_config.base_fee,
-                proposed_fee: header.fee_info().amount()
+                proposed_fee: header.fee_info().amount().unwrap()
             },
             err
         );

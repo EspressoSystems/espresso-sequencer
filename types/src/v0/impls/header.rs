@@ -1634,7 +1634,7 @@ mod test_headers {
         let (fee_account, _) = FeeAccount::generated_from_seed_indexed([0; 32], 0);
 
         let v1_header = Header::create(
-            genesis.instance_state.chain_config.into(),
+            genesis.instance_state.chain_config,
             1,
             2,
             3,
@@ -1657,7 +1657,7 @@ mod test_headers {
         assert_eq!(v1_header, deserialized);
 
         let v2_header = Header::create(
-            genesis.instance_state.chain_config.into(),
+            genesis.instance_state.chain_config,
             1,
             2,
             3,
@@ -1680,7 +1680,7 @@ mod test_headers {
         assert_eq!(v2_header, deserialized);
 
         let v3_header = Header::create(
-            genesis.instance_state.chain_config.into(),
+            genesis.instance_state.chain_config,
             1,
             2,
             3,

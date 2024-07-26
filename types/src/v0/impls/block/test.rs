@@ -9,7 +9,7 @@ use jf_vid::VidScheme;
 use rand::RngCore;
 
 use crate::{
-    BlockSize, ChainConfig, NamespaceId, NodeState, NsProof, Payload, Transaction, TxProof,
+    v0_3::ChainConfig, BlockSize, NamespaceId, NodeState, NsProof, Payload, Transaction, TxProof,
     ValidatedState,
 };
 
