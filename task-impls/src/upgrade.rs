@@ -92,12 +92,9 @@ pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
-    /// Check if the version has been upgraded.
+    /// Check if we have decided on an upgrade certificate
     async fn upgraded(&self) -> bool {
-        if let Some(cert) = self.decided_upgrade_certificate.read().await.clone() {
-            return cert.data.new_version == TYPES::Upgrade::VERSION;
-        }
-        false
+        self.decided_upgrade_certificate.read().await.is_some()
     }
 
     /// main task event handler
@@ -263,15 +260,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
 
                 self.cur_view = *new_view;
 
-                // Skip proposing if the version has already been upgraded.
-                if self.upgraded().await {
-                    info!(
-                        "Already upgraded to {:?}, skip proposing.",
-                        TYPES::Upgrade::VERSION
-                    );
-                    return None;
-                }
-
                 let view: u64 = *self.cur_view;
                 let time = SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
@@ -283,6 +271,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
                     && view < self.stop_proposing_view
                     && time >= self.start_proposing_time
                     && time < self.stop_proposing_time
+                    && !self.upgraded().await
                     && self
                         .quorum_membership
                         .leader(TYPES::Time::new(view + UPGRADE_PROPOSE_OFFSET))
@@ -309,6 +298,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
                         upgrade_proposal_data.commit().as_ref(),
                     )
                     .expect("Failed to sign upgrade proposal commitment!");
+
+                    warn!("Sending upgrade proposal:\n\n {:?}", upgrade_proposal);
 
                     let message = Proposal {
                         data: upgrade_proposal,
