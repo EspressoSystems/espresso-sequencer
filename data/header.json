@@ -1,19 +1,37 @@
 {
-    "height": 42,
-    "timestamp": 789,
-    "l1_head": 124,
-    "l1_finalized": {
-        "number": 123,
-        "timestamp": "0x456",
-        "hash": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    },
-    "payload_commitment": "HASH~1yS-KEtL3oDZDBJdsW51Pd7zywIiHesBZsTbpOzrxOfu",
-    "builder_commitment": "BUILDER_COMMITMENT~1yS-KEtL3oDZDBJdsW51Pd7zywIiHesBZsTbpOzrxOdZ",
-    "ns_table": {
-        "bytes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    },
-    "block_merkle_tree_root": "MERKLE_COMM~yB4_Aqa35_PoskgTpcCR1oVLh6BUdLHIs7erHKWi-usUAAAAAAAAAAEAAAAAAAAAJg",
-    "fee_merkle_tree_root": "MERKLE_COMM~VJ9z239aP9GZDrHp3VxwPd_0l28Hc5KEAB1pFeCIxhYgAAAAAAAAAAIAAAAAAAAAdA",
-    "fee_info": { "account": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266", "amount": "0x0" },
-    "chain_config": { "chain_config": { "Left": { "chain_id": "0x8a19", "max_block_size": 10240, "base_fee": "0x0" } } }
+  "block_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAQA",
+  "builder_commitment": "BUILDER_COMMITMENT~jlEvJoHPETCSwXF6UKcD22zOjfoHGuyVFTVkP_BNc-no",
+  "builder_signature": {
+    "r": "0xa1c3795850b7b490e616b60fead89753841fbc9fffe1a939d483f1d959ad1c45",
+    "s": "0x20228f5b63b14792d371dce479978e45020f19602189ef6d325b73029a2848ac",
+    "v": 27
+  },
+  "chain_config": {
+    "chain_config": {
+      "Left": {
+        "base_fee": "0",
+        "chain_id": "35353",
+        "fee_contract": "0x0000000000000000000000000000000000000000",
+        "fee_recipient": "0x0000000000000000000000000000000000000000",
+        "max_block_size": "10240"
+      }
+    }
+  },
+  "fee_info": {
+    "account": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+    "amount": "0"
+  },
+  "fee_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUAAAAAAAAAAAAAAAAAAAAKA",
+  "height": 42,
+  "l1_finalized": {
+    "hash": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "number": 123,
+    "timestamp": "0x456"
+  },
+  "l1_head": 124,
+  "ns_table": {
+    "bytes": "AwAAAO7/wAAcBgAAobC5EkAOAABksAWiXBQAAA=="
+  },
+  "payload_commitment": "HASH~u-mEo1mwByROUhnvO7pBFitcD0UEvruK-b8WONkKoCLQ",
+  "timestamp": 789
 }

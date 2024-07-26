@@ -9,12 +9,9 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::{
-        election::static_committee::GeneralStaticCommittee,
-        implementations::{NetworkingMetricsValue, WebServerNetwork},
-    },
+    traits::election::static_committee::GeneralStaticCommittee,
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, Networks, SystemContext,
+    HotShotInitializer, Memberships, SystemContext,
 };
 use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
@@ -22,12 +19,10 @@ use hotshot_orchestrator::{
 };
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
-    constants::{Version01, STATIC_VER_0_1},
     event::Event,
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
-    traits::election::Membership,
-    traits::metrics::Metrics,
+    traits::{election::Membership, metrics::Metrics},
     HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::fmt::Display;
@@ -41,11 +36,12 @@ use async_compatibility_layer::art::{async_sleep, async_spawn};
 use hotshot_builder_api::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
-use hotshot_builder_core::service::{GlobalState, ProxyGlobalState};
-use jf_primitives::{
-    merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme},
-    signatures::bls_over_bn254::VerKey,
+use hotshot_builder_core::{
+    service::{GlobalState, ProxyGlobalState},
+    testing::basic_test::NodeType,
 };
+use jf_merkle_tree::{namespaced_merkle_tree::NamespacedMerkleTreeScheme, MerkleTreeScheme};
+use jf_signature::bls_over_bn254::VerKey;
 use sequencer::catchup::mock::MockStateCatchup;
 use sequencer::state_signature::StakeTableCommitmentType;
 use sequencer::{
@@ -57,7 +53,7 @@ use sequencer::{
     state::FeeAccount,
     state::ValidatedState,
     state_signature::{static_stake_table_commitment, StateSigner},
-    BuilderParams, L1Params, NetworkParams, Node, NodeState, PrivKey, PubKey, SeqTypes,
+    L1Params, NetworkParams, Node, NodeState, PrivKey, PubKey, SeqTypes,
 };
 use std::{alloc::System, any, fmt::Debug, mem};
 use std::{marker::PhantomData, net::IpAddr};
@@ -69,25 +65,24 @@ pub mod non_permissioned;
 pub mod permissioned;
 
 // It runs the api service for the builder
-pub fn run_builder_api_service(url: Url, source: Arc<RwLock<ProxyGlobalState<SeqTypes>>>) {
+pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     // it is to serve hotshot
     let builder_api = hotshot_builder_api::builder::define_api::<
-        Arc<RwLock<ProxyGlobalState<SeqTypes>>>,
+        ProxyGlobalState<SeqTypes>,
         SeqTypes,
-        Version01,
+        <SeqTypes as NodeType>::Base,
     >(&HotshotBuilderApiOptions::default())
     .expect("Failed to construct the builder APIs");
 
     // it enables external clients to submit txn to the builder's private mempool
     let private_mempool_api = hotshot_builder_api::builder::submit_api::<
-        Arc<RwLock<ProxyGlobalState<SeqTypes>>>,
+        ProxyGlobalState<SeqTypes>,
         SeqTypes,
-        Version01,
+        <SeqTypes as NodeType>::Base,
     >(&HotshotBuilderApiOptions::default())
     .expect("Failed to construct the builder API for private mempool txns");
 
-    let mut app: App<Arc<RwLock<ProxyGlobalState<SeqTypes>>>, BuilderApiError> =
-        App::with_state(source);
+    let mut app: App<ProxyGlobalState<SeqTypes>, BuilderApiError> = App::with_state(source);
 
     app.register_module("block_info", builder_api)
         .expect("Failed to register the builder API");
@@ -95,7 +90,7 @@ pub fn run_builder_api_service(url: Url, source: Arc<RwLock<ProxyGlobalState<Seq
     app.register_module("txn_submit", private_mempool_api)
         .expect("Failed to register the private mempool API");
 
-    async_spawn(app.serve(url, STATIC_VER_0_1));
+    async_spawn(app.serve(url, <SeqTypes as NodeType>::Base::instance()));
 }
 
 #[cfg(test)]
@@ -125,6 +120,7 @@ pub mod testing {
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     use portpicker::pick_unused_port;
+    use vbs::version::StaticVersion;
     //use sequencer::persistence::NoStorage;
     use async_broadcast::{
         broadcast, Receiver as BroadcastReceiver, RecvError, Sender as BroadcastSender,
@@ -164,7 +160,6 @@ pub mod testing {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
-    use hotshot_types::constants::{Version01, STATIC_VER_0_1};
     use serde::{Deserialize, Serialize};
     use snafu::{guide::feature_flags, *};
 
@@ -176,7 +171,7 @@ pub mod testing {
         staking_nodes_state_key_pairs: Vec<StateKeyPair>,
         non_staking_nodes_state_key_pairs: Vec<StateKeyPair>,
         non_staking_nodes_stake_entries: Vec<PeerConfig<hotshot_state_prover::QCVerKey>>,
-        master_map: Arc<MasterMap<Message<SeqTypes>, PubKey>>,
+        master_map: Arc<MasterMap<PubKey>>,
         anvil: Arc<AnvilInstance>,
     }
 
@@ -199,7 +194,7 @@ pub mod testing {
             // Only pass the pub keys to the hotshot config
             let known_nodes_without_stake_pub_keys = known_nodes_without_stake
                 .iter()
-                .map(|x| <BLSPubKey as SignatureKey>::get_public_key(&x.stake_table_entry))
+                .map(|x| <BLSPubKey as SignatureKey>::public_key(&x.stake_table_entry))
                 .collect::<Vec<_>>();
 
             let master_map = MasterMap::new();
@@ -224,12 +219,20 @@ pub mod testing {
                 data_request_delay: Duration::from_millis(200),
                 view_sync_timeout: Duration::from_secs(5),
                 fixed_leader_for_gpuvid: 0,
-                builder_url,
+                builder_urls: vec1::vec1![builder_url],
                 builder_timeout: Duration::from_secs(1),
                 start_threshold: (
                     known_nodes_with_stake.clone().len() as u64,
                     known_nodes_with_stake.clone().len() as u64,
                 ),
+                start_proposing_view: 0,
+                stop_proposing_view: 0,
+                start_voting_view: 0,
+                stop_voting_view: 0,
+                start_proposing_time: 0,
+                start_voting_time: 0,
+                stop_proposing_time: 0,
+                stop_voting_time: 0,
             };
 
             Self {
@@ -265,7 +268,7 @@ pub mod testing {
             .iter()
             .zip(&state_key_pairs)
             .map(|(pub_key, state_key_pair)| PeerConfig::<PubKey> {
-                stake_table_entry: pub_key.get_stake_table_entry(stake_value),
+                stake_table_entry: pub_key.stake_table_entry(stake_value),
                 state_ver_key: state_key_pair.ver_key(),
             })
             .collect::<Vec<_>>();
@@ -326,7 +329,7 @@ pub mod testing {
             bind_version: Ver,
             options: impl PersistenceOptions<Persistence = P>,
         ) -> Vec<(
-            SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
+            Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
             Option<StateSigner<Ver>>,
         )> {
             let num_staked_nodes = self.num_staked_nodes();
@@ -352,7 +355,7 @@ pub mod testing {
                         )
                         .await;
                     // wrapped in some because need to take later
-                    (hotshot_handle, Some(state_signer))
+                    (Arc::new(hotshot_handle), Some(state_signer))
                 }
             }))
             .await
@@ -382,19 +385,14 @@ pub mod testing {
 
             let network = Arc::new(MemoryNetwork::new(
                 config.my_own_validator_config.public_key,
-                NetworkingMetricsValue::new(metrics),
-                self.master_map.clone(),
+                &self.master_map,
                 None,
             ));
-            let networks = Networks {
-                da_network: network.clone(),
-                quorum_network: network,
-                _pd: Default::default(),
-            };
 
             let node_state = NodeState::new(
+                i as u64,
                 ChainConfig::default(),
-                L1Client::new(self.anvil.endpoint().parse().unwrap(), Address::default()),
+                L1Client::new(self.anvil.endpoint().parse().unwrap(), 1),
                 MockStateCatchup::default(),
             )
             .with_genesis(ValidatedState::default());
@@ -404,7 +402,7 @@ pub mod testing {
                 config,
                 Some(self.non_staking_nodes_stake_entries.clone()),
                 node_state,
-                networks,
+                network,
                 metrics,
                 i as u64,
                 None,
@@ -439,7 +437,7 @@ pub mod testing {
             let hotshot_events_api = hotshot_events_service::events::define_api::<
                 Arc<RwLock<EventsStreamer<SeqTypes>>>,
                 SeqTypes,
-                Version01,
+                <SeqTypes as NodeType>::Base,
             >(&EventStreamingApiOptions::default())
             .expect("Failed to define hotshot eventsAPI");
 
@@ -448,14 +446,14 @@ pub mod testing {
             app.register_module("hotshot-events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");
 
-            async_spawn(app.serve(url, STATIC_VER_0_1));
+            async_spawn(app.serve(url, <SeqTypes as NodeType>::Base::instance()));
         }
         // enable hotshot event streaming
         pub fn enable_hotshot_node_event_streaming<P: SequencerPersistence>(
             hotshot_events_api_url: Url,
             known_nodes_with_stake: Vec<PeerConfig<VerKey>>,
             num_non_staking_nodes: usize,
-            hotshot_context_handle: SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
+            hotshot_context_handle: Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
         ) {
             // create a event streamer
             let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
@@ -469,7 +467,7 @@ pub mod testing {
             // send the events to the event streaming state
             async_spawn({
                 async move {
-                    let mut hotshot_event_stream = hotshot_context_handle.get_event_stream();
+                    let mut hotshot_event_stream = hotshot_context_handle.event_stream();
                     loop {
                         let event = hotshot_event_stream.next().await.unwrap();
                         tracing::debug!("Before writing in event streamer: {event:?}");
@@ -497,12 +495,12 @@ pub mod testing {
             if let Decide { leaf_chain, .. } = event.event {
                 if let Some(height) = leaf_chain.iter().find_map(|LeafInfo { leaf, .. }| {
                     if leaf
-                        .get_block_payload()
+                        .block_payload()
                         .as_ref()?
-                        .transaction_commitments(leaf.get_block_header().metadata())
+                        .transaction_commitments(leaf.block_header().metadata())
                         .contains(&commitment)
                     {
-                        Some(leaf.get_block_header().block_number())
+                        Some(leaf.block_header().block_number())
                     } else {
                         None
                     }
@@ -530,10 +528,11 @@ pub mod testing {
         ) -> Self {
             // setup the instance state
             let node_state = NodeState::new(
+                u64::MAX,
                 ChainConfig::default(),
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
-                    Address::default(),
+                    1,
                 ),
                 MockStateCatchup::default(),
             )
@@ -544,22 +543,27 @@ pub mod testing {
             let (fee_account, key_pair) = FeeAccount::generated_from_seed_indexed(seed, 2011_u64);
 
             // channel capacity for the builder states
-            let channel_capacity = NonZeroUsize::new(100).unwrap();
+            let tx_channel_capacity = NonZeroUsize::new(500).unwrap();
+            let event_channel_capacity = NonZeroUsize::new(20).unwrap();
             // bootstrapping view number
             // A new builder can use this view number to start building blocks from this view number
             let bootstrapped_view = ViewNumber::new(0);
 
+            let node_count = NonZeroUsize::new(HotShotTestConfig::total_nodes()).unwrap();
+
             let builder_config = BuilderConfig::init(
                 key_pair,
                 bootstrapped_view,
-                channel_capacity,
+                tx_channel_capacity,
+                event_channel_capacity,
+                node_count,
                 node_state,
+                ValidatedState::default(),
                 hotshot_events_streaming_api_url,
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
                 15,
-                Duration::from_millis(50),
-                0,
+                Duration::from_millis(500),
             )
             .await
             .unwrap();
@@ -584,17 +588,18 @@ pub mod testing {
     {
         pub async fn init_permissioned_builder(
             hotshot_test_config: HotShotTestConfig,
-            hotshot_handle: SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
+            hotshot_handle: Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
             node_id: u64,
             state_signer: StateSigner<Ver>,
             hotshot_builder_api_url: Url,
         ) -> Self {
             // setup the instance state
             let node_state = NodeState::new(
+                node_id,
                 ChainConfig::default(),
                 L1Client::new(
                     hotshot_test_config.get_anvil().endpoint().parse().unwrap(),
-                    Address::default(),
+                    1,
                 ),
                 MockStateCatchup::default(),
             )
@@ -605,24 +610,26 @@ pub mod testing {
             let (fee_account, key_pair) = FeeAccount::generated_from_seed_indexed(seed, 2011_u64);
 
             // channel capacity for the builder states
-            let channel_capacity = NonZeroUsize::new(100).unwrap();
+            let tx_channel_capacity = NonZeroUsize::new(20).unwrap();
+            let event_channel_capacity = NonZeroUsize::new(500).unwrap();
             // bootstrapping view number
             // A new builder can use this view number to start building blocks from this view number
             let bootstrapped_view = ViewNumber::new(0);
 
             let builder_context = BuilderContext::init(
-                hotshot_handle,
+                Arc::clone(&hotshot_handle),
                 state_signer,
                 node_id,
                 key_pair,
                 bootstrapped_view,
-                channel_capacity,
+                tx_channel_capacity,
+                event_channel_capacity,
                 node_state,
+                ValidatedState::default(),
                 hotshot_builder_api_url,
                 Duration::from_millis(2000),
                 15,
-                Duration::from_millis(50),
-                0,
+                Duration::from_millis(500),
             )
             .await
             .unwrap();
@@ -664,10 +671,10 @@ mod test {
     use hotshot_builder_core::service::GlobalState;
     use hotshot_types::event::LeafInfo;
     use hotshot_types::traits::block_contents::{
-        vid_commitment, BlockHeader, BlockPayload, GENESIS_VID_NUM_STORAGE_NODES,
+        vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
     };
     use hotshot_types::utils::BuilderCommitment;
-    use sequencer::block::payload::Payload;
+    use sequencer::block::Payload;
     use sequencer::persistence::no_storage::{self, NoStorage};
     use sequencer::persistence::sql;
     use sequencer::{empty_builder_commitment, Header};
@@ -695,23 +702,23 @@ mod test {
         let total_nodes = HotShotTestConfig::total_nodes();
 
         // try to listen on non-voting node handle as it is the last handle
-        let mut events = handles[total_nodes - 1].0.get_event_stream();
+        let mut events = handles[total_nodes - 1].0.event_stream();
         for (handle, ..) in handles.iter() {
             handle.hotshot.start_consensus().await;
         }
 
         let genesis_state = NodeState::mock();
+        let validated_state = ValidatedState::default();
         let mut parent = {
             // TODO refactor repeated code from other tests
             let (genesis_payload, genesis_ns_table) =
-                Payload::from_transactions([], Arc::new(genesis_state.clone()))
+                Payload::from_transactions([], &validated_state, &genesis_state)
+                    .await
                     .expect("unable to create genesis payload");
             let builder_commitment = genesis_payload.builder_commitment(&genesis_ns_table);
             let genesis_commitment = {
                 // TODO we should not need to collect payload bytes just to compute vid_commitment
-                let payload_bytes = genesis_payload
-                    .encode()
-                    .expect("unable to encode genesis payload");
+                let payload_bytes = genesis_payload.encode();
                 vid_commitment(&payload_bytes, GENESIS_VID_NUM_STORAGE_NODES)
             };
             Header::genesis(
@@ -733,7 +740,7 @@ mod test {
             // Check that each successive header satisfies invariants relative to its parent: all
             // the fields which should be monotonic are.
             for LeafInfo { leaf, .. } in leaf_chain.iter().rev() {
-                let header = leaf.get_block_header().clone();
+                let header = leaf.block_header().clone();
                 if header.height == 0 {
                     parent = header;
                     continue;

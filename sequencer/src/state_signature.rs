@@ -20,11 +20,10 @@ use hotshot_types::{
     },
     PeerConfig,
 };
-use jf_primitives::{
-    crhf::{VariableLengthRescueCRHF, CRHF},
-    errors::PrimitivesError,
-    signatures::SignatureScheme,
-};
+use jf_crhf::CRHF;
+use jf_rescue::crhf::VariableLengthRescueCRHF;
+use jf_rescue::RescueError;
+use jf_signature::SignatureScheme;
 use std::collections::{HashMap, VecDeque};
 use surf_disco::{Client, Url};
 use tide_disco::error::ServerError;
@@ -77,10 +76,7 @@ impl<Ver: StaticVersionType> StateSigner<Ver> {
         match form_light_client_state(leaf, &self.stake_table_comm) {
             Ok(state) => {
                 let signature = self.sign_new_state(&state).await;
-                tracing::debug!(
-                    "New leaves decided. Latest block height: {}",
-                    leaf.get_height(),
-                );
+                tracing::debug!("New leaves decided. Latest block height: {}", leaf.height(),);
 
                 if let Some(client) = &self.relay_server_client {
                     let request_body = StateSignatureRequestBody {
@@ -138,7 +134,7 @@ impl<Ver: StaticVersionType> StateSigner<Ver> {
     }
 }
 
-fn hash_bytes_to_field(bytes: &[u8]) -> Result<CircuitField, PrimitivesError> {
+fn hash_bytes_to_field(bytes: &[u8]) -> Result<CircuitField, RescueError> {
     // make sure that `mod_order` won't happen.
     let bytes_len = ((<CircuitField as PrimeField>::MODULUS_BIT_SIZE + 7) / 8 - 1) as usize;
     let elem = bytes
@@ -151,8 +147,8 @@ fn hash_bytes_to_field(bytes: &[u8]) -> Result<CircuitField, PrimitivesError> {
 fn form_light_client_state(
     leaf: &Leaf,
     stake_table_comm: &StakeTableCommitmentType,
-) -> Result<LightClientState, PrimitivesError> {
-    let header = leaf.get_block_header();
+) -> anyhow::Result<LightClientState> {
+    let header = leaf.block_header();
     let mut block_comm_root_bytes = vec![];
     header
         .block_merkle_tree_root
@@ -163,8 +159,8 @@ fn form_light_client_state(
         .fee_merkle_tree_root
         .serialize_compressed(&mut fee_ledger_comm_bytes)?;
     Ok(LightClientState {
-        view_number: leaf.get_view_number().get_u64() as usize,
-        block_height: leaf.get_height() as usize,
+        view_number: leaf.view_number().u64() as usize,
+        block_height: leaf.height() as usize,
         block_comm_root: hash_bytes_to_field(&block_comm_root_bytes)?,
         fee_ledger_comm: hash_bytes_to_field(&fee_ledger_comm_bytes)?,
         stake_table_comm: *stake_table_comm,
@@ -204,8 +200,8 @@ pub fn static_stake_table_commitment(
     known_nodes_with_stakes.iter().for_each(|peer| {
         // This `unwrap()` won't fail unless number of entries exceeds `capacity`
         st.register(
-            *peer.stake_table_entry.get_key(),
-            peer.stake_table_entry.get_stake(),
+            *peer.stake_table_entry.key(),
+            peer.stake_table_entry.stake(),
             peer.state_ver_key.clone(),
         )
         .unwrap();

@@ -1,12 +1,13 @@
 //! The following is the main `Broker` binary, which just instantiates and runs
 //! a `Broker` object.
-use anyhow::Result;
+use anyhow::{Context, Result};
 use cdn_broker::reexports::crypto::signature::KeyPair;
 use cdn_broker::{Broker, Config};
 use clap::Parser;
 use hotshot_types::traits::node_implementation::NodeType;
 use hotshot_types::traits::signature_key::SignatureKey;
 use sequencer::network::cdn::{ProductionDef, WrappedSignatureKey};
+use sequencer::options::parse_size;
 use sequencer::SeqTypes;
 use sha2::Digest;
 use tracing_subscriber::EnvFilter;
@@ -70,8 +71,19 @@ struct Args {
     ca_key_path: Option<String>,
 
     /// The seed for broker key generation
-    #[arg(short, long, default_value_t = 0)]
+    #[arg(short, long, default_value_t = 0, env = "ESPRESSO_CDN_BROKER_KEY_SEED")]
     key_seed: u64,
+
+    /// The size of the global memory pool. This is the maximum number of bytes that
+    /// can be allocated at once for all connections. A connection will block if it
+    /// tries to allocate more than this amount until some memory is freed.
+    #[arg(
+        long,
+        default_value = "1GB",
+        value_parser = parse_size,
+        env = "ESPRESSO_CDN_BROKER_GLOBAL_MEMORY_POOL_SIZE"
+    )]
+    global_memory_pool_size: u64,
 }
 #[async_std::main]
 async fn main() -> Result<()> {
@@ -95,6 +107,15 @@ async fn main() -> Result<()> {
     let (public_key, private_key) =
         <SeqTypes as NodeType>::SignatureKey::generated_from_seed_indexed(key_hash.into(), 1337);
 
+    // Cast the memory pool size to a `usize`
+    let global_memory_pool_size =
+        usize::try_from(args.global_memory_pool_size).with_context(|| {
+            format!(
+                "Failed to convert global memory pool size to usize: {}",
+                args.global_memory_pool_size
+            )
+        })?;
+
     // Create config
     let broker_config: Config<ProductionDef<SeqTypes>> = Config {
         ca_cert_path: args.ca_cert_path,
@@ -111,6 +132,7 @@ async fn main() -> Result<()> {
         public_advertise_endpoint: args.public_advertise_endpoint,
         private_bind_endpoint: args.private_bind_endpoint,
         private_advertise_endpoint: args.private_advertise_endpoint,
+        global_memory_pool_size: Some(global_memory_pool_size),
     };
 
     // Create new `Broker`

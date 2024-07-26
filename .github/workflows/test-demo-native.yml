@@ -29,7 +29,7 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v26
+        uses: cachix/install-nix-action@V27
 
       - name: Install process-compose
         run: |
@@ -50,4 +50,4 @@ jobs:
         run: |
           export PATH="$PWD/target/release:$PATH"
           scripts/demo-native --tui=false &
-          timeout -v 600 scripts/smoke-test-demo
+          timeout -v 600 scripts/smoke-test-demo | sed -e 's/^/smoke-test: /;'
