@@ -169,7 +169,7 @@ impl Default for ChainConfig {
             base_fee: 0.into(),
             fee_contract: None,
             fee_recipient: Default::default(),
-            bid_recipient: Default::default(),
+            bid_recipient: Some(Default::default()),
         }
     }
 }
