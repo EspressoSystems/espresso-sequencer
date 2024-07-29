@@ -20,15 +20,15 @@ use crate::{
     },
     data_source::{
         storage::pruning::{PruneStorage, PrunedHeightStorage, PrunerConfig},
-        VersionedDataSource,
+        update, VersionedDataSource,
     },
     node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
     Header, Payload, QueryError, QueryResult, VidShare,
 };
 use async_trait::async_trait;
-use futures::future::{self, BoxFuture, FutureExt};
+use futures::future::Future;
 use hotshot_types::traits::node_implementation::NodeType;
-use std::{convert::Infallible, ops::RangeBounds};
+use std::ops::RangeBounds;
 
 /// Mock storage implementation which doesn't actually store anything.
 ///
@@ -38,21 +38,31 @@ use std::{convert::Infallible, ops::RangeBounds};
 #[derive(Clone, Debug, Default, Copy)]
 pub struct NoStorage;
 
-#[async_trait]
 impl VersionedDataSource for NoStorage {
-    type Error = Infallible;
+    type Transaction<'a> = Self
+    where
+        Self: 'a;
 
-    async fn commit(&mut self) -> Result<(), Infallible> {
+    async fn transaction(&self) -> anyhow::Result<Self::Transaction<'_>> {
+        Ok(*self)
+    }
+}
+
+impl update::Transaction for NoStorage {
+    async fn commit(self) -> anyhow::Result<()> {
         Ok(())
     }
 
-    async fn revert(&mut self) {}
+    fn revert(self) -> impl Future + Send {
+        async {}
+    }
 }
+
 impl PrunerConfig for NoStorage {}
-impl PruneStorage for NoStorage {}
-impl PrunedHeightStorage for NoStorage {
-    type Error = Infallible;
+impl PruneStorage for NoStorage {
+    type Pruner = ();
 }
+impl PrunedHeightStorage for NoStorage {}
 
 #[async_trait]
 impl<Types: NodeType> AvailabilityStorage<Types> for NoStorage
@@ -132,13 +142,11 @@ impl<Types: NodeType> UpdateAvailabilityData<Types> for NoStorage
 where
     Payload<Types>: QueryablePayload<Types>,
 {
-    type Error = Infallible;
-
-    async fn insert_leaf(&mut self, _leaf: LeafQueryData<Types>) -> Result<(), Self::Error> {
+    async fn insert_leaf(&mut self, _leaf: LeafQueryData<Types>) -> anyhow::Result<()> {
         Ok(())
     }
 
-    async fn insert_block(&mut self, _block: BlockQueryData<Types>) -> Result<(), Self::Error> {
+    async fn insert_block(&mut self, _block: BlockQueryData<Types>) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -146,7 +154,7 @@ where
         &mut self,
         _common: VidCommonQueryData<Types>,
         _share: Option<VidShare>,
-    ) -> Result<(), Self::Error> {
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 }
@@ -175,8 +183,8 @@ where
         Err(QueryError::Missing)
     }
 
-    async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
-        future::ready(Err(QueryError::Missing)).boxed()
+    async fn sync_status(&self) -> QueryResult<SyncStatus> {
+        Err(QueryError::Missing)
     }
 
     async fn get_header_window(
@@ -192,11 +200,11 @@ where
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
     use super::*;
-    use crate::QueryError;
     use crate::{
         availability::{define_api, AvailabilityDataSource, Fetch},
         data_source::{
-            storage::sql::testing::TmpDb, FetchingDataSource, SqlDataSource, UpdateDataSource,
+            storage::sql::testing::TmpDb, update::Transaction as _, FetchingDataSource,
+            SqlDataSource, UpdateDataSource,
         },
         fetching::provider::{NoFetching, QueryServiceProvider},
         metrics::PrometheusMetrics,
@@ -211,7 +219,7 @@ pub mod testing {
     use futures::stream::{BoxStream, StreamExt};
     use hotshot::types::Event;
     use portpicker::pick_unused_port;
-    use std::{fmt::Display, time::Duration};
+    use std::time::Duration;
     use tide_disco::App;
     use vbs::version::StaticVersionType;
 
@@ -270,7 +278,7 @@ pub mod testing {
                         MockBase::instance(),
                     );
                     Self::NoStorage(
-                        FetchingDataSource::builder(NoStorage, provider)
+                        FetchingDataSource::<MockTypes, NoStorage, _>::builder(NoStorage, provider)
                             // The default minor scan interval is suitable for real scenarios, where
                             // missing blocks are quite rare. But in these tests, we rely entirely
                             // on proactive scanning to recover some objects, so we want to do this
@@ -326,28 +334,80 @@ pub mod testing {
         }
 
         async fn handle_event(&mut self, event: &Event<MockTypes>) {
-            self.update(event).await.unwrap();
-            self.commit().await.unwrap();
+            let mut tx = self.transaction().await.unwrap();
+            tx.update(event).await.unwrap();
+            tx.commit().await.unwrap();
         }
+    }
+
+    pub enum Transaction<'a> {
+        Sql(<SqlDataSource<MockTypes, NoFetching> as VersionedDataSource>::Transaction<'a>),
+        NoStorage(<FetchingDataSource<MockTypes, NoStorage, QueryServiceProvider<MockBase>> as VersionedDataSource>::Transaction<'a>),
     }
 
     // Now a lot of boilerplate to implement all teh traits for [`DataSource`], by dispatching each
     // method to either variant.
-    #[async_trait]
     impl VersionedDataSource for DataSource {
-        type Error = QueryError;
+        type Transaction<'a> = Transaction<'a>
+        where
+            Self: 'a;
 
-        async fn commit(&mut self) -> Result<(), Self::Error> {
+        async fn transaction(&self) -> anyhow::Result<Self::Transaction<'_>> {
             match self {
-                Self::Sql(data_source) => data_source.commit().await.map_err(err_msg),
-                Self::NoStorage(data_source) => data_source.commit().await.map_err(err_msg),
+                Self::Sql(data_source) => Ok(Transaction::Sql(data_source.transaction().await?)),
+                Self::NoStorage(data_source) => {
+                    Ok(Transaction::NoStorage(data_source.transaction().await?))
+                }
+            }
+        }
+    }
+
+    impl<'a> update::Transaction for Transaction<'a> {
+        async fn commit(self) -> anyhow::Result<()> {
+            match self {
+                Self::Sql(tx) => tx.commit().await,
+                Self::NoStorage(tx) => tx.commit().await,
             }
         }
 
-        async fn revert(&mut self) {
+        fn revert(self) -> impl Future + Send {
+            async move {
+                match self {
+                    Self::Sql(tx) => {
+                        tx.revert().await;
+                    }
+                    Self::NoStorage(tx) => {
+                        tx.revert().await;
+                    }
+                }
+            }
+        }
+    }
+
+    #[async_trait]
+    impl<'a> UpdateAvailabilityData<MockTypes> for Transaction<'a> {
+        async fn insert_leaf(&mut self, leaf: LeafQueryData<MockTypes>) -> anyhow::Result<()> {
             match self {
-                Self::Sql(data_source) => data_source.revert().await,
-                Self::NoStorage(data_source) => data_source.revert().await,
+                Self::Sql(tx) => tx.insert_leaf(leaf).await,
+                Self::NoStorage(tx) => tx.insert_leaf(leaf).await,
+            }
+        }
+
+        async fn insert_block(&mut self, block: BlockQueryData<MockTypes>) -> anyhow::Result<()> {
+            match self {
+                Self::Sql(tx) => tx.insert_block(block).await,
+                Self::NoStorage(tx) => tx.insert_block(block).await,
+            }
+        }
+
+        async fn insert_vid(
+            &mut self,
+            common: VidCommonQueryData<MockTypes>,
+            share: Option<VidShare>,
+        ) -> anyhow::Result<()> {
+            match self {
+                Self::Sql(tx) => tx.insert_vid(common, share).await,
+                Self::NoStorage(tx) => tx.insert_vid(common, share).await,
             }
         }
     }
@@ -461,47 +521,6 @@ pub mod testing {
     }
 
     #[async_trait]
-    impl UpdateAvailabilityData<MockTypes> for DataSource {
-        type Error = QueryError;
-
-        async fn insert_leaf(&mut self, leaf: LeafQueryData<MockTypes>) -> Result<(), Self::Error> {
-            match self {
-                Self::Sql(data_source) => data_source.insert_leaf(leaf).await.map_err(err_msg),
-                Self::NoStorage(data_source) => {
-                    data_source.insert_leaf(leaf).await.map_err(err_msg)
-                }
-            }
-        }
-
-        async fn insert_block(
-            &mut self,
-            block: BlockQueryData<MockTypes>,
-        ) -> Result<(), Self::Error> {
-            match self {
-                Self::Sql(data_source) => data_source.insert_block(block).await.map_err(err_msg),
-                Self::NoStorage(data_source) => {
-                    data_source.insert_block(block).await.map_err(err_msg)
-                }
-            }
-        }
-
-        async fn insert_vid(
-            &mut self,
-            common: VidCommonQueryData<MockTypes>,
-            share: Option<VidShare>,
-        ) -> Result<(), Self::Error> {
-            match self {
-                Self::Sql(data_source) => {
-                    data_source.insert_vid(common, share).await.map_err(err_msg)
-                }
-                Self::NoStorage(data_source) => {
-                    data_source.insert_vid(common, share).await.map_err(err_msg)
-                }
-            }
-        }
-    }
-
-    #[async_trait]
     impl NodeDataSource<MockTypes> for DataSource {
         async fn block_height(&self) -> QueryResult<usize> {
             match self {
@@ -534,7 +553,7 @@ pub mod testing {
             }
         }
 
-        async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
+        async fn sync_status(&self) -> QueryResult<SyncStatus> {
             match self {
                 Self::Sql(data_source) => data_source.sync_status().await,
                 Self::NoStorage(data_source) => data_source.sync_status().await,
@@ -567,12 +586,6 @@ pub mod testing {
                 Self::Sql(data_source) => data_source.metrics(),
                 Self::NoStorage(data_source) => data_source.metrics(),
             }
-        }
-    }
-
-    fn err_msg<E: Display>(err: E) -> QueryError {
-        QueryError::Error {
-            message: err.to_string(),
         }
     }
 }

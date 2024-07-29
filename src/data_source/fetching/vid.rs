@@ -14,16 +14,17 @@
 
 use super::{
     header::{fetch_header_and_then, HeaderCallback},
-    AvailabilityProvider, FetchRequest, Fetchable, Fetcher, NotifyStorage, RangedFetchable,
+    AvailabilityProvider, FetchRequest, Fetchable, Fetcher, Notifiers, NotifyStorage,
+    RangedFetchable,
 };
 use crate::{
     availability::{BlockId, QueryablePayload, UpdateAvailabilityData, VidCommonQueryData},
-    data_source::{storage::AvailabilityStorage, VersionedDataSource},
+    data_source::{storage::AvailabilityStorage, update::Transaction, VersionedDataSource},
     fetching::{self, request, Callback},
     types::HeightIndexed,
     Header, Payload, QueryResult, VidCommon,
 };
-use async_std::sync::{Arc, RwLockReadGuard};
+use async_std::sync::Arc;
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::From;
@@ -68,37 +69,39 @@ where
         }
     }
 
-    async fn passive_fetch<S>(
-        storage: &NotifyStorage<Types, S>,
+    async fn passive_fetch(
+        notifiers: &Notifiers<Types>,
         req: Self::Request,
-    ) -> BoxFuture<'static, Option<Self>>
-    where
-        S: AvailabilityStorage<Types>,
-    {
-        storage
-            .vid_common_notifier
+    ) -> BoxFuture<'static, Option<Self>> {
+        notifiers
+            .vid_common
             .wait_for(move |vid| vid.satisfies(req))
             .await
             .into_future()
             .boxed()
     }
 
-    async fn active_fetch<S, P>(
-        fetcher: Arc<Fetcher<Types, S, P>>,
-        storage: &RwLockReadGuard<'_, NotifyStorage<Types, S>>,
-        req: Self::Request,
-    ) where
-        S: AvailabilityStorage<Types> + 'static,
+    async fn active_fetch<S, P>(fetcher: Arc<Fetcher<Types, S, P>>, req: Self::Request)
+    where
+        S: AvailabilityStorage<Types> + VersionedDataSource + 'static,
+        for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
         P: AvailabilityProvider<Types>,
     {
-        fetch_header_and_then(storage, req.0, HeaderCallback::VidCommon { fetcher }).await
+        fetch_header_and_then(
+            &fetcher.storage,
+            req.0,
+            HeaderCallback::VidCommon {
+                fetcher: fetcher.clone(),
+            },
+        )
+        .await
     }
 
     async fn load<S>(storage: &NotifyStorage<Types, S>, req: Self::Request) -> QueryResult<Self>
     where
         S: AvailabilityStorage<Types>,
     {
-        storage.storage.get_vid_common(req.0).await
+        storage.as_ref().get_vid_common(req.0).await
     }
 }
 
@@ -118,7 +121,7 @@ where
         S: AvailabilityStorage<Types>,
         R: RangeBounds<usize> + Send + 'static,
     {
-        storage.storage.get_vid_common_range(range).await
+        storage.as_ref().get_vid_common_range(range).await
     }
 }
 
@@ -128,7 +131,8 @@ pub(super) fn fetch_vid_common_with_header<Types, S, P>(
 ) where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types> + 'static,
+    S: AvailabilityStorage<Types> + VersionedDataSource + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
     P: AvailabilityProvider<Types>,
 {
     // Now that we have the header, we only need to retrieve the VID common data.
@@ -148,15 +152,18 @@ pub(super) fn fetch_vid_common_with_header<Types, S, P>(
 }
 
 async fn store_vid_common<Types, S>(
-    storage: &mut NotifyStorage<Types, S>,
+    storage: &NotifyStorage<Types, S>,
     common: VidCommonQueryData<Types>,
 ) -> anyhow::Result<()>
 where
     Types: NodeType,
-    S: UpdateAvailabilityData<Types> + VersionedDataSource,
+    Payload<Types>: QueryablePayload<Types>,
+    S: VersionedDataSource,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
 {
-    storage.insert_vid(common, None).await?;
-    storage.commit().await?;
+    let mut tx = storage.transaction().await?;
+    tx.insert_vid(common, None).await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -191,7 +198,8 @@ impl<Types: NodeType, S, P> PartialOrd for VidCommonCallback<Types, S, P> {
 impl<Types: NodeType, S, P> Callback<VidCommon> for VidCommonCallback<Types, S, P>
 where
     Payload<Types>: QueryablePayload<Types>,
-    S: AvailabilityStorage<Types>,
+    S: VersionedDataSource + 'static,
+    for<'a> S::Transaction<'a>: UpdateAvailabilityData<Types>,
     P: AvailabilityProvider<Types>,
 {
     async fn run(self, common: VidCommon) {
@@ -201,11 +209,7 @@ where
 
         // Store the data in local storage, so we can avoid fetching it in the future.
         {
-            let mut storage = self.fetcher.storage.write().await;
-            if let Err(err) = store_vid_common(&mut *storage, common).await {
-                // Rollback the transaction if insert fails
-                // This prevents subsequent queries from failing, as they would be part of the same transaction block.
-                storage.revert().await;
+            if let Err(err) = store_vid_common(&self.fetcher.storage, common).await {
                 // It is unfortunate if this fails, but we can still proceed by returning
                 // the block that we fetched, keeping it in memory. Simply log the error and
                 // move on.

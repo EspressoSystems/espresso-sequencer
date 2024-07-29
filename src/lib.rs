@@ -428,8 +428,10 @@ pub mod types;
 pub use error::Error;
 pub use resolvable::Resolvable;
 
-use async_std::sync::{Arc, RwLock};
-use futures::StreamExt;
+use async_std::sync::Arc;
+use async_trait::async_trait;
+use data_source::{Transaction as _, UpdateDataSource};
+use futures::{future::BoxFuture, stream::StreamExt};
 use hotshot::types::SystemContextHandle;
 use hotshot_types::traits::{
     node_implementation::{NodeImplementation, NodeType, Versions},
@@ -438,7 +440,7 @@ use hotshot_types::traits::{
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use task::BackgroundTask;
-use tide_disco::{App, StatusCode};
+use tide_disco::{method::ReadState, App, StatusCode};
 use vbs::version::StaticVersionType;
 
 pub use hotshot_types::{
@@ -506,22 +508,36 @@ where
     D: availability::AvailabilityDataSource<Types>
         + node::NodeDataSource<Types>
         + status::StatusDataSource
-        + data_source::UpdateDataSource<Types>
         + data_source::VersionedDataSource
         + Send
         + Sync
         + 'static,
+    for<'a> D::Transaction<'a>: data_source::UpdateDataSource<Types>,
     ApiVer: StaticVersionType + 'static,
 {
+    #[derive(Clone, Debug)]
+    struct ApiState<D>(Arc<D>);
+
+    #[async_trait]
+    impl<D: 'static + Send + Sync> ReadState for ApiState<D> {
+        type State = D;
+        async fn read<T>(
+            &self,
+            op: impl Send + for<'a> FnOnce(&'a Self::State) -> BoxFuture<'a, T> + 'async_trait,
+        ) -> T {
+            op(&self.0).await
+        }
+    }
+
     // Create API modules.
     let availability_api =
         availability::define_api(&options.availability, bind_version).map_err(Error::internal)?;
     let node_api = node::define_api(&options.node, bind_version).map_err(Error::internal)?;
     let status_api = status::define_api(&options.status, bind_version).map_err(Error::internal)?;
 
-    // Create app. We wrap `data_source` into an `RwLock` so we can share it with the web server.
-    let data_source = Arc::new(RwLock::new(data_source));
-    let mut app = App::<_, Error>::with_state(data_source.clone());
+    // Create app.
+    let data_source = Arc::new(data_source);
+    let mut app = App::<_, Error>::with_state(ApiState(data_source.clone()));
     app.register_module("availability", availability_api)
         .map_err(Error::internal)?
         .register_module("node", node_api)
@@ -540,12 +556,10 @@ where
 
     // Update query data using HotShot events.
     while let Some(event) = events.next().await {
-        // Re-lock the mutex each time we get a new event.
-        let mut data_source = data_source.write().await;
-
         // Update the query data based on this event.
-        data_source.update(&event).await.map_err(Error::internal)?;
-        data_source.commit().await.map_err(Error::internal)?;
+        let mut tx = data_source.transaction().await.map_err(Error::internal)?;
+        tx.update(&event).await.map_err(Error::internal)?;
+        tx.commit().await.map_err(Error::internal)?;
     }
 
     Ok(())
@@ -560,6 +574,7 @@ mod test {
             PayloadQueryData, TransactionHash, TransactionQueryData, UpdateAvailabilityData,
             VidCommonQueryData,
         },
+        data_source::VersionedDataSource,
         metrics::PrometheusMetrics,
         node::{NodeDataSource, SyncStatus, TimeWindowQueryData, WindowStart},
         status::StatusDataSource,
@@ -571,7 +586,7 @@ mod test {
     use async_std::sync::RwLock;
     use async_trait::async_trait;
     use atomic_store::{load_store::BincodeLoadStore, AtomicStore, AtomicStoreLoader, RollingLog};
-    use futures::future::{BoxFuture, FutureExt};
+    use futures::future::FutureExt;
     use hotshot_example_types::state_types::{TestInstanceState, TestValidatedState};
     use portpicker::pick_unused_port;
     use std::ops::RangeBounds;
@@ -689,7 +704,7 @@ mod test {
         {
             self.hotshot_qs.vid_share(id).await
         }
-        async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
+        async fn sync_status(&self) -> QueryResult<SyncStatus> {
             self.hotshot_qs.sync_status().await
         }
         async fn get_header_window(
@@ -716,7 +731,7 @@ mod test {
     async fn test_composition() {
         let dir = TempDir::with_prefix("test_composition").unwrap();
         let mut loader = AtomicStoreLoader::create(dir.path(), "test_composition").unwrap();
-        let mut hotshot_qs = MockDataSource::create_with_store(&mut loader, Default::default())
+        let hotshot_qs = MockDataSource::create_with_store(&mut loader, Default::default())
             .await
             .unwrap();
 
@@ -727,7 +742,9 @@ mod test {
         )
         .await;
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
-        hotshot_qs.insert_block(block.clone()).await.unwrap();
+        let mut tx = hotshot_qs.transaction().await.unwrap();
+        tx.insert_block(block.clone()).await.unwrap();
+        tx.commit().await.unwrap();
 
         let module_state =
             RollingLog::create(&mut loader, Default::default(), "module_state", 1024).unwrap();

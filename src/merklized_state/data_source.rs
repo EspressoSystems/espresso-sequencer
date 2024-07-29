@@ -55,17 +55,17 @@ where
 pub trait UpdateStateData<Types: NodeType, State: MerklizedState<Types, ARITY>, const ARITY: usize>:
     Send + Sync
 {
+    async fn set_last_state_height(&mut self, height: usize) -> anyhow::Result<()>;
     async fn insert_merkle_nodes(
         &mut self,
         path: MerkleProof<State::Entry, State::Key, State::T, ARITY>,
         traversal_path: Vec<usize>,
         block_number: u64,
-    ) -> QueryResult<()>;
+    ) -> anyhow::Result<()>;
 }
 
 #[async_trait]
 pub trait MerklizedStateHeightPersistence {
-    async fn set_last_state_height(&mut self, height: usize) -> QueryResult<()>;
     async fn get_last_state_height(&self) -> QueryResult<usize>;
 }
 

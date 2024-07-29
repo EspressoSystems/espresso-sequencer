@@ -43,7 +43,7 @@ pub use fs::FileSystemDataSource;
 pub use metrics::MetricsDataSource;
 #[cfg(feature = "sql-data-source")]
 pub use sql::SqlDataSource;
-pub use update::{UpdateDataSource, VersionedDataSource};
+pub use update::{Transaction, UpdateDataSource, VersionedDataSource};
 
 #[cfg(any(test, feature = "testing"))]
 mod test_helpers {
@@ -442,7 +442,8 @@ pub mod availability_tests {
 #[espresso_macros::generic_tests]
 pub mod persistence_tests {
     use crate::{
-        availability::{BlockQueryData, LeafQueryData},
+        availability::{BlockQueryData, LeafQueryData, UpdateAvailabilityData},
+        data_source::{storage::AvailabilityStorage, Transaction, UpdateDataSource},
         node::NodeDataSource,
         testing::{
             consensus::TestableDataSource,
@@ -456,11 +457,16 @@ pub mod persistence_tests {
     use hotshot_types::simple_certificate::QuorumCertificate;
 
     #[async_std::test]
-    pub async fn test_revert<D: TestableDataSource>() {
+    pub async fn test_revert<D: TestableDataSource>()
+    where
+        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>
+            + NodeDataSource<MockTypes>
+            + AvailabilityStorage<MockTypes>,
+    {
         setup_test();
 
         let storage = D::create(0).await;
-        let mut ds = D::connect(&storage).await;
+        let ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
         let mut qc = QuorumCertificate::<MockTypes>::genesis(
@@ -482,20 +488,32 @@ pub mod persistence_tests {
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert, but do not commit, some data and check that we can read it back.
-        ds.insert_leaf(leaf.clone()).await.unwrap();
-        ds.insert_block(block.clone()).await.unwrap();
+        let mut tx = ds.transaction().await.unwrap();
+        tx.insert_leaf(leaf.clone()).await.unwrap();
+        tx.insert_block(block.clone()).await.unwrap();
 
         assert_eq!(
-            NodeDataSource::<MockTypes>::block_height(&ds)
+            NodeDataSource::<MockTypes>::block_height(&tx)
                 .await
                 .unwrap(),
             2
         );
-        assert_eq!(leaf, ds.get_leaf(1).await.await);
-        assert_eq!(block, ds.get_block(1).await.await);
+        assert_eq!(leaf, tx.get_leaf(1.into()).await.unwrap());
+        assert_eq!(block, tx.get_block(1.into()).await.unwrap());
+
+        // The inserted data is _not_ returned when reading through the data source itself (as
+        // opposed to the transaction) since it is not yet committed.
+        assert_eq!(
+            NodeDataSource::<MockTypes>::block_height(&ds)
+                .await
+                .unwrap(),
+            0
+        );
+        ds.get_leaf(1).await.try_resolve().unwrap_err();
+        ds.get_block(1).await.try_resolve().unwrap_err();
 
         // Revert the changes.
-        ds.revert().await;
+        tx.revert().await;
         assert_eq!(
             NodeDataSource::<MockTypes>::block_height(&ds)
                 .await
@@ -507,11 +525,14 @@ pub mod persistence_tests {
     }
 
     #[async_std::test]
-    pub async fn test_reset<D: TestableDataSource>() {
+    pub async fn test_reset<D: TestableDataSource>()
+    where
+        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
+    {
         setup_test();
 
         let storage = D::create(0).await;
-        let mut ds = D::connect(&storage).await;
+        let ds = D::connect(&storage).await;
 
         // Mock up some consensus data.
         let mut qc = QuorumCertificate::<MockTypes>::genesis(
@@ -533,9 +554,10 @@ pub mod persistence_tests {
         let leaf = LeafQueryData::new(leaf, qc).unwrap();
 
         // Insert some data and check that we can read it back.
-        ds.insert_leaf(leaf.clone()).await.unwrap();
-        ds.insert_block(block.clone()).await.unwrap();
-        ds.commit().await.unwrap();
+        let mut tx = ds.transaction().await.unwrap();
+        tx.insert_leaf(leaf.clone()).await.unwrap();
+        tx.insert_block(block.clone()).await.unwrap();
+        tx.commit().await.unwrap();
 
         assert_eq!(
             NodeDataSource::<MockTypes>::block_height(&ds)
@@ -566,7 +588,11 @@ pub mod persistence_tests {
 #[espresso_macros::generic_tests]
 pub mod node_tests {
     use crate::{
-        availability::{BlockQueryData, LeafQueryData, QueryableHeader, VidCommonQueryData},
+        availability::{
+            BlockQueryData, LeafQueryData, QueryableHeader, UpdateAvailabilityData,
+            VidCommonQueryData,
+        },
+        data_source::{update::Transaction, UpdateDataSource},
         node::{BlockId, SyncStatus, TimeWindowQueryData, WindowStart},
         testing::{
             consensus::{MockNetwork, TestableDataSource},
@@ -593,11 +619,14 @@ pub mod node_tests {
     use jf_vid::VidScheme;
 
     #[async_std::test]
-    pub async fn test_sync_status<D: TestableDataSource>() {
+    pub async fn test_sync_status<D: TestableDataSource>()
+    where
+        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
+    {
         setup_test();
 
         let storage = D::create(0).await;
-        let mut ds = D::connect(&storage).await;
+        let ds = D::connect(&storage).await;
 
         // Set up a mock VID scheme to use for generating test data.
         let mut vid = vid_scheme(2);
@@ -640,14 +669,17 @@ pub mod node_tests {
             .collect::<Vec<_>>();
 
         // At first, the node is fully synced.
-        assert!(ds.sync_status().await.await.unwrap().is_fully_synced());
+        assert!(ds.sync_status().await.unwrap().is_fully_synced());
 
         // Insert a leaf without the corresponding block or VID info, make sure we detect that the
         // block and VID info are missing.
-        ds.insert_leaf(leaves[0].clone()).await.unwrap();
-        ds.commit().await.unwrap();
+        {
+            let mut tx = ds.transaction().await.unwrap();
+            tx.insert_leaf(leaves[0].clone()).await.unwrap();
+            tx.commit().await.unwrap();
+        }
         assert_eq!(
-            ds.sync_status().await.await.unwrap(),
+            ds.sync_status().await.unwrap(),
             SyncStatus {
                 missing_blocks: 1,
                 missing_vid_common: 1,
@@ -659,10 +691,13 @@ pub mod node_tests {
 
         // Insert a leaf whose height is not the successor of the previous leaf. We should now
         // detect that the leaf in between is missing (along with all _three_ corresponding blocks).
-        ds.insert_leaf(leaves[2].clone()).await.unwrap();
-        ds.commit().await.unwrap();
+        {
+            let mut tx = ds.transaction().await.unwrap();
+            tx.insert_leaf(leaves[2].clone()).await.unwrap();
+            tx.commit().await.unwrap();
+        }
         assert_eq!(
-            ds.sync_status().await.await.unwrap(),
+            ds.sync_status().await.unwrap(),
             SyncStatus {
                 missing_blocks: 3,
                 missing_vid_common: 3,
@@ -673,10 +708,13 @@ pub mod node_tests {
         );
 
         // Insert VID common without a corresponding share.
-        ds.insert_vid(vid[0].0.clone(), None).await.unwrap();
-        ds.commit().await.unwrap();
+        {
+            let mut tx = ds.transaction().await.unwrap();
+            tx.insert_vid(vid[0].0.clone(), None).await.unwrap();
+            tx.commit().await.unwrap();
+        }
         assert_eq!(
-            ds.sync_status().await.await.unwrap(),
+            ds.sync_status().await.unwrap(),
             SyncStatus {
                 missing_blocks: 3,
                 missing_vid_common: 2,
@@ -687,20 +725,23 @@ pub mod node_tests {
         );
 
         // Rectify the missing data.
-        ds.insert_block(blocks[0].clone()).await.unwrap();
-        ds.insert_vid(vid[0].0.clone(), Some(vid[0].1.clone()))
-            .await
-            .unwrap();
-        ds.insert_leaf(leaves[1].clone()).await.unwrap();
-        ds.insert_block(blocks[1].clone()).await.unwrap();
-        ds.insert_vid(vid[1].0.clone(), Some(vid[1].1.clone()))
-            .await
-            .unwrap();
-        ds.insert_block(blocks[2].clone()).await.unwrap();
-        ds.insert_vid(vid[2].0.clone(), Some(vid[2].1.clone()))
-            .await
-            .unwrap();
-        ds.commit().await.unwrap();
+        {
+            let mut tx = ds.transaction().await.unwrap();
+            tx.insert_block(blocks[0].clone()).await.unwrap();
+            tx.insert_vid(vid[0].0.clone(), Some(vid[0].1.clone()))
+                .await
+                .unwrap();
+            tx.insert_leaf(leaves[1].clone()).await.unwrap();
+            tx.insert_block(blocks[1].clone()).await.unwrap();
+            tx.insert_vid(vid[1].0.clone(), Some(vid[1].1.clone()))
+                .await
+                .unwrap();
+            tx.insert_block(blocks[2].clone()).await.unwrap();
+            tx.insert_vid(vid[2].0.clone(), Some(vid[2].1.clone()))
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+        }
 
         // Some data sources (e.g. file system) don't support out-of-order insertion of missing
         // data. These would have just ignored the insertion of `vid[0]` (the share) and
@@ -721,20 +762,27 @@ pub mod node_tests {
             missing_vid_shares: expected_missing,
             pruned_height: None,
         };
-        assert_eq!(ds.sync_status().await.await.unwrap(), expected_sync_status);
+        assert_eq!(ds.sync_status().await.unwrap(), expected_sync_status);
 
         // If we re-insert one of the VID entries without a share, it should not overwrite the share
         // that we already have; that is, `insert_vid` should be monotonic.
-        ds.insert_vid(vid[0].0.clone(), None).await.unwrap();
-        assert_eq!(ds.sync_status().await.await.unwrap(), expected_sync_status);
+        {
+            let mut tx = ds.transaction().await.unwrap();
+            tx.insert_vid(vid[0].0.clone(), None).await.unwrap();
+            tx.commit().await.unwrap();
+        }
+        assert_eq!(ds.sync_status().await.unwrap(), expected_sync_status);
     }
 
     #[async_std::test]
-    pub async fn test_counters<D: TestableDataSource>() {
+    pub async fn test_counters<D: TestableDataSource>()
+    where
+        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
+    {
         setup_test();
 
         let storage = D::create(0).await;
-        let mut ds = D::connect(&storage).await;
+        let ds = D::connect(&storage).await;
 
         assert_eq!(ds.count_transactions().await.unwrap(), 0);
         assert_eq!(ds.payload_size().await.unwrap(), 0);
@@ -775,9 +823,12 @@ pub mod node_tests {
             .await;
             *leaf.leaf.block_header_mut() = header.clone();
             let block = BlockQueryData::new(header, payload);
-            ds.insert_leaf(leaf).await.unwrap();
-            ds.insert_block(block).await.unwrap();
-            ds.commit().await.unwrap();
+            {
+                let mut tx = ds.transaction().await.unwrap();
+                tx.insert_leaf(leaf).await.unwrap();
+                tx.insert_block(block).await.unwrap();
+                tx.commit().await.unwrap();
+            }
 
             total_transactions += 1;
             total_size += encoded.len();
@@ -813,11 +864,14 @@ pub mod node_tests {
     }
 
     #[async_std::test]
-    pub async fn test_vid_monotonicity<D: TestableDataSource>() {
+    pub async fn test_vid_monotonicity<D: TestableDataSource>()
+    where
+        for<'a> D::Transaction<'a>: UpdateDataSource<MockTypes>,
+    {
         setup_test();
 
         let storage = D::create(0).await;
-        let mut ds = D::connect(&storage).await;
+        let ds = D::connect(&storage).await;
 
         // Generate some test VID data.
         let mut vid = vid_scheme(2);
@@ -830,19 +884,25 @@ pub mod node_tests {
         )
         .await;
         let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
-        ds.insert_leaf(leaf).await.unwrap();
-        ds.insert_vid(common.clone(), Some(disperse.shares[0].clone()))
-            .await
-            .unwrap();
-        ds.commit().await.unwrap();
+        {
+            let mut tx = ds.transaction().await.unwrap();
+            tx.insert_leaf(leaf).await.unwrap();
+            tx.insert_vid(common.clone(), Some(disperse.shares[0].clone()))
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+        }
 
         assert_eq!(ds.get_vid_common(0).await.await, common);
         assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
 
         // Re-insert the common data, without a share. This should not overwrite the share we
         // already have.
-        ds.insert_vid(common.clone(), None).await.unwrap();
-        ds.commit().await.unwrap();
+        {
+            let mut tx = ds.transaction().await.unwrap();
+            tx.insert_vid(common.clone(), None).await.unwrap();
+            tx.commit().await.unwrap();
+        }
         assert_eq!(ds.get_vid_common(0).await.await, common);
         assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
     }

@@ -448,7 +448,9 @@ where
 mod test {
     use super::*;
     use crate::{
-        data_source::{storage::no_storage, ExtensibleDataSource},
+        data_source::{
+            storage::no_storage, ExtensibleDataSource, Transaction, VersionedDataSource,
+        },
         status::StatusDataSource,
         task::BackgroundTask,
         testing::{
@@ -853,7 +855,7 @@ mod test {
         setup_test();
 
         let dir = TempDir::with_prefix("test_availability_extensions").unwrap();
-        let mut data_source = ExtensibleDataSource::new(
+        let data_source = ExtensibleDataSource::new(
             MockDataSource::create(dir.path(), Default::default())
                 .await
                 .unwrap(),
@@ -869,7 +871,9 @@ mod test {
 
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
 
-        data_source.insert_block(block.clone()).await.unwrap();
+        let mut tx = data_source.transaction().await.unwrap();
+        tx.insert_block(block.clone()).await.unwrap();
+        tx.commit().await.unwrap();
 
         // assert that the store has data before we move on to API requests
         assert_eq!(

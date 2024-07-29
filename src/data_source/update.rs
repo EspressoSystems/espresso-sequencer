@@ -15,10 +15,10 @@ use crate::{
     availability::{
         BlockQueryData, LeafQueryData, QueryablePayload, UpdateAvailabilityData, VidCommonQueryData,
     },
-    status::UpdateStatusData,
     Leaf, Payload,
 };
 use async_trait::async_trait;
+use futures::future::Future;
 use hotshot::types::{Event, EventType};
 use hotshot_types::event::LeafInfo;
 use hotshot_types::{
@@ -29,7 +29,7 @@ use hotshot_types::{
     vid::vid_scheme,
 };
 use jf_vid::VidScheme;
-use std::{error::Error, fmt::Debug, iter::once};
+use std::iter::once;
 
 /// An extension trait for types which implement the update trait for each API module.
 ///
@@ -40,9 +40,7 @@ use std::{error::Error, fmt::Debug, iter::once};
 ///   [SystemContextHandle](hotshot::types::SystemContextHandle)
 /// * [update](Self::update), to update the query state when a new HotShot event is emitted
 #[async_trait]
-pub trait UpdateDataSource<Types: NodeType>:
-    UpdateAvailabilityData<Types> + UpdateStatusData
-{
+pub trait UpdateDataSource<Types: NodeType>: UpdateAvailabilityData<Types> {
     /// Update query state based on a new consensus event.
     ///
     /// The caller is responsible for authenticating `event`. This function does not perform any
@@ -54,23 +52,17 @@ pub trait UpdateDataSource<Types: NodeType>:
     ///
     /// If you want to update the data source with an untrusted event, for example one received from
     /// a peer over the network, you must authenticate it first.
-    async fn update(
-        &mut self,
-        event: &Event<Types>,
-    ) -> Result<(), <Self as UpdateAvailabilityData<Types>>::Error>;
+    async fn update(&mut self, event: &Event<Types>) -> anyhow::Result<()>;
 }
 
 #[async_trait]
 impl<Types: NodeType, T> UpdateDataSource<Types> for T
 where
-    T: UpdateAvailabilityData<Types> + UpdateStatusData + Send,
+    T: UpdateAvailabilityData<Types> + Send,
     Payload<Types>: QueryablePayload<Types>,
     <Types as NodeType>::InstanceState: Default,
 {
-    async fn update(
-        &mut self,
-        event: &Event<Types>,
-    ) -> Result<(), <Self as UpdateAvailabilityData<Types>>::Error> {
+    async fn update(&mut self, event: &Event<Types>) -> anyhow::Result<()> {
         if let EventType::Decide { leaf_chain, qc, .. } = &event.event {
             // `qc` justifies the first (most recent) leaf...
             let qcs = once((**qc).clone())
@@ -179,19 +171,15 @@ async fn store_genesis_vid<Types: NodeType>(
 /// underlying storage, and are saved if the process restarts. It also allows pending changes to be
 /// rolled back ([revert](Self::revert)) so that they are never written back to storage and are no
 /// longer reflected even through the data source object which was used to make the changes.
-#[async_trait]
-pub trait VersionedDataSource {
-    type Error: Error + Debug + Send + Sync + 'static;
+pub trait VersionedDataSource: Send + Sync {
+    type Transaction<'a>: Transaction
+    where
+        Self: 'a;
 
-    /// Atomically commit to all outstanding modifications to the data.
-    ///
-    /// If this method fails, outstanding changes are left unmodified. The caller may opt to retry
-    /// or to erase outstanding changes with [`revert`](Self::revert).
-    async fn commit(&mut self) -> Result<(), Self::Error>;
+    fn transaction(&self) -> impl Future<Output = anyhow::Result<Self::Transaction<'_>>> + Send;
+}
 
-    /// Erase all oustanding modifications to the data.
-    ///
-    /// This function must not return if it has failed to revert changes. Inability to revert
-    /// changes to the database is considered a fatal error, and this function may panic.
-    async fn revert(&mut self);
+pub trait Transaction: Send + Sync {
+    fn commit(self) -> impl Future<Output = anyhow::Result<()>> + Send;
+    fn revert(self) -> impl Future + Send;
 }

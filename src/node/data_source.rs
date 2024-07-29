@@ -29,7 +29,6 @@ use crate::{Header, QueryResult, VidShare};
 use async_trait::async_trait;
 use derivative::Derivative;
 use derive_more::From;
-use futures::future::BoxFuture;
 use hotshot_types::traits::node_implementation::NodeType;
 
 #[derive(Derivative, From)]
@@ -63,12 +62,5 @@ pub trait NodeDataSource<Types: NodeType> {
     ) -> QueryResult<TimeWindowQueryData<Header<Types>>>;
 
     /// Search the database for missing objects and generate a report.
-    ///
-    /// The query to find missing objects can be quite expensive while the database is large, but it
-    /// is read-only and thus should not block other operations. This function returns a future
-    /// which runs the bulk of the query and _does not borrow from `self`_. This allows the caller
-    /// to release a lock on the storage layer and run the expensive query asynchronously, while
-    /// other operations, including write that require exclusive access to the API state, are able
-    /// to proceed.
-    async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>>;
+    async fn sync_status(&self) -> QueryResult<SyncStatus>;
 }

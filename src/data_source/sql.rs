@@ -14,20 +14,17 @@
 
 use super::{
     fetching,
-    storage::sql::{self, Client, SqlStorage},
+    storage::sql::{self, SqlStorage},
     AvailabilityProvider, FetchingDataSource,
 };
 pub use crate::include_migrations;
 use crate::{
     availability::{QueryableHeader, QueryablePayload},
-    Header, Payload, QueryResult,
+    Header, Payload,
 };
 pub use anyhow::Error;
-use async_std::sync::Arc;
-use async_trait::async_trait;
 use hotshot_types::traits::node_implementation::NodeType;
 pub use refinery::Migration;
-use std::borrow::Cow;
 pub use tokio_postgres as postgres;
 
 pub use sql::{Config, Query, Transaction};
@@ -325,46 +322,15 @@ where
     }
 }
 
-impl<Types, P> SqlDataSource<Types, P>
-where
-    Types: NodeType,
-{
-    /// Access the transaction which is accumulating all uncommitted changes to the data source.
-    ///
-    /// This can be used to manually group database modifications to custom state atomically with
-    /// modifications made through the [`SqlDataSource`].
-    ///
-    /// If there is no currently open transaction, a new transaction will be opened. No changes
-    /// made through the transaction objeect returned by this method will be persisted until
-    /// [`commit`](super::VersionedDataSource::commit) is called.
-    pub async fn transaction(&mut self) -> QueryResult<Transaction<'_>> {
-        Ok(self
-            .storage_mut()
-            .await
-            .transaction()
-            .await?
-            .change_lifetime())
-    }
-}
-
-#[async_trait]
-impl<Types, P: Send + Sync> Query for SqlDataSource<Types, P>
-where
-    Types: NodeType,
-{
-    async fn client(&self) -> Cow<Arc<Client>> {
-        Cow::Owned(self.storage().await.client().await.into_owned())
-    }
-}
-
 // These tests run the `postgres` Docker image, which doesn't work on Windows.
 #[cfg(all(any(test, feature = "testing"), not(target_os = "windows")))]
 pub mod testing {
     use super::*;
     use crate::{
-        data_source::{UpdateDataSource, VersionedDataSource},
+        data_source::{Transaction, UpdateDataSource, VersionedDataSource},
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes},
     };
+    use async_trait::async_trait;
     use hotshot::types::Event;
 
     pub use sql::testing::TmpDb;
@@ -393,8 +359,9 @@ pub mod testing {
         }
 
         async fn handle_event(&mut self, event: &Event<MockTypes>) {
-            self.update(event).await.unwrap();
-            self.commit().await.unwrap();
+            let mut tx = self.transaction().await.unwrap();
+            tx.update(event).await.unwrap();
+            tx.commit().await.unwrap();
         }
     }
 }
@@ -419,7 +386,7 @@ mod test {
         availability::{
             AvailabilityDataSource, LeafQueryData, UpdateAvailabilityData, VidCommonQueryData,
         },
-        data_source::VersionedDataSource,
+        data_source::{Transaction, VersionedDataSource},
         fetching::provider::NoFetching,
         node::NodeDataSource,
         testing::{consensus::DataSourceLifeCycle, mocks::MockTypes, setup_test},
@@ -437,7 +404,7 @@ mod test {
         setup_test();
 
         let storage = D::create(0).await;
-        let mut ds = <D as DataSourceLifeCycle>::connect(&storage).await;
+        let ds = <D as DataSourceLifeCycle>::connect(&storage).await;
 
         // Generate some test VID data.
         let disperse = vid_scheme(2).disperse([]).unwrap();
@@ -449,18 +416,20 @@ mod test {
         )
         .await;
         let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);
-        ds.insert_leaf(leaf).await.unwrap();
-        ds.insert_vid(common.clone(), None).await.unwrap();
-        ds.commit().await.unwrap();
+        let mut tx = ds.transaction().await.unwrap();
+        tx.insert_leaf(leaf).await.unwrap();
+        tx.insert_vid(common.clone(), None).await.unwrap();
+        tx.commit().await.unwrap();
 
         assert_eq!(ds.get_vid_common(0).await.await, common);
         ds.vid_share(0).await.unwrap_err();
 
         // Re-insert the common data with the share.
-        ds.insert_vid(common.clone(), Some(disperse.shares[0].clone()))
+        let mut tx = ds.transaction().await.unwrap();
+        tx.insert_vid(common.clone(), Some(disperse.shares[0].clone()))
             .await
             .unwrap();
-        ds.commit().await.unwrap();
+        tx.commit().await.unwrap();
         assert_eq!(ds.get_vid_common(0).await.await, common);
         assert_eq!(ds.vid_share(0).await.unwrap(), disperse.shares[0]);
     }

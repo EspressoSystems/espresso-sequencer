@@ -73,7 +73,7 @@
 use async_compatibility_layer::channel::{
     oneshot, unbounded, OneShotReceiver, OneShotSender, UnboundedReceiver, UnboundedSender,
 };
-use async_std::sync::Arc;
+use async_std::sync::{Arc, Mutex};
 use derivative::Derivative;
 use futures::future::{BoxFuture, FutureExt};
 use std::{
@@ -136,13 +136,14 @@ impl<T: Clone> Subscriber<T> {
 #[derivative(Debug)]
 pub struct Notifier<T> {
     // Active subscribers.
-    active: Vec<Subscriber<T>>,
+    active: Mutex<Vec<Subscriber<T>>>,
     // Pending subscribers.
     //
     // When a new subscriber joins the subscriber set, they do not immediately add themselves to
-    // `active`. Instead, they simply send themselves to this channel. Every time a message is
-    // sent, it will drain pending subscribers from here and add them to `active`. In this way,
-    // almost all of the cost is paid by senders, rather than receivers. We adopt this design for
+    // `active`. Instead, they simply send themselves to this channel. Every time a message is sent,
+    // it will drain pending subscribers from here and add them to `active`. In this way, almost all
+    // of the cost is paid by senders, rather than receivers, and receivers do not contend with
+    // senders. We adopt this design for
     // two reasons:
     // 1. Most basically, more messages are received than sent, since the intended use of this
     //    channel is broadcast, with each message being delivered to multiple receivers. Thus,
@@ -168,7 +169,7 @@ impl<T> Notifier<T> {
     pub fn new() -> Self {
         let (subscribe, pending) = unbounded();
         Self {
-            active: vec![],
+            active: Default::default(),
             pending,
             subscribe,
         }
@@ -177,15 +178,17 @@ impl<T> Notifier<T> {
 
 impl<T: Clone> Notifier<T> {
     /// Notify all subscribers whose predicate is satisfied by `msg`.
-    pub fn notify(&mut self, msg: &T) {
+    pub async fn notify(&self, msg: &T) {
+        let mut active = self.active.lock().await;
+
         // Try sending the message to each active subscriber.
-        for subscriber in &mut self.active {
+        for subscriber in &mut *active {
             subscriber.notify(msg);
         }
 
         // Some subscribers may be closed, either because the receiver was dropped or because we
         // just sent it its message. Remove these from the `active` list.
-        self.active.retain(|subscriber| !subscriber.is_closed());
+        active.retain(|subscriber| !subscriber.is_closed());
 
         // Promote pending subscribers to active and send them the message.
         for mut subscriber in self.pending.drain().unwrap_or_default() {
@@ -193,7 +196,7 @@ impl<T: Clone> Notifier<T> {
             if !subscriber.is_closed() {
                 // If that message didn't satisfy the subscriber, or it was dropped, at it to the
                 // active list so it will get future messages.
-                self.active.push(subscriber);
+                active.push(subscriber);
             }
         }
     }
@@ -283,14 +286,14 @@ mod test {
     #[async_std::test]
     async fn test_notify_drop() {
         setup_test();
-        let mut n = Notifier::new();
+        let n = Notifier::new();
 
         // Create two subscribers with different predicates.
         let wait_for_zero = n.wait_for(|i| *i == 0).await;
         let wait_for_one = n.wait_for(|i| *i == 1).await;
 
         // Send a message which satisfies only one of the subscribers.
-        n.notify(&0);
+        n.notify(&0).await;
         assert_eq!(wait_for_zero.await.unwrap(), 0);
 
         // Check that the other subscriber was not notified.
@@ -301,14 +304,15 @@ mod test {
         // Check subscribers. The first subsciber should have been cleaned up when it was notified.
         // The second should have been closed when it was dropped without completing, but not yet
         // garbage collected.
-        assert_eq!(n.active.len(), 1);
-        assert!(n.active[0].is_closed());
+        let active = n.active.lock().await;
+        assert_eq!(active.len(), 1);
+        assert!(active[0].is_closed());
     }
 
     #[async_std::test]
     async fn test_notify_active() {
         setup_test();
-        let mut n = Notifier::new();
+        let n = Notifier::new();
 
         // Create two subscribers.
         let s1 = n.wait_for(|i| *i == 1).await;
@@ -316,46 +320,52 @@ mod test {
 
         // Send a message that doesn't notify either subscriber, but just promotes them from pending
         // to active.
-        n.notify(&0);
+        n.notify(&0).await;
         // Check active subscribers.
-        assert_eq!(n.active.len(), 2);
-        assert!(!n.active[0].is_closed());
-        assert!(!n.active[1].is_closed());
+        {
+            let active = n.active.lock().await;
+            assert_eq!(active.len(), 2);
+            assert!(!active[0].is_closed());
+            assert!(!active[1].is_closed());
+        }
 
         // Drop one of the subscribers, then send another non-satisfying message. This should cause
         // the dropped subscriber to get garbage collected.
         drop(s2);
-        n.notify(&0);
-        assert_eq!(n.active.len(), 1);
-        assert!(!n.active[0].is_closed());
+        n.notify(&0).await;
+        {
+            let active = n.active.lock().await;
+            assert_eq!(active.len(), 1);
+            assert!(!active[0].is_closed());
+        }
 
         // Satisfy the final subscriber.
-        n.notify(&1);
+        n.notify(&1).await;
         assert_eq!(s1.await.unwrap(), 1);
     }
 
     #[async_std::test]
     async fn test_pending_dropped() {
         setup_test();
-        let mut n = Notifier::new();
+        let n = Notifier::new();
 
         // Create and immediately drop a pending subscriber.
         drop(n.wait_for(|_| false).await);
 
         // Check that the subscriber gets garbage collected on the next notification.
-        n.notify(&0);
-        assert_eq!(n.active.len(), 0);
+        n.notify(&0).await;
+        assert_eq!(n.active.lock().await.len(), 0);
     }
 
     #[async_std::test]
     async fn test_notifier_dropped() {
         setup_test();
 
-        let mut n = Notifier::new();
+        let n = Notifier::new();
 
         // Create an active subscriber.
         let fut1 = n.wait_for(|_| false).await;
-        n.notify(&0);
+        n.notify(&0).await;
 
         // Create a pending subscriber.
         let fut2 = n.wait_for(|_| false).await;

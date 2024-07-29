@@ -204,7 +204,7 @@ mod test {
     use super::*;
     use crate::{
         availability::{define_api, AvailabilityDataSource, UpdateAvailabilityData},
-        data_source::{storage::sql::testing::TmpDb, VersionedDataSource},
+        data_source::{storage::sql::testing::TmpDb, Transaction, VersionedDataSource},
         fetching::provider::{NoFetching, QueryServiceProvider},
         task::BackgroundTask,
         testing::{
@@ -251,7 +251,7 @@ mod test {
                     format!("http://localhost:{port}").parse().unwrap(),
                     MockBase::instance(),
                 ));
-        let mut data_source = db.config().connect(provider.clone()).await.unwrap();
+        let data_source = db.config().connect(provider.clone()).await.unwrap();
 
         // Start consensus.
         network.start().await;
@@ -265,11 +265,11 @@ mod test {
 
         // Give the node a leaf after the range of interest so it learns about the correct block
         // height.
-        data_source
-            .insert_leaf(leaves.last().cloned().unwrap())
+        let mut tx = data_source.transaction().await.unwrap();
+        tx.insert_leaf(leaves.last().cloned().unwrap())
             .await
             .unwrap();
-        data_source.commit().await.unwrap();
+        tx.commit().await.unwrap();
 
         tracing::info!("requesting leaf from multiple providers");
         let leaf = data_source

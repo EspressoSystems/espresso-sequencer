@@ -166,7 +166,7 @@ mod test {
                 pruning::{PrunedHeightStorage, PrunerCfg},
                 sql::testing::TmpDb,
             },
-            AvailabilityProvider, VersionedDataSource,
+            AvailabilityProvider, Transaction, VersionedDataSource,
         },
         fetching::provider::{NoFetching, Provider as ProviderTrait, TestProvider},
         node::{data_source::NodeDataSource, SyncStatus},
@@ -242,7 +242,7 @@ mod test {
             format!("http://localhost:{port}").parse().unwrap(),
             MockBase::instance(),
         ));
-        let mut data_source = data_source(&db, &provider).await;
+        let data_source = data_source(&db, &provider).await;
 
         // Start consensus.
         network.start().await;
@@ -331,11 +331,11 @@ mod test {
         // Now we will actually fetch the missing data. First, since our node is not really
         // connected to consensus, we need to give it a leaf after the range of interest so it
         // learns about the correct block height.
-        data_source
-            .insert_leaf(leaves.last().cloned().unwrap())
+        let mut tx = data_source.transaction().await.unwrap();
+        tx.insert_leaf(leaves.last().cloned().unwrap())
             .await
             .unwrap();
-        data_source.commit().await.unwrap();
+        tx.commit().await.unwrap();
 
         // Block requests to the provider so that we can verify that without the provider, the node
         // does _not_ get the data.
@@ -469,7 +469,7 @@ mod test {
             format!("http://localhost:{port}").parse().unwrap(),
             MockBase::instance(),
         ));
-        let mut data_source = data_source(&db, &provider).await;
+        let data_source = data_source(&db, &provider).await;
 
         // Start consensus.
         network.start().await;
@@ -481,8 +481,9 @@ mod test {
         let test_leaf = &leaves[0];
 
         // Tell the node about a leaf after the one of interest so it learns about the block height.
-        data_source.insert_leaf(leaves[1].clone()).await.unwrap();
-        data_source.commit().await.unwrap();
+        let mut tx = data_source.transaction().await.unwrap();
+        tx.insert_leaf(leaves[1].clone()).await.unwrap();
+        tx.commit().await.unwrap();
 
         // Fetch a leaf and the corresponding block at the same time. This will result in two tasks
         // trying to fetch the same leaf, but one should win and notify the other, which ultimately
@@ -528,7 +529,7 @@ mod test {
             format!("http://localhost:{port}").parse().unwrap(),
             MockBase::instance(),
         ));
-        let mut data_source = data_source(&db, &provider).await;
+        let data_source = data_source(&db, &provider).await;
 
         // Start consensus.
         network.start().await;
@@ -540,11 +541,11 @@ mod test {
 
         // Tell the node about a leaf after the range of interest so it learns about the block
         // height.
-        data_source
-            .insert_leaf(leaves.last().cloned().unwrap())
+        let mut tx = data_source.transaction().await.unwrap();
+        tx.insert_leaf(leaves.last().cloned().unwrap())
             .await
             .unwrap();
-        data_source.commit().await.unwrap();
+        tx.commit().await.unwrap();
 
         // All the blocks here are empty, so they have the same payload:
         assert_eq!(leaves[0].payload_hash(), leaves[1].payload_hash());
@@ -591,7 +592,7 @@ mod test {
             format!("http://localhost:{port}").parse().unwrap(),
             MockBase::instance(),
         ));
-        let mut data_source = data_source(&db, &provider).await;
+        let data_source = data_source(&db, &provider).await;
 
         // Start consensus.
         network.start().await;
@@ -607,11 +608,11 @@ mod test {
 
         // Tell the node about a leaf after the range of interest so it learns about the block
         // height.
-        data_source
-            .insert_leaf(finalized_leaves.last().cloned().unwrap())
+        let mut tx = data_source.transaction().await.unwrap();
+        tx.insert_leaf(finalized_leaves.last().cloned().unwrap())
             .await
             .unwrap();
-        data_source.commit().await.unwrap();
+        tx.commit().await.unwrap();
 
         // Check the subscriptions.
         let blocks = blocks.take(5).collect::<Vec<_>>().await;
@@ -651,7 +652,7 @@ mod test {
             format!("http://localhost:{port}").parse().unwrap(),
             MockBase::instance(),
         ));
-        let mut data_source = data_source(&db, &provider).await;
+        let data_source = data_source(&db, &provider).await;
 
         // Start consensus.
         network.start().await;
@@ -663,15 +664,10 @@ mod test {
         // Tell the node about a leaf after the range of interest (so it learns about the block
         // height) and one in the middle of the range, to test what happens when data is missing
         // from the beginning of the range but other data is available.
-        data_source
-            .insert_leaf(finalized_leaves[2].clone())
-            .await
-            .unwrap();
-        data_source
-            .insert_leaf(finalized_leaves[4].clone())
-            .await
-            .unwrap();
-        data_source.commit().await.unwrap();
+        let mut tx = data_source.transaction().await.unwrap();
+        tx.insert_leaf(finalized_leaves[2].clone()).await.unwrap();
+        tx.insert_leaf(finalized_leaves[4].clone()).await.unwrap();
+        tx.commit().await.unwrap();
 
         // Get the whole range of leaves.
         let leaves = data_source
@@ -709,7 +705,7 @@ mod test {
         // Start a data source which is not receiving events from consensus. We don't give it a
         // fetcher since transactions are always fetched passively anyways.
         let db = TmpDb::init().await;
-        let mut data_source = data_source(&db, &NoFetching).await;
+        let data_source = data_source(&db, &NoFetching).await;
 
         // Subscribe to blocks.
         let mut leaves = { network.data_source().read().await.subscribe_leaves(1).await };
@@ -733,9 +729,12 @@ mod test {
             let leaf = leaves.next().await.unwrap();
             let block = blocks.next().await.unwrap();
 
-            data_source.insert_leaf(leaf).await.unwrap();
-            data_source.insert_block(block.clone()).await.unwrap();
-            data_source.commit().await.unwrap();
+            {
+                let mut tx = data_source.transaction().await.unwrap();
+                tx.insert_leaf(leaf).await.unwrap();
+                tx.insert_block(block.clone()).await.unwrap();
+                tx.commit().await.unwrap();
+            }
 
             if block.transaction_by_hash(tx.commit()).is_some() {
                 break block;
@@ -782,7 +781,7 @@ mod test {
             format!("http://localhost:{port}").parse().unwrap(),
             MockBase::instance(),
         ));
-        let mut data_source = builder(&db, &provider)
+        let data_source = builder(&db, &provider)
             .await
             .with_retry_delay(Duration::from_secs(1))
             .build()
@@ -800,11 +799,11 @@ mod test {
 
         // Give the node a leaf after the range of interest so it learns about the correct block
         // height.
-        data_source
-            .insert_leaf(leaves.last().cloned().unwrap())
+        let mut tx = data_source.transaction().await.unwrap();
+        tx.insert_leaf(leaves.last().cloned().unwrap())
             .await
             .unwrap();
-        data_source.commit().await.unwrap();
+        tx.commit().await.unwrap();
 
         // Cause requests to fail temporarily, so we can test retries.
         provider.fail();
@@ -951,22 +950,16 @@ mod test {
         let leaves = leaves.take(5).collect::<Vec<_>>().await;
 
         // The disconnected data source has no data yet, so it hasn't done any pruning.
-        let pruned_height = {
-            data_source
-                .storage()
-                .await
-                .load_pruned_height()
-                .await
-                .unwrap()
-        };
+        let pruned_height = data_source.as_ref().load_pruned_height().await.unwrap();
         // Either None or 0 is acceptable, depending on whether or not the prover has run yet.
         assert!(matches!(pruned_height, None | Some(0)), "{pruned_height:?}");
 
         // Send the last leaf to the disconnected data source so it learns about the height and
         // fetches the missing data.
         let last_leaf = leaves.last().unwrap();
-        data_source.insert_leaf(last_leaf.clone()).await.unwrap();
-        data_source.commit().await.unwrap();
+        let mut tx = data_source.transaction().await.unwrap();
+        tx.insert_leaf(last_leaf.clone()).await.unwrap();
+        tx.commit().await.unwrap();
 
         // Trigger a fetch of each leaf so the database gets populated.
         for i in 1..=last_leaf.height() {
@@ -979,12 +972,7 @@ mod test {
 
         // After a bit of time, the pruner has run and deleted all the missing data we just fetched.
         loop {
-            let pruned_height = data_source
-                .storage()
-                .await
-                .load_pruned_height()
-                .await
-                .unwrap();
+            let pruned_height = data_source.as_ref().load_pruned_height().await.unwrap();
             if pruned_height == Some(last_leaf.height()) {
                 break;
             }
@@ -1010,25 +998,19 @@ mod test {
             .unwrap();
 
         // Pruned height should be reset.
-        let pruned_height = {
-            data_source
-                .storage()
-                .await
-                .load_pruned_height()
-                .await
-                .unwrap()
-        };
+        let pruned_height = data_source.as_ref().load_pruned_height().await.unwrap();
         assert_eq!(pruned_height, None);
 
         // The node has pruned all of it's data including the latest block, so it's forgotten the
         // block height. We need to give it another leaf with some height so it will be willing to
         // fetch.
-        data_source.insert_leaf(last_leaf.clone()).await.unwrap();
-        data_source.commit().await.unwrap();
+        let mut tx = data_source.transaction().await.unwrap();
+        tx.insert_leaf(last_leaf.clone()).await.unwrap();
+        tx.commit().await.unwrap();
 
         // Wait for the data to be restored. It should be restored by the next major scan.
         loop {
-            let sync_status = data_source.sync_status().await.await.unwrap();
+            let sync_status = data_source.sync_status().await.unwrap();
 
             // VID shares are unique to a node and will never be fetched from a peer; this is
             // acceptable since there is redundancy built into the VID scheme. Ignore missing VID
@@ -1046,7 +1028,7 @@ mod test {
 
         // The node remains fully synced even after some time; no pruning.
         sleep(Duration::from_secs(3)).await;
-        let sync_status = data_source.sync_status().await.await.unwrap();
+        let sync_status = data_source.sync_status().await.unwrap();
         assert!(
             (SyncStatus {
                 missing_vid_shares: 0,

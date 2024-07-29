@@ -27,10 +27,8 @@
 use crate::{
     availability::{
         BlockId, BlockQueryData, LeafId, LeafQueryData, PayloadQueryData, QueryableHeader,
-        QueryablePayload, TransactionHash, TransactionQueryData, UpdateAvailabilityData,
-        VidCommonQueryData,
+        QueryablePayload, TransactionHash, TransactionQueryData, VidCommonQueryData,
     },
-    data_source::VersionedDataSource,
     explorer, Header, Payload, QueryResult, Transaction,
 };
 use async_trait::async_trait;
@@ -50,8 +48,6 @@ pub use no_storage::NoStorage;
 #[cfg(feature = "sql-data-source")]
 pub use sql::SqlStorage;
 
-use self::pruning::PruneStorage;
-
 /// Persistent storage for a HotShot blockchain.
 ///
 /// This trait defines the interface which must be provided by the storage layer in order to
@@ -67,8 +63,7 @@ use self::pruning::PruneStorage;
 /// Rust gives us ways to abstract and deduplicate these two similar APIs, but they do not lead to a
 /// better interface.
 #[async_trait]
-pub trait AvailabilityStorage<Types>:
-    UpdateAvailabilityData<Types> + VersionedDataSource + PruneStorage + Send + Sync
+pub trait AvailabilityStorage<Types>: Send + Sync
 where
     Types: NodeType,
     Payload<Types>: QueryablePayload<Types>,

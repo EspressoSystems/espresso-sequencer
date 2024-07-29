@@ -135,12 +135,8 @@ where
             }
             .boxed()
         })?
-        .at("sync_status", |_req, state| {
-            async move {
-                let fut = state.read(|state| state.sync_status()).await;
-                Ok(fut.await?)
-            }
-            .boxed()
+        .get("sync_status", |_req, state| {
+            async move { state.sync_status().await.context(QuerySnafu) }.boxed()
         })?
         .get("get_header_window", |req, state| {
             async move {

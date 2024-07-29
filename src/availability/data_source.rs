@@ -23,7 +23,7 @@ use derivative::Derivative;
 use derive_more::{Display, From};
 use futures::stream::{BoxStream, Stream, StreamExt};
 use hotshot_types::traits::node_implementation::NodeType;
-use std::{cmp::Ordering, error::Error, fmt::Debug, ops::RangeBounds};
+use std::{cmp::Ordering, ops::RangeBounds};
 
 #[derive(Derivative, From, Display)]
 #[derivative(Ord = "feature_allow_slow_enum")]
@@ -203,12 +203,11 @@ where
 
 #[async_trait]
 pub trait UpdateAvailabilityData<Types: NodeType> {
-    type Error: Error + Debug + Send + Sync + 'static;
-    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> Result<(), Self::Error>;
-    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> Result<(), Self::Error>;
+    async fn insert_leaf(&mut self, leaf: LeafQueryData<Types>) -> anyhow::Result<()>;
+    async fn insert_block(&mut self, block: BlockQueryData<Types>) -> anyhow::Result<()>;
     async fn insert_vid(
         &mut self,
         common: VidCommonQueryData<Types>,
         share: Option<VidShare>,
-    ) -> Result<(), Self::Error>;
+    ) -> anyhow::Result<()>;
 }
