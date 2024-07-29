@@ -419,6 +419,7 @@ impl<
         };
         let view = message.kind.view_number();
         let committee = membership.whole_committee(view);
+        let committee_topic = membership.committee_topic();
         let net = Arc::clone(&self.channel);
         let storage = Arc::clone(&self.storage);
         let decided_upgrade_certificate = self.decided_upgrade_certificate.clone();
@@ -455,7 +456,7 @@ impl<
                     net.direct_message(serialized_message, recipient).await
                 }
                 TransmitType::Broadcast => {
-                    net.broadcast_message(serialized_message, committee, broadcast_delay)
+                    net.broadcast_message(serialized_message, committee_topic, broadcast_delay)
                         .await
                 }
                 TransmitType::DaCommitteeBroadcast => {

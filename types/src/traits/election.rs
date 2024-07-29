@@ -7,7 +7,7 @@ use std::{collections::BTreeSet, fmt::Debug, hash::Hash, num::NonZeroU64};
 
 use snafu::Snafu;
 
-use super::node_implementation::NodeType;
+use super::{network::Topic, node_implementation::NodeType};
 use crate::{traits::signature_key::SignatureKey, PeerConfig};
 
 /// Error for election problems
@@ -30,6 +30,7 @@ pub trait Membership<TYPES: NodeType>:
     fn create_election(
         all_nodes: Vec<PeerConfig<TYPES::SignatureKey>>,
         committee_members: Vec<PeerConfig<TYPES::SignatureKey>>,
+        committee_topic: Topic,
         fixed_leader_for_gpuvid: usize,
     ) -> Self;
 
@@ -49,6 +50,9 @@ pub trait Membership<TYPES: NodeType>:
 
     /// Get whole (staked + non-staked) committee for view `view_number`.
     fn whole_committee(&self, view_number: TYPES::Time) -> BTreeSet<TYPES::SignatureKey>;
+
+    /// Get the network topic for the committee
+    fn committee_topic(&self) -> Topic;
 
     /// Check if a key has stake
     fn has_stake(&self, pub_key: &TYPES::SignatureKey) -> bool;
