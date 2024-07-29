@@ -99,7 +99,7 @@ fn reference_chain_config() -> ChainConfig {
         base_fee: 0.into(),
         fee_contract: Some(Default::default()),
         fee_recipient: Default::default(),
-        bid_recipient: None,
+        bid_recipient: Some(Default::default()),
     }
 }
 
@@ -151,7 +151,7 @@ async fn reference_header(version: Version) -> Header {
 
 const REFERENCE_V1_HEADER_COMMITMENT: &str = "BLOCK~dh1KpdvvxSvnnPpOi2yI3DOg8h6ltr2Kv13iRzbQvtN2";
 const REFERENCE_V2_HEADER_COMMITMENT: &str = "BLOCK~V0GJjL19nCrlm9n1zZ6gaOKEekSMCT6uR5P-h7Gi6UJR";
-const REFERENCE_V3_HEADER_COMMITMENT: &str = "BLOCK~pD6_in2J8VzT6SshvvFUkNyMbx_h_gTtlU3WTmC6WedD";
+const REFERENCE_V3_HEADER_COMMITMENT: &str = "BLOCK~oqbUzqJdG4JfWCDpCQWsLDjb47Rx_OH6KVsKQFOl4S2n";
 
 fn reference_transaction<R>(ns_id: NamespaceId, rng: &mut R) -> Transaction
 where
@@ -343,21 +343,27 @@ fn test_reference_fee_info() {
 }
 
 #[async_std::test]
-async fn test_reference_header() {
+async fn test_reference_header_v1() {
     reference_test(
         "v1",
         "header",
         reference_header(StaticVersion::<0, 1>::version()).await,
         REFERENCE_V1_HEADER_COMMITMENT,
     );
+}
 
+#[async_std::test]
+async fn test_reference_header_v2() {
     reference_test(
         "v2",
         "header",
         reference_header(StaticVersion::<0, 2>::version()).await,
         REFERENCE_V2_HEADER_COMMITMENT,
     );
+}
 
+#[async_std::test]
+async fn test_reference_header_v3() {
     reference_test(
         "v3",
         "header",
@@ -365,7 +371,6 @@ async fn test_reference_header() {
         REFERENCE_V3_HEADER_COMMITMENT,
     );
 }
-
 #[test]
 fn test_reference_transaction() {
     reference_test(

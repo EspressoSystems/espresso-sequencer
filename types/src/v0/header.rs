@@ -4,7 +4,8 @@ use vbs::version::Version;
 
 use crate::{
     v0_1::{self, ChainConfig},
-    v0_2, v0_3,
+    v0_2,
+    v0_3::{self},
 };
 
 /// Each variant represents a specific minor version header.
