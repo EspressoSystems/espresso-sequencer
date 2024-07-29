@@ -40,7 +40,7 @@ use hotshot_types::{
     consensus::ConsensusMetricsValue,
     light_client::StateKeyPair,
     signature_key::BLSPubKey,
-    traits::{election::Membership, signature_key::SignatureKey as _},
+    traits::{election::Membership, network::Topic, signature_key::SignatureKey as _},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::fmt::Display;
@@ -92,17 +92,23 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
             })
             .collect::<Vec<_>>();
 
-        let membership = MockMembership::create_election(
+        let da_membership = MockMembership::create_election(
             known_nodes_with_stake.clone(),
             known_nodes_with_stake.clone(),
+            Topic::Da,
             0,
         );
-
+        let non_da_membership = MockMembership::create_election(
+            known_nodes_with_stake.clone(),
+            known_nodes_with_stake.clone(),
+            Topic::Global,
+            0,
+        );
         let memberships = Memberships {
-            quorum_membership: membership.clone(),
-            da_membership: membership.clone(),
-            vid_membership: membership.clone(),
-            view_sync_membership: membership.clone(),
+            quorum_membership: non_da_membership.clone(),
+            da_membership: da_membership.clone(),
+            vid_membership: non_da_membership.clone(),
+            view_sync_membership: non_da_membership.clone(),
         };
 
         // Pick a random, unused port for the builder server
@@ -181,8 +187,9 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                         let data_source = D::connect(&storage).await;
 
                         let network = Arc::new(MemoryNetwork::new(
-                            pub_keys[node_id],
+                            &pub_keys[node_id],
                             &master_map.clone(),
+                            &[Topic::Global, Topic::Da],
                             None,
                         ));
 

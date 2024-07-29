@@ -42,8 +42,11 @@ use hotshot_query_service::{
 };
 use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
 use hotshot_types::{
-    consensus::ConsensusMetricsValue, light_client::StateKeyPair, signature_key::BLSPubKey,
-    traits::election::Membership, ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
+    consensus::ConsensusMetricsValue,
+    light_client::StateKeyPair,
+    signature_key::BLSPubKey,
+    traits::{election::Membership, network::Topic},
+    ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
 use std::{num::NonZeroUsize, time::Duration};
 use url::Url;
@@ -160,16 +163,23 @@ async fn init_consensus(
     // Get the number of nodes with stake
     let num_nodes_with_stake = NonZeroUsize::new(pub_keys.len()).unwrap();
 
-    let membership = MockMembership::create_election(
+    let da_membership = MockMembership::create_election(
         known_nodes_with_stake.clone(),
         known_nodes_with_stake.clone(),
+        Topic::Da,
+        0,
+    );
+    let non_da_membership = MockMembership::create_election(
+        known_nodes_with_stake.clone(),
+        known_nodes_with_stake.clone(),
+        Topic::Global,
         0,
     );
     let memberships = Memberships {
-        quorum_membership: membership.clone(),
-        da_membership: membership.clone(),
-        vid_membership: membership.clone(),
-        view_sync_membership: membership.clone(),
+        quorum_membership: non_da_membership.clone(),
+        da_membership: da_membership.clone(),
+        vid_membership: non_da_membership.clone(),
+        view_sync_membership: non_da_membership.clone(),
     };
 
     // Pick a random, unused port for the builder server
@@ -245,8 +255,9 @@ async fn init_consensus(
                 };
 
                 let network = Arc::new(MemoryNetwork::new(
-                    pub_keys[node_id],
+                    &pub_keys[node_id],
                     &master_map.clone(),
+                    &[Topic::Global, Topic::Da],
                     None,
                 ));
 
