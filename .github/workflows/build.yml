@@ -53,7 +53,7 @@ jobs:
           cargo build --locked --release --workspace
 
       - name: Build Espresso Dev Node
-        # Espresso Dev Node currently requires testing feature, so it is built separately.
+        # Espresso Dev Node currently requires a testing feature, so it is built separately.
         run: |
           cargo build --locked --release --features testing --bin espresso-dev-node
 
@@ -104,7 +104,7 @@ jobs:
           cargo build --locked --release --workspace
 
       - name: Build Espresso Dev Node
-        # Espresso Dev Node currently requires testing feature, so it is built separately.
+        # Espresso Dev Node currently requires a testing feature, so it is built separately.
         run: |
           cargo build --locked --release --features testing --bin espresso-dev-node
 
