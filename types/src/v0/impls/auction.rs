@@ -150,6 +150,9 @@ pub enum ExecutionError {
     #[error("Could not resolve `ChainConfig`")]
     /// Could not resolve `ChainConfig`.
     UnresolvableChainConfig,
+    #[error("Bid ricipient not set on `ChainConfig`")]
+    /// Bid Recipient is not set on `ChainConfig`
+    BidRecipientNotFound,
 }
 
 impl From<FeeError> for ExecutionError {
@@ -182,7 +185,9 @@ impl BidTx {
             return Err(ExecutionError::UnresolvableChainConfig);
         };
 
-        let recipient = chain_config.bid_recipient.unwrap();
+        let Some(recipient) = chain_config.bid_recipient else {
+            return Err(ExecutionError::BidRecipientNotFound);
+        };
         // Charge the bid amount
         state
             .charge_fee(FeeInfo::new(self.account(), self.amount()), recipient)
