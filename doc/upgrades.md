@@ -23,7 +23,7 @@ An upgrade consists of two parts:
 
 ## Enabling an Upgrade
 
-To enable an upgrade in Hotshot protocol, it is essential to define the base version, the upgrade version, and a upgrade
+To enable an upgrade in Hotshot protocol, it is essential to define the base version, the upgrade version, and an upgrade
 hash:
 
 - **Base Version:** Represents the current version of the protocol (`0.1` in this example).
@@ -71,7 +71,7 @@ Time based:
 
 - **start_voting_time:** UNIX timestamp at which voting for the upgrade proposal starts.
 - **stop_voting_time:** UNIX timestamp at which voting for the upgrade proposal stops.
-- **start_proposing_time:** the earliest UNIX timestamnp in which the node can propose an upgrade.
+- **start_proposing_time:** the earliest UNIX timestamp in which the node can propose an upgrade.
 - **stop_proposing_time:** UNIX timestamp after which the node stops proposing an upgrade.
 
 The window between `start_proposing_view/time` and `stop_proposing_view/time` should provide sufficient time for nodes
