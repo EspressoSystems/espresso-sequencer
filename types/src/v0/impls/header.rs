@@ -1427,7 +1427,7 @@ mod test_headers {
         *parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
         let mut proposal = parent_header.clone();
 
-        let ver = StaticVersion::<1, 0>::version();
+        let ver = StaticVersion::<0, 1>::version();
 
         // Pass a different chain config to trigger a chain config validation error.
         let state = validated_state
@@ -1586,7 +1586,7 @@ mod test_headers {
                 &genesis_state,
                 &parent_leaf,
                 &proposal,
-                StaticVersion::<1, 0>::version(),
+                StaticVersion::<0, 1>::version(),
             )
             .await
             .unwrap()
