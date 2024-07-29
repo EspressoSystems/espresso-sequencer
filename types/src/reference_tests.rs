@@ -43,8 +43,8 @@ use vbs::{
 };
 
 use crate::{
-    v0_3::ChainConfig, FeeAccount, FeeInfo, Header, L1BlockInfo, NamespaceId, NsTable, Payload,
-    SeqTypes, Transaction, ValidatedState,
+    v0_1, FeeAccount, FeeInfo, Header, L1BlockInfo, NamespaceId, NsTable, Payload, SeqTypes,
+    Transaction, ValidatedState,
 };
 
 type Serializer = vbs::Serializer<SequencerVersion>;
@@ -92,8 +92,8 @@ fn reference_l1_block() -> L1BlockInfo {
 
 const REFERENCE_L1_BLOCK_COMMITMENT: &str = "L1BLOCK~4HpzluLK2Isz3RdPNvNrDAyQcWOF2c9JeLZzVNLmfpQ9";
 
-fn reference_chain_config() -> ChainConfig {
-    ChainConfig {
+fn reference_chain_config() -> crate::v0_3::ChainConfig {
+    crate::v0_3::ChainConfig {
         chain_id: 0x8a19.into(),
         max_block_size: 10240.into(),
         base_fee: 0.into(),
@@ -103,8 +103,11 @@ fn reference_chain_config() -> ChainConfig {
     }
 }
 
-const REFERENCE_CHAIN_CONFIG_COMMITMENT: &str =
+const REFERENCE_V1_CHAIN_CONFIG_COMMITMENT: &str =
     "CHAIN_CONFIG~L6HmMktJbvnEGgpmRrsiYvQmIBstSj9UtDM7eNFFqYFO";
+
+const REFERENCE_V3_CHAIN_CONFIG_COMMITMENT: &str =
+    "CHAIN_CONFIG~1mJTBiaJ0Nyuu4Ir5IZTamyI8CjexbktPkRr6R1rtnGh";
 
 fn reference_fee_info() -> FeeInfo {
     FeeInfo::new(
@@ -323,12 +326,22 @@ fn test_reference_l1_block() {
 }
 
 #[test]
-fn test_reference_chain_config() {
+fn test_reference_v1_chain_config() {
     reference_test(
         "v1",
         "chain_config",
+        v0_1::ChainConfig::from(reference_chain_config()),
+        REFERENCE_V1_CHAIN_CONFIG_COMMITMENT,
+    );
+}
+
+#[test]
+fn test_reference_v3_chain_config() {
+    reference_test(
+        "v3",
+        "chain_config",
         reference_chain_config(),
-        REFERENCE_CHAIN_CONFIG_COMMITMENT,
+        REFERENCE_V3_CHAIN_CONFIG_COMMITMENT,
     );
 }
 
