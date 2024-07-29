@@ -29,7 +29,6 @@ FORMAT_VERSION = "0.1.0"
 [route.bundle]
 PATH = ["bundle/:view_number"]
 ":view_number" = "Integer"
-METHOD = "POST"
 DOC = """
 Fetch the bundle from the builder for the specified view.
 """
