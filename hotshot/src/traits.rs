@@ -18,7 +18,7 @@ pub mod implementations {
         },
         memory_network::{MasterMap, MemoryNetwork},
         push_cdn_network::{
-            CdnMetricsValue, KeyPair, ProductionDef, PushCdnNetwork, TestingDef, Topic as CdnTopic,
+            CdnMetricsValue, KeyPair, ProductionDef, PushCdnNetwork, TestingDef, Topic,
             WrappedSignatureKey,
         },
     };

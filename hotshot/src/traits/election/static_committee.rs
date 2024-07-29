@@ -1,7 +1,6 @@
 use std::{marker::PhantomData, num::NonZeroU64};
 
 use ethereum_types::U256;
-use hotshot_types::traits::network::Topic;
 // use ark_bls12_381::Parameters as Param381;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
 use hotshot_types::{
@@ -27,9 +26,6 @@ pub struct GeneralStaticCommittee<T, PUBKEY: SignatureKey> {
     fixed_leader_for_gpuvid: usize,
     /// Node type phantom
     _type_phantom: PhantomData<T>,
-
-    /// The network topic of the committee
-    committee_topic: Topic,
 }
 
 /// static committee using a vrf kp
@@ -43,7 +39,6 @@ impl<T, PUBKEY: SignatureKey> GeneralStaticCommittee<T, PUBKEY> {
         nodes_with_stake: Vec<PUBKEY::StakeTableEntry>,
         nodes_without_stake: Vec<PUBKEY>,
         fixed_leader_for_gpuvid: usize,
-        committee_topic: Topic,
     ) -> Self {
         Self {
             all_nodes_with_stake: nodes_with_stake.clone(),
@@ -51,7 +46,6 @@ impl<T, PUBKEY: SignatureKey> GeneralStaticCommittee<T, PUBKEY> {
             committee_nodes_without_stake: nodes_without_stake,
             fixed_leader_for_gpuvid,
             _type_phantom: PhantomData,
-            committee_topic,
         }
     }
 }
@@ -64,11 +58,6 @@ where
     /// Clone the public key and corresponding stake table for current elected committee
     fn committee_qc_stake_table(&self) -> Vec<PUBKEY::StakeTableEntry> {
         self.committee_nodes_with_stake.clone()
-    }
-
-    /// Get the network topic for the committee
-    fn committee_topic(&self) -> Topic {
-        self.committee_topic.clone()
     }
 
     #[cfg(not(any(
@@ -126,7 +115,6 @@ where
     fn create_election(
         mut all_nodes: Vec<PeerConfig<PUBKEY>>,
         committee_members: Vec<PeerConfig<PUBKEY>>,
-        committee_topic: Topic,
         fixed_leader_for_gpuvid: usize,
     ) -> Self {
         let mut committee_nodes_with_stake = Vec::new();
@@ -163,7 +151,6 @@ where
             committee_nodes_without_stake,
             fixed_leader_for_gpuvid,
             _type_phantom: PhantomData,
-            committee_topic,
         }
     }
 

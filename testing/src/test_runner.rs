@@ -28,7 +28,7 @@ use hotshot_types::{
     simple_certificate::QuorumCertificate,
     traits::{
         election::Membership,
-        network::{ConnectedNetwork, Topic},
+        network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},
     },
     HotShotConfig, ValidatorConfig,
@@ -392,25 +392,21 @@ where
                 quorum_membership: <TYPES as NodeType>::Membership::create_election(
                     known_nodes_with_stake.clone(),
                     known_nodes_with_stake.clone(),
-                    Topic::Global,
                     config.fixed_leader_for_gpuvid,
                 ),
                 da_membership: <TYPES as NodeType>::Membership::create_election(
                     known_nodes_with_stake.clone(),
                     config.known_da_nodes.clone(),
-                    Topic::Da,
                     config.fixed_leader_for_gpuvid,
                 ),
                 vid_membership: <TYPES as NodeType>::Membership::create_election(
                     known_nodes_with_stake.clone(),
                     known_nodes_with_stake.clone(),
-                    Topic::Global,
                     config.fixed_leader_for_gpuvid,
                 ),
                 view_sync_membership: <TYPES as NodeType>::Membership::create_election(
                     known_nodes_with_stake.clone(),
                     known_nodes_with_stake.clone(),
-                    Topic::Global,
                     config.fixed_leader_for_gpuvid,
                 ),
             };

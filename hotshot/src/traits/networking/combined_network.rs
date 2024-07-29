@@ -32,7 +32,7 @@ use hotshot_types::{
     },
     data::ViewNumber,
     traits::{
-        network::{BroadcastDelay, ConnectedNetwork, ResponseChannel, Topic},
+        network::{BroadcastDelay, ConnectedNetwork, ResponseChannel},
         node_implementation::NodeType,
     },
     BoxSyncFuture,
@@ -372,24 +372,24 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks
     async fn broadcast_message(
         &self,
         message: Vec<u8>,
-        topic: Topic,
+        recipients: BTreeSet<TYPES::SignatureKey>,
         broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
         let primary = self.primary().clone();
         let secondary = self.secondary().clone();
         let primary_message = message.clone();
         let secondary_message = message.clone();
-        let topic_clone = topic.clone();
+        let primary_recipients = recipients.clone();
         self.send_both_networks(
             message,
             async move {
                 primary
-                    .broadcast_message(primary_message, topic_clone, BroadcastDelay::None)
+                    .broadcast_message(primary_message, primary_recipients, BroadcastDelay::None)
                     .await
             },
             async move {
                 secondary
-                    .broadcast_message(secondary_message, topic, BroadcastDelay::None)
+                    .broadcast_message(secondary_message, recipients, BroadcastDelay::None)
                     .await
             },
             broadcast_delay,

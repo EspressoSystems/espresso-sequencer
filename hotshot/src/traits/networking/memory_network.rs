@@ -26,7 +26,6 @@ use hotshot_types::{
     traits::{
         network::{
             AsyncGenerator, BroadcastDelay, ConnectedNetwork, TestableNetworkingImplementation,
-            Topic,
         },
         node_implementation::NodeType,
         signature_key::SignatureKey,
@@ -47,10 +46,6 @@ pub struct MasterMap<K: SignatureKey> {
     /// The list of `MemoryNetwork`s
     #[debug(skip)]
     map: DashMap<K, MemoryNetwork<K>>,
-
-    /// The list of `MemoryNetwork`s aggregated by topic
-    subscribed_map: DashMap<Topic, Vec<(K, MemoryNetwork<K>)>>,
-
     /// The id of this `MemoryNetwork` cluster
     id: u64,
 }
@@ -61,7 +56,6 @@ impl<K: SignatureKey> MasterMap<K> {
     pub fn new() -> Arc<MasterMap<K>> {
         Arc::new(MasterMap {
             map: DashMap::new(),
-            subscribed_map: DashMap::new(),
             id: rand::thread_rng().gen(),
         })
     }
@@ -108,9 +102,8 @@ impl<K: SignatureKey> Debug for MemoryNetwork<K> {
 impl<K: SignatureKey> MemoryNetwork<K> {
     /// Creates a new `MemoryNetwork` and hooks it up to the group through the provided `MasterMap`
     pub fn new(
-        pub_key: &K,
+        pub_key: K,
         master_map: &Arc<MasterMap<K>>,
-        subscribed_topics: &[Topic],
         reliability_config: Option<Box<dyn NetworkReliability>>,
     ) -> MemoryNetwork<K> {
         info!("Attaching new MemoryNetwork");
@@ -149,16 +142,8 @@ impl<K: SignatureKey> MemoryNetwork<K> {
                 reliability_config,
             }),
         };
-        // Insert our public key into the master map
-        master_map.map.insert(pub_key.clone(), mn.clone());
-        // Insert our subscribed topics into the master map
-        for topic in subscribed_topics {
-            master_map
-                .subscribed_map
-                .entry(topic.clone())
-                .or_default()
-                .push((pub_key.clone(), mn.clone()));
-        }
+        master_map.map.insert(pub_key, mn.clone());
+        trace!("Master map updated");
 
         mn
     }
@@ -184,7 +169,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
         _expected_node_count: usize,
         _num_bootstrap: usize,
         _network_id: usize,
-        da_committee_size: usize,
+        _da_committee_size: usize,
         _is_da: bool,
         reliability_config: Option<Box<dyn NetworkReliability>>,
         _secondary_network_delay: Duration,
@@ -194,22 +179,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
         Box::pin(move |node_id| {
             let privkey = TYPES::SignatureKey::generated_from_seed_indexed([0u8; 32], node_id).1;
             let pubkey = TYPES::SignatureKey::from_private(&privkey);
-
-            // Subscribe to topics based on our index
-            let subscribed_topics = if node_id < da_committee_size as u64 {
-                // DA node
-                vec![Topic::Da, Topic::Global]
-            } else {
-                // Non-DA node
-                vec![Topic::Global]
-            };
-
-            let net = MemoryNetwork::new(
-                &pubkey,
-                &master,
-                &subscribed_topics,
-                reliability_config.clone(),
-            );
+            let net = MemoryNetwork::new(pubkey, &master, reliability_config.clone());
             Box::pin(async move { net.into() })
         })
     }
@@ -249,20 +219,16 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for MemoryNetwork<K> {
     async fn broadcast_message(
         &self,
         message: Vec<u8>,
-        topic: Topic,
+        recipients: BTreeSet<K>,
         _broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
         trace!(?message, "Broadcasting message");
-        for node in self
-            .inner
-            .master_map
-            .subscribed_map
-            .entry(topic)
-            .or_default()
-            .iter()
-        {
+        for node in &self.inner.master_map.map {
             // TODO delay/drop etc here
-            let (key, node) = node;
+            let (key, node) = node.pair();
+            if !recipients.contains(key) {
+                continue;
+            }
             trace!(?key, "Sending message to node");
             if let Some(ref config) = &self.inner.reliability_config {
                 {
@@ -302,17 +268,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for MemoryNetwork<K> {
         recipients: BTreeSet<K>,
         broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
-        // Iterate over all topics, compare to recipients, and get the `Topic`
-        let topic = self
-            .inner
-            .master_map
-            .subscribed_map
-            .iter()
-            .find(|v| v.value().iter().all(|(k, _)| recipients.contains(k)))
-            .map(|v| v.key().clone())
-            .ok_or(NetworkError::NotFound)?;
-
-        self.broadcast_message(message, topic, broadcast_delay)
+        self.broadcast_message(message, recipients, broadcast_delay)
             .await
     }
 

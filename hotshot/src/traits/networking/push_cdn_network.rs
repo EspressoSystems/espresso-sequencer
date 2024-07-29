@@ -36,7 +36,7 @@ use hotshot_types::{
     data::ViewNumber,
     traits::{
         metrics::{Counter, Metrics, NoMetrics},
-        network::{BroadcastDelay, ConnectedNetwork, PushCdnNetworkError, Topic as HotShotTopic},
+        network::{BroadcastDelay, ConnectedNetwork, PushCdnNetworkError},
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
@@ -457,10 +457,10 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for PushCdnNetwork<T
     async fn broadcast_message(
         &self,
         message: Vec<u8>,
-        topic: HotShotTopic,
+        _recipients: BTreeSet<TYPES::SignatureKey>,
         _broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
-        self.broadcast_message(message, topic.into())
+        self.broadcast_message(message, Topic::Global)
             .await
             .map_err(|e| {
                 self.metrics.num_failed_messages.add(1);
@@ -563,14 +563,5 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for PushCdnNetwork<T
         _pk: TYPES::SignatureKey,
     ) -> Result<(), TrySendError<Option<(ViewNumber, TYPES::SignatureKey)>>> {
         Ok(())
-    }
-}
-
-impl From<HotShotTopic> for Topic {
-    fn from(topic: HotShotTopic) -> Self {
-        match topic {
-            HotShotTopic::Global => Topic::Global,
-            HotShotTopic::Da => Topic::Da,
-        }
     }
 }
