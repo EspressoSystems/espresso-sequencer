@@ -11,9 +11,6 @@ testing = ["hotshot-testing"]
 libp2p = []
 benchmarking = []
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(async_executor_impl, values("async-std", "tokio"))'] }
-
 [[bin]]
 name = "espresso-dev-node"
 required-features = ["testing"]
