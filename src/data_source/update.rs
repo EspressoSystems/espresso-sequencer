@@ -33,12 +33,14 @@ use std::iter::once;
 
 /// An extension trait for types which implement the update trait for each API module.
 ///
-/// If a type implements both [UpdateAvailabilityData] and [UpdateStatusData], then it can be fully
-/// kept up to date through two interfaces:
-/// * [populate_metrics](UpdateStatusData::populate_metrics), to get a handle for populating the
-///   status metrics, which should be used when initializing a
+/// If a type implements [UpdateAvailabilityData] and
+/// [UpdateStatusData](crate::status::UpdateStatusData), then it can be fully kept up to date
+/// through two interfaces:
+/// * [populate_metrics](crate::status::UpdateStatusData::populate_metrics), to get a handle for
+///   populating the status metrics, which should be used when initializing a
 ///   [SystemContextHandle](hotshot::types::SystemContextHandle)
-/// * [update](Self::update), to update the query state when a new HotShot event is emitted
+/// * [update](Self::update), provided by this extension trait, to update the query state when a new
+///   HotShot event is emitted
 #[async_trait]
 pub trait UpdateDataSource<Types: NodeType>: UpdateAvailabilityData<Types> {
     /// Update query state based on a new consensus event.
@@ -160,25 +162,30 @@ async fn store_genesis_vid<Types: NodeType>(
 
 /// A data source with an atomic transaction-based synchronization interface.
 ///
-/// Any changes made to a versioned data source are initially visible when queried through that same
-/// data source object only. They are not immediately written back to storage, which means that a
-/// new data source object opened against the same persistent storage will not reflect the changes.
-/// In particular, this means that if the process restarts and reopens its storage, uncommitted
-/// changes will be lost.
+/// Changes are made to a versioned data source through a [`Transaction`]. Any changes made in a
+/// [`Transaction`] are initially visible only when queried through that same [`Transaction`]. They
+/// are not immediately written back to storage, which means that a new data source object opened
+/// against the same persistent storage will not reflect the changes. In particular, this means that
+/// if the process restarts and reopens its storage, uncommitted changes will be lost.
+///
+/// Only when a [`Transaction`] is committed are changes written back to storage, synchronized with
+/// any concurrent changes, and made visible to other connections to the same data source.
+pub trait VersionedDataSource: Send + Sync {
+    type Transaction<'a>: Transaction
+    where
+        Self: 'a;
+
+    /// Start an atomic transaction on the data source.
+    fn transaction(&self) -> impl Future<Output = anyhow::Result<Self::Transaction<'_>>> + Send;
+}
+
+/// A unit of atomicity for updating a shared data sourec.
 ///
 /// The methods provided by this trait can be used to write such pending changes back to persistent
 /// storage ([commit](Self::commit)) so that they become visible to other clients of the same
 /// underlying storage, and are saved if the process restarts. It also allows pending changes to be
 /// rolled back ([revert](Self::revert)) so that they are never written back to storage and are no
 /// longer reflected even through the data source object which was used to make the changes.
-pub trait VersionedDataSource: Send + Sync {
-    type Transaction<'a>: Transaction
-    where
-        Self: 'a;
-
-    fn transaction(&self) -> impl Future<Output = anyhow::Result<Self::Transaction<'_>>> + Send;
-}
-
 pub trait Transaction: Send + Sync {
     fn commit(self) -> impl Future<Output = anyhow::Result<()>> + Send;
     fn revert(self) -> impl Future + Send;

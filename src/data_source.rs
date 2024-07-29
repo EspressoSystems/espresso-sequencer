@@ -28,7 +28,7 @@
 
 mod extension;
 pub mod fetching;
-mod fs;
+pub mod fs;
 mod metrics;
 mod notifier;
 pub mod sql;

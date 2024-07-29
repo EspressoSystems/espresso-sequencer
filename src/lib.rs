@@ -27,18 +27,19 @@
 //! # use hotshot_example_types::node_types::TestVersions;
 //! # use hotshot_types::consensus::ConsensusMetricsValue;
 //! # use std::path::Path;
-//! # async fn doc(storage_path: &std::path::Path) -> Result<(), hotshot_query_service::Error> {
+//! # async fn doc(storage_path: &std::path::Path) -> anyhow::Result<()> {
 //! use hotshot_query_service::{
 //!     availability,
-//!     data_source::{FileSystemDataSource, UpdateDataSource, VersionedDataSource},
+//!     data_source::{FileSystemDataSource, Transaction, UpdateDataSource, VersionedDataSource},
 //!     fetching::provider::NoFetching,
 //!     node,
 //!     status::UpdateStatusData,
-//!     status, Error,
+//!     status,
 //!     testing::mocks::MockBase,
+//!     ApiState, Error,
 //! };
 //!
-//! use async_std::{sync::{Arc, RwLock}, task::spawn};
+//! use async_std::{sync::Arc, task::spawn};
 //! use futures::StreamExt;
 //! use vbs::version::StaticVersionType;
 //! use hotshot::SystemContext;
@@ -46,8 +47,7 @@
 //!
 //! // Create or open a data source.
 //! let data_source = FileSystemDataSource::<AppTypes, NoFetching>::create(storage_path, NoFetching)
-//!     .await
-//!     .map_err(Error::internal)?;
+//!     .await?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
 //! let hotshot = SystemContext::<AppTypes, AppNodeImpl, AppVersions>::init(
@@ -55,39 +55,32 @@
 //!     ConsensusMetricsValue::new(&*data_source.populate_metrics()), panic!(),
 //!     panic!()
 //!     // Other fields omitted
-//! ).await.map_err(Error::internal)?.0;
+//! ).await?.0;
 //!
 //! // Create API modules.
-//! let availability_api = availability::define_api(&Default::default(),  MockBase::instance())
-//!     .map_err(Error::internal)?;
-//! let node_api = node::define_api(&Default::default(),  MockBase::instance())
-//!     .map_err(Error::internal)?;
-//! let status_api = status::define_api(&Default::default(),  MockBase::instance())
-//!     .map_err(Error::internal)?;
+//! let availability_api = availability::define_api(&Default::default(),  MockBase::instance())?;
+//! let node_api = node::define_api(&Default::default(),  MockBase::instance())?;
+//! let status_api = status::define_api(&Default::default(),  MockBase::instance())?;
 //!
-//! // Create app. We wrap `data_source` into an `RwLock` so we can share it with the web server.
-//! let data_source = Arc::new(RwLock::new(data_source));
+//! // Create app. We wrap `data_source` into an `Arc` so we can share it with the web server.
+//! let data_source = ApiState::from(Arc::new(data_source));
 //! let mut app = App::<_, Error>::with_state(data_source.clone());
 //! app
-//!     .register_module("availability", availability_api)
-//!     .map_err(Error::internal)?
-//!     .register_module("node", node_api)
-//!     .map_err(Error::internal)?
-//!     .register_module("status", status_api)
-//!     .map_err(Error::internal)?;
+//!     .register_module("availability", availability_api)?
+//!     .register_module("node", node_api)?
+//!     .register_module("status", status_api)?;
 //!
 //! // Serve app.
-//! spawn(app.serve("0.0.0.0:8080",  MockBase::instance()));
+//! spawn(app.serve("0.0.0.0:8080", MockBase::instance()));
 //!
 //! // Update query data using HotShot events.
 //! let mut events = hotshot.event_stream();
 //! while let Some(event) = events.next().await {
-//!     // Re-lock the mutex each time we get a new event.
-//!     let mut data_source = data_source.write().await;
+//!     let mut tx = data_source.transaction().await?;
 //!
 //!     // Update the query data based on this event.
-//!     data_source.update(&event);
-//!     data_source.commit().await.map_err(Error::internal)?;
+//!     tx.update(&event).await?;
+//!     tx.commit().await?;
 //! }
 //! # Ok(())
 //! # }
@@ -267,7 +260,6 @@
 //!
 //! ```
 //! # use async_trait::async_trait;
-//! # use futures::future::BoxFuture;
 //! # use hotshot_query_service::{Header, QueryResult, VidShare};
 //! # use hotshot_query_service::availability::{
 //! #   AvailabilityDataSource, BlockId, BlockQueryData, Fetch, LeafId, LeafQueryData,
@@ -360,7 +352,7 @@
 //!         self.hotshot_qs.vid_share(id).await
 //!     }
 //!
-//!     async fn sync_status(&self) -> BoxFuture<'static, QueryResult<SyncStatus>> {
+//!     async fn sync_status(&self) -> QueryResult<SyncStatus> {
 //!         self.hotshot_qs.sync_status().await
 //!     }
 //!
@@ -431,6 +423,7 @@ pub use resolvable::Resolvable;
 use async_std::sync::Arc;
 use async_trait::async_trait;
 use data_source::{Transaction as _, UpdateDataSource};
+use derive_more::{Deref, From, Into};
 use futures::{future::BoxFuture, stream::StreamExt};
 use hotshot::types::SystemContextHandle;
 use hotshot_types::traits::{
@@ -489,6 +482,21 @@ pub struct Options {
     pub port: u16,
 }
 
+/// Read-only wrapper for API state which does not require locking.
+#[derive(Clone, Debug, Deref, From, Into)]
+pub struct ApiState<D>(Arc<D>);
+
+#[async_trait]
+impl<D: 'static + Send + Sync> ReadState for ApiState<D> {
+    type State = D;
+    async fn read<T>(
+        &self,
+        op: impl Send + for<'a> FnOnce(&'a Self::State) -> BoxFuture<'a, T> + 'async_trait,
+    ) -> T {
+        op(&self.0).await
+    }
+}
+
 /// Run an instance of the HotShot Query service with no customization.
 pub async fn run_standalone_service<
     Types: NodeType,
@@ -515,20 +523,6 @@ where
     for<'a> D::Transaction<'a>: data_source::UpdateDataSource<Types>,
     ApiVer: StaticVersionType + 'static,
 {
-    #[derive(Clone, Debug)]
-    struct ApiState<D>(Arc<D>);
-
-    #[async_trait]
-    impl<D: 'static + Send + Sync> ReadState for ApiState<D> {
-        type State = D;
-        async fn read<T>(
-            &self,
-            op: impl Send + for<'a> FnOnce(&'a Self::State) -> BoxFuture<'a, T> + 'async_trait,
-        ) -> T {
-            op(&self.0).await
-        }
-    }
-
     // Create API modules.
     let availability_api =
         availability::define_api(&options.availability, bind_version).map_err(Error::internal)?;

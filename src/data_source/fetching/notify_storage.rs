@@ -41,8 +41,26 @@ where
     Types: NodeType,
 {
     storage: S,
-    cache: RwLock<Cache>,
     notifiers: Notifiers<Types>,
+
+    /// In-memory cache for commonly read fields.
+    ///
+    /// This cache keeps fields which are read frequently and which can be kept up-to-date by dead
+    /// reckoning on each update. Thus, we avoid ever reading these fields from the database after
+    /// startup, and we don't have to write back when the cache is modified either.
+    ///
+    /// Currently the cached fields include latest height and pruned height.
+    ///
+    /// The concurrency semantics are inherited from the underlying database. That is, any read from
+    /// the cache is *always* guaranteed to be consistent with the results we would have gotten had
+    /// we read from the database at that instant, and thus it is as if there is no cache at all --
+    /// except performance. This is accomplished by exclusively locking the cache during any
+    /// critical section where it might be out of sync with the database, for example just before
+    /// committing a database transaction, until the cache is updated with the results of that
+    /// transaction. While the cache is locked (hopefully only briefly) readers can bypass it and
+    /// read directly from the database, getting consistent data to the extent that the databse
+    /// itself maintains consistency. Thus, a reader should never block on cache updates.
+    cache: RwLock<Cache>,
 }
 
 impl<Types, S> AsRef<S> for NotifyStorage<Types, S>

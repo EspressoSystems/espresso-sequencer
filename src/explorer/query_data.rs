@@ -512,10 +512,9 @@ where
 }
 
 /// [GetBlockDetailError] represents an error that has occurred in response to
-/// the [GetBlockDetail] request.
+/// the `get_block_detail` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
-
 pub enum GetBlockDetailError {
     Unimplemented(Unimplemented),
     BlockNotFound(NotFound),
@@ -569,7 +568,7 @@ impl From<crate::QueryError> for GetBlockDetailError {
 }
 
 /// [GetBlockSummariesError] represents an error that has occurred in response
-/// to the [GetBlockSummaries] request.
+/// to the [GetBlockSummariesRequest] request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetBlockSummariesError {
@@ -630,7 +629,7 @@ impl From<crate::QueryError> for GetBlockSummariesError {
 }
 
 /// [GetTransactionDetailError] represents an error that has occurred in
-/// response to the [GetTransactionDetail] request.
+/// response to the `get_tranaction_detail` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetTransactionDetailError {
@@ -696,7 +695,7 @@ impl From<TimestampConversionError> for GetTransactionDetailError {
 }
 
 /// [GetTransactionSummariesError] represents an error that has occurred in
-/// response to the [GetTransactionSummaries] request.
+/// response to the [GetTransactionSummariesRequest] request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetTransactionSummariesError {
@@ -757,7 +756,7 @@ impl From<crate::QueryError> for GetTransactionSummariesError {
 }
 
 /// [GetExplorerSummaryError] represents an error that has occurred in response
-/// to the [GetExplorerSummary] request.
+/// to the `get_explorer_summary` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetExplorerSummaryError {
@@ -843,7 +842,7 @@ impl From<GetTransactionSummariesError> for GetExplorerSummaryError {
 }
 
 /// [GetSearchResultsError] represents an error that has occurred in response
-/// to the [GetSearchResults] request.
+/// to the `get_search_results` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GetSearchResultsError {

@@ -104,7 +104,7 @@ impl<'a> Transaction<'a> {
     ///
     /// The results of the statement will be reflected immediately in future statements made within
     /// this transaction, but will not be reflected in the underlying database until the transaction
-    /// is committed with [`commit`](VersionedDataSource::commit).
+    /// is committed with [`commit`](update::Transaction::commit).
     pub async fn execute<T, P>(&mut self, statement: &T, params: P) -> anyhow::Result<u64>
     where
         T: ?Sized + ToStatement,
