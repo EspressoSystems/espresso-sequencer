@@ -10,7 +10,7 @@
 
 use async_trait::async_trait;
 use committable::Commitment;
-use espresso_types::ChainConfig;
+use espresso_types::v0_3::ChainConfig;
 
 pub mod fs;
 pub mod no_storage;

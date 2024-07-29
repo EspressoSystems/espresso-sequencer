@@ -1,21 +1,25 @@
+use super::state::ValidatedState;
 use crate::{
     eth_signature_key::{EthKeyPair, SigningError},
-    v0_1::ValidatedState,
-    v0_3::{BidTx, BidTxBody, FullNetworkTx},
+    v0_3::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
     FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId,
 };
+use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use ethers::types::Signature;
 use hotshot_types::{
     data::ViewNumber,
     traits::{
-        auction_results_provider::HasUrls, node_implementation::ConsensusTime,
+        auction_results_provider::{AuctionResultsProvider, HasUrls},
+        node_implementation::{ConsensusTime, NodeType},
         signature_key::BuilderSignatureKey,
     },
 };
 use std::str::FromStr;
 use thiserror::Error;
+use tide_disco::error::ServerError;
 use url::Url;
+use vbs::version::StaticVersion;
 
 impl FullNetworkTx {
     /// Proxy for `execute` method of each transaction variant.
@@ -93,10 +97,19 @@ impl BidTxBody {
     pub fn amount(&self) -> FeeAmount {
         self.bid_amount
     }
+    /// get the view number
+    pub fn view(&self) -> ViewNumber {
+        self.view
+    }
     /// Instantiate a `BidTxBody` containing the values of `self`
     /// with a new `url` field.
     pub fn with_url(self, url: Url) -> Self {
         Self { url, ..self }
+    }
+
+    /// Get the cloned `url` field.
+    fn url(&self) -> Url {
+        self.url.clone()
     }
 }
 
@@ -169,8 +182,7 @@ impl BidTx {
             return Err(ExecutionError::UnresolvableChainConfig);
         };
 
-        // TODO change to `bid_recipient` when this logic is finally enabled
-        let recipient = chain_config.fee_recipient;
+        let recipient = chain_config.bid_recipient.unwrap();
         // Charge the bid amount
         state
             .charge_fee(FeeInfo::new(self.account(), self.amount()), recipient)
@@ -213,19 +225,61 @@ impl BidTx {
     pub fn account(&self) -> FeeAccount {
         self.body.account
     }
-}
-
-impl HasUrls for BidTx {
+    /// get the view number
+    pub fn view(&self) -> ViewNumber {
+        self.body.view
+    }
     /// Get the `url` field from the body.
-    fn urls(&self) -> Vec<Url> {
-        self.body.urls()
+    fn url(&self) -> Url {
+        self.body.url()
     }
 }
 
-impl HasUrls for BidTxBody {
-    /// Get the cloned `url` field.
+impl SolverAuctionResults {
+    pub fn winning_bids(&self) -> &[BidTx] {
+        &self.winning_bids
+    }
+    pub fn reserve_bids(&self) -> &[(NamespaceId, Url)] {
+        &self.reserve_bids
+    }
+    pub fn genesis() -> Self {
+        Self {
+            view_number: ViewNumber::genesis(),
+            winning_bids: vec![],
+            reserve_bids: vec![],
+        }
+    }
+}
+
+impl HasUrls for SolverAuctionResults {
     fn urls(&self) -> Vec<Url> {
-        vec![self.url.clone()]
+        self.winning_bids()
+            .iter()
+            .map(|bid| bid.url())
+            .chain(self.reserve_bids().iter().map(|bid| bid.1.clone()))
+            .collect()
+    }
+}
+
+const SOLVER_URL: &str = "https://solver:1234";
+type Ver = StaticVersion<0, 3>;
+type SurfClient<Ver> = surf_disco::Client<ServerError, Ver>;
+
+#[async_trait]
+impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for SolverAuctionResults {
+    type AuctionResult = SolverAuctionResults;
+
+    /// Fetch the auction results.
+    async fn fetch_auction_result(
+        &self,
+        view_number: TYPES::Time,
+    ) -> anyhow::Result<Self::AuctionResult> {
+        let resp = SurfClient::<Ver>::new(Url::from_str(SOLVER_URL).unwrap())
+            .get::<SolverAuctionResults>(&format!("/v0/api/auction_results/{}", *view_number))
+            .send()
+            .await
+            .unwrap();
+        Ok(resp)
     }
 }
 

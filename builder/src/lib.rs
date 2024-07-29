@@ -119,7 +119,7 @@ pub mod testing {
     use async_trait::async_trait;
     use committable::Committable;
     use espresso_types::{
-        mock::MockStateCatchup, ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey,
+        mock::MockStateCatchup, v0_3::ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey,
         PubKey, Transaction, ValidatedState,
     };
     use ethers::{

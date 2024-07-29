@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Context;
 use espresso_types::{
-    ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade, UpgradeType,
+    v0_3::ChainConfig, FeeAccount, FeeAmount, GenesisHeader, L1BlockInfo, Upgrade, UpgradeType,
 };
 use serde::{Deserialize, Serialize};
 use vbs::version::Version;
@@ -265,7 +265,8 @@ mod test {
                 max_block_size: 30000.into(),
                 base_fee: 1.into(),
                 fee_recipient: FeeAccount::default(),
-                fee_contract: Some(Address::default())
+                fee_contract: Some(Address::default()),
+                bid_recipient: None
             }
         );
         assert_eq!(
@@ -329,6 +330,7 @@ mod test {
                 max_block_size: 30000.into(),
                 base_fee: 1.into(),
                 fee_recipient: FeeAccount::default(),
+                bid_recipient: None,
                 fee_contract: None,
             }
         );

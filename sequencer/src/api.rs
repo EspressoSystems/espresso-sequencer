@@ -8,7 +8,7 @@ use committable::Commitment;
 use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::SequencerPersistence, AccountQueryData, BlockMerkleTree, ChainConfig,
+    v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData, BlockMerkleTree,
     FeeAccountProof, NodeState, PubKey, Transaction,
 };
 use ethers::prelude::Address;

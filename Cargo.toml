@@ -8,15 +8,15 @@ edition = "2021"
 resolver = "2"
 
 members = [
-  "builder",
-  "contract-bindings",
-  "contracts/rust/adapter",
-  "contracts/rust/diff-test",
-  "contracts/rust/gen-vk-contract",
-  "hotshot-state-prover",
-  "sequencer",
-  "types",
-  "utils",
+    "builder",
+    "contract-bindings",
+    "contracts/rust/adapter",
+    "contracts/rust/diff-test",
+    "contracts/rust/gen-vk-contract",
+    "hotshot-state-prover",
+    "sequencer",
+    "types",
+    "utils",
 ]
 
 [workspace.dependencies]
@@ -31,7 +31,7 @@ ark-poly = "0.4"
 ark-serialize = "0.4"
 ark-srs = "0.3.1"
 async-compatibility-layer = { version = "1.1", default-features = false, features = [
-  "logging-utils",
+    "logging-utils",
 ] }
 async-once-cell = "0.5"
 async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
@@ -48,56 +48,57 @@ dotenvy = "0.15"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.64" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.67" }
 # Hotshot imports
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.64" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "rc-0.1.36" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "rc-0.1.35" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.64" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "rc-0.1.46" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.64" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.67" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "rc-0.1.38" }
+marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", rev = "c1e60e76893557f21e8aea7e86994ebe107b4914" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "rc-0.1.37" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.67" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "rc-0.1.49" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.67" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.64" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.64" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.64" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.67" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.67" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.67" }
 hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
 # Temporary, used to pull in the mock auction results provider
-hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.64" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.67" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
-  "runtime-async-std",
-  "global-permits",
+    "runtime-async-std",
+    "global-permits",
 ], tag = "0.4.3", package = "cdn-broker" }
 cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
-  "runtime-async-std",
-  "global-permits",
+    "runtime-async-std",
+    "global-permits",
 ], tag = "0.4.3", package = "cdn-marshal" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-  "test-apis",
+    "test-apis",
 ] }
 jf-crhf = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
 jf-merkle-tree = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-  "std",
+    "std",
 ] }
 jf-signature = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-  "std",
+    "std",
 ] }
 jf-pcs = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-  "std",
-  "parallel",
+    "std",
+    "parallel",
 ] }
 jf-vid = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-  "std",
-  "parallel",
+    "std",
+    "parallel",
 ] }
 jf-rescue = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-  "std",
-  "parallel",
+    "std",
+    "parallel",
 ] }
 jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-  "std",
+    "std",
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
 libp2p = { version = "0.53", default-features = false }

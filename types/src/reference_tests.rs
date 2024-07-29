@@ -43,8 +43,8 @@ use vbs::{
 };
 
 use crate::{
-    ChainConfig, FeeAccount, FeeInfo, Header, L1BlockInfo, NamespaceId, NsTable, Payload, SeqTypes,
-    Transaction, ValidatedState,
+    v0_3::ChainConfig, FeeAccount, FeeInfo, Header, L1BlockInfo, NamespaceId, NsTable, Payload,
+    SeqTypes, Transaction, ValidatedState,
 };
 
 type Serializer = vbs::Serializer<SequencerVersion>;
@@ -99,6 +99,7 @@ fn reference_chain_config() -> ChainConfig {
         base_fee: 0.into(),
         fee_contract: Some(Default::default()),
         fee_recipient: Default::default(),
+        bid_recipient: None,
     }
 }
 
@@ -132,7 +133,7 @@ async fn reference_header(version: Version) -> Header {
     let state = ValidatedState::default();
 
     Header::create(
-        reference_chain_config().into(),
+        reference_chain_config(),
         42,
         789,
         124,
@@ -142,8 +143,8 @@ async fn reference_header(version: Version) -> Header {
         ns_table,
         state.fee_merkle_tree.commitment(),
         state.block_merkle_tree.commitment(),
-        fee_info,
-        Some(builder_signature),
+        vec![fee_info],
+        vec![builder_signature],
         version,
     )
 }
