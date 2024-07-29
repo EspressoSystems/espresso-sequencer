@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-#![cfg(feature = "dependency-tasks")]
 
 use std::sync::Arc;
 

@@ -1,5 +1,3 @@
-#![cfg(feature = "dependency-tasks")]
-
 use std::sync::Arc;
 
 use anyhow::Result;

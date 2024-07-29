@@ -1,12 +1,14 @@
 use std::{marker::PhantomData, num::NonZeroU64};
 
 use ethereum_types::U256;
-use hotshot_types::traits::network::Topic;
 // use ark_bls12_381::Parameters as Param381;
 use hotshot_types::traits::signature_key::StakeTableEntryType;
 use hotshot_types::{
     signature_key::BLSPubKey,
-    traits::{election::Membership, node_implementation::NodeType, signature_key::SignatureKey},
+    traits::{
+        election::Membership, network::Topic, node_implementation::NodeType,
+        signature_key::SignatureKey,
+    },
     PeerConfig,
 };
 #[cfg(feature = "randomized-leader-election")]
