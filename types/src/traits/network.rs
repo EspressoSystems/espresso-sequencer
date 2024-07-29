@@ -18,7 +18,7 @@ use tokio::time::error::Elapsed as TimeoutError;
 compile_error! {"Either config option \"async-std\" or \"tokio\" must be enabled for this crate."}
 use std::{
     collections::{BTreeSet, HashMap},
-    fmt::Debug,
+    fmt::{Debug, Display},
     hash::Hash,
     pin::Pin,
     sync::Arc,
@@ -274,7 +274,7 @@ pub trait ConnectedNetwork<K: SignatureKey + 'static>: Clone + Send + Sync + 'st
     async fn broadcast_message(
         &self,
         message: Vec<u8>,
-        recipients: BTreeSet<K>,
+        topic: Topic,
         broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError>;
 
@@ -672,5 +672,24 @@ impl NetworkReliability for ChaosNetwork {
 
     fn sample_repeat(&self) -> usize {
         Uniform::new_inclusive(self.repeat_low, self.repeat_high).sample(&mut rand::thread_rng())
+    }
+}
+
+/// Used when broadcasting messages
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Topic {
+    /// The `Global` topic goes out to all nodes
+    Global,
+    /// The `Da` topic goes out to only the DA committee
+    Da,
+}
+
+/// Libp2p topics require a string, so we need to convert our enum to a string
+impl Display for Topic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Topic::Global => write!(f, "global"),
+            Topic::Da => write!(f, "DA"),
+        }
     }
 }

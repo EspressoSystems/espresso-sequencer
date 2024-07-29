@@ -1,5 +1,5 @@
 #![allow(clippy::panic)]
-use std::{collections::BTreeSet, sync::Arc};
+use std::sync::Arc;
 
 use async_compatibility_layer::logging::setup_logging;
 use hotshot::{
@@ -21,7 +21,7 @@ use hotshot_types::{
     message::{DataMessage, Message, MessageKind, VersionedMessage},
     signature_key::{BLSPubKey, BuilderKey},
     traits::{
-        network::{BroadcastDelay, ConnectedNetwork, TestableNetworkingImplementation},
+        network::{BroadcastDelay, ConnectedNetwork, TestableNetworkingImplementation, Topic},
         node_implementation::{ConsensusTime, NodeType},
     },
 };
@@ -153,10 +153,10 @@ async fn memory_network_direct_queue() {
     trace!(?group);
 
     let pub_key_1 = pubkey();
-    let network1 = MemoryNetwork::new(pub_key_1, &group.clone(), Option::None);
+    let network1 = MemoryNetwork::new(&pub_key_1, &group.clone(), &[Topic::Global], Option::None);
 
     let pub_key_2 = pubkey();
-    let network2 = MemoryNetwork::new(pub_key_2, &group, Option::None);
+    let network2 = MemoryNetwork::new(&pub_key_2, &group, &[Topic::Global], Option::None);
 
     let first_messages: Vec<Message<Test>> = gen_messages(5, 100, pub_key_1);
 
@@ -204,14 +204,12 @@ async fn memory_network_direct_queue() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 #[instrument]
 async fn memory_network_broadcast_queue() {
-    setup_logging();
     // Make and connect the networking instances
     let group: Arc<MasterMap<<Test as NodeType>::SignatureKey>> = MasterMap::new();
-    trace!(?group);
     let pub_key_1 = pubkey();
-    let network1 = MemoryNetwork::new(pub_key_1, &group.clone(), Option::None);
+    let network1 = MemoryNetwork::new(&pub_key_1, &group.clone(), &[Topic::Global], Option::None);
     let pub_key_2 = pubkey();
-    let network2 = MemoryNetwork::new(pub_key_2, &group, Option::None);
+    let network2 = MemoryNetwork::new(&pub_key_2, &group, &[Topic::Da], Option::None);
 
     let first_messages: Vec<Message<Test>> = gen_messages(5, 100, pub_key_1);
 
@@ -220,11 +218,7 @@ async fn memory_network_broadcast_queue() {
     for sent_message in first_messages {
         let serialized_message = VersionedMessage::serialize(&sent_message, &None).unwrap();
         network1
-            .broadcast_message(
-                serialized_message.clone(),
-                vec![pub_key_2].into_iter().collect::<BTreeSet<_>>(),
-                BroadcastDelay::None,
-            )
+            .broadcast_message(serialized_message.clone(), Topic::Da, BroadcastDelay::None)
             .await
             .expect("Failed to message node");
         let mut recv_messages = network2
@@ -246,7 +240,7 @@ async fn memory_network_broadcast_queue() {
         network2
             .broadcast_message(
                 serialized_message.clone(),
-                vec![pub_key_1].into_iter().collect::<BTreeSet<_>>(),
+                Topic::Global,
                 BroadcastDelay::None,
             )
             .await
@@ -272,13 +266,12 @@ async fn memory_network_test_in_flight_message_count() {
     let group: Arc<MasterMap<<Test as NodeType>::SignatureKey>> = MasterMap::new();
     trace!(?group);
     let pub_key_1 = pubkey();
-    let network1 = MemoryNetwork::new(pub_key_1, &group.clone(), Option::None);
+    let network1 = MemoryNetwork::new(&pub_key_1, &group.clone(), &[Topic::Global], Option::None);
     let pub_key_2 = pubkey();
-    let network2 = MemoryNetwork::new(pub_key_2, &group, Option::None);
+    let network2 = MemoryNetwork::new(&pub_key_2, &group, &[Topic::Global], Option::None);
 
     // Create some dummy messages
     let messages: Vec<Message<Test>> = gen_messages(5, 100, pub_key_1);
-    let broadcast_recipients = BTreeSet::from([pub_key_1, pub_key_2]);
 
     assert_eq!(
         TestableNetworkingImplementation::<Test>::in_flight_message_count(&network1),
@@ -305,7 +298,7 @@ async fn memory_network_test_in_flight_message_count() {
         network2
             .broadcast_message(
                 serialized_message.clone(),
-                broadcast_recipients.clone(),
+                Topic::Global,
                 BroadcastDelay::None,
             )
             .await
