@@ -5,9 +5,10 @@ use crate::{v0_3::ChainConfig, Timestamp};
 
 /// Represents the specific type of upgrade.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(untagged)]
 #[serde(rename_all = "snake_case")]
+#[serde(untagged)]
 pub enum UpgradeType {
+    Marketplace {},
     // Note: Wrapping this in a tuple variant causes deserialization to fail because
     // the 'chain_config' name is also provided in the TOML input.
     ChainConfig { chain_config: ChainConfig },
