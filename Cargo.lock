@@ -6191,6 +6191,86 @@ dependencies = [
 ]
 
 [[package]]
+name = "marketplace-builder"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "cld",
+ "committable",
+ "dotenvy",
+ "espresso-types 0.1.0",
+ "ethers",
+ "futures",
+ "hotshot",
+ "hotshot-builder-api",
+ "hotshot-events-service",
+ "hotshot-example-types",
+ "hotshot-orchestrator",
+ "hotshot-stake-table",
+ "hotshot-state-prover",
+ "hotshot-types",
+ "jf-merkle-tree",
+ "jf-signature",
+ "libp2p",
+ "marketplace-builder-core",
+ "portpicker",
+ "rand 0.8.5",
+ "sequencer",
+ "serde",
+ "snafu 0.8.4",
+ "surf",
+ "surf-disco",
+ "tagged-base64",
+ "tide-disco",
+ "toml",
+ "tracing",
+ "url",
+ "vbs",
+ "vec1",
+]
+
+[[package]]
+name = "marketplace-builder-core"
+version = "0.0.1"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=rc-0.0.1#194e97297f7798ba763699106b1cedb045b1d9be"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "committable",
+ "derivative",
+ "futures",
+ "hotshot",
+ "hotshot-builder-api",
+ "hotshot-events-service",
+ "hotshot-task-impls",
+ "hotshot-types",
+ "multimap",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "snafu 0.8.4",
+ "surf-disco",
+ "tagged-base64",
+ "tide-disco",
+ "tokio",
+ "toml",
+ "tracing",
+ "url",
+ "vbs",
+]
+
+[[package]]
 name = "marketplace-solver"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/marketplace-solver.git?branch=ab/marketplace-integration#f2b49afae1afc389ce4f2b726b39cf845437400e"
@@ -6403,6 +6483,15 @@ dependencies = [
  "core2",
  "serde",
  "unsigned-varint 0.7.2",
+]
+
+[[package]]
+name = "multimap"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "defc4c55412d89136f966bbb339008b474350e5e6e78d2714439c386b3137a03"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -7443,7 +7532,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.70",
