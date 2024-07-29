@@ -4111,7 +4111,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.67"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4157,7 +4157,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
 dependencies = [
  "async-trait",
  "clap",
@@ -4273,7 +4273,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.67"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4306,7 +4306,7 @@ dependencies = [
 [[package]]
 name = "hotshot-fakeapi"
 version = "0.5.67"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
 dependencies = [
  "anyhow",
  "async-lock 2.8.0",
@@ -4325,7 +4325,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.67"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4336,7 +4336,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.67"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4422,7 +4422,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.67"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4487,7 +4487,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.67"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4502,7 +4502,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.67"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4538,7 +4538,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.5.67"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4583,7 +4583,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -5829,7 +5829,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.67"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
+source = "git+https://github.com/EspressoSystems/HotShot.git?tag=0.5.67#a8115816f131bf56b6689937dc8029871bbe8476"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -6174,6 +6174,86 @@ dependencies = [
 ]
 
 [[package]]
+name = "marketplace-builder"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 3.4.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "cld",
+ "committable",
+ "dotenvy",
+ "espresso-types 0.1.0",
+ "ethers",
+ "futures",
+ "hotshot",
+ "hotshot-builder-api",
+ "hotshot-events-service",
+ "hotshot-example-types",
+ "hotshot-orchestrator",
+ "hotshot-stake-table",
+ "hotshot-state-prover",
+ "hotshot-types",
+ "jf-merkle-tree",
+ "jf-signature",
+ "libp2p",
+ "marketplace-builder-core",
+ "portpicker",
+ "rand 0.8.5",
+ "sequencer",
+ "serde",
+ "snafu 0.8.4",
+ "surf",
+ "surf-disco",
+ "tagged-base64",
+ "tide-disco",
+ "toml",
+ "tracing",
+ "url",
+ "vbs",
+ "vec1",
+]
+
+[[package]]
+name = "marketplace-builder-core"
+version = "0.0.1"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=rc-0.0.1#3f3a73f5bab7276000027a929dacb17341a0e63e"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 3.4.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "committable",
+ "derivative",
+ "futures",
+ "hotshot",
+ "hotshot-builder-api",
+ "hotshot-events-service",
+ "hotshot-task-impls",
+ "hotshot-types",
+ "multimap",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "snafu 0.8.4",
+ "surf-disco",
+ "tagged-base64",
+ "tide-disco",
+ "tokio",
+ "toml",
+ "tracing",
+ "url",
+ "vbs",
+]
+
+[[package]]
 name = "marketplace-solver"
 version = "0.1.0"
 source = "git+https://github.com/EspressoSystems/marketplace-solver.git?tag=0.1.2#11f4e09f5fbf70f825230d37ec3c03d199700149"
@@ -6386,6 +6466,15 @@ dependencies = [
  "core2",
  "serde",
  "unsigned-varint 0.7.2",
+]
+
+[[package]]
+name = "multimap"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "defc4c55412d89136f966bbb339008b474350e5e6e78d2714439c386b3137a03"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -7426,7 +7515,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.70",
