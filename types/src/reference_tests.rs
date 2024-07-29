@@ -151,7 +151,7 @@ async fn reference_header(version: Version) -> Header {
 
 const REFERENCE_V1_HEADER_COMMITMENT: &str = "BLOCK~dh1KpdvvxSvnnPpOi2yI3DOg8h6ltr2Kv13iRzbQvtN2";
 const REFERENCE_V2_HEADER_COMMITMENT: &str = "BLOCK~V0GJjL19nCrlm9n1zZ6gaOKEekSMCT6uR5P-h7Gi6UJR";
-const REFERENCE_V3_HEADER_COMMITMENT: &str = "BLOCK~X3j5MJWJrye2dKJv5uRLk5-z3augpUDftecBFO6dYahF";
+const REFERENCE_V3_HEADER_COMMITMENT: &str = "BLOCK~pD6_in2J8VzT6SshvvFUkNyMbx_h_gTtlU3WTmC6WedD";
 
 fn reference_transaction<R>(ns_id: NamespaceId, rng: &mut R) -> Transaction
 where
