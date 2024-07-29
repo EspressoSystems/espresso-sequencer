@@ -255,6 +255,7 @@ mod test {
     };
     use sequencer::persistence::no_storage::{self, NoStorage};
     use surf_disco::Client;
+    use vbs::version::StaticVersion;
 
     use super::*;
     use crate::testing::{
@@ -269,7 +270,7 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let ver = <SeqTypes as NodeType>::Base::instance();
+        let ver = StaticVersion::<0, 1>::instance();
         // Hotshot Test Config
         let hotshot_config = HotShotTestConfig::default();
 
@@ -315,10 +316,10 @@ mod test {
         let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
-        let builder_client = Client::<
-            hotshot_builder_api::v0_1::builder::Error,
-            <SeqTypes as NodeType>::Base,
-        >::new(hotshot_builder_api_url.clone());
+        let builder_client =
+            Client::<hotshot_builder_api::v0_1::builder::Error, StaticVersion<0, 1>>::new(
+                hotshot_builder_api_url.clone(),
+            );
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
 
         let seed = [207_u8; 32];

@@ -4,14 +4,13 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use cld::ClDuration;
-use espresso_types::{eth_signature_key::EthKeyPair, SeqTypes};
+use espresso_types::eth_signature_key::EthKeyPair;
 use hotshot::traits::ValidatedState;
-use hotshot_builder_core::testing::basic_test::NodeType;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use sequencer::{Genesis, L1Params};
 use snafu::Snafu;
 use url::Url;
-use vbs::version::StaticVersionType;
+use vbs::version::{StaticVersion, StaticVersionType};
 
 #[derive(Parser, Clone, Debug)]
 struct NonPermissionedBuilderOptions {
@@ -121,7 +120,7 @@ async fn main() -> anyhow::Result<()> {
         genesis.chain_config,
         l1_params,
         opt.state_peers,
-        <SeqTypes as NodeType>::Base::instance(),
+        StaticVersion::<0, 1>::instance(),
     )
     .unwrap();
 
