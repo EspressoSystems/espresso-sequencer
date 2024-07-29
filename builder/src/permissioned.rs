@@ -591,7 +591,7 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let ver = SequencerVersion::instance();
+        let ver = <SeqTypes as NodeType>::Base::instance();
 
         // Hotshot Test Config
         let hotshot_config = HotShotTestConfig::default();
