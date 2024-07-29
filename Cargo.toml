@@ -125,10 +125,10 @@ portpicker = "0.1.1"
 pretty_assertions = "1.4"
 
 [patch."https://github.com/EspressoSystems/HotShot.git"]
-hotshot = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3-lower-quorum" }
-hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3-lower-quorum" }
-hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3-lower-quorum" }
-hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3-lower-quorum" }
-hotshot-task = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3-lower-quorum" }
-hotshot-testing = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3-lower-quorum" }
-hotshot-types = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch3-lower-quorum" }
+hotshot = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch4" }
+hotshot-builder-api = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch4" }
+hotshot-orchestrator = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch4" }
+hotshot-stake-table = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch4" }
+hotshot-task = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch4" }
+hotshot-testing = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch4" }
+hotshot-types = { git = "https://www.github.com/EspressoSystems/hotshot", tag = "0.5.60-patch4" }
