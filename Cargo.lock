@@ -2020,7 +2020,7 @@ dependencies = [
 [[package]]
 name = "contract-bindings"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main#a31c0bca53e2b46e47f913085e0cf3efe56bdcc6"
+source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration#bc760cd9abde2e5ead2075418e2c91e468474732"
 dependencies = [
  "ethers",
  "serde",
@@ -2961,8 +2961,10 @@ dependencies = [
  "sha2 0.10.8",
  "snafu 0.8.4",
  "static_assertions",
+ "surf-disco",
  "tagged-base64",
  "thiserror",
+ "tide-disco",
  "time 0.3.36",
  "tracing",
  "trait-set",
@@ -2973,7 +2975,7 @@ dependencies = [
 [[package]]
 name = "espresso-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main#a31c0bca53e2b46e47f913085e0cf3efe56bdcc6"
+source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration#bc760cd9abde2e5ead2075418e2c91e468474732"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -2988,7 +2990,7 @@ dependencies = [
  "clap",
  "cld",
  "committable",
- "contract-bindings 0.1.0 (git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main)",
+ "contract-bindings 0.1.0 (git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration)",
  "derivative",
  "derive_more",
  "es-version",
@@ -3010,7 +3012,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rand_distr",
- "sequencer-utils 0.1.0 (git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main)",
+ "sequencer-utils 0.1.0 (git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration)",
  "serde",
  "serde_json",
  "sha2 0.10.8",
@@ -4243,7 +4245,7 @@ dependencies = [
 [[package]]
 name = "hotshot-contract-adapter"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main#a31c0bca53e2b46e47f913085e0cf3efe56bdcc6"
+source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration#bc760cd9abde2e5ead2075418e2c91e468474732"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -4253,7 +4255,7 @@ dependencies = [
  "ark-poly",
  "ark-serialize",
  "ark-std",
- "contract-bindings 0.1.0 (git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main)",
+ "contract-bindings 0.1.0 (git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration)",
  "diff-test-bn254",
  "ethers",
  "hotshot-types",
@@ -6193,7 +6195,7 @@ dependencies = [
 [[package]]
 name = "marketplace-solver"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/marketplace-solver.git?tag=0.1.1#f13b6a6dc37705d887821d9f7a164146af34c439"
+source = "git+https://github.com/EspressoSystems/marketplace-solver.git?branch=ab/marketplace-integration#f2b49afae1afc389ce4f2b726b39cf845437400e"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -6203,7 +6205,7 @@ dependencies = [
  "clap",
  "cld",
  "committable",
- "espresso-types 0.1.0 (git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main)",
+ "espresso-types 0.1.0 (git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration)",
  "futures",
  "hotshot",
  "hotshot-events-service",
@@ -8618,18 +8620,18 @@ dependencies = [
 [[package]]
 name = "sequencer-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main#a31c0bca53e2b46e47f913085e0cf3efe56bdcc6"
+source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration#bc760cd9abde2e5ead2075418e2c91e468474732"
 dependencies = [
  "anyhow",
  "ark-serialize",
  "async-std",
  "clap",
  "committable",
- "contract-bindings 0.1.0 (git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main)",
+ "contract-bindings 0.1.0 (git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration)",
  "derive_more",
  "ethers",
  "futures",
- "hotshot-contract-adapter 0.1.0 (git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main)",
+ "hotshot-contract-adapter 0.1.0 (git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration)",
  "portpicker",
  "serde",
  "serde_json",

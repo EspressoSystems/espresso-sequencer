@@ -1,12 +1,18 @@
 use crate::{v0_1, BlockSize, ChainId, FeeAccount, FeeAmount};
+use anyhow::Chain;
 use committable::{Commitment, Committable};
 use ethers::types::{Address, U256};
 use itertools::Either;
-use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use serde::{
+    de::{self, MapAccess, SeqAccess, Visitor},
+    ser::SerializeStruct,
+    Deserialize, Deserializer, Serialize, Serializer,
+};
+use serde_json::{Map, Value};
+use std::{fmt, str::FromStr};
 
 /// Global variables for an Espresso blockchain.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Hash)]
 pub struct ChainConfig {
     /// Espresso chain ID
     pub chain_id: ChainId,
@@ -31,8 +37,152 @@ pub struct ChainConfig {
     /// contract can decide what to do with tokens locked in this account in Espresso.
     pub fee_recipient: FeeAccount,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     /// Account that receives sequencing bids.
     pub bid_recipient: Option<FeeAccount>,
+}
+
+// impl Serialize for ChainConfig {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: Serializer,
+//     {
+//         let mut len = 5;
+//         if self.bid_recipient.is_some() {
+//             len = 6;
+//         }
+
+//         let mut state = serializer.serialize_struct("ChainConfig", len)?;
+//         state.serialize_field("chain_id", &self.chain_id)?;
+//         state.serialize_field("max_block_size", &self.max_block_size)?;
+//         state.serialize_field("base_fee", &self.base_fee)?;
+//         state.serialize_field("fee_contract", &self.fee_contract)?;
+//         state.serialize_field("fee_recipient", &self.fee_recipient)?;
+
+//         if self.bid_recipient.is_some() {
+//             state.serialize_field("bid_recipient", &self.bid_recipient)?;
+//         }
+
+//         state.end()
+//     }
+// }
+
+impl<'de> Deserialize<'de> for ChainConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ChainConfigVisitor;
+
+        impl<'de> Visitor<'de> for ChainConfigVisitor {
+            type Value = ChainConfig;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("ChainConfig")
+            }
+
+            fn visit_seq<V>(self, mut seq: V) -> Result<Self::Value, V::Error>
+            where
+                V: SeqAccess<'de>,
+            {
+                let chain_config = ChainConfig {
+                    chain_id: seq
+                        .next_element()?
+                        .ok_or_else(|| de::Error::missing_field("chain_id"))?,
+                    max_block_size: seq
+                        .next_element()?
+                        .ok_or_else(|| de::Error::missing_field("max_block_size"))?,
+                    base_fee: seq
+                        .next_element()?
+                        .ok_or_else(|| de::Error::missing_field("base_fee"))?,
+                    fee_contract: seq
+                        .next_element()?
+                        .ok_or_else(|| de::Error::missing_field("fee_contract"))?,
+                    fee_recipient: seq
+                        .next_element()?
+                        .ok_or_else(|| de::Error::missing_field("fee_recipient"))?,
+                    bid_recipient: if let Ok(val) = seq.next_element() {
+                        val.ok_or_else(|| de::Error::custom("failed to deserialize bid_recipient"))?
+                    } else {
+                        None
+                    },
+                };
+
+                Ok(chain_config)
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<ChainConfig, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                // insert all the fields in the serde_map as the map may have out of order fields.
+                let mut serde_map: Map<String, Value> = Map::new();
+
+                while let Some(key) = map.next_key::<String>()? {
+                    serde_map.insert(key.trim().to_owned(), map.next_value()?);
+                }
+
+                let bid_recipient = if let Some(val) = serde_map.get("bid_recipient") {
+                    serde_json::from_value(val.clone()).unwrap()
+                } else {
+                    None
+                };
+
+                let chain_config = ChainConfig {
+                    chain_id: serde_json::from_value(
+                        serde_map
+                            .get("chain_id")
+                            .ok_or_else(|| de::Error::missing_field("chain_id"))?
+                            .clone(),
+                    )
+                    .map_err(de::Error::custom)?,
+                    max_block_size: serde_json::from_value(
+                        serde_map
+                            .get("max_block_size")
+                            .ok_or_else(|| de::Error::missing_field("max_block_size"))?
+                            .clone(),
+                    )
+                    .map_err(de::Error::custom)?,
+                    base_fee: serde_json::from_value(
+                        serde_map
+                            .get("base_fee")
+                            .ok_or_else(|| de::Error::missing_field("base_fee"))?
+                            .clone(),
+                    )
+                    .map_err(de::Error::custom)?,
+                    fee_contract: serde_json::from_value(
+                        serde_map
+                            .get("fee_contract")
+                            .ok_or_else(|| de::Error::missing_field("fee_contract"))?
+                            .clone(),
+                    )
+                    .map_err(de::Error::custom)?,
+                    fee_recipient: serde_json::from_value(
+                        serde_map
+                            .get("fee_recipient")
+                            .ok_or_else(|| de::Error::missing_field("fee_recipient"))?
+                            .clone(),
+                    )
+                    .map_err(de::Error::custom)?,
+                    bid_recipient,
+                };
+
+                Ok(chain_config)
+            }
+        }
+
+        let fields: &[&str] = &[
+            "chain_id",
+            "max_block_size",
+            "base_fee",
+            "fee_contract",
+            "fee_recipient",
+            "bid_recipient",
+        ];
+
+        deserializer.deserialize_struct("ChainConfig", fields, ChainConfigVisitor)
+    }
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Deserialize, Serialize, Eq, Hash)]
@@ -117,6 +267,37 @@ impl From<&v0_1::ResolvableChainConfig> for ResolvableChainConfig {
         }
     }
 }
+
+impl From<ChainConfig> for v0_1::ResolvableChainConfig {
+    fn from(cf: ChainConfig) -> Self {
+        let v01_chain_config = v0_1::ChainConfig::from(cf);
+
+        Self {
+            chain_config: Either::Left(v01_chain_config),
+        }
+    }
+}
+
+// impl From<ChainConfig> for v0_1::ChainConfig {
+//     fn from(chain_config: ChainConfig) -> v0_1::ChainConfig {
+//         let ChainConfig {
+//             chain_id,
+//             max_block_size,
+//             base_fee,
+//             fee_contract,
+//             fee_recipient,
+//             ..
+//         } = chain_config;
+
+//         v0_1::ChainConfig {
+//             chain_id,
+//             max_block_size,
+//             base_fee,
+//             fee_contract,
+//             fee_recipient,
+//         }
+//     }
+// }
 
 impl From<v0_1::ChainConfig> for ChainConfig {
     fn from(chain_config: v0_1::ChainConfig) -> ChainConfig {
