@@ -2,6 +2,8 @@
 /// The types we're importing
 pub mod types;
 
+use std::path::Path;
+
 use async_compatibility_layer::art::async_spawn;
 use cdn_broker::{reexports::crypto::signature::KeyPair, Broker};
 use cdn_marshal::Marshal;
@@ -13,6 +15,7 @@ use hotshot_example_types::state_types::TestTypes;
 use hotshot_orchestrator::client::ValidatorArgs;
 use hotshot_types::traits::node_implementation::NodeType;
 use infra::{gen_local_address, BUILDER_BASE_PORT};
+use rand::{rngs::StdRng, RngCore, SeedableRng};
 
 use crate::{
     infra::{read_orchestrator_init_config, run_orchestrator, OrchestratorArgs},
@@ -47,8 +50,17 @@ async fn main() {
     let (broker_public_key, broker_private_key) =
         <TestTypes as NodeType>::SignatureKey::generated_from_seed_indexed([0u8; 32], 1337);
 
-    // The broker (peer) discovery endpoint shall be a local SQLite file
-    let discovery_endpoint = "test.sqlite".to_string();
+    // Get the OS temporary directory
+    let temp_dir = std::env::temp_dir();
+
+    // Create an SQLite file inside of the temporary directory
+    let discovery_endpoint = temp_dir
+        .join(Path::new(&format!(
+            "test-{}.sqlite",
+            StdRng::from_entropy().next_u64()
+        )))
+        .to_string_lossy()
+        .into_owned();
 
     // 2 brokers
     for _ in 0..2 {
