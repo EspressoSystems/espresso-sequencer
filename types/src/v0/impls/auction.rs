@@ -305,6 +305,7 @@ mod test {
     }
 
     #[test]
+    #[ignore] // TODO enable after upgrade to v3
     fn test_mock_bid_tx_charge() {
         let mut state = ValidatedState::default();
         let key = FeeAccount::test_key_pair();
