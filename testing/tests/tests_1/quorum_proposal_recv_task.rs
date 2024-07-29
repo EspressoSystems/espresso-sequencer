@@ -40,7 +40,7 @@ async fn test_quorum_proposal_recv_task() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle(2).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl>(2).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
     let consensus = handle.hotshot.consensus();
@@ -128,7 +128,7 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle(4).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl>(4).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
     let consensus = handle.hotshot.consensus();

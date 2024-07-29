@@ -40,7 +40,7 @@ async fn test_upgrade_task_vote() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle(1).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl>(1).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -197,7 +197,7 @@ async fn test_upgrade_task_propose() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle(3).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl>(3).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -355,7 +355,7 @@ async fn test_upgrade_task_blank_blocks() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle(6).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl>(6).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 

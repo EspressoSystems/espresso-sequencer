@@ -17,7 +17,7 @@ async fn test_view_sync_task() {
     async_compatibility_layer::logging::setup_backtrace();
 
     // Build the API for node 5.
-    let handle = build_system_handle(5).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl>(5).await.0;
 
     let vote_data = ViewSyncPreCommitData {
         relay: 0,

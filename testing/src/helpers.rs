@@ -6,13 +6,16 @@ use bitvec::bitvec;
 use committable::Committable;
 use ethereum_types::U256;
 use hotshot::{
+    traits::{NodeImplementation, TestableNodeImplementation},
     types::{BLSPubKey, SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, SystemContext,
 };
 use hotshot_example_types::{
+    auction_results_provider_types::TestAuctionResultsProvider,
     block_types::TestTransaction,
     node_types::{MemoryImpl, TestTypes},
     state_types::{TestInstanceState, TestValidatedState},
+    storage_types::TestStorage,
 };
 use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
@@ -39,15 +42,21 @@ use crate::test_builder::TestDescription;
 /// create the [`SystemContextHandle`] from a node id
 /// # Panics
 /// if cannot create a [`HotShotInitializer`]
-pub async fn build_system_handle(
+pub async fn build_system_handle<
+    TYPES: NodeType<InstanceState = TestInstanceState>,
+    I: NodeImplementation<
+            TYPES,
+            Storage = TestStorage<TYPES>,
+            AuctionResultsProvider = TestAuctionResultsProvider,
+        > + TestableNodeImplementation<TYPES>,
+>(
     node_id: u64,
 ) -> (
-    SystemContextHandle<TestTypes, MemoryImpl>,
-    Sender<Arc<HotShotEvent<TestTypes>>>,
-    Receiver<Arc<HotShotEvent<TestTypes>>>,
+    SystemContextHandle<TYPES, I>,
+    Sender<Arc<HotShotEvent<TYPES>>>,
+    Receiver<Arc<HotShotEvent<TYPES>>>,
 ) {
-    let builder: TestDescription<TestTypes, MemoryImpl> =
-        TestDescription::default_multiple_rounds();
+    let builder: TestDescription<TYPES, I> = TestDescription::default_multiple_rounds();
 
     let launcher = builder.gen_launcher(node_id);
 
@@ -56,33 +65,33 @@ pub async fn build_system_handle(
     let auction_results_provider = (launcher.resource_generator.auction_results_provider)(node_id);
     let config = launcher.resource_generator.config.clone();
 
-    let initializer = HotShotInitializer::<TestTypes>::from_genesis(TestInstanceState {})
+    let initializer = HotShotInitializer::<TYPES>::from_genesis(TestInstanceState {})
         .await
         .unwrap();
 
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
     let private_key = config.my_own_validator_config.private_key.clone();
-    let public_key = config.my_own_validator_config.public_key;
+    let public_key = config.my_own_validator_config.public_key.clone();
 
     let _known_nodes_without_stake = config.known_nodes_without_stake.clone();
 
     let memberships = Memberships {
-        quorum_membership: <TestTypes as NodeType>::Membership::create_election(
+        quorum_membership: TYPES::Membership::create_election(
             known_nodes_with_stake.clone(),
             known_nodes_with_stake.clone(),
             config.fixed_leader_for_gpuvid,
         ),
-        da_membership: <TestTypes as NodeType>::Membership::create_election(
+        da_membership: TYPES::Membership::create_election(
             known_nodes_with_stake.clone(),
             config.known_da_nodes.clone(),
             config.fixed_leader_for_gpuvid,
         ),
-        vid_membership: <TestTypes as NodeType>::Membership::create_election(
+        vid_membership: TYPES::Membership::create_election(
             known_nodes_with_stake.clone(),
             known_nodes_with_stake.clone(),
             config.fixed_leader_for_gpuvid,
         ),
-        view_sync_membership: <TestTypes as NodeType>::Membership::create_election(
+        view_sync_membership: TYPES::Membership::create_election(
             known_nodes_with_stake.clone(),
             known_nodes_with_stake,
             config.fixed_leader_for_gpuvid,

@@ -52,7 +52,7 @@ async fn test_upgrade_task_with_proposal() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle(3).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl>(3).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 

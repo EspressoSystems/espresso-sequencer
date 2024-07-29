@@ -1,5 +1,8 @@
 use hotshot::traits::{
-    election::static_committee::{GeneralStaticCommittee, StaticCommittee},
+    election::{
+        static_committee::{GeneralStaticCommittee, StaticCommittee},
+        static_committee_leader_two_views::StaticCommitteeLeaderForTwoViews,
+    },
     implementations::{CombinedNetworks, Libp2pNetwork, MemoryNetwork, PushCdnNetwork},
     NodeImplementation,
 };
@@ -49,6 +52,41 @@ impl NodeType for TestTypes {
     type ValidatedState = TestValidatedState;
     type InstanceState = TestInstanceState;
     type Membership = GeneralStaticCommittee<TestTypes, Self::SignatureKey>;
+    type BuilderSignatureKey = BuilderKey;
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Default,
+    Hash,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+/// filler struct to implement node type and allow us
+/// to select our traits
+pub struct TestConsecutiveLeaderTypes;
+impl NodeType for TestConsecutiveLeaderTypes {
+    type Base = StaticVersion<0, 1>;
+    type Upgrade = StaticVersion<0, 2>;
+    const UPGRADE_HASH: [u8; 32] = [
+        1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+        0, 0,
+    ];
+    type Time = ViewNumber;
+    type BlockHeader = TestBlockHeader;
+    type BlockPayload = TestBlockPayload;
+    type SignatureKey = BLSPubKey;
+    type Transaction = TestTransaction;
+    type ValidatedState = TestValidatedState;
+    type InstanceState = TestInstanceState;
+    type Membership =
+        StaticCommitteeLeaderForTwoViews<TestConsecutiveLeaderTypes, Self::SignatureKey>;
     type BuilderSignatureKey = BuilderKey;
 }
 

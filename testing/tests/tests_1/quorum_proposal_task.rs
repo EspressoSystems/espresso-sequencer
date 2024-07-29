@@ -43,7 +43,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
     async_compatibility_layer::logging::setup_backtrace();
 
     let node_id = 1;
-    let handle = build_system_handle(node_id).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl>(node_id).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -130,7 +130,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
     async_compatibility_layer::logging::setup_backtrace();
 
     let node_id = 3;
-    let handle = build_system_handle(node_id).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl>(node_id).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -307,7 +307,7 @@ async fn test_quorum_proposal_task_qc_timeout() {
     async_compatibility_layer::logging::setup_backtrace();
 
     let node_id = 3;
-    let handle = build_system_handle(node_id).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl>(node_id).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -388,7 +388,7 @@ async fn test_quorum_proposal_task_view_sync() {
     async_compatibility_layer::logging::setup_backtrace();
 
     let node_id = 2;
-    let handle = build_system_handle(node_id).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl>(node_id).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -470,7 +470,7 @@ async fn test_quorum_proposal_task_liveness_check() {
     async_compatibility_layer::logging::setup_backtrace();
 
     let node_id = 3;
-    let handle = build_system_handle(node_id).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl>(node_id).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -640,7 +640,7 @@ async fn test_quorum_proposal_task_with_incomplete_events() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle(2).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl>(2).await.0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
