@@ -1102,7 +1102,7 @@ mod test_headers {
     use std::sync::Arc;
 
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
-    use es_version::SequencerVersion;
+
     use ethers::{
         types::{Address, U256},
         utils::Anvil,
@@ -1509,7 +1509,7 @@ mod test_headers {
         let anvil = Anvil::new().block_time(1u32).spawn();
         let mut genesis_state = NodeState::mock()
             .with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1))
-            .with_version(SequencerVersion::version());
+            .with_version(StaticVersion::<0, 1>::version());
 
         let genesis = GenesisForTest::default().await;
         let vid_common = vid_scheme(1).disperse([]).unwrap().common;
@@ -1564,7 +1564,7 @@ mod test_headers {
             ns_table,
             builder_fee,
             vid_common.clone(),
-            SequencerVersion::version(),
+            StaticVersion::<0, 1>::version(),
         )
         .await
         .unwrap();

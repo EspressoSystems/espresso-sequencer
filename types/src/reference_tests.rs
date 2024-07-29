@@ -25,10 +25,10 @@ use std::{fmt::Debug, path::Path, str::FromStr};
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
-use es_version::SequencerVersion;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::{
-    block_contents::vid_commitment, signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
+    block_contents::vid_commitment, node_implementation::NodeType,
+    signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
 };
 use jf_merkle_tree::MerkleTreeScheme;
 use pretty_assertions::assert_eq;
@@ -47,7 +47,7 @@ use crate::{
     Transaction, ValidatedState,
 };
 
-type Serializer = vbs::Serializer<SequencerVersion>;
+type Serializer = vbs::Serializer<<SeqTypes as NodeType>::Base>;
 
 async fn reference_payload() -> Payload {
     const NUM_NS_IDS: usize = 3;

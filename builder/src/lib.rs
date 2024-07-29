@@ -14,7 +14,6 @@ use async_std::{
     sync::{Arc, RwLock},
     task::{spawn, JoinHandle},
 };
-use es_version::SequencerVersion;
 use espresso_types::{
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
     SeqTypes,
@@ -87,7 +86,7 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     let private_mempool_api = hotshot_builder_api::v0_1::builder::submit_api::<
         ProxyGlobalState<SeqTypes>,
         SeqTypes,
-        SequencerVersion,
+        <SeqTypes as NodeType>::Base,
     >(&HotshotBuilderApiOptions::default())
     .expect("Failed to construct the builder API for private mempool txns");
 
@@ -119,7 +118,7 @@ pub mod testing {
     use async_lock::RwLock;
     use async_trait::async_trait;
     use committable::Committable;
-    use es_version::SequencerVersion;
+
     use espresso_types::{
         mock::MockStateCatchup, v0_3::ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey,
         PubKey, Transaction, ValidatedState,
@@ -449,7 +448,7 @@ pub mod testing {
             let hotshot_events_api = hotshot_events_service::events::define_api::<
                 Arc<RwLock<EventsStreamer<SeqTypes>>>,
                 SeqTypes,
-                SequencerVersion,
+                <SeqTypes as NodeType>::Base,
             >(&EventStreamingApiOptions::default())
             .expect("Failed to define hotshot eventsAPI");
 
@@ -458,7 +457,7 @@ pub mod testing {
             app.register_module("hotshot-events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");
 
-            async_spawn(app.serve(url, SequencerVersion::instance()));
+            async_spawn(app.serve(url, <SeqTypes as NodeType>::Base::instance()));
         }
         // enable hotshot event streaming
         pub fn enable_hotshot_node_event_streaming<P: SequencerPersistence>(
@@ -548,7 +547,7 @@ pub mod testing {
                 ),
                 MockStateCatchup::default(),
             )
-            .with_version(SequencerVersion::VERSION)
+            .with_version(<SeqTypes as NodeType>::Base::VERSION)
             .with_genesis(ValidatedState::default());
 
             // generate builder keys
@@ -677,7 +676,6 @@ mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::stream::IntoStream;
     use clap::builder;
-    use es_version::SequencerVersion;
     use espresso_types::{Header, NodeState, Payload, ValidatedState};
     use ethers::providers::Quorum;
     use futures::StreamExt;
@@ -704,7 +702,7 @@ mod test {
         setup_logging();
         setup_backtrace();
 
-        let ver = SequencerVersion::instance();
+        let ver = <SeqTypes as NodeType>::Base::instance();
 
         let success_height = 5;
         // Assign `config` so it isn't dropped early.

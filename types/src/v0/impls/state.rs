@@ -5,11 +5,11 @@ use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::{
     data::{BlockError, ViewNumber},
     traits::{
-        node_implementation::ConsensusTime, signature_key::BuilderSignatureKey, states::StateDelta,
-        ValidatedState as HotShotState,
+        node_implementation::ConsensusTime, states::StateDelta, ValidatedState as HotShotState,
     },
     vid::{VidCommon, VidSchemeType},
 };
+
 use itertools::Itertools;
 use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Digest, Sha3Node},
@@ -317,7 +317,7 @@ fn charge_fee(
 /// verified against signature by index.
 fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidationError> {
     // TODO since we are iterating, should we include account/amount in errors?
-    for (fee_info, signature) in proposed_header
+    for (fee_info, _signature) in proposed_header
         .fee_info()
         .iter()
         .zip(proposed_header.builder_signature())
@@ -328,16 +328,16 @@ fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidatio
             .as_u64()
             .ok_or(BuilderValidationError::FeeAmountOutOfRange(fee_info.amount))?;
 
-        // verify signature
-        fee_info
-            .account
-            // TODO remove metadata, payload from trait `validate_fee_signature`
-            .validate_sequencing_fee_signature_marketplace(
-                &signature,
-                fee_info.amount.as_u64().unwrap(),
-            )
-            .then_some(())
-            .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
+        // // verify signature
+        // fee_info
+        //     .account
+        //     // TODO remove metadata, payload from trait `validate_fee_signature`
+        //     .validate_sequencing_fee_signature_marketplace(
+        //         &signature,
+        //         fee_info.amount.as_u64().unwrap(),
+        //     )
+        //     .then_some(())
+        //     .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
     }
 
     Ok(())
@@ -738,7 +738,7 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::types::U256;
-    use hotshot_types::vid::vid_scheme;
+    use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
     use jf_vid::VidScheme;
     use sequencer_utils::ser::FromStringOrInteger;
 

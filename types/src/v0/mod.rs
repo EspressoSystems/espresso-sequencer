@@ -132,8 +132,8 @@ impl NodeType for SeqTypes {
     type ValidatedState = ValidatedState;
     type Membership = GeneralStaticCommittee<Self, PubKey>;
     type BuilderSignatureKey = FeeAccount;
-    type Base = StaticVersion<0, 3>;
-    type Upgrade = StaticVersion<0, 4>;
+    type Base = StaticVersion<0, 2>;
+    type Upgrade = StaticVersion<0, 3>;
     const UPGRADE_HASH: [u8; 32] = [
         1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
         0, 0,

@@ -8,11 +8,15 @@ use crate::{v0_3::ChainConfig, Timestamp};
 #[serde(rename_all = "snake_case")]
 #[serde(untagged)]
 pub enum UpgradeType {
-    Marketplace {},
     // Note: Wrapping this in a tuple variant causes deserialization to fail because
     // the 'chain_config' name is also provided in the TOML input.
     ChainConfig { chain_config: ChainConfig },
+    // todo (ab): use empty variant and fix serialization
+    Marketplace { marketplace: Marketplace },
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct Marketplace {}
 
 /// Represents an upgrade based on time (unix timestamp).
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]

@@ -6,10 +6,10 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::sleep;
 use clap::Parser;
 use committable::Committable;
-use es_version::SequencerVersion;
 use espresso_types::SeqTypes;
 use futures::future::join_all;
 use hotshot_query_service::availability::BlockQueryData;
+use hotshot_types::traits::node_implementation::NodeType;
 use surf_disco::Url;
 
 /// Utility program to count transactions sequenced by HotShot.
@@ -37,7 +37,10 @@ async fn main() {
     setup_backtrace();
 
     let opt = Options::parse();
-    let client = surf_disco::Client::<hotshot_query_service::Error, SequencerVersion>::new(opt.url);
+    let client =
+        surf_disco::Client::<hotshot_query_service::Error, <SeqTypes as NodeType>::Base>::new(
+            opt.url,
+        );
     client.connect(None).await;
 
     let block_height: u64 = client

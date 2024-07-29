@@ -25,7 +25,6 @@ committable = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
 derivative = { workspace = true }
 derive_more = { workspace = true }
-es-version = { workspace = true } 
 ethers = { workspace = true }
 fluent-asserter = "0.1.9"
 futures = { workspace = true } 

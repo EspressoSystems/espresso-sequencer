@@ -6,9 +6,9 @@ use anyhow::{bail, Context};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use builder::permissioned::init_node;
 use clap::Parser;
-use es_version::SEQUENCER_VERSION;
-use espresso_types::eth_signature_key::EthKeyPair;
+use espresso_types::{eth_signature_key::EthKeyPair, SeqTypes};
 use ethers::types::Address;
+use hotshot_builder_core::testing::basic_test::NodeType;
 use hotshot_types::{
     data::ViewNumber,
     light_client::StateSignKey,
@@ -20,6 +20,7 @@ use sequencer::{
     options::parse_duration, persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams,
 };
 use url::Url;
+use vbs::version::StaticVersionType;
 
 #[derive(Parser, Clone, Debug)]
 pub struct PermissionedBuilderOptions {
@@ -259,7 +260,7 @@ async fn main() -> anyhow::Result<()> {
         catchup_backoff: Default::default(),
     };
 
-    let sequencer_version = SEQUENCER_VERSION;
+    let sequencer_version = <SeqTypes as NodeType>::Base::instance();
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 

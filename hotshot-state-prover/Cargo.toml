@@ -23,7 +23,6 @@ cld = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
 derive_more = { workspace = true }
 displaydoc = { version = "0.2.3", default-features = false }
-es-version = { workspace = true }
 ethers = { workspace = true }
 futures = { workspace = true }
 hotshot-contract-adapter = { workspace = true }
@@ -50,6 +49,7 @@ time = { workspace = true }
 toml = "0.8"
 tracing = { workspace = true }
 url = { workspace = true }
+espresso-types = { path = "../types", features = ["testing"] }
 vbs = { workspace = true }
 
 [features]

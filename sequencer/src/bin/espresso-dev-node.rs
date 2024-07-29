@@ -4,7 +4,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::spawn;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
-use es_version::SEQUENCER_VERSION;
+use espresso_types::SeqTypes;
 use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
@@ -15,7 +15,10 @@ use futures::FutureExt;
 use hotshot_state_prover::service::{
     one_honest_threshold, run_prover_service_with_stake_table, StateProverConfig,
 };
-use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
+use hotshot_types::traits::{
+    node_implementation::NodeType,
+    stake_table::{SnapshotVersion, StakeTableScheme},
+};
 use portpicker::pick_unused_port;
 use sequencer::{
     api::{
@@ -160,7 +163,7 @@ async fn main() -> anyhow::Result<()> {
         format!("http://0.0.0.0:{relay_server_port}")
             .parse()
             .unwrap(),
-        SEQUENCER_VERSION,
+        <SeqTypes as NodeType>::Base::instance(),
     ));
 
     let provider = Provider::<Http>::try_from(url.as_str()).unwrap();
@@ -196,7 +199,7 @@ async fn main() -> anyhow::Result<()> {
 
     spawn(run_prover_service_with_stake_table(
         config,
-        SEQUENCER_VERSION,
+        <SeqTypes as NodeType>::Base::instance(),
         Arc::new(st),
     ));
 
@@ -214,7 +217,7 @@ async fn main() -> anyhow::Result<()> {
         cli_params.dev_node_port,
         mock_contract,
         dev_info,
-        SEQUENCER_VERSION,
+        <SeqTypes as NodeType>::Base::instance(),
     )
     .await?;
 
@@ -303,7 +306,6 @@ mod tests {
     use async_std::{stream::StreamExt, task::sleep};
     use committable::{Commitment, Committable};
     use contract_bindings::light_client::LightClient;
-    use es_version::SequencerVersion;
     use escargot::CargoBuild;
     use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
     use ethers::{
@@ -315,6 +317,7 @@ mod tests {
         availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
         data_source::sql::testing::TmpDb,
     };
+    use hotshot_types::traits::node_implementation::NodeType;
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
     use sequencer::api::endpoints::NamespaceProofQueryData;
@@ -381,7 +384,7 @@ mod tests {
 
         let _process = BackgroundProcess(process);
 
-        let api_client: Client<ServerError, SequencerVersion> =
+        let api_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
         api_client.connect(None).await;
 
@@ -396,7 +399,7 @@ mod tests {
             .await
             .unwrap();
 
-        let builder_api_client: Client<ServerError, SequencerVersion> =
+        let builder_api_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
             Client::new(format!("http://localhost:{builder_port}").parse().unwrap());
         builder_api_client.connect(None).await;
 
@@ -577,7 +580,7 @@ mod tests {
             }
         }
 
-        let dev_node_client: Client<ServerError, SequencerVersion> =
+        let dev_node_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
             Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
         dev_node_client.connect(None).await;
 

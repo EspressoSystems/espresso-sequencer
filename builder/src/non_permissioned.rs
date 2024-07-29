@@ -229,7 +229,6 @@ mod test {
     };
     use async_lock::RwLock;
     use async_std::task;
-    use es_version::SequencerVersion;
     use espresso_types::{FeeAccount, NamespaceId, Transaction};
     use hotshot_builder_api::v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
@@ -316,10 +315,10 @@ mod test {
         let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
-        let builder_client =
-            Client::<hotshot_builder_api::v0_1::builder::Error, SequencerVersion>::new(
-                hotshot_builder_api_url.clone(),
-            );
+        let builder_client = Client::<
+            hotshot_builder_api::v0_1::builder::Error,
+            <SeqTypes as NodeType>::Base,
+        >::new(hotshot_builder_api_url.clone());
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
 
         let seed = [207_u8; 32];
