@@ -33,7 +33,7 @@ use sequencer_utils::{
 use serde::{Deserialize, Serialize};
 use tide_disco::{error::ServerError, Api, Error as _, StatusCode};
 use url::Url;
-use vbs::version::StaticVersionType;
+use vbs::version::{StaticVersion, StaticVersionType};
 
 #[derive(Clone, Debug, Parser)]
 struct Args {
@@ -129,7 +129,7 @@ async fn main() -> anyhow::Result<()> {
         .network_config(network_config)
         .build();
 
-    let network = TestNetwork::new(config).await;
+    let network = TestNetwork::new(config, StaticVersion::<1, 0>::instance()).await;
 
     let config = network.cfg.hotshot_config();
     tracing::info!("Hotshot config {config:?}");

@@ -361,7 +361,7 @@ pub mod test_helpers {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use committable::Committable;
-    use es_version::{SequencerVersion, SEQUENCER_VERSION};
+    use es_version::SequencerVersion;
     use espresso_types::{
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
@@ -392,9 +392,13 @@ pub mod test_helpers {
 
     pub const STAKE_TABLE_CAPACITY_FOR_TEST: u64 = 10;
 
-    pub struct TestNetwork<P: PersistenceOptions, const NUM_NODES: usize> {
-        pub server: SequencerContext<network::Memory, P::Persistence, SequencerVersion>,
-        pub peers: Vec<SequencerContext<network::Memory, P::Persistence, SequencerVersion>>,
+    pub struct TestNetwork<
+        P: PersistenceOptions,
+        const NUM_NODES: usize,
+        Ver: StaticVersionType + 'static,
+    > {
+        pub server: SequencerContext<network::Memory, P::Persistence, Ver>,
+        pub peers: Vec<SequencerContext<network::Memory, P::Persistence, Ver>>,
         pub cfg: TestConfig<{ NUM_NODES }>,
     }
 
@@ -507,9 +511,12 @@ pub mod test_helpers {
         }
     }
 
-    impl<P: PersistenceOptions, const NUM_NODES: usize> TestNetwork<P, { NUM_NODES }> {
+    impl<P: PersistenceOptions, const NUM_NODES: usize, Ver: StaticVersionType + 'static>
+        TestNetwork<P, { NUM_NODES }, Ver>
+    {
         pub async fn new<C: StateCatchup + 'static>(
             cfg: TestNetworkConfig<{ NUM_NODES }, P, C>,
+            _bind_ver: Ver,
         ) -> Self {
             let mut cfg = cfg;
             let (builder_task, builder_url) =
@@ -538,14 +545,14 @@ pub mod test_helpers {
                                                 catchup,
                                                 &*metrics,
                                                 STAKE_TABLE_CAPACITY_FOR_TEST,
-                                                SEQUENCER_VERSION,
+                                                Ver::instance(),
                                                 upgrades_map,
                                             )
                                             .await
                                         }
                                         .boxed()
                                     },
-                                    SEQUENCER_VERSION,
+                                    Ver::instance(),
                                 )
                                 .await
                                 .unwrap()
@@ -557,7 +564,7 @@ pub mod test_helpers {
                                     catchup,
                                     &NoMetrics,
                                     STAKE_TABLE_CAPACITY_FOR_TEST,
-                                    SEQUENCER_VERSION,
+                                    Ver::instance(),
                                     upgrades_map,
                                 )
                                 .await
@@ -623,7 +630,7 @@ pub mod test_helpers {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let _network = TestNetwork::new(config).await;
+        let _network = TestNetwork::new(config, SequencerVersion::instance()).await;
         client.connect(None).await;
 
         // The status API is well tested in the query service repo. Here we are just smoke testing
@@ -676,7 +683,7 @@ pub mod test_helpers {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config).await;
+        let network = TestNetwork::new(config, SequencerVersion::instance()).await;
         let mut events = network.server.event_stream().await;
 
         client.connect(None).await;
@@ -712,7 +719,7 @@ pub mod test_helpers {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config).await;
+        let network = TestNetwork::new(config, SequencerVersion::instance()).await;
 
         let mut height: u64;
         // Wait for block >=2 appears
@@ -755,7 +762,7 @@ pub mod test_helpers {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config).await;
+        let network = TestNetwork::new(config, SequencerVersion::instance()).await;
         client.connect(None).await;
 
         // Wait for a few blocks to be decided.
@@ -890,7 +897,7 @@ mod api_tests {
             .api_config(D::options(&storage, Options::with_port(port)).submit(Default::default()))
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config).await;
+        let network = TestNetwork::new(config, SequencerVersion::instance()).await;
         let mut events = network.server.event_stream().await;
 
         // Connect client.
@@ -1006,7 +1013,7 @@ mod api_tests {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let _network = TestNetwork::new(config).await;
+        let _network = TestNetwork::new(config, SequencerVersion::instance()).await;
 
         let mut subscribed_events = client
             .socket("hotshot-events/events")
@@ -1101,7 +1108,7 @@ mod test {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let _network = TestNetwork::new(config).await;
+        let _network = TestNetwork::new(config, SequencerVersion::instance()).await;
 
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
@@ -1150,7 +1157,7 @@ mod test {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let mut network = TestNetwork::new(config).await;
+        let mut network = TestNetwork::new(config, SequencerVersion::instance()).await;
         let url = format!("http://localhost:{port}").parse().unwrap();
         let client: Client<ServerError, SequencerVersion> = Client::new(url);
 
@@ -1222,7 +1229,7 @@ mod test {
                 )
             }))
             .build();
-        let mut network = TestNetwork::new(config).await;
+        let mut network = TestNetwork::new(config, SequencerVersion::instance()).await;
 
         // Wait for replica 0 to reach a (non-genesis) decide, before disconnecting it.
         let mut events = network.peers[0].event_stream().await;
@@ -1332,7 +1339,7 @@ mod test {
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
 
-        let mut network = TestNetwork::new(config).await;
+        let mut network = TestNetwork::new(config, SequencerVersion::instance()).await;
 
         // Wait for few blocks to be decided.
         network
@@ -1410,7 +1417,7 @@ mod test {
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
 
-        let mut network = TestNetwork::new(config).await;
+        let mut network = TestNetwork::new(config, SequencerVersion::instance()).await;
 
         // Wait for a few blocks to be decided.
         network
@@ -1489,7 +1496,7 @@ mod test {
             )
             .build();
 
-        let mut network = TestNetwork::new(config).await;
+        let mut network = TestNetwork::new(config, SequencerVersion::instance()).await;
 
         let mut events = network.server.event_stream().await;
         loop {
@@ -1565,7 +1572,7 @@ mod test {
             .persistences(persistence)
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
-        let mut network = TestNetwork::new(config).await;
+        let mut network = TestNetwork::new(config, SequencerVersion::instance()).await;
 
         // Connect client.
         let client: Client<ServerError, SequencerVersion> =
@@ -1642,7 +1649,7 @@ mod test {
             }))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
-        let _network = TestNetwork::new(config).await;
+        let _network = TestNetwork::new(config, SequencerVersion::instance()).await;
         let client: Client<ServerError, SequencerVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
@@ -1695,7 +1702,7 @@ mod test {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config).await;
+        let network = TestNetwork::new(config, SequencerVersion::instance()).await;
         client.connect(None).await;
 
         // Fetch a network config from the API server. The first peer URL is bogus, to test the
