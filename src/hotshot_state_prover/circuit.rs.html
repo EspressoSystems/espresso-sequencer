@@ -583,6 +583,8 @@
 <a href="#583" id="583">583</a>
 <a href="#584" id="584">584</a>
 <a href="#585" id="585">585</a>
+<a href="#586" id="586">586</a>
+<a href="#587" id="587">587</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Circuit implementation for verifying light client state update
 
 </span><span class="kw">use </span>ark_ec::twisted_edwards::TECurveConfig;
@@ -708,6 +710,7 @@
 /// - a list of schnorr signatures of the updated states (`Vec&lt;SchnorrSignature&gt;`), default if the node doesn't sign the state
 /// - updated light client state (`(view_number, block_height, block_comm_root, fee_ledger_comm, stake_table_comm)`)
 /// - a quorum threshold
+///
 /// Lengths of input vectors should not exceed the `stake_table_capacity`.
 /// The list of stake table entries, bit indicators and signatures will be padded to the `stake_table_capacity`.
 /// It checks that
@@ -715,6 +718,7 @@
 /// - the signers' accumulated weight exceeds the quorum threshold
 /// - the stake table corresponds to the one committed in the light client state
 /// - all Schnorr signatures over the light client state are valid
+///
 /// and returns
 /// - A circuit for proof generation
 /// - A list of public inputs for verification
