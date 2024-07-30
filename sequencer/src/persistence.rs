@@ -44,11 +44,8 @@ mod testing {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod persistence_tests {
-    use hotshot_query_service::data_source::SqlDataSource;
-
     use std::collections::BTreeMap;
 
-    use crate::api::data_source::testing::TestableSequencerDataSource;
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use committable::Committable;
     use espresso_types::{Leaf, NodeState, PubKey, SeqTypes, ValidatedState};
@@ -108,8 +105,6 @@ mod persistence_tests {
 
     #[async_std::test]
     pub async fn test_voted_view<P: TestablePersistence>() {
-        let _ = SqlDataSource::create_storage().await;
-
         setup_logging();
         setup_backtrace();
 
