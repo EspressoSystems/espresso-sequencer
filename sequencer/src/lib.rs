@@ -656,9 +656,9 @@ pub mod testing {
             };
 
             let topics = if is_da {
-                vec![Topic::Global]
-            } else {
                 vec![Topic::Global, Topic::Da]
+            } else {
+                vec![Topic::Global]
             };
 
             let network = Arc::new(MemoryNetwork::new(
