@@ -5,6 +5,8 @@ import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 contract UtilsScript is Script {
     string public constant SALT_HISTORY_FILE_NAME = "saltHistory.json";
+    string public constant DEFENDER_OUTPUT_FILE_PATH =
+        "/contracts/script/output/defenderDeployments/";
 
     function readFile(string memory path) external returns (bool, string memory) {
         if (vm.exists(path)) {
@@ -32,7 +34,7 @@ contract UtilsScript is Script {
         return Strings.toHexString(uint256(uint160(address(addr))));
     }
 
-    function generateDeploymentOutput(
+    function generateProxyDeploymentOutput(
         string memory contractName,
         uint256 contractSalt,
         address proxy,
@@ -42,7 +44,7 @@ contract UtilsScript is Script {
     ) external returns (string memory filePath, string memory data) {
         string memory outputDir = string.concat(
             vm.projectRoot(),
-            "/contracts/script/output/defenderDeployments/",
+            DEFENDER_OUTPUT_FILE_PATH,
             contractName,
             "/",
             vm.toString(block.chainid),
@@ -62,6 +64,36 @@ contract UtilsScript is Script {
         return (filePath, obj3);
     }
 
+    function generateDeploymentOutput(
+        string memory contractName,
+        uint256 contractSalt,
+        address contractAddress,
+        address multisig,
+        string memory approvalProcessId,
+        string memory viaType
+    ) external returns (string memory filePath, string memory data) {
+        string memory outputDir = string.concat(
+            vm.projectRoot(),
+            DEFENDER_OUTPUT_FILE_PATH,
+            contractName,
+            "/",
+            vm.toString(block.chainid),
+            "/"
+        );
+        filePath = string.concat(outputDir, Strings.toString(contractSalt), ".json");
+
+        createDir(outputDir);
+
+        string memory obj1 = "object";
+        vm.serializeAddress(obj1, "contractAddress", contractAddress);
+        vm.serializeAddress(obj1, "multisig", multisig);
+        vm.serializeString(obj1, "approvalProcessId", approvalProcessId);
+        vm.serializeString(obj1, "approvalType", viaType);
+        string memory obj3 = vm.serializeUint(obj1, "salt", contractSalt);
+
+        return (filePath, obj3);
+    }
+
     function generateUpgradeOutput(
         string memory originalContractName,
         uint256 contractSalt,
@@ -73,7 +105,7 @@ contract UtilsScript is Script {
     ) external returns (string memory filePath, string memory data) {
         string memory outputDir = string.concat(
             vm.projectRoot(),
-            "/contracts/script/output/defenderDeployments/",
+            DEFENDER_OUTPUT_FILE_PATH,
             originalContractName,
             "/",
             vm.toString(block.chainid),
@@ -103,7 +135,7 @@ contract UtilsScript is Script {
     {
         outputDir = string.concat(
             vm.projectRoot(),
-            "/contracts/script/output/defenderDeployments/",
+            DEFENDER_OUTPUT_FILE_PATH,
             contractName,
             "/",
             vm.toString(block.chainid),
@@ -137,7 +169,7 @@ contract UtilsScript is Script {
     {
         outputDir = string.concat(
             vm.projectRoot(),
-            "/contracts/script/output/defenderDeployments/",
+            DEFENDER_OUTPUT_FILE_PATH,
             contractName,
             "/",
             vm.toString(block.chainid),
