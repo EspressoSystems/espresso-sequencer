@@ -1,7 +1,7 @@
 use anyhow::{bail, Context};
 use async_trait::async_trait;
 use committable::Commitment;
-use espresso_types::{BlockMerkleTree, ChainConfig, FeeAccountProof, FeeMerkleTree};
+use espresso_types::{v0_3::ChainConfig, BlockMerkleTree, FeeAccountProof, FeeMerkleTree};
 use ethers::prelude::Address;
 use futures::FutureExt;
 use hotshot_query_service::{

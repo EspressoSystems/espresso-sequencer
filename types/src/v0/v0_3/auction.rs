@@ -42,7 +42,7 @@ pub struct BidTxBody {
 
 /// The results of an Auction
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, Hash)]
-pub struct AuctionResults {
+pub struct SolverAuctionResults {
     /// view number the results are for
     pub(crate) view_number: ViewNumber,
     /// A list of the bid txs that won

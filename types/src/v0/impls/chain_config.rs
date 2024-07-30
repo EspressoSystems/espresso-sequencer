@@ -1,16 +1,13 @@
-use std::str::FromStr;
-
 use bytesize::ByteSize;
-use committable::{Commitment, Committable};
 use derive_more::From;
 use ethers::types::U256;
-use itertools::Either;
 use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
 use snafu::Snafu;
+use std::str::FromStr;
 
-use crate::{BlockSize, ChainConfig, ChainId, ResolvableChainConfig};
+use crate::{BlockSize, ChainId};
 
 impl_serde_from_string_or_integer!(ChainId);
 impl_to_fixed_bytes!(ChainId, U256);
@@ -77,69 +74,6 @@ impl FromStringOrInteger for BlockSize {
     }
 }
 
-impl Default for ChainConfig {
-    fn default() -> Self {
-        Self {
-            chain_id: U256::from(35353).into(), // arbitrarily chosen chain ID
-            max_block_size: 30720.into(),
-            base_fee: 0.into(),
-            fee_contract: None,
-            fee_recipient: Default::default(),
-        }
-    }
-}
-
-impl Committable for ChainConfig {
-    fn tag() -> String {
-        "CHAIN_CONFIG".to_string()
-    }
-
-    fn commit(&self) -> Commitment<Self> {
-        let comm = committable::RawCommitmentBuilder::new(&Self::tag())
-            .fixed_size_field("chain_id", &self.chain_id.to_fixed_bytes())
-            .u64_field("max_block_size", *self.max_block_size)
-            .fixed_size_field("base_fee", &self.base_fee.to_fixed_bytes())
-            .fixed_size_field("fee_recipient", &self.fee_recipient.to_fixed_bytes());
-        let comm = if let Some(addr) = self.fee_contract {
-            comm.u64_field("fee_contract", 1).fixed_size_bytes(&addr.0)
-        } else {
-            comm.u64_field("fee_contract", 0)
-        };
-        comm.finalize()
-    }
-}
-
-impl ResolvableChainConfig {
-    pub fn commit(&self) -> Commitment<ChainConfig> {
-        match self.chain_config {
-            Either::Left(config) => config.commit(),
-            Either::Right(commitment) => commitment,
-        }
-    }
-    pub fn resolve(self) -> Option<ChainConfig> {
-        match self.chain_config {
-            Either::Left(config) => Some(config),
-            Either::Right(_) => None,
-        }
-    }
-}
-
-impl From<Commitment<ChainConfig>> for ResolvableChainConfig {
-    fn from(value: Commitment<ChainConfig>) -> Self {
-        Self {
-            chain_config: Either::Right(value),
-        }
-    }
-}
-
-impl From<ChainConfig> for ResolvableChainConfig {
-    fn from(value: ChainConfig) -> Self {
-        Self {
-            chain_config: Either::Left(value),
-        }
-    }
-}
-
 #[derive(Clone, Debug, From, Snafu)]
 pub struct ParseSizeError {
     msg: String,
@@ -151,6 +85,8 @@ pub fn parse_size(s: &str) -> Result<u64, ParseSizeError> {
 
 #[cfg(test)]
 mod tests {
+    use crate::v0_3::{ChainConfig, ResolvableChainConfig};
+
     use super::*;
 
     #[test]

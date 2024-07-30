@@ -12,9 +12,10 @@ use jf_vid::VidScheme;
 use sha2::Digest;
 
 use crate::{
-    ChainConfig, Index, Iter, NamespaceId, NodeState, NsIndex, NsPayload, NsPayloadBuilder,
-    NsPayloadRange, NsTable, NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction,
-    TxProof, ValidatedState,
+    v0::impls::{NodeState, ValidatedState},
+    v0_1::ChainConfig,
+    Index, Iter, NamespaceId, NsIndex, NsPayload, NsPayloadBuilder, NsPayloadRange, NsTable,
+    NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction, TxProof,
 };
 
 impl Payload {
@@ -146,7 +147,11 @@ impl BlockPayload<SeqTypes> for Payload {
             }
         };
 
-        Self::from_transactions_sync(transactions, chain_config, instance_state)
+        Self::from_transactions_sync(
+            transactions,
+            ChainConfig::from(chain_config),
+            instance_state,
+        )
     }
 
     // TODO avoid cloning the entire payload here?

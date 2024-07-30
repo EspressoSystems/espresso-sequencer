@@ -12,8 +12,7 @@ testing = ["hotshot-testing"]
 anyhow = { workspace = true }
 ark-serialize = { workspace = true }
 async-compatibility-layer = { workspace = true }
-async-once-cell = { workspace = true }
-async-std = { workspace = true } 
+async-std = { workspace = true }
 async-trait = { workspace = true }
 base64-bytes = { workspace = true }
 bincode = { workspace = true }
@@ -23,37 +22,35 @@ clap = { workspace = true }
 cld = { workspace = true }
 committable = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
-derivative = { workspace = true }
 derive_more = { workspace = true }
-es-version = { workspace = true } 
+es-version = { workspace = true }
 ethers = { workspace = true }
 fluent-asserter = "0.1.9"
-futures = { workspace = true } 
-hotshot = { workspace = true } 
+futures = { workspace = true }
+hotshot = { workspace = true }
 hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true, features = ["testing"] }
 hotshot-testing = { workspace = true, optional = true }
 hotshot-types = { workspace = true }
 itertools = { workspace = true }
 jf-merkle-tree = { workspace = true }
-jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
+jf-utils = { workspace = true }                                      # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
 num-traits = { workspace = true }
 paste = { workspace = true }
-pretty_assertions   = { workspace = true } 
+pretty_assertions = { workspace = true }
 rand = { workspace = true }
-rand_chacha = { workspace = true }
-rand_distr = { workspace = true }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
+sha2 = "0.10"                                                        # TODO temporary, used only for VID, should be set in hotshot
 snafu = { workspace = true }
-static_assertions = { workspace = true } 
+static_assertions = { workspace = true }
+surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
 thiserror = { workspace = true }
+tide-disco = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
-trait-set = { workspace = true }
 url = { workspace = true }
-vbs = { workspace = true } 
+vbs = { workspace = true }
