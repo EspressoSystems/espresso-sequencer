@@ -241,6 +241,22 @@ impl BidTx {
 }
 
 impl SolverAuctionResults {
+    pub fn new(
+        view_number: ViewNumber,
+        winning_bids: Vec<BidTx>,
+        reserve_bids: Vec<(NamespaceId, Url)>,
+    ) -> Self {
+        Self {
+            view_number,
+            winning_bids,
+            reserve_bids,
+        }
+    }
+
+    pub fn view(&self) -> ViewNumber {
+        self.view_number
+    }
+
     pub fn winning_bids(&self) -> &[BidTx] {
         &self.winning_bids
     }
