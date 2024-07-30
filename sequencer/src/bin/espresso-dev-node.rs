@@ -324,6 +324,7 @@ mod tests {
     use sequencer_utils::{init_signer, AnvilOptions};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
+    use vbs::version::StaticVersion;
 
     use crate::{DevInfo, SetHotshotUpBody};
 
@@ -399,7 +400,7 @@ mod tests {
             .await
             .unwrap();
 
-        let builder_api_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let builder_api_client: Client<ServerError, StaticVersion<0, 1>> =
             Client::new(format!("http://localhost:{builder_port}").parse().unwrap());
         builder_api_client.connect(None).await;
 
