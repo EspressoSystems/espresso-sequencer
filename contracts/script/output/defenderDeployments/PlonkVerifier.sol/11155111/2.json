@@ -1,0 +1,7 @@
+{
+  "approvalProcessId": "a0dd5bf1-9766-4a2f-94b1-2a7ceb0dc5be",
+  "approvalType": "Gnosis Safe",
+  "multisig": "0xc56fA6505d10bF322e01327e22479DE78C3Bf1cE",
+  "contractAddress": "0x7807612b7F4D8241E1128F0037d056DA2Eec0242",
+  "salt": 2
+}
