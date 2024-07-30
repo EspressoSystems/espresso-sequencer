@@ -10,6 +10,8 @@ testing = ["hotshot-testing"]
 [dependencies]
 
 anyhow = { workspace = true }
+surf-disco = { workspace = true }
+tide-disco = { workspace = true }
 ark-serialize = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-std = { workspace = true }
