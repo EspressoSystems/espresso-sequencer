@@ -4,16 +4,6 @@ Upgradeable Smart contracts are deployed with Openzeppelin Defender to enable a 
 and also uses a multi-sig Safe wallet. When deploying using openzeppelin the `defender` profile in the `foundry.toml`
 file is used.
 
-Note: One must set the environment variable `FOUNDRY_PROFILE` accordingly to use the appropriate profile in the
-`foundry.toml` settings. E.g.
-
-```bash
-export FOUNDRY_PROFILE=defender
-```
-
-The profile, `profile.default` is used by default. Setting the `FOUNDRY_PROFILE` variable overrides the `foundry.toml`
-settings.
-
 ## Prerequisites
 
 1. Create a multisig wallet using [Safe](https://app.safe.global/welcome/accounts) on the network you'd like to deploy
@@ -29,8 +19,10 @@ settings.
    Sepolia) and "Production Environment" for mainnet.
    1. Choose a network
    1. Select the approval process created in Step 2
-   1. Be sure to save DEFENDER_SECRET ("Team Secret key") and DEFENDER_KEY ("Team API Key"), that is shown at the end of
-      this step, into the .env file. The keys won't be available later at a later point.
+   1. Be sure to save `DEFENDER_SECRET` ("Team Secret key") and `DEFENDER_KEY` ("Team API Key"), that is shown at the
+      end of this step, into the `.env` file. The keys won't be available later at a later point.
+4. In the home folder of this repo, you're in a nix shell: Enter `nix-shell` in the terminal
+5. If the contracts have never been compiled run, `forge build`
 
 ## Deployments
 
@@ -41,7 +33,7 @@ Steps:
 1. Run the Deployment command.
 
    ```bash
-   forge clean && forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
+   forge clean && FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript --ffi --rpc-url https://ethereum-sepolia.publicnode.com  --build-info true
    ```
 
    1. Go to the [deploy](https://defender.openzeppelin.com/v2/#/deploy) tab OpenZeppelin Defender's UI and click on the
@@ -102,7 +94,7 @@ forge verify-contract --chain-id 11155111 \
 --watch --etherscan-api-key $ETHERSCAN_API_KEY \
 --compiler-version $SOLC_VERSION \
 $LIGHT_CLIENT_CONTRACT_ADDRESS \
-contracts/src/LightClient.sol:LightClient --watch
+contracts/src/LightClient.sol:LightClient
 ```
 
 3. Inform Etherscan that it's a Proxy When the proxy is deployed, go to Etherscan. Go to Contract > Code > More Options
@@ -169,3 +161,50 @@ This error occurs when build_info is set to true in the foundry.toml configurati
 foundry profile is set to default when running commands like `just gen-bindings`.
 
 Solution: `export FOUNDRY_PROFILE=default`
+
+# Deploying Upgradable Contracts without OpenZeppelin Defender or a Safe Multisig Wallet
+
+## LightClient Contract Deployment
+
+```bash
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators \
+--sig 'run(uint32, uint32)' \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com
+```
+
+## LightClient Contract Upgrade
+
+```bash
+forge script contracts/script/UpgradeLightClient.s.sol:UpgradeLightClientScript $admin $mostRecentlyDeployedProxy \
+--sig 'run(address, address)' \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com
+```
+
+# Deploy and Upgrade without Defender
+
+Change the $MNEMONIC in the .env file to the one of the admin
+
+To Deploy
+
+```bash
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators \
+--sig 'run(uint32, uint32)' \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com\
+--broadcast --legacy
+```
+
+To Upgrade (assuming it's the same LightClient.sol file being used (pre-mainnet))
+
+```bash
+forge script contracts/script/UpgradeSameLightClient.s.sol:UpgradeLightClientScript $mnemonicOffset $mostRecentlyDeployedProxy \
+--sig 'run(uint32, address)' \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com \
+--broadcast --legacy
+```
+
+Note: the `$mnemonicOffset` should be zero by default if address referenced by the `$MNEMONIC` in the `.env` is the
+first address in that wallet. Otherwise, please specify the correct `$mnemonicOffset`

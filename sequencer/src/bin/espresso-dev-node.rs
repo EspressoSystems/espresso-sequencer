@@ -122,6 +122,7 @@ async fn main() -> anyhow::Result<()> {
         .state_relay_url(relay_server_url.clone())
         .l1_url(url.clone())
         .build();
+
     const NUM_NODES: usize = 2;
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(api_options)
@@ -436,6 +437,81 @@ mod tests {
                 ))
                 .send()
                 .await;
+        }
+
+        let large_tx = Transaction::new(100_u32.into(), vec![0; 20000]);
+        let large_hash: Commitment<Transaction> = api_client
+            .post("submit/submit")
+            .body_json(&large_tx)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+
+        let tx_hash = large_tx.commit();
+        assert_eq!(large_hash, tx_hash);
+
+        let mut tx_result = api_client
+            .get::<TransactionQueryData<SeqTypes>>(&format!(
+                "availability/transaction/hash/{tx_hash}",
+            ))
+            .send()
+            .await;
+        while tx_result.is_err() {
+            tracing::info!("waiting for large tx");
+            sleep(Duration::from_secs(3)).await;
+
+            tx_result = api_client
+                .get::<TransactionQueryData<SeqTypes>>(&format!(
+                    "availability/transaction/hash/{}",
+                    tx_hash
+                ))
+                .send()
+                .await;
+        }
+
+        // Now the `submit/submit` endpoint allows the extremely large transactions to be in the mempool.
+        // And we need to check whether this extremely large transaction blocks the building process.
+        // Currently the default value of `max_block_size` is 30720, and this transaction exceeds the limit.
+        // TODO: https://github.com/EspressoSystems/espresso-sequencer/issues/1777
+        {
+            let extremely_large_tx = Transaction::new(100_u32.into(), vec![0; 50120]);
+            let extremely_large_hash: Commitment<Transaction> = api_client
+                .post("submit/submit")
+                .body_json(&extremely_large_tx)
+                .unwrap()
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(extremely_large_tx.commit(), extremely_large_hash);
+
+            // Now we send a small transaction to make sure this transaction can be included in a hotshot block.
+            let tx = Transaction::new(100_u32.into(), vec![0; 3]);
+            let tx_hash: Commitment<Transaction> = api_client
+                .post("submit/submit")
+                .body_json(&tx)
+                .unwrap()
+                .send()
+                .await
+                .unwrap();
+
+            let mut result = api_client
+                .get::<TransactionQueryData<SeqTypes>>(&format!(
+                    "availability/transaction/hash/{tx_hash}",
+                ))
+                .send()
+                .await;
+            while result.is_err() {
+                sleep(Duration::from_secs(3)).await;
+
+                result = api_client
+                    .get::<TransactionQueryData<SeqTypes>>(&format!(
+                        "availability/transaction/hash/{}",
+                        tx_hash
+                    ))
+                    .send()
+                    .await;
+            }
         }
 
         let tx_block_height = tx_result.unwrap().block_height();
