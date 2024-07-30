@@ -364,12 +364,13 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
     /// Load the latest known consensus state.
     ///
     /// Returns an initializer to resume HotShot from the latest saved state (or start from genesis,
-    /// if there is no saved state).
+    /// if there is no saved state). Also returns the anchor view number, which can be used as a
+    /// reference point to process any events which were not processed before a previous shutdown,
+    /// if applicable,.
     async fn load_consensus_state(
-        &mut self,
+        &self,
         state: NodeState,
-        consumer: &(impl EventConsumer + 'static),
-    ) -> anyhow::Result<HotShotInitializer<SeqTypes>> {
+    ) -> anyhow::Result<(HotShotInitializer<SeqTypes>, Option<ViewNumber>)> {
         let genesis_validated_state = ValidatedState::genesis(&state).0;
         let highest_voted_view = match self
             .load_latest_acted_view()
@@ -385,7 +386,7 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                 ViewNumber::genesis()
             }
         };
-        let (leaf, high_qc) = match self
+        let (leaf, high_qc, anchor_view) = match self
             .load_anchor_leaf()
             .await
             .context("loading anchor leaf")?
@@ -401,24 +402,15 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
                     )
                 );
 
-                // Process and clean up any leaves that we may have persisted last time we were
-                // running but failed to handle due to a shutdown.
-                if let Err(err) = self
-                    .append_decided_leaves(leaf.view_number(), vec![], consumer)
-                    .await
-                {
-                    tracing::warn!(
-                        "failed to process decided leaves, chain may not be up to date: {err:#}"
-                    );
-                }
-
-                (leaf, high_qc)
+                let anchor_view = leaf.view_number();
+                (leaf, high_qc, Some(anchor_view))
             }
             None => {
                 tracing::info!("no saved leaf, starting from genesis leaf");
                 (
                     Leaf::genesis(&genesis_validated_state, &state).await,
                     QuorumCertificate::genesis(&genesis_validated_state, &state).await,
+                    None,
                 )
             }
         };
@@ -462,15 +454,18 @@ pub trait SequencerPersistence: Sized + Send + Sync + 'static {
             "loaded consensus state"
         );
 
-        Ok(HotShotInitializer::from_reload(
-            leaf,
-            state,
-            validated_state,
-            view,
-            saved_proposals,
-            high_qc,
-            undecided_leaves.into_values().collect(),
-            undecided_state,
+        Ok((
+            HotShotInitializer::from_reload(
+                leaf,
+                state,
+                validated_state,
+                view,
+                saved_proposals,
+                high_qc,
+                undecided_leaves.into_values().collect(),
+                undecided_state,
+            ),
+            anchor_view,
         ))
     }
 
