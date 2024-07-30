@@ -3,6 +3,7 @@ pub mod catchup;
 pub mod context;
 pub mod genesis;
 
+mod external_event_handler;
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
@@ -104,6 +105,8 @@ pub struct NetworkParams {
     pub state_peers: Vec<Url>,
     pub config_peers: Option<Vec<Url>>,
     pub catchup_backoff: BackoffParams,
+    /// The address to advertise as our public API's URL
+    pub public_api_url: Option<Url>,
 
     /// The address to send to other Libp2p nodes to contact us
     pub libp2p_advertise_address: SocketAddr,
@@ -354,6 +357,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         Some(network_params.state_relay_server_url),
         metrics,
         genesis.stake_table.capacity,
+        network_params.public_api_url,
         bind_version,
     )
     .await?;
@@ -692,6 +696,7 @@ pub mod testing {
                 self.state_relay_url.clone(),
                 metrics,
                 stake_table_capacity,
+                None, // The public API URL
                 bind_version,
             )
             .await
