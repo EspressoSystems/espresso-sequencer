@@ -6,9 +6,9 @@ import { Test } /*, console2*/ from "forge-std/Test.sol";
 import { LightClient as LCV1 } from "../src/LightClient.sol";
 import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
 import { DeployLightClientContractScript } from "../script/LightClient.s.sol";
-import { UpgradeLightClientScript } from "../script/UpgradeLightClient.s.sol";
+import { UpgradeLightClientScript } from "../script/UpgradeLightClientToV2.s.sol";
 
-contract LightClientUpgradeTest is Test {
+contract LightClientUpgradeToV2Test is Test {
     LCV1 public lcV1Proxy;
     LCV2 public lcV2Proxy;
 
@@ -46,7 +46,7 @@ contract LightClientUpgradeTest is Test {
         // Upgrade LightClient and check that the genesis state is not changed and that the new
         // field
         // of the upgraded contract is set to 0
-        lcV2Proxy = LCV2(upgrader.run(admin, proxy));
+        lcV2Proxy = LCV2(upgrader.run(0, proxy));
 
         assertEq(lcV2Proxy.newField(), 0);
         assertEq(lcV2Proxy.blocksPerEpoch(), 10);
@@ -75,7 +75,7 @@ contract LightClientUpgradeTest is Test {
         assertEq(patch, 0);
 
         //upgrade box
-        lcV2Proxy = LCV2(upgrader.run(admin, proxy));
+        lcV2Proxy = LCV2(upgrader.run(0, proxy));
         assertEq(address(lcV2Proxy), address(lcV1Proxy));
         (uint8 majorV2, uint8 minorV2, uint8 patchV2) = lcV2Proxy.getVersion();
         assertEq(majorV2, 2);
@@ -87,7 +87,8 @@ contract LightClientUpgradeTest is Test {
         address attacker = makeAddr("attacker");
 
         //attempted upgrade as attacker will revert
+        vm.prank(attacker);
         vm.expectRevert();
-        lcV2Proxy = LCV2(upgrader.run(attacker, address(proxy)));
+        lcV2Proxy = LCV2(upgrader.run(0, address(proxy)));
     }
 }
