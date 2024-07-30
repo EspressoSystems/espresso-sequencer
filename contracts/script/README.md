@@ -11,7 +11,7 @@ file is used.
 2. In [OpenZeppelin Defender](https://www.openzeppelin.com/defender), create an Approval Process that requires the
    multisig wallet you created above. `Manage > Approval Processes`.
    1. Enter a name for your approval process
-   1. Enter the multisig address from shown in te Safe UI
+   1. Enter the multisig address from shown in the Safe UI
    1. Enter one of multisig owner address addresses
    1. Save the changes
 3. In OpenZeppelin Defender, create a deployment environment by clicking on "Setup" in the
