@@ -1026,6 +1026,7 @@ mod test {
             .then_some(())
             .unwrap();
 
+        let sig = FeeAccount::sign_sequencing_fee_marketplace(&key_pair, data).unwrap();
         // test dedicated marketplace validation function
         account
             .validate_sequencing_fee_signature_marketplace(&sig, data)
