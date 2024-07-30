@@ -80,7 +80,6 @@ async fn test_quorum_proposal_recv_task() {
     )]];
 
     let expectations = vec![Expectations::from_outputs(vec![
-        exact(ViewChange(ViewNumber::new(2))),
         exact(UpdateHighQc(proposals[1].data.justify_qc.clone())),
         exact(ValidatedStateUpdated(
             ViewNumber::new(2),
@@ -95,6 +94,7 @@ async fn test_quorum_proposal_recv_task() {
             proposals[1].data.clone(),
             leaves[0].clone(),
         )),
+        exact(ViewChange(ViewNumber::new(2))),
     ])];
 
     let state = QuorumProposalRecvTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
