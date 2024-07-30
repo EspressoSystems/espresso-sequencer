@@ -747,8 +747,10 @@ mod test {
 
     use super::*;
     use crate::{
-        eth_signature_key::EthKeyPair, v0_1, v0_3::BidTx, BlockSize, FeeAccountProof,
-        FeeMerkleProof,
+        eth_signature_key::{BuilderSignature, EthKeyPair},
+        v0_1,
+        v0_3::BidTx,
+        BlockSize, FeeAccountProof, FeeMerkleProof,
     };
 
     pub fn mock_full_network_txs(key: Option<EthKeyPair>) -> Vec<FullNetworkTx> {
