@@ -3,7 +3,7 @@ use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, time::Duration};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use cld::ClDuration;
-use espresso_types::{eth_signature_key::EthKeyPair, NamespaceId, SeqTypes};
+use espresso_types::{eth_signature_key::EthKeyPair, FeeAmount, NamespaceId, SeqTypes};
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use marketplace_builder::non_permissioned::{build_instance_state, BuilderConfig};
@@ -98,9 +98,14 @@ struct NonPermissionedBuilderOptions {
     #[clap(long, env = "ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL")]
     solver_url: Url,
 
-    /// Url we will use to communicate to solver
-    #[clap(long, env = "ESPRESSO_MARKETPLACE_BUILDER_BID_CONFIG")]
-    bid_config_file: String,
+    /// Bid amount in WEI.
+    /// Builder will submit the same bid for every view
+    #[clap(
+        long,
+        env = "ESPRESSO_MARKETPLACE_BUILDER_BID_AMOUNT",
+        default_value = "1"
+    )]
+    bid_amount: FeeAmount,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -128,8 +133,6 @@ async fn main() -> anyhow::Result<()> {
         url: opt.l1_provider_url,
         events_max_block_range: 10000,
     };
-
-    let bid_config = marketplace_builder::bid::read_bid_config_file(&opt.bid_config_file)?;
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
     let bootstrapped_view = ViewNumber::new(opt.view_number);
@@ -169,9 +172,9 @@ async fn main() -> anyhow::Result<()> {
         buffer_view_num_count,
         txn_timeout_duration,
         base_fee,
+        opt.bid_amount,
         NamespaceId::from(opt.namespace),
         opt.solver_url,
-        bid_config,
     );
     let _builder_config = init.await;
 

@@ -52,7 +52,10 @@ use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::StaticVersionType;
 
-use crate::{bid::BidConfig, run_builder_api_service, EspressoHooks};
+use crate::{
+    hooks::{self, EspressoHooks},
+    run_builder_api_service,
+};
 
 #[derive(Clone, Debug)]
 pub struct BuilderConfig {
@@ -96,9 +99,9 @@ impl BuilderConfig {
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
+        bid_amount: FeeAmount,
         namespace_id: NamespaceId,
         solver_api_url: Url,
-        bid_config: BidConfig,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
@@ -189,7 +192,7 @@ impl BuilderConfig {
         // create the proxy global state it will server the builder apis
         let proxy_global_state = ProxyGlobalState::new(
             global_state.clone(),
-            (builder_key_pair.fee_account(), builder_key_pair),
+            (builder_key_pair.fee_account(), builder_key_pair.clone()),
         );
 
         // start the hotshot api service
@@ -199,11 +202,12 @@ impl BuilderConfig {
         let events_url = hotshot_events_api_url.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
 
-        let hooks = EspressoHooks {
+        let hooks = hooks::EspressoHooks {
             namespace_id,
             solver_api_url,
             builder_api_base_url: hotshot_builder_apis_url.clone(),
-            bid_config,
+            bid_key_pair: builder_key_pair,
+            bid_amount,
         };
 
         async_spawn(async move {

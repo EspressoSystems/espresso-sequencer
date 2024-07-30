@@ -15,10 +15,11 @@ use async_std::{
     task::{spawn, JoinHandle},
 };
 use async_trait::async_trait;
-use bid::{connect_to_solver, BidConfig};
 use espresso_types::{
+    eth_signature_key::EthKeyPair,
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
-    NamespaceId, SeqTypes,
+    v0_3::BidTxBody,
+    SeqTypes,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -31,7 +32,7 @@ use futures::{
 };
 use hotshot::{
     traits::election::static_committee::GeneralStaticCommittee,
-    types::{Event, EventType, SignatureKey, SystemContextHandle},
+    types::{SignatureKey, SystemContextHandle},
     HotShotInitializer, Memberships, SystemContext,
 };
 use hotshot_builder_api::v0_3::builder::{
@@ -41,7 +42,7 @@ use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
     config::NetworkConfig,
 };
-use marketplace_builder_core::service::{BuilderHooks, GlobalState, ProxyGlobalState};
+use marketplace_builder_core::service::{GlobalState, ProxyGlobalState};
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_types::{
@@ -55,7 +56,7 @@ use hotshot_types::{
         },
         election::Membership,
         metrics::Metrics,
-        node_implementation::NodeType,
+        node_implementation::{ConsensusTime, NodeType},
     },
     utils::BuilderCommitment,
     HotShotConfig, PeerConfig, ValidatorConfig,
@@ -69,71 +70,14 @@ use sequencer::{
     state_signature::{static_stake_table_commitment, StakeTableCommitmentType, StateSigner},
     L1Params, NetworkParams, Node,
 };
+use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
 use tracing::error;
 use vbs::version::StaticVersionType;
 
-pub mod bid;
 pub mod non_permissioned;
 
-/// Builder hooks for espresso sequencer
-/// Provides bidding and transaction filtering on top of base builder functionality
-struct EspressoHooks {
-    /// ID of namespace to filter and bid for
-    namespace_id: NamespaceId,
-    /// Base API to contact the solver
-    solver_api_url: Url,
-    /// Builder API base to include in the bid
-    builder_api_base_url: Url,
-    /// Configuration for bidding
-    bid_config: BidConfig,
-}
-
-#[async_trait]
-impl BuilderHooks<SeqTypes> for EspressoHooks {
-    #[inline(always)]
-    async fn process_transactions(
-        &mut self,
-        mut transactions: Vec<<SeqTypes as NodeType>::Transaction>,
-    ) -> Vec<<SeqTypes as NodeType>::Transaction> {
-        transactions.retain(|txn| txn.namespace() == self.namespace_id);
-        transactions
-    }
-
-    #[inline(always)]
-    async fn handle_hotshot_event(&mut self, event: &Event<SeqTypes>) {
-        if let EventType::ViewFinished { view_number } = event.event {
-            // We submit a bid three views in advance.
-            let bid_tx = match bid::from_bid_config(
-                &self.bid_config,
-                view_number + 3,
-                self.builder_api_base_url.clone(),
-                self.namespace_id,
-            ) {
-                Ok(bid) => bid,
-                Err(e) => {
-                    error!("Failed to construct the bid txn: {:?}.", e);
-                    return;
-                }
-            };
-
-            let Some(solver_client) = connect_to_solver(self.solver_api_url.clone()).await else {
-                error!("Failed to connect to the solver service.");
-                return;
-            };
-
-            if let Err(e) = solver_client
-                .post::<()>("submit_bid")
-                .body_json(&bid_tx)
-                .unwrap()
-                .send()
-                .await
-            {
-                error!("Failed to submit the bid: {:?}.", e);
-            }
-        }
-    }
-}
+mod hooks;
 
 // It runs the api service for the builder
 pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
