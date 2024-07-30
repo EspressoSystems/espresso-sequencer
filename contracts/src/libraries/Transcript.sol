@@ -3,7 +3,6 @@
 pragma solidity ^0.8.0;
 
 import { BN254 } from "bn254/BN254.sol";
-import { BytesLib } from "solidity-bytes-utils/BytesLib.sol";
 import { IPlonkVerifier } from "../interfaces/IPlonkVerifier.sol";
 
 library Transcript {
@@ -42,8 +41,9 @@ library Transcript {
     }
 
     function getAndAppendChallenge(TranscriptData memory self) internal pure returns (uint256) {
-        uint256 ret = uint256(keccak256(self.transcript)) % BN254.R_MOD;
         bytes memory transcript = self.transcript;
+        uint256 ret = uint256(keccak256(transcript)) % BN254.R_MOD;
+
         assembly {
             let len := mload(transcript)
             let newLen := add(len, 32)
@@ -51,6 +51,9 @@ library Transcript {
 
             mstore(transcript, newLen)
             mstore(add(dataPtr, len), ret)
+            // update free memory pointer since we extend the dynamic array
+            // to prevent potential overwrite
+            mstore(0x40, add(mload(0x40), 32))
         }
         return ret;
     }
@@ -164,34 +167,24 @@ library Transcript {
         TranscriptData memory self,
         IPlonkVerifier.PlonkProof memory proof
     ) internal pure {
-        self.transcript =
-            abi.encodePacked(self.transcript, BN254.ScalarField.unwrap(proof.wireEval0));
+        self.transcript = abi.encodePacked(self.transcript, proof.wireEval0);
 
-        self.transcript =
-            abi.encodePacked(self.transcript, BN254.ScalarField.unwrap(proof.wireEval1));
+        self.transcript = abi.encodePacked(self.transcript, proof.wireEval1);
 
-        self.transcript =
-            abi.encodePacked(self.transcript, BN254.ScalarField.unwrap(proof.wireEval2));
+        self.transcript = abi.encodePacked(self.transcript, proof.wireEval2);
 
-        self.transcript =
-            abi.encodePacked(self.transcript, BN254.ScalarField.unwrap(proof.wireEval3));
+        self.transcript = abi.encodePacked(self.transcript, proof.wireEval3);
 
-        self.transcript =
-            abi.encodePacked(self.transcript, BN254.ScalarField.unwrap(proof.wireEval4));
+        self.transcript = abi.encodePacked(self.transcript, proof.wireEval4);
 
-        self.transcript =
-            abi.encodePacked(self.transcript, BN254.ScalarField.unwrap(proof.sigmaEval0));
+        self.transcript = abi.encodePacked(self.transcript, proof.sigmaEval0);
 
-        self.transcript =
-            abi.encodePacked(self.transcript, BN254.ScalarField.unwrap(proof.sigmaEval1));
+        self.transcript = abi.encodePacked(self.transcript, proof.sigmaEval1);
 
-        self.transcript =
-            abi.encodePacked(self.transcript, BN254.ScalarField.unwrap(proof.sigmaEval2));
+        self.transcript = abi.encodePacked(self.transcript, proof.sigmaEval2);
 
-        self.transcript =
-            abi.encodePacked(self.transcript, BN254.ScalarField.unwrap(proof.sigmaEval3));
+        self.transcript = abi.encodePacked(self.transcript, proof.sigmaEval3);
 
-        self.transcript =
-            abi.encodePacked(self.transcript, BN254.ScalarField.unwrap(proof.prodPermZetaOmegaEval));
+        self.transcript = abi.encodePacked(self.transcript, proof.prodPermZetaOmegaEval);
     }
 }
