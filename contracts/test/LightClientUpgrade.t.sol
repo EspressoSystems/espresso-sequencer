@@ -52,7 +52,7 @@ contract LightClientUpgradeTest is Test {
         assertEq(lcV2Proxy.blocksPerEpoch(), 10);
         assertEq(lcV2Proxy.currentEpoch(), 0);
 
-        LCV2.LightClientState memory expectedLightClientState = LCV2.LightClientState(
+        LCV1.LightClientState memory expectedLightClientState = LCV1.LightClientState(
             stateV1.viewNum,
             stateV1.blockHeight,
             stateV1.blockCommRoot,
@@ -60,11 +60,18 @@ contract LightClientUpgradeTest is Test {
             stateV1.stakeTableBlsKeyComm,
             stateV1.stakeTableSchnorrKeyComm,
             stateV1.stakeTableAmountComm,
-            stateV1.threshold,
-            0 // New field for testing purposes
+            stateV1.threshold //,
+                // 0 // New field for testing purposes
         );
 
+        LCV2.ExtendedLightClientState memory expectedExtendedLightClientState =
+            LCV2.ExtendedLightClientState(0);
+
         assertEq(abi.encode(lcV2Proxy.getFinalizedState()), abi.encode(expectedLightClientState));
+        assertEq(
+            abi.encode(lcV2Proxy.getExtendedFinalizedState()),
+            abi.encode(expectedExtendedLightClientState)
+        );
     }
 
     // check that the proxy address remains the same
