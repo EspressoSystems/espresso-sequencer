@@ -275,7 +275,6 @@ fn build_sequence_batches_txn<M: ethers::prelude::Middleware>(
 
 #[cfg(test)]
 mod test {
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::spawn;
     use committable::Committable;
     use contract_bindings::hot_shot::{NewBlocksCall, NewBlocksFilter};
@@ -283,7 +282,10 @@ mod test {
     use ethers::{abi::AbiDecode, providers::Middleware};
     use futures::FutureExt;
     use hotshot_types::simple_certificate::QuorumCertificate;
-    use sequencer_utils::{test_utils::TestL1System, AnvilOptions};
+    use sequencer_utils::{
+        test_utils::{setup_test, TestL1System},
+        AnvilOptions,
+    };
     use surf_disco::{Error, StatusCode};
 
     use super::*;
@@ -356,8 +358,7 @@ mod test {
 
     #[async_std::test]
     async fn test_sequencer_task() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let anvil = AnvilOptions::default().spawn().await;
 
@@ -431,8 +432,7 @@ mod test {
 
     #[async_std::test]
     async fn test_idempotency() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let anvil = AnvilOptions::default().spawn().await;
 
@@ -496,8 +496,7 @@ mod test {
 
     #[async_std::test]
     async fn test_error_handling() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let anvil = AnvilOptions::default().spawn().await;
 

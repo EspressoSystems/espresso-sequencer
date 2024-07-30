@@ -44,10 +44,8 @@ mod testing {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod persistence_tests {
-
     use std::collections::BTreeMap;
 
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use committable::Committable;
     use espresso_types::{Leaf, NodeState, PubKey, SeqTypes, ValidatedState};
     use hotshot::types::{BLSPubKey, SignatureKey};
@@ -60,14 +58,14 @@ mod persistence_tests {
         vid::vid_scheme,
     };
     use jf_vid::VidScheme;
+    use sequencer_utils::test_utils::setup_test;
     use testing::TestablePersistence;
 
     use super::*;
 
     #[async_std::test]
     pub async fn test_anchor_leaf<P: TestablePersistence>() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let tmp = P::tmp_storage().await;
         let mut storage = P::connect(&tmp).await;
@@ -106,8 +104,7 @@ mod persistence_tests {
 
     #[async_std::test]
     pub async fn test_voted_view<P: TestablePersistence>() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let tmp = P::tmp_storage().await;
         let mut storage = P::connect(&tmp).await;
@@ -150,8 +147,7 @@ mod persistence_tests {
 
     #[async_std::test]
     pub async fn test_append_and_collect_garbage<P: TestablePersistence>() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let tmp = P::tmp_storage().await;
         let mut storage = P::connect(&tmp).await;
