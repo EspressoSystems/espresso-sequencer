@@ -1022,7 +1022,7 @@ mod test {
 
         let parent = Leaf::genesis(&instance_state.genesis_state, &instance_state).await;
         let header = parent.block_header().clone();
-        let metatdata = parent.block_header().metadata();
+        let metadata = parent.block_header().metadata();
         let vid_commitment = parent.payload_commitment();
 
         dbg!(header.version());
@@ -1040,7 +1040,7 @@ mod test {
             .unwrap();
 
         // test v1 sig
-        let sig = FeeAccount::sign_fee(&key_pair, data, metatdata, &vid_commitment).unwrap();
+        let sig = FeeAccount::sign_fee(&key_pair, data, metadata, &vid_commitment).unwrap();
 
         let header = match header {
             Header::V1(header) => Header::V1(v0_1::Header {
