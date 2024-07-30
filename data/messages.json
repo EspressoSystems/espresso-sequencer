@@ -7,41 +7,33 @@
             "_pd": null,
             "data": {
               "block_header": {
-                "fields": {
-                  "block_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAQA",
-                  "builder_commitment": "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_",
-                  "builder_signature": null,
+                "block_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAQA",
+                "builder_commitment": "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_",
+                "builder_signature": null,
+                "chain_config": {
                   "chain_config": {
-                    "chain_config": {
-                      "Left": {
-                        "base_fee": "0",
-                        "chain_id": "35353",
-                        "fee_contract": null,
-                        "fee_recipient": "0x0000000000000000000000000000000000000000",
-                        "max_block_size": "30720"
-                      }
+                    "Left": {
+                      "base_fee": "0",
+                      "chain_id": "35353",
+                      "fee_contract": null,
+                      "fee_recipient": "0x0000000000000000000000000000000000000000",
+                      "max_block_size": "30720"
                     }
-                  },
-                  "fee_info": {
-                    "account": "0x0000000000000000000000000000000000000000",
-                    "amount": "0"
-                  },
-                  "fee_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUAAAAAAAAAAAAAAAAAAAAKA",
-                  "height": 0,
-                  "l1_finalized": null,
-                  "l1_head": 0,
-                  "ns_table": {
-                    "bytes": "AAAAAA=="
-                  },
-                  "payload_commitment": "HASH~AazstQer_ho1SqgGT0r10_Gs0BnjfbPBHJdSO3HHbp29",
-                  "timestamp": 0
-                },
-                "version": {
-                  "Version": {
-                    "major": 0,
-                    "minor": 2
                   }
-                }
+                },
+                "fee_info": {
+                  "account": "0x0000000000000000000000000000000000000000",
+                  "amount": "0"
+                },
+                "fee_merkle_tree_root": "MERKLE_COMM~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUAAAAAAAAAAAAAAAAAAAAKA",
+                "height": 0,
+                "l1_finalized": null,
+                "l1_head": 0,
+                "ns_table": {
+                  "bytes": "AAAAAA=="
+                },
+                "payload_commitment": "HASH~AazstQer_ho1SqgGT0r10_Gs0BnjfbPBHJdSO3HHbp29",
+                "timestamp": 0
               },
               "justify_qc": {
                 "_pd": null,
