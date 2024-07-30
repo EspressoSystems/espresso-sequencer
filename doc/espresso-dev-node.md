@@ -15,9 +15,9 @@ docker run ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:main
 
 | Name                            | Type            | Environment Variable                 | Default Value                                                 | Description                                                                                                                                  |
 | ------------------------------- | --------------- | ------------------------------------ | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rpc_url`                       | `Option<Url>`   | `ESPRESSO_SEQUENCER_L1_PROVIDER`     | Automatically launched Avil node if not provided.             | The JSON-RPC endpoint of the L1. If not provided, an Avil node will be launched automatically.                                   |
+| `rpc_url`                       | `Option<Url>`   | `ESPRESSO_SEQUENCER_L1_PROVIDER`     | Automatically launched Avil node if not provided.             | The JSON-RPC endpoint of the L1. If not provided, an Avil node will be launched automatically.                                               |
 | `mnemonic`                      | `String`        | `ESPRESSO_SEQUENCER_ETH_MNEMONIC`    | `test test test test test test test test test test test junk` | Mnemonic for an L1 wallet. This wallet is used to deploy the contracts, so the account indicated by `ACCOUNT_INDEX` must be funded with ETH. |
-| `account_index`                 | `u32`           | `ESPRESSO_DEPLOYER_ACCOUNT_INDEX`    | `0`                                                           | Account index of the L1 wallet generated from `MNEMONIC`. Used when deploying contracts.                                                  |
+| `account_index`                 | `u32`           | `ESPRESSO_DEPLOYER_ACCOUNT_INDEX`    | `0`                                                           | Account index of the L1 wallet generated from `MNEMONIC`. Used when deploying contracts.                                                     |
 | `sequencer_api_port`            | `u16`           | `ESPRESSO_SEQUENCER_API_PORT`        | Required                                                      | Port that the HTTP API will use.                                                                                                             |
 | `sequencer_api_max_connections` | `Option<usize>` | `ESPRESSO_SEQUENCER_MAX_CONNECTIONS` | None                                                          | Maximum concurrent connections allowed by the HTTP API server.                                                                               |
 | `builder_port`                  | `Option<u16>`   | `ESPRESSO_BUILDER_PORT`              | An unused port                                                | Port for connecting to the builder.                                                                                                          |
@@ -56,6 +56,14 @@ contract.
 By calling this, the L1 height in the light contract will be frozen, and rollups will detect the HotShot failure. This
 is intended for testing rollups' functionalities when HotShot is down.
 
+An example of a `curl` command:
+
+```cmd
+curl -X POST "http://localhost:20000/api/set-hotshot-down" \
+     -H "Content-Type: application/json" \
+     -d '{"height": 12345}'
+```
+
 Parameters
 
 | Name   | Type    | Description                              |
@@ -69,3 +77,10 @@ contract.
 
 This is intended to be used when `set-hotshot-down` has been called previously. By calling this, rollups will detect the
 reactivity of HotShot.
+
+An example of a `curl` command:
+
+```cmd
+curl -X POST "http://localhost:20000/api/set-hotshot-up" \
+     -H "Content-Type: application/json"
+```
