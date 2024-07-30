@@ -6,26 +6,20 @@ authors = { workspace = true }
 edition = { workspace = true }
 
 [dependencies]
-anyhow = { workspace = true }
 ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
 ark-ed-on-bn254 = { workspace = true }
 ark-ff = { workspace = true }
 ark-poly = { workspace = true }
-ark-srs = { workspace = true }
 ark-std = { workspace = true }
 clap = { version = "^4.4", features = ["derive"] }
 diff-test-bn254 = { git = "https://github.com/EspressoSystems/solidity-bn254.git" }
-digest = { version = "0.10", default-features = false, features = ["alloc"] }
 ethers = { version = "2.0.4" }
 hotshot-contract-adapter = { path = "../adapter" }
-hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { path = "../../../hotshot-state-prover" }
-hotshot-types = { workspace = true }
 itertools = { workspace = true }
 jf-pcs = { workspace = true }
 jf-plonk = { workspace = true }
-jf-relation = { workspace = true }
 jf-signature = { workspace = true }
 jf-utils = { workspace = true }
 sha3 = { version = "0.10.8", default-features = false }
