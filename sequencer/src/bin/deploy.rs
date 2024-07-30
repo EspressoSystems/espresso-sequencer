@@ -1,11 +1,13 @@
 use std::{fs::File, io::stdout, path::PathBuf};
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use futures::FutureExt;
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::light_client_genesis;
-use sequencer_utils::deployer::{deploy, ContractGroup, Contracts, DeployedContracts};
+use sequencer_utils::{
+    deployer::{deploy, ContractGroup, Contracts, DeployedContracts},
+    logging,
+};
 use url::Url;
 
 /// Deploy contracts needed to run the sequencer.
@@ -84,14 +86,16 @@ struct Options {
     /// Stake table capacity for the prover circuit
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
     pub stake_table_capacity: usize,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
-    setup_logging();
-    setup_backtrace();
-
     let opt = Options::parse();
+    opt.logging.init();
+
     let contracts = Contracts::from(opt.contracts);
 
     let sequencer_url = opt.sequencer_url.clone();

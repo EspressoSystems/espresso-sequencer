@@ -55,7 +55,7 @@ contract LightClientDefenderDeployScript is Script {
         );
 
         //generate the file path, file output and write to the file
-        (string memory filePath, string memory fileData) = utils.generateDeploymentOutput(
+        (string memory filePath, string memory fileData) = utils.generateProxyDeploymentOutput(
             contractName,
             contractSalt,
             proxy,

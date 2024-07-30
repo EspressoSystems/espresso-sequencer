@@ -22,7 +22,6 @@ use std::{
 };
 
 use anyhow::{bail, ensure, Context};
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{
     sync::RwLock,
     task::{sleep, spawn},
@@ -31,7 +30,7 @@ use clap::Parser;
 use committable::Committable;
 use derivative::Derivative;
 use es_version::{SequencerVersion, SEQUENCER_VERSION};
-use espresso_types::{BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
+use espresso_types::{v0_3::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
 use futures::{
     future::{FutureExt, TryFuture, TryFutureExt},
     stream::{Peekable, StreamExt},
@@ -47,6 +46,7 @@ use jf_merkle_tree::{
 };
 use rand::{seq::SliceRandom, RngCore};
 use sequencer::{api::endpoints::NamespaceProofQueryData, options::parse_duration};
+use sequencer_utils::logging;
 use serde::de::DeserializeOwned;
 use strum::{EnumDiscriminants, VariantArray};
 use surf_disco::{error::ClientError, socket, Error, StatusCode, Url};
@@ -76,6 +76,9 @@ struct Options {
 
     #[clap(flatten)]
     distribution: ActionDistribution,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 #[derive(Clone, Copy, Debug, Parser)]
@@ -929,7 +932,10 @@ impl ResourceManager<Header> {
                     .await
             })
             .await?;
-        let builder_address = builder_header.fee_info().account();
+
+        // Since we have multiple fee accounts, we need to select one.
+        let accounts = builder_header.fee_info().accounts();
+        let builder_address = accounts.first().unwrap();
 
         // Get the header of the state snapshot we're going to query so we can later verify our
         // results.
@@ -1268,10 +1274,9 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
 
 #[async_std::main]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
-
     let opt = Options::parse();
+    opt.logging.init();
+
     let metrics = PrometheusMetrics::default();
     let total_actions = metrics.create_counter("total_actions".into(), None);
     let failed_actions = metrics.create_counter("failed_actions".into(), None);
