@@ -1,6 +1,5 @@
 use std::net::ToSocketAddrs;
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use espresso_types::SeqTypes;
 use futures::future::FutureExt;
@@ -15,13 +14,11 @@ use vbs::version::StaticVersionType;
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
-    setup_logging();
-    setup_backtrace();
-
-    tracing::warn!("sequencer starting up");
     let opt = Options::parse();
+    opt.logging.init();
+
     let mut modules = opt.modules();
-    tracing::warn!("modules: {:?}", modules);
+    tracing::warn!(?modules, "sequencer starting up");
 
     if let Some(storage) = modules.storage_fs.take() {
         init_with_storage(
@@ -191,6 +188,7 @@ mod test {
         genesis::StakeTableConfig,
         persistence::fs,
     };
+    use sequencer_utils::test_utils::setup_test;
     use surf_disco::{error::ClientError, Client, Url};
     use tempfile::TempDir;
 
@@ -198,8 +196,7 @@ mod test {
 
     #[async_std::test]
     async fn test_startup_before_orchestrator() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let (pub_key, priv_key) = PubKey::generated_from_seed_indexed([0; 32], 0);
         let state_key = StateKeyPair::generate_from_seed_indexed([0; 32], 0);

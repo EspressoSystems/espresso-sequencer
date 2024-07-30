@@ -358,7 +358,6 @@ impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: Sequencer
 pub mod test_helpers {
     use std::time::Duration;
 
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use committable::Committable;
 
@@ -382,6 +381,7 @@ pub mod test_helpers {
     use itertools::izip;
     use jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     use portpicker::pick_unused_port;
+    use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
     use tide_disco::error::ServerError;
 
@@ -616,8 +616,7 @@ pub mod test_helpers {
     /// to test a different initialization path) but should not remove or modify the existing
     /// functionality (e.g. removing the status module or changing the port).
     pub async fn status_test_helper(opt: impl FnOnce(Options) -> Options) {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
@@ -666,8 +665,7 @@ pub mod test_helpers {
     /// to test a different initialization path) but should not remove or modify the existing
     /// functionality (e.g. removing the submit module or changing the port).
     pub async fn submit_test_helper(opt: impl FnOnce(Options) -> Options) {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let txn = Transaction::new(NamespaceId::from(1_u32), vec![1, 2, 3, 4]);
 
@@ -704,8 +702,7 @@ pub mod test_helpers {
 
     /// Test the state signature API.
     pub async fn state_signature_test_helper(opt: impl FnOnce(Options) -> Options) {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let port = pick_unused_port().expect("No ports free");
 
@@ -748,8 +745,7 @@ pub mod test_helpers {
     /// to test a different initialization path) but should not remove or modify the existing
     /// functionality (e.g. removing the catchup module or changing the port).
     pub async fn catchup_test_helper(opt: impl FnOnce(Options) -> Options) {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
@@ -840,7 +836,6 @@ pub mod test_helpers {
 #[cfg(test)]
 #[espresso_macros::generic_tests]
 mod api_tests {
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use committable::Committable;
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
@@ -851,6 +846,7 @@ mod api_tests {
     use hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
     use hotshot_types::traits::node_implementation::NodeType;
     use portpicker::pick_unused_port;
+    use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
@@ -882,8 +878,7 @@ mod api_tests {
 
     #[async_std::test]
     pub(crate) async fn test_namespace_query<D: TestableSequencerDataSource>() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         // Arbitrary transaction, arbitrary namespace ID
         let ns_id = NamespaceId::from(42_u32);
@@ -988,9 +983,7 @@ mod api_tests {
     pub(crate) async fn test_hotshot_event_streaming<D: TestableSequencerDataSource>() {
         use HotshotEvents;
 
-        setup_logging();
-
-        setup_backtrace();
+        setup_test();
 
         let hotshot_event_streaming_port =
             pick_unused_port().expect("No ports free for hotshot event streaming");
@@ -1046,7 +1039,6 @@ mod api_tests {
 mod test {
     use std::time::Duration;
 
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::task::sleep;
     use committable::{Commitment, Committable};
 
@@ -1075,6 +1067,7 @@ mod test {
     };
     use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     use portpicker::pick_unused_port;
+    use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
@@ -1095,8 +1088,7 @@ mod test {
 
     #[async_std::test]
     async fn test_healthcheck() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
@@ -1138,8 +1130,7 @@ mod test {
 
     #[async_std::test]
     async fn test_merklized_state_api() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let port = pick_unused_port().expect("No ports free");
 
@@ -1212,8 +1203,7 @@ mod test {
 
     #[async_std::test]
     async fn test_catchup() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         // Start a sequencer network, using the query service for catchup.
         let port = pick_unused_port().expect("No ports free");
@@ -1312,8 +1302,7 @@ mod test {
         // This test uses a ValidatedState which only has the default chain config commitment.
         // The NodeState has the full chain config.
         // Both chain config commitments will match, so the ValidatedState should have the full chain config after a non-genesis block is decided.
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let port = pick_unused_port().expect("No ports free");
         let anvil = Anvil::new().spawn();
@@ -1369,8 +1358,7 @@ mod test {
         // However, for this test to work, at least one node should have a full chain config
         // to allow other nodes to catch up.
 
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let port = pick_unused_port().expect("No ports free");
         let anvil = Anvil::new().spawn();
@@ -1442,8 +1430,7 @@ mod test {
 
     #[async_std::test]
     async fn test_chain_config_upgrade() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let port = pick_unused_port().expect("No ports free");
         let anvil = Anvil::new().spawn();
@@ -1548,8 +1535,7 @@ mod test {
 
     #[async_std::test]
     pub(crate) async fn test_restart() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         const NUM_NODES: usize = 5;
         // Initialize nodes.
@@ -1688,8 +1674,7 @@ mod test {
 
     #[async_std::test]
     async fn test_fetch_config() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let port = pick_unused_port().expect("No ports free");
         let url: surf_disco::Url = format!("http://localhost:{port}").parse().unwrap();

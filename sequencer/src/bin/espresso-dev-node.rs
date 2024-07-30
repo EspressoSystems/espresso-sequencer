@@ -1,6 +1,5 @@
 use std::{io, sync::Arc, time::Duration};
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::spawn;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
@@ -31,7 +30,7 @@ use sequencer::{
 };
 use sequencer_utils::{
     deployer::{deploy, Contract, Contracts},
-    AnvilOptions,
+    logging, AnvilOptions,
 };
 use serde::{Deserialize, Serialize};
 use tide_disco::{error::ServerError, Api, Error as _, StatusCode};
@@ -88,14 +87,16 @@ struct Args {
 
     #[clap(flatten)]
     sql: persistence::sql::Options,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
-    setup_logging();
-    setup_backtrace();
-
     let cli_params = Args::parse();
+    cli_params.logging.init();
+
     let api_options = options::Options::from(options::Http {
         port: cli_params.sequencer_api_port,
         max_connections: cli_params.sequencer_api_max_connections,
@@ -302,7 +303,6 @@ struct SetHotshotUpBody {
 mod tests {
     use std::{process::Child, sync::Arc, time::Duration};
 
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::{stream::StreamExt, task::sleep};
     use committable::{Commitment, Committable};
     use contract_bindings::light_client::LightClient;
@@ -321,7 +321,7 @@ mod tests {
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
     use sequencer::api::endpoints::NamespaceProofQueryData;
-    use sequencer_utils::{init_signer, AnvilOptions};
+    use sequencer_utils::{init_signer, test_utils::setup_test, AnvilOptions};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
     use vbs::version::StaticVersion;
@@ -345,8 +345,7 @@ mod tests {
     // - Types (like `Header`) update
     #[async_std::test]
     async fn dev_node_test() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let builder_port = pick_unused_port().unwrap();
 

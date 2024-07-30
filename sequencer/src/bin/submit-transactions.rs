@@ -5,7 +5,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::{sleep, spawn};
 use clap::Parser;
 use committable::{Commitment, Committable};
@@ -21,6 +20,7 @@ use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
 use sequencer::options::{parse_duration, parse_size};
+use sequencer_utils::logging;
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};
 use vbs::version::StaticVersionType;
@@ -145,6 +145,9 @@ struct Options {
     #[cfg(feature = "benchmarking")]
     #[clap(short, long, env = "ESPRESSO_BENCH_END_BLOCK")]
     benchmark_end_block: NonZeroUsize,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 impl Options {
@@ -160,10 +163,9 @@ impl Options {
 
 #[async_std::main]
 async fn main() {
-    setup_backtrace();
-    setup_logging();
-
     let opt = Options::parse();
+    opt.logging.init();
+
     tracing::warn!("starting load generator for sequencer {}", opt.url);
 
     let (sender, mut receiver) = mpsc::channel(opt.channel_bound);

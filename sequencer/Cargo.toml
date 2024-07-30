@@ -18,7 +18,6 @@ required-features = ["testing"]
 [dev-dependencies]
 escargot = "0.5.10"
 espresso-macros = { git = "https://github.com/EspressoSystems/espresso-macros.git", tag = "0.1.0" }
-fluent-asserter = "0.1.9"
 hotshot-query-service = { workspace = true, features = ["testing"] }
 hotshot-testing = { workspace = true }
 pretty_assertions = { workspace = true }
@@ -32,20 +31,13 @@ vergen = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
-ark-bls12-381 = { workspace = true }
-ark-ec = { workspace = true }
-ark-ed-on-bn254 = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
-ark-std = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-once-cell = { workspace = true }
 async-std = { workspace = true }
 async-trait = { workspace = true }
-base64 = { workspace = true }
-base64-bytes = { workspace = true }
 bincode = { workspace = true }
-blake3 = { workspace = true }
 bytesize = { workspace = true }
 
 # CDN imports
@@ -62,7 +54,6 @@ derive_more = { workspace = true }
 dotenvy = { workspace = true }
 espresso-types = { path = "../types", features = ["testing"] }
 ethers = { workspace = true }
-ethers-contract-derive = "2.0.10"
 futures = { workspace = true }
 
 hotshot = { workspace = true }
@@ -73,7 +64,6 @@ hotshot-orchestrator = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { workspace = true }
-hotshot-task = { workspace = true }
 
 # Dependencies for feature `testing`
 hotshot-testing = { workspace = true, optional = true }
@@ -85,13 +75,9 @@ jf-merkle-tree = { workspace = true }
 jf-rescue = { workspace = true }
 
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
-jf-utils = { workspace = true } # TODO temporary: used only for test_rng()
 jf-vid = { workspace = true }
-libp2p = { workspace = true } 
-marketplace-solver = { git = "https://github.com/EspressoSystems/marketplace-solver.git", branch = "ab/marketplace-integration" }
-num-traits = "0.2.18"
+libp2p = { workspace = true }
 num_enum = "0.7"
-paste = { workspace = true }
 portpicker = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
@@ -99,32 +85,26 @@ rand_distr = { workspace = true }
 sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10" # TODO temporary, used only for VID, should be set in hotshot
+sha2 = "0.10"                                                      # TODO temporary, used only for VID, should be set in hotshot
 snafu = { workspace = true }
 static_assertions = "1"
 strum = { workspace = true }
 surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
-thiserror = { workspace = true }
 tide-disco = { workspace = true }
 time = { workspace = true }
-tokio-postgres = { version = "0.7", default-features = false, features = [ # disabling the default features removes dependence on the tokio runtime
-    "with-serde_json-1",
-] }
 toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = "0.3.18"
-trait-set = "0.3.0"
-typenum = { version = "1.15.0", default-features = false, features = [
-    "no_std",
-] }
 url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
-zeroize = { workspace = true }
+marketplace-solver = { git = "https://github.com/EspressoSystems/marketplace-solver.git", branch = "ab/marketplace-integration" }
 
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(async_executor_impl, values("tokio", "async-std"))'] }
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(async_executor_impl, values("tokio", "async-std"))',
+] }

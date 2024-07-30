@@ -1321,11 +1321,11 @@ dependencies = [
  "portpicker",
  "rand 0.8.5",
  "sequencer",
+ "sequencer-utils 0.1.0",
  "serde",
  "snafu 0.8.4",
  "surf",
  "surf-disco",
- "tagged-base64",
  "tide-disco",
  "tracing",
  "url",
@@ -2019,7 +2019,7 @@ dependencies = [
 [[package]]
 name = "contract-bindings"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration#bc760cd9abde2e5ead2075418e2c91e468474732"
+source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration#bd186d6e36487f604687f1ad58d1f581467cd737"
 dependencies = [
  "ethers",
  "serde",
@@ -2558,26 +2558,20 @@ dependencies = [
 name = "diff-test-hotshot"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "ark-bn254",
  "ark-ec",
  "ark-ed-on-bn254",
  "ark-ff",
  "ark-poly",
- "ark-srs",
  "ark-std",
  "clap",
  "diff-test-bn254",
- "digest 0.10.7",
  "ethers",
  "hotshot-contract-adapter 0.1.0",
- "hotshot-stake-table",
  "hotshot-state-prover",
- "hotshot-types",
  "itertools 0.12.1",
  "jf-pcs",
  "jf-plonk",
- "jf-relation",
  "jf-signature",
  "jf-utils",
  "sha3",
@@ -2876,14 +2870,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "es-version"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/es-version.git?branch=main#29b7cc71c9da1f5430d81a074c7371cdc260ac20"
-dependencies = [
- "vbs",
-]
-
-[[package]]
 name = "escargot"
 version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2922,7 +2908,6 @@ dependencies = [
  "anyhow",
  "ark-serialize",
  "async-compatibility-layer",
- "async-once-cell",
  "async-std",
  "async-trait",
  "base64-bytes",
@@ -2933,7 +2918,6 @@ dependencies = [
  "cld",
  "committable",
  "contract-bindings 0.1.0",
- "derivative",
  "derive_more",
  "ethers",
  "fluent-asserter",
@@ -2951,8 +2935,6 @@ dependencies = [
  "paste",
  "pretty_assertions",
  "rand 0.8.5",
- "rand_chacha 0.3.1",
- "rand_distr",
  "sequencer-utils 0.1.0",
  "serde",
  "serde_json",
@@ -2965,7 +2947,6 @@ dependencies = [
  "tide-disco",
  "time 0.3.36",
  "tracing",
- "trait-set",
  "url",
  "vbs",
 ]
@@ -2973,7 +2954,7 @@ dependencies = [
 [[package]]
 name = "espresso-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration#bc760cd9abde2e5ead2075418e2c91e468474732"
+source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration#bd186d6e36487f604687f1ad58d1f581467cd737"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -2991,7 +2972,6 @@ dependencies = [
  "contract-bindings 0.1.0 (git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration)",
  "derivative",
  "derive_more",
- "es-version",
  "ethers",
  "fluent-asserter",
  "futures",
@@ -4223,11 +4203,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ark-bn254",
- "ark-ec",
- "ark-ed-on-bn254",
  "ark-ff",
  "ark-poly",
- "ark-serialize",
  "ark-std",
  "contract-bindings 0.1.0",
  "diff-test-bn254",
@@ -4243,7 +4220,7 @@ dependencies = [
 [[package]]
 name = "hotshot-contract-adapter"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration#bc760cd9abde2e5ead2075418e2c91e468474732"
+source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration#bd186d6e36487f604687f1ad58d1f581467cd737"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -4469,23 +4446,18 @@ dependencies = [
  "ark-ec",
  "ark-ed-on-bn254",
  "ark-ff",
- "ark-serialize",
  "ark-srs",
  "ark-std",
  "async-compatibility-layer",
  "async-std",
- "async-trait",
- "blake3",
  "clap",
  "cld",
  "contract-bindings 0.1.0",
- "derive_more",
  "displaydoc",
  "espresso-types 0.1.0",
  "ethers",
  "futures",
  "hotshot-contract-adapter 0.1.0",
- "hotshot-orchestrator",
  "hotshot-stake-table",
  "hotshot-types",
  "itertools 0.12.1",
@@ -4496,13 +4468,11 @@ dependencies = [
  "jf-rescue",
  "jf-signature",
  "jf-utils",
- "rand_chacha 0.3.1",
  "reqwest 0.12.5",
  "sequencer-utils 0.1.0",
  "serde",
  "snafu 0.8.4",
  "surf-disco",
- "tagged-base64",
  "tide-disco",
  "time 0.3.36",
  "toml",
@@ -6150,6 +6120,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
 dependencies = [
  "value-bag",
+]
+
+[[package]]
+name = "log-panics"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68f9dd8546191c1850ecf67d22f5ff00a935b890d0e84713159a55495cc2ac5f"
+dependencies = [
+ "backtrace",
+ "log",
 ]
 
 [[package]]
@@ -8503,20 +8483,13 @@ name = "sequencer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "ark-bls12-381",
- "ark-ec",
- "ark-ed-on-bn254",
  "ark-ff",
  "ark-serialize",
- "ark-std",
  "async-compatibility-layer",
  "async-once-cell",
  "async-std",
  "async-trait",
- "base64 0.22.1",
- "base64-bytes",
  "bincode",
- "blake3",
  "bytesize",
  "cdn-broker 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.3)",
  "cdn-marshal 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.3)",
@@ -8532,8 +8505,6 @@ dependencies = [
  "espresso-macros",
  "espresso-types 0.1.0",
  "ethers",
- "ethers-contract-derive",
- "fluent-asserter",
  "futures",
  "hotshot",
  "hotshot-contract-adapter 0.1.0",
@@ -8543,7 +8514,6 @@ dependencies = [
  "hotshot-query-service",
  "hotshot-stake-table",
  "hotshot-state-prover",
- "hotshot-task",
  "hotshot-testing",
  "hotshot-types",
  "include_dir",
@@ -8552,13 +8522,10 @@ dependencies = [
  "jf-merkle-tree",
  "jf-rescue",
  "jf-signature",
- "jf-utils",
  "jf-vid",
  "libp2p",
  "marketplace-solver",
- "num-traits",
  "num_enum",
- "paste",
  "portpicker",
  "pretty_assertions",
  "rand 0.8.5",
@@ -8575,20 +8542,15 @@ dependencies = [
  "surf-disco",
  "tagged-base64",
  "tempfile",
- "thiserror",
  "tide-disco",
  "time 0.3.36",
- "tokio-postgres",
  "toml",
  "tracing",
  "tracing-subscriber 0.3.18",
- "trait-set",
- "typenum",
  "url",
  "vbs",
  "vec1",
  "vergen",
- "zeroize",
 ]
 
 [[package]]
@@ -8597,6 +8559,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ark-serialize",
+ "async-compatibility-layer",
  "async-std",
  "clap",
  "committable",
@@ -8605,6 +8568,7 @@ dependencies = [
  "ethers",
  "futures",
  "hotshot-contract-adapter 0.1.0",
+ "log-panics",
  "portpicker",
  "serde",
  "serde_json",
@@ -8617,7 +8581,7 @@ dependencies = [
 [[package]]
 name = "sequencer-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration#bc760cd9abde2e5ead2075418e2c91e468474732"
+source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=marketplace-integration#bd186d6e36487f604687f1ad58d1f581467cd737"
 dependencies = [
  "anyhow",
  "ark-serialize",

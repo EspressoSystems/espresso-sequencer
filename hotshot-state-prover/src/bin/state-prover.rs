@@ -1,6 +1,5 @@
 use std::{str::FromStr as _, time::Duration};
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use cld::ClDuration;
 use espresso_types::SeqTypes;
@@ -12,6 +11,7 @@ use ethers::{
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
 use hotshot_types::traits::node_implementation::NodeType;
+use sequencer_utils::logging;
 use snafu::Snafu;
 use url::Url;
 use vbs::version::StaticVersionType;
@@ -80,6 +80,9 @@ struct Args {
     /// Stake table capacity for the prover circuit
     #[clap(short, long, env = "ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY", default_value_t = STAKE_TABLE_CAPACITY)]
     pub stake_table_capacity: usize,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -97,10 +100,8 @@ fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
 
 #[async_std::main]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
-
     let args = Args::parse();
+    args.logging.init();
 
     // prepare config for state prover from user options
     let provider = Provider::<Http>::try_from(args.l1_provider.to_string()).unwrap();

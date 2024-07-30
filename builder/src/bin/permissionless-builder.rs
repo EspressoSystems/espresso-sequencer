@@ -1,6 +1,5 @@
 use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, time::Duration};
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
 use cld::ClDuration;
@@ -8,6 +7,7 @@ use espresso_types::eth_signature_key::EthKeyPair;
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use sequencer::{Genesis, L1Params};
+use sequencer_utils::logging;
 use snafu::Snafu;
 use url::Url;
 use vbs::version::{StaticVersion, StaticVersionType};
@@ -83,6 +83,9 @@ struct NonPermissionedBuilderOptions {
     /// Path to TOML file containing genesis state.
     #[clap(long, name = "GENESIS_FILE", env = "ESPRESSO_BUILDER_GENESIS_FILE")]
     genesis_file: PathBuf,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 #[derive(Clone, Debug, Snafu)]
@@ -100,10 +103,9 @@ fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
-    setup_logging();
-    setup_backtrace();
-
     let opt = NonPermissionedBuilderOptions::parse();
+    opt.logging.init();
+
     let genesis = Genesis::from_file(&opt.genesis_file)?;
 
     let l1_params = L1Params {

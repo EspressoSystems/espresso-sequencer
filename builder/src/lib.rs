@@ -670,10 +670,6 @@ pub mod testing {
 
 #[cfg(test)]
 mod test {
-    //use self::testing::mock_node_state;
-
-    //use super::{transaction::ApplicationTransaction, vm::TestVm, *};
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::stream::IntoStream;
     use clap::builder;
     use espresso_types::{Header, NodeState, Payload, ValidatedState};
@@ -689,6 +685,7 @@ mod test {
             sql,
         },
     };
+    use sequencer_utils::test_utils::setup_test;
     use testing::{wait_for_decide_on_handle, HotShotTestConfig};
     use vbs::version::StaticVersion;
 
@@ -700,8 +697,7 @@ mod test {
     #[ignore]
     #[async_std::test]
     async fn test_non_voting_hotshot_node() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let ver = StaticVersion::<0, 1>::instance();
 

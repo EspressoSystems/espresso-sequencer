@@ -3,7 +3,6 @@ use std::{
 };
 
 use anyhow::{bail, Context};
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use builder::permissioned::init_node;
 use clap::Parser;
 use espresso_types::eth_signature_key::EthKeyPair;
@@ -18,6 +17,7 @@ use libp2p::Multiaddr;
 use sequencer::{
     options::parse_duration, persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams,
 };
+use sequencer_utils::logging;
 use url::Url;
 use vbs::version::{StaticVersion, StaticVersionType};
 
@@ -188,6 +188,9 @@ pub struct PermissionedBuilderOptions {
     /// Whether or not we are a DA node.
     #[clap(long, env = "ESPRESSO_SEQUENCER_IS_DA", action)]
     pub is_da: bool,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 impl PermissionedBuilderOptions {
@@ -215,10 +218,8 @@ impl PermissionedBuilderOptions {
 }
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
-    setup_logging();
-    setup_backtrace();
-
     let opt = PermissionedBuilderOptions::parse();
+    opt.logging.init();
 
     let (private_staking_key, private_state_key) = opt.private_keys()?;
 
