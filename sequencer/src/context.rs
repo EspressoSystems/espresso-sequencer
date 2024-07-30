@@ -84,7 +84,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     pub async fn init(
         network_config: NetworkConfig<PubKey>,
         instance_state: NodeState,
-        mut persistence: P,
+        persistence: P,
         network: Arc<N>,
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
@@ -104,8 +104,8 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             .set(instance_state.node_id as usize);
 
         // Load saved consensus state from storage.
-        let initializer = persistence
-            .load_consensus_state(instance_state.clone(), &event_consumer)
+        let (initializer, anchor_view) = persistence
+            .load_consensus_state(instance_state.clone())
             .await?;
 
         let committee_membership = GeneralStaticCommittee::create_election(
@@ -181,6 +181,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             instance_state,
             network_config,
             event_consumer,
+            anchor_view,
         ))
     }
 
@@ -195,6 +196,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         node_state: NodeState,
         config: NetworkConfig<PubKey>,
         event_consumer: impl PersistenceEventConsumer + 'static,
+        anchor_view: Option<ViewNumber>,
     ) -> Self {
         let events = handle.event_stream();
 
@@ -219,6 +221,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
                 external_event_handler,
                 Some(event_streamer.clone()),
                 event_consumer,
+                anchor_view,
             ),
         );
 
@@ -352,7 +355,19 @@ async fn handle_events<Ver: StaticVersionType>(
     external_event_handler: ExternalEventHandler,
     events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
     event_consumer: impl PersistenceEventConsumer + 'static,
+    anchor_view: Option<ViewNumber>,
 ) {
+    if let Some(view) = anchor_view {
+        // Process and clean up any leaves that we may have persisted last time we were running but
+        // failed to handle due to a shutdown.
+        let mut p = persistence.write().await;
+        if let Err(err) = p.append_decided_leaves(view, vec![], &event_consumer).await {
+            tracing::warn!(
+                "failed to process decided leaves, chain may not be up to date: {err:#}"
+            );
+        }
+    }
+
     while let Some(event) = events.next().await {
         tracing::debug!(node_id, ?event, "consensus event");
 
