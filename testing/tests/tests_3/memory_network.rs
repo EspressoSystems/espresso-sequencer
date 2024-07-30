@@ -11,7 +11,7 @@ use hotshot::{
     types::SignatureKey,
 };
 use hotshot_example_types::{
-    auction_results_provider_types::TestAuctionResultsProvider,
+    auction_results_provider_types::{TestAuctionResult, TestAuctionResultsProvider},
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
@@ -46,6 +46,7 @@ use vbs::version::StaticVersion;
 pub struct Test;
 
 impl NodeType for Test {
+    type AuctionResult = TestAuctionResult;
     type Base = StaticVersion<0, 1>;
     type Upgrade = StaticVersion<0, 2>;
     const UPGRADE_HASH: [u8; 32] = [
@@ -69,7 +70,7 @@ pub struct TestImpl {}
 impl NodeImplementation<Test> for TestImpl {
     type Network = MemoryNetwork<<Test as NodeType>::SignatureKey>;
     type Storage = TestStorage<Test>;
-    type AuctionResultsProvider = TestAuctionResultsProvider;
+    type AuctionResultsProvider = TestAuctionResultsProvider<Test>;
 }
 
 /// fake Eq

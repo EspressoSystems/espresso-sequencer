@@ -14,6 +14,7 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
+    constants::MarketplaceVersion,
     data::{Leaf, QuorumProposal, VidDisperse, ViewChangeEvidence},
     message::Proposal,
     simple_certificate::{version, UpgradeCertificate},
@@ -22,6 +23,7 @@ use hotshot_types::{
     },
 };
 use tracing::{debug, error, instrument};
+use vbs::version::StaticVersionType;
 
 use crate::{
     events::HotShotEvent,
@@ -161,19 +163,35 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
             &self.decided_upgrade_certificate.read().await.clone(),
         )?;
 
-        let block_header = TYPES::BlockHeader::new_legacy(
-            state.as_ref(),
-            self.instance_state.as_ref(),
-            &parent_leaf,
-            commitment_and_metadata.commitment,
-            commitment_and_metadata.builder_commitment,
-            commitment_and_metadata.metadata,
-            commitment_and_metadata.fee,
-            vid_share.data.common.clone(),
-            version,
-        )
-        .await
-        .context("Failed to construct block header")?;
+        let block_header = if version < MarketplaceVersion::VERSION {
+            TYPES::BlockHeader::new_legacy(
+                state.as_ref(),
+                self.instance_state.as_ref(),
+                &parent_leaf,
+                commitment_and_metadata.commitment,
+                commitment_and_metadata.builder_commitment,
+                commitment_and_metadata.metadata,
+                commitment_and_metadata.fees.first().clone(),
+                vid_share.data.common.clone(),
+                version,
+            )
+            .await
+            .context("Failed to construct legacy block header")?
+        } else {
+            TYPES::BlockHeader::new_marketplace(
+                state.as_ref(),
+                self.instance_state.as_ref(),
+                &parent_leaf,
+                commitment_and_metadata.commitment,
+                commitment_and_metadata.metadata,
+                commitment_and_metadata.fees.to_vec(),
+                vid_share.data.common.clone(),
+                commitment_and_metadata.auction_result,
+                version,
+            )
+            .await
+            .context("Failed to construct marketplace block header")?
+        };
 
         let proposal = QuorumProposal {
             block_header,
@@ -267,14 +285,16 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
                     builder_commitment,
                     metadata,
                     view,
-                    fee,
+                    fees,
+                    auction_result,
                 ) => {
                     commit_and_metadata = Some(CommitmentAndMetadata {
                         commitment: *payload_commitment,
                         builder_commitment: builder_commitment.clone(),
                         metadata: metadata.clone(),
-                        fee: fee.clone(),
+                        fees: fees.clone(),
                         block_view: *view,
+                        auction_result: auction_result.clone(),
                     });
                 }
                 HotShotEvent::QcFormed(cert) => match cert {

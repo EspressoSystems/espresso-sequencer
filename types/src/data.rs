@@ -881,6 +881,9 @@ pub struct PackedBundle<TYPES: NodeType> {
 
     /// The Vid precompute for the block.
     pub vid_precompute: Option<VidPrecomputeData>,
+
+    /// The auction results for the block, if it was produced as the result of an auction
+    pub auction_result: Option<TYPES::AuctionResult>,
 }
 
 impl<TYPES: NodeType> PackedBundle<TYPES> {
@@ -891,6 +894,7 @@ impl<TYPES: NodeType> PackedBundle<TYPES> {
         view_number: TYPES::Time,
         sequencing_fees: Vec1<BuilderFee<TYPES>>,
         vid_precompute: Option<VidPrecomputeData>,
+        auction_result: Option<TYPES::AuctionResult>,
     ) -> Self {
         Self {
             encoded_transactions,
@@ -898,6 +902,7 @@ impl<TYPES: NodeType> PackedBundle<TYPES> {
             view_number,
             sequencing_fees,
             vid_precompute,
+            auction_result,
         }
     }
 }

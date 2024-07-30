@@ -11,6 +11,7 @@ use anyhow::{bail, ensure, Result};
 use async_lock::{RwLock, RwLockReadGuard, RwLockUpgradableReadGuard, RwLockWriteGuard};
 use committable::{Commitment, Committable};
 use tracing::{debug, error, instrument, trace};
+use vec1::Vec1;
 
 pub use crate::utils::{View, ViewInner};
 use crate::{
@@ -732,7 +733,9 @@ pub struct CommitmentAndMetadata<TYPES: NodeType> {
     /// Metadata for the block payload
     pub metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
     /// Builder fee data
-    pub fee: BuilderFee<TYPES>,
+    pub fees: Vec1<BuilderFee<TYPES>>,
     /// View number this block is for
     pub block_view: TYPES::Time,
+    /// auction result that the block was produced from, if any
+    pub auction_result: Option<TYPES::AuctionResult>,
 }

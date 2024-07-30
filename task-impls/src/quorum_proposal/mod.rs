@@ -146,6 +146,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                             _metadata,
                             view_number,
                             _fee,
+                            _auction_result,
                         ) = event
                         {
                             *view_number
@@ -400,6 +401,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                 _metadata,
                 view_number,
                 _fee,
+                _auction_result,
             ) => {
                 let view_number = *view_number;
 

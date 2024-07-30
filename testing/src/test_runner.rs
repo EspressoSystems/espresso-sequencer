@@ -70,7 +70,7 @@ where
         TYPES,
         Network = N,
         Storage = TestStorage<TYPES>,
-        AuctionResultsProvider = TestAuctionResultsProvider,
+        AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
     >,
 {
     /// execute test

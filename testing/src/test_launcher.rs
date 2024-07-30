@@ -29,7 +29,7 @@ pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYP
     /// configuration used to generate each hotshot node
     pub config: HotShotConfig<TYPES::SignatureKey>,
     /// generate a new auction results connector for each node
-    pub auction_results_provider: Generator<TestAuctionResultsProvider>,
+    pub auction_results_provider: Generator<TestAuctionResultsProvider<TYPES>>,
 }
 
 /// test launcher

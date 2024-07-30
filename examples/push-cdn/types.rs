@@ -17,7 +17,7 @@ pub type Network = PushCdnNetwork<TestTypes>;
 impl NodeImplementation<TestTypes> for NodeImpl {
     type Network = Network;
     type Storage = TestStorage<TestTypes>;
-    type AuctionResultsProvider = TestAuctionResultsProvider;
+    type AuctionResultsProvider = TestAuctionResultsProvider<TestTypes>;
 }
 
 /// Convenience type alias

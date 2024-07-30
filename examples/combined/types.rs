@@ -20,7 +20,7 @@ pub type Network = CombinedNetworks<TestTypes>;
 impl NodeImplementation<TestTypes> for NodeImpl {
     type Network = Network;
     type Storage = TestStorage<TestTypes>;
-    type AuctionResultsProvider = TestAuctionResultsProvider;
+    type AuctionResultsProvider = TestAuctionResultsProvider<TestTypes>;
 }
 /// convenience type alias
 pub type ThisRun = CombinedDaRun<TestTypes>;

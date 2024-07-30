@@ -18,10 +18,10 @@ use hotshot_types::{
     event::{Event, EventType},
     simple_certificate::{version, UpgradeCertificate},
     traits::{
-        auction_results_provider::{AuctionResultsProvider, HasUrls},
+        auction_results_provider::AuctionResultsProvider,
         block_contents::{precompute_vid_commitment, BuilderFee, EncodeBytes},
         election::Membership,
-        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, HasUrls, NodeImplementation, NodeType},
         signature_key::{BuilderSignatureKey, SignatureKey},
         BlockPayload,
     },
@@ -187,6 +187,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
                     block_view,
                     vec1::vec1![fee],
                     precompute_data,
+                    None,
                 ))),
                 event_stream,
             )
@@ -226,6 +227,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
                     block_view,
                     vec1::vec1![null_fee],
                     Some(precompute_data),
+                    None,
                 ))),
                 event_stream,
             )
@@ -277,7 +279,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
             {
                 let mut futures = Vec::new();
 
-                for url in urls.urls() {
+                for url in urls.clone().urls() {
                     futures.push(async_timeout(
                         self.builder_timeout.saturating_sub(start.elapsed()),
                         async {
@@ -324,6 +326,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
                             block_view,
                             sequencing_fees,
                             None,
+                            Some(urls),
                         ))),
                         event_stream,
                     )
@@ -367,6 +370,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
                 block_view,
                 vec1::vec1![null_fee],
                 Some(precompute_data),
+                None,
             ))),
             event_stream,
         )

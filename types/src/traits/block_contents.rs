@@ -17,7 +17,7 @@ use jf_vid::{precomputable::Precomputable, VidScheme};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use vbs::version::Version;
 
-use super::{auction_results_provider::HasUrls, signature_key::BuilderSignatureKey};
+use super::signature_key::BuilderSignatureKey;
 use crate::{
     data::Leaf,
     traits::{node_implementation::NodeType, states::InstanceState, ValidatedState},
@@ -181,8 +181,6 @@ pub trait BlockHeader<TYPES: NodeType>:
 {
     /// Error type for this type of block header
     type Error: Error + Debug + Send + Sync;
-    /// Type of Auction Results
-    type AuctionResult: HasUrls + Send;
 
     /// Build a header with the parent validate state, instance-level state, parent leaf, payload
     /// commitment, and metadata. This is only used in pre-marketplace versions
@@ -210,7 +208,7 @@ pub trait BlockHeader<TYPES: NodeType>:
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         builder_fee: Vec<BuilderFee<TYPES>>,
         vid_common: VidCommon,
-        auction_results: Option<Self::AuctionResult>,
+        auction_results: Option<TYPES::AuctionResult>,
         version: Version,
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send;
 
@@ -235,5 +233,5 @@ pub trait BlockHeader<TYPES: NodeType>:
     fn builder_commitment(&self) -> BuilderCommitment;
 
     /// Get the results of the auction for this Header. Only used in post-marketplace versions
-    fn get_auction_results(&self) -> Option<Self::AuctionResult>;
+    fn get_auction_results(&self) -> Option<TYPES::AuctionResult>;
 }

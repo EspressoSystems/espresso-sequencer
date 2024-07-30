@@ -23,7 +23,6 @@ use time::OffsetDateTime;
 use vbs::version::Version;
 
 use crate::{
-    auction_results_provider_types::TestAuctionResult,
     node_types::TestTypes,
     state_types::{TestInstanceState, TestValidatedState},
 };
@@ -244,7 +243,6 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
     for TestBlockHeader
 {
     type Error = std::convert::Infallible;
-    type AuctionResult = TestAuctionResult;
 
     async fn new_legacy(
         _parent_state: &TYPES::ValidatedState,
@@ -281,7 +279,7 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
         _metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         _builder_fee: Vec<BuilderFee<TYPES>>,
         _vid_common: VidCommon,
-        _auction_results: Option<Self::AuctionResult>,
+        _auction_results: Option<TYPES::AuctionResult>,
         _version: Version,
     ) -> Result<Self, Self::Error> {
         unimplemented!()
@@ -317,7 +315,7 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
         self.builder_commitment.clone()
     }
 
-    fn get_auction_results(&self) -> Option<Self::AuctionResult> {
+    fn get_auction_results(&self) -> Option<TYPES::AuctionResult> {
         unimplemented!()
     }
 }

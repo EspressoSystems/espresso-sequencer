@@ -339,7 +339,7 @@ pub trait RunDa<
         TYPES,
         Network = NETWORK,
         Storage = TestStorage<TYPES>,
-        AuctionResultsProvider = TestAuctionResultsProvider,
+        AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
     >,
 > where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
@@ -406,7 +406,7 @@ pub trait RunDa<
             initializer,
             ConsensusMetricsValue::default(),
             TestStorage::<TYPES>::default(),
-            TestAuctionResultsProvider::default(),
+            TestAuctionResultsProvider::<TYPES>::default(),
         )
         .await
         .expect("Could not init hotshot")
@@ -604,7 +604,7 @@ impl<
             TYPES,
             Network = PushCdnNetwork<TYPES>,
             Storage = TestStorage<TYPES>,
-            AuctionResultsProvider = TestAuctionResultsProvider,
+            AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
         >,
     > RunDa<TYPES, PushCdnNetwork<TYPES>, NODE> for PushCdnDaRun<TYPES>
 where
@@ -681,7 +681,7 @@ impl<
             TYPES,
             Network = Libp2pNetwork<TYPES::SignatureKey>,
             Storage = TestStorage<TYPES>,
-            AuctionResultsProvider = TestAuctionResultsProvider,
+            AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
         >,
     > RunDa<TYPES, Libp2pNetwork<TYPES::SignatureKey>, NODE> for Libp2pDaRun<TYPES>
 where
@@ -767,7 +767,7 @@ impl<
             TYPES,
             Network = CombinedNetworks<TYPES>,
             Storage = TestStorage<TYPES>,
-            AuctionResultsProvider = TestAuctionResultsProvider,
+            AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
         >,
     > RunDa<TYPES, CombinedNetworks<TYPES>, NODE> for CombinedDaRun<TYPES>
 where
@@ -837,7 +837,7 @@ pub async fn main_entry_point<
         TYPES,
         Network = NETWORK,
         Storage = TestStorage<TYPES>,
-        AuctionResultsProvider = TestAuctionResultsProvider,
+        AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
     >,
     RUNDA: RunDa<TYPES, NETWORK, NODE>,
 >(

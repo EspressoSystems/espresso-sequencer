@@ -1,14 +1,14 @@
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use hotshot_types::traits::{
-    auction_results_provider::{AuctionResultsProvider, HasUrls},
-    node_implementation::NodeType,
+    auction_results_provider::AuctionResultsProvider,
+    node_implementation::{HasUrls, NodeType},
 };
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// A mock result for the auction solver. This type is just a pointer to a URL.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TestAuctionResult {
     /// The URL of the builder to reach out to.
     pub urls: Vec<Url>,
@@ -22,10 +22,10 @@ impl HasUrls for TestAuctionResult {
 
 /// The test auction results type is used to mimic the results from the Solver.
 #[derive(Clone, Debug, Default)]
-pub struct TestAuctionResultsProvider {
+pub struct TestAuctionResultsProvider<TYPES: NodeType> {
     /// We intentionally allow for the results to be pre-cooked for the unit test to gurantee a
     /// particular outcome is met.
-    pub solver_results: TestAuctionResult,
+    pub solver_results: TYPES::AuctionResult,
 
     /// A canned type to ensure that an error is thrown in absence of a true fault-injectible
     /// system for logical tests. This will guarantee that `fetch_auction_result` always throws an
@@ -39,17 +39,15 @@ pub struct TestAuctionResultsProvider {
 }
 
 #[async_trait]
-impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for TestAuctionResultsProvider {
-    type AuctionResult = TestAuctionResult;
-
+impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for TestAuctionResultsProvider<TYPES> {
     /// Mock fetching the auction results, with optional error injection to simulate failure cases
     /// in the solver.
-    async fn fetch_auction_result(&self, view_number: TYPES::Time) -> Result<Self::AuctionResult> {
+    async fn fetch_auction_result(&self, view_number: TYPES::Time) -> Result<TYPES::AuctionResult> {
         if let Some(url) = &self.broadcast_url {
             let resp =
                 reqwest::get(url.join(&format!("/v0/api/auction_results/{}", *view_number))?)
                     .await?
-                    .json::<TestAuctionResult>()
+                    .json::<TYPES::AuctionResult>()
                     .await?;
 
             Ok(resp)

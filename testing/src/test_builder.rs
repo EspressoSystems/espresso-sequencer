@@ -478,7 +478,9 @@ impl<TYPES: NodeType<InstanceState = TestInstanceState>, I: TestableNodeImplemen
                 ),
                 storage: Box::new(|_| TestStorage::<TYPES>::default()),
                 config,
-                auction_results_provider: Box::new(|_| TestAuctionResultsProvider::default()),
+                auction_results_provider: Box::new(|_| {
+                    TestAuctionResultsProvider::<TYPES>::default()
+                }),
             },
             metadata: self,
         }

@@ -37,6 +37,7 @@ use hotshot_types::{
 };
 use jf_vid::VidScheme;
 use sha2::Digest;
+use vec1::vec1;
 
 const TIMEOUT: Duration = Duration::from_millis(35);
 
@@ -97,8 +98,12 @@ async fn test_consensus_task() {
                 builder_commitment,
                 TestMetadata,
                 ViewNumber::new(2),
-                null_block::builder_fee(quorum_membership.total_nodes(), BaseVersion::version())
-                    .unwrap(),
+                vec1![null_block::builder_fee(
+                    quorum_membership.total_nodes(),
+                    BaseVersion::version()
+                )
+                .unwrap()],
+                None,
             ),
         ],
     ];
@@ -285,7 +290,8 @@ async fn test_view_sync_finalize_propose() {
                 builder_commitment,
                 TestMetadata,
                 ViewNumber::new(4),
-                null_block::builder_fee(4, BaseVersion::version()).unwrap(),
+                vec1![null_block::builder_fee(4, BaseVersion::version()).unwrap()],
+                None,
             ),
         ],
     ];

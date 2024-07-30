@@ -48,7 +48,7 @@ pub async fn build_system_handle<
     I: NodeImplementation<
             TYPES,
             Storage = TestStorage<TYPES>,
-            AuctionResultsProvider = TestAuctionResultsProvider,
+            AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
         > + TestableNodeImplementation<TYPES>,
 >(
     node_id: u64,

@@ -47,6 +47,7 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
         )
         .unwrap()],
         Some(precompute_data.clone()),
+        None,
     );
     output.push(HotShotEvent::BlockRecv(exp_packed_bundle.clone()));
 

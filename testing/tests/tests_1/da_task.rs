@@ -85,6 +85,7 @@ async fn test_da_task() {
                 )
                 .unwrap()],
                 Some(precompute),
+                None,
             )),
         ],
         serial![DaProposalRecv(proposals[1].clone(), leaders[1])],
@@ -171,6 +172,7 @@ async fn test_da_task_storage_failure() {
                 )
                 .unwrap()],
                 Some(precompute),
+                None,
             ),)
         ],
         serial![DaProposalRecv(proposals[1].clone(), leaders[1])],

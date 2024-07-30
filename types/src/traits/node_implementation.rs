@@ -13,7 +13,8 @@ use std::{
 
 use async_trait::async_trait;
 use committable::Committable;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use url::Url;
 use vbs::version::StaticVersionType;
 
 use super::{
@@ -33,6 +34,14 @@ use crate::{
         election::Membership, signature_key::SignatureKey, states::InstanceState, BlockPayload,
     },
 };
+
+/// This trait guarantees that a particular type has urls that can be extracted from it. This trait
+/// essentially ensures that the results returned by the [`AuctionResultsProvider`] trait includes a
+/// list of urls for the builders that HotShot must request from.
+pub trait HasUrls {
+    /// Returns the builer url associated with the datatype
+    fn urls(&self) -> Vec<Url>;
+}
 
 /// Node implementation aggregate trait
 ///
@@ -205,6 +214,17 @@ pub trait NodeType:
     ///
     /// This should be the same `Time` that `ValidatedState::Time` is using.
     type Time: ConsensusTime;
+    /// The AuctionSolverResult is a type that holds the data associated with a particular solver
+    /// run, for a particular view.
+    type AuctionResult: Debug
+        + HasUrls
+        + DeserializeOwned
+        + Default
+        + PartialEq
+        + Eq
+        + Clone
+        + Send
+        + Sync;
     /// The block header type that this hotshot setup is using.
     type BlockHeader: BlockHeader<Self>;
     /// The block type that this hotshot setup is using.
