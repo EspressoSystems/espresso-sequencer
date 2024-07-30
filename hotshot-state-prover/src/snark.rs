@@ -48,8 +48,10 @@ pub fn preprocess(
 /// - the signer's accumulated weight exceeds the quorum threshold
 /// - the stake table corresponds to the one committed in the light client state
 /// - all schnorr signatures over the light client state are valid
+///
 /// # Errors
 /// Errors if unable to generate proof
+///
 /// # Panics
 /// if the stake table is not up to date
 #[allow(clippy::too_many_arguments)]
