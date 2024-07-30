@@ -1297,6 +1297,9 @@
 <a href="#1297" id="1297">1297</a>
 <a href="#1298" id="1298">1298</a>
 <a href="#1299" id="1299">1299</a>
+<a href="#1300" id="1300">1300</a>
+<a href="#1301" id="1301">1301</a>
+<a href="#1302" id="1302">1302</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Adversarial Espresso client.
 //!
 //! This program runs a randomized client for the Espresso query service. It is designed to hit
@@ -1329,7 +1332,7 @@
 <span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>derivative::Derivative;
 <span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
-<span class="kw">use </span>espresso_types::{BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
+<span class="kw">use </span>espresso_types::{v0_3::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
 <span class="kw">use </span>futures::{
     future::{FutureExt, TryFuture, TryFutureExt},
     stream::{Peekable, StreamExt},
@@ -2231,7 +2234,10 @@
                     .<span class="kw">await
             </span>})
             .<span class="kw">await</span><span class="question-mark">?</span>;
-        <span class="kw">let </span>builder_address = builder_header.fee_info().account();
+
+        <span class="comment">// Since we have multiple fee accounts, we need to select one.
+        </span><span class="kw">let </span>accounts = builder_header.fee_info().accounts();
+        <span class="kw">let </span>builder_address = accounts.first().unwrap();
 
         <span class="comment">// Get the header of the state snapshot we're going to query so we can later verify our
         // results.

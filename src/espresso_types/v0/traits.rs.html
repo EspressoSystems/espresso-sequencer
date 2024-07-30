@@ -608,6 +608,8 @@
 <a href="#608" id="608">608</a>
 <a href="#609" id="609">609</a>
 <a href="#610" id="610">610</a>
+<a href="#611" id="611">611</a>
+<a href="#612" id="612">612</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! This module contains all the traits used for building the sequencer types.
 //! It also includes some trait implementations that cannot be implemented in an external crate.
 </span><span class="kw">use </span>std::{cmp::max, collections::BTreeMap, ops::Range, sync::Arc};
@@ -632,9 +634,11 @@
 <span class="kw">use </span>serde::{de::DeserializeOwned, Serialize};
 
 <span class="kw">use crate</span>::{
-    AccountQueryData, BackoffParams, BlockMerkleTree, ChainConfig, Event, FeeAccount,
-    FeeMerkleCommitment, Leaf, NetworkConfig, NodeState, SeqTypes, ValidatedState,
+    v0::impls::ValidatedState, v0_3::ChainConfig, AccountQueryData, BackoffParams, BlockMerkleTree,
+    Event, FeeAccount, FeeMerkleCommitment, Leaf, NetworkConfig, SeqTypes,
 };
+
+<span class="kw">use </span><span class="kw">super</span>::impls::NodeState;
 
 <span class="attr">#[async_trait]
 </span><span class="kw">pub trait </span>StateCatchup: Send + Sync + std::fmt::Debug {

@@ -517,7 +517,7 @@
 <span class="kw">use </span>anyhow::{bail, ensure, Context};
 <span class="kw">use </span>async_std::{stream::StreamExt, sync::RwLock};
 <span class="kw">use </span>espresso_types::{
-    BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeMerkleTree, ValidatedState,
+    v0_3::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree, ValidatedState,
 };
 <span class="kw">use </span>futures::future::Future;
 <span class="kw">use </span>hotshot::traits::ValidatedState <span class="kw">as </span>HotShotState;
@@ -803,8 +803,8 @@
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
     <span class="kw">use </span>espresso_types::{
-        validate_proposal, BlockSize, FeeAccount, FeeAccountProof, FeeAmount, FeeError, FeeInfo,
-        FeeMerkleProof, Leaf, ProposalValidationError,
+        v0_3::IterableFeeInfo, validate_proposal, BlockSize, FeeAccount, FeeAccountProof,
+        FeeAmount, FeeError, FeeInfo, FeeMerkleProof, Leaf, ProposalValidationError,
     };
     <span class="kw">use </span>ethers::{abi::Address, types::U256};
     <span class="kw">use </span>hotshot_types::{
@@ -915,7 +915,7 @@
             ProposalValidationError::InsufficientFee {
                 max_block_size: instance.chain_config.max_block_size,
                 base_fee: instance.chain_config.base_fee,
-                proposed_fee: header.fee_info().amount()
+                proposed_fee: header.fee_info().amount().unwrap()
             },
             err
         );

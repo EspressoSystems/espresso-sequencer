@@ -25,24 +25,8 @@
 <a href="#25" id="25">25</a>
 <a href="#26" id="26">26</a>
 <a href="#27" id="27">27</a>
-<a href="#28" id="28">28</a>
-<a href="#29" id="29">29</a>
-<a href="#30" id="30">30</a>
-<a href="#31" id="31">31</a>
-<a href="#32" id="32">32</a>
-<a href="#33" id="33">33</a>
-<a href="#34" id="34">34</a>
-<a href="#35" id="35">35</a>
-<a href="#36" id="36">36</a>
-<a href="#37" id="37">37</a>
-<a href="#38" id="38">38</a>
-<a href="#39" id="39">39</a>
-<a href="#40" id="40">40</a>
-<a href="#41" id="41">41</a>
-</pre></div><pre class="rust"><code><span class="kw">use crate</span>::{Header, ResolvableChainConfig};
-
-<span class="kw">use super</span>::{FeeAccount, FeeAmount};
-
+</pre></div><pre class="rust"><code><span class="kw">use super</span>::{FeeAccount, FeeAmount};
+<span class="kw">use </span><span class="kw">crate</span>::Header;
 <span class="kw">use </span>committable::Commitment;
 <span class="kw">use </span>jf_merkle_tree::{
     prelude::{LightWeightSHA3MerkleTree, Sha3Digest, Sha3Node},
@@ -50,6 +34,7 @@
     MerkleTreeScheme,
 };
 <span class="kw">use </span>serde::{Deserialize, Serialize};
+<span class="kw">use </span>std::collections::HashSet;
 
 <span class="comment">// The block merkle tree accumulates header commitments. However, since the underlying
 // representation of the commitment type remains the same even while the header itself changes,
@@ -60,21 +45,8 @@
 <span class="kw">pub type </span>FeeMerkleTree = UniversalMerkleTree&lt;FeeAmount, Sha3Digest, FeeAccount, <span class="number">256</span>, Sha3Node&gt;;
 <span class="kw">pub type </span>FeeMerkleCommitment = &lt;FeeMerkleTree <span class="kw">as </span>MerkleTreeScheme&gt;::Commitment;
 
-<span class="kw">use </span>core::fmt::Debug;
-
-<span class="kw">use </span>std::collections::HashSet;
-
 <span class="kw">pub const </span>BLOCK_MERKLE_TREE_HEIGHT: usize = <span class="number">32</span>;
 <span class="kw">pub const </span>FEE_MERKLE_TREE_HEIGHT: usize = <span class="number">20</span>;
-
-<span class="attr">#[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-</span><span class="kw">pub struct </span>ValidatedState {
-    <span class="doccomment">/// Frontier of Block Merkle Tree
-    </span><span class="kw">pub </span>block_merkle_tree: BlockMerkleTree,
-    <span class="doccomment">/// Fee Merkle Tree
-    </span><span class="kw">pub </span>fee_merkle_tree: FeeMerkleTree,
-    <span class="kw">pub </span>chain_config: ResolvableChainConfig,
-}
 
 <span class="attr">#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 </span><span class="kw">pub struct </span>Delta {

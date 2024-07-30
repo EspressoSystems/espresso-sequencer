@@ -41,11 +41,17 @@
 <a href="#41" id="41">41</a>
 <a href="#42" id="42">42</a>
 <a href="#43" id="43">43</a>
+<a href="#44" id="44">44</a>
+<a href="#45" id="45">45</a>
+<a href="#46" id="46">46</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>committable::Commitment;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>vbs::version::Version;
 
-<span class="kw">use crate</span>::{v0_1, v0_2, v0_3, ChainConfig};
+<span class="kw">use crate</span>::{
+    v0_1::{<span class="self">self</span>, ChainConfig},
+    v0_2, v0_3,
+};
 
 <span class="doccomment">/// Each variant represents a specific minor version header.
 </span><span class="attr">#[derive(Clone, Debug, Hash, PartialEq, Eq)]

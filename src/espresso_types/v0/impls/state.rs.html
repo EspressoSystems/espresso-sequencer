@@ -922,9 +922,167 @@
 <a href="#922" id="922">922</a>
 <a href="#923" id="923">923</a>
 <a href="#924" id="924">924</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::ops::Add;
-
-<span class="kw">use </span>anyhow::bail;
+<a href="#925" id="925">925</a>
+<a href="#926" id="926">926</a>
+<a href="#927" id="927">927</a>
+<a href="#928" id="928">928</a>
+<a href="#929" id="929">929</a>
+<a href="#930" id="930">930</a>
+<a href="#931" id="931">931</a>
+<a href="#932" id="932">932</a>
+<a href="#933" id="933">933</a>
+<a href="#934" id="934">934</a>
+<a href="#935" id="935">935</a>
+<a href="#936" id="936">936</a>
+<a href="#937" id="937">937</a>
+<a href="#938" id="938">938</a>
+<a href="#939" id="939">939</a>
+<a href="#940" id="940">940</a>
+<a href="#941" id="941">941</a>
+<a href="#942" id="942">942</a>
+<a href="#943" id="943">943</a>
+<a href="#944" id="944">944</a>
+<a href="#945" id="945">945</a>
+<a href="#946" id="946">946</a>
+<a href="#947" id="947">947</a>
+<a href="#948" id="948">948</a>
+<a href="#949" id="949">949</a>
+<a href="#950" id="950">950</a>
+<a href="#951" id="951">951</a>
+<a href="#952" id="952">952</a>
+<a href="#953" id="953">953</a>
+<a href="#954" id="954">954</a>
+<a href="#955" id="955">955</a>
+<a href="#956" id="956">956</a>
+<a href="#957" id="957">957</a>
+<a href="#958" id="958">958</a>
+<a href="#959" id="959">959</a>
+<a href="#960" id="960">960</a>
+<a href="#961" id="961">961</a>
+<a href="#962" id="962">962</a>
+<a href="#963" id="963">963</a>
+<a href="#964" id="964">964</a>
+<a href="#965" id="965">965</a>
+<a href="#966" id="966">966</a>
+<a href="#967" id="967">967</a>
+<a href="#968" id="968">968</a>
+<a href="#969" id="969">969</a>
+<a href="#970" id="970">970</a>
+<a href="#971" id="971">971</a>
+<a href="#972" id="972">972</a>
+<a href="#973" id="973">973</a>
+<a href="#974" id="974">974</a>
+<a href="#975" id="975">975</a>
+<a href="#976" id="976">976</a>
+<a href="#977" id="977">977</a>
+<a href="#978" id="978">978</a>
+<a href="#979" id="979">979</a>
+<a href="#980" id="980">980</a>
+<a href="#981" id="981">981</a>
+<a href="#982" id="982">982</a>
+<a href="#983" id="983">983</a>
+<a href="#984" id="984">984</a>
+<a href="#985" id="985">985</a>
+<a href="#986" id="986">986</a>
+<a href="#987" id="987">987</a>
+<a href="#988" id="988">988</a>
+<a href="#989" id="989">989</a>
+<a href="#990" id="990">990</a>
+<a href="#991" id="991">991</a>
+<a href="#992" id="992">992</a>
+<a href="#993" id="993">993</a>
+<a href="#994" id="994">994</a>
+<a href="#995" id="995">995</a>
+<a href="#996" id="996">996</a>
+<a href="#997" id="997">997</a>
+<a href="#998" id="998">998</a>
+<a href="#999" id="999">999</a>
+<a href="#1000" id="1000">1000</a>
+<a href="#1001" id="1001">1001</a>
+<a href="#1002" id="1002">1002</a>
+<a href="#1003" id="1003">1003</a>
+<a href="#1004" id="1004">1004</a>
+<a href="#1005" id="1005">1005</a>
+<a href="#1006" id="1006">1006</a>
+<a href="#1007" id="1007">1007</a>
+<a href="#1008" id="1008">1008</a>
+<a href="#1009" id="1009">1009</a>
+<a href="#1010" id="1010">1010</a>
+<a href="#1011" id="1011">1011</a>
+<a href="#1012" id="1012">1012</a>
+<a href="#1013" id="1013">1013</a>
+<a href="#1014" id="1014">1014</a>
+<a href="#1015" id="1015">1015</a>
+<a href="#1016" id="1016">1016</a>
+<a href="#1017" id="1017">1017</a>
+<a href="#1018" id="1018">1018</a>
+<a href="#1019" id="1019">1019</a>
+<a href="#1020" id="1020">1020</a>
+<a href="#1021" id="1021">1021</a>
+<a href="#1022" id="1022">1022</a>
+<a href="#1023" id="1023">1023</a>
+<a href="#1024" id="1024">1024</a>
+<a href="#1025" id="1025">1025</a>
+<a href="#1026" id="1026">1026</a>
+<a href="#1027" id="1027">1027</a>
+<a href="#1028" id="1028">1028</a>
+<a href="#1029" id="1029">1029</a>
+<a href="#1030" id="1030">1030</a>
+<a href="#1031" id="1031">1031</a>
+<a href="#1032" id="1032">1032</a>
+<a href="#1033" id="1033">1033</a>
+<a href="#1034" id="1034">1034</a>
+<a href="#1035" id="1035">1035</a>
+<a href="#1036" id="1036">1036</a>
+<a href="#1037" id="1037">1037</a>
+<a href="#1038" id="1038">1038</a>
+<a href="#1039" id="1039">1039</a>
+<a href="#1040" id="1040">1040</a>
+<a href="#1041" id="1041">1041</a>
+<a href="#1042" id="1042">1042</a>
+<a href="#1043" id="1043">1043</a>
+<a href="#1044" id="1044">1044</a>
+<a href="#1045" id="1045">1045</a>
+<a href="#1046" id="1046">1046</a>
+<a href="#1047" id="1047">1047</a>
+<a href="#1048" id="1048">1048</a>
+<a href="#1049" id="1049">1049</a>
+<a href="#1050" id="1050">1050</a>
+<a href="#1051" id="1051">1051</a>
+<a href="#1052" id="1052">1052</a>
+<a href="#1053" id="1053">1053</a>
+<a href="#1054" id="1054">1054</a>
+<a href="#1055" id="1055">1055</a>
+<a href="#1056" id="1056">1056</a>
+<a href="#1057" id="1057">1057</a>
+<a href="#1058" id="1058">1058</a>
+<a href="#1059" id="1059">1059</a>
+<a href="#1060" id="1060">1060</a>
+<a href="#1061" id="1061">1061</a>
+<a href="#1062" id="1062">1062</a>
+<a href="#1063" id="1063">1063</a>
+<a href="#1064" id="1064">1064</a>
+<a href="#1065" id="1065">1065</a>
+<a href="#1066" id="1066">1066</a>
+<a href="#1067" id="1067">1067</a>
+<a href="#1068" id="1068">1068</a>
+<a href="#1069" id="1069">1069</a>
+<a href="#1070" id="1070">1070</a>
+<a href="#1071" id="1071">1071</a>
+<a href="#1072" id="1072">1072</a>
+<a href="#1073" id="1073">1073</a>
+<a href="#1074" id="1074">1074</a>
+<a href="#1075" id="1075">1075</a>
+<a href="#1076" id="1076">1076</a>
+<a href="#1077" id="1077">1077</a>
+<a href="#1078" id="1078">1078</a>
+<a href="#1079" id="1079">1079</a>
+<a href="#1080" id="1080">1080</a>
+<a href="#1081" id="1081">1081</a>
+<a href="#1082" id="1082">1082</a>
+<a href="#1083" id="1083">1083</a>
+<a href="#1084" id="1084">1084</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::bail;
 <span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>ethers::types::Address;
 <span class="kw">use </span>hotshot_query_service::merklized_state::MerklizedState;
@@ -945,14 +1103,20 @@
 };
 <span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>num_traits::CheckedSub;
+<span class="kw">use </span>serde::{Deserialize, Serialize};
+<span class="kw">use </span>std::ops::Add;
 <span class="kw">use </span>thiserror::Error;
 <span class="kw">use </span>vbs::version::Version;
 
-<span class="kw">use super</span>::{fee_info::FeeError, header::ProposalValidationError};
+<span class="kw">use super</span>::{
+    auction::ExecutionError, fee_info::FeeError, header::ProposalValidationError,
+    instance_state::NodeState,
+};
 <span class="kw">use crate</span>::{
-    BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header,
-    Leaf, NodeState, NsTableValidationError, PayloadByteLen, ResolvableChainConfig, SeqTypes,
-    UpgradeType, ValidatedState, BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT,
+    v0_3::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
+    BlockMerkleTree, Delta, FeeAccount, FeeAmount, FeeInfo, FeeMerkleTree, Header, Leaf,
+    NsTableValidationError, PayloadByteLen, SeqTypes, UpgradeType, BLOCK_MERKLE_TREE_HEIGHT,
+    FEE_MERKLE_TREE_HEIGHT,
 };
 
 <span class="doccomment">/// Possible builder validation failures
@@ -976,6 +1140,15 @@
 }
 
 <span class="kw">impl </span>StateDelta <span class="kw">for </span>Delta {}
+
+<span class="attr">#[derive(Hash, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+</span><span class="kw">pub struct </span>ValidatedState {
+    <span class="doccomment">/// Frontier of Block Merkle Tree
+    </span><span class="kw">pub </span>block_merkle_tree: BlockMerkleTree,
+    <span class="doccomment">/// Fee Merkle Tree
+    </span><span class="kw">pub </span>fee_merkle_tree: FeeMerkleTree,
+    <span class="kw">pub </span>chain_config: ResolvableChainConfig,
+}
 
 <span class="kw">impl </span>Default <span class="kw">for </span>ValidatedState {
     <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
@@ -1153,11 +1326,18 @@
         });
     }
 
-    <span class="kw">if </span>proposal.fee_info().amount() &lt; expected_chain_config.base_fee * block_size {
+    <span class="comment">// Validate that sum of fees is at least `base_fee * blocksize`.
+    // TODO this should be updated to `base_fee * bundle_size` when we have
+    // VID per bundle or namespace.
+    </span><span class="kw">let </span><span class="prelude-val">Some</span>(amount) = proposal.fee_info().amount() <span class="kw">else </span>{
+        <span class="kw">return </span><span class="prelude-val">Err</span>(ProposalValidationError::SomeFeeAmountOutOfRange);
+    };
+
+    <span class="kw">if </span>amount &lt; expected_chain_config.base_fee * block_size {
         <span class="kw">return </span><span class="prelude-val">Err</span>(ProposalValidationError::InsufficientFee {
             max_block_size: expected_chain_config.max_block_size,
             base_fee: expected_chain_config.base_fee,
-            proposed_fee: proposal.fee_info().amount(),
+            proposed_fee: amount,
         });
     }
 
@@ -1207,32 +1387,51 @@
 <span class="kw">fn </span>charge_fee(
     state: <span class="kw-2">&amp;mut </span>ValidatedState,
     delta: <span class="kw-2">&amp;mut </span>Delta,
-    fee_info: FeeInfo,
+    fee_info: Vec&lt;FeeInfo&gt;,
     recipient: FeeAccount,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FeeError&gt; {
-    state.charge_fee(fee_info, recipient)<span class="question-mark">?</span>;
-    delta.fees_delta.extend([fee_info.account, recipient]);
+    <span class="kw">for </span>fee_info <span class="kw">in </span>fee_info {
+        state.charge_fee(fee_info, recipient)<span class="question-mark">?</span>;
+        delta.fees_delta.extend([fee_info.account, recipient]);
+    }
     <span class="prelude-val">Ok</span>(())
 }
 
-<span class="doccomment">/// Validate builder account by verifying signature
+<span class="doccomment">/// Validate builder accounts by verifying signatures. All fees are
+/// verified against signature by index.
 </span><span class="kw">fn </span>validate_builder_fee(proposed_header: <span class="kw-2">&amp;</span>Header) -&gt; <span class="prelude-ty">Result</span>&lt;(), BuilderValidationError&gt; {
-    <span class="comment">// Beware of Malice!
-    </span><span class="kw">let </span>signature = proposed_header
-        .builder_signature()
-        .ok_or(BuilderValidationError::SignatureNotFound)<span class="question-mark">?</span>;
-    <span class="kw">let </span>fee_amount = proposed_header.fee_info().amount().as_u64().ok_or(
-        BuilderValidationError::FeeAmountOutOfRange(proposed_header.fee_info().amount()),
-    )<span class="question-mark">?</span>;
+    <span class="comment">// TODO since we are iterating, should we include account/amount in errors?
+    </span><span class="kw">for </span>(fee_info, signature) <span class="kw">in </span>proposed_header
+        .fee_info()
+        .iter()
+        .zip(proposed_header.builder_signature())
+    {
+        <span class="comment">// check that `amount` fits in a u64
+        </span>fee_info
+            .amount()
+            .as_u64()
+            .ok_or(BuilderValidationError::FeeAmountOutOfRange(fee_info.amount))<span class="question-mark">?</span>;
 
-    <span class="comment">// verify signature
-    </span><span class="kw">if </span>!proposed_header.fee_info().account.validate_fee_signature(
-        <span class="kw-2">&amp;</span>signature,
-        fee_amount,
-        proposed_header.metadata(),
-        <span class="kw-2">&amp;</span>proposed_header.payload_commitment(),
-    ) {
-        <span class="kw">return </span><span class="prelude-val">Err</span>(BuilderValidationError::InvalidBuilderSignature);
+        <span class="comment">// verify signature, accept any verification that succeeds
+        </span>fee_info
+            .account()
+            .validate_sequencing_fee_signature_marketplace(
+                <span class="kw-2">&amp;</span>signature,
+                fee_info.amount().as_u64().unwrap(),
+            )
+            .then_some(())
+            .or_else(|| {
+                fee_info
+                    .account()
+                    .validate_fee_signature(
+                        <span class="kw-2">&amp;</span>signature,
+                        fee_info.amount().as_u64().unwrap(),
+                        proposed_header.metadata(),
+                        <span class="kw-2">&amp;</span>proposed_header.payload_commitment(),
+                    )
+                    .then_some(())
+            })
+            .ok_or(BuilderValidationError::InvalidBuilderSignature)<span class="question-mark">?</span>;
     }
 
     <span class="prelude-val">Ok</span>(())
@@ -1253,7 +1452,7 @@
         validated_state.apply_upgrade(instance, version);
 
         <span class="kw">let </span>chain_config = validated_state
-            .get_chain_config(instance, proposed_header.chain_config())
+            .get_chain_config(instance, <span class="kw-2">&amp;</span>proposed_header.chain_config())
             .<span class="kw">await</span><span class="question-mark">?</span>;
 
         <span class="kw">if </span><span class="prelude-val">Some</span>(chain_config) != validated_state.chain_config.resolve() {
@@ -1272,12 +1471,10 @@
         // fee and the recipient account which is receiving it, plus any counts receiving deposits
         // in this block.
         </span><span class="kw">let </span>missing_accounts = <span class="self">self</span>.forgotten_accounts(
-            [
-                proposed_header.fee_info().account,
-                chain_config.fee_recipient,
-            ]
-            .into_iter()
-            .chain(l1_deposits.iter().map(|fee_info| fee_info.account)),
+            [chain_config.fee_recipient]
+                .into_iter()
+                .chain(proposed_header.fee_info().accounts())
+                .chain(l1_deposits.accounts()),
         );
 
         <span class="kw">let </span>parent_height = parent_leaf.height();
@@ -1395,6 +1592,15 @@
 
         <span class="prelude-val">Ok</span>(cf)
     }
+}
+
+<span class="kw">fn </span>_apply_full_transactions(
+    validated_state: <span class="kw-2">&amp;mut </span>ValidatedState,
+    full_network_txs: Vec&lt;FullNetworkTx&gt;,
+) -&gt; <span class="prelude-ty">Result</span>&lt;(), ExecutionError&gt; {
+    full_network_txs
+        .iter()
+        .try_for_each(|tx| tx.execute(validated_state))
 }
 
 <span class="kw">pub async fn </span>get_l1_deposits(
@@ -1531,7 +1737,7 @@
         <span class="self">Self </span>{
             fee_merkle_tree,
             block_merkle_tree,
-            chain_config: <span class="kw-2">*</span>block_header.chain_config(),
+            chain_config: block_header.chain_config(),
         }
     }
     <span class="doccomment">/// Construct a genesis validated state.
@@ -1628,12 +1834,46 @@
 </span><span class="kw">mod </span>test {
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>ethers::types::U256;
+    <span class="kw">use </span>hotshot_types::traits::{block_contents::BlockHeader, signature_key::BuilderSignatureKey};
     <span class="kw">use </span>hotshot_types::vid::vid_scheme;
     <span class="kw">use </span>jf_vid::VidScheme;
     <span class="kw">use </span>sequencer_utils::ser::FromStringOrInteger;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use crate</span>::{BlockSize, FeeAccountProof, FeeMerkleProof};
+    <span class="kw">use crate</span>::{
+        eth_signature_key::{BuilderSignature, EthKeyPair},
+        v0_1,
+        v0_3::BidTx,
+        BlockSize, FeeAccountProof, FeeMerkleProof,
+    };
+
+    <span class="kw">pub fn </span>mock_full_network_txs(key: <span class="prelude-ty">Option</span>&lt;EthKeyPair&gt;) -&gt; Vec&lt;FullNetworkTx&gt; {
+        <span class="comment">// if no key is supplied, use `test_key_pair`. Since default `BidTxBody` is
+        // signed with `test_key_pair`, it will verify successfully
+        </span><span class="kw">let </span>key = key.unwrap_or_else(FeeAccount::test_key_pair);
+        <span class="macro">vec!</span>[FullNetworkTx::Bid(BidTx::mock(key))]
+    }
+
+    <span class="attr">#[test]
+    #[ignore]
+    </span><span class="comment">// TODO Currently we have some mismatch causing tests using
+    // `Leaf::genesis` to generate a a Header to
+    // fail. `NodeState::mock` is setting version to `v1` resulting in
+    // an empty `bid_recipient` field on chain_config. We need a way to
+    // pass in desired version, or so some other change before this can be enabled.
+    </span><span class="kw">fn </span>test_apply_full_tx() {
+        <span class="kw">let </span><span class="kw-2">mut </span>state = ValidatedState::default();
+        <span class="kw">let </span>txs = mock_full_network_txs(<span class="prelude-val">None</span>);
+        <span class="comment">// Default key can be verified b/c it is the same that signs the mock tx
+        </span>_apply_full_transactions(<span class="kw-2">&amp;mut </span>state, txs).unwrap();
+
+        <span class="comment">// Tx will be invalid if it is signed by a different key than
+        // set in `account` field.
+        </span><span class="kw">let </span>key = FeeAccount::generated_from_seed_indexed([<span class="number">1</span>; <span class="number">32</span>], <span class="number">0</span>).<span class="number">1</span>;
+        <span class="kw">let </span>invalid = mock_full_network_txs(<span class="prelude-val">Some</span>(key));
+        <span class="kw">let </span>err = _apply_full_transactions(<span class="kw-2">&amp;mut </span>state, invalid).unwrap_err();
+        <span class="macro">assert_eq!</span>(ExecutionError::InvalidSignature, err);
+    }
 
     <span class="attr">#[test]
     </span><span class="kw">fn </span>test_fee_proofs() {
@@ -1687,9 +1927,11 @@
         <span class="kw">let </span>instance = NodeState::mock().with_chain_config(ChainConfig {
             max_block_size: (MAX_BLOCK_SIZE <span class="kw">as </span>u64).into(),
             base_fee: <span class="number">0</span>.into(),
-            ..Default::default()
+            ..state.chain_config.resolve().unwrap()
         });
-        <span class="kw">let </span>parent = Leaf::genesis(<span class="kw-2">&amp;</span>instance.genesis_state, <span class="kw-2">&amp;</span>instance).<span class="kw">await</span>;
+        <span class="comment">// TODO this test will fail if we add `Some(bid_recipient)` (v3) to chain_config
+        // b/c version in `Leaf::genesis` is set to 1
+        </span><span class="kw">let </span>parent = Leaf::genesis(<span class="kw-2">&amp;</span>instance.genesis_state, <span class="kw-2">&amp;</span>instance).<span class="kw">await</span>;
         <span class="kw">let </span>header = parent.block_header();
 
         <span class="comment">// Validation fails because the proposed block exceeds the maximum block size.
@@ -1722,9 +1964,11 @@
         <span class="kw">let </span>instance = NodeState::mock().with_chain_config(ChainConfig {
             base_fee: <span class="number">1000</span>.into(), <span class="comment">// High base fee
             </span>max_block_size: max_block_size.into(),
-            ..Default::default()
+            ..state.chain_config.resolve().unwrap()
         });
-        <span class="kw">let </span>parent = Leaf::genesis(<span class="kw-2">&amp;</span>instance.genesis_state, <span class="kw-2">&amp;</span>instance).<span class="kw">await</span>;
+        <span class="comment">// TODO this test will fail if we add `Some(bid_recipient)` (v3) to chain_config
+        // b/c version in `Leaf::genesis` is set to 1
+        </span><span class="kw">let </span>parent = Leaf::genesis(<span class="kw-2">&amp;</span>instance.genesis_state, <span class="kw-2">&amp;</span>instance).<span class="kw">await</span>;
         <span class="kw">let </span>header = parent.block_header();
 
         <span class="comment">// Validation fails because the genesis fee (0) is too low.
@@ -1736,7 +1980,7 @@
             ProposalValidationError::InsufficientFee {
                 max_block_size: instance.chain_config.max_block_size,
                 base_fee: instance.chain_config.base_fee,
-                proposed_fee: header.fee_info().amount()
+                proposed_fee: header.fee_info().amount().unwrap()
             },
             err
         );
@@ -1844,6 +2088,82 @@
             bincode::serialize(<span class="kw-2">&amp;</span>n).unwrap(),
             bincode::serialize(<span class="kw-2">&amp;</span>amt).unwrap(),
         );
+    }
+
+    <span class="attr">#[async_std::test]
+    </span><span class="kw">async fn </span>test_validate_builder_fee() {
+        setup_logging();
+        setup_backtrace();
+
+        <span class="kw">let </span>max_block_size = <span class="number">10</span>;
+
+        <span class="kw">let </span>validated_state = ValidatedState::default();
+        <span class="kw">let </span>instance_state = NodeState::mock().with_chain_config(ChainConfig {
+            base_fee: <span class="number">1000</span>.into(), <span class="comment">// High base fee
+            </span>max_block_size: max_block_size.into(),
+            ..validated_state.chain_config.resolve().unwrap()
+        });
+
+        <span class="kw">let </span>parent = Leaf::genesis(<span class="kw-2">&amp;</span>instance_state.genesis_state, <span class="kw-2">&amp;</span>instance_state).<span class="kw">await</span>;
+        <span class="kw">let </span>header = parent.block_header().clone();
+        <span class="kw">let </span>metadata = parent.block_header().metadata();
+        <span class="kw">let </span>vid_commitment = parent.payload_commitment();
+
+        <span class="macro">dbg!</span>(header.version());
+
+        <span class="kw">let </span>key_pair = EthKeyPair::random();
+        <span class="kw">let </span>account = key_pair.fee_account();
+
+        <span class="kw">let </span>data = header.fee_info()[<span class="number">0</span>].amount().as_u64().unwrap();
+        <span class="kw">let </span>sig = FeeAccount::sign_builder_message(<span class="kw-2">&amp;</span>key_pair, <span class="kw-2">&amp;</span>data.to_be_bytes()).unwrap();
+
+        <span class="comment">// ensure the signature is indeed valid
+        </span>account
+            .validate_builder_signature(<span class="kw-2">&amp;</span>sig, <span class="kw-2">&amp;</span>data.to_be_bytes())
+            .then_some(())
+            .unwrap();
+
+        <span class="comment">// test v1 sig
+        </span><span class="kw">let </span>sig = FeeAccount::sign_fee(<span class="kw-2">&amp;</span>key_pair, data, metadata, <span class="kw-2">&amp;</span>vid_commitment).unwrap();
+
+        <span class="kw">let </span>header = <span class="kw">match </span>header {
+            Header::V1(header) =&gt; Header::V1(v0_1::Header {
+                builder_signature: <span class="prelude-val">Some</span>(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            <span class="kw">_ </span>=&gt; <span class="macro">unimplemented!</span>(),
+        };
+
+        validate_builder_fee(<span class="kw-2">&amp;</span>header).unwrap();
+
+        <span class="comment">// test v3 sig
+        </span><span class="kw">let </span>sig = FeeAccount::sign_sequencing_fee_marketplace(<span class="kw-2">&amp;</span>key_pair, data).unwrap();
+        <span class="comment">// test dedicated marketplace validation function
+        </span>account
+            .validate_sequencing_fee_signature_marketplace(<span class="kw-2">&amp;</span>sig, data)
+            .then_some(())
+            .unwrap();
+
+        <span class="kw">let </span>header = <span class="kw">match </span>header {
+            Header::V1(header) =&gt; Header::V1(v0_1::Header {
+                builder_signature: <span class="prelude-val">Some</span>(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            <span class="kw">_ </span>=&gt; <span class="macro">unimplemented!</span>(),
+        };
+
+        <span class="kw">let </span>sig: Vec&lt;BuilderSignature&gt; = header.builder_signature();
+        <span class="kw">let </span>fee = header.fee_info()[<span class="number">0</span>].amount().as_u64().unwrap();
+
+        <span class="comment">// assert expectations
+        </span>account
+            .validate_sequencing_fee_signature_marketplace(<span class="kw-2">&amp;</span>sig[<span class="number">0</span>], fee)
+            .then_some(())
+            .unwrap();
+
+        validate_builder_fee(<span class="kw-2">&amp;</span>header).unwrap();
     }
 }
 </code></pre></div></section></main></body></html>

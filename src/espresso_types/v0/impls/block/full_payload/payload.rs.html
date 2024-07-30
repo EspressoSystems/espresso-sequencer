@@ -298,6 +298,11 @@
 <a href="#298" id="298">298</a>
 <a href="#299" id="299">299</a>
 <a href="#300" id="300">300</a>
+<a href="#301" id="301">301</a>
+<a href="#302" id="302">302</a>
+<a href="#303" id="303">303</a>
+<a href="#304" id="304">304</a>
+<a href="#305" id="305">305</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, sync::Arc};
 
 <span class="kw">use </span>async_trait::async_trait;
@@ -312,9 +317,10 @@
 <span class="kw">use </span>sha2::Digest;
 
 <span class="kw">use crate</span>::{
-    ChainConfig, Index, Iter, NamespaceId, NodeState, NsIndex, NsPayload, NsPayloadBuilder,
-    NsPayloadRange, NsTable, NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction,
-    TxProof, ValidatedState,
+    v0::impls::{NodeState, ValidatedState},
+    v0_1::ChainConfig,
+    Index, Iter, NamespaceId, NsIndex, NsPayload, NsPayloadBuilder, NsPayloadRange, NsTable,
+    NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction, TxProof,
 };
 
 <span class="kw">impl </span>Payload {
@@ -446,7 +452,11 @@
             }
         };
 
-        <span class="self">Self</span>::from_transactions_sync(transactions, chain_config, instance_state)
+        <span class="self">Self</span>::from_transactions_sync(
+            transactions,
+            ChainConfig::from(chain_config),
+            instance_state,
+        )
     }
 
     <span class="comment">// TODO avoid cloning the entire payload here?

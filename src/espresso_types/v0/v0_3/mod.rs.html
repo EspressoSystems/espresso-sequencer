@@ -22,28 +22,32 @@
 <a href="#22" id="22">22</a>
 <a href="#23" id="23">23</a>
 <a href="#24" id="24">24</a>
+<a href="#25" id="25">25</a>
+<a href="#26" id="26">26</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>vbs::version::Version;
 
 <span class="comment">// Re-export types which haven't changed since the last minor version.
 </span><span class="kw">pub use </span><span class="kw">super</span>::v0_1::{
-    AccountQueryData, BlockMerkleCommitment, BlockMerkleTree, BlockSize, BuilderSignature,
-    ChainConfig, ChainId, Delta, FeeAccount, FeeAccountProof, FeeAmount, FeeInfo,
-    FeeMerkleCommitment, FeeMerkleProof, FeeMerkleTree, Index, Iter, L1BlockInfo, L1Client,
-    L1Snapshot, NamespaceId, NodeState, NsIndex, NsIter, NsPayload, NsPayloadBuilder,
-    NsPayloadByteLen, NsPayloadOwned, NsPayloadRange, NsProof, NsTable, NsTableBuilder,
-    NsTableValidationError, NumNss, NumTxs, NumTxsRange, NumTxsUnchecked, Payload, PayloadByteLen,
-    ResolvableChainConfig, TimeBasedUpgrade, Transaction, TxIndex, TxIter, TxPayload,
+    AccountQueryData, BlockMerkleCommitment, BlockMerkleTree, BlockSize, BuilderSignature, ChainId,
+    Delta, FeeAccount, FeeAccountProof, FeeAmount, FeeInfo, FeeMerkleCommitment, FeeMerkleProof,
+    FeeMerkleTree, Index, Iter, L1BlockInfo, L1Client, L1Snapshot, NamespaceId, NsIndex, NsIter,
+    NsPayload, NsPayloadBuilder, NsPayloadByteLen, NsPayloadOwned, NsPayloadRange, NsProof,
+    NsTable, NsTableBuilder, NsTableValidationError, NumNss, NumTxs, NumTxsRange, NumTxsUnchecked,
+    Payload, PayloadByteLen, TimeBasedUpgrade, Transaction, TxIndex, TxIter, TxPayload,
     TxPayloadRange, TxProof, TxTableEntries, TxTableEntriesRange, Upgrade, UpgradeMode,
-    UpgradeType, ValidatedState, ViewBasedUpgrade, BLOCK_MERKLE_TREE_HEIGHT,
-    FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN,
-    TX_OFFSET_BYTE_LEN,
+    UpgradeType, ViewBasedUpgrade, BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT,
+    NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN, NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
 
 <span class="kw">pub const </span>VERSION: Version = Version { major: <span class="number">0</span>, minor: <span class="number">3 </span>};
 
 <span class="kw">mod </span>auction;
+<span class="kw">mod </span>chain_config;
+<span class="kw">mod </span>fee_info;
 <span class="kw">mod </span>header;
 
-<span class="kw">pub use </span>auction::{AuctionResults, BidTx, BidTxBody, FullNetworkTx};
+<span class="kw">pub use </span>auction::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults};
+<span class="kw">pub use </span>chain_config::<span class="kw-2">*</span>;
+<span class="kw">pub use </span>fee_info::IterableFeeInfo;
 <span class="kw">pub use </span>header::Header;
 </code></pre></div></section></main></body></html>

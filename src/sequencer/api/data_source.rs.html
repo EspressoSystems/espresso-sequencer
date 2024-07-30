@@ -447,6 +447,7 @@
 <a href="#447" id="447">447</a>
 <a href="#448" id="448">448</a>
 <a href="#449" id="449">449</a>
+<a href="#450" id="450">450</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -454,7 +455,8 @@
 <span class="kw">use </span>committable::Commitment;
 <span class="kw">use </span>espresso_types::{
     v0::traits::{PersistenceOptions, SequencerPersistence},
-    ChainConfig, PubKey, Transaction,
+    v0_3::ChainConfig,
+    PubKey, Transaction,
 };
 <span class="kw">use </span>ethers::prelude::Address;
 <span class="kw">use </span>futures::future::Future;

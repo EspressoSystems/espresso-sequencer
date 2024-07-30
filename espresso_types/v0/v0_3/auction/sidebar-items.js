@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["FullNetworkTx"],"struct":["AuctionResults","BidTx","BidTxBody"]};
+window.SIDEBAR_ITEMS = {"enum":["FullNetworkTx"],"struct":["BidTx","BidTxBody","SolverAuctionResults"]};
