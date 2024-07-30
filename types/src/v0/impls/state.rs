@@ -5,8 +5,8 @@ use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::{
     data::{BlockError, ViewNumber},
     traits::{
-        node_implementation::ConsensusTime, signature_key::BuilderSignatureKey, states::StateDelta,
-        ValidatedState as HotShotState,
+        block_contents::BlockHeader, node_implementation::ConsensusTime,
+        signature_key::BuilderSignatureKey, states::StateDelta, ValidatedState as HotShotState,
     },
     vid::{VidCommon, VidSchemeType},
 };
@@ -324,19 +324,29 @@ fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidatio
     {
         // check that `amount` fits in a u64
         fee_info
-            .amount
+            .amount()
             .as_u64()
             .ok_or(BuilderValidationError::FeeAmountOutOfRange(fee_info.amount))?;
 
-        // verify signature
+        // verify signature, accept any verification that succeeds
         fee_info
-            .account
-            // TODO remove metadata, payload from trait `validate_fee_signature`
+            .account()
             .validate_sequencing_fee_signature_marketplace(
                 &signature,
-                fee_info.amount.as_u64().unwrap(),
+                fee_info.amount().as_u64().unwrap(),
             )
             .then_some(())
+            .or_else(|| {
+                fee_info
+                    .account()
+                    .validate_fee_signature(
+                        &signature,
+                        fee_info.amount().as_u64().unwrap(),
+                        proposed_header.metadata(),
+                        &proposed_header.payload_commitment(),
+                    )
+                    .then_some(())
+            })
             .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
     }
 
@@ -740,7 +750,7 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::types::U256;
-    use hotshot_types::traits::signature_key::BuilderSignatureKey;
+    use hotshot_types::traits::{block_contents::BlockHeader, signature_key::BuilderSignatureKey};
     use hotshot_types::vid::vid_scheme;
     use jf_vid::VidScheme;
     use sequencer_utils::ser::FromStringOrInteger;
@@ -1012,6 +1022,9 @@ mod test {
 
         let parent = Leaf::genesis(&instance_state.genesis_state, &instance_state).await;
         let header = parent.block_header().clone();
+        let metatdata = parent.block_header().metadata();
+        let vid_commitment = parent.payload_commitment();
+
         dbg!(header.version());
 
         let key_pair = EthKeyPair::random();
@@ -1026,6 +1039,21 @@ mod test {
             .then_some(())
             .unwrap();
 
+        // test v1 sig
+        let sig = FeeAccount::sign_fee(&key_pair, data, metatdata, &vid_commitment).unwrap();
+
+        let header = match header {
+            Header::V1(header) => Header::V1(v0_1::Header {
+                builder_signature: Some(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            _ => unimplemented!(),
+        };
+
+        validate_builder_fee(&header).unwrap();
+
+        // test v3 sig
         let sig = FeeAccount::sign_sequencing_fee_marketplace(&key_pair, data).unwrap();
         // test dedicated marketplace validation function
         account
