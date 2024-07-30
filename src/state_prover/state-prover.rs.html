@@ -135,9 +135,9 @@
 <a href="#135" id="135">135</a>
 <a href="#136" id="136">136</a>
 <a href="#137" id="137">137</a>
+<a href="#138" id="138">138</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{str::FromStr <span class="kw">as _</span>, time::Duration};
 
-<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>cld::ClDuration;
 <span class="kw">use </span>es_version::SEQUENCER_VERSION;
@@ -148,6 +148,7 @@
 };
 <span class="kw">use </span>hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 <span class="kw">use </span>hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
+<span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>snafu::Snafu;
 <span class="kw">use </span>url::Url;
 
@@ -215,6 +216,9 @@
     <span class="doccomment">/// Stake table capacity for the prover circuit
     </span><span class="attr">#[clap(short, long, env = <span class="string">"ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY"</span>, default_value_t = STAKE_TABLE_CAPACITY)]
     </span><span class="kw">pub </span>stake_table_capacity: usize,
+
+    <span class="attr">#[clap(flatten)]
+    </span>logging: logging::Config,
 }
 
 <span class="attr">#[derive(Clone, Debug, Snafu)]
@@ -232,10 +236,8 @@
 
 <span class="attr">#[async_std::main]
 </span><span class="kw">async fn </span>main() {
-    setup_logging();
-    setup_backtrace();
-
     <span class="kw">let </span>args = Args::parse();
+    args.logging.init();
 
     <span class="comment">// prepare config for state prover from user options
     </span><span class="kw">let </span>provider = Provider::&lt;Http&gt;::try_from(args.l1_provider.to_string()).unwrap();

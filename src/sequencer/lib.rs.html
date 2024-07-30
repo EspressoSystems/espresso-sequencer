@@ -875,10 +875,6 @@
 <a href="#875" id="875">875</a>
 <a href="#876" id="876">876</a>
 <a href="#877" id="877">877</a>
-<a href="#878" id="878">878</a>
-<a href="#879" id="879">879</a>
-<a href="#880" id="880">880</a>
-<a href="#881" id="881">881</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
@@ -1621,8 +1617,6 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-
-    <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>es_version::SequencerVersion;
     <span class="kw">use </span>espresso_types::{Header, NamespaceId, Payload, Transaction};
     <span class="kw">use </span>futures::StreamExt;
@@ -1633,7 +1627,7 @@
             vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
         },
     };
-    <span class="kw">use </span>sequencer_utils::AnvilOptions;
+    <span class="kw">use </span>sequencer_utils::{test_utils::setup_test, AnvilOptions};
     <span class="kw">use </span>testing::{wait_for_decide_on_handle, TestConfigBuilder};
 
     <span class="kw">use </span><span class="self">self</span>::testing::run_test_builder;
@@ -1641,8 +1635,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_skeleton_instantiation() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
         <span class="kw">let </span>ver = SequencerVersion::instance();
         <span class="comment">// Assign `config` so it isn't dropped early.
         </span><span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
@@ -1682,8 +1675,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_header_invariants() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>success_height = <span class="number">30</span>;
         <span class="kw">let </span>ver = SequencerVersion::instance();

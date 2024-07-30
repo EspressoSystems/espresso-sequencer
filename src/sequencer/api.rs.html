@@ -1718,21 +1718,6 @@
 <a href="#1718" id="1718">1718</a>
 <a href="#1719" id="1719">1719</a>
 <a href="#1720" id="1720">1720</a>
-<a href="#1721" id="1721">1721</a>
-<a href="#1722" id="1722">1722</a>
-<a href="#1723" id="1723">1723</a>
-<a href="#1724" id="1724">1724</a>
-<a href="#1725" id="1725">1725</a>
-<a href="#1726" id="1726">1726</a>
-<a href="#1727" id="1727">1727</a>
-<a href="#1728" id="1728">1728</a>
-<a href="#1729" id="1729">1729</a>
-<a href="#1730" id="1730">1730</a>
-<a href="#1731" id="1731">1731</a>
-<a href="#1732" id="1732">1732</a>
-<a href="#1733" id="1733">1733</a>
-<a href="#1734" id="1734">1734</a>
-<a href="#1735" id="1735">1735</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::pin::Pin;
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -2093,7 +2078,6 @@
 </span><span class="kw">pub mod </span>test_helpers {
     <span class="kw">use </span>std::time::Duration;
 
-    <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>async_std::task::sleep;
     <span class="kw">use </span>committable::Committable;
     <span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
@@ -2116,6 +2100,7 @@
     <span class="kw">use </span>itertools::izip;
     <span class="kw">use </span>jf_merkle_tree::{MerkleCommitment, MerkleTreeScheme};
     <span class="kw">use </span>portpicker::pick_unused_port;
+    <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>tide_disco::error::ServerError;
 
@@ -2343,8 +2328,7 @@
     /// to test a different initialization path) but should not remove or modify the existing
     /// functionality (e.g. removing the status module or changing the port).
     </span><span class="kw">pub async fn </span>status_test_helper(opt: <span class="kw">impl </span>FnOnce(Options) -&gt; Options) {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
@@ -2393,8 +2377,7 @@
     /// to test a different initialization path) but should not remove or modify the existing
     /// functionality (e.g. removing the submit module or changing the port).
     </span><span class="kw">pub async fn </span>submit_test_helper(opt: <span class="kw">impl </span>FnOnce(Options) -&gt; Options) {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>txn = Transaction::new(NamespaceId::from(<span class="number">1_u32</span>), <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>, <span class="number">4</span>]);
 
@@ -2431,8 +2414,7 @@
 
     <span class="doccomment">/// Test the state signature API.
     </span><span class="kw">pub async fn </span>state_signature_test_helper(opt: <span class="kw">impl </span>FnOnce(Options) -&gt; Options) {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
 
@@ -2475,8 +2457,7 @@
     /// to test a different initialization path) but should not remove or modify the existing
     /// functionality (e.g. removing the catchup module or changing the port).
     </span><span class="kw">pub async fn </span>catchup_test_helper(opt: <span class="kw">impl </span>FnOnce(Options) -&gt; Options) {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
@@ -2567,7 +2548,6 @@
 <span class="attr">#[cfg(test)]
 #[espresso_macros::generic_tests]
 </span><span class="kw">mod </span>api_tests {
-    <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>committable::Committable;
     <span class="kw">use </span>data_source::testing::TestableSequencerDataSource;
     <span class="kw">use </span>endpoints::NamespaceProofQueryData;
@@ -2577,6 +2557,7 @@
     <span class="kw">use </span>futures::stream::StreamExt;
     <span class="kw">use </span>hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
     <span class="kw">use </span>portpicker::pick_unused_port;
+    <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
@@ -2608,8 +2589,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>test_namespace_query&lt;D: TestableSequencerDataSource&gt;() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="comment">// Arbitrary transaction, arbitrary namespace ID
         </span><span class="kw">let </span>ns_id = NamespaceId::from(<span class="number">42_u32</span>);
@@ -2714,9 +2694,7 @@
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>test_hotshot_event_streaming&lt;D: TestableSequencerDataSource&gt;() {
         <span class="kw">use </span>HotshotEvents;
 
-        setup_logging();
-
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>hotshot_event_streaming_port =
             pick_unused_port().expect(<span class="string">"No ports free for hotshot event streaming"</span>);
@@ -2772,7 +2750,6 @@
 </span><span class="kw">mod </span>test {
     <span class="kw">use </span>std::time::Duration;
 
-    <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>async_std::task::sleep;
     <span class="kw">use </span>committable::{Commitment, Committable};
     <span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
@@ -2801,6 +2778,7 @@
     };
     <span class="kw">use </span>jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     <span class="kw">use </span>portpicker::pick_unused_port;
+    <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
@@ -2822,8 +2800,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_healthcheck() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();
@@ -2865,8 +2842,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_merklized_state_api() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
 
@@ -2939,8 +2915,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_catchup() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="comment">// Start a sequencer network, using the query service for catchup.
         </span><span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
@@ -3039,8 +3014,7 @@
         <span class="comment">// This test uses a ValidatedState which only has the default chain config commitment.
         // The NodeState has the full chain config.
         // Both chain config commitments will match, so the ValidatedState should have the full chain config after a non-genesis block is decided.
-        </span>setup_logging();
-        setup_backtrace();
+        </span>setup_test();
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>anvil = Anvil::new().spawn();
@@ -3096,8 +3070,7 @@
         // However, for this test to work, at least one node should have a full chain config
         // to allow other nodes to catch up.
 
-        </span>setup_logging();
-        setup_backtrace();
+        </span>setup_test();
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>anvil = Anvil::new().spawn();
@@ -3169,8 +3142,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_chain_config_upgrade() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>anvil = Anvil::new().spawn();
@@ -3275,8 +3247,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">async fn </span>test_restart() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">const </span>NUM_NODES: usize = <span class="number">5</span>;
         <span class="comment">// Initialize nodes.
@@ -3415,8 +3386,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_fetch_config() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>url: surf_disco::Url = <span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap();

@@ -534,7 +534,6 @@
 <a href="#534" id="534">534</a>
 <a href="#535" id="535">535</a>
 <a href="#536" id="536">536</a>
-<a href="#537" id="537">537</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{error::Error, time::Duration};
 
 <span class="kw">use </span>anyhow::anyhow;
@@ -812,7 +811,6 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>async_std::task::spawn;
     <span class="kw">use </span>committable::Committable;
     <span class="kw">use </span>contract_bindings::hot_shot::{NewBlocksCall, NewBlocksFilter};
@@ -820,7 +818,10 @@
     <span class="kw">use </span>ethers::{abi::AbiDecode, providers::Middleware};
     <span class="kw">use </span>futures::FutureExt;
     <span class="kw">use </span>hotshot_types::simple_certificate::QuorumCertificate;
-    <span class="kw">use </span>sequencer_utils::{test_utils::TestL1System, AnvilOptions};
+    <span class="kw">use </span>sequencer_utils::{
+        test_utils::{setup_test, TestL1System},
+        AnvilOptions,
+    };
     <span class="kw">use </span>surf_disco::{Error, StatusCode};
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
@@ -893,8 +894,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_sequencer_task() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
 
@@ -968,8 +968,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_idempotency() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
 
@@ -1033,8 +1032,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_error_handling() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
 

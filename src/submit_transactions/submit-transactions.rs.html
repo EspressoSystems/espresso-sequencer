@@ -478,6 +478,8 @@
 <a href="#478" id="478">478</a>
 <a href="#479" id="479">479</a>
 <a href="#480" id="480">480</a>
+<a href="#481" id="481">481</a>
+<a href="#482" id="482">482</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utility program to submit random transactions to an Espresso Sequencer.
 
 </span><span class="kw">use </span>std::{
@@ -485,7 +487,6 @@
     time::{Duration, Instant},
 };
 
-<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>async_std::task::{sleep, spawn};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>committable::{Commitment, Committable};
@@ -501,6 +502,7 @@
 <span class="kw">use </span>rand_chacha::ChaChaRng;
 <span class="kw">use </span>rand_distr::Distribution;
 <span class="kw">use </span>sequencer::options::{parse_duration, parse_size};
+<span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>surf_disco::{Client, Url};
 <span class="kw">use </span>tide_disco::{error::ServerError, App};
 <span class="kw">use </span>vbs::version::StaticVersionType;
@@ -625,6 +627,9 @@
     </span><span class="attr">#[cfg(feature = <span class="string">"benchmarking"</span>)]
     #[clap(short, long, env = <span class="string">"ESPRESSO_BENCH_END_BLOCK"</span>)]
     </span>benchmark_end_block: NonZeroUsize,
+
+    <span class="attr">#[clap(flatten)]
+    </span>logging: logging::Config,
 }
 
 <span class="kw">impl </span>Options {
@@ -640,10 +645,9 @@
 
 <span class="attr">#[async_std::main]
 </span><span class="kw">async fn </span>main() {
-    setup_backtrace();
-    setup_logging();
-
     <span class="kw">let </span>opt = Options::parse();
+    opt.logging.init();
+
     <span class="macro">tracing::warn!</span>(<span class="string">"starting load generator for sequencer {}"</span>, opt.url);
 
     <span class="kw">let </span>(sender, <span class="kw-2">mut </span>receiver) = mpsc::channel(opt.channel_bound);

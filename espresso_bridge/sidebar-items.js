@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Command"],"fn":["balance","deposit","get_espresso_balance","l1_balance","main"],"struct":["Balance","Deposit","L1Balance"],"type":["EspressoClient","FeeMerkleProof"]};
+window.SIDEBAR_ITEMS = {"enum":["Command"],"fn":["balance","deposit","get_espresso_balance","l1_balance","main"],"struct":["Balance","Deposit","L1Balance","Options"],"type":["EspressoClient","FeeMerkleProof"]};

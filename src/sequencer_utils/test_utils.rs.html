@@ -90,6 +90,10 @@
 <a href="#90" id="90">90</a>
 <a href="#91" id="91">91</a>
 <a href="#92" id="92">92</a>
+<a href="#93" id="93">93</a>
+<a href="#94" id="94">94</a>
+<a href="#95" id="95">95</a>
+<a href="#96" id="96">96</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::sync::Arc;
 
 <span class="kw">use </span>anyhow::Result;
@@ -181,5 +185,9 @@
             provider,
         })
     }
+}
+
+<span class="kw">pub fn </span>setup_test() {
+    <span class="kw">super</span>::logging::Config::from_env().init();
 }
 </code></pre></div></section></main></body></html>

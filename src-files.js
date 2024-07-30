@@ -5,7 +5,6 @@ var srcIndex = new Map(JSON.parse('[\
 ["cdn_whitelist",["",[],["cdn-whitelist.rs"]]],\
 ["commitment_task",["",[],["commitment-task.rs"]]],\
 ["contract_bindings",["",[],["erc1967_proxy.rs","fee_contract.rs","hot_shot.rs","i_plonk_verifier.rs","lib.rs","light_client.rs","light_client_mock.rs","light_client_state_update_vk.rs","light_client_state_update_vk_mock.rs","plonk_verifier.rs","shared_types.rs"]]],\
-["count_transactions",["",[],["count-transactions.rs"]]],\
 ["deploy",["",[],["deploy.rs"]]],\
 ["dev_cdn",["",[],["dev-cdn.rs"]]],\
 ["diff_test",["",[],["main.rs"]]],\
@@ -25,7 +24,7 @@ var srcIndex = new Map(JSON.parse('[\
 ["pub_key",["",[],["pub-key.rs"]]],\
 ["reset_storage",["",[],["reset-storage.rs"]]],\
 ["sequencer",["",[["api",[],["data_source.rs","endpoints.rs","fs.rs","options.rs","sql.rs","update.rs"]],["network",[],["cdn.rs","libp2p.rs","mod.rs"]],["persistence",[],["fs.rs","no_storage.rs","sql.rs"]],["state_signature",[],["relay_server.rs"]]],["api.rs","catchup.rs","context.rs","genesis.rs","hotshot_commitment.rs","lib.rs","options.rs","persistence.rs","state.rs","state_signature.rs"]]],\
-["sequencer_utils",["",[],["deployer.rs","lib.rs","ser.rs","test_utils.rs"]]],\
+["sequencer_utils",["",[],["deployer.rs","lib.rs","logging.rs","ser.rs","test_utils.rs"]]],\
 ["state_prover",["",[],["state-prover.rs"]]],\
 ["state_relay_server",["",[],["state-relay-server.rs"]]],\
 ["submit_transactions",["",[],["submit-transactions.rs"]]],\

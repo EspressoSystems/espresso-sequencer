@@ -140,7 +140,6 @@
 <a href="#140" id="140">140</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{io, time::Duration};
 
-<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>async_std::task::spawn;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>es_version::SEQUENCER_VERSION;
@@ -150,6 +149,7 @@
     hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
     options::parse_duration,
 };
+<span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>tide_disco::{error::ServerError, Api};
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
@@ -198,13 +198,14 @@
     <span class="doccomment">/// If specified, sequencing attempts will be delayed by duration sampled from an exponential distribution with mean DELAY.
     </span><span class="attr">#[clap(long, name = <span class="string">"DELAY"</span>, value_parser = parse_duration, env = <span class="string">"ESPRESSO_COMMITMENT_TASK_DELAY"</span>)]
     </span><span class="kw">pub </span>delay: <span class="prelude-ty">Option</span>&lt;Duration&gt;,
+
+    <span class="attr">#[clap(flatten)]
+    </span>logging: logging::Config,
 }
 <span class="attr">#[async_std::main]
 </span><span class="kw">async fn </span>main() {
-    setup_logging();
-    setup_backtrace();
-
     <span class="kw">let </span>opt = Options::parse();
+    opt.logging.init();
 
     <span class="kw">if let </span><span class="prelude-val">Some</span>(port) = opt.port {
         start_http_server(port, opt.hotshot_address, SEQUENCER_VERSION).unwrap();
@@ -250,17 +251,16 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
     <span class="kw">use </span>portpicker::pick_unused_port;
+    <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>surf_disco::Client;
 
     <span class="kw">use super</span>::{start_http_server, Address, ServerError};
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_get_hotshot_contract() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>expected_addr = <span class="string">"0xED15E1FE0789c524398137a066ceb2EF9884E5D8"

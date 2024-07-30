@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["TestClient","TestClients","TestL1System"]};
+window.SIDEBAR_ITEMS = {"fn":["setup_test"],"struct":["TestClient","TestClients","TestL1System"]};

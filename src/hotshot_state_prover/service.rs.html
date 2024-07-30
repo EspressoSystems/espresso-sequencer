@@ -727,9 +727,6 @@
 <a href="#727" id="727">727</a>
 <a href="#728" id="728">728</a>
 <a href="#729" id="729">729</a>
-<a href="#730" id="730">730</a>
-<a href="#731" id="731">731</a>
-<a href="#732" id="732">732</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! A light client prover service
 
 </span><span class="kw">use </span>std::{
@@ -1249,7 +1246,6 @@
 
     <span class="kw">use </span>anyhow::Result;
     <span class="kw">use </span>ark_ed_on_bn254::EdwardsConfig;
-    <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>ethers::{
         abi::AbiEncode,
         utils::{Anvil, AnvilInstance},
@@ -1258,7 +1254,7 @@
     <span class="kw">use </span>hotshot_types::light_client::StateSignKey;
     <span class="kw">use </span>jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
     <span class="kw">use </span>jf_utils::test_rng;
-    <span class="kw">use </span>sequencer_utils::deployer;
+    <span class="kw">use </span>sequencer_utils::{deployer, test_utils::setup_test};
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use </span><span class="kw">crate</span>::mock_ledger::{MockLedger, MockSystemParam};
@@ -1413,8 +1409,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_read_contract_state() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>dummy_genesis = ParsedLightClientState::dummy_genesis();
         <span class="kw">let </span>(_wallet, contract) = deploy_contract_for_test(<span class="kw-2">&amp;</span>anvil, dummy_genesis.clone()).<span class="kw">await</span><span class="question-mark">?</span>;
@@ -1434,8 +1429,7 @@
     <span class="comment">// This test is temporarily ignored. We are unifying the contract deployment in #1071.
     </span><span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_submit_state_and_proof() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>(genesis, _qc_keys, state_keys, st) = init_ledger_for_test();
 

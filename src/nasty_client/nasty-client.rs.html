@@ -1295,6 +1295,8 @@
 <a href="#1295" id="1295">1295</a>
 <a href="#1296" id="1296">1296</a>
 <a href="#1297" id="1297">1297</a>
+<a href="#1298" id="1298">1298</a>
+<a href="#1299" id="1299">1299</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Adversarial Espresso client.
 //!
 //! This program runs a randomized client for the Espresso query service. It is designed to hit
@@ -1319,7 +1321,6 @@
 };
 
 <span class="kw">use </span>anyhow::{bail, ensure, Context};
-<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>async_std::{
     sync::RwLock,
     task::{sleep, spawn},
@@ -1344,6 +1345,7 @@
 };
 <span class="kw">use </span>rand::{seq::SliceRandom, RngCore};
 <span class="kw">use </span>sequencer::{api::endpoints::NamespaceProofQueryData, options::parse_duration};
+<span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>serde::de::DeserializeOwned;
 <span class="kw">use </span>strum::{EnumDiscriminants, VariantArray};
 <span class="kw">use </span>surf_disco::{error::ClientError, socket, Error, StatusCode, Url};
@@ -1373,6 +1375,9 @@
 
     <span class="attr">#[clap(flatten)]
     </span>distribution: ActionDistribution,
+
+    <span class="attr">#[clap(flatten)]
+    </span>logging: logging::Config,
 }
 
 <span class="attr">#[derive(Clone, Copy, Debug, Parser)]
@@ -2565,10 +2570,9 @@
 
 <span class="attr">#[async_std::main]
 </span><span class="kw">async fn </span>main() {
-    setup_logging();
-    setup_backtrace();
-
     <span class="kw">let </span>opt = Options::parse();
+    opt.logging.init();
+
     <span class="kw">let </span>metrics = PrometheusMetrics::default();
     <span class="kw">let </span>total_actions = metrics.create_counter(<span class="string">"total_actions"</span>.into(), <span class="prelude-val">None</span>);
     <span class="kw">let </span>failed_actions = metrics.create_counter(<span class="string">"failed_actions"</span>.into(), <span class="prelude-val">None</span>);

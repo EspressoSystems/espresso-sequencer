@@ -364,10 +364,6 @@
 <a href="#364" id="364">364</a>
 <a href="#365" id="365">365</a>
 <a href="#366" id="366">366</a>
-<a href="#367" id="367">367</a>
-<a href="#368" id="368">368</a>
-<a href="#369" id="369">369</a>
-<a href="#370" id="370">370</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer node persistence.
 //!
 //! This module implements the persistence required for a sequencer node to rejoin the network and
@@ -414,10 +410,8 @@
 <span class="attr">#[cfg(test)]
 #[espresso_macros::generic_tests]
 </span><span class="kw">mod </span>persistence_tests {
-
     <span class="kw">use </span>std::collections::BTreeMap;
 
-    <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>committable::Committable;
     <span class="kw">use </span>espresso_types::{Leaf, NodeState, PubKey, SeqTypes, ValidatedState};
     <span class="kw">use </span>hotshot::types::{BLSPubKey, SignatureKey};
@@ -430,14 +424,14 @@
         vid::vid_scheme,
     };
     <span class="kw">use </span>jf_vid::VidScheme;
+    <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>testing::TestablePersistence;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">pub async fn </span>test_anchor_leaf&lt;P: TestablePersistence&gt;() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>tmp = P::tmp_storage().<span class="kw">await</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>storage = P::connect(<span class="kw-2">&amp;</span>tmp).<span class="kw">await</span>;
@@ -476,8 +470,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">pub async fn </span>test_voted_view&lt;P: TestablePersistence&gt;() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>tmp = P::tmp_storage().<span class="kw">await</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>storage = P::connect(<span class="kw-2">&amp;</span>tmp).<span class="kw">await</span>;
@@ -520,8 +513,7 @@
 
     <span class="attr">#[async_std::test]
     </span><span class="kw">pub async fn </span>test_append_and_collect_garbage&lt;P: TestablePersistence&gt;() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>tmp = P::tmp_storage().<span class="kw">await</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>storage = P::connect(<span class="kw-2">&amp;</span>tmp).<span class="kw">await</span>;

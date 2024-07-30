@@ -156,6 +156,7 @@
 <a href="#156" id="156">156</a>
 <a href="#157" id="157">157</a>
 <a href="#158" id="158">158</a>
+<a href="#159" id="159">159</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utility program to generate keypairs
 
 </span><span class="kw">use </span>std::{
@@ -165,13 +166,13 @@
 };
 
 <span class="kw">use </span>anyhow::anyhow;
-<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>clap::{Parser, ValueEnum};
 <span class="kw">use </span>derive_more::Display;
 <span class="kw">use </span>ethers::utils::hex;
 <span class="kw">use </span>hotshot::types::SignatureKey;
 <span class="kw">use </span>hotshot_types::{light_client::StateKeyPair, signature_key::BLSPubKey};
 <span class="kw">use </span>rand::{RngCore, SeedableRng};
+<span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>tracing::info_span;
 
 <span class="attr">#[derive(Clone, Copy, Debug, Display, Default, ValueEnum)]
@@ -258,6 +259,9 @@
     /// called .seed.
     </span><span class="attr">#[clap(short, long, name = <span class="string">"OUT"</span>)]
     </span>out: PathBuf,
+
+    <span class="attr">#[clap(flatten)]
+    </span>logging: logging::Config,
 }
 
 <span class="kw">fn </span>parse_seed(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;[u8; <span class="number">32</span>], anyhow::Error&gt; {
@@ -276,10 +280,8 @@
 }
 
 <span class="kw">fn </span>main() -&gt; anyhow::Result&lt;()&gt; {
-    setup_logging();
-    setup_backtrace();
-
     <span class="kw">let </span>opts = Options::parse();
+    opts.logging.init();
 
     <span class="macro">tracing::debug!</span>(
         <span class="string">"Generating {} keypairs with scheme {}"</span>,

@@ -213,17 +213,19 @@
 <a href="#213" id="213">213</a>
 <a href="#214" id="214">214</a>
 <a href="#215" id="215">215</a>
+<a href="#216" id="216">216</a>
+<a href="#217" id="217">217</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utility program to verify properties of headers sequenced by HotShot.
 
 </span><span class="kw">use </span>std::{cmp::max, process::exit, time::Duration};
 
-<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>async_std::{sync::Arc, task::sleep};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>espresso_types::{Header, L1BlockInfo};
 <span class="kw">use </span>ethers::prelude::<span class="kw-2">*</span>;
 <span class="kw">use </span>futures::future::join_all;
 <span class="kw">use </span>itertools::Itertools;
+<span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>surf_disco::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
@@ -263,6 +265,9 @@
 
     <span class="doccomment">/// URL of the HotShot query service.
     </span>url: Url,
+
+    <span class="attr">#[clap(flatten)]
+    </span>logging: logging::Config,
 }
 
 <span class="kw">type </span>SequencerClient&lt;Ver&gt; = surf_disco::Client&lt;hotshot_query_service::Error, Ver&gt;;
@@ -378,10 +383,9 @@
 
 <span class="attr">#[async_std::main]
 </span><span class="kw">async fn </span>main() {
-    setup_logging();
-    setup_backtrace();
-
     <span class="kw">let </span>opt = Arc::new(Options::parse());
+    opt.logging.init();
+
     <span class="kw">let </span>seq = Arc::new(SequencerClient::&lt;es_version::SequencerVersion&gt;::new(
         opt.url.clone(),
     ));

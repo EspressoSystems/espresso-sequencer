@@ -296,12 +296,12 @@
 <a href="#296" id="296">296</a>
 <a href="#297" id="297">297</a>
 <a href="#298" id="298">298</a>
+<a href="#299" id="299">299</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     collections::HashMap, net::ToSocketAddrs, num::NonZeroUsize, path::PathBuf, time::Duration,
 };
 
 <span class="kw">use </span>anyhow::{bail, Context};
-<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>builder::permissioned::init_node;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>es_version::SEQUENCER_VERSION;
@@ -317,6 +317,7 @@
 <span class="kw">use </span>sequencer::{
     options::parse_duration, persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams,
 };
+<span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>url::Url;
 
 <span class="attr">#[derive(Parser, Clone, Debug)]
@@ -486,6 +487,9 @@
     <span class="doccomment">/// Whether or not we are a DA node.
     </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_IS_DA"</span>, action)]
     </span><span class="kw">pub </span>is_da: bool,
+
+    <span class="attr">#[clap(flatten)]
+    </span>logging: logging::Config,
 }
 
 <span class="kw">impl </span>PermissionedBuilderOptions {
@@ -513,10 +517,8 @@
 }
 <span class="attr">#[async_std::main]
 </span><span class="kw">async fn </span>main() -&gt; anyhow::Result&lt;()&gt; {
-    setup_logging();
-    setup_backtrace();
-
     <span class="kw">let </span>opt = PermissionedBuilderOptions::parse();
+    opt.logging.init();
 
     <span class="kw">let </span>(private_staking_key, private_state_key) = opt.private_keys()<span class="question-mark">?</span>;
 

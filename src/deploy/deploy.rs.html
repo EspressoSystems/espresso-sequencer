@@ -122,14 +122,20 @@
 <a href="#122" id="122">122</a>
 <a href="#123" id="123">123</a>
 <a href="#124" id="124">124</a>
+<a href="#125" id="125">125</a>
+<a href="#126" id="126">126</a>
+<a href="#127" id="127">127</a>
+<a href="#128" id="128">128</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{fs::File, io::stdout, path::PathBuf};
 
-<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>futures::FutureExt;
 <span class="kw">use </span>hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 <span class="kw">use </span>hotshot_state_prover::service::light_client_genesis;
-<span class="kw">use </span>sequencer_utils::deployer::{deploy, ContractGroup, Contracts, DeployedContracts};
+<span class="kw">use </span>sequencer_utils::{
+    deployer::{deploy, ContractGroup, Contracts, DeployedContracts},
+    logging,
+};
 <span class="kw">use </span>url::Url;
 
 <span class="doccomment">/// Deploy contracts needed to run the sequencer.
@@ -208,14 +214,16 @@
     <span class="doccomment">/// Stake table capacity for the prover circuit
     </span><span class="attr">#[clap(short, long, env = <span class="string">"ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY"</span>, default_value_t = STAKE_TABLE_CAPACITY)]
     </span><span class="kw">pub </span>stake_table_capacity: usize,
+
+    <span class="attr">#[clap(flatten)]
+    </span>logging: logging::Config,
 }
 
 <span class="attr">#[async_std::main]
 </span><span class="kw">async fn </span>main() -&gt; anyhow::Result&lt;()&gt; {
-    setup_logging();
-    setup_backtrace();
-
     <span class="kw">let </span>opt = Options::parse();
+    opt.logging.init();
+
     <span class="kw">let </span>contracts = Contracts::from(opt.contracts);
 
     <span class="kw">let </span>sequencer_url = opt.sequencer_url.clone();

@@ -628,10 +628,8 @@
 <a href="#628" id="628">628</a>
 <a href="#629" id="629">629</a>
 <a href="#630" id="630">630</a>
-<a href="#631" id="631">631</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{io, sync::Arc, time::Duration};
 
-<span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 <span class="kw">use </span>async_std::task::spawn;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>contract_bindings::light_client_mock::LightClientMock;
@@ -659,7 +657,7 @@
 };
 <span class="kw">use </span>sequencer_utils::{
     deployer::{deploy, Contract, Contracts},
-    AnvilOptions,
+    logging, AnvilOptions,
 };
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>tide_disco::{error::ServerError, Api, Error <span class="kw">as _</span>, StatusCode};
@@ -716,14 +714,16 @@
 
     <span class="attr">#[clap(flatten)]
     </span>sql: persistence::sql::Options,
+
+    <span class="attr">#[clap(flatten)]
+    </span>logging: logging::Config,
 }
 
 <span class="attr">#[async_std::main]
 </span><span class="kw">async fn </span>main() -&gt; anyhow::Result&lt;()&gt; {
-    setup_logging();
-    setup_backtrace();
-
     <span class="kw">let </span>cli_params = Args::parse();
+    cli_params.logging.init();
+
     <span class="kw">let </span>api_options = options::Options::from(options::Http {
         port: cli_params.sequencer_api_port,
         max_connections: cli_params.sequencer_api_max_connections,
@@ -930,7 +930,6 @@
 </span><span class="kw">mod </span>tests {
     <span class="kw">use </span>std::{process::Child, sync::Arc, time::Duration};
 
-    <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>async_std::{stream::StreamExt, task::sleep};
     <span class="kw">use </span>committable::{Commitment, Committable};
     <span class="kw">use </span>contract_bindings::light_client::LightClient;
@@ -949,7 +948,7 @@
     <span class="kw">use </span>jf_merkle_tree::MerkleTreeScheme;
     <span class="kw">use </span>portpicker::pick_unused_port;
     <span class="kw">use </span>sequencer::api::endpoints::NamespaceProofQueryData;
-    <span class="kw">use </span>sequencer_utils::{init_signer, AnvilOptions};
+    <span class="kw">use </span>sequencer_utils::{init_signer, test_utils::setup_test, AnvilOptions};
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>tide_disco::error::ServerError;
 
@@ -972,8 +971,7 @@
     // - Types (like `Header`) update
     </span><span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>dev_node_test() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>builder_port = pick_unused_port().unwrap();
 

@@ -762,10 +762,6 @@
 <a href="#762" id="762">762</a>
 <a href="#763" id="763">763</a>
 <a href="#764" id="764">764</a>
-<a href="#765" id="765">765</a>
-<a href="#766" id="766">766</a>
-<a href="#767" id="767">767</a>
-<a href="#768" id="768">768</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
 </span><span class="kw">use </span>std::{
     alloc::System,
@@ -1434,10 +1430,6 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="comment">//use self::testing::mock_node_state;
-
-    //use super::{transaction::ApplicationTransaction, vm::TestVm, *};
-    </span><span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>async_std::stream::IntoStream;
     <span class="kw">use </span>clap::builder;
     <span class="kw">use </span>es_version::SequencerVersion;
@@ -1454,6 +1446,7 @@
             sql,
         },
     };
+    <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>testing::{wait_for_decide_on_handle, HotShotTestConfig};
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
@@ -1464,8 +1457,7 @@
     </span><span class="attr">#[ignore]
     #[async_std::test]
     </span><span class="kw">async fn </span>test_non_voting_hotshot_node() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>ver = SequencerVersion::instance();
 

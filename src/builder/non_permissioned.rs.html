@@ -693,6 +693,7 @@
         },
     };
     <span class="kw">use </span>sequencer::persistence::no_storage::{<span class="self">self</span>, NoStorage};
+    <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>surf_disco::Client;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
@@ -705,8 +706,7 @@
     /// Builder subscrived to this api, and server the hotshot client request and the private mempool tx submission
     </span><span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_non_permissioned_builder() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         <span class="kw">let </span>ver = SequencerVersion::instance();
         <span class="comment">// Hotshot Test Config
