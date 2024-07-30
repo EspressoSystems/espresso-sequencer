@@ -58,7 +58,7 @@ hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-quer
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.64" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.64" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.64" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.67" }
 hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.64" }
 hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
 # Temporary, used to pull in the mock auction results provider
