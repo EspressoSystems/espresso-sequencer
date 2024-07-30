@@ -5,7 +5,8 @@ use hotshot_query_service::merklized_state::MerklizedState;
 use hotshot_types::{
     data::{BlockError, ViewNumber},
     traits::{
-        node_implementation::ConsensusTime, states::StateDelta, ValidatedState as HotShotState,
+        block_contents::BlockHeader, node_implementation::ConsensusTime,
+        signature_key::BuilderSignatureKey, states::StateDelta, ValidatedState as HotShotState,
     },
     vid::{VidCommon, VidSchemeType},
 };
@@ -317,27 +318,37 @@ fn charge_fee(
 /// verified against signature by index.
 fn validate_builder_fee(proposed_header: &Header) -> Result<(), BuilderValidationError> {
     // TODO since we are iterating, should we include account/amount in errors?
-    for (fee_info, _signature) in proposed_header
+    for (fee_info, signature) in proposed_header
         .fee_info()
         .iter()
         .zip(proposed_header.builder_signature())
     {
         // check that `amount` fits in a u64
         fee_info
-            .amount
+            .amount()
             .as_u64()
             .ok_or(BuilderValidationError::FeeAmountOutOfRange(fee_info.amount))?;
 
-        // // verify signature
-        // fee_info
-        //     .account
-        //     // TODO remove metadata, payload from trait `validate_fee_signature`
-        //     .validate_sequencing_fee_signature_marketplace(
-        //         &signature,
-        //         fee_info.amount.as_u64().unwrap(),
-        //     )
-        //     .then_some(())
-        //     .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
+        // verify signature, accept any verification that succeeds
+        fee_info
+            .account()
+            .validate_sequencing_fee_signature_marketplace(
+                &signature,
+                fee_info.amount().as_u64().unwrap(),
+            )
+            .then_some(())
+            .or_else(|| {
+                fee_info
+                    .account()
+                    .validate_fee_signature(
+                        &signature,
+                        fee_info.amount().as_u64().unwrap(),
+                        proposed_header.metadata(),
+                        &proposed_header.payload_commitment(),
+                    )
+                    .then_some(())
+            })
+            .ok_or(BuilderValidationError::InvalidBuilderSignature)?;
     }
 
     Ok(())
@@ -744,7 +755,10 @@ mod test {
 
     use super::*;
     use crate::{
-        eth_signature_key::EthKeyPair, v0_3::BidTx, BlockSize, FeeAccountProof, FeeMerkleProof,
+        eth_signature_key::{BuilderSignature, EthKeyPair},
+        v0_1,
+        v0_3::BidTx,
+        BlockSize, FeeAccountProof, FeeMerkleProof,
     };
 
     pub fn mock_full_network_txs(key: Option<EthKeyPair>) -> Vec<FullNetworkTx> {
@@ -988,5 +1002,81 @@ mod test {
             bincode::serialize(&n).unwrap(),
             bincode::serialize(&amt).unwrap(),
         );
+    }
+
+    #[async_std::test]
+    async fn test_validate_builder_fee() {
+        setup_logging();
+        setup_backtrace();
+
+        let max_block_size = 10;
+
+        let validated_state = ValidatedState::default();
+        let instance_state = NodeState::mock().with_chain_config(ChainConfig {
+            base_fee: 1000.into(), // High base fee
+            max_block_size: max_block_size.into(),
+            ..validated_state.chain_config.resolve().unwrap()
+        });
+
+        let parent = Leaf::genesis(&instance_state.genesis_state, &instance_state).await;
+        let header = parent.block_header().clone();
+        let metadata = parent.block_header().metadata();
+        let vid_commitment = parent.payload_commitment();
+
+        dbg!(header.version());
+
+        let key_pair = EthKeyPair::random();
+        let account = key_pair.fee_account();
+
+        let data = header.fee_info()[0].amount().as_u64().unwrap();
+        let sig = FeeAccount::sign_builder_message(&key_pair, &data.to_be_bytes()).unwrap();
+
+        // ensure the signature is indeed valid
+        account
+            .validate_builder_signature(&sig, &data.to_be_bytes())
+            .then_some(())
+            .unwrap();
+
+        // test v1 sig
+        let sig = FeeAccount::sign_fee(&key_pair, data, metadata, &vid_commitment).unwrap();
+
+        let header = match header {
+            Header::V1(header) => Header::V1(v0_1::Header {
+                builder_signature: Some(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            _ => unimplemented!(),
+        };
+
+        validate_builder_fee(&header).unwrap();
+
+        // test v3 sig
+        let sig = FeeAccount::sign_sequencing_fee_marketplace(&key_pair, data).unwrap();
+        // test dedicated marketplace validation function
+        account
+            .validate_sequencing_fee_signature_marketplace(&sig, data)
+            .then_some(())
+            .unwrap();
+
+        let header = match header {
+            Header::V1(header) => Header::V1(v0_1::Header {
+                builder_signature: Some(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            _ => unimplemented!(),
+        };
+
+        let sig: Vec<BuilderSignature> = header.builder_signature();
+        let fee = header.fee_info()[0].amount().as_u64().unwrap();
+
+        // assert expectations
+        account
+            .validate_sequencing_fee_signature_marketplace(&sig[0], fee)
+            .then_some(())
+            .unwrap();
+
+        validate_builder_fee(&header).unwrap();
     }
 }
