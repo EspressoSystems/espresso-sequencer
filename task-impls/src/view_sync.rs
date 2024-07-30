@@ -293,8 +293,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncTaskState<TYPES, I> 
                     view: vote_view,
                     id: self.id,
                 };
-                let vote_collector =
-                    create_vote_accumulator(&info, vote.clone(), event, &event_stream).await;
+                let vote_collector = create_vote_accumulator(&info, event, &event_stream).await;
                 if let Some(vote_task) = vote_collector {
                     relay_map.insert(relay, vote_task);
                 }
@@ -331,8 +330,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncTaskState<TYPES, I> 
                     view: vote_view,
                     id: self.id,
                 };
-                let vote_collector =
-                    create_vote_accumulator(&info, vote.clone(), event, &event_stream).await;
+                let vote_collector = create_vote_accumulator(&info, event, &event_stream).await;
                 if let Some(vote_task) = vote_collector {
                     relay_map.insert(relay, vote_task);
                 }
@@ -369,8 +367,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncTaskState<TYPES, I> 
                     view: vote_view,
                     id: self.id,
                 };
-                let vote_collector =
-                    create_vote_accumulator(&info, vote.clone(), event, &event_stream).await;
+                let vote_collector = create_vote_accumulator(&info, event, &event_stream).await;
                 if let Some(vote_task) = vote_collector {
                     relay_map.insert(relay, vote_task);
                 }

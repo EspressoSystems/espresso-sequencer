@@ -237,7 +237,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
                         TYPES,
                         UpgradeVote<TYPES>,
                         UpgradeCertificate<TYPES>,
-                    >(&info, vote.clone(), event, &tx)
+                    >(&info, event, &tx)
                     .await;
                 } else {
                     let result = collector

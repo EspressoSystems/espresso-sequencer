@@ -49,10 +49,7 @@ pub(crate) async fn handle_quorum_vote_recv<TYPES: NodeType, I: NodeImplementati
             id: task_state.id,
         };
         *collector = create_vote_accumulator::<TYPES, QuorumVote<TYPES>, QuorumCertificate<TYPES>>(
-            &info,
-            vote.clone(),
-            event,
-            sender,
+            &info, event, sender,
         )
         .await;
     } else {
@@ -96,10 +93,7 @@ pub(crate) async fn handle_timeout_vote_recv<TYPES: NodeType, I: NodeImplementat
         };
         *collector =
             create_vote_accumulator::<TYPES, TimeoutVote<TYPES>, TimeoutCertificate<TYPES>>(
-                &info,
-                vote.clone(),
-                event,
-                sender,
+                &info, event, sender,
             )
             .await;
     } else {

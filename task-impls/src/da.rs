@@ -268,7 +268,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> DaTaskState<TYPES, I> {
                         TYPES,
                         DaVote<TYPES>,
                         DaCertificate<TYPES>,
-                    >(&info, vote.clone(), event, &event_stream)
+                    >(&info, event, &event_stream)
                     .await;
                 } else {
                     let result = collector

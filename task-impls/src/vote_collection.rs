@@ -140,7 +140,6 @@ pub struct AccumulatorInfo<TYPES: NodeType> {
 /// Calls unwrap but should never panic.
 pub async fn create_vote_accumulator<TYPES, VOTE, CERT>(
     info: &AccumulatorInfo<TYPES>,
-    vote: VOTE,
     event: Arc<HotShotEvent<TYPES>>,
     sender: &Sender<Arc<HotShotEvent<TYPES>>>,
 ) -> Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>
@@ -158,14 +157,6 @@ where
         + 'static,
     VoteCollectionTaskState<TYPES, VOTE, CERT>: HandleVoteEvent<TYPES, VOTE, CERT>,
 {
-    if vote.view_number() != info.view {
-        error!(
-            "Vote view does not match! vote view is {} current view is {}",
-            *vote.view_number(),
-            *info.view
-        );
-        return None;
-    }
     let new_accumulator = VoteAccumulator {
         vote_outcomes: HashMap::new(),
         signers: HashMap::new(),

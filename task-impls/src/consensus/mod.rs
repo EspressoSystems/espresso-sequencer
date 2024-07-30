@@ -314,7 +314,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                         TYPES,
                         QuorumVote<TYPES>,
                         QuorumCertificate<TYPES>,
-                    >(&info, vote.clone(), event, &event_stream)
+                    >(&info, event, &event_stream)
                     .await;
                 } else {
                     let result = collector
@@ -353,7 +353,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
                         TYPES,
                         TimeoutVote<TYPES>,
                         TimeoutCertificate<TYPES>,
-                    >(&info, vote.clone(), event, &event_stream)
+                    >(&info, event, &event_stream)
                     .await;
                 } else {
                     let result = collector
