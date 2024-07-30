@@ -329,6 +329,22 @@
 <a href="#329" id="329">329</a>
 <a href="#330" id="330">330</a>
 <a href="#331" id="331">331</a>
+<a href="#332" id="332">332</a>
+<a href="#333" id="333">333</a>
+<a href="#334" id="334">334</a>
+<a href="#335" id="335">335</a>
+<a href="#336" id="336">336</a>
+<a href="#337" id="337">337</a>
+<a href="#338" id="338">338</a>
+<a href="#339" id="339">339</a>
+<a href="#340" id="340">340</a>
+<a href="#341" id="341">341</a>
+<a href="#342" id="342">342</a>
+<a href="#343" id="343">343</a>
+<a href="#344" id="344">344</a>
+<a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">super</span>::state::ValidatedState;
 <span class="kw">use crate</span>::{
     eth_signature_key::{EthKeyPair, SigningError},
@@ -572,6 +588,22 @@
 }
 
 <span class="kw">impl </span>SolverAuctionResults {
+    <span class="kw">pub fn </span>new(
+        view_number: ViewNumber,
+        winning_bids: Vec&lt;BidTx&gt;,
+        reserve_bids: Vec&lt;(NamespaceId, Url)&gt;,
+    ) -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            view_number,
+            winning_bids,
+            reserve_bids,
+        }
+    }
+
+    <span class="kw">pub fn </span>view(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ViewNumber {
+        <span class="self">self</span>.view_number
+    }
+
     <span class="kw">pub fn </span>winning_bids(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[BidTx] {
         <span class="kw-2">&amp;</span><span class="self">self</span>.winning_bids
     }
