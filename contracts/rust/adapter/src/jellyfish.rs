@@ -9,12 +9,12 @@ pub use diff_test_bn254::{field_to_u256, u256_to_field, ParsedG1Point};
 use ethers::{
     abi::AbiDecode,
     prelude::{AbiError, EthAbiCodec, EthAbiType},
-    types::{Bytes, H256, U256},
+    types::{Bytes, U256},
 };
 use jf_pcs::prelude::Commitment;
 use jf_plonk::proof_system::structs::{OpenKey, Proof, ProofEvaluations, VerifyingKey};
 use jf_plonk::testing_apis::Challenges;
-use jf_plonk::{constants::KECCAK256_STATE_SIZE, transcript::SolidityTranscript};
+use jf_plonk::transcript::SolidityTranscript;
 use num_bigint::BigUint;
 use num_traits::Num;
 
@@ -94,7 +94,6 @@ pub fn open_key() -> OpenKey<Bn254> {
 #[derive(Clone, EthAbiType, EthAbiCodec)]
 pub struct ParsedTranscript {
     pub(crate) transcript: Bytes,
-    pub(crate) state: H256,
 }
 
 impl FromStr for ParsedTranscript {
@@ -107,19 +106,16 @@ impl FromStr for ParsedTranscript {
 
 impl From<SolidityTranscript> for ParsedTranscript {
     fn from(t: SolidityTranscript) -> Self {
-        let (transcript, state) = t.internal();
+        let transcript = t.internal();
         Self {
             transcript: transcript.into(),
-            state: H256::from_slice(&state),
         }
     }
 }
 
 impl From<ParsedTranscript> for SolidityTranscript {
     fn from(t: ParsedTranscript) -> Self {
-        let mut state = [0u8; KECCAK256_STATE_SIZE];
-        state.copy_from_slice(&t.state.to_fixed_bytes());
-        Self::from_internal(t.transcript.to_vec(), state)
+        Self::from_internal(t.transcript.to_vec())
     }
 }
 
@@ -464,7 +460,7 @@ impl From<Challenges<Fr>> for ParsedChallenges {
 impl From<ParsedChallenges> for Challenges<Fr> {
     fn from(c: ParsedChallenges) -> Self {
         Self {
-            tau: Fr::from(0u32),
+            tau: None,
             alpha: u256_to_field(c.alpha),
             beta: u256_to_field(c.beta),
             gamma: u256_to_field(c.gamma),
