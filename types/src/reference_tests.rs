@@ -27,8 +27,7 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::traits::{
-    block_contents::vid_commitment, node_implementation::NodeType,
-    signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
+    block_contents::vid_commitment, signature_key::BuilderSignatureKey, BlockPayload, EncodeBytes,
 };
 use jf_merkle_tree::MerkleTreeScheme;
 use pretty_assertions::assert_eq;
@@ -47,7 +46,9 @@ use crate::{
     Transaction, ValidatedState,
 };
 
-type Serializer = vbs::Serializer<<SeqTypes as NodeType>::Base>;
+type V1Serializer = vbs::Serializer<StaticVersion<0, 1>>;
+type V2Serializer = vbs::Serializer<StaticVersion<0, 2>>;
+type V3Serializer = vbs::Serializer<StaticVersion<0, 3>>;
 
 async fn reference_payload() -> Payload {
     const NUM_NS_IDS: usize = 3;
@@ -228,7 +229,13 @@ change in the serialization of this data structure.
 
     // Check that the reference object matches the expected binary form.
     let expected = std::fs::read(data_dir.join(format!("{name}.bin"))).unwrap();
-    let actual = Serializer::serialize(&reference).unwrap();
+    // todo (ab) : cleanup
+    let actual = match version {
+        "v1" => V1Serializer::serialize(&reference).unwrap(),
+        "v2" => V2Serializer::serialize(&reference).unwrap(),
+        "v3" => V3Serializer::serialize(&reference).unwrap(),
+        _ => panic!("invalid version"),
+    };
     if actual != expected {
         // Write the actual output to a file to make it easier to compare with/replace the expected
         // file if the serialization change was actually intended.
@@ -251,7 +258,14 @@ change in the serialization of this data structure.
     }
 
     // Check that we can deserialize from the reference binary object.
-    let parsed: T = Serializer::deserialize(&expected).unwrap();
+    // todo: (ab) cleanup
+    let parsed: T = match version {
+        "v1" => V1Serializer::deserialize(&expected).unwrap(),
+        "v2" => V2Serializer::deserialize(&expected).unwrap(),
+        "v3" => V3Serializer::deserialize(&expected).unwrap(),
+        _ => panic!("invalid version"),
+    };
+
     assert_eq!(
         *reference, parsed,
         "Reference object commitment does not match commitment of parsed binary object. This is
