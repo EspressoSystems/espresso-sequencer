@@ -1,19 +1,9 @@
+use crate::{v0_1, BlockSize, ChainId, FeeAccount, FeeAmount};
 use committable::{Commitment, Committable};
-use derive_more::{Deref, Display, From, Into};
 use ethers::types::{Address, U256};
 use itertools::Either;
-
 use serde::{Deserialize, Serialize};
-
-use crate::{FeeAccount, FeeAmount};
-
-#[derive(Default, Hash, Copy, Clone, Debug, Display, PartialEq, Eq, From, Into)]
-#[display(fmt = "{_0}")]
-pub struct ChainId(pub U256);
-
-#[derive(Hash, Copy, Clone, Debug, Default, Display, PartialEq, Eq, From, Into, Deref)]
-#[display(fmt = "{_0}")]
-pub struct BlockSize(pub(crate) u64);
+use std::str::FromStr;
 
 /// Global variables for an Espresso blockchain.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -40,9 +30,13 @@ pub struct ChainConfig {
     /// regardless of whether or not their is a `fee_contract` deployed. Once deployed, the fee
     /// contract can decide what to do with tokens locked in this account in Espresso.
     pub fee_recipient: FeeAccount,
+
+    /// Account that receives sequencing bids.
+    pub bid_recipient: Option<FeeAccount>,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Deserialize, Serialize, Eq, Hash)]
+/// A commitment to a ChainConfig or a full ChainConfig.
 pub struct ResolvableChainConfig {
     pub(crate) chain_config: Either<ChainConfig, Commitment<ChainConfig>>,
 }
@@ -63,6 +57,16 @@ impl Committable for ChainConfig {
         } else {
             comm.u64_field("fee_contract", 0)
         };
+
+        // With `ChainConfig` upgrades we want commitments w/out
+        // fields added >= v0_3 to have the same commitment as <= v0_3
+        // commitment. Therefore `None` values are simply ignored.
+        let comm = if let Some(bid_recipient) = self.bid_recipient {
+            comm.fixed_size_field("bid_recipient", &bid_recipient.to_fixed_bytes())
+        } else {
+            comm
+        };
+
         comm.finalize()
     }
 }
@@ -98,6 +102,65 @@ impl From<ChainConfig> for ResolvableChainConfig {
     }
 }
 
+impl From<&v0_1::ResolvableChainConfig> for ResolvableChainConfig {
+    fn from(
+        &v0_1::ResolvableChainConfig { chain_config }: &v0_1::ResolvableChainConfig,
+    ) -> ResolvableChainConfig {
+        match chain_config {
+            Either::Left(chain_config) => ResolvableChainConfig {
+                chain_config: Either::Left(ChainConfig::from(chain_config)),
+            },
+            // TODO does this work? is there a better way?
+            Either::Right(c) => ResolvableChainConfig {
+                chain_config: Either::Right(Commitment::from_str(&c.to_string()).unwrap()),
+            },
+        }
+    }
+}
+
+impl From<v0_1::ChainConfig> for ChainConfig {
+    fn from(chain_config: v0_1::ChainConfig) -> ChainConfig {
+        let v0_1::ChainConfig {
+            chain_id,
+            max_block_size,
+            base_fee,
+            fee_contract,
+            fee_recipient,
+            ..
+        } = chain_config;
+
+        ChainConfig {
+            chain_id,
+            max_block_size,
+            base_fee,
+            fee_contract,
+            fee_recipient,
+            bid_recipient: None,
+        }
+    }
+}
+
+impl From<ChainConfig> for v0_1::ChainConfig {
+    fn from(chain_config: ChainConfig) -> v0_1::ChainConfig {
+        let ChainConfig {
+            chain_id,
+            max_block_size,
+            base_fee,
+            fee_contract,
+            fee_recipient,
+            ..
+        } = chain_config;
+
+        v0_1::ChainConfig {
+            chain_id,
+            max_block_size,
+            base_fee,
+            fee_contract,
+            fee_recipient,
+        }
+    }
+}
+
 impl Default for ChainConfig {
     fn default() -> Self {
         Self {
@@ -106,6 +169,7 @@ impl Default for ChainConfig {
             base_fee: 0.into(),
             fee_contract: None,
             fee_recipient: Default::default(),
+            bid_recipient: None,
         }
     }
 }
