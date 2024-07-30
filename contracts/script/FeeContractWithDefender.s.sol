@@ -39,7 +39,7 @@ contract FeeContractDefenderDeployScript is Script {
             Upgrades.deployUUPSProxy(contractName, abi.encodeCall(FC.initialize, (multisig)), opts);
 
         //generate the deployment file path, output and write to the file
-        (string memory filePath, string memory fileData) = utils.generateDeploymentOutput(
+        (string memory filePath, string memory fileData) = utils.generateProxyDeploymentOutput(
             contractName, contractSalt, proxyAddress, multisig, approvalProcessId, viaType
         );
         utils.writeJson(filePath, fileData);

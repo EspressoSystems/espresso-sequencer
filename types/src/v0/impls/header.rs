@@ -889,13 +889,13 @@ impl ExplorerHeader<SeqTypes> for Header {
 mod test_headers {
     use std::sync::Arc;
 
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::{
         types::{Address, U256},
         utils::Anvil,
     };
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
     use jf_vid::VidScheme;
+    use sequencer_utils::test_utils::setup_test;
     use v0_1::{BlockMerkleTree, FeeMerkleTree, L1Client};
     use vbs::{
         bincode_serializer::BincodeSerializer,
@@ -931,8 +931,7 @@ mod test_headers {
 
     impl TestCase {
         async fn run(self) {
-            setup_logging();
-            setup_backtrace();
+            setup_test();
 
             // Check test case validity.
             assert!(self.expected_timestamp >= self.parent_timestamp);
@@ -1289,8 +1288,7 @@ mod test_headers {
 
     #[async_std::test]
     async fn test_validate_proposal_success() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let anvil = Anvil::new().block_time(1u32).spawn();
         let mut genesis_state =
@@ -1407,8 +1405,7 @@ mod test_headers {
 
     #[async_std::test]
     async fn test_versioned_header_serialization() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let genesis = GenesisForTest::default().await;
         let header = genesis.header.clone();
