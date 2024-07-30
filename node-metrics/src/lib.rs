@@ -100,24 +100,21 @@ pub mod service;
 
 use crate::{
     api::node_validator::v0::{
+        cdn::{BroadcastRollCallTask, CdnReceiveMessagesTask},
         create_node_validator_api::{create_node_validator_processing, NodeValidatorConfig},
         HotshotQueryServiceLeafStreamRetriever, ProcessProduceLeafStreamTask,
         StateClientMessageSender, STATIC_VER_0_1,
     },
     service::{client_message::InternalClientMessage, server_message::ServerMessage},
 };
-use api::node_validator::v0::create_node_validator_api::ExternalMessage;
 use clap::Parser;
 use espresso_types::{PubKey, SeqTypes};
-use futures::{
-    channel::mpsc::{self, Sender},
-    SinkExt,
-};
+use futures::channel::mpsc::{self, Sender};
 use hotshot::traits::implementations::{
     CdnMetricsValue, PushCdnNetwork, Topic, WrappedSignatureKey,
 };
 use hotshot_query_service::metrics::PrometheusMetrics;
-use hotshot_types::traits::{network::ConnectedNetwork, signature_key::BuilderSignatureKey};
+use hotshot_types::traits::signature_key::BuilderSignatureKey;
 use tide_disco::App;
 use url::Url;
 
@@ -127,12 +124,37 @@ use url::Url;
 /// variables.
 #[derive(Parser, Clone, Debug)]
 pub struct Options {
+    /// stake_table_source_based_url is the base URL for the config API
+    /// endpoint that is provided by Espresso Sequencers.
+    ///
+    /// This endpoint is expected to point to the version root path of the
+    /// URL.
+    /// Example:
+    ///   - https://query.cappuccino.testnet.espresso.network/v0/
     #[clap(long, env = "ESPRESSO_NODE_VALIDATOR_STAKE_TABLE_SOURCE_BASE_URL")]
     stake_table_source_base_url: Url,
 
+    /// leaf_stream_base_url is the base URL for the availability API endpoint
+    /// that is capable of providing a stream of leaf data.
+    ///
+    /// This endpoint is expected to point to the version root path of the
+    /// URL.
+    /// Example:
+    ///   - https://query.cappuccino.testnet.espresso.network/v0/
+    ///
     #[clap(long, env = "ESPRESSO_NODE_VALIDATOR_LEAF_STREAM_SOURCE_BASE_URL")]
     leaf_stream_base_url: Url,
 
+    /// initial_node_public_base_urls is a list of URLs that are the initial
+    /// public base URLs of the nodes that are in the network.  These can be
+    /// supplied as an initial source of URLS to scrape for node identity.
+    ///
+    /// These urls are expected to point to the root path of the URL for the
+    /// node, and are expected to be URLS that support the status endpoint
+    /// for the nodes.
+    ///
+    /// Example URL:
+    ///  - https://query-1.cappuccino.testnet.espresso.network/
     #[clap(
         long,
         env = "ESPRESSO_NODE_VALIDATOR_INITIAL_NODE_PUBLIC_BASE_URLS",
@@ -140,6 +162,9 @@ pub struct Options {
     )]
     initial_node_public_base_urls: Vec<Url>,
 
+    /// port is the port that the node validator service will listen on.
+    /// This port is expected to be a valid port number that is available
+    /// for the service to bind to.
     #[clap(
         long,
         value_parser,
@@ -148,8 +173,12 @@ pub struct Options {
     )]
     port: u16,
 
+    /// cdn_marshal_endpoint is the endpoint for the CDN marshal service.
+    ///
+    /// This endpoint is optional, and if it is not provided, then the CDN
+    /// service will not be utilized.
     #[clap(long, env = "ESPRESSO_NODE_VALIDATOR_CDN_MARSHAL_ENDPOINT")]
-    cdn_marshal_endpoint: String,
+    cdn_marshal_endpoint: Option<String>,
 }
 
 impl Options {
@@ -169,7 +198,7 @@ impl Options {
         self.port
     }
 
-    fn cdn_marshal_endpoint(&self) -> &str {
+    fn cdn_marshal_endpoint(&self) -> &Option<String> {
         &self.cdn_marshal_endpoint
     }
 }
@@ -237,67 +266,35 @@ pub async fn run_standalone_service(options: Options) {
         }
     };
 
-    let (public_key, private_key) = PubKey::generated_from_seed_indexed([1; 32], 0);
-    let cdn_network_result = PushCdnNetwork::<SeqTypes>::new(
-        options.cdn_marshal_endpoint().to_string(),
-        vec![Topic::Global],
-        hotshot::traits::implementations::KeyPair {
-            public_key: WrappedSignatureKey(public_key),
-            private_key: private_key.clone(),
-        },
-        CdnMetricsValue::new(&PrometheusMetrics::default()),
-    );
-    let cdn_network = match cdn_network_result {
-        Ok(cdn_network) => cdn_network,
-        Err(err) => {
-            panic!("error creating cdn network: {:?}", err);
-        }
-    };
-
-    let url_sender = node_validator_task_state.url_sender.clone();
-
-    let cdn_task_handle = async_std::task::spawn(async move {
-        let mut url_sender = url_sender;
-
-        loop {
-            let messages_result = cdn_network.recv_msgs().await;
-            let messages = match messages_result {
-                Ok(message) => message,
-                Err(err) => {
-                    tracing::error!("error receiving message: {:?}", err);
-                    continue;
-                }
-            };
-
-            for message in messages {
-                // We want to try and decode this message.
-                let message_deserialize_result = bincode::deserialize::<ExternalMessage>(&message);
-                let external_message = match message_deserialize_result {
-                    Ok(external_message) => external_message,
-                    Err(err) => {
-                        tracing::error!("error deserializing message: {:?}", err);
-                        continue;
-                    }
-                };
-
-                match external_message {
-                    ExternalMessage::RollCallResponse(roll_call_info) => {
-                        let public_api_url = roll_call_info.public_api_url;
-
-                        // We have a public api url, so we can process this url.
-
-                        if let Err(err) = url_sender.send(public_api_url).await {
-                            tracing::error!("error sending public api url: {:?}", err);
-                        }
-                    }
-
-                    _ => {
-                        // We're not concerned about other message types
-                    }
-                }
+    let cdn_tasks = if let Some(cdn_broker_url_string) = options.cdn_marshal_endpoint() {
+        let (public_key, private_key) = PubKey::generated_from_seed_indexed([1; 32], 0);
+        let cdn_network_result = PushCdnNetwork::<SeqTypes>::new(
+            cdn_broker_url_string.to_string(),
+            vec![Topic::Global],
+            hotshot::traits::implementations::KeyPair {
+                public_key: WrappedSignatureKey(public_key),
+                private_key: private_key.clone(),
+            },
+            CdnMetricsValue::new(&PrometheusMetrics::default()),
+        );
+        let cdn_network = match cdn_network_result {
+            Ok(cdn_network) => cdn_network,
+            Err(err) => {
+                panic!("error creating cdn network: {:?}", err);
             }
-        }
-    });
+        };
+
+        let url_sender = node_validator_task_state.url_sender.clone();
+
+        let broadcast_cdn_network = cdn_network.clone();
+        let cdn_receive_message_task = CdnReceiveMessagesTask::new(cdn_network, url_sender);
+        let broadcast_roll_call_task =
+            BroadcastRollCallTask::new(broadcast_cdn_network, public_key);
+
+        Some((broadcast_roll_call_task, cdn_receive_message_task))
+    } else {
+        None
+    };
 
     let port = options.port();
     // We would like to wait until being signaled
@@ -306,11 +303,13 @@ pub async fn run_standalone_service(options: Options) {
         tracing::info!("app serve result: {:?}", app_serve_result);
     });
 
-    tracing::info!("now listening on port {:?}", port);
-
     app_serve_handle.await;
 
-    drop(cdn_task_handle);
+    if let Some((broadcast_roll_call_task, cdn_receive_message_task)) = cdn_tasks {
+        drop(broadcast_roll_call_task);
+        drop(cdn_receive_message_task);
+    }
+
     drop(node_validator_task_state);
     drop(process_consume_leaves);
 }

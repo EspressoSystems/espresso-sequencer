@@ -1,4 +1,6 @@
+pub mod cdn;
 pub mod create_node_validator_api;
+
 use crate::service::client_message::{ClientMessage, InternalClientMessage};
 use crate::service::data_state::{LocationDetails, NodeIdentity};
 use crate::service::server_message::ServerMessage;
