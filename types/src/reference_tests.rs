@@ -23,7 +23,6 @@
 
 use std::{fmt::Debug, path::Path, str::FromStr};
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use committable::Committable;
 use es_version::SequencerVersion;
 use hotshot_query_service::availability::QueryablePayload;
@@ -33,7 +32,7 @@ use hotshot_types::traits::{
 use jf_merkle_tree::MerkleTreeScheme;
 use pretty_assertions::assert_eq;
 use rand::{Rng, RngCore};
-use sequencer_utils::commitment_to_u256;
+use sequencer_utils::{commitment_to_u256, test_utils::setup_test};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use tagged_base64::TaggedBase64;
@@ -174,8 +173,7 @@ fn reference_test_without_committable<T: Serialize + DeserializeOwned + Eq + Deb
     name: &str,
     reference: &T,
 ) {
-    setup_logging();
-    setup_backtrace();
+    setup_test();
 
     // Load the expected serialization from the repo.
     let data_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -262,8 +260,7 @@ fn reference_test<T: Committable + Serialize + DeserializeOwned + Eq + Debug>(
     reference: T,
     commitment: &str,
 ) {
-    setup_logging();
-    setup_backtrace();
+    setup_test();
 
     reference_test_without_committable(version, name, &reference);
 

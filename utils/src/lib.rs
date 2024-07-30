@@ -21,6 +21,7 @@ use tempfile::TempDir;
 use url::Url;
 
 pub mod deployer;
+pub mod logging;
 pub mod ser;
 pub mod test_utils;
 

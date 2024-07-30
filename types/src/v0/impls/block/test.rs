@@ -1,12 +1,12 @@
 #![cfg(test)]
 use std::collections::BTreeMap;
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use hotshot::traits::BlockPayload;
 use hotshot_query_service::availability::QueryablePayload;
 use hotshot_types::{traits::EncodeBytes, vid::vid_scheme};
 use jf_vid::VidScheme;
 use rand::RngCore;
+use sequencer_utils::test_utils::setup_test;
 
 use crate::{
     v0_3::ChainConfig, BlockSize, NamespaceId, NodeState, NsProof, Payload, Transaction, TxProof,
@@ -20,8 +20,7 @@ async fn basic_correctness() {
         vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]], // 3 non-empty namespaces
     ];
 
-    setup_logging();
-    setup_backtrace();
+    setup_test();
     let mut rng = jf_utils::test_rng();
     let valid_tests = ValidTest::many_from_tx_lengths(test_cases, &mut rng);
 
@@ -106,8 +105,7 @@ async fn basic_correctness() {
 
 #[async_std::test]
 async fn enforce_max_block_size() {
-    setup_logging();
-    setup_backtrace();
+    setup_test();
     let test_case = vec![vec![5, 8, 8], vec![7, 9, 11], vec![10, 5, 8]];
     let payload_byte_len_expected: usize = 119;
     let ns_table_byte_len_expected: usize = 28;

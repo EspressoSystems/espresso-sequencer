@@ -102,6 +102,7 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4
 ] }
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
 libp2p = { version = "0.53", default-features = false }
+log-panics = { version = "2.0", features = ["with-backtrace"] }
 snafu = "0.8"
 strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.9"

@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 ark-serialize = { workspace = true, features = ["derive"] }
+async-compatibility-layer = { workspace = true }
 async-std = { workspace = true }
 clap = { workspace = true }
 committable = "0.2"
@@ -16,6 +17,7 @@ derive_more = { workspace = true }
 ethers = { workspace = true }
 futures = { workspace = true }
 hotshot-contract-adapter = { workspace = true }
+log-panics = { workspace = true }
 portpicker = { workspace = true }
 serde = { workspace = true }
 serde_json = "^1.0.113"
