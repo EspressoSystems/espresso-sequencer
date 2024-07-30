@@ -740,13 +740,15 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::types::U256;
+    use hotshot_types::traits::signature_key::BuilderSignatureKey;
     use hotshot_types::vid::vid_scheme;
     use jf_vid::VidScheme;
     use sequencer_utils::ser::FromStringOrInteger;
 
     use super::*;
     use crate::{
-        eth_signature_key::EthKeyPair, v0_3::BidTx, BlockSize, FeeAccountProof, FeeMerkleProof,
+        eth_signature_key::EthKeyPair, v0_1, v0_3::BidTx, BlockSize, FeeAccountProof,
+        FeeMerkleProof,
     };
 
     pub fn mock_full_network_txs(key: Option<EthKeyPair>) -> Vec<FullNetworkTx> {
@@ -990,5 +992,62 @@ mod test {
             bincode::serialize(&n).unwrap(),
             bincode::serialize(&amt).unwrap(),
         );
+    }
+
+    #[async_std::test]
+    async fn test_validate_builder_fee() {
+        setup_logging();
+        setup_backtrace();
+
+        let max_block_size = 10;
+
+        let validated_state = ValidatedState::default();
+        let instance_state = NodeState::mock().with_chain_config(ChainConfig {
+            base_fee: 1000.into(), // High base fee
+            max_block_size: max_block_size.into(),
+            ..validated_state.chain_config.resolve().unwrap()
+        });
+
+        let parent = Leaf::genesis(&instance_state.genesis_state, &instance_state).await;
+        let header = parent.block_header().clone();
+        dbg!(header.version());
+
+        let key_pair = EthKeyPair::random();
+        let account = key_pair.fee_account();
+
+        let data = header.fee_info()[0].amount().as_u64().unwrap();
+        let sig = FeeAccount::sign_builder_message(&key_pair, &data.to_be_bytes()).unwrap();
+
+        // ensure the signature is indeed valid
+        account
+            .validate_builder_signature(&sig, &data.to_be_bytes())
+            .then_some(())
+            .unwrap();
+
+        // test dedicated marketplace validation function
+        account
+            .validate_sequencing_fee_signature_marketplace(&sig, data)
+            .then_some(())
+            .unwrap();
+
+        let header = match header {
+            Header::V1(header) => Header::V1(v0_1::Header {
+                builder_signature: Some(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            _ => unimplemented!(),
+        };
+
+        let sig: Vec<BuilderSignature> = header.builder_signature();
+        let fee = header.fee_info()[0].amount().as_u64().unwrap();
+
+        // assert expectations
+        account
+            .validate_sequencing_fee_signature_marketplace(&sig[0], fee)
+            .then_some(())
+            .unwrap();
+
+        validate_builder_fee(&header).unwrap();
     }
 }
