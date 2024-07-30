@@ -2,13 +2,13 @@
 
 use std::{cmp::max, process::exit, time::Duration};
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{sync::Arc, task::sleep};
 use clap::Parser;
 use espresso_types::{Header, L1BlockInfo};
 use ethers::prelude::*;
 use futures::future::join_all;
 use itertools::Itertools;
+use sequencer_utils::logging;
 use surf_disco::Url;
 use vbs::version::StaticVersionType;
 
@@ -48,6 +48,9 @@ struct Options {
 
     /// URL of the HotShot query service.
     url: Url,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 type SequencerClient<Ver> = surf_disco::Client<hotshot_query_service::Error, Ver>;
@@ -163,10 +166,9 @@ async fn get_l1_block(l1: &Provider<Http>, height: u64) -> L1BlockInfo {
 
 #[async_std::main]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
-
     let opt = Arc::new(Options::parse());
+    opt.logging.init();
+
     let seq = Arc::new(SequencerClient::<es_version::SequencerVersion>::new(
         opt.url.clone(),
     ));

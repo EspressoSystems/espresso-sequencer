@@ -740,8 +740,6 @@ pub mod testing {
 
 #[cfg(test)]
 mod test {
-
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use es_version::SequencerVersion;
     use espresso_types::{Header, NamespaceId, Payload, Transaction};
     use futures::StreamExt;
@@ -752,7 +750,7 @@ mod test {
             vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
         },
     };
-    use sequencer_utils::AnvilOptions;
+    use sequencer_utils::{test_utils::setup_test, AnvilOptions};
     use testing::{wait_for_decide_on_handle, TestConfigBuilder};
 
     use self::testing::run_test_builder;
@@ -760,8 +758,7 @@ mod test {
 
     #[async_std::test]
     async fn test_skeleton_instantiation() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
         let ver = SequencerVersion::instance();
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
@@ -801,8 +798,7 @@ mod test {
 
     #[async_std::test]
     async fn test_header_invariants() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let success_height = 30;
         let ver = SequencerVersion::instance();

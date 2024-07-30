@@ -253,20 +253,18 @@ async fn get_finalized_block<P: JsonRpcClient>(
 
 #[cfg(test)]
 mod test {
-
     use std::ops::Add;
 
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use contract_bindings::fee_contract::FeeContract;
     use ethers::utils::{parse_ether, Anvil};
+    use sequencer_utils::test_utils::setup_test;
 
     use super::*;
     use crate::NodeState;
 
     #[async_std::test]
     async fn test_l1_block_fetching() -> anyhow::Result<()> {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         // Test l1_client methods against `ethers::Provider`. There is
         // also some sanity testing demonstrating `Anvil` availability.
@@ -303,8 +301,7 @@ mod test {
 
     #[async_std::test]
     async fn test_get_finalized_deposits() -> anyhow::Result<()> {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         // how many deposits will we make
         let deposits = 5;
@@ -446,8 +443,7 @@ mod test {
 
     #[async_std::test]
     async fn test_wait_for_finalized_block() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let anvil = Anvil::new().block_time(1u32).spawn();
         let l1_client = L1Client::new(anvil.endpoint().parse().unwrap(), 1);

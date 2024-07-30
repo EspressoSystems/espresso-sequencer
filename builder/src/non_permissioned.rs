@@ -255,6 +255,7 @@ mod test {
         },
     };
     use sequencer::persistence::no_storage::{self, NoStorage};
+    use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
 
     use super::*;
@@ -267,8 +268,7 @@ mod test {
     /// Builder subscrived to this api, and server the hotshot client request and the private mempool tx submission
     #[async_std::test]
     async fn test_non_permissioned_builder() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let ver = SequencerVersion::instance();
         // Hotshot Test Config
