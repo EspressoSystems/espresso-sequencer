@@ -5,7 +5,7 @@ use super::v0_3::{RollupRegistrationBody, RollupUpdatebody};
 
 impl Committable for RollupRegistrationBody {
     fn tag() -> String {
-        "ROLLUP_REG".to_string()
+        "ROLLUP_REGISTRATION".to_string()
     }
 
     fn commit(&self) -> Commitment<Self> {
