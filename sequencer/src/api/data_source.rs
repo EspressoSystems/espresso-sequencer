@@ -5,7 +5,8 @@ use async_trait::async_trait;
 use committable::Commitment;
 use espresso_types::{
     v0::traits::{PersistenceOptions, SequencerPersistence},
-    ChainConfig, PubKey, Transaction,
+    v0_3::ChainConfig,
+    PubKey, Transaction,
 };
 use ethers::prelude::Address;
 use futures::future::Future;

@@ -119,7 +119,7 @@ pub mod testing {
     use async_trait::async_trait;
     use committable::Committable;
     use espresso_types::{
-        mock::MockStateCatchup, ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey,
+        mock::MockStateCatchup, v0_3::ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey,
         PubKey, Transaction, ValidatedState,
     };
     use ethers::{
@@ -155,6 +155,7 @@ pub mod testing {
         traits::{
             block_contents::{vid_commitment, BlockHeader, GENESIS_VID_NUM_STORAGE_NODES},
             metrics::NoMetrics,
+            network::Topic,
             node_implementation::ConsensusTime,
             signature_key::BuilderSignatureKey as _,
         },
@@ -393,8 +394,9 @@ pub mod testing {
             }
 
             let network = Arc::new(MemoryNetwork::new(
-                config.my_own_validator_config.public_key,
+                &config.my_own_validator_config.public_key,
                 &self.master_map,
+                &[Topic::Global, Topic::Da],
                 None,
             ));
 
