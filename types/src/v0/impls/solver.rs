@@ -9,13 +9,11 @@ impl Committable for RollupRegistrationBody {
     }
 
     fn commit(&self) -> Commitment<Self> {
-        let active: [u8; 1] = if self.active { [1] } else { [0] };
-
         let mut comm = committable::RawCommitmentBuilder::new(&Self::tag())
             .u64_field("namespace_id", u64::from(self.namespace_id))
             .var_size_field("reserve_url", self.reserve_url.as_str().as_ref())
             .fixed_size_field("reserve_price", &self.reserve_price.to_fixed_bytes())
-            .fixed_size_field("active", &active)
+            .fixed_size_field("active", &[u8::from(self.active)])
             .constant_str("signature_keys");
 
         for key in self.signature_keys.iter() {
@@ -48,9 +46,7 @@ impl Committable for RollupUpdatebody {
         };
 
         if let Some(active) = self.active {
-            let active: [u8; 1] = if active { [1] } else { [0] };
-
-            comm = comm.fixed_size_field("active", &active);
+            comm = comm.fixed_size_field("active", &[u8::from(active)]);
         }
 
         if let Some(keys) = &self.signature_keys {
