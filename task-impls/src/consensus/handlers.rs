@@ -305,7 +305,6 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
 
     validate_proposal_view_and_certs(
         proposal,
-        &sender,
         task_state.cur_view,
         &task_state.quorum_membership,
         &task_state.timeout_membership,
@@ -313,7 +312,6 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
     .context("Failed to validate proposal view and attached certs")?;
 
     let view = proposal.data.view_number();
-    let view_leader_key = task_state.quorum_membership.leader(view);
     let justify_qc = proposal.data.justify_qc.clone();
 
     if !justify_qc.is_valid_cert(task_state.quorum_membership.as_ref()) {
@@ -501,7 +499,6 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
                 OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
                 Arc::clone(&task_state.decided_upgrade_certificate),
                 Arc::clone(&task_state.quorum_membership),
-                view_leader_key,
                 event_stream.clone(),
                 sender,
                 task_state.output_event_stream.clone(),

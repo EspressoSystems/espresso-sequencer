@@ -157,7 +157,7 @@ async fn test_upgrade_task_with_proposal() {
             ),
         ],
         random![
-            QuorumProposalRecv(proposals[0].clone(), leaders[0]),
+            QuorumProposalPreliminarilyValidated(proposals[0].clone()),
             QcFormed(either::Left(proposals[1].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment(&quorum_membership, ViewNumber::new(2)),
@@ -175,7 +175,7 @@ async fn test_upgrade_task_with_proposal() {
         ],
         InputOrder::Random(upgrade_vote_recvs),
         random![
-            QuorumProposalRecv(proposals[1].clone(), leaders[1]),
+            QuorumProposalPreliminarilyValidated(proposals[1].clone()),
             QcFormed(either::Left(proposals[2].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment(&quorum_membership, ViewNumber::new(3)),

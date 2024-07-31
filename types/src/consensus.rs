@@ -577,7 +577,7 @@ impl<TYPES: NodeType> Consensus<TYPES> {
             view.leaf_commitment()
                 .ok_or_else(|| HotShotError::InvalidState {
                     context: format!(
-                        "Visited failed view {start_from:?} leaf. Expected successfuil leaf"
+                        "Visited failed view {start_from:?} leaf. Expected successful leaf"
                     ),
                 })?
         } else {

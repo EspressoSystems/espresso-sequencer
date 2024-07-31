@@ -202,7 +202,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             ),
         ],
         random![
-            QuorumProposalRecv(proposals[0].clone(), leaders[0]),
+            QuorumProposalPreliminarilyValidated(proposals[0].clone()),
             QcFormed(either::Left(proposals[1].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment(&quorum_membership, ViewNumber::new(2)),
@@ -219,7 +219,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             ),
         ],
         random![
-            QuorumProposalRecv(proposals[1].clone(), leaders[1]),
+            QuorumProposalPreliminarilyValidated(proposals[1].clone()),
             QcFormed(either::Left(proposals[2].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment(&quorum_membership, ViewNumber::new(3)),
@@ -236,7 +236,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             ),
         ],
         random![
-            QuorumProposalRecv(proposals[2].clone(), leaders[2]),
+            QuorumProposalPreliminarilyValidated(proposals[2].clone()),
             QcFormed(either::Left(proposals[3].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment(&quorum_membership, ViewNumber::new(4)),
@@ -253,7 +253,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
             ),
         ],
         random![
-            QuorumProposalRecv(proposals[3].clone(), leaders[3]),
+            QuorumProposalPreliminarilyValidated(proposals[3].clone()),
             QcFormed(either::Left(proposals[4].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment(&quorum_membership, ViewNumber::new(5)),
@@ -557,7 +557,7 @@ async fn test_quorum_proposal_task_liveness_check() {
             ),
         ],
         random![
-            QuorumProposalRecv(proposals[0].clone(), leaders[0]),
+            QuorumProposalPreliminarilyValidated(proposals[0].clone()),
             QcFormed(either::Left(proposals[1].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment(&quorum_membership, ViewNumber::new(2)),
@@ -574,7 +574,7 @@ async fn test_quorum_proposal_task_liveness_check() {
             ),
         ],
         random![
-            QuorumProposalRecv(proposals[1].clone(), leaders[1]),
+            QuorumProposalPreliminarilyValidated(proposals[1].clone()),
             QcFormed(either::Left(proposals[2].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment(&quorum_membership, ViewNumber::new(3)),
@@ -591,7 +591,7 @@ async fn test_quorum_proposal_task_liveness_check() {
             ),
         ],
         random![
-            QuorumProposalRecv(proposals[2].clone(), leaders[2]),
+            QuorumProposalPreliminarilyValidated(proposals[2].clone()),
             QcFormed(either::Left(proposals[3].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment(&quorum_membership, ViewNumber::new(4)),
@@ -608,7 +608,7 @@ async fn test_quorum_proposal_task_liveness_check() {
             ),
         ],
         random![
-            QuorumProposalRecv(proposals[3].clone(), leaders[3]),
+            QuorumProposalPreliminarilyValidated(proposals[3].clone()),
             QcFormed(either::Left(proposals[4].data.justify_qc.clone())),
             SendPayloadCommitmentAndMetadata(
                 build_payload_commitment(&quorum_membership, ViewNumber::new(5)),

@@ -139,7 +139,6 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
 
     validate_proposal_view_and_certs(
         proposal,
-        &sender,
         task_state.cur_view,
         &task_state.quorum_membership,
         &task_state.timeout_membership,
@@ -147,7 +146,6 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
     .context("Failed to validate proposal view or attached certs")?;
 
     let view_number = proposal.data.view_number();
-    let view_leader_key = task_state.quorum_membership.leader(view_number);
     let justify_qc = proposal.data.justify_qc.clone();
 
     if !justify_qc.is_valid_cert(task_state.quorum_membership.as_ref()) {
@@ -155,6 +153,14 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
         consensus.metrics.invalid_qc.update(1);
         bail!("Invalid justify_qc in proposal for view {}", *view_number);
     }
+
+    broadcast_event(
+        Arc::new(HotShotEvent::QuorumProposalPreliminarilyValidated(
+            proposal.clone(),
+        )),
+        event_sender,
+    )
+    .await;
 
     // Get the parent leaf and state.
     let mut parent_leaf = task_state
@@ -209,7 +215,7 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
     drop(consensus_write);
 
     broadcast_event(
-        HotShotEvent::UpdateHighQc(justify_qc.clone()).into(),
+        HotShotEvent::HighQcUpdated(justify_qc.clone()).into(),
         event_sender,
     )
     .await;
@@ -229,7 +235,6 @@ pub(crate) async fn handle_quorum_proposal_recv<TYPES: NodeType, I: NodeImplemen
         OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
         Arc::clone(&task_state.decided_upgrade_certificate),
         Arc::clone(&task_state.quorum_membership),
-        view_leader_key,
         event_sender.clone(),
         sender,
         task_state.output_event_stream.clone(),

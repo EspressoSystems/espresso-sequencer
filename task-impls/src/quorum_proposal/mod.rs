@@ -133,7 +133,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                         }
                     }
                     ProposalDependency::Proposal => {
-                        if let HotShotEvent::QuorumProposalRecv(proposal, _) = event {
+                        if let HotShotEvent::QuorumProposalPreliminarilyValidated(proposal) = event
+                        {
                             proposal.data.view_number() + 1
                         } else {
                             return false;
@@ -218,7 +219,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
             HotShotEvent::SendPayloadCommitmentAndMetadata(..) => {
                 payload_commitment_dependency.mark_as_completed(Arc::clone(&event));
             }
-            HotShotEvent::QuorumProposalRecv(..) => {
+            HotShotEvent::QuorumProposalPreliminarilyValidated(..) => {
                 proposal_dependency.mark_as_completed(event);
             }
             HotShotEvent::QcFormed(quorum_certificate) => match quorum_certificate {
@@ -430,7 +431,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalTaskState<TYPE
                     event,
                 );
             }
-            HotShotEvent::QuorumProposalRecv(proposal, _) => {
+            HotShotEvent::QuorumProposalPreliminarilyValidated(proposal) => {
                 let view_number = proposal.data.view_number();
 
                 // All nodes get the latest proposed view as a proxy of `cur_view` of olde.
