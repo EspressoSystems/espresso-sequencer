@@ -116,6 +116,9 @@
 <a href="#116" id="116">116</a>
 <a href="#117" id="117">117</a>
 <a href="#118" id="118">118</a>
+<a href="#119" id="119">119</a>
+<a href="#120" id="120">120</a>
+<a href="#121" id="121">121</a>
 </pre></div><pre class="rust"><code><span class="doccomment">/// Trait implementations for the CDN
 </span><span class="kw">use </span>std::marker::PhantomData;
 
@@ -126,8 +129,11 @@
     def::{ConnectionDef, RunDef, Topic <span class="kw">as </span>TopicTrait},
     discovery::{Embedded, Redis},
 };
-<span class="kw">use </span>hotshot::{traits::implementations::Topic <span class="kw">as </span>HotShotTopic, types::SignatureKey};
-<span class="kw">use </span>hotshot_types::{traits::node_implementation::NodeType, utils::bincode_opts};
+<span class="kw">use </span>hotshot::types::SignatureKey;
+<span class="kw">use </span>hotshot_types::{
+    traits::{network::Topic <span class="kw">as </span>HotShotTopic, node_implementation::NodeType},
+    utils::bincode_opts,
+};
 <span class="kw">use </span>num_enum::{IntoPrimitive, TryFromPrimitive};
 <span class="kw">use </span>static_assertions::const_assert_eq;
 

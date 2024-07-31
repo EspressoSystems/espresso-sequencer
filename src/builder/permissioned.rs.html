@@ -743,6 +743,13 @@
 <a href="#743" id="743">743</a>
 <a href="#744" id="744">744</a>
 <a href="#745" id="745">745</a>
+<a href="#746" id="746">746</a>
+<a href="#747" id="747">747</a>
+<a href="#748" id="748">748</a>
+<a href="#749" id="749">749</a>
+<a href="#750" id="750">750</a>
+<a href="#751" id="751">751</a>
+<a href="#752" id="752">752</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     alloc::System,
     any,
@@ -785,8 +792,8 @@
     traits::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
-            derive_libp2p_peer_id, CdnMetricsValue, CombinedNetworks, KeyPair, Libp2pNetwork,
-            PushCdnNetwork, Topic, WrappedSignatureKey,
+            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, KeyPair,
+            Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
         },
         BlockPayload,
     },
@@ -829,7 +836,7 @@
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
         election::Membership,
         metrics::Metrics,
-        network::ConnectedNetwork,
+        network::{ConnectedNetwork, Topic},
         node_implementation::{ConsensusTime, NodeType},
         EncodeBytes,
     },
@@ -958,7 +965,7 @@
     <span class="comment">// Initialize the push CDN network (and perform the initial connection)
     </span><span class="kw">let </span>cdn_network = PushCdnNetwork::new(
         network_params.cdn_endpoint,
-        <span class="macro">vec!</span>[Topic::Global, Topic::Da],
+        <span class="macro">vec!</span>[CdnTopic::Global, CdnTopic::Da],
         KeyPair {
             public_key: WrappedSignatureKey(my_config.public_key),
             private_key: my_config.private_key.clone(),
@@ -1098,12 +1105,19 @@
 
     <span class="kw">let </span>quorum_membership = GeneralStaticCommittee::create_election(
         combined_known_nodes_with_stake.clone(),
+        combined_known_nodes_with_stake.clone(),
+        Topic::Global,
+        <span class="number">0</span>,
+    );
+    <span class="kw">let </span>da_membership = GeneralStaticCommittee::create_election(
+        combined_known_nodes_with_stake.clone(),
         combined_known_nodes_with_stake,
+        Topic::Da,
         <span class="number">0</span>,
     );
     <span class="kw">let </span>memberships = Memberships {
         quorum_membership: quorum_membership.clone(),
-        da_membership: quorum_membership.clone(),
+        da_membership: da_membership.clone(),
         vid_membership: quorum_membership.clone(),
         view_sync_membership: quorum_membership,
     };

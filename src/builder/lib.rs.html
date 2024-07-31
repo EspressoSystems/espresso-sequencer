@@ -762,6 +762,8 @@
 <a href="#762" id="762">762</a>
 <a href="#763" id="763">763</a>
 <a href="#764" id="764">764</a>
+<a href="#765" id="765">765</a>
+<a href="#766" id="766">766</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
 </span><span class="kw">use </span>std::{
     alloc::System,
@@ -919,6 +921,7 @@
         traits::{
             block_contents::{vid_commitment, BlockHeader, GENESIS_VID_NUM_STORAGE_NODES},
             metrics::NoMetrics,
+            network::Topic,
             node_implementation::ConsensusTime,
             signature_key::BuilderSignatureKey <span class="kw">as _</span>,
         },
@@ -1157,8 +1160,9 @@
             }
 
             <span class="kw">let </span>network = Arc::new(MemoryNetwork::new(
-                config.my_own_validator_config.public_key,
+                <span class="kw-2">&amp;</span>config.my_own_validator_config.public_key,
                 <span class="kw-2">&amp;</span><span class="self">self</span>.master_map,
+                <span class="kw-2">&amp;</span>[Topic::Global, Topic::Da],
                 <span class="prelude-val">None</span>,
             ));
 

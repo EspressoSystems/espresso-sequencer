@@ -875,6 +875,14 @@
 <a href="#875" id="875">875</a>
 <a href="#876" id="876">876</a>
 <a href="#877" id="877">877</a>
+<a href="#878" id="878">878</a>
+<a href="#879" id="879">879</a>
+<a href="#880" id="880">880</a>
+<a href="#881" id="881">881</a>
+<a href="#882" id="882">882</a>
+<a href="#883" id="883">883</a>
+<a href="#884" id="884">884</a>
+<a href="#885" id="885">885</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
@@ -915,7 +923,7 @@
 </span><span class="kw">use </span>hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
 <span class="kw">use </span>hotshot::{
     traits::implementations::{
-        derive_libp2p_peer_id, CdnMetricsValue, KeyPair, MemoryNetwork, PushCdnNetwork, Topic,
+        derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, KeyPair, MemoryNetwork, PushCdnNetwork,
         WrappedSignatureKey,
     },
     types::SignatureKey,
@@ -930,7 +938,7 @@
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
         metrics::Metrics,
-        network::ConnectedNetwork,
+        network::{ConnectedNetwork, Topic},
         node_implementation::{NodeImplementation, NodeType},
         signature_key::{BuilderSignatureKey, StakeTableEntryType},
     },
@@ -1126,9 +1134,9 @@
 
     <span class="comment">// If we are a DA node, we need to subscribe to the DA topic
     </span><span class="kw">let </span>topics = {
-        <span class="kw">let </span><span class="kw-2">mut </span>topics = <span class="macro">vec!</span>[Topic::Global];
+        <span class="kw">let </span><span class="kw-2">mut </span>topics = <span class="macro">vec!</span>[CdnTopic::Global];
         <span class="kw">if </span>is_da {
-            topics.push(Topic::Da);
+            topics.push(CdnTopic::Da);
         }
         topics
     };
@@ -1523,17 +1531,25 @@
         ) -&gt; SequencerContext&lt;network::Memory, P::Persistence, Ver&gt; {
             <span class="kw">let </span><span class="kw-2">mut </span>config = <span class="self">self</span>.config.clone();
             <span class="kw">let </span>my_peer_config = <span class="kw-2">&amp;</span>config.known_nodes_with_stake[i];
+            <span class="kw">let </span>is_da = config.known_da_nodes.contains(my_peer_config);
             config.my_own_validator_config = ValidatorConfig {
                 public_key: my_peer_config.stake_table_entry.stake_key,
                 private_key: <span class="self">self</span>.priv_keys[i].clone(),
                 stake_value: my_peer_config.stake_table_entry.stake_amount.as_u64(),
                 state_key_pair: <span class="self">self</span>.state_key_pairs[i].clone(),
-                is_da: config.known_da_nodes.contains(my_peer_config),
+                is_da,
+            };
+
+            <span class="kw">let </span>topics = <span class="kw">if </span>is_da {
+                <span class="macro">vec!</span>[Topic::Global, Topic::Da]
+            } <span class="kw">else </span>{
+                <span class="macro">vec!</span>[Topic::Global]
             };
 
             <span class="kw">let </span>network = Arc::new(MemoryNetwork::new(
-                config.my_own_validator_config.public_key,
+                <span class="kw-2">&amp;</span>config.my_own_validator_config.public_key,
                 <span class="kw-2">&amp;</span><span class="self">self</span>.master_map,
+                <span class="kw-2">&amp;</span>topics,
                 <span class="prelude-val">None</span>,
             ));
 

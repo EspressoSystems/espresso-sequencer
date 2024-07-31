@@ -375,6 +375,12 @@
 <a href="#375" id="375">375</a>
 <a href="#376" id="376">376</a>
 <a href="#377" id="377">377</a>
+<a href="#378" id="378">378</a>
+<a href="#379" id="379">379</a>
+<a href="#380" id="380">380</a>
+<a href="#381" id="381">381</a>
+<a href="#382" id="382">382</a>
+<a href="#383" id="383">383</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::Display;
 
 <span class="kw">use </span>anyhow::Context;
@@ -402,7 +408,11 @@
 <span class="kw">use </span>hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
-    traits::{election::Membership, metrics::Metrics, network::ConnectedNetwork},
+    traits::{
+        election::Membership,
+        metrics::Metrics,
+        network::{ConnectedNetwork, Topic},
+    },
 };
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
@@ -475,12 +485,14 @@
         <span class="kw">let </span>committee_membership = GeneralStaticCommittee::create_election(
             config.known_nodes_with_stake.clone(),
             config.known_nodes_with_stake.clone(),
+            Topic::Global,
             <span class="number">0</span>,
         );
 
         <span class="kw">let </span>da_membership = GeneralStaticCommittee::create_election(
             config.known_nodes_with_stake.clone(),
             config.known_da_nodes.clone(),
+            Topic::Da,
             <span class="number">0</span>,
         );
 
