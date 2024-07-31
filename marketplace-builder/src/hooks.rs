@@ -20,12 +20,13 @@ use surf_disco::Client;
 
 use tide_disco::Url;
 use tracing::error;
+use tracing::info;
 
 pub async fn connect_to_solver(
     solver_api_url: Url,
 ) -> Option<Client<hotshot_events_service::events::Error, <SeqTypes as NodeType>::Base>> {
     let client = Client::<hotshot_events_service::events::Error, <SeqTypes as NodeType>::Base>::new(
-        solver_api_url,
+        solver_api_url.join("v0/marketplace-solver/").unwrap(),
     );
 
     if !(client.connect(None).await) {
@@ -96,6 +97,8 @@ impl BuilderHooks<SeqTypes> for EspressoHooks {
             {
                 error!("Failed to submit the bid: {:?}.", e);
             }
+
+            info!("Submitted bid for view {}", *view_number);
         }
     }
 }
