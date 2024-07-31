@@ -9,8 +9,6 @@ impl Committable for RollupRegistrationBody {
     }
 
     fn commit(&self) -> Commitment<Self> {
-        // todo (ab): expose to_fixed_bytes() method of fee amount
-
         let active: [u8; 1] = if self.active { [1] } else { [0] };
 
         let mut comm = committable::RawCommitmentBuilder::new(&Self::tag())
@@ -38,8 +36,6 @@ impl Committable for RollupUpdatebody {
     }
 
     fn commit(&self) -> Commitment<Self> {
-        // todo (ab): expose to_fixed_bytes() method of fee amount
-
         let mut comm = committable::RawCommitmentBuilder::new(&Self::tag())
             .u64_field("namespace_id", u64::from(self.namespace_id));
 
