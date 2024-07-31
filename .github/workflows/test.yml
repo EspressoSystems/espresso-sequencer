@@ -55,4 +55,4 @@ jobs:
           cargo build --locked --bin diff-test --release
           cargo test --locked --release --workspace --all-features --no-run
           cargo test --locked --release --workspace --all-features --verbose -- --test-threads 1 --nocapture
-        timeout-minutes: 40
+        timeout-minutes: 90

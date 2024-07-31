@@ -7,7 +7,8 @@ use async_std::{
 };
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
+    v0::traits::{EventConsumer as PersistenceEventConsumer, SequencerPersistence},
+    NodeState, PubKey, Transaction, ValidatedState,
 };
 use futures::{
     future::{join_all, Future},
@@ -35,6 +36,7 @@ use url::Url;
 use vbs::version::StaticVersionType;
 
 use crate::{state_signature::StateSigner, static_stake_table_commitment, Node, SeqTypes};
+
 /// The consensus handle
 pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>>;
 
@@ -83,11 +85,12 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
         stake_table_capacity: u64,
+        event_consumer: impl PersistenceEventConsumer + 'static,
         _: Ver,
     ) -> anyhow::Result<Self> {
         let config = &network_config.config;
         let pub_key = config.my_own_validator_config.public_key;
-        tracing::info!(%pub_key, "initializing consensus");
+        tracing::info!(%pub_key, is_da = config.my_own_validator_config.is_da, "initializing consensus");
 
         // Stick our node ID in `metrics` so it is easily accessible via the status API.
         metrics
@@ -95,7 +98,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             .set(instance_state.node_id as usize);
 
         // Load saved consensus state from storage.
-        let initializer = persistence
+        let (initializer, anchor_view) = persistence
             .load_consensus_state(instance_state.clone())
             .await?;
 
@@ -162,10 +165,13 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             event_streamer,
             instance_state,
             network_config,
+            event_consumer,
+            anchor_view,
         ))
     }
 
     /// Constructor
+    #[allow(clippy::too_many_arguments)]
     fn new(
         handle: Consensus<N, P>,
         persistence: Arc<RwLock<P>>,
@@ -173,9 +179,12 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
         node_state: NodeState,
         config: NetworkConfig<PubKey>,
+        event_consumer: impl PersistenceEventConsumer + 'static,
+        anchor_view: Option<ViewNumber>,
     ) -> Self {
         let events = handle.event_stream();
 
+        let node_id = node_state.node_id;
         let mut ctx = Self {
             handle: Arc::new(RwLock::new(handle)),
             state_signer: Arc::new(state_signer),
@@ -189,10 +198,13 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         ctx.spawn(
             "main event handler",
             handle_events(
+                node_id,
                 events,
                 persistence,
                 ctx.state_signer.clone(),
                 Some(event_streamer.clone()),
+                event_consumer,
+                anchor_view,
             ),
         );
 
@@ -250,6 +262,10 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
 
     pub async fn decided_state(&self) -> Arc<ValidatedState> {
         self.handle.read().await.decided_state().await
+    }
+
+    pub fn node_id(&self) -> u64 {
+        self.node_state.node_id
     }
 
     pub fn node_state(&self) -> NodeState {
@@ -315,18 +331,32 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
 }
 
 async fn handle_events<Ver: StaticVersionType>(
+    node_id: u64,
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
     persistence: Arc<RwLock<impl SequencerPersistence>>,
     state_signer: Arc<StateSigner<Ver>>,
     events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
+    event_consumer: impl PersistenceEventConsumer + 'static,
+    anchor_view: Option<ViewNumber>,
 ) {
+    if let Some(view) = anchor_view {
+        // Process and clean up any leaves that we may have persisted last time we were running but
+        // failed to handle due to a shutdown.
+        let mut p = persistence.write().await;
+        if let Err(err) = p.append_decided_leaves(view, vec![], &event_consumer).await {
+            tracing::warn!(
+                "failed to process decided leaves, chain may not be up to date: {err:#}"
+            );
+        }
+    }
+
     while let Some(event) = events.next().await {
-        tracing::debug!(?event, "consensus event");
+        tracing::debug!(node_id, ?event, "consensus event");
 
         {
             let mut p = persistence.write().await;
             // Store latest consensus state.
-            p.handle_event(&event).await;
+            p.handle_event(&event, &event_consumer).await;
         }
         // Generate state signature.
         state_signer.handle_event(&event).await;

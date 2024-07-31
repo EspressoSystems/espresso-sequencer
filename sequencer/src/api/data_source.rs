@@ -435,12 +435,12 @@ impl PublicNetworkConfig {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod testing {
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
     use super::{super::Options, *};
 
     #[async_trait]
-    pub(crate) trait TestableSequencerDataSource: SequencerDataSource {
+    pub trait TestableSequencerDataSource: SequencerDataSource {
         type Storage: Sync;
 
         async fn create_storage() -> Self::Storage;
