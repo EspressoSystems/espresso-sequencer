@@ -14,9 +14,7 @@ members = [
     "contracts/rust/diff-test",
     "contracts/rust/gen-vk-contract",
     "hotshot-state-prover",
-    "marketplace-builder",
     "marketplace-solver",
-    "node-metrics",
     "sequencer",
     "types",
     "utils",
@@ -33,8 +31,8 @@ ark-ff = "0.4"
 ark-poly = "0.4"
 ark-serialize = "0.4"
 ark-srs = "0.3.1"
-async-compatibility-layer = { version = "1.2.1", default-features = false, features = [
-  "logging-utils",
+async-compatibility-layer = { version = "1.1", default-features = false, features = [
+    "logging-utils",
 ] }
 async-once-cell = "0.5"
 async-std = { version = "1.12.0", features = ["attributes", "tokio1"] }
@@ -42,9 +40,7 @@ async-trait = "0.1"
 base64 = "0.22"
 base64-bytes = "0.1"
 bincode = "1.3.3"
-bitvec = "1.0.1"
 blake3 = "1.5"
-circular-buffer = "0.1.7"
 clap = { version = "4.4", features = ["derive", "env", "string"] }
 cld = "0.5"
 derive_more = "0.99.17"
@@ -52,22 +48,22 @@ dotenvy = "0.15"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.68" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.70" }
 # Hotshot imports
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.68" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.39" }
-marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.0.2" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.38" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.68" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.50" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.68" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.70" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.38" }
+marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", rev = "c1e60e76893557f21e8aea7e86994ebe107b4914" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.37" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.70" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "rc-0.1.51" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.70" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.68" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.68" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.68" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.70" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.70" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.70" }
 hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
 # Temporary, used to pull in the mock auction results provider
-hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.68" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.70" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
@@ -107,6 +103,7 @@ jf-relation = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4
 jf-utils = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
 libp2p = { version = "0.53", default-features = false }
 log-panics = { version = "2.0", features = ["with-backtrace"] }
+snafu = "0.8"
 strum = { version = "0.26", features = ["derive"] }
 surf-disco = "0.9"
 tagged-base64 = "0.4"
@@ -136,4 +133,3 @@ paste = "1.0"
 rand = "0.8.5"
 time = "0.3"
 trait-set = "0.3.0"
-

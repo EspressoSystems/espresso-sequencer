@@ -14,12 +14,14 @@ use anyhow::Context;
 use async_std::sync::RwLock;
 use catchup::StatePeers;
 use context::SequencerContext;
-use espresso_types::{BackoffParams, L1Client, NodeState, PubKey, SeqTypes, ValidatedState};
+use espresso_types::{
+    BackoffParams, L1Client, NodeState, PubKey, SeqTypes, SolverAuctionResultsProvider,
+    ValidatedState,
+};
 use ethers::types::U256;
 #[cfg(feature = "libp2p")]
 use futures::FutureExt;
 use genesis::L1Finalized;
-use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
 use network::libp2p::split_off_peer_id;
@@ -44,6 +46,7 @@ use hotshot::{
         WrappedSignatureKey,
     },
     types::SignatureKey,
+    MarketplaceConfig,
 };
 use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
@@ -92,7 +95,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> NodeImplementation<Se
 {
     type Network = N;
     type Storage = Arc<RwLock<P>>;
-    type AuctionResultsProvider = TestAuctionResultsProvider<SeqTypes>;
+    type AuctionResultsProvider = SolverAuctionResultsProvider;
 }
 
 #[derive(Clone, Debug)]
@@ -133,6 +136,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
     is_da: bool,
     identity: Identity,
+    marketplace_config: MarketplaceConfig,
 ) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
     // Expose git information via status API.
     metrics
@@ -405,6 +409,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         genesis.stake_table.capacity,
         network_params.public_api_url,
         bind_version,
+        marketplace_config,
     )
     .await?;
     if wait_for_orchestrator {
@@ -419,7 +424,7 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use std::{collections::HashMap, time::Duration};
+    use std::{collections::HashMap, str::FromStr, time::Duration};
 
     use committable::Committable;
     use espresso_types::{
@@ -753,6 +758,7 @@ pub mod testing {
                 stake_table_capacity,
                 None, // The public API URL
                 bind_version,
+                Url::from_str("https://some.url").unwrap(),
             )
             .await
             .unwrap()

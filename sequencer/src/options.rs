@@ -104,6 +104,32 @@ pub struct Options {
     #[derivative(Debug(format_with = "Display::fmt"))]
     pub state_relay_server_url: Url,
 
+    /// URL of the Auction Results Solver
+    #[clap(
+        long,
+        env = "ESPRESSO_AUCTION_RESULTS_SOLVER_URL",
+        default_value = "http://localhost:8083"
+    )]
+    #[derivative(Debug(format_with = "Display::fmt"))]
+    pub auction_results_solver_url: Url,
+
+    /// URL of generic builder
+    #[clap(
+        long,
+        env = "ESPRESSO_GENERIC_BUILDER_URL",
+        default_value = "http://localhost:8083"
+    )]
+    #[derivative(Debug(format_with = "Display::fmt"))]
+    pub generic_builder_url: Url,
+
+    /// Full network gas price
+    #[clap(long, env = "FULL_NETSORK_GAS", default_value = "0")]
+    pub full_network_gas: u64,
+
+    /// minimum gas price
+    #[clap(long, env = "MINIMUM_GAS_PRICE", default_value = "0")]
+    pub minimus_gas_price: u64,
+
     /// Path to TOML file containing genesis state.
     #[clap(
         long,

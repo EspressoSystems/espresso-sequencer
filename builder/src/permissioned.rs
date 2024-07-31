@@ -6,6 +6,7 @@ use std::{
     mem,
     net::{IpAddr, Ipv4Addr},
     num::NonZeroUsize,
+    str::FromStr,
     thread::Builder,
     time::Duration,
 };
@@ -25,7 +26,8 @@ use async_std::{
 use espresso_types::{
     eth_signature_key::EthKeyPair,
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
-    FeeAmount, L1Client, NodeState, Payload, PubKey, SeqTypes, ValidatedState,
+    FeeAmount, L1Client, NodeState, Payload, PubKey, SeqTypes, SolverAuctionResultsProvider,
+    ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -384,7 +386,8 @@ pub async fn init_hotshot<
             .unwrap(),
         ConsensusMetricsValue::new(metrics),
         da_storage,
-        TestAuctionResultsProvider::default(),
+        // TODO I think this is ok b/c this provider isn't actually used in this builder.
+        SolverAuctionResultsProvider(Url::from_str("http://some.url").unwrap()),
     )
     .await
     .unwrap()
