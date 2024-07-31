@@ -150,7 +150,7 @@ pub enum ExecutionError {
     #[error("Could not resolve `ChainConfig`")]
     /// Could not resolve `ChainConfig`.
     UnresolvableChainConfig,
-    #[error("Bid ricipient not set on `ChainConfig`")]
+    #[error("Bid recipient not set on `ChainConfig`")]
     /// Bid Recipient is not set on `ChainConfig`
     BidRecipientNotFound,
 }

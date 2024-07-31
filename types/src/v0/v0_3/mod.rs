@@ -19,8 +19,10 @@ mod auction;
 mod chain_config;
 mod fee_info;
 mod header;
+mod solver;
 
 pub use auction::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults};
 pub use chain_config::*;
 pub use fee_info::IterableFeeInfo;
 pub use header::Header;
+pub use solver::*;

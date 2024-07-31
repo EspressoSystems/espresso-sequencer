@@ -8,8 +8,11 @@ use cdn_broker::reexports::{
     def::{ConnectionDef, RunDef, Topic as TopicTrait},
     discovery::{Embedded, Redis},
 };
-use hotshot::{traits::implementations::Topic as HotShotTopic, types::SignatureKey};
-use hotshot_types::{traits::node_implementation::NodeType, utils::bincode_opts};
+use hotshot::types::SignatureKey;
+use hotshot_types::{
+    traits::{network::Topic as HotShotTopic, node_implementation::NodeType},
+    utils::bincode_opts,
+};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use static_assertions::const_assert_eq;
 

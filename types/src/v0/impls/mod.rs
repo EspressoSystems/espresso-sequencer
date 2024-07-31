@@ -7,6 +7,7 @@ mod fee_info;
 mod header;
 mod instance_state;
 mod l1;
+mod solver;
 mod state;
 mod transaction;
 
