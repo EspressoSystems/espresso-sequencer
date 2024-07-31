@@ -11,6 +11,7 @@ testing = ["serde_json", "espresso-types/testing"]
 [dependencies]
 async-compatibility-layer = { workspace = true } 
 async-std = { workspace = true }
+async-trait = { workspace = true }
 bincode = { workspace = true }
 bitvec = { workspace = true }
 circular-buffer = { workspace = true }

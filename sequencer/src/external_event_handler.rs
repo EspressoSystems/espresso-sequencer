@@ -3,15 +3,21 @@
 use anyhow::{Context, Result};
 use async_compatibility_layer::channel::{Receiver, Sender};
 use async_std::task::{self, JoinHandle};
-use espresso_types::PubKey;
-use hotshot::types::BLSPubKey;
-use hotshot_types::traits::network::{BroadcastDelay, ConnectedNetwork, Topic};
+use espresso_types::{PubKey, SeqTypes};
+use hotshot::types::{BLSPubKey, Message, SignatureKey};
+use hotshot_types::{
+    message::{MessageKind, VersionedMessage},
+    traits::{
+        network::{BroadcastDelay, ConnectedNetwork, Topic},
+        node_implementation::NodeType,
+    },
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use url::Url;
 
 /// An external message that can be sent to or received from a node
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ExternalMessage {
     /// A request for a node to respond with its identifier
     /// Contains the public key of the node that is requesting the roll call
@@ -23,7 +29,7 @@ pub enum ExternalMessage {
 }
 
 /// Information about a node that is used in a roll call response
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RollCallInfo {
     // The public API URL of the node
     pub public_api_url: Option<Url>,
@@ -42,6 +48,7 @@ pub struct ExternalEventHandler {
 }
 
 // The different types of outbound messages (broadcast or direct)
+#[derive(Debug)]
 pub enum OutboundMessage {
     Direct(Vec<u8>, PubKey),
     Broadcast(Vec<u8>),
@@ -68,6 +75,21 @@ impl ExternalEventHandler {
             let roll_call_message = ExternalMessage::RollCallResponse(roll_call_info.clone());
             let roll_call_message_bytes = bincode::serialize(&roll_call_message)
                 .with_context(|| "Failed to serialize roll call message for initial broadcast")?;
+
+            let message = Message::<SeqTypes> {
+                sender: <SeqTypes as NodeType>::SignatureKey::generated_from_seed_indexed(
+                    [0; 32], 0,
+                )
+                .0,
+                kind: MessageKind::External(roll_call_message_bytes),
+            };
+
+            let roll_call_message_bytes =
+                <Message<SeqTypes> as VersionedMessage<SeqTypes>>::serialize(&message, &None)
+                    .with_context(|| {
+                        "Failed to serialize roll call message for initial broadcast"
+                    })?;
+
             outbound_message_sender
                 .try_send(OutboundMessage::Broadcast(roll_call_message_bytes))
                 .with_context(|| "External outbound message queue is somehow full")?;
@@ -103,6 +125,18 @@ impl ExternalEventHandler {
                 // Serialize the response
                 let response_bytes = bincode::serialize(&response)
                     .with_context(|| "Failed to serialize roll call response")?;
+
+                let message = Message::<SeqTypes> {
+                    sender: <SeqTypes as NodeType>::SignatureKey::generated_from_seed_indexed(
+                        [0; 32], 0,
+                    )
+                    .0,
+                    kind: MessageKind::<SeqTypes>::External(response_bytes),
+                };
+
+                let response_bytes =
+                    <Message<SeqTypes> as VersionedMessage<SeqTypes>>::serialize(&message, &None)
+                        .with_context(|| "Failed to serialize roll call response")?;
 
                 // Send the response
                 self.outbound_message_sender

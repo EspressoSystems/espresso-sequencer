@@ -84,6 +84,7 @@
 //! consume, and which data can be derived for these purposes.
 //!
 //! What Data Streams do we need to provide to clients?
+//!
 //! 1. Node Information
 //!     a. Node Identity Information
 //!         - Should be able to be sent in an initial batch
