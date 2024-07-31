@@ -38,7 +38,7 @@ pub use genesis::Genesis;
 use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
 use hotshot::{
     traits::implementations::{
-        derive_libp2p_peer_id, CdnMetricsValue, KeyPair, MemoryNetwork, PushCdnNetwork, Topic,
+        derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, KeyPair, MemoryNetwork, PushCdnNetwork,
         WrappedSignatureKey,
     },
     types::SignatureKey,
@@ -53,7 +53,7 @@ use hotshot_types::{
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
         metrics::Metrics,
-        network::ConnectedNetwork,
+        network::{ConnectedNetwork, Topic},
         node_implementation::{NodeImplementation, NodeType},
         signature_key::{BuilderSignatureKey, StakeTableEntryType},
     },
@@ -249,9 +249,9 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     // If we are a DA node, we need to subscribe to the DA topic
     let topics = {
-        let mut topics = vec![Topic::Global];
+        let mut topics = vec![CdnTopic::Global];
         if is_da {
-            topics.push(Topic::Da);
+            topics.push(CdnTopic::Da);
         }
         topics
     };
@@ -646,17 +646,25 @@ pub mod testing {
         ) -> SequencerContext<network::Memory, P::Persistence, Ver> {
             let mut config = self.config.clone();
             let my_peer_config = &config.known_nodes_with_stake[i];
+            let is_da = config.known_da_nodes.contains(my_peer_config);
             config.my_own_validator_config = ValidatorConfig {
                 public_key: my_peer_config.stake_table_entry.stake_key,
                 private_key: self.priv_keys[i].clone(),
                 stake_value: my_peer_config.stake_table_entry.stake_amount.as_u64(),
                 state_key_pair: self.state_key_pairs[i].clone(),
-                is_da: config.known_da_nodes.contains(my_peer_config),
+                is_da,
+            };
+
+            let topics = if is_da {
+                vec![Topic::Global, Topic::Da]
+            } else {
+                vec![Topic::Global]
             };
 
             let network = Arc::new(MemoryNetwork::new(
-                config.my_own_validator_config.public_key,
+                &config.my_own_validator_config.public_key,
                 &self.master_map,
+                &topics,
                 None,
             ));
 
