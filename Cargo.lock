@@ -1303,7 +1303,6 @@ dependencies = [
  "cld",
  "committable",
  "dotenvy",
- "es-version",
  "espresso-types 0.1.0",
  "ethers",
  "futures",
@@ -2020,7 +2019,7 @@ dependencies = [
 [[package]]
 name = "contract-bindings"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main#6d52a7e331a5517d9c19ea459ee18947f6c567cc"
+source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main#ac42ca041b6ab41f12417fa8e3d8cd9f1b7e22b8"
 dependencies = [
  "ethers",
  "serde",
@@ -2928,7 +2927,6 @@ dependencies = [
  "committable",
  "contract-bindings 0.1.0",
  "derive_more",
- "es-version",
  "ethers",
  "fluent-asserter",
  "futures",
@@ -2964,7 +2962,7 @@ dependencies = [
 [[package]]
 name = "espresso-types"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main#6d52a7e331a5517d9c19ea459ee18947f6c567cc"
+source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main#ac42ca041b6ab41f12417fa8e3d8cd9f1b7e22b8"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4226,7 +4224,7 @@ dependencies = [
 [[package]]
 name = "hotshot-contract-adapter"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main#6d52a7e331a5517d9c19ea459ee18947f6c567cc"
+source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main#ac42ca041b6ab41f12417fa8e3d8cd9f1b7e22b8"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -4457,7 +4455,7 @@ dependencies = [
  "cld",
  "contract-bindings 0.1.0",
  "displaydoc",
- "es-version",
+ "espresso-types 0.1.0",
  "ethers",
  "futures",
  "hotshot-contract-adapter 0.1.0",
@@ -8504,7 +8502,6 @@ dependencies = [
  "derivative",
  "derive_more",
  "dotenvy",
- "es-version",
  "escargot",
  "espresso-macros",
  "espresso-types 0.1.0",
@@ -8586,7 +8583,7 @@ dependencies = [
 [[package]]
 name = "sequencer-utils"
 version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main#6d52a7e331a5517d9c19ea459ee18947f6c567cc"
+source = "git+https://github.com/EspressoSystems/espresso-sequencer.git?branch=main#ac42ca041b6ab41f12417fa8e3d8cd9f1b7e22b8"
 dependencies = [
  "anyhow",
  "ark-serialize",
