@@ -40,8 +40,8 @@ use hotshot::{
     traits::{
         election::static_committee::GeneralStaticCommittee,
         implementations::{
-            derive_libp2p_peer_id, CdnMetricsValue, CombinedNetworks, KeyPair, Libp2pNetwork,
-            PushCdnNetwork, Topic, WrappedSignatureKey,
+            derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, CombinedNetworks, KeyPair,
+            Libp2pNetwork, PushCdnNetwork, WrappedSignatureKey,
         },
         BlockPayload,
     },
@@ -84,7 +84,7 @@ use hotshot_types::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
         election::Membership,
         metrics::Metrics,
-        network::ConnectedNetwork,
+        network::{ConnectedNetwork, Topic},
         node_implementation::{ConsensusTime, NodeType},
         EncodeBytes,
     },
@@ -213,7 +213,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
     // Initialize the push CDN network (and perform the initial connection)
     let cdn_network = PushCdnNetwork::new(
         network_params.cdn_endpoint,
-        vec![Topic::Global, Topic::Da],
+        vec![CdnTopic::Global, CdnTopic::Da],
         KeyPair {
             public_key: WrappedSignatureKey(my_config.public_key),
             private_key: my_config.private_key.clone(),
@@ -353,12 +353,19 @@ pub async fn init_hotshot<
 
     let quorum_membership = GeneralStaticCommittee::create_election(
         combined_known_nodes_with_stake.clone(),
+        combined_known_nodes_with_stake.clone(),
+        Topic::Global,
+        0,
+    );
+    let da_membership = GeneralStaticCommittee::create_election(
+        combined_known_nodes_with_stake.clone(),
         combined_known_nodes_with_stake,
+        Topic::Da,
         0,
     );
     let memberships = Memberships {
         quorum_membership: quorum_membership.clone(),
-        da_membership: quorum_membership.clone(),
+        da_membership: da_membership.clone(),
         vid_membership: quorum_membership.clone(),
         view_sync_membership: quorum_membership,
     };
@@ -543,10 +550,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
 mod test {
     use std::time::Duration;
 
-    use async_compatibility_layer::{
-        art::{async_sleep, async_spawn},
-        logging::{setup_backtrace, setup_logging},
-    };
+    use async_compatibility_layer::art::{async_sleep, async_spawn};
     use async_lock::RwLock;
     use async_std::task;
     use es_version::SequencerVersion;
@@ -575,6 +579,7 @@ mod test {
         },
     };
     use sequencer::persistence::no_storage::{self, NoStorage};
+    use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
 
     use super::*;
@@ -588,8 +593,7 @@ mod test {
 
     #[async_std::test]
     async fn test_permissioned_builder() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let ver = SequencerVersion::instance();
 

@@ -4,7 +4,7 @@ use std::{sync::Arc, time::Duration};
 use anyhow::{bail, ensure, Context};
 use async_std::{stream::StreamExt, sync::RwLock};
 use espresso_types::{
-    BlockMerkleTree, ChainConfig, Delta, FeeAccount, FeeMerkleTree, ValidatedState,
+    v0_3::ChainConfig, BlockMerkleTree, Delta, FeeAccount, FeeMerkleTree, ValidatedState,
 };
 use futures::future::Future;
 use hotshot::traits::ValidatedState as HotShotState;
@@ -289,10 +289,9 @@ impl<T> SequencerStateDataSource for T where
 
 #[cfg(test)]
 mod test {
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use espresso_types::{
-        validate_proposal, BlockSize, FeeAccount, FeeAccountProof, FeeAmount, FeeError, FeeInfo,
-        FeeMerkleProof, Leaf, ProposalValidationError,
+        v0_3::IterableFeeInfo, validate_proposal, BlockSize, FeeAccount, FeeAccountProof,
+        FeeAmount, FeeError, FeeInfo, FeeMerkleProof, Leaf, ProposalValidationError,
     };
     use ethers::{abi::Address, types::U256};
     use hotshot_types::{
@@ -301,14 +300,13 @@ mod test {
     };
     use jf_merkle_tree::{ForgetableMerkleTreeScheme, MerkleTreeError};
     use jf_vid::VidScheme;
-    use sequencer_utils::ser::FromStringOrInteger;
+    use sequencer_utils::{ser::FromStringOrInteger, test_utils::setup_test};
 
     use super::*;
 
     #[test]
     fn test_fee_proofs() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let mut tree = ValidatedState::default().fee_merkle_tree;
         let account1 = Address::random();
@@ -346,8 +344,7 @@ mod test {
 
     #[async_std::test]
     async fn test_validation_max_block_size() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         const MAX_BLOCK_SIZE: usize = 10;
         let payload = [0; 2 * MAX_BLOCK_SIZE];
@@ -381,8 +378,7 @@ mod test {
 
     #[async_std::test]
     async fn test_validation_base_fee() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let max_block_size = 10;
         let payload = [0; 1];
@@ -406,7 +402,7 @@ mod test {
             ProposalValidationError::InsufficientFee {
                 max_block_size: instance.chain_config.max_block_size,
                 base_fee: instance.chain_config.base_fee,
-                proposed_fee: header.fee_info().amount()
+                proposed_fee: header.fee_info().amount().unwrap()
             },
             err
         );
@@ -414,8 +410,7 @@ mod test {
 
     #[test]
     fn test_charge_fee() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let src = FeeAccount::generated_from_seed_indexed([0; 32], 0).0;
         let dst = FeeAccount::generated_from_seed_indexed([0; 32], 1).0;

@@ -266,12 +266,12 @@ where
         .latest_blocks()
         .map(|block| BlockDetail {
             hash: block.hash,
-            proposer_id: block.proposer_id,
+            proposer_id: block.proposer_id.clone(),
             height: block.height,
             size: block.size,
             time: block.time,
             num_transactions: block.num_transactions,
-            fee_recipient: block.fee_recipient,
+            fee_recipient: block.fee_recipient.clone(),
             block_reward: block.block_reward.clone(),
         })
         .collect::<Vec<BlockDetail<SeqTypes>>>();
@@ -685,12 +685,12 @@ where
 pub fn clone_block_detail(input: &BlockDetail<SeqTypes>) -> BlockDetail<SeqTypes> {
     BlockDetail {
         hash: input.hash,
-        proposer_id: input.proposer_id,
+        proposer_id: input.proposer_id.clone(),
         height: input.height,
         size: input.size,
         time: input.time,
         num_transactions: input.num_transactions,
-        fee_recipient: input.fee_recipient,
+        fee_recipient: input.fee_recipient.clone(),
         block_reward: input.block_reward.clone(),
     }
 }

@@ -6,7 +6,8 @@ use async_trait::async_trait;
 use committable::Commitment;
 use espresso_types::{
     v0::traits::{PersistenceOptions, StateCatchup},
-    AccountQueryData, BackoffParams, BlockMerkleTree, ChainConfig, FeeAccount, FeeMerkleCommitment,
+    v0_3::ChainConfig,
+    AccountQueryData, BackoffParams, BlockMerkleTree, FeeAccount, FeeMerkleCommitment,
 };
 use futures::future::FutureExt;
 use hotshot_orchestrator::config::NetworkConfig;

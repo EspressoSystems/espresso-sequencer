@@ -5,7 +5,7 @@ use futures::{channel::mpsc::SendError, Sink, SinkExt};
 use hotshot::{traits::implementations::PushCdnNetwork, types::Message};
 use hotshot_types::{
     message::{MessageKind, VersionedMessage},
-    traits::network::{BroadcastDelay, ConnectedNetwork},
+    traits::network::{BroadcastDelay, ConnectedNetwork, Topic},
 };
 use url::Url;
 
@@ -168,7 +168,7 @@ impl BroadcastRollCallTask {
         let broadcast_result = network
             .broadcast_message(
                 hotshot_message_serialized,
-                Default::default(),
+                Topic::Global,
                 BroadcastDelay::None,
             )
             .await;

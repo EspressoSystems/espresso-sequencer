@@ -30,7 +30,6 @@ contract UpgradeBoxScript is Script {
         DemoBoxV1 proxy = DemoBoxV1(proxyAddress); //make the function call on the previous
             // implementation
         vm.prank(admin);
-
         proxy.upgradeToAndCall(newBox, ""); //proxy address now points to the new implementation
         return address(proxy);
     }

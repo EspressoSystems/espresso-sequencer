@@ -538,7 +538,8 @@ mod tests {
     };
     use async_std::{prelude::FutureExt, sync::RwLock};
     use espresso_types::{
-        BlockMerkleTree, ChainConfig, FeeAccount, FeeMerkleTree, Leaf, NodeState, ValidatedState,
+        v0_3::ChainConfig, BlockMerkleTree, FeeAccount, FeeMerkleTree, Leaf, NodeState,
+        ValidatedState,
     };
     use futures::{channel::mpsc, SinkExt, StreamExt};
     use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};

@@ -12,9 +12,10 @@ use jf_vid::VidScheme;
 use sha2::Digest;
 
 use crate::{
-    ChainConfig, Index, Iter, NamespaceId, NodeState, NsIndex, NsPayload, NsPayloadBuilder,
-    NsPayloadRange, NsTable, NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction,
-    TxProof, ValidatedState,
+    v0::impls::{NodeState, ValidatedState},
+    v0_1::ChainConfig,
+    Index, Iter, NamespaceId, NsIndex, NsPayload, NsPayloadBuilder, NsPayloadRange, NsTable,
+    NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction, TxProof,
 };
 
 impl Payload {
@@ -68,13 +69,23 @@ impl Payload {
         // add each tx to its namespace
         let mut ns_builders = BTreeMap::<NamespaceId, NsPayloadBuilder>::new();
         for tx in transactions.into_iter() {
-            // accounting for block byte length limit
-            block_byte_len += tx.payload().len() + NsPayloadBuilder::tx_table_entry_byte_len();
+            let mut tx_size = tx.payload().len() + NsPayloadBuilder::tx_table_entry_byte_len();
             if !ns_builders.contains_key(&tx.namespace()) {
                 // each new namespace adds overhead
-                block_byte_len +=
+                tx_size +=
                     NsTableBuilder::entry_byte_len() + NsPayloadBuilder::tx_table_header_byte_len();
             }
+
+            if tx_size > max_block_byte_len {
+                // skip this transaction since it excceds the block size limit
+                tracing::warn!(
+                    "skip the transaction to fit in maximum block byte length {max_block_byte_len}, transaction size {tx_size}"
+                );
+                continue;
+            }
+
+            // accounting for block byte length limit
+            block_byte_len += tx_size;
             if block_byte_len > max_block_byte_len {
                 tracing::warn!("transactions truncated to fit in maximum block byte length {max_block_byte_len}");
                 break;
@@ -136,7 +147,11 @@ impl BlockPayload<SeqTypes> for Payload {
             }
         };
 
-        Self::from_transactions_sync(transactions, chain_config, instance_state)
+        Self::from_transactions_sync(
+            transactions,
+            ChainConfig::from(chain_config),
+            instance_state,
+        )
     }
 
     // TODO avoid cloning the entire payload here?

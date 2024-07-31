@@ -517,7 +517,6 @@ mod test {
 
     use anyhow::Result;
     use ark_ed_on_bn254::EdwardsConfig;
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::{
         abi::AbiEncode,
         utils::{Anvil, AnvilInstance},
@@ -526,7 +525,7 @@ mod test {
     use hotshot_types::light_client::StateSignKey;
     use jf_signature::{schnorr::SchnorrSignatureScheme, SignatureScheme};
     use jf_utils::test_rng;
-    use sequencer_utils::deployer;
+    use sequencer_utils::{deployer, test_utils::setup_test};
 
     use super::*;
     use crate::mock_ledger::{MockLedger, MockSystemParam};
@@ -681,8 +680,7 @@ mod test {
 
     #[async_std::test]
     async fn test_read_contract_state() -> Result<()> {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
         let anvil = Anvil::new().spawn();
         let dummy_genesis = ParsedLightClientState::dummy_genesis();
         let (_wallet, contract) = deploy_contract_for_test(&anvil, dummy_genesis.clone()).await?;
@@ -702,8 +700,7 @@ mod test {
     // This test is temporarily ignored. We are unifying the contract deployment in #1071.
     #[async_std::test]
     async fn test_submit_state_and_proof() -> Result<()> {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let (genesis, _qc_keys, state_keys, st) = init_ledger_for_test();
 

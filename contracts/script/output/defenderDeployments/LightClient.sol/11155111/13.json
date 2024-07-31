@@ -1,0 +1,8 @@
+{
+  "multisig": "0xc56fA6505d10bF322e01327e22479DE78C3Bf1cE",
+  "newContractName": "LightClient.sol",
+  "proposalId": "8d347333-7e10-417e-96fd-a2b785115c58",
+  "proxyAddress": "0xbC781a2BCcdac8F65EF10EA85D765CA240D1789b",
+  "responseUrl": "https://app.safe.global/transactions/tx?safe=sep:0xc56fA6505d10bF322e01327e22479DE78C3Bf1cE&id=0xad6fe9ec8b6275b81e3a894fb87408fb77e9ad0020e40506aa189024fe28fae8",
+  "salt": 13
+}

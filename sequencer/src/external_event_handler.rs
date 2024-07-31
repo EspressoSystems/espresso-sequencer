@@ -1,14 +1,13 @@
 //! Should probably rename this to "external" or something
 
-use std::{collections::BTreeSet, sync::Arc};
-
 use anyhow::{Context, Result};
 use async_compatibility_layer::channel::{Receiver, Sender};
 use async_std::task::{self, JoinHandle};
 use espresso_types::PubKey;
 use hotshot::types::BLSPubKey;
-use hotshot_types::traits::network::{BroadcastDelay, ConnectedNetwork};
+use hotshot_types::traits::network::{BroadcastDelay, ConnectedNetwork, Topic};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use url::Url;
 
 /// An external message that can be sent to or received from a node
@@ -136,7 +135,7 @@ impl ExternalEventHandler {
                 OutboundMessage::Broadcast(message) => {
                     // Broadcast the message to the global topic
                     if let Err(err) = network
-                        .broadcast_message(message, BTreeSet::new(), BroadcastDelay::None)
+                        .broadcast_message(message, Topic::Global, BroadcastDelay::None)
                         .await
                     {
                         tracing::error!("Failed to broadcast message: {:?}", err);

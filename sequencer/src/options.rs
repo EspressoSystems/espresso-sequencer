@@ -1,4 +1,5 @@
 use core::fmt::Display;
+use sequencer_utils::logging;
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
@@ -206,6 +207,9 @@ pub struct Options {
     /// Exponential backoff for fetching missing state from peers.
     #[clap(flatten)]
     pub catchup_backoff: BackoffParams,
+
+    #[clap(flatten)]
+    pub logging: logging::Config,
 }
 
 impl Options {

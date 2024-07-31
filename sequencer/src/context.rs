@@ -25,7 +25,11 @@ use hotshot_query_service::Leaf;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
-    traits::{election::Membership, metrics::Metrics, network::ConnectedNetwork},
+    traits::{
+        election::Membership,
+        metrics::Metrics,
+        network::{ConnectedNetwork, Topic},
+    },
 };
 use url::Url;
 use vbs::version::StaticVersionType;
@@ -103,12 +107,14 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         let committee_membership = GeneralStaticCommittee::create_election(
             config.known_nodes_with_stake.clone(),
             config.known_nodes_with_stake.clone(),
+            Topic::Global,
             0,
         );
 
         let da_membership = GeneralStaticCommittee::create_election(
             config.known_nodes_with_stake.clone(),
             config.known_da_nodes.clone(),
+            Topic::Da,
             0,
         );
 

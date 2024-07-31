@@ -69,7 +69,6 @@ reexport_unchanged_types!(
     BlockMerkleCommitment,
     BlockMerkleTree,
     BuilderSignature,
-    ChainConfig,
     ChainId,
     Delta,
     FeeAccount,
@@ -85,7 +84,6 @@ reexport_unchanged_types!(
     L1Client,
     L1Snapshot,
     NamespaceId,
-    NodeState,
     NsIndex,
     NsIter,
     NsPayload,
@@ -103,7 +101,6 @@ reexport_unchanged_types!(
     NumTxsUnchecked,
     Payload,
     PayloadByteLen,
-    ResolvableChainConfig,
     Transaction,
     TxIndex,
     TxIter,
@@ -117,7 +114,6 @@ reexport_unchanged_types!(
     UpgradeMode,
     TimeBasedUpgrade,
     ViewBasedUpgrade,
-    ValidatedState,
     BlockSize,
 );
 
@@ -151,6 +147,7 @@ pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey>;
 
+pub use self::impls::{NodeState, ValidatedState};
 pub use crate::v0_1::{
     BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
     NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
