@@ -553,7 +553,7 @@ mod test {
     use async_compatibility_layer::art::{async_sleep, async_spawn};
     use async_lock::RwLock;
     use async_std::task;
-    use es_version::SequencerVersion;
+
     use espresso_types::{FeeAccount, NamespaceId, Transaction};
     use hotshot_builder_api::v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
@@ -581,6 +581,7 @@ mod test {
     use sequencer::persistence::no_storage::{self, NoStorage};
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
+    use vbs::version::StaticVersion;
 
     use super::*;
     use crate::{
@@ -595,7 +596,7 @@ mod test {
     async fn test_permissioned_builder() {
         setup_test();
 
-        let ver = SequencerVersion::instance();
+        let ver = StaticVersion::<0, 1>::instance();
 
         // Hotshot Test Config
         let hotshot_config = HotShotTestConfig::default();
@@ -629,10 +630,10 @@ mod test {
         let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
-        let builder_client = Client::<
-            hotshot_builder_api::v0_1::builder::Error,
-            <SeqTypes as NodeType>::Base,
-        >::new(hotshot_builder_api_url.clone());
+        let builder_client =
+            Client::<hotshot_builder_api::v0_1::builder::Error, StaticVersion<0, 1>>::new(
+                hotshot_builder_api_url.clone(),
+            );
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
 
         let seed = [207_u8; 32];

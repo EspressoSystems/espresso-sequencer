@@ -2,9 +2,10 @@ use std::{io, time::Duration};
 
 use async_std::task::spawn;
 use clap::Parser;
-use es_version::SEQUENCER_VERSION;
+use espresso_types::SeqTypes;
 use ethers::prelude::*;
 use futures::FutureExt;
+use hotshot_types::traits::node_implementation::NodeType;
 use sequencer::{
     hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
     options::parse_duration,
@@ -68,7 +69,12 @@ async fn main() {
     opt.logging.init();
 
     if let Some(port) = opt.port {
-        start_http_server(port, opt.hotshot_address, SEQUENCER_VERSION).unwrap();
+        start_http_server(
+            port,
+            opt.hotshot_address,
+            <SeqTypes as NodeType>::Base::instance(),
+        )
+        .unwrap();
     }
 
     let hotshot_contract_options = CommitmentTaskOptions {
@@ -82,7 +88,7 @@ async fn main() {
         query_service_url: Some(opt.sequencer_url),
     };
     tracing::info!("Launching HotShot commitment task..");
-    run_hotshot_commitment_task::<es_version::SequencerVersion>(&hotshot_contract_options).await;
+    run_hotshot_commitment_task::<<SeqTypes as NodeType>::Base>(&hotshot_contract_options).await;
 }
 
 fn start_http_server<Ver: StaticVersionType + 'static>(
@@ -111,10 +117,12 @@ fn start_http_server<Ver: StaticVersionType + 'static>(
 
 #[cfg(test)]
 mod test {
-    use es_version::{SequencerVersion, SEQUENCER_VERSION};
+    use espresso_types::SeqTypes;
+    use hotshot_types::traits::node_implementation::NodeType;
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
+    use vbs::version::StaticVersionType;
 
     use super::{start_http_server, Address, ServerError};
 
@@ -126,10 +134,14 @@ mod test {
         let expected_addr = "0xED15E1FE0789c524398137a066ceb2EF9884E5D8"
             .parse::<Address>()
             .unwrap();
-        start_http_server(port, expected_addr, SEQUENCER_VERSION)
-            .expect("Failed to start the server");
+        start_http_server(
+            port,
+            expected_addr,
+            <SeqTypes as NodeType>::Base::instance(),
+        )
+        .expect("Failed to start the server");
 
-        let client: Client<ServerError, SequencerVersion> =
+        let client: Client<ServerError, <SeqTypes as NodeType>::Base> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 

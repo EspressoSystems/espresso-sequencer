@@ -1429,7 +1429,7 @@ mod test_headers {
         *parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
         let mut proposal = parent_header.clone();
 
-        let ver = StaticVersion::<1, 0>::version();
+        let ver = StaticVersion::<0, 1>::version();
 
         // Pass a different chain config to trigger a chain config validation error.
         let state = validated_state
@@ -1508,8 +1508,9 @@ mod test_headers {
         setup_test();
 
         let anvil = Anvil::new().block_time(1u32).spawn();
-        let mut genesis_state =
-            NodeState::mock().with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1));
+        let mut genesis_state = NodeState::mock()
+            .with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1))
+            .with_current_version(StaticVersion::<0, 1>::version());
 
         let genesis = GenesisForTest::default().await;
         let vid_common = vid_scheme(1).disperse([]).unwrap().common;
@@ -1564,7 +1565,7 @@ mod test_headers {
             ns_table,
             builder_fee,
             vid_common.clone(),
-            <SeqTypes as NodeType>::Base::version(),
+            StaticVersion::<0, 1>::version(),
         )
         .await
         .unwrap();
@@ -1586,7 +1587,7 @@ mod test_headers {
                 &genesis_state,
                 &parent_leaf,
                 &proposal,
-                StaticVersion::<1, 0>::version(),
+                StaticVersion::<0, 1>::version(),
             )
             .await
             .unwrap()
