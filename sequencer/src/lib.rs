@@ -38,7 +38,7 @@ pub use genesis::Genesis;
 use hotshot::traits::implementations::{CombinedNetworks, Libp2pNetwork};
 use hotshot::{
     traits::implementations::{
-        derive_libp2p_peer_id, CdnMetricsValue, KeyPair, MemoryNetwork, PushCdnNetwork, Topic,
+        derive_libp2p_peer_id, CdnMetricsValue, CdnTopic, KeyPair, MemoryNetwork, PushCdnNetwork,
         WrappedSignatureKey,
     },
     types::SignatureKey,
@@ -53,7 +53,7 @@ use hotshot_types::{
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
         metrics::Metrics,
-        network::ConnectedNetwork,
+        network::{ConnectedNetwork, Topic},
         node_implementation::{NodeImplementation, NodeType},
         signature_key::{BuilderSignatureKey, StakeTableEntryType},
     },
@@ -249,9 +249,9 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     // If we are a DA node, we need to subscribe to the DA topic
     let topics = {
-        let mut topics = vec![Topic::Global];
+        let mut topics = vec![CdnTopic::Global];
         if is_da {
-            topics.push(Topic::Da);
+            topics.push(CdnTopic::Da);
         }
         topics
     };
@@ -376,7 +376,7 @@ pub mod testing {
         eth_signature_key::EthKeyPair,
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        ChainConfig, Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade,
+        Event, FeeAccount, PubKey, SeqTypes, Transaction, Upgrade,
     };
     use futures::{
         future::join_all,
@@ -420,7 +420,9 @@ pub mod testing {
         (
             <SimpleBuilderImplementation as TestBuilderImplementation<SeqTypes>>::start(
                 NUM_NODES,
-                url.clone(),
+                format!("http://0.0.0.0:{port}")
+                    .parse()
+                    .expect("Failed to parse builder listener"),
                 (),
                 HashMap::new(),
             )
@@ -644,17 +646,25 @@ pub mod testing {
         ) -> SequencerContext<network::Memory, P::Persistence, Ver> {
             let mut config = self.config.clone();
             let my_peer_config = &config.known_nodes_with_stake[i];
+            let is_da = config.known_da_nodes.contains(my_peer_config);
             config.my_own_validator_config = ValidatorConfig {
                 public_key: my_peer_config.stake_table_entry.stake_key,
                 private_key: self.priv_keys[i].clone(),
                 stake_value: my_peer_config.stake_table_entry.stake_amount.as_u64(),
                 state_key_pair: self.state_key_pairs[i].clone(),
-                is_da: config.known_da_nodes.contains(my_peer_config),
+                is_da,
+            };
+
+            let topics = if is_da {
+                vec![Topic::Global, Topic::Da]
+            } else {
+                vec![Topic::Global]
             };
 
             let network = Arc::new(MemoryNetwork::new(
-                config.my_own_validator_config.public_key,
+                &config.my_own_validator_config.public_key,
                 &self.master_map,
+                &topics,
                 None,
             ));
 
@@ -664,7 +674,7 @@ pub mod testing {
             state.prefund_account(builder_account, U256::max_value().into());
             let node_state = NodeState::new(
                 i as u64,
-                ChainConfig::default(),
+                state.chain_config.resolve().unwrap_or_default(),
                 L1Client::new(self.l1_url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
             )
@@ -738,8 +748,6 @@ pub mod testing {
 
 #[cfg(test)]
 mod test {
-
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use es_version::SequencerVersion;
     use espresso_types::{Header, NamespaceId, Payload, Transaction};
     use futures::StreamExt;
@@ -750,7 +758,7 @@ mod test {
             vid_commitment, BlockHeader, BlockPayload, EncodeBytes, GENESIS_VID_NUM_STORAGE_NODES,
         },
     };
-    use sequencer_utils::AnvilOptions;
+    use sequencer_utils::{test_utils::setup_test, AnvilOptions};
     use testing::{wait_for_decide_on_handle, TestConfigBuilder};
 
     use self::testing::run_test_builder;
@@ -758,8 +766,7 @@ mod test {
 
     #[async_std::test]
     async fn test_skeleton_instantiation() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
         let ver = SequencerVersion::instance();
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
@@ -799,8 +806,7 @@ mod test {
 
     #[async_std::test]
     async fn test_header_invariants() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let success_height = 30;
         let ver = SequencerVersion::instance();

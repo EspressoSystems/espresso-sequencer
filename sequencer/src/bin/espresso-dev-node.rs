@@ -1,6 +1,5 @@
 use std::{io, sync::Arc, time::Duration};
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::task::spawn;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
@@ -28,7 +27,7 @@ use sequencer::{
 };
 use sequencer_utils::{
     deployer::{deploy, Contract, Contracts},
-    AnvilOptions,
+    logging, AnvilOptions,
 };
 use serde::{Deserialize, Serialize};
 use tide_disco::{error::ServerError, Api, Error as _, StatusCode};
@@ -85,14 +84,16 @@ struct Args {
 
     #[clap(flatten)]
     sql: persistence::sql::Options,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
-    setup_logging();
-    setup_backtrace();
-
     let cli_params = Args::parse();
+    cli_params.logging.init();
+
     let api_options = options::Options::from(options::Http {
         port: cli_params.sequencer_api_port,
         max_connections: cli_params.sequencer_api_max_connections,
@@ -122,6 +123,7 @@ async fn main() -> anyhow::Result<()> {
         .state_relay_url(relay_server_url.clone())
         .l1_url(url.clone())
         .build();
+
     const NUM_NODES: usize = 2;
     let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
         .api_config(api_options)
@@ -298,7 +300,6 @@ struct SetHotshotUpBody {
 mod tests {
     use std::{process::Child, sync::Arc, time::Duration};
 
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::{stream::StreamExt, task::sleep};
     use committable::{Commitment, Committable};
     use contract_bindings::light_client::LightClient;
@@ -317,7 +318,7 @@ mod tests {
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
     use sequencer::api::endpoints::NamespaceProofQueryData;
-    use sequencer_utils::{init_signer, AnvilOptions};
+    use sequencer_utils::{init_signer, test_utils::setup_test, AnvilOptions};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
 
@@ -340,8 +341,7 @@ mod tests {
     // - Types (like `Header`) update
     #[async_std::test]
     async fn dev_node_test() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let builder_port = pick_unused_port().unwrap();
 
@@ -436,6 +436,81 @@ mod tests {
                 ))
                 .send()
                 .await;
+        }
+
+        let large_tx = Transaction::new(100_u32.into(), vec![0; 20000]);
+        let large_hash: Commitment<Transaction> = api_client
+            .post("submit/submit")
+            .body_json(&large_tx)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+
+        let tx_hash = large_tx.commit();
+        assert_eq!(large_hash, tx_hash);
+
+        let mut tx_result = api_client
+            .get::<TransactionQueryData<SeqTypes>>(&format!(
+                "availability/transaction/hash/{tx_hash}",
+            ))
+            .send()
+            .await;
+        while tx_result.is_err() {
+            tracing::info!("waiting for large tx");
+            sleep(Duration::from_secs(3)).await;
+
+            tx_result = api_client
+                .get::<TransactionQueryData<SeqTypes>>(&format!(
+                    "availability/transaction/hash/{}",
+                    tx_hash
+                ))
+                .send()
+                .await;
+        }
+
+        // Now the `submit/submit` endpoint allows the extremely large transactions to be in the mempool.
+        // And we need to check whether this extremely large transaction blocks the building process.
+        // Currently the default value of `max_block_size` is 30720, and this transaction exceeds the limit.
+        // TODO: https://github.com/EspressoSystems/espresso-sequencer/issues/1777
+        {
+            let extremely_large_tx = Transaction::new(100_u32.into(), vec![0; 50120]);
+            let extremely_large_hash: Commitment<Transaction> = api_client
+                .post("submit/submit")
+                .body_json(&extremely_large_tx)
+                .unwrap()
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(extremely_large_tx.commit(), extremely_large_hash);
+
+            // Now we send a small transaction to make sure this transaction can be included in a hotshot block.
+            let tx = Transaction::new(100_u32.into(), vec![0; 3]);
+            let tx_hash: Commitment<Transaction> = api_client
+                .post("submit/submit")
+                .body_json(&tx)
+                .unwrap()
+                .send()
+                .await
+                .unwrap();
+
+            let mut result = api_client
+                .get::<TransactionQueryData<SeqTypes>>(&format!(
+                    "availability/transaction/hash/{tx_hash}",
+                ))
+                .send()
+                .await;
+            while result.is_err() {
+                sleep(Duration::from_secs(3)).await;
+
+                result = api_client
+                    .get::<TransactionQueryData<SeqTypes>>(&format!(
+                        "availability/transaction/hash/{}",
+                        tx_hash
+                    ))
+                    .send()
+                    .await;
+            }
         }
 
         let tx_block_height = tx_result.unwrap().block_height();

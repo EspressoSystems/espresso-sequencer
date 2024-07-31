@@ -1,6 +1,5 @@
 use std::{num::NonZeroUsize, time::Duration};
 
-use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use derive_more::From;
 use espresso_types::PubKey;
@@ -10,6 +9,7 @@ use hotshot_orchestrator::{
     run_orchestrator,
 };
 use sequencer::options::{parse_duration, Ratio};
+use sequencer_utils::logging;
 use snafu::Snafu;
 use url::Url;
 use vec1::Vec1;
@@ -92,6 +92,9 @@ struct Args {
         value_parser = parse_duration
     )]
     builder_timeout: Duration,
+
+    #[clap(flatten)]
+    logging: logging::Config,
 }
 
 #[derive(Debug, Snafu, From)]
@@ -110,9 +113,9 @@ fn parse_seed(s: &str) -> Result<[u8; 32], ParseSeedError> {
 
 #[async_std::main]
 async fn main() {
-    setup_logging();
-    setup_backtrace();
     let args = Args::parse();
+    args.logging.init();
+
     let mut config = NetworkConfig::<PubKey> {
         start_delay_seconds: args.start_delay.as_secs(),
         manual_start_password: args.manual_start_password,
