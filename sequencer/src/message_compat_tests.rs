@@ -54,10 +54,17 @@ type Serializer = vbs::Serializer<SequencerVersion>;
 #[cfg(feature = "testing")]
 async fn test_message_compat() {
     use espresso_types::{Payload, SeqTypes, Transaction};
+    use hotshot_types::traits::network::Topic;
 
     let (sender, priv_key) = PubKey::generated_from_seed_indexed(Default::default(), 0);
     let signature = PubKey::sign(&priv_key, &[]).unwrap();
-    let membership = GeneralStaticCommittee::new(&[], vec![sender.stake_table_entry(1)], vec![], 0);
+    let membership = GeneralStaticCommittee::new(
+        &[],
+        vec![sender.stake_table_entry(1)],
+        vec![],
+        0,
+        Topic::Global,
+    );
     let upgrade_data = UpgradeProposalData {
         old_version: Version { major: 0, minor: 1 },
         new_version: Version { major: 1, minor: 0 },

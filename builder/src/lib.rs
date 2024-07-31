@@ -119,7 +119,7 @@ pub mod testing {
     use async_trait::async_trait;
     use committable::Committable;
     use espresso_types::{
-        mock::MockStateCatchup, ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey,
+        mock::MockStateCatchup, v0_3::ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey,
         PubKey, Transaction, ValidatedState,
     };
     use ethers::{
@@ -155,6 +155,7 @@ pub mod testing {
         traits::{
             block_contents::{vid_commitment, BlockHeader, GENESIS_VID_NUM_STORAGE_NODES},
             metrics::NoMetrics,
+            network::Topic,
             node_implementation::ConsensusTime,
             signature_key::BuilderSignatureKey as _,
         },
@@ -393,8 +394,9 @@ pub mod testing {
             }
 
             let network = Arc::new(MemoryNetwork::new(
-                config.my_own_validator_config.public_key,
+                &config.my_own_validator_config.public_key,
                 &self.master_map,
+                &[Topic::Global, Topic::Da],
                 None,
             ));
 
@@ -666,10 +668,6 @@ pub mod testing {
 
 #[cfg(test)]
 mod test {
-    //use self::testing::mock_node_state;
-
-    //use super::{transaction::ApplicationTransaction, vm::TestVm, *};
-    use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use async_std::stream::IntoStream;
     use clap::builder;
     use es_version::SequencerVersion;
@@ -686,6 +684,7 @@ mod test {
             sql,
         },
     };
+    use sequencer_utils::test_utils::setup_test;
     use testing::{wait_for_decide_on_handle, HotShotTestConfig};
 
     use super::*;
@@ -696,8 +695,7 @@ mod test {
     #[ignore]
     #[async_std::test]
     async fn test_non_voting_hotshot_node() {
-        setup_logging();
-        setup_backtrace();
+        setup_test();
 
         let ver = SequencerVersion::instance();
 
