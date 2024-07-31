@@ -524,9 +524,27 @@ services:
       sequencer0:
         condition: service_healthy
 
+  marketplace-solver:
+    image: ghcr.io/espressosystems/espresso-sequencer/marketplace-solver:main
+    ports:
+      - "$ESPRESSO_MARKETPLACE_SOLVER_API_PORT:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT"
+
+    environment:
+      - MARKETPLACE_SOLVER_POSTGRES_URL=postgresql://root:password@solver-db/solver
+      - ESPRESSO_MARKETPLACE_SOLVER_API_PORT
+      - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_API_URL=http://sequencer0:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
+      - MARKETPLACE_SOLVER_POSTGRES_MAX_CONNECTIONS=100
+      - MARKETPLACE_SOLVER_POSTGRES_ACQUIRE_TIMEOUT=5
+      - RUST_LOG
+    depends_on:
+      sequencer0:
+        condition: service_healthy
+      solver-db:
+        condition: service_healthy
+
   sequencer-db-0:
     image: postgres
-    user: postgres
+    user: root
     ports:
       - "$ESPRESSO_SEQUENCER0_DB_PORT:5432"
     environment:
@@ -543,13 +561,30 @@ services:
 
   sequencer-db-1:
     image: postgres
-    user: postgres
+    user: root
     ports:
       - "$ESPRESSO_SEQUENCER1_DB_PORT:5432"
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=root
       - POSTGRES_DB=sequencer
+    healthcheck:
+      # Postgres can be falsely "ready" once before running init scripts.
+      # See https://github.com/docker-library/postgres/issues/146 for discussion.
+      test: "pg_isready -U root && sleep 1 && pg_isready -U root"
+      interval: 5s
+      timeout: 4s
+      retries: 20
+
+  solver-db:
+    image: postgres
+    user: root
+    ports:
+      - "$MARKETPLACE_SOLVER_POSTGRES_PORT:5432"
+    environment:
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_USER=root
+      - POSTGRES_DB=solver
     healthcheck:
       # Postgres can be falsely "ready" once before running init scripts.
       # See https://github.com/docker-library/postgres/issues/146 for discussion.
