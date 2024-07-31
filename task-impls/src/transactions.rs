@@ -448,7 +448,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
         let consensus = self.consensus.read().await;
         let mut target_view = TYPES::Time::new(block_view.saturating_sub(1));
 
-        while target_view != TYPES::Time::genesis() {
+        loop {
             let Some(view_data) = consensus.validated_state_map().get(&target_view) else {
                 tracing::warn!(?target_view, "Missing record for view in validated state");
                 return None;
@@ -469,13 +469,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
                 }
                 ViewInner::Failed => {
                     // For failed views, backtrack
-                    target_view = target_view - 1;
+                    target_view = TYPES::Time::new(target_view.checked_sub(1)?);
                     continue;
                 }
             }
         }
-
-        None
     }
 
     #[instrument(skip_all, fields(id = self.id, cur_view = *self.cur_view, block_view = *block_view), name = "wait_for_block", level = "error")]
