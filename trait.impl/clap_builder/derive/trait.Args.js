@@ -11,6 +11,7 @@
 "espresso_types":[["impl Args for <a class=\"struct\" href=\"espresso_types/v0/utils/struct.BackoffParams.html\" title=\"struct espresso_types::v0::utils::BackoffParams\">BackoffParams</a>"]],
 "gen_demo_genesis":[["impl Args for <a class=\"struct\" href=\"gen_demo_genesis/struct.Args.html\" title=\"struct gen_demo_genesis::Args\">Args</a>"]],
 "keygen":[["impl Args for <a class=\"struct\" href=\"keygen/struct.Options.html\" title=\"struct keygen::Options\">Options</a>"]],
+"marketplace_solver":[["impl Args for <a class=\"struct\" href=\"marketplace_solver/struct.Args.html\" title=\"struct marketplace_solver::Args\">Args</a>"]],
 "nasty_client":[["impl Args for <a class=\"struct\" href=\"nasty_client/struct.ActionDistribution.html\" title=\"struct nasty_client::ActionDistribution\">ActionDistribution</a>"],["impl Args for <a class=\"struct\" href=\"nasty_client/struct.ClientConfig.html\" title=\"struct nasty_client::ClientConfig\">ClientConfig</a>"],["impl Args for <a class=\"struct\" href=\"nasty_client/struct.Options.html\" title=\"struct nasty_client::Options\">Options</a>"]],
 "orchestrator":[["impl Args for <a class=\"struct\" href=\"orchestrator/struct.Args.html\" title=\"struct orchestrator::Args\">Args</a>"]],
 "permissioned_builder":[["impl Args for <a class=\"struct\" href=\"permissioned_builder/struct.PermissionedBuilderOptions.html\" title=\"struct permissioned_builder::PermissionedBuilderOptions\">PermissionedBuilderOptions</a>"]],
