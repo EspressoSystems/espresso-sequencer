@@ -11,7 +11,11 @@ use hotshot_testing::{
     test_builder::TestDescription,
 };
 #[cfg(async_executor_impl = "async-std")]
-use {hotshot::tasks::DoubleProposeVote, hotshot_testing::test_builder::Behaviour, std::rc::Rc};
+use {
+    hotshot::tasks::{BadProposalViewDos, DoubleProposeVote},
+    hotshot_testing::test_builder::Behaviour,
+    std::rc::Rc,
+};
 
 cross_tests!(
     TestName: test_success,
@@ -33,7 +37,7 @@ cross_tests!(
 
 #[cfg(async_executor_impl = "async-std")]
 cross_tests!(
-    TestName: twins_test_success,
+    TestName: double_propose_vote,
     Impls: [MemoryImpl],
     Types: [TestTypes],
     Ignore: false,
@@ -53,5 +57,35 @@ cross_tests!(
             behaviour,
             ..TestDescription::default()
         }
+    },
+);
+
+// Test where node 4 sends out the correct quorum proposal and additionally spams the network with an extra 99 malformed proposals
+#[cfg(async_executor_impl = "async-std")]
+cross_tests!(
+    TestName: multiple_bad_proposals,
+    Impls: [MemoryImpl],
+    Types: [TestTypes],
+    Ignore: false,
+    Metadata: {
+        let behaviour = Rc::new(|node_id| { match node_id {
+          4 => Behaviour::Byzantine(Box::new(BadProposalViewDos { multiplier: 100, increment: 1 })),
+          _ => Behaviour::Standard,
+          } });
+
+        let mut metadata = TestDescription {
+            // allow more time to pass in CI
+            completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
+                                             TimeBasedCompletionTaskDescription {
+                                                 duration: Duration::from_secs(60),
+                                             },
+                                         ),
+            behaviour,
+            ..TestDescription::default()
+        };
+
+        metadata.overall_safety_properties.num_failed_views = 0;
+
+        metadata
     },
 );

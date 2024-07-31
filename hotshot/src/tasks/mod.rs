@@ -314,6 +314,8 @@ where
 
                     let mut results = state.send_handler(&msg).await;
 
+                    results.reverse();
+
                     while let Some(event) = results.pop() {
                         let _ = sender_to_network.broadcast(event.into()).await;
                     }
@@ -330,6 +332,8 @@ where
 
                     let mut results = state.recv_handler(&msg).await;
 
+                    results.reverse();
+
                     while let Some(event) = results.pop() {
                         let _ = original_sender.broadcast(event.into()).await;
                     }
@@ -339,6 +343,46 @@ where
 
         handle.network_registry.register(send_handle);
         handle.network_registry.register(recv_handle);
+    }
+}
+
+#[derive(Debug)]
+/// An `EventTransformerState` that multiplies `QuorumProposalSend` events, incrementing the view number of the proposal
+pub struct BadProposalViewDos {
+    /// The number of times to duplicate a `QuorumProposalSend` event
+    pub multiplier: u64,
+    /// The view number increment each time it's duplicated
+    pub increment: u64,
+}
+
+#[async_trait]
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>> EventTransformerState<TYPES, I>
+    for BadProposalViewDos
+{
+    async fn recv_handler(&mut self, event: &HotShotEvent<TYPES>) -> Vec<HotShotEvent<TYPES>> {
+        vec![event.clone()]
+    }
+
+    async fn send_handler(&mut self, event: &HotShotEvent<TYPES>) -> Vec<HotShotEvent<TYPES>> {
+        match event {
+            HotShotEvent::QuorumProposalSend(proposal, signature) => {
+                let mut result = Vec::new();
+
+                for n in 0..self.multiplier {
+                    let mut modified_proposal = proposal.clone();
+
+                    modified_proposal.data.view_number += n * self.increment;
+
+                    result.push(HotShotEvent::QuorumProposalSend(
+                        modified_proposal,
+                        signature.clone(),
+                    ));
+                }
+
+                result
+            }
+            _ => vec![event.clone()],
+        }
     }
 }
 
