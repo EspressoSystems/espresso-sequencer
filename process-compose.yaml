@@ -333,6 +333,36 @@ processes:
         path: /healthcheck
       failure_threshold: 100
 
+  node_validator:
+    command: node-metrics --
+    environment:
+      - ESPRESSO_NODE_VALIDATOR_STAKE_TABLE_SOURCE_BASE_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_NODE_VALIDATOR_LEAF_STREAM_SOURCE_BASE_URL=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_NODE_VALIDATOR_INITIAL_NODE_PUBLIC_BASE_URLS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT,http://localhost:$ESPRESSO_SEQUENCER1_API_PORT,http://localhost:$ESPRESSO_SEQUENCER2_API_PORT,http://localhost:$ESPRESSO_SEQUENCER3_API_PORT,http://localhost:$ESPRESSO_SEQUENCER4_API_PORT
+    depends_on:
+      broker_0:
+        condition: process_healthy
+      broker_1:
+        condition: process_healthy
+      sequencer0:
+        condition: process_healthy
+      sequencer1:
+        condition: process_healthy
+      sequencer2:
+        condition: process_healthy
+      sequencer3:
+        condition: process_healthy
+      sequencer4:
+        condition: process_healthy
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_SEQUENCER1_API_PORT
+        path: /healthcheck
+      failure_threshold: 100
+
+
   # We use KeyDB (a Redis variant) to maintain consistency between 
   # different parts of the CDN
   # Cheating a bit here too, but KeyDB is not available as a Nix package.
