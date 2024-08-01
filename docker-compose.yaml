@@ -593,6 +593,26 @@ services:
       solver-db:
         condition: service_healthy
 
+  node-validator:
+    image: ghcr.io/espressosystems/espresso-sequencer/node-validator:main
+    ports:
+      - "$ESPRESSO_NODE_VALIDATOR_PORT:$ESPRESSO_NODE_VALIDATOR_PORT"
+    environment:
+      - ESPRESSO_NODE_VALIDATOR_STAKE_TABLE_SOURCE_BASE_URL=http://sequencer0:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_NODE_VALIDATOR_LEAF_STREAM_SOURCE_BASE_URL=http://sequencer0:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_NODE_VALIDATOR_INITIAL_NODE_PUBLIC_BASE_URLS=http://sequencer0:$ESPRESSO_SEQUENCER_API_PORT,http://sequencer1:$ESPRESSO_SEQUENCER1_API_PORT,http://sequencer2:$ESPRESSO_SEQUENCER2_API_PORT,http://sequencer3:$ESPRESSO_SEQUENCER3_API_PORT,http://sequencer4:$ESPRESSO_SEQUENCER4_API_PORT
+    depends_on:
+      sequencer0:
+        condition: process_healthy
+      sequencer1:
+        condition: process_healthy
+      sequencer2:
+        condition: process_healthy
+      sequencer3:
+        condition: process_healthy
+      sequencer4:
+        condition: process_healthy
+
   sequencer-db-0:
     image: postgres
     user: root
