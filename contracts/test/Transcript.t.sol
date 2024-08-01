@@ -148,16 +148,16 @@ contract Transcript_appendVkAndPubInput_Test is Test {
         T.TranscriptData memory transcript,
         uint256[8] memory _publicInput
     ) external {
+        for (uint256 i = 0; i < 8; i++) {
+            _publicInput[i] = bound(_publicInput[i], 0, BN254.R_MOD - 1);
+            BN254.validateScalarField(BN254.ScalarField.wrap(_publicInput[i]));
+        }
+        IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
+
         uint256[] memory publicInput = new uint256[](8);
         for (uint256 i = 0; i < 8; i++) {
             publicInput[i] = _publicInput[i];
         }
-
-        for (uint256 i = 0; i < publicInput.length; i++) {
-            publicInput[i] = bound(publicInput[i], 0, BN254.R_MOD - 1);
-            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
-        }
-        IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
 
         string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
@@ -169,7 +169,7 @@ contract Transcript_appendVkAndPubInput_Test is Test {
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
 
-        transcript.appendVkAndPubInput(vk, publicInput);
+        transcript.appendVkAndPubInput(vk, _publicInput);
 
         assertEq(updated.transcript, transcript.transcript, "transcript field mismatch");
         assertEq(updated.state[0], transcript.state[0], "state[0] field mismatch");

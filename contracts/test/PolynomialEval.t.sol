@@ -75,16 +75,17 @@ contract PolynomialEval_evalDataGen_Test is Test {
     function testFuzz_evalDataGen_matches(
         uint256 logSize,
         uint256 zeta,
-        uint256[] memory publicInput
+        uint256[8] memory _publicInput
     ) external {
         logSize = bound(logSize, 16, 20);
         zeta = bound(zeta, 0, BN254.R_MOD - 1);
         BN254.validateScalarField(BN254.ScalarField.wrap(zeta));
+
         // Since these user-provided `publicInputs` were checked outside before passing in via
         // `BN254.validateScalarField()`, it suffices to assume they are proper for our test here.
-        for (uint256 i = 0; i < publicInput.length; i++) {
-            publicInput[i] = bound(publicInput[i], 0, BN254.R_MOD - 1);
-            BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
+        for (uint256 i = 0; i < 8; i++) {
+            _publicInput[i] = bound(_publicInput[i], 0, BN254.R_MOD - 1);
+            BN254.validateScalarField(BN254.ScalarField.wrap(_publicInput[i]));
         }
 
         Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSize);
@@ -98,13 +99,13 @@ contract PolynomialEval_evalDataGen_Test is Test {
         cmds[1] = "eval-data-gen";
         cmds[2] = vm.toString(logSize);
         cmds[3] = vm.toString(bytes32(zeta));
-        cmds[4] = vm.toString(abi.encode(publicInput));
+        cmds[4] = vm.toString(abi.encode(_publicInput));
 
         bytes memory result = vm.ffi(cmds);
         (uint256 vanishEval, uint256 lagrangeOne, uint256 piEval) =
             abi.decode(result, (uint256, uint256, uint256));
 
-        Poly.EvalData memory evalData = Poly.evalDataGen(domain, zeta, publicInput);
+        Poly.EvalData memory evalData = Poly.evalDataGen(domain, zeta, _publicInput);
         assertEq(vanishEval, BN254.ScalarField.unwrap(evalData.vanishEval));
         assertEq(lagrangeOne, BN254.ScalarField.unwrap(evalData.lagrangeOne));
         assertEq(piEval, BN254.ScalarField.unwrap(evalData.piEval));
@@ -152,23 +153,18 @@ contract PolynomialEval_evalDataGen_Test is Test {
         Poly.EvalDomain memory domain = Poly.newEvalDomain(size);
 
         uint256[] memory elements = Poly.domainElements(domain, size);
-        uint256 piLen = 10;
-        uint256[] memory publicInputs = new uint256[](piLen);
-        // arbitrarily pick public input length = 10, and fill in arbitrary values
-        for (uint256 i = 0; i < piLen; i++) {
+
+        uint256[8] memory publicInputs;
+
+        for (uint256 i = 0; i < 8; i++) {
             publicInputs[i] = 2 ** i;
         }
 
-        for (uint256 i = 0; i < size; i++) {
+        for (uint256 i = 0; i < 8; i++) {
             uint256 zeta = elements[i];
             uint256 vanishEval = Poly.evaluateVanishingPoly(domain, zeta);
-            if (i < piLen) {
-                assertEq(
-                    Poly.evaluatePiPoly(domain, publicInputs, zeta, vanishEval), publicInputs[i]
-                );
-            } else {
-                assertEq(Poly.evaluatePiPoly(domain, publicInputs, zeta, vanishEval), 0);
-            }
+
+            assertEq(Poly.evaluatePiPoly(domain, publicInputs, zeta, vanishEval), publicInputs[i]);
         }
     }
 }

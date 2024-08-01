@@ -149,7 +149,7 @@ library PolynomialEval {
     /// @dev Evaluate public input polynomial at point `zeta`.
     function evaluatePiPoly(
         EvalDomain memory self,
-        uint256[] memory pi,
+        uint256[8] memory pi,
         uint256 zeta,
         uint256 vanishEval
     ) internal view returns (uint256 res) {
@@ -274,7 +274,7 @@ library PolynomialEval {
     }
 
     /// @dev compute the EvalData for a given domain and a challenge zeta
-    function evalDataGen(EvalDomain memory self, uint256 zeta, uint256[] memory publicInput)
+    function evalDataGen(EvalDomain memory self, uint256 zeta, uint256[8] memory publicInput)
         internal
         view
         returns (EvalData memory evalData)

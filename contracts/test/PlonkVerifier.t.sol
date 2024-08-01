@@ -41,6 +41,19 @@ contract PlonkVerifierCommonTest is Test {
         return a;
     }
 
+    /// @dev Sanitize all values in `a` (array of size 8) to be valid scalar fields Bn254::Fr.
+    /// This is helpful to sanitize fuzzer-generated random `uint[]` values.
+    function sanitizeScalarFieldsFixedSizedArray(uint256[8] memory a)
+        public
+        pure
+        returns (uint256[8] memory)
+    {
+        for (uint256 i = 0; i < 8; i++) {
+            a[i] = sanitizeScalarField(a[i]);
+        }
+        return a;
+    }
+
     /// @dev Sanitize dummy verifyingKey such that it matches with the length of publicInput,
     /// This is only used for fuzz-generated-dummy-valued tests.
     function sanitizeVk(IPlonkVerifier.VerifyingKey memory vk, uint256 piLength)
@@ -77,7 +90,7 @@ contract PlonkVerifierCommonTest is Test {
     /// @dev helper function to generate some dummy but format-valid arguments for
     /// `prepareOpeningProof` step. The verifyingKey should be fixed/loaded from library,
     /// proof should be generated via `dummyProof()`, other inputs are from fuzzers.
-    function dummyArgsForOpeningProof(uint64 seed, uint256[] memory publicInput)
+    function dummyArgsForOpeningProof(uint64 seed, uint256[8] memory publicInput)
         public
         returns (
             IPlonkVerifier.VerifyingKey memory,
@@ -151,7 +164,12 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
         );
 
         vm.resumeGasMetering();
-        assert(V.verify(verifyingKeys[0], publicInputs[0], proofs[0]));
+        uint256[8] memory publicInputsCopy;
+        for (uint256 i = 0; i < 8; i++) {
+            publicInputsCopy[i] = publicInputs[0][i];
+        }
+
+        assert(V.verify(verifyingKeys[0], publicInputsCopy, proofs[0]));
     }
 
     /// @dev Test when bad verifying key is supplied, the verification should fail
@@ -193,7 +211,12 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             mstore(badPointRef, badPoint)
         }
 
-        assert(!V.verify(verifyingKeys[0], publicInputs[0], proofs[0]));
+        uint256[8] memory publicInputsCopy;
+        for (uint256 i = 0; i < 8; i++) {
+            publicInputsCopy[i] = publicInputs[0][i];
+        }
+
+        assert(!V.verify(verifyingKeys[0], publicInputsCopy, proofs[0]));
     }
 
     // @dev Test when bad public input is supplied, the verification should fail
@@ -220,7 +243,11 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
         );
 
-        assert(!V.verify(verifyingKeys[0], badPublicInput, proofs[0]));
+        uint256[8] memory badPublicInputCopy;
+        for (uint256 i = 0; i < 8; i++) {
+            badPublicInputCopy[i] = badPublicInput[i];
+        }
+        assert(!V.verify(verifyingKeys[0], badPublicInputCopy, proofs[0]));
     }
 
     /// @dev Test when bad proof is supplied, the verification should fail
@@ -239,7 +266,12 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
         );
 
-        assert(!V.verify(verifyingKeys[0], publicInputs[0], badProof));
+        uint256[8] memory publicInputsCopy;
+        for (uint256 i = 0; i < 8; i++) {
+            publicInputsCopy[i] = publicInputs[0][i];
+        }
+
+        assert(!V.verify(verifyingKeys[0], publicInputsCopy, badProof));
     }
 }
 
@@ -306,22 +338,17 @@ contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
     function testFuzz_preparePcsInfo_matches(uint64 seed, uint256[8] memory _publicInput)
         external
     {
-        uint256[] memory publicInput = new uint256[](8);
-        for (uint256 i = 0; i < 8; i++) {
-            publicInput[i] = _publicInput[i];
-        }
-
-        publicInput = sanitizeScalarFields(publicInput);
-        IPlonkVerifier.VerifyingKey memory vk = sanitizeVk(VkTest.getVk(), publicInput.length);
+        _publicInput = sanitizeScalarFieldsFixedSizedArray(_publicInput);
+        IPlonkVerifier.VerifyingKey memory vk = sanitizeVk(VkTest.getVk(), _publicInput.length);
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
 
-        V.PcsInfo memory info = V._preparePcsInfo(vk, publicInput, proof);
+        V.PcsInfo memory info = V._preparePcsInfo(vk, _publicInput, proof);
 
         string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "plonk-prepare-pcs-info";
         cmds[2] = vm.toString(abi.encode(vk));
-        cmds[3] = vm.toString(abi.encode(publicInput));
+        cmds[3] = vm.toString(abi.encode(_publicInput));
         cmds[4] = vm.toString(abi.encode(proof));
 
         bytes memory result = vm.ffi(cmds);
@@ -362,27 +389,22 @@ contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
     function testFuzz_computeChallenges_matches(uint64 seed, uint256[8] memory _publicInput)
         external
     {
-        uint256[] memory publicInput = new uint256[](8);
-        for (uint256 i = 0; i < 8; i++) {
-            publicInput[i] = _publicInput[i];
-        }
-
         IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
-        publicInput = sanitizeScalarFields(publicInput);
+        _publicInput = sanitizeScalarFieldsFixedSizedArray(_publicInput);
 
         string[] memory cmds = new string[](6);
         cmds[0] = "diff-test";
         cmds[1] = "plonk-compute-chal";
         cmds[2] = vm.toString(abi.encode(vk));
-        cmds[3] = vm.toString(abi.encode(publicInput));
+        cmds[3] = vm.toString(abi.encode(_publicInput));
         cmds[4] = vm.toString(abi.encode(proof));
         cmds[5] = vm.toString(abi.encode(""));
 
         bytes memory result = vm.ffi(cmds);
         (V.Challenges memory chal) = abi.decode(result, (V.Challenges));
 
-        V.Challenges memory c = V._computeChallenges(vk, publicInput, proof);
+        V.Challenges memory c = V._computeChallenges(vk, _publicInput, proof);
         assertEq(chal.alpha, c.alpha);
         assertEq(chal.alpha2, c.alpha2);
         assertEq(chal.alpha3, c.alpha3);

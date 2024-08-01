@@ -135,7 +135,7 @@ fn main() {
 
             let log_size = cli.args[0].parse::<u32>().unwrap();
             let zeta = u256_to_field::<Fr>(cli.args[1].parse::<U256>().unwrap());
-            let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[2]).unwrap();
+            let pi_u256: [U256; 8] = AbiDecode::decode_hex(&cli.args[2]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
 
             let verifier = Verifier::<Bn254>::new(2u32.pow(log_size) as usize).unwrap();
@@ -267,7 +267,7 @@ fn main() {
             }
 
             let vk = cli.args[0].parse::<ParsedVerifyingKey>().unwrap().into();
-            let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[1]).unwrap();
+            let pi_u256: [U256; 8] = AbiDecode::decode_hex(&cli.args[1]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
             let proof: Proof<Bn254> = cli.args[2].parse::<ParsedPlonkProof>().unwrap().into();
             let msg = {
@@ -317,7 +317,7 @@ fn main() {
             }
 
             let vk: VerifyingKey<Bn254> = cli.args[0].parse::<ParsedVerifyingKey>().unwrap().into();
-            let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[1]).unwrap();
+            let pi_u256: [U256; 8] = AbiDecode::decode_hex(&cli.args[1]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
             let proof: Proof<Bn254> = cli.args[2].parse::<ParsedPlonkProof>().unwrap().into();
 
