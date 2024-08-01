@@ -91,9 +91,6 @@ pub struct TransactionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Builder 0.1 API clients
     pub builder_clients: Vec<BuilderClientBase<TYPES>>,
 
-    /// Builder 0.3 API clients
-    pub builder_clients_marketplace: Vec<BuilderClientMarketplace<TYPES>>,
-
     /// This Nodes Public Key
     pub public_key: TYPES::SignatureKey,
     /// Our Private Key
@@ -283,7 +280,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
                     futures.push(async_timeout(
                         self.builder_timeout.saturating_sub(start.elapsed()),
                         async {
-                            let client = crate::builder::v0_3::BuilderClient::new(url);
+                            let client = BuilderClientMarketplace::new(url);
                             client.bundle(*block_view).await
                         },
                     ));
