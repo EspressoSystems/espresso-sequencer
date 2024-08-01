@@ -20,6 +20,7 @@ clap = { workspace = true }
 cld = { workspace = true }
 committable = { workspace = true }
 dotenvy = { workspace = true }
+es-version = { workspace = true }
 espresso-types = { path = "../types", features = ["testing"] }
 ethers = { workspace = true }
 futures = { workspace = true }
@@ -51,4 +52,7 @@ vbs = { workspace = true }
 vec1 = { workspace = true }
 
 [dev-dependencies]
+hotshot-query-service = { workspace = true }
 sequencer = { path = "../sequencer", features = ["testing"] }
+sequencer-utils = { path = "../utils" }
+tempfile = "3.10.1"

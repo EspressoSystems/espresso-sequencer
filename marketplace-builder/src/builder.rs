@@ -236,3 +236,156 @@ impl BuilderConfig {
         })
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::time::Duration;
+
+    use async_compatibility_layer::{
+        art::{async_sleep, async_spawn},
+        logging::{setup_backtrace, setup_logging},
+    };
+    use async_lock::RwLock;
+    use async_std::{stream::StreamExt, task};
+    use committable::Commitment;
+    use es_version::SequencerVersion;
+    use espresso_types::{mock::MockStateCatchup, FeeAccount, NamespaceId, PubKey, Transaction};
+    use ethers::utils::Anvil;
+    use hotshot::types::BLSPrivKey;
+    use hotshot_builder_api::v0_3::builder::BuildError;
+    use hotshot_events_service::{
+        events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
+        events_source::{EventConsumer, EventsStreamer},
+    };
+    use hotshot_query_service::availability::LeafQueryData;
+    use hotshot_types::{
+        bundle::Bundle,
+        constants::MarketplaceVersion,
+        light_client::StateKeyPair,
+        signature_key::BLSPubKey,
+        traits::{
+            block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
+            node_implementation::NodeType,
+            signature_key::{BuilderSignatureKey, SignatureKey},
+        },
+    };
+    use marketplace_builder_core::service::{
+        run_non_permissioned_standalone_builder_service,
+        run_permissioned_standalone_builder_service,
+    };
+    use portpicker::pick_unused_port;
+    use sequencer::{
+        api::test_helpers::TestNetworkConfigBuilder,
+        persistence::no_storage::{self, NoStorage},
+        testing::TestConfigBuilder,
+    };
+    use sequencer::{
+        api::{fs::DataSource, options::HotshotEvents, test_helpers::TestNetwork, Options},
+        persistence,
+    };
+    use sequencer_utils::test_utils::setup_test;
+    use surf_disco::Client;
+    use tempfile::TempDir;
+    use tide_disco::error::ServerError;
+
+    use super::*;
+
+    #[async_std::test]
+    async fn test_marketplace_builder() {
+        setup_test();
+
+        let query_port = pick_unused_port().expect("No ports free");
+        let query_api_url: Url = format!("http://localhost:{query_port}").parse().unwrap();
+
+        let event_port = pick_unused_port().expect("No ports free");
+        let event_service_url: Url = format!("http://localhost:{event_port}").parse().unwrap();
+
+        let builder_port = pick_unused_port().expect("No ports free");
+        let builder_api_url: Url = format!("http://localhost:{builder_port}").parse().unwrap();
+
+        // Set up and start the network
+        let anvil = Anvil::new().spawn();
+        let l1 = anvil.endpoint().parse().unwrap();
+        let network_config = TestConfigBuilder::default().l1_url(l1).build();
+
+        let tmpdir = TempDir::new().unwrap();
+
+        let config = TestNetworkConfigBuilder::default()
+            .api_config(
+                Options::with_port(query_port)
+                    .submit(Default::default())
+                    .query_fs(
+                        Default::default(),
+                        persistence::fs::Options::new(tmpdir.path().to_owned()),
+                    )
+                    .hotshot_events(HotshotEvents {
+                        events_service_port: event_port,
+                    }),
+            )
+            .network_config(network_config)
+            .build();
+        let network = TestNetwork::new(config).await;
+
+        // Start the builder
+        let init = BuilderConfig::init(
+            FeeAccount::test_key_pair(),
+            ViewNumber::genesis(),
+            NonZeroUsize::new(1024).unwrap(),
+            NonZeroUsize::new(1024).unwrap(),
+            NonZeroUsize::new(network.cfg.num_nodes()).unwrap(),
+            NodeState::default(),
+            ValidatedState::default(),
+            event_service_url.clone(),
+            builder_api_url.clone(),
+            Duration::from_secs(2),
+            5,
+            Duration::from_secs(2),
+            FeeAmount::from(10),
+            FeeAmount::from(10),
+            vec![NamespaceId::from(10u32)],
+            format!("http://localhost:{}", 3000).parse().unwrap(),
+        );
+        let _builder_config = init.await;
+
+        // Wait for at least one empty block to be sequenced (after consensus starts VID).
+        let sequencer_client: Client<ServerError, SequencerVersion> = Client::new(query_api_url);
+        sequencer_client.connect(None).await;
+        sequencer_client
+            .socket("availability/stream/leaves/0")
+            .subscribe::<LeafQueryData<SeqTypes>>()
+            .await
+            .unwrap()
+            .next()
+            .await
+            .unwrap()
+            .unwrap();
+
+        //  Connect to builder
+        let builder_client: Client<ServerError, MarketplaceVersion> =
+            Client::new(builder_api_url.clone());
+        builder_client.connect(None).await;
+
+        //  TODO(AG): workaround for version mismatch between bundle and submit APIs
+        let submission_client: Client<ServerError, SequencerVersion> = Client::new(builder_api_url);
+        submission_client.connect(None).await;
+
+        // Test getting a bundle
+        let _bundle = builder_client
+            .get::<Bundle<SeqTypes>>("block_info/bundle/1")
+            .send()
+            .await
+            .unwrap();
+
+        // Test submitting transactions
+        let transactions = (0..10)
+            .map(|i| Transaction::new(0u32.into(), vec![1, 1, 1, i]))
+            .collect::<Vec<_>>();
+        submission_client
+            .post::<Vec<Commitment<Transaction>>>("txn_submit/batch")
+            .body_json(&transactions)
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+    }
+}
