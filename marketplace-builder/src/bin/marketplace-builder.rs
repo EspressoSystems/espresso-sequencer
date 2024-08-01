@@ -6,7 +6,7 @@ use cld::ClDuration;
 use espresso_types::{eth_signature_key::EthKeyPair, FeeAmount, NamespaceId, SeqTypes};
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
-use marketplace_builder::non_permissioned::{build_instance_state, BuilderConfig};
+use marketplace_builder::builder::{build_instance_state, BuilderConfig};
 use marketplace_builder_core::testing::basic_test::NodeType;
 use sequencer::{Genesis, L1Params};
 use snafu::Snafu;

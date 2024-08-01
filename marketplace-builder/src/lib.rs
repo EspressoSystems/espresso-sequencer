@@ -75,7 +75,7 @@ use tide_disco::{app, method::ReadState, App, Url};
 use tracing::error;
 use vbs::version::StaticVersionType;
 
-pub mod non_permissioned;
+pub mod builder;
 
 mod hooks;
 
