@@ -16,7 +16,36 @@ pub struct NodeIdentity {
     pub(crate) company_website: Option<Url>,
     pub(crate) location: Option<LocationDetails>,
     pub(crate) operating_system: Option<String>,
+
+    /// note_type is meant to reflect the type of the node that is being
+    /// run.  The simplest representation of this value is the specific
+    /// binary program that is running for the node. In the case of the
+    /// Espresso sequencer, this is expected to be the value:
+    /// "espresso-sequencer <version>".
+    ///
+    /// Other implementations may use their own values instead.
     pub(crate) node_type: Option<String>,
+
+    /// network_type is meant to represent the type of network that the node is
+    /// connected to.  The sample specification has the following values
+    /// suggested:
+    /// - residential
+    /// - hosting
+    ///
+    /// It is preferred to have some present values we would like for these
+    /// to be, but for flexibility it is set to be a generic String.
+    /// Proposed values:
+    /// - Residential
+    /// - AWS
+    /// - Azure
+    /// - GCP
+    ///
+    /// These could also potentially include the availability zone for the
+    /// hosted networks:
+    /// - AWS (us-east-1)
+    ///
+    /// This could potentially even be:
+    /// - AWS (us-east-1a)
     pub(crate) network_type: Option<String>,
 }
 
