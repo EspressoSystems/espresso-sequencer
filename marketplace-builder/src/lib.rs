@@ -77,7 +77,7 @@ use vbs::version::StaticVersionType;
 
 pub mod non_permissioned;
 
-mod hooks;
+pub mod hooks;
 
 // It runs the api service for the builder
 pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {

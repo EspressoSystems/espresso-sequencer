@@ -6,7 +6,10 @@ use cld::ClDuration;
 use espresso_types::{eth_signature_key::EthKeyPair, FeeAmount, NamespaceId, SeqTypes};
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
-use marketplace_builder::non_permissioned::{build_instance_state, BuilderConfig};
+use marketplace_builder::{
+    hooks::BidConfig,
+    non_permissioned::{build_instance_state, BuilderConfig},
+};
 use marketplace_builder_core::testing::basic_test::NodeType;
 use sequencer::{Genesis, L1Params};
 use snafu::Snafu;
@@ -15,6 +18,10 @@ use vbs::version::StaticVersionType;
 
 #[derive(Parser, Clone, Debug)]
 struct NonPermissionedBuilderOptions {
+    /// Whether this is a generic builder.
+    #[clap(short, long, env = "ESPRESSO_MARKETPLACE_BUILDER_IS_GENERIC")]
+    is_generic: bool,
+
     /// URL of hotshot events API running on Espresso Sequencer DA committee node
     /// The builder will subscribe to this server to receive hotshot events
     #[clap(
@@ -134,6 +141,16 @@ async fn main() -> anyhow::Result<()> {
         events_max_block_range: 10000,
     };
 
+    let is_generic = opt.is_generic;
+    let bid_config = if is_generic {
+        Some(BidConfig {
+            amount: opt.bid_amount,
+            namespace_id: NamespaceId::from(opt.namespace),
+        })
+    } else {
+        None
+    };
+
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
     let bootstrapped_view = ViewNumber::new(opt.view_number);
 
@@ -159,6 +176,7 @@ async fn main() -> anyhow::Result<()> {
     let buffer_view_num_count = opt.buffer_view_num_count;
 
     let init = BuilderConfig::init(
+        opt.is_generic,
         builder_key_pair,
         bootstrapped_view,
         opt.tx_channel_capacity,
@@ -172,8 +190,7 @@ async fn main() -> anyhow::Result<()> {
         buffer_view_num_count,
         txn_timeout_duration,
         base_fee,
-        opt.bid_amount,
-        NamespaceId::from(opt.namespace),
+        bid_config,
         opt.solver_url,
     );
     let _builder_config = init.await;

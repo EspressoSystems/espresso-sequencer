@@ -413,12 +413,36 @@ processes:
         path: /healthcheck
       failure_threshold: 100
 
-  marketplace-builder:
+  marketplace-builder-normal:
     disabled: true
     command: marketplace-builder
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
     environment:
+      - ESPRESSO_MARKETPLACE_BUILDER_IS_GENERIC=false
+      - ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
+      - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10000
+      - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
+      - ESPRESSO_BUILDER_GENESIS_FILE
+    depends_on:
+      fund-builder:
+        condition: process_completed
+    readiness_probe:
+      http_get:
+        scheme: http
+        host: localhost
+        port: $ESPRESSO_BUILDER_SERVER_PORT
+        path: /healthcheck
+      failure_threshold: 100
+
+  marketplace-builder-generic:
+    disabled: true
+    command: marketplace-builder
+    ports:
+      - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
+    environment:
+      - ESPRESSO_MARKETPLACE_BUILDER_IS_GENERIC=true
       - ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
       - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10000
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://localhost:$ESPRESSO_SEQUENCER_API_PORT
