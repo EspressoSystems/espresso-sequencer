@@ -160,7 +160,7 @@ impl HotShotEventProcessingTask {
                     let send_result = url_sender.send(public_api_url).await;
                     if let Err(err) = send_result {
                         tracing::info!("url sender closed: {}", err);
-                        return;
+                        continue;
                     }
                 }
                 _ => {
