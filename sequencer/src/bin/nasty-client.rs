@@ -12,15 +12,6 @@
 //! provides a healthcheck endpoint as well as a prometheus endpoint which provides metrics like the
 //! count of various types of actions performed and the number of open streams.
 
-use std::{
-    borrow::Cow,
-    collections::{BTreeMap, HashMap},
-    fmt::Debug,
-    pin::Pin,
-    sync::Arc,
-    time::{Duration, Instant},
-};
-
 use anyhow::{bail, ensure, Context};
 use async_std::{
     sync::RwLock,
@@ -29,7 +20,6 @@ use async_std::{
 use clap::Parser;
 use committable::Committable;
 use derivative::Derivative;
-use es_version::{SequencerVersion, SEQUENCER_VERSION};
 use espresso_types::{v0_3::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
 use futures::{
     future::{FutureExt, TryFuture, TryFutureExt},
@@ -40,7 +30,10 @@ use hotshot_query_service::{
     metrics::PrometheusMetrics,
     node::TimeWindowQueryData,
 };
-use hotshot_types::traits::metrics::{Counter, Gauge, Histogram, Metrics as _};
+use hotshot_types::traits::{
+    metrics::{Counter, Gauge, Histogram, Metrics as _},
+    node_implementation::NodeType,
+};
 use jf_merkle_tree::{
     ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
@@ -48,12 +41,21 @@ use rand::{seq::SliceRandom, RngCore};
 use sequencer::{api::endpoints::NamespaceProofQueryData, options::parse_duration};
 use sequencer_utils::logging;
 use serde::de::DeserializeOwned;
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, HashMap},
+    fmt::Debug,
+    pin::Pin,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use strum::{EnumDiscriminants, VariantArray};
 use surf_disco::{error::ClientError, socket, Error, StatusCode, Url};
 use tide_disco::{error::ServerError, App};
 use time::OffsetDateTime;
 use toml::toml;
 use tracing::info_span;
+use vbs::version::StaticVersionType;
 
 /// An adversarial stress test for sequencer APIs.
 #[derive(Clone, Debug, Parser)]
@@ -400,7 +402,8 @@ impl Queryable for PayloadQueryData<SeqTypes> {
     }
 }
 
-type Connection<T> = socket::Connection<T, socket::Unsupported, ClientError, SequencerVersion>;
+type Connection<T> =
+    socket::Connection<T, socket::Unsupported, ClientError, <SeqTypes as NodeType>::Base>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -413,7 +416,7 @@ struct Subscription<T: Queryable> {
 
 #[derive(Debug)]
 struct ResourceManager<T: Queryable> {
-    client: surf_disco::Client<ClientError, SequencerVersion>,
+    client: surf_disco::Client<ClientError, <SeqTypes as NodeType>::Base>,
     open_streams: BTreeMap<u64, Subscription<T>>,
     next_stream_id: u64,
     metrics: Arc<Metrics>,
@@ -1258,14 +1261,17 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
         METHOD = "METRICS"
     };
     let mut app = App::<_, ServerError>::with_state(RwLock::new(metrics));
-    app.module::<ServerError, SequencerVersion>("status", api)
+    app.module::<ServerError, <SeqTypes as NodeType>::Base>("status", api)
         .unwrap()
         .metrics("metrics", |_req, state| {
             async move { Ok(Cow::Borrowed(state)) }.boxed()
         })
         .unwrap();
     if let Err(err) = app
-        .serve(format!("0.0.0.0:{port}"), SEQUENCER_VERSION)
+        .serve(
+            format!("0.0.0.0:{port}"),
+            <SeqTypes as NodeType>::Base::instance(),
+        )
         .await
     {
         tracing::error!("web server exited unexpectedly: {err:#}");

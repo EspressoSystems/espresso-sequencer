@@ -7,8 +7,8 @@ use espresso_types::{eth_signature_key::EthKeyPair, FeeAmount, NamespaceId, SeqT
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use marketplace_builder::{
+    builder::{build_instance_state, BuilderConfig},
     hooks::BidConfig,
-    non_permissioned::{build_instance_state, BuilderConfig},
 };
 use marketplace_builder_core::testing::basic_test::NodeType;
 use sequencer::{Genesis, L1Params};
@@ -97,9 +97,10 @@ struct NonPermissionedBuilderOptions {
         short,
         long,
         env = "ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE",
-        default_value = "1"
+        default_value = "1",
+        value_delimiter = ','
     )]
-    pub namespace: u32,
+    pub namespaces: Vec<u32>,
 
     /// Url we will use to communicate to solver
     #[clap(long, env = "ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL")]
@@ -145,7 +146,7 @@ async fn main() -> anyhow::Result<()> {
     let bid_config = if is_generic {
         Some(BidConfig {
             amount: opt.bid_amount,
-            namespace_id: NamespaceId::from(opt.namespace),
+            namespaces: opt.namespaces.into_iter().map(NamespaceId::from).collect(),
         })
     } else {
         None

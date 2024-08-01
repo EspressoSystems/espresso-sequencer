@@ -19,7 +19,7 @@ clap = { workspace = true }
 cld = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
 displaydoc = { version = "0.2.3", default-features = false }
-es-version = { workspace = true }
+espresso-types = { path = "../types", features = ["testing"] }
 ethers = { workspace = true }
 futures = { workspace = true }
 hotshot-contract-adapter = { workspace = true }

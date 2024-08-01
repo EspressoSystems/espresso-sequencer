@@ -27,8 +27,8 @@ use tracing::info;
 
 /// Configurations for bid submission.
 pub struct BidConfig {
-    /// Namespace ID to filter and bid for.
-    pub namespace_id: NamespaceId,
+    /// Namespace IDs to filter and bid for.
+    pub namespaces: Vec<NamespaceId>,
     /// Amount to bid.
     pub amount: FeeAmount,
 }
@@ -53,14 +53,16 @@ pub async fn connect_to_solver(
 ///
 /// Provides bidding and transaction filtering on top of base builder functionality.
 pub(crate) struct EspressoNormalHooks {
-    /// Bid configuraitons.
-    pub(crate) bid_config: BidConfig,
+    /// IDs of namespaces to filter and bid for
+    pub(crate) namespaces: HashSet<NamespaceId>,
     /// Base API to contact the solver
     pub(crate) solver_api_url: Url,
     /// Builder API base to include in the bid
     pub(crate) builder_api_base_url: Url,
     /// Keys for bidding
     pub(crate) bid_key_pair: EthKeyPair,
+    /// Bid amount
+    pub(crate) bid_amount: FeeAmount,
 }
 
 #[async_trait]
@@ -70,7 +72,7 @@ impl BuilderHooks<SeqTypes> for EspressoNormalHooks {
         &mut self,
         mut transactions: Vec<<SeqTypes as NodeType>::Transaction>,
     ) -> Vec<<SeqTypes as NodeType>::Transaction> {
-        transactions.retain(|txn| txn.namespace() == self.bid_config.namespace_id);
+        transactions.retain(|txn| self.namespaces.contains(&txn.namespace()));
         transactions
     }
 
@@ -79,9 +81,9 @@ impl BuilderHooks<SeqTypes> for EspressoNormalHooks {
         if let EventType::ViewFinished { view_number } = event.event {
             let bid_tx = match BidTxBody::new(
                 self.bid_key_pair.fee_account(),
-                self.bid_config.amount,
+                self.bid_amount,
                 view_number + 3, // We submit a bid three views in advance.
-                vec![self.bid_config.namespace_id],
+                self.namespaces.iter().cloned().collect(),
                 self.builder_api_base_url.clone(),
             )
             .signed(&self.bid_key_pair)

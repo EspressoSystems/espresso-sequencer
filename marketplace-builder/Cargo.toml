@@ -51,4 +51,7 @@ vbs = { workspace = true }
 vec1 = { workspace = true }
 
 [dev-dependencies]
+hotshot-query-service = { workspace = true }
 sequencer = { path = "../sequencer", features = ["testing"] }
+sequencer-utils = { path = "../utils" }
+tempfile = "3.10.1"
