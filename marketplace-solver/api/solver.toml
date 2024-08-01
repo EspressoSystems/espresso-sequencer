@@ -42,7 +42,7 @@ PATH = ["update_rollup"]
 METHOD = "POST"
 DOC = """
 Updates a rollup registration using the `RollupRegistration` data in the body of the request.  
-Returns an error if the request is not authenicated properly. 
+Returns an error if the request is not authenticated properly. 
 """
 
 [route.rollup_registrations]
