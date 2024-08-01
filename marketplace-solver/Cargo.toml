@@ -26,9 +26,7 @@ hotshot = { workspace = true }
 hotshot-events-service = { workspace = true }
 hotshot-query-service = { workspace = true, optional = true }
 hotshot-types = { workspace = true }
-jf-signature = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
-  "std",
-] }
+jf-signature = { workspace = true }
 portpicker = { workspace = true, optional = true } 
 rand = { workspace = true }
 serde = { workspace = true }
