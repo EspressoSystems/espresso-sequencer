@@ -129,6 +129,7 @@ where
                                 l1_params,
                                 bind_version,
                                 opt.is_da,
+                                opt.identity,
                             )
                             .await
                             .unwrap()
@@ -148,6 +149,7 @@ where
                 l1_params,
                 bind_version,
                 opt.is_da,
+                opt.identity,
             )
             .await?
         }

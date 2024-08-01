@@ -23,6 +23,7 @@ use hotshot_example_types::auction_results_provider_types::TestAuctionResultsPro
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
 use network::libp2p::split_off_peer_id;
+use options::Identity;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 pub mod persistence;
@@ -122,6 +123,7 @@ pub struct L1Params {
     pub events_max_block_range: u64,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     genesis: Genesis,
     network_params: NetworkParams,
@@ -130,6 +132,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     l1_params: L1Params,
     bind_version: Ver,
     is_da: bool,
+    identity: Identity,
 ) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
     // Expose git information via status API.
     metrics
@@ -158,14 +161,16 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             ],
         )
         .create(vec![
-            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_NODE_NAME").unwrap_or("".into()),
-            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_WALLET_ADDRESS").unwrap_or("".into()),
-            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_COMPANY_NAME").unwrap_or("".into()),
-            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_COMPANY_WEBSITE").unwrap_or("".into()),
-            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_OPERATING_SYSTEM").unwrap_or("".into()),
-            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_NODE_TYPE")
-                .unwrap_or(format!("espresso-sequencer {}", Ver::VERSION)),
-            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_NETWORK_TYPE").unwrap_or("".into()),
+            identity.node_name.unwrap_or("".into()),
+            identity.wallet_address.unwrap_or("".into()),
+            identity.company_name.unwrap_or("".into()),
+            identity
+                .company_website
+                .map(|u| u.into())
+                .unwrap_or("".into()),
+            identity.operating_system.unwrap_or("".into()),
+            identity.node_type.unwrap_or("".into()),
+            identity.network_type.unwrap_or("".into()),
         ]);
 
     // Expose Node Identity Location via the status/metrics API
@@ -175,9 +180,15 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             vec!["country".into(), "latitude".into(), "longitude".into()],
         )
         .create(vec![
-            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_COUNTRY_CODE").unwrap_or("".into()),
-            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_LATITUDE").unwrap_or("".into()),
-            std::env::var("ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE").unwrap_or("".into()),
+            identity.country_code.unwrap_or("".into()),
+            identity
+                .latitude
+                .map(|l| l.to_string())
+                .unwrap_or("".into()),
+            identity
+                .longitude
+                .map(|l| l.to_string())
+                .unwrap_or("".into()),
         ]);
 
     // Stick our public key in `metrics` so it is easily accessible via the status API.

@@ -210,6 +210,9 @@ pub struct Options {
 
     #[clap(flatten)]
     pub logging: logging::Config,
+
+    #[clap(skip)]
+    pub identity: Identity,
 }
 
 impl Options {
@@ -236,6 +239,67 @@ impl Options {
             Ok((staking, state))
         } else {
             bail!("neither key file nor full set of private keys was provided")
+        }
+    }
+}
+
+/// Identity represents identifying information concerning the sequencer node.
+/// This information is used to populate relevant information in the metrics
+/// endpoint.  This information will also potentially be scraped and displayed
+/// in a public facing dashboard.
+#[derive(Parser, Clone, Derivative)]
+#[derivative(Debug(bound = ""))]
+pub struct Identity {
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_COUNTRY_CODE")]
+    pub country_code: Option<String>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_LATITUDE")]
+    pub latitude: Option<f64>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE")]
+    pub longitude: Option<f64>,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_NODE_NAME")]
+    pub node_name: Option<String>,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_WALLET_ADDRESS")]
+    pub wallet_address: Option<String>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_COMPANY_NAME")]
+    pub company_name: Option<String>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_COMPANY_WEBSITE")]
+    pub company_website: Option<Url>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_OPERATING_SYSTEM")]
+    pub operating_system: Option<String>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_NODE_TYPE")]
+    pub node_type: Option<String>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_NETWORK_TYPE")]
+    pub network_type: Option<String>,
+}
+
+impl Default for Identity {
+    fn default() -> Self {
+        let Identity {
+            country_code,
+            latitude,
+            longitude,
+            node_name,
+            wallet_address,
+            company_name,
+            company_website,
+            operating_system,
+            node_type,
+            network_type,
+        } = Self::parse();
+
+        Self {
+            country_code,
+            latitude,
+            longitude,
+            node_name,
+            wallet_address,
+            company_name,
+            company_website,
+            operating_system: operating_system.or(Some(std::env::consts::OS.to_string())),
+            node_type: node_type.or(Some(format!("sequencer-{}", env!("CARGO_PKG_VERSION")))),
+            network_type,
         }
     }
 }
