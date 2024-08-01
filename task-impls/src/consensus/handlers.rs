@@ -172,6 +172,7 @@ pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType>(
 ) -> Result<JoinHandle<()>> {
     let (parent_leaf, state) = parent_leaf_and_state(
         view,
+        &sender,
         quorum_membership,
         public_key.clone(),
         OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),

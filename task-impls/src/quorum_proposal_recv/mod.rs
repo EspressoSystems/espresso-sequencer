@@ -126,6 +126,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
                     // Build the parent leaf since we didn't find it during the proposal check.
                     let parent_leaf = match parent_leaf_and_state(
                         proposal.data.view_number() + 1,
+                        &event_stream,
                         Arc::clone(&self.quorum_membership),
                         self.public_key.clone(),
                         OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),

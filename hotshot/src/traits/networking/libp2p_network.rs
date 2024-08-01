@@ -202,7 +202,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
     /// - An invalid configuration
     ///   (probably an issue with the defaults of this function)
     /// - An inability to spin up the replica's network
-    #[allow(clippy::panic)]
+    #[allow(clippy::panic, clippy::too_many_lines)]
     fn generator(
         expected_node_count: usize,
         num_bootstrap: usize,
@@ -217,8 +217,8 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
             "DA committee size must be less than or equal to total # nodes"
         );
         let bootstrap_addrs: PeerInfoVec = Arc::default();
+        let node_ids: Arc<RwLock<HashSet<u64>>> = Arc::default();
         // We assign known_nodes' public key and stake value rather than read from config file since it's a test
-        let mut all_keys = BTreeSet::new();
         let mut da_keys = BTreeSet::new();
 
         for i in 0u64..(expected_node_count as u64) {
@@ -227,7 +227,6 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
             if i < da_committee_size as u64 {
                 da_keys.insert(pubkey.clone());
             }
-            all_keys.insert(pubkey);
         }
 
         // NOTE uncomment this for easier debugging
@@ -296,9 +295,18 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
                         .unwrap()
                 };
                 let bootstrap_addrs_ref = Arc::clone(&bootstrap_addrs);
+                let node_ids_ref = Arc::clone(&node_ids);
                 let da = da_keys.clone();
                 let reliability_config_dup = reliability_config.clone();
                 Box::pin(async move {
+                    // If it's the second time we are starting this network, clear the bootstrap info
+                    let mut write_ids = node_ids_ref.write().await;
+                    if write_ids.contains(&node_id) {
+                        write_ids.clear();
+                        bootstrap_addrs_ref.write().await.clear();
+                    }
+                    write_ids.insert(node_id);
+                    drop(write_ids);
                     Arc::new(
                         match Libp2pNetwork::new(
                             Libp2pMetricsValue::default(),
@@ -493,11 +501,6 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         #[cfg(feature = "hotshot-testing")] reliability_config: Option<Box<dyn NetworkReliability>>,
         is_da: bool,
     ) -> Result<Libp2pNetwork<K>, NetworkError> {
-        // Error if there were no bootstrap nodes specified
-        #[cfg(not(feature = "hotshot-testing"))]
-        if bootstrap_addrs.read().await.len() == 0 {
-            return Err(NetworkError::NoBootstrapNodesSpecified);
-        }
         let (mut rx, network_handle) = spawn_network_node(config.clone(), id)
             .await
             .map_err(Into::<NetworkError>::into)?;

@@ -177,8 +177,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     /// To do a full initialization, use `fn init` instead, which will set up background tasks as
     /// well.
     ///
-    /// # Errors
-    /// -
+    /// Use this instead of `init` if you want to start the tasks manually
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         public_key: TYPES::SignatureKey,
@@ -192,14 +191,58 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         storage: I::Storage,
         auction_results_provider: I::AuctionResultsProvider,
     ) -> Arc<Self> {
+        let interal_chan = broadcast(EVENT_CHANNEL_SIZE);
+        let external_chan = broadcast(EXTERNAL_EVENT_CHANNEL_SIZE);
+
+        Self::new_from_channels(
+            public_key,
+            private_key,
+            nonce,
+            config,
+            memberships,
+            network,
+            initializer,
+            metrics,
+            storage,
+            auction_results_provider,
+            interal_chan,
+            external_chan,
+        )
+    }
+
+    /// Creates a new [`Arc<SystemContext>`] with the given configuration options.
+    ///
+    /// To do a full initialization, use `fn init` instead, which will set up background tasks as
+    /// well.
+    ///
+    /// Use this function if you want to use some prexisting channels and to spin up the tasks
+    /// and start consensus manually.  Mostly useful for tests
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    pub fn new_from_channels(
+        public_key: TYPES::SignatureKey,
+        private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
+        nonce: u64,
+        config: HotShotConfig<TYPES::SignatureKey>,
+        memberships: Memberships<TYPES>,
+        network: Arc<I::Network>,
+        initializer: HotShotInitializer<TYPES>,
+        metrics: ConsensusMetricsValue,
+        storage: I::Storage,
+        auction_results_provider: I::AuctionResultsProvider,
+        internal_channel: (
+            Sender<Arc<HotShotEvent<TYPES>>>,
+            Receiver<Arc<HotShotEvent<TYPES>>>,
+        ),
+        external_channel: (Sender<Event<TYPES>>, Receiver<Event<TYPES>>),
+    ) -> Arc<Self> {
         debug!("Creating a new hotshot");
 
         let consensus_metrics = Arc::new(metrics);
         let anchored_leaf = initializer.inner;
         let instance_state = initializer.instance_state;
 
-        let (internal_tx, internal_rx) = broadcast(EVENT_CHANNEL_SIZE);
-        let (mut external_tx, mut external_rx) = broadcast(EXTERNAL_EVENT_CHANNEL_SIZE);
+        let (internal_tx, internal_rx) = internal_channel;
+        let (mut external_tx, mut external_rx) = external_channel;
 
         let decided_upgrade_certificate = Arc::new(RwLock::new(None));
 

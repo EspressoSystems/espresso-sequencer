@@ -5,15 +5,16 @@ use std::{
     sync::Arc,
 };
 
-use async_broadcast::broadcast;
+use async_broadcast::{broadcast, Receiver, Sender};
 use async_compatibility_layer::art::async_spawn;
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
 use futures::future::join_all;
 use hotshot::{
-    traits::TestableNodeImplementation, types::SystemContextHandle, HotShotInitializer,
-    Memberships, SystemContext,
+    traits::TestableNodeImplementation,
+    types::{Event, SystemContextHandle},
+    HotShotInitializer, Memberships, SystemContext,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider,
@@ -21,6 +22,7 @@ use hotshot_example_types::{
     storage_types::TestStorage,
 };
 use hotshot_fakeapi::fake_solver::FakeSolverState;
+use hotshot_task_impls::events::HotShotEvent;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     constants::EVENT_CHANNEL_SIZE,
@@ -88,10 +90,14 @@ where
             .clone();
 
         let mut late_start_nodes: HashSet<u64> = HashSet::new();
+        let mut restart_nodes: HashSet<u64> = HashSet::new();
         for (_, changes) in &spinning_changes {
             for change in changes {
                 if matches!(change.updown, UpDown::Up) {
                     late_start_nodes.insert(change.idx.try_into().unwrap());
+                }
+                if matches!(change.updown, UpDown::Restart) {
+                    restart_nodes.insert(change.idx.try_into().unwrap());
                 }
             }
         }
@@ -99,6 +105,7 @@ where
         self.add_nodes::<B>(
             self.launcher.metadata.num_nodes_with_stake,
             &late_start_nodes,
+            &restart_nodes,
         )
         .await;
         let mut event_rxs = vec![];
@@ -370,6 +377,7 @@ where
         &mut self,
         total: usize,
         late_start: &HashSet<u64>,
+        restart: &HashSet<u64>,
     ) -> Vec<u64> {
         let mut results = vec![];
         let config = self.launcher.resource_generator.config.clone();
@@ -495,6 +503,21 @@ where
             results.push(node_id);
         }
 
+        // Add the restart nodes after the rest.  This must be done after all the original networks are
+        // created because this will reset the bootstrap info for the restarted nodes
+        for node_id in &results {
+            if restart.contains(node_id) {
+                self.late_start.insert(
+                    *node_id,
+                    LateStartNode {
+                        network: (self.launcher.resource_generator.channel_generator)(*node_id)
+                            .await,
+                        context: LateNodeContext::Restart,
+                    },
+                );
+            }
+        }
+
         // Wait for all networks to be ready
         join_all(networks_ready).await;
 
@@ -570,6 +593,45 @@ where
             auction_results_provider,
         )
     }
+
+    /// add a specific node with a config
+    /// # Panics
+    /// if unable to initialize the node's `SystemContext` based on the config
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    pub async fn add_node_with_config_and_channels(
+        node_id: u64,
+        network: Network<TYPES, I>,
+        memberships: Memberships<TYPES>,
+        initializer: HotShotInitializer<TYPES>,
+        config: HotShotConfig<TYPES::SignatureKey>,
+        validator_config: ValidatorConfig<TYPES::SignatureKey>,
+        storage: I::Storage,
+        auction_results_provider: I::AuctionResultsProvider,
+        internal_channel: (
+            Sender<Arc<HotShotEvent<TYPES>>>,
+            Receiver<Arc<HotShotEvent<TYPES>>>,
+        ),
+        external_channel: (Sender<Event<TYPES>>, Receiver<Event<TYPES>>),
+    ) -> Arc<SystemContext<TYPES, I>> {
+        // Get key pair for certificate aggregation
+        let private_key = validator_config.private_key.clone();
+        let public_key = validator_config.public_key.clone();
+
+        SystemContext::new_from_channels(
+            public_key,
+            private_key,
+            node_id,
+            config,
+            memberships,
+            network,
+            initializer,
+            ConsensusMetricsValue::default(),
+            storage,
+            auction_results_provider,
+            internal_channel,
+            external_channel,
+        )
+    }
 }
 
 /// a node participating in a test
@@ -608,6 +670,8 @@ pub enum LateNodeContext<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> 
     /// The system context that we're passing to the node when it is not yet initialized, so we're
     /// initializing it based on the received leaf and init parameters.
     UninitializedContext(LateNodeContextParameters<TYPES, I>),
+    /// The node is to be restarted so we will build the context from the node that was already running.
+    Restart,
 }
 
 /// A yet-to-be-started node that participates in tests

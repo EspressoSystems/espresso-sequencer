@@ -114,6 +114,7 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
     ) -> Result<()> {
         let (parent_leaf, state) = parent_leaf_and_state(
             self.view_number,
+            &self.sender,
             Arc::clone(&self.quorum_membership),
             self.public_key.clone(),
             OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),

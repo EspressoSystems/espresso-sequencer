@@ -62,7 +62,7 @@ impl DMBehaviour {
                 request_id,
                 error,
             } => {
-                error!("Outbound message failure to {:?}: {:?}", peer, error);
+                warn!("Outbound message failure to {:?}: {:?}", peer, error);
                 if let Some(mut req) = self.in_progress_rr.remove(&request_id) {
                     if req.retry_count == 0 {
                         return None;
