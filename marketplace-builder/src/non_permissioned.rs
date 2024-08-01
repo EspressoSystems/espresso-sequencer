@@ -100,7 +100,7 @@ impl BuilderConfig {
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
         bid_amount: FeeAmount,
-        namespace_id: NamespaceId,
+        namespaces: impl IntoIterator<Item = NamespaceId>,
         solver_api_url: Url,
     ) -> anyhow::Result<Self> {
         tracing::info!(
@@ -203,7 +203,7 @@ impl BuilderConfig {
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
 
         let hooks = hooks::EspressoHooks {
-            namespace_id,
+            namespaces: namespaces.into_iter().collect(),
             solver_api_url,
             builder_api_base_url: hotshot_builder_apis_url.clone(),
             bid_key_pair: builder_key_pair,

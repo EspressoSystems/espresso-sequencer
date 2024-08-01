@@ -90,9 +90,10 @@ struct NonPermissionedBuilderOptions {
         short,
         long,
         env = "ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE",
-        default_value = "1"
+        default_value = "1",
+        value_delimiter = ','
     )]
-    pub namespace: u32,
+    pub namespaces: Vec<u32>,
 
     /// Url we will use to communicate to solver
     #[clap(long, env = "ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL")]
@@ -173,7 +174,7 @@ async fn main() -> anyhow::Result<()> {
         txn_timeout_duration,
         base_fee,
         opt.bid_amount,
-        NamespaceId::from(opt.namespace),
+        opt.namespaces.into_iter().map(NamespaceId::from),
         opt.solver_url,
     );
     let _builder_config = init.await;

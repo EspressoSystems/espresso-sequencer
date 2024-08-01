@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use async_trait::async_trait;
 use espresso_types::v0_3::BidTxBody;
 
@@ -41,8 +43,8 @@ pub async fn connect_to_solver(
 /// Builder hooks for espresso sequencer
 /// Provides bidding and transaction filtering on top of base builder functionality
 pub(crate) struct EspressoHooks {
-    /// ID of namespace to filter and bid for
-    pub(crate) namespace_id: NamespaceId,
+    /// IDs of namespaces to filter and bid for
+    pub(crate) namespaces: HashSet<NamespaceId>,
     /// Base API to contact the solver
     pub(crate) solver_api_url: Url,
     /// Builder API base to include in the bid
@@ -60,7 +62,7 @@ impl BuilderHooks<SeqTypes> for EspressoHooks {
         &mut self,
         mut transactions: Vec<<SeqTypes as NodeType>::Transaction>,
     ) -> Vec<<SeqTypes as NodeType>::Transaction> {
-        transactions.retain(|txn| txn.namespace() == self.namespace_id);
+        transactions.retain(|txn| self.namespaces.contains(&txn.namespace()));
         transactions
     }
 
@@ -71,7 +73,7 @@ impl BuilderHooks<SeqTypes> for EspressoHooks {
                 self.bid_key_pair.fee_account(),
                 self.bid_amount,
                 view_number + 3, // We submit a bid three views in advance.
-                vec![self.namespace_id],
+                self.namespaces.iter().cloned().collect(),
                 self.builder_api_base_url.clone(),
             )
             .signed(&self.bid_key_pair)
