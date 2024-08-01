@@ -1,4 +1,4 @@
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Context;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
@@ -9,40 +9,26 @@ use hotshot_types::traits::node_implementation::NodeType;
 use marketplace_solver::{
     define_api, handle_events,
     state::{GlobalState, SolverState, StakeTable},
-    DatabaseOptions, EventsServiceClient, SolverError,
+    EventsServiceClient, Options, SolverError,
 };
-use tide_disco::{App, Url};
+use tide_disco::App;
 use vbs::version::StaticVersionType;
 
 type Version = <SeqTypes as NodeType>::Base;
-
-#[derive(Parser)]
-struct Args {
-    /// Port to run the server on.
-    #[clap(short, long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_PORT")]
-    solver_api_port: u16,
-
-    /// Hotshot events service api URL
-    #[clap(short, long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_API_URL")]
-    events_api_url: String,
-
-    #[clap(flatten)]
-    database_options: DatabaseOptions,
-}
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
     setup_logging();
     setup_backtrace();
 
-    let args = Args::parse();
-    let Args {
+    let args = Options::parse();
+    let Options {
         solver_api_port,
         events_api_url,
         database_options,
     } = args;
 
-    let events_api_url = Url::from_str(&format!("{events_api_url}/hotshot-events"))?;
+    let events_api_url = events_api_url.join("hotshot-events").unwrap();
 
     let events_client = EventsServiceClient::new(events_api_url.clone()).await;
 

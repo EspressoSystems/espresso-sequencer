@@ -6,11 +6,15 @@ use tide_disco::Url;
 
 use crate::database::PostgresClient;
 
-// todo (abdul) remove
-#[derive(Parser, Clone, Debug)]
+#[derive(Parser)]
 pub struct Options {
-    #[clap(long, env = "HOTSHOT_EVENTS_API_URL")]
-    pub events_url: Url,
+    /// Port to run the server on.
+    #[clap(short, long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_PORT")]
+    pub solver_api_port: u16,
+
+    /// Hotshot events service api URL
+    #[clap(short, long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_API_URL")]
+    pub events_api_url: Url,
 
     #[clap(flatten)]
     pub database_options: DatabaseOptions,
