@@ -1,16 +1,13 @@
 //! Should probably rename this to "external" or something
 
+use crate::context::TaskList;
 use anyhow::{Context, Result};
 use async_compatibility_layer::channel::{Receiver, Sender};
-use async_std::task::{self, JoinHandle};
 use espresso_types::{PubKey, SeqTypes};
-use hotshot::types::{BLSPubKey, Message, SignatureKey};
+use hotshot::types::{BLSPubKey, Message};
 use hotshot_types::{
     message::{MessageKind, VersionedMessage},
-    traits::{
-        network::{BroadcastDelay, ConnectedNetwork, Topic},
-        node_implementation::NodeType,
-    },
+    traits::network::{BroadcastDelay, ConnectedNetwork, Topic},
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -40,8 +37,11 @@ pub struct ExternalEventHandler {
     // The `RollCallInfo` of the node (used in the roll call response)
     pub roll_call_info: RollCallInfo,
 
+    // The public key of the node
+    pub public_key: BLSPubKey,
+
     // The tasks that are running
-    pub tasks: Vec<JoinHandle<()>>,
+    pub _tasks: TaskList,
 
     // The outbound message queue
     pub outbound_message_sender: Sender<OutboundMessage>,
@@ -59,36 +59,25 @@ impl ExternalEventHandler {
     pub fn new<N: ConnectedNetwork<PubKey>>(
         network: Arc<N>,
         roll_call_info: RollCallInfo,
+        public_key: BLSPubKey,
     ) -> Result<Self> {
         // Create the outbound message queue
         let (outbound_message_sender, outbound_message_receiver) =
             async_compatibility_layer::channel::bounded(10);
 
+        let mut tasks: TaskList = Default::default();
+
         // Spawn the outbound message handling loop
-        let outbound_message_loop = async_std::task::spawn(Self::outbound_message_loop(
-            outbound_message_receiver,
-            network,
-        ));
+        tasks.spawn(
+            "ExternalEventHandler (RollCall)",
+            Self::outbound_message_loop(outbound_message_receiver, network),
+        );
 
         // We just started, so queue an outbound RollCall message (if we have a public API URL)
         if roll_call_info.public_api_url.is_some() {
-            let roll_call_message = ExternalMessage::RollCallResponse(roll_call_info.clone());
-            let roll_call_message_bytes = bincode::serialize(&roll_call_message)
-                .with_context(|| "Failed to serialize roll call message for initial broadcast")?;
-
-            let message = Message::<SeqTypes> {
-                sender: <SeqTypes as NodeType>::SignatureKey::generated_from_seed_indexed(
-                    [0; 32], 0,
-                )
-                .0,
-                kind: MessageKind::External(roll_call_message_bytes),
-            };
-
             let roll_call_message_bytes =
-                <Message<SeqTypes> as VersionedMessage<SeqTypes>>::serialize(&message, &None)
-                    .with_context(|| {
-                        "Failed to serialize roll call message for initial broadcast"
-                    })?;
+                Self::create_roll_call_response(&public_key, &roll_call_info)
+                    .with_context(|| "Failed to create roll call response for initial broadcast")?;
 
             outbound_message_sender
                 .try_send(OutboundMessage::Broadcast(roll_call_message_bytes))
@@ -97,7 +86,8 @@ impl ExternalEventHandler {
 
         Ok(Self {
             roll_call_info,
-            tasks: vec![outbound_message_loop],
+            public_key,
+            _tasks: tasks,
             outbound_message_sender,
         })
     }
@@ -119,24 +109,11 @@ impl ExternalEventHandler {
                     return Ok(());
                 }
 
-                // If it's a roll call request, send our information (if we have a public API URL)
-                let response = ExternalMessage::RollCallResponse(self.roll_call_info.clone());
-
-                // Serialize the response
-                let response_bytes = bincode::serialize(&response)
-                    .with_context(|| "Failed to serialize roll call response")?;
-
-                let message = Message::<SeqTypes> {
-                    sender: <SeqTypes as NodeType>::SignatureKey::generated_from_seed_indexed(
-                        [0; 32], 0,
-                    )
-                    .0,
-                    kind: MessageKind::<SeqTypes>::External(response_bytes),
-                };
-
                 let response_bytes =
-                    <Message<SeqTypes> as VersionedMessage<SeqTypes>>::serialize(&message, &None)
-                        .with_context(|| "Failed to serialize roll call response")?;
+                    Self::create_roll_call_response(&self.public_key, &self.roll_call_info)
+                        .with_context(|| {
+                            "Failed to serialize roll call response for RollCallRequest"
+                        })?;
 
                 // Send the response
                 self.outbound_message_sender
@@ -149,6 +126,29 @@ impl ExternalEventHandler {
             }
         }
         Ok(())
+    }
+
+    /// Creates a roll call response message
+    fn create_roll_call_response(
+        public_key: &BLSPubKey,
+        roll_call_info: &RollCallInfo,
+    ) -> Result<Vec<u8>> {
+        let response = ExternalMessage::RollCallResponse(roll_call_info.clone());
+
+        // Serialize the response
+        let response_bytes = bincode::serialize(&response)
+            .with_context(|| "Failed to serialize roll call response")?;
+
+        let message = Message::<SeqTypes> {
+            sender: *public_key,
+            kind: MessageKind::<SeqTypes>::External(response_bytes),
+        };
+
+        let response_bytes =
+            <Message<SeqTypes> as VersionedMessage<SeqTypes>>::serialize(&message, &None)
+                .with_context(|| "Failed to serialize roll call response")?;
+
+        Ok(response_bytes)
     }
 
     /// The main loop for sending outbound messages.
@@ -176,15 +176,6 @@ impl ExternalEventHandler {
                     };
                 }
             }
-        }
-    }
-}
-
-impl Drop for ExternalEventHandler {
-    fn drop(&mut self) {
-        // Cancel all tasks
-        for task in self.tasks.drain(..) {
-            task::block_on(task.cancel());
         }
     }
 }

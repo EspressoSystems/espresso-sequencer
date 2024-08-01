@@ -164,7 +164,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         let roll_call_info = external_event_handler::RollCallInfo { public_api_url };
 
         // Create the external event handler
-        let external_event_handler = ExternalEventHandler::new(network, roll_call_info)
+        let external_event_handler = ExternalEventHandler::new(network, roll_call_info, pub_key)
             .with_context(|| "Failed to create external event handler")?;
 
         Ok(Self::new(
