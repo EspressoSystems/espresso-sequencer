@@ -513,7 +513,7 @@ services:
       fund-builder:
         condition: service_completed_successfully
 
-  marketplace-generic-builder:
+  marketplace-fallback-builder:
     image: ghcr.io/espressosystems/espresso-sequencer/marketplace-builder:main
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
