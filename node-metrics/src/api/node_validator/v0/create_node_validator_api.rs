@@ -125,9 +125,7 @@ impl HotShotEventProcessingTask {
 
             match event {
                 EventType::Decide { leaf_chain, .. } => {
-                    let mut leaf_chain_cloned = leaf_chain.iter().cloned().collect::<Vec<_>>();
-                    leaf_chain_cloned.sort_by_key(|a| a.leaf.height());
-                    for leaf_info in leaf_chain_cloned.iter() {
+                    for leaf_info in leaf_chain.iter().rev() {
                         let leaf = leaf_info.leaf.clone();
 
                         let send_result = leaf_sender.send(leaf).await;

@@ -14,27 +14,26 @@
 FORMAT_VERSION = "0.1.0"
 NAME = "node-validator"
 DESCRIPTION = """
-HotShot chain state
+The node-validator API provides an endpoint that allows for the near real-time
+streaming of the HotShot blockchain, and the sequencer nodes that are connected
+and contributing to the HotShot blockchain.
 
-The availability API provides an objective view of the HotShot blockchain. It provides access only
-to normative data: that is, data which is agreed upon by all honest consensus nodes and which is
-immutable. This means access to core consensus data structures including leaves, blocks, and
-headers, where each query is pure and idempotent. This also means that it is possible for a client
-to verify all of the information provided by this API, by running a HotShot light client and
-downloading the appropriate evidence with each query.
+The data that is provided by this API can be used to construct a dashboard to
+provide near real-time updates / views of the current blockchain state and
+nodes.
 
-This API does not provide any queries which represent only the _current_ state of the chain or may
-change over time, and it does not provide information for which there is not (yet) agreement of a
-supermajority of consensus nodes. For information about the current dynamic state of consensus and
-uncommitted state, try the `status` API. For information about the chain which is tabulated by this
-specific node and not subject to full consensus agreement, try the `node` API.
+Additionally, this gives participating nodes the ability to be identified and
+represented for public view, and transparency.
 """
 
 [route.details]
 PATH = ["details"]
 METHOD = "SOCKET"
 DOC = """
-Subscribe to a stream of blocks in the order they are sequenced, starting at `:height`.
+The details endpoint allows a client to opt-in to specific stream updates in a
+single connection.  All information that is provided by this endpoint is opt-in.
+It will only provide what is requested across the WebSocket.
 
-Opens a WebSockets connection and sends a stream of the same data type returned by `block/:height`.
+Opens a WebSocket connection that will send events and responses to specifically
+requested data.
 """
