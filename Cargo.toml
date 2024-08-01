@@ -15,6 +15,7 @@ members = [
     "contracts/rust/gen-vk-contract",
     "hotshot-state-prover",
     "marketplace-builder",
+    "marketplace-solver",
     "sequencer",
     "types",
     "utils",
