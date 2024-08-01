@@ -537,8 +537,8 @@ services:
       - MARKETPLACE_SOLVER_POSTGRES_ACQUIRE_TIMEOUT=5
       - RUST_LOG
     depends_on:
-      sequencer0:
-        condition: service_healthy
+      # sequencer0:
+      #   condition: service_healthy
       solver-db:
         condition: service_healthy
 

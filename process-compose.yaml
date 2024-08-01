@@ -458,8 +458,8 @@ processes:
       - MARKETPLACE_SOLVER_POSTGRES_PASSWORD=password
       - MARKETPLACE_SOLVER_POSTGRES_DATABASE_NAME=solver
     depends_on:
-      sequencer0:
-        condition: process_healthy
+      # sequencer0:
+      #   condition: process_healthy
       solver-db:
         condition: process_healthy
 

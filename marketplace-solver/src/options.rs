@@ -2,7 +2,6 @@ use std::{str::FromStr, time::Duration};
 
 use clap::Parser;
 use thiserror::Error;
-use tide_disco::Url;
 
 use crate::database::PostgresClient;
 
@@ -13,8 +12,8 @@ pub struct Options {
     pub solver_api_port: u16,
 
     /// Hotshot events service api URL
-    #[clap(short, long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_API_URL")]
-    pub events_api_url: Url,
+    // #[clap(short, long, env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_API_URL")]
+    // pub events_api_url: Url,
 
     #[clap(flatten)]
     pub database_options: DatabaseOptions,
