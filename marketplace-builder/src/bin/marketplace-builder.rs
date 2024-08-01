@@ -18,9 +18,11 @@ use vbs::version::StaticVersionType;
 
 #[derive(Parser, Clone, Debug)]
 struct NonPermissionedBuilderOptions {
-    /// Whether to run a fallback builder to build for unregistered rollups.
-    #[clap(short, long, env = "ESPRESSO_MARKETPLACE_BUILDER_FALLBACK")]
-    fallback: bool,
+    /// Whether this is a reserve builder.
+    ///
+    /// If not, it's a fallback buidler that only builds for unregistered rollups.
+    #[clap(short, long, env = "ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE")]
+    is_reserve: bool,
 
     /// URL of hotshot events API running on Espresso Sequencer DA committee node
     /// The builder will subscribe to this server to receive hotshot events
@@ -92,9 +94,7 @@ struct NonPermissionedBuilderOptions {
     #[clap(long, name = "GENESIS_FILE", env = "ESPRESSO_BUILDER_GENESIS_FILE")]
     genesis_file: PathBuf,
 
-    /// Namespaces for the reserve builder to build for.
-    ///
-    /// If empty, the reserve builder won't be run.
+    /// Namespace to build for
     #[clap(
         short,
         long,
@@ -109,9 +109,7 @@ struct NonPermissionedBuilderOptions {
     solver_url: Url,
 
     /// Bid amount in WEI.
-    ///
-    /// The reserve builder (ran if `namespaces` isn't empty) will submit the same bid for every
-    /// view.
+    /// Builder will submit the same bid for every view
     #[clap(
         long,
         env = "ESPRESSO_MARKETPLACE_BUILDER_BID_AMOUNT",
@@ -146,11 +144,8 @@ async fn main() -> anyhow::Result<()> {
         events_max_block_range: 10000,
     };
 
-    let fallback = opt.fallback;
-    let bid_config = if opt.namespaces.is_empty() {
-        if !fallback {
-            panic!("Either fallback or namespaces should be specified to run at least one type of builder.");
-        }
+    let is_reserve = opt.is_reserve;
+    let bid_config = if opt.is_reserve {
         None
     } else {
         Some(BidConfig {
@@ -184,7 +179,7 @@ async fn main() -> anyhow::Result<()> {
     let buffer_view_num_count = opt.buffer_view_num_count;
 
     let init = BuilderConfig::init(
-        fallback,
+        is_reserve,
         builder_key_pair,
         bootstrapped_view,
         opt.tx_channel_capacity,

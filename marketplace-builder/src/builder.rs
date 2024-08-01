@@ -84,10 +84,9 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
 }
 
 impl BuilderConfig {
-    /// Initiate a reserve or fallback builder, or both.
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
-        fallback: bool,
+        is_reserve: bool,
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         tx_channel_capacity: NonZeroUsize,
@@ -125,7 +124,7 @@ impl BuilderConfig {
             broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // qc channel
-        let (quorum_sender, qc_receiver) =
+        let (qc_sender, qc_receiver) =
             broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
 
         // decide channel
@@ -203,38 +202,10 @@ impl BuilderConfig {
         let events_url = hotshot_events_api_url.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
 
-        if fallback {
-            let hooks = hooks::EspressoFallbackHooks {
-                solver_api_url: solver_api_url.clone(),
+        if is_reserve {
+            let Some(bid_config) = bid_config else {
+                panic!("Missing bid config for the reserve builder.");
             };
-            let senders = (
-                tx_sender.clone(),
-                da_sender.clone(),
-                quorum_sender.clone(),
-                decide_sender.clone(),
-            );
-            let url = events_url.clone();
-
-            async_spawn(async move {
-                let res = run_non_permissioned_standalone_builder_service(
-                    hooks,
-                    BroadcastSenders {
-                        transactions: senders.0,
-                        da_proposal: senders.1,
-                        quorum_proposal: senders.2,
-                        decide: senders.3,
-                    },
-                    url,
-                )
-                .await;
-                tracing::error!(?res, "fall builder service exited");
-                if res.is_err() {
-                    panic!("Builder should restart.");
-                }
-            });
-        }
-
-        if let Some(bid_config) = bid_config {
             let hooks = hooks::EspressoReserveHooks {
                 namespaces: bid_config.namespaces.into_iter().collect(),
                 solver_api_url,
@@ -249,13 +220,33 @@ impl BuilderConfig {
                     BroadcastSenders {
                         transactions: tx_sender,
                         da_proposal: da_sender,
-                        quorum_proposal: quorum_sender,
+                        quorum_proposal: qc_sender,
                         decide: decide_sender,
                     },
                     events_url,
                 )
                 .await;
-                tracing::error!(?res, "reserve builder service exited");
+                tracing::error!(?res, "builder service exited");
+                if res.is_err() {
+                    panic!("Builder should restart.");
+                }
+            });
+        } else {
+            let hooks = hooks::EspressoFallbackHooks { solver_api_url };
+
+            async_spawn(async move {
+                let res = run_non_permissioned_standalone_builder_service(
+                    hooks,
+                    BroadcastSenders {
+                        transactions: tx_sender,
+                        da_proposal: da_sender,
+                        quorum_proposal: qc_sender,
+                        decide: decide_sender,
+                    },
+                    events_url,
+                )
+                .await;
+                tracing::error!(?res, "builder service exited");
                 if res.is_err() {
                     panic!("Builder should restart.");
                 }
