@@ -20,8 +20,8 @@ contract LightClientCommonTest is Test {
     LC.LightClientState public genesis;
     uint32 public constant BLOCKS_PER_EPOCH_TEST = 3;
     uint32 public constant DELAY_THRESHOLD = 6;
-    uint64 oneDayEpoch = 86400;
-    uint64 initialEpoch = oneDayEpoch;
+    uint64 oneDaySeconds = 86400;
+    uint64 initialEpoch = oneDaySeconds;
     // this constant should be consistent with `hotshot_contract::light_client.rs`
     uint64 internal constant STAKE_TABLE_CAPACITY = 10;
     DeployLightClientTestScript public deployer = new DeployLightClientTestScript();
@@ -33,7 +33,7 @@ contract LightClientCommonTest is Test {
         public
         returns (address payable, address)
     {
-        vm.warp(oneDayEpoch);
+        vm.warp(oneDaySeconds);
         //deploy light client test with a proxy
         (lcTestProxy, admin, state) = deployer.deployContract(state, numBlocksPerEpoch, admin);
 
@@ -622,6 +622,20 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     LC.LightClientState internal newState;
     V.PlonkProof internal newProof;
 
+    function assertInitialStateHistoryConditions() internal view {
+        // assert that stateHistoryFirstIndex starts at 0.
+        assertEq(lc.stateHistoryFirstIndex(), 0);
+        // asset maxStateHistoryDuration is greater or equal to at least one day in seconds.
+        assertGe(lc.maxStateHistoryDuration(), oneDaySeconds);
+    }
+
+    function setMaxStateHistoryDuration(uint64 duration) internal {
+        // Set the new max block states allowed to half of the number of states available
+        vm.prank(admin);
+        lc.setMaxStateHistoryDuration(duration);
+        assertEq(lc.maxStateHistoryDuration(), duration);
+    }
+
     /**
      * Liveness test cases to consider
      * Outside of HotShot threshold, revert
@@ -644,7 +658,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         //assert initial conditions
         assertEq(lc.stateHistoryFirstIndex(), 0);
-        assertGe(lc.maxStateHistoryAllowed(), oneDayEpoch);
+        assertGe(lc.maxStateHistoryDuration(), oneDaySeconds);
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
@@ -666,152 +680,25 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertEq(lc.getStateHistoryCount(), blockUpdatesCount + 1);
     }
 
-    function testFuzz_setMaxStateHistoryAllowed(uint64 maxBlocksAllowed) public {
+    function testFuzz_setMaxStateHistoryDuration(uint64 maxBlocksAllowed) public {
         vm.prank(admin);
-        vm.assume(maxBlocksAllowed >= oneDayEpoch);
-        lc.setMaxStateHistoryAllowed(maxBlocksAllowed);
-        assertEq(maxBlocksAllowed, lc.maxStateHistoryAllowed());
+        vm.assume(maxBlocksAllowed >= oneDaySeconds);
+        lc.setMaxStateHistoryDuration(maxBlocksAllowed);
+        assertEq(maxBlocksAllowed, lc.maxStateHistoryDuration());
     }
 
     function test_revertNonAdminSetMaxStateHistoryAllowed() public {
         vm.expectRevert();
-        lc.setMaxStateHistoryAllowed(oneDayEpoch);
+        lc.setMaxStateHistoryDuration(oneDaySeconds);
     }
 
     function test_revertSetMaxStateHistoryAllowedWhenInvalidValueSent() public {
         vm.prank(admin);
         vm.expectRevert(LC.InvalidMaxStateHistory.selector);
-        lc.setMaxStateHistoryAllowed(oneDayEpoch - 1);
+        lc.setMaxStateHistoryDuration(oneDaySeconds - 1);
     }
 
-    // function test_stateHistoryHandling() public {
-    //     string[] memory cmds = new string[](6);
-    //     cmds[0] = "diff-test";
-    //     cmds[1] = "mock-consecutive-finalized-states";
-    //     cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-    //     cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
-    //     cmds[4] = vm.toString(uint64(5));
-    //     cmds[5] = vm.toString(uint64(5));
-
-    //     // assert initial conditions
-    //     // assert that stateHistoryFirstIndex starts at 0.
-    //     assertEq(lc.stateHistoryFirstIndex(), 0);
-    //     // asset maxStateHistoryAllowed is greater than zero.
-    //     assertGt(lc.maxStateHistoryAllowed(), oneDayEpoch);
-
-    //     bytes memory result = vm.ffi(cmds);
-    //     (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
-    //         abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
-
-    //     // set the new max block states allowed to half of the number of states available
-    //     vm.prank(admin);
-    //     lc.setMaxStateHistoryAllowed(uint64(states.length / 2)); //2
-    //     assertEq(lc.maxStateHistoryAllowed(), uint64(states.length / 2));
-
-    //     // Update the states to max state history allowed
-    //     uint256 i;
-    //     for (i = 0; i < lc.maxStateHistoryAllowed() - lc.getStateHistoryCount(); i++) {
-    //         vm.prank(permissionedProver);
-    //         vm.expectEmit(true, true, true, true);
-    //         emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
-    //         lc.newFinalizedState(states[i], proofs[i]);
-    //     }
-
-    //     // the number of elements are equal to the max state history so the first index should
-    // still
-    //     // be zero
-    //     assertEq(lc.stateHistoryFirstIndex(), 0);
-    //     // assert that the offset, stateHistoryFirstIndex, is accurately recorded
-    //     // so that the array elements used in further analysis are no more than
-    //     // maxStateHistoryAllowed
-    //     assertEq(
-    //         lc.getStateHistoryCount() - lc.maxStateHistoryAllowed(), lc.stateHistoryFirstIndex()
-    //     );
-
-    //     // Add a new state
-    //     vm.prank(permissionedProver);
-    //     vm.expectEmit(true, true, true, true);
-    //     emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
-    //     lc.newFinalizedState(states[i], proofs[i]);
-
-    //     // the number of updates are equal to the max state history + 1  so the first index
-    // should
-    //     // be one
-    //     assertEq(lc.stateHistoryFirstIndex(), 1);
-    //     assertEq(lc.getStateHistoryCount(), lc.maxStateHistoryAllowed() + 1);
-    // }
-
-    // function test_stateHistoryHandlingMaxOneBlock() public {
-    //     string[] memory cmds = new string[](6);
-    //     cmds[0] = "diff-test";
-    //     cmds[1] = "mock-consecutive-finalized-states";
-    //     cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
-    //     cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
-    //     cmds[4] = vm.toString(uint64(5));
-    //     cmds[5] = vm.toString(uint64(5));
-
-    //     // assert initial conditions
-    //     // assert that stateHistoryFirstIndex starts at 0.
-    //     assertEq(lc.stateHistoryFirstIndex(), 0);
-    //     // asset maxStateHistoryAllowed is greater than zero.
-    //     assertGt(lc.maxStateHistoryAllowed(), 0);
-
-    //     bytes memory result = vm.ffi(cmds);
-    //     (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
-    //         abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
-
-    //     // set the new max block states allowed to half of the number of states available
-    //     vm.prank(admin);
-    //     lc.setMaxStateHistoryAllowed(1);
-    //     assertEq(lc.maxStateHistoryAllowed(), 1);
-
-    //     // Update the states to max state history allowed
-    //     uint256 i;
-    //     for (i = 0; i < lc.maxStateHistoryAllowed() - lc.getStateHistoryCount(); i++) {
-    //         vm.prank(permissionedProver);
-    //         vm.expectEmit(true, true, true, true);
-    //         emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
-    //         lc.newFinalizedState(states[i], proofs[i]);
-    //     }
-
-    //     // the number of elements are equal to the max state history so the first index should
-    // still
-    //     // be zero
-    //     assertEq(lc.stateHistoryFirstIndex(), 0);
-    //     // assert that the offset, stateHistoryFirstIndex, is accurately recorded
-    //     // so that the array elements used in further analysis are no more than
-    //     // maxStateHistoryAllowed
-    //     assertEq(
-    //         lc.getStateHistoryCount() - lc.maxStateHistoryAllowed(), lc.stateHistoryFirstIndex()
-    //     );
-
-    //     // Add a new state
-    //     vm.prank(permissionedProver);
-    //     vm.expectEmit(true, true, true, true);
-    //     emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
-    //     lc.newFinalizedState(states[i], proofs[i]);
-
-    //     // the number of updates are equal to the max state history + 1  so the first index
-    // should
-    //     // be one
-    //     assertEq(lc.stateHistoryFirstIndex(), 1);
-    //     assertEq(lc.getStateHistoryCount(), lc.maxStateHistoryAllowed() + 1);
-
-    //     // Add a new state
-    //     i++;
-    //     vm.prank(permissionedProver);
-    //     vm.expectEmit(true, true, true, true);
-    //     emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
-    //     lc.newFinalizedState(states[i], proofs[i]);
-
-    //     // the number of updates are equal to the max state history + 1  so the first index
-    // should
-    //     // be one
-    //     assertEq(lc.stateHistoryFirstIndex(), 2);
-    //     assertEq(lc.getStateHistoryCount(), lc.maxStateHistoryAllowed() + 2);
-    // }
-
-    function test_l1BlockUpdatesIsUpdatedOverMaxButStateHistoryLimitNotSurpassed() public {
+    function test_stateHistoryHandlingWithOneDayMaxHistory() public {
         string[] memory cmds = new string[](6);
         cmds[0] = "diff-test";
         cmds[1] = "mock-consecutive-finalized-states";
@@ -820,55 +707,148 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         cmds[4] = vm.toString(uint64(5));
         cmds[5] = vm.toString(uint64(5));
 
-        // assert initial conditions
-        // assert that stateHistoryFirstIndex starts at 0.
-        assertEq(lc.stateHistoryFirstIndex(), 0);
-        // asset maxStateHistoryAllowed is greater than a day in epochmillis.
-        assertGe(lc.maxStateHistoryAllowed(), oneDayEpoch);
+        uint64 numDays = 1;
+
+        assertInitialStateHistoryConditions();
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
         // set the new max block states allowed to half of the number of states available
-        vm.prank(admin);
-        lc.setMaxStateHistoryAllowed(oneDayEpoch);
-        assertEq(lc.maxStateHistoryAllowed(), oneDayEpoch);
-        (, uint256 currentBlockTimestamp,) =
-            lc.stateHistoryCommitments(lc.getStateHistoryCount() - 1);
-        assertEq(currentBlockTimestamp, initialEpoch);
+        setMaxStateHistoryDuration(initialEpoch);
 
-        // Update the states to double the max block states allowed
-        for (uint256 i = 0; i < states.length; i++) {
-            vm.warp(initialEpoch + ((i + 1) * oneDayEpoch)); // increase the timestamp for each
-                // state addition by one day
+        // Add one numDays worth of a new state
+        uint256 i;
+        for (i = 0; i < numDays; i++) {
+            vm.warp(initialEpoch + ((i + 1) * oneDaySeconds)); // increase the timestamp for each
             vm.prank(permissionedProver);
             vm.expectEmit(true, true, true, true);
             emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
             lc.newFinalizedState(states[i], proofs[i]);
-            if (i == 0) {
-                assertEq(lc.stateHistoryFirstIndex(), 0);
-            }
         }
 
-        // post-update
+        // assert that the first index is still zero as
+        // the number of duration between the 1st and last elements  are equal to the max state
+        // history duration
+        assertEq(lc.stateHistoryFirstIndex(), 0);
 
         // get oldest and newest state commitment info
         (, uint256 latestBlockTimestamp,) =
             lc.stateHistoryCommitments(lc.getStateHistoryCount() - 1);
         (, uint256 oldestBlockTimestamp,) = lc.stateHistoryCommitments(lc.stateHistoryFirstIndex());
-
-        // assert that stateHistoryFirstIndex is updated and is no longer zero after exceeding
-        // maxStateHistoryAllowed.
-        assertNotEq(lc.stateHistoryFirstIndex(), 0);
         // assert that the latest Commitment timestamp - oldest Commitment timestamp is == the max
         // history allowed
-        assertEq(latestBlockTimestamp - oldestBlockTimestamp, lc.maxStateHistoryAllowed());
+        assertEq(latestBlockTimestamp - oldestBlockTimestamp, lc.maxStateHistoryDuration());
 
-        // verify that the elements before stateHistoryFirstIndex is zero
-        for (uint256 i = 0; i < lc.stateHistoryFirstIndex(); i++) {
-            (uint256 l1Block,,) = lc.stateHistoryCommitments(i);
-            assertEq(l1Block, 0);
+        // Add a new state so that the state history duration is only surpassed by one element
+        vm.prank(permissionedProver);
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
+        vm.warp(initialEpoch + ((i + 1) * oneDaySeconds)); // increase the timestamp for each
+        lc.newFinalizedState(states[i], proofs[i]);
+        i++;
+
+        // the duration between the updates are more than maxStateHistoryDuration,  so the first
+        // index should be one
+        assertEq(lc.stateHistoryFirstIndex(), 1);
+
+        // continue updating the state
+        for (uint256 j = i; j < states.length; j++) {
+            vm.warp(initialEpoch + ((j + 1) * oneDaySeconds)); // increase the timestamp for each
+            vm.prank(permissionedProver);
+            vm.expectEmit(true, true, true, true);
+            emit LC.NewState(states[j].viewNum, states[j].blockHeight, states[j].blockCommRoot);
+            lc.newFinalizedState(states[j], proofs[j]);
+        }
+
+        // get stale commitments and assert that it has been reset to zero
+        for (i = 0; i < lc.stateHistoryFirstIndex(); i++) {
+            (, uint256 staleBlockTimestamp,) = lc.stateHistoryCommitments(i);
+            assertEq(staleBlockTimestamp, 0);
+        }
+
+        // get the recent commitments and assert that the values are non-zero
+        for (i = lc.stateHistoryFirstIndex(); i < lc.getStateHistoryCount(); i++) {
+            (, uint256 activeBlockTimestamp,) = lc.stateHistoryCommitments(i);
+            assertNotEq(activeBlockTimestamp, 0);
+        }
+    }
+
+    function test_stateHistoryHandlingWithTwoDaysMaxHistory() public {
+        string[] memory cmds = new string[](6);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-consecutive-finalized-states";
+        cmds[2] = vm.toString(BLOCKS_PER_EPOCH_TEST);
+        cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
+        cmds[4] = vm.toString(uint64(5));
+        cmds[5] = vm.toString(uint64(5));
+        uint64 numDays = 2;
+
+        bytes memory result = vm.ffi(cmds);
+        (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
+            abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        assertInitialStateHistoryConditions();
+
+        // set the new max block states allowed to half of the number of states available
+        setMaxStateHistoryDuration(oneDaySeconds * numDays);
+        assertEq(lc.maxStateHistoryDuration(), oneDaySeconds * numDays);
+
+        // Update the states to max state history allowed
+        uint256 i;
+        for (i = 0; i < numDays; i++) {
+            vm.warp(initialEpoch + ((i + 1) * oneDaySeconds)); // increase the timestamp for each
+            vm.prank(permissionedProver);
+            vm.expectEmit(true, true, true, true);
+            emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
+            lc.newFinalizedState(states[i], proofs[i]);
+        }
+
+        // the number of elements are equal to the max state history so the first index should still
+        // be zero
+        assertEq(lc.stateHistoryFirstIndex(), 0);
+
+        // get oldest and newest state commitment info
+        (, uint256 latestBlockTimestamp,) =
+            lc.stateHistoryCommitments(lc.getStateHistoryCount() - 1);
+        (, uint256 oldestBlockTimestamp,) = lc.stateHistoryCommitments(lc.stateHistoryFirstIndex());
+        // assert that the latest Commitment timestamp - oldest Commitment timestamp is == the max
+        // history allowed
+
+        assertEq(latestBlockTimestamp - oldestBlockTimestamp, lc.maxStateHistoryDuration());
+
+        // Add a new state so that the state history duration is only surpassed by one element
+        vm.prank(permissionedProver);
+        vm.expectEmit(true, true, true, true);
+        emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
+        vm.warp(initialEpoch + ((i + 1) * oneDaySeconds)); // increase the timestamp for each
+        lc.newFinalizedState(states[i], proofs[i]);
+        i++;
+
+        // the duration between the updates are more than maxStateHistoryDuration,  so the first
+        // index should be one
+        assertEq(lc.stateHistoryFirstIndex(), 1);
+
+        // continue updating the state
+        for (uint256 j = i; j < states.length; j++) {
+            vm.warp(initialEpoch + ((j + 1) * oneDaySeconds)); // increase the timestamp for each
+            vm.prank(permissionedProver);
+            vm.expectEmit(true, true, true, true);
+            emit LC.NewState(states[j].viewNum, states[j].blockHeight, states[j].blockCommRoot);
+            lc.newFinalizedState(states[j], proofs[j]);
+        }
+
+        // get stale commitments and assert that it has been reset to zero
+        for (i = 0; i < lc.stateHistoryFirstIndex(); i++) {
+            (, uint256 staleBlockTimestamp,) = lc.stateHistoryCommitments(i);
+            assertEq(staleBlockTimestamp, 0);
+        }
+
+        // get the recent commitments and assert that the values are non-zero
+        for (i = lc.stateHistoryFirstIndex(); i < lc.getStateHistoryCount(); i++) {
+            (, uint256 activeBlockTimestamp,) = lc.stateHistoryCommitments(i);
+            assertNotEq(activeBlockTimestamp, 0);
         }
     }
 
@@ -885,7 +865,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDayEpoch);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
 
         LC.HotShotCommitment memory hotShotCommitment =
@@ -936,7 +916,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDayEpoch);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
 
         for (uint256 i = 0; i < blockNumberUpdates.length; i++) {
@@ -976,7 +956,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDayEpoch);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {
@@ -1011,7 +991,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDayEpoch);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {
@@ -1049,7 +1029,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDayEpoch);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {
@@ -1073,7 +1053,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     function test_revertWhenSetZeroMaxStateUpdatesAllowed() public {
         vm.prank(admin);
         vm.expectRevert(LC.InvalidMaxStateHistory.selector);
-        lc.setMaxStateHistoryAllowed(0);
+        lc.setMaxStateHistoryDuration(0);
     }
 
     function test_hotShotIsDownWhenBlockIsHigherThanLastRecordedAndTheDelayThresholdHasPassed()
@@ -1095,7 +1075,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDayEpoch);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {
@@ -1136,7 +1116,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDayEpoch);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {
@@ -1172,7 +1152,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDayEpoch);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {
@@ -1210,7 +1190,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDayEpoch);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {

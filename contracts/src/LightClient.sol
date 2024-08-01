@@ -87,12 +87,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice a flag that indicates when a permissioned provrer is needed
     bool public permissionedProverEnabled;
 
-    ///@notice Max number of blockStates to record
-    uint64 public maxStateHistoryAllowed;
+    ///@notice Max number of seconds worth of state commitments to record based on this block
+    /// timestamp
+    uint64 public maxStateHistoryDuration;
 
     ///@notice index of first block in block state series
     ///@dev use this instead of index 0 since old states would be set to zero to keep storage costs
-    /// constant to maxStateHistoryAllowed
+    /// constant to maxStateHistoryDuration
     uint64 public stateHistoryFirstIndex;
 
     /// @notice an array to store the L1 block heights, HotShot Block Heights and their respective
@@ -233,7 +234,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         blocksPerEpoch = numBlockPerEpoch;
 
-        maxStateHistoryAllowed = 86400; // set to one day epoch by default
+        maxStateHistoryDuration = 86400; // set to one day epoch by default
 
         bytes32 initStakeTableComm = computeStakeTableComm(genesis);
         votingStakeTableCommitment = initStakeTableComm;
@@ -253,7 +254,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// become the snapshots used for vote verifications later on.
     /// @dev in this version, only a permissioned prover doing the computations
     /// can call this function
-    /// @dev the state history for `maxStateHistoryAllowed` L1 blocks are also recorded in the
+    /// @dev the state history for `maxStateHistoryDuration` L1 blocks are also recorded in the
     /// `stateHistoryCommitments` array
     /// @notice While `newState.stakeTable*` refers to the (possibly) new stake table states,
     /// the entire `newState` needs to be signed by stakers in `finalizedState`
@@ -391,52 +392,44 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    /// @notice update the stateHistoryCommitments array each time a new
-    /// finalized state is added to the LightClient contract
-    /// @dev only maintains maxStateHistoryAllowed non-zero elements in these arrays
-    /// @dev using a FIFO approach to delete elements at the start of the array and storing the new
-    /// initial index in stateHistoryFirstIndex so that the offset from the usual index of 0 is
-    /// clearly known
-    /// This offset is required since the `delete` method does not reduce the array length
-    /// `delete` only resets the storage at that index to the zero value for each data type
+    /// @notice updates the stateHistoryCommitments array each time a new
+    /// finalized state is added to the LightClient contract.
+    /// Ensures that the array contains only the most recent data and does not
+    /// exceed the maxStateHistoryDuration duration in seconds.
+    /// @dev the block timestamp is used to determine if the stateHistoryCommitments array
+    /// should be pruned, based on the maxStateHistoryDuration duration in seconds.
+    /// @dev a FIFO (First-In-First-Out) approach is used to delete elements from the start of the
+    /// array,
+    /// ensuring that only the most recent states are retained within the maxStateHistoryDuration
+    /// duration.
+    /// @dev the `delete` method does not reduce the array length but resets the value at the
+    /// specified index to zero.
+    /// the stateHistoryFirstIndex variable is used as an offset to indicate the starting point for
+    /// reading the array,
+    /// since the length of the array is not reduced even after deletion.
     function updateStateHistory(
         uint256 blockNumber,
         uint256 blockTimestamp,
         LightClientState memory state
     ) internal {
-        if (maxStateHistoryAllowed < 86400) revert InvalidMaxStateHistory();
+        if (maxStateHistoryDuration < 86400) revert InvalidMaxStateHistory();
 
         if (
             stateHistoryCommitments.length != 0
                 && stateHistoryCommitments[stateHistoryCommitments.length - 1].l1BlockTimestamp
                     - stateHistoryCommitments[stateHistoryFirstIndex].l1BlockTimestamp
-                    >= maxStateHistoryAllowed
+                    >= maxStateHistoryDuration
         ) {
-            // the arrays already has the max block states allowed so we clear the first non-empty
-            // element
-            // the arrays are cleared from a FIFO approach
+            // the stateHistoryCommitments array is the max history duration allowed
+            // so we delete the first non-empty element (FIFO)
             delete stateHistoryCommitments[stateHistoryFirstIndex];
-            // and increment the first index so that you know where the first non-zero element is in
-            // the affected arrays
+
+            // increment the offset to the first non-zero element in the stateHistoryCommitments
+            // array
             stateHistoryFirstIndex++;
         }
 
-        // if (
-        //     stateHistoryCommitments.length >= maxStateHistoryAllowed
-        //         && stateHistoryCommitments.length - maxStateHistoryAllowed <=
-        // stateHistoryFirstIndex
-        // ) {
-        //     // the arrays already has the max block states allowed so we clear the first
-        // non-empty
-        //     // element
-        //     // the arrays are cleared from a FIFO approach
-        //     delete stateHistoryCommitments[stateHistoryFirstIndex];
-        //     // and increment the first index so that you know where the first non-zero element is
-        // in
-        //     // the affected arrays
-        //     stateHistoryFirstIndex++;
-        // }
-        // //add the L1 Block to stateUpdateBlockNumbers &  HotShot commitment for the genesis state
+        // add the L1 Block to stateUpdateBlockNumbers & HotShot commitment to the genesis state
         stateHistoryCommitments.push(
             StateHistoryCommitment(
                 blockNumber,
@@ -531,10 +524,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice set Max Block States allowed
-    /// @param numBlocks The maximum number of block states allowed to be stored
-    function setMaxStateHistoryAllowed(uint64 numBlocks) public onlyOwner {
-        if (numBlocks < 86400) revert InvalidMaxStateHistory();
+    /// @param historySeconds The maximum number of block states allowed to be stored
+    function setMaxStateHistoryDuration(uint64 historySeconds) public onlyOwner {
+        if (historySeconds < 86400) revert InvalidMaxStateHistory();
 
-        maxStateHistoryAllowed = numBlocks;
+        maxStateHistoryDuration = historySeconds;
     }
 }
