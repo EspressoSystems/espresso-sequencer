@@ -17,7 +17,7 @@ var srcIndex = new Map(JSON.parse('[\
 ["hotshot_contract_adapter",["",[],["jellyfish.rs","lib.rs","light_client.rs"]]],\
 ["hotshot_state_prover",["",[],["circuit.rs","lib.rs","mock_ledger.rs","service.rs","snark.rs"]]],\
 ["keygen",["",[],["keygen.rs"]]],\
-["marketplace_solver",["",[],["marketplace-solver.rs"]]],\
+["marketplace_solver",["",[],["api.rs","database.rs","events.rs","lib.rs","options.rs","state.rs"]]],\
 ["nasty_client",["",[],["nasty-client.rs"]]],\
 ["orchestrator",["",[],["orchestrator.rs"]]],\
 ["permissioned_builder",["",[],["permissioned-builder.rs"]]],\
