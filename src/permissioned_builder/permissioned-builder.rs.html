@@ -304,7 +304,6 @@
 <span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>builder::permissioned::init_node;
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>es_version::SEQUENCER_VERSION;
 <span class="kw">use </span>espresso_types::eth_signature_key::EthKeyPair;
 <span class="kw">use </span>ethers::types::Address;
 <span class="kw">use </span>hotshot_types::{
@@ -319,6 +318,7 @@
 };
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>url::Url;
+<span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType};
 
 <span class="attr">#[derive(Parser, Clone, Debug)]
 </span><span class="kw">pub struct </span>PermissionedBuilderOptions {
@@ -559,7 +559,7 @@
         catchup_backoff: Default::default(),
     };
 
-    <span class="kw">let </span>sequencer_version = SEQUENCER_VERSION;
+    <span class="kw">let </span>sequencer_version = StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::instance();
 
     <span class="kw">let </span>builder_server_url: Url = <span class="macro">format!</span>(<span class="string">"http://0.0.0.0:{}"</span>, opt.port).parse().unwrap();
 

@@ -1082,6 +1082,24 @@
 <a href="#1082" id="1082">1082</a>
 <a href="#1083" id="1083">1083</a>
 <a href="#1084" id="1084">1084</a>
+<a href="#1085" id="1085">1085</a>
+<a href="#1086" id="1086">1086</a>
+<a href="#1087" id="1087">1087</a>
+<a href="#1088" id="1088">1088</a>
+<a href="#1089" id="1089">1089</a>
+<a href="#1090" id="1090">1090</a>
+<a href="#1091" id="1091">1091</a>
+<a href="#1092" id="1092">1092</a>
+<a href="#1093" id="1093">1093</a>
+<a href="#1094" id="1094">1094</a>
+<a href="#1095" id="1095">1095</a>
+<a href="#1096" id="1096">1096</a>
+<a href="#1097" id="1097">1097</a>
+<a href="#1098" id="1098">1098</a>
+<a href="#1099" id="1099">1099</a>
+<a href="#1100" id="1100">1100</a>
+<a href="#1101" id="1101">1101</a>
+<a href="#1102" id="1102">1102</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::bail;
 <span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>ethers::types::Address;
@@ -1094,6 +1112,7 @@
     },
     vid::{VidCommon, VidSchemeType},
 };
+
 <span class="kw">use </span>itertools::Itertools;
 <span class="kw">use </span>jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Digest, Sha3Node},
@@ -1834,16 +1853,15 @@
 </span><span class="kw">mod </span>test {
     <span class="kw">use </span>async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     <span class="kw">use </span>ethers::types::U256;
-    <span class="kw">use </span>hotshot_types::traits::{block_contents::BlockHeader, signature_key::BuilderSignatureKey};
-    <span class="kw">use </span>hotshot_types::vid::vid_scheme;
+    <span class="kw">use </span>hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
     <span class="kw">use </span>jf_vid::VidScheme;
     <span class="kw">use </span>sequencer_utils::ser::FromStringOrInteger;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use crate</span>::{
         eth_signature_key::{BuilderSignature, EthKeyPair},
-        v0_1,
-        v0_3::BidTx,
+        v0_1, v0_2,
+        v0_3::{<span class="self">self</span>, BidTx},
         BlockSize, FeeAccountProof, FeeMerkleProof,
     };
 
@@ -2132,7 +2150,16 @@
                 fee_info: FeeInfo::new(account, data),
                 ..header
             }),
-            <span class="kw">_ </span>=&gt; <span class="macro">unimplemented!</span>(),
+            Header::V2(header) =&gt; Header::V2(v0_2::Header {
+                builder_signature: <span class="prelude-val">Some</span>(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            Header::V3(header) =&gt; Header::V3(v0_3::Header {
+                builder_signature: <span class="macro">vec!</span>[sig],
+                fee_info: <span class="macro">vec!</span>[FeeInfo::new(account, data)],
+                ..header
+            }),
         };
 
         validate_builder_fee(<span class="kw-2">&amp;</span>header).unwrap();
@@ -2151,7 +2178,16 @@
                 fee_info: FeeInfo::new(account, data),
                 ..header
             }),
-            <span class="kw">_ </span>=&gt; <span class="macro">unimplemented!</span>(),
+            Header::V2(header) =&gt; Header::V2(v0_2::Header {
+                builder_signature: <span class="prelude-val">Some</span>(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            Header::V3(header) =&gt; Header::V3(v0_3::Header {
+                builder_signature: <span class="macro">vec!</span>[sig],
+                fee_info: <span class="macro">vec!</span>[FeeInfo::new(account, data)],
+                ..header
+            }),
         };
 
         <span class="kw">let </span>sig: Vec&lt;BuilderSignature&gt; = header.builder_signature();

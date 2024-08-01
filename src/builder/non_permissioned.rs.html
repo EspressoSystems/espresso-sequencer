@@ -667,7 +667,6 @@
     };
     <span class="kw">use </span>async_lock::RwLock;
     <span class="kw">use </span>async_std::task;
-    <span class="kw">use </span>es_version::SequencerVersion;
     <span class="kw">use </span>espresso_types::{FeeAccount, NamespaceId, Transaction};
     <span class="kw">use </span>hotshot_builder_api::v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
@@ -695,6 +694,7 @@
     <span class="kw">use </span>sequencer::persistence::no_storage::{<span class="self">self</span>, NoStorage};
     <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>surf_disco::Client;
+    <span class="kw">use </span>vbs::version::StaticVersion;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
     <span class="kw">use </span><span class="kw">crate</span>::testing::{
@@ -708,7 +708,7 @@
     </span><span class="kw">async fn </span>test_non_permissioned_builder() {
         setup_test();
 
-        <span class="kw">let </span>ver = SequencerVersion::instance();
+        <span class="kw">let </span>ver = StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::instance();
         <span class="comment">// Hotshot Test Config
         </span><span class="kw">let </span>hotshot_config = HotShotTestConfig::default();
 
@@ -754,10 +754,10 @@
         <span class="kw">let </span>builder_pub_key = builder_config.fee_account;
 
         <span class="comment">// Start a builder api client
-        </span><span class="kw">let </span>builder_client = Client::&lt;
-            hotshot_builder_api::v0_1::builder::Error,
-            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base,
-        &gt;::new(hotshot_builder_api_url.clone());
+        </span><span class="kw">let </span>builder_client =
+            Client::&lt;hotshot_builder_api::v0_1::builder::Error, StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;&gt;::new(
+                hotshot_builder_api_url.clone(),
+            );
         <span class="macro">assert!</span>(builder_client.connect(<span class="prelude-val">Some</span>(Duration::from_secs(<span class="number">60</span>))).<span class="kw">await</span>);
 
         <span class="kw">let </span>seed = [<span class="number">207_u8</span>; <span class="number">32</span>];

@@ -159,21 +159,19 @@
 <a href="#159" id="159">159</a>
 <a href="#160" id="160">160</a>
 <a href="#161" id="161">161</a>
-<a href="#162" id="162">162</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, path::PathBuf, str::FromStr, time::Duration};
 
 <span class="kw">use </span>builder::non_permissioned::{build_instance_state, BuilderConfig};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>cld::ClDuration;
-<span class="kw">use </span>espresso_types::{eth_signature_key::EthKeyPair, SeqTypes};
+<span class="kw">use </span>espresso_types::eth_signature_key::EthKeyPair;
 <span class="kw">use </span>hotshot::traits::ValidatedState;
-<span class="kw">use </span>hotshot_builder_core::testing::basic_test::NodeType;
 <span class="kw">use </span>hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 <span class="kw">use </span>sequencer::{Genesis, L1Params};
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>snafu::Snafu;
 <span class="kw">use </span>url::Url;
-<span class="kw">use </span>vbs::version::StaticVersionType;
+<span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType};
 
 <span class="attr">#[derive(Parser, Clone, Debug)]
 </span><span class="kw">struct </span>NonPermissionedBuilderOptions {
@@ -285,7 +283,7 @@
         genesis.chain_config,
         l1_params,
         opt.state_peers,
-        &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance(),
+        StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::instance(),
     )
     .unwrap();
 

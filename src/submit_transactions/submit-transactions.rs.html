@@ -490,7 +490,6 @@
 <span class="kw">use </span>async_std::task::{sleep, spawn};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>committable::{Commitment, Committable};
-<span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
 <span class="kw">use </span>espresso_types::{SeqTypes, Transaction};
 <span class="kw">use </span>futures::{
     channel::mpsc::{<span class="self">self</span>, Sender},
@@ -498,6 +497,7 @@
     stream::StreamExt,
 };
 <span class="kw">use </span>hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, Error};
+<span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
 <span class="kw">use </span>rand::{Rng, RngCore, SeedableRng};
 <span class="kw">use </span>rand_chacha::ChaChaRng;
 <span class="kw">use </span>rand_distr::Distribution;
@@ -657,7 +657,7 @@
     <span class="kw">let </span><span class="kw-2">mut </span>rng = ChaChaRng::seed_from_u64(seed);
 
     <span class="comment">// Subscribe to block stream so we can check that our transactions are getting sequenced.
-    </span><span class="kw">let </span>client = Client::&lt;Error, SequencerVersion&gt;::new(opt.url.clone());
+    </span><span class="kw">let </span>client = Client::&lt;Error, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base&gt;::new(opt.url.clone());
     <span class="kw">let </span>block_height: usize = client.get(<span class="string">"status/block-height"</span>).send().<span class="kw">await</span>.unwrap();
     <span class="kw">let </span><span class="kw-2">mut </span>blocks = client
         .socket(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"availability/stream/blocks/{}"</span>, block_height - <span class="number">1</span>))
@@ -672,13 +672,13 @@
             opt.clone(),
             sender.clone(),
             ChaChaRng::from_rng(<span class="kw-2">&amp;mut </span>rng).unwrap(),
-            SEQUENCER_VERSION,
+            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance(),
         ));
     }
 
     <span class="comment">// Start healthcheck endpoint once tasks are running.
     </span><span class="kw">if let </span><span class="prelude-val">Some</span>(port) = opt.port {
-        spawn(server(port, SEQUENCER_VERSION));
+        spawn(server(port, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance()));
     }
 
     <span class="comment">// Keep track of the results.

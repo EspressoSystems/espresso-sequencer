@@ -136,11 +136,14 @@
 <a href="#136" id="136">136</a>
 <a href="#137" id="137">137</a>
 <a href="#138" id="138">138</a>
+<a href="#139" id="139">139</a>
+<a href="#140" id="140">140</a>
+<a href="#141" id="141">141</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{str::FromStr <span class="kw">as _</span>, time::Duration};
 
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>cld::ClDuration;
-<span class="kw">use </span>es_version::SEQUENCER_VERSION;
+<span class="kw">use </span>espresso_types::SeqTypes;
 <span class="kw">use </span>ethers::{
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
@@ -148,9 +151,11 @@
 };
 <span class="kw">use </span>hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 <span class="kw">use </span>hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
+<span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>snafu::Snafu;
 <span class="kw">use </span>url::Url;
+<span class="kw">use </span>vbs::version::StaticVersionType;
 
 <span class="attr">#[derive(Parser)]
 </span><span class="kw">struct </span>Args {
@@ -264,12 +269,13 @@
 
     <span class="kw">if </span>args.daemon {
         <span class="comment">// Launching the prover service daemon
-        </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = run_prover_service(config, SEQUENCER_VERSION).<span class="kw">await </span>{
+        </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = run_prover_service(config, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance()).<span class="kw">await
+        </span>{
             <span class="macro">tracing::error!</span>(<span class="string">"Error running prover service: {:?}"</span>, err);
         };
     } <span class="kw">else </span>{
         <span class="comment">// Run light client state update once
-        </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = run_prover_once(config, SEQUENCER_VERSION).<span class="kw">await </span>{
+        </span><span class="kw">if let </span><span class="prelude-val">Err</span>(err) = run_prover_once(config, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance()).<span class="kw">await </span>{
             <span class="macro">tracing::error!</span>(<span class="string">"Error running prover once: {:?}"</span>, err);
         };
     }

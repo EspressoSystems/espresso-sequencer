@@ -225,6 +225,11 @@
 <a href="#225" id="225">225</a>
 <a href="#226" id="226">226</a>
 <a href="#227" id="227">227</a>
+<a href="#228" id="228">228</a>
+<a href="#229" id="229">229</a>
+<a href="#230" id="230">230</a>
+<a href="#231" id="231">231</a>
+<a href="#232" id="232">232</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
     v0::traits::StateCatchup, v0_3::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
     SeqTypes, Timestamp, Upgrade, UpgradeMode,
@@ -317,6 +322,11 @@
 
     <span class="kw">pub fn </span>with_upgrades(<span class="kw-2">mut </span><span class="self">self</span>, upgrades: BTreeMap&lt;Version, Upgrade&gt;) -&gt; <span class="self">Self </span>{
         <span class="self">self</span>.upgrades = upgrades;
+        <span class="self">self
+    </span>}
+
+    <span class="kw">pub fn </span>with_current_version(<span class="kw-2">mut </span><span class="self">self</span>, ver: Version) -&gt; <span class="self">Self </span>{
+        <span class="self">self</span>.current_version = ver;
         <span class="self">self
     </span>}
 }

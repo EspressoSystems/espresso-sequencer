@@ -764,6 +764,10 @@
 <a href="#764" id="764">764</a>
 <a href="#765" id="765">765</a>
 <a href="#766" id="766">766</a>
+<a href="#767" id="767">767</a>
+<a href="#768" id="768">768</a>
+<a href="#769" id="769">769</a>
+<a href="#770" id="770">770</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
 </span><span class="kw">use </span>std::{
     alloc::System,
@@ -834,7 +838,7 @@
     L1Params, NetworkParams, Node,
 };
 <span class="kw">use </span>tide_disco::{app, method::ReadState, App, Url};
-<span class="kw">use </span>vbs::version::StaticVersionType;
+<span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType};
 
 <span class="kw">pub mod </span>non_permissioned;
 <span class="kw">pub mod </span>permissioned;
@@ -852,7 +856,7 @@
     </span><span class="kw">let </span>private_mempool_api = hotshot_builder_api::v0_1::builder::submit_api::&lt;
         ProxyGlobalState&lt;SeqTypes&gt;,
         SeqTypes,
-        &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base,
+        StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;,
     &gt;(<span class="kw-2">&amp;</span>HotshotBuilderApiOptions::default())
     .expect(<span class="string">"Failed to construct the builder API for private mempool txns"</span>);
 
@@ -864,7 +868,7 @@
     app.register_module(<span class="string">"txn_submit"</span>, private_mempool_api)
         .expect(<span class="string">"Failed to register the private mempool API"</span>);
 
-    async_spawn(app.serve(url, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance()));
+    async_spawn(app.serve(url, StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::instance()));
 }
 
 <span class="attr">#[cfg(test)]
@@ -884,6 +888,7 @@
     <span class="kw">use </span>async_lock::RwLock;
     <span class="kw">use </span>async_trait::async_trait;
     <span class="kw">use </span>committable::Committable;
+
     <span class="kw">use </span>espresso_types::{
         mock::MockStateCatchup, v0_3::ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey,
         PubKey, Transaction, ValidatedState,
@@ -1172,6 +1177,7 @@
                 L1Client::new(<span class="self">self</span>.anvil.endpoint().parse().unwrap(), <span class="number">1</span>),
                 MockStateCatchup::default(),
             )
+            .with_current_version(Ver::VERSION)
             .with_genesis(ValidatedState::default());
 
             <span class="macro">tracing::info!</span>(<span class="string">"Before init hotshot"</span>);
@@ -1214,7 +1220,7 @@
             </span><span class="kw">let </span>hotshot_events_api = hotshot_events_service::events::define_api::&lt;
                 Arc&lt;RwLock&lt;EventsStreamer&lt;SeqTypes&gt;&gt;&gt;,
                 SeqTypes,
-                &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base,
+                StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;,
             &gt;(<span class="kw-2">&amp;</span>EventStreamingApiOptions::default())
             .expect(<span class="string">"Failed to define hotshot eventsAPI"</span>);
 
@@ -1223,7 +1229,7 @@
             app.register_module(<span class="string">"hotshot-events"</span>, hotshot_events_api)
                 .expect(<span class="string">"Failed to register hotshot events API"</span>);
 
-            async_spawn(app.serve(url, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance()));
+            async_spawn(app.serve(url, StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::instance()));
         }
         <span class="comment">// enable hotshot event streaming
         </span><span class="kw">pub fn </span>enable_hotshot_node_event_streaming&lt;P: SequencerPersistence&gt;(
@@ -1313,6 +1319,7 @@
                 ),
                 MockStateCatchup::default(),
             )
+            .with_current_version(StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::VERSION)
             .with_genesis(ValidatedState::default());
 
             <span class="comment">// generate builder keys
@@ -1381,6 +1388,7 @@
                 ),
                 MockStateCatchup::default(),
             )
+            .with_current_version(Ver::VERSION)
             .with_genesis(ValidatedState::default());
 
             <span class="comment">// generate builder keys
@@ -1436,7 +1444,6 @@
 </span><span class="kw">mod </span>test {
     <span class="kw">use </span>async_std::stream::IntoStream;
     <span class="kw">use </span>clap::builder;
-    <span class="kw">use </span>es_version::SequencerVersion;
     <span class="kw">use </span>espresso_types::{Header, NodeState, Payload, ValidatedState};
     <span class="kw">use </span>ethers::providers::Quorum;
     <span class="kw">use </span>futures::StreamExt;
@@ -1452,6 +1459,7 @@
     };
     <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>testing::{wait_for_decide_on_handle, HotShotTestConfig};
+    <span class="kw">use </span>vbs::version::StaticVersion;
 
     <span class="kw">use super</span>::<span class="kw-2">*</span>;
 
@@ -1463,7 +1471,7 @@
     </span><span class="kw">async fn </span>test_non_voting_hotshot_node() {
         setup_test();
 
-        <span class="kw">let </span>ver = SequencerVersion::instance();
+        <span class="kw">let </span>ver = StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::instance();
 
         <span class="kw">let </span>success_height = <span class="number">5</span>;
         <span class="comment">// Assign `config` so it isn't dropped early.

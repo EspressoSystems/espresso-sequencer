@@ -1715,6 +1715,7 @@
 <a href="#1715" id="1715">1715</a>
 <a href="#1716" id="1716">1716</a>
 <a href="#1717" id="1717">1717</a>
+<a href="#1718" id="1718">1718</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{ensure, Context};
 <span class="kw">use </span>ark_serialize::CanonicalSerialize;
 <span class="kw">use </span>committable::{Commitment, Committable, RawCommitmentBuilder};
@@ -3146,7 +3147,7 @@
         <span class="kw-2">*</span>parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
         <span class="kw">let </span><span class="kw-2">mut </span>proposal = parent_header.clone();
 
-        <span class="kw">let </span>ver = StaticVersion::&lt;<span class="number">1</span>, <span class="number">0</span>&gt;::version();
+        <span class="kw">let </span>ver = StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::version();
 
         <span class="comment">// Pass a different chain config to trigger a chain config validation error.
         </span><span class="kw">let </span>state = validated_state
@@ -3225,8 +3226,9 @@
         setup_test();
 
         <span class="kw">let </span>anvil = Anvil::new().block_time(<span class="number">1u32</span>).spawn();
-        <span class="kw">let </span><span class="kw-2">mut </span>genesis_state =
-            NodeState::mock().with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), <span class="number">1</span>));
+        <span class="kw">let </span><span class="kw-2">mut </span>genesis_state = NodeState::mock()
+            .with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), <span class="number">1</span>))
+            .with_current_version(StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::version());
 
         <span class="kw">let </span>genesis = GenesisForTest::default().<span class="kw">await</span>;
         <span class="kw">let </span>vid_common = vid_scheme(<span class="number">1</span>).disperse([]).unwrap().common;
@@ -3281,7 +3283,7 @@
             ns_table,
             builder_fee,
             vid_common.clone(),
-            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::version(),
+            StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::version(),
         )
         .<span class="kw">await
         </span>.unwrap();
@@ -3303,7 +3305,7 @@
                 <span class="kw-2">&amp;</span>genesis_state,
                 <span class="kw-2">&amp;</span>parent_leaf,
                 <span class="kw-2">&amp;</span>proposal,
-                StaticVersion::&lt;<span class="number">1</span>, <span class="number">0</span>&gt;::version(),
+                StaticVersion::&lt;<span class="number">0</span>, <span class="number">1</span>&gt;::version(),
             )
             .<span class="kw">await
             </span>.unwrap()

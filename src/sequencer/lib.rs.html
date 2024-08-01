@@ -883,6 +883,7 @@
 <a href="#883" id="883">883</a>
 <a href="#884" id="884">884</a>
 <a href="#885" id="885">885</a>
+<a href="#886" id="886">886</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
@@ -1563,6 +1564,7 @@
                 L1Client::new(<span class="self">self</span>.l1_url.clone(), <span class="number">1000</span>),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).<span class="kw">await</span>,
             )
+            .with_current_version(Ver::version())
             .with_genesis(state)
             .with_upgrades(upgrades);
 
@@ -1633,7 +1635,7 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use </span>es_version::SequencerVersion;
+
     <span class="kw">use </span>espresso_types::{Header, NamespaceId, Payload, Transaction};
     <span class="kw">use </span>futures::StreamExt;
     <span class="kw">use </span>hotshot::types::EventType::Decide;
@@ -1652,7 +1654,7 @@
     <span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_skeleton_instantiation() {
         setup_test();
-        <span class="kw">let </span>ver = SequencerVersion::instance();
+        <span class="kw">let </span>ver = &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance();
         <span class="comment">// Assign `config` so it isn't dropped early.
         </span><span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
         <span class="kw">let </span>url = anvil.url();
@@ -1694,7 +1696,7 @@
         setup_test();
 
         <span class="kw">let </span>success_height = <span class="number">30</span>;
-        <span class="kw">let </span>ver = SequencerVersion::instance();
+        <span class="kw">let </span>ver = &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance();
         <span class="comment">// Assign `config` so it isn't dropped early.
         </span><span class="kw">let </span>anvil = AnvilOptions::default().spawn().<span class="kw">await</span>;
         <span class="kw">let </span>url = anvil.url();

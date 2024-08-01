@@ -138,13 +138,26 @@
 <a href="#138" id="138">138</a>
 <a href="#139" id="139">139</a>
 <a href="#140" id="140">140</a>
+<a href="#141" id="141">141</a>
+<a href="#142" id="142">142</a>
+<a href="#143" id="143">143</a>
+<a href="#144" id="144">144</a>
+<a href="#145" id="145">145</a>
+<a href="#146" id="146">146</a>
+<a href="#147" id="147">147</a>
+<a href="#148" id="148">148</a>
+<a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
+<a href="#151" id="151">151</a>
+<a href="#152" id="152">152</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{io, time::Duration};
 
 <span class="kw">use </span>async_std::task::spawn;
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>es_version::SEQUENCER_VERSION;
+<span class="kw">use </span>espresso_types::SeqTypes;
 <span class="kw">use </span>ethers::prelude::<span class="kw-2">*</span>;
 <span class="kw">use </span>futures::FutureExt;
+<span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
 <span class="kw">use </span>sequencer::{
     hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
     options::parse_duration,
@@ -208,7 +221,12 @@
     opt.logging.init();
 
     <span class="kw">if let </span><span class="prelude-val">Some</span>(port) = opt.port {
-        start_http_server(port, opt.hotshot_address, SEQUENCER_VERSION).unwrap();
+        start_http_server(
+            port,
+            opt.hotshot_address,
+            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance(),
+        )
+        .unwrap();
     }
 
     <span class="kw">let </span>hotshot_contract_options = CommitmentTaskOptions {
@@ -222,7 +240,7 @@
         query_service_url: <span class="prelude-val">Some</span>(opt.sequencer_url),
     };
     <span class="macro">tracing::info!</span>(<span class="string">"Launching HotShot commitment task.."</span>);
-    run_hotshot_commitment_task::&lt;es_version::SequencerVersion&gt;(<span class="kw-2">&amp;</span>hotshot_contract_options).<span class="kw">await</span>;
+    run_hotshot_commitment_task::&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base&gt;(<span class="kw-2">&amp;</span>hotshot_contract_options).<span class="kw">await</span>;
 }
 
 <span class="kw">fn </span>start_http_server&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
@@ -251,10 +269,12 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use </span>es_version::{SequencerVersion, SEQUENCER_VERSION};
+    <span class="kw">use </span>espresso_types::SeqTypes;
+    <span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
     <span class="kw">use </span>portpicker::pick_unused_port;
     <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>surf_disco::Client;
+    <span class="kw">use </span>vbs::version::StaticVersionType;
 
     <span class="kw">use super</span>::{start_http_server, Address, ServerError};
 
@@ -266,10 +286,14 @@
         <span class="kw">let </span>expected_addr = <span class="string">"0xED15E1FE0789c524398137a066ceb2EF9884E5D8"
             </span>.parse::&lt;Address&gt;()
             .unwrap();
-        start_http_server(port, expected_addr, SEQUENCER_VERSION)
-            .expect(<span class="string">"Failed to start the server"</span>);
+        start_http_server(
+            port,
+            expected_addr,
+            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance(),
+        )
+        .expect(<span class="string">"Failed to start the server"</span>);
 
-        <span class="kw">let </span>client: Client&lt;ServerError, SequencerVersion&gt; =
+        <span class="kw">let </span>client: Client&lt;ServerError, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap());
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
