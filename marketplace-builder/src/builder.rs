@@ -325,7 +325,7 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config).await;
+        let network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
 
         // Start the builder
         let init = BuilderConfig::init(
