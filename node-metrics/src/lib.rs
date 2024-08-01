@@ -228,13 +228,8 @@ pub async fn run_standalone_service(options: Options) {
     };
 
     let mut app: App<_, api::node_validator::v0::Error> = App::with_state(state);
-    let node_validator_api_result = api::node_validator::v0::define_api();
-    let node_validator_api = match node_validator_api_result {
-        Ok(node_validator_api) => node_validator_api,
-        Err(err) => {
-            panic!("error defining node validator api: {:?}", err);
-        }
-    };
+    let node_validator_api =
+        api::node_validator::v0::define_api().expect("error defining node validator api");
 
     match app.register_module("node-validator", node_validator_api) {
         Ok(_) => {}
