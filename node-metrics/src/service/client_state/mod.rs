@@ -1,6 +1,6 @@
 use super::{
     client_id::ClientId,
-    client_message::InternalClientMessage,
+    client_message::{ClientMessage, InternalClientMessage},
     data_state::{DataState, NodeIdentity},
     server_message::ServerMessage,
 };
@@ -623,22 +623,22 @@ where
             Ok(())
         }
 
-        InternalClientMessage::SubscribeLatestBlock(client_id) => {
+        InternalClientMessage::Request(client_id, ClientMessage::SubscribeLatestBlock) => {
             handle_client_message_subscribe_latest_block(client_id, client_thread_state).await;
             Ok(())
         }
 
-        InternalClientMessage::SubscribeNodeIdentity(client_id) => {
+        InternalClientMessage::Request(client_id, ClientMessage::SubscribeNodeIdentity) => {
             handle_client_message_subscribe_node_identity(client_id, client_thread_state).await;
             Ok(())
         }
 
-        InternalClientMessage::SubscribeVoters(client_id) => {
+        InternalClientMessage::Request(client_id, ClientMessage::SubscribeVoters) => {
             handle_client_message_subscribe_voters(client_id, client_thread_state).await;
             Ok(())
         }
 
-        InternalClientMessage::RequestBlocksSnapshot(client_id) => {
+        InternalClientMessage::Request(client_id, ClientMessage::RequestBlocksSnapshot) => {
             handle_client_message_request_blocks_snapshot(
                 client_id,
                 data_state,
@@ -648,7 +648,7 @@ where
             Ok(())
         }
 
-        InternalClientMessage::RequestNodeIdentitySnapshot(client_id) => {
+        InternalClientMessage::Request(client_id, ClientMessage::RequestNodeIdentitySnapshot) => {
             handle_client_message_request_node_identity_snapshot(
                 client_id,
                 data_state,
@@ -658,7 +658,7 @@ where
             Ok(())
         }
 
-        InternalClientMessage::RequestHistogramSnapshot(client_id) => {
+        InternalClientMessage::Request(client_id, ClientMessage::RequestHistogramSnapshot) => {
             handle_client_message_request_histogram_snapshot(
                 client_id,
                 data_state,
@@ -668,7 +668,7 @@ where
             Ok(())
         }
 
-        InternalClientMessage::RequestVotersSnapshot(client_id) => {
+        InternalClientMessage::Request(client_id, ClientMessage::RequestVotersSnapshot) => {
             handle_client_message_request_voters_snapshot(
                 client_id,
                 data_state,
@@ -1186,7 +1186,7 @@ pub mod tests {
     use super::{ClientThreadState, InternalClientMessageProcessingTask};
     use crate::service::{
         client_id::ClientId,
-        client_message::InternalClientMessage,
+        client_message::{ClientMessage, InternalClientMessage},
         client_state::{
             ProcessDistributeBlockDetailHandlingTask, ProcessDistributeNodeIdentityHandlingTask,
             ProcessDistributeVotersHandlingTask,
@@ -1366,7 +1366,10 @@ pub mod tests {
 
         assert_eq!(
             internal_client_message_sender_1
-                .send(InternalClientMessage::RequestVotersSnapshot(client_1_id))
+                .send(InternalClientMessage::Request(
+                    client_1_id,
+                    ClientMessage::RequestVotersSnapshot
+                ))
                 .await,
             Ok(()),
         );
@@ -1455,7 +1458,10 @@ pub mod tests {
 
         assert_eq!(
             internal_client_message_sender_1
-                .send(InternalClientMessage::RequestBlocksSnapshot(client_1_id))
+                .send(InternalClientMessage::Request(
+                    client_1_id,
+                    ClientMessage::RequestBlocksSnapshot
+                ))
                 .await,
             Ok(()),
         );
@@ -1536,8 +1542,9 @@ pub mod tests {
 
         assert_eq!(
             internal_client_message_sender_1
-                .send(InternalClientMessage::RequestNodeIdentitySnapshot(
-                    client_1_id
+                .send(InternalClientMessage::Request(
+                    client_1_id,
+                    ClientMessage::RequestNodeIdentitySnapshot
                 ))
                 .await,
             Ok(()),
@@ -1658,14 +1665,20 @@ pub mod tests {
 
         assert_eq!(
             internal_client_message_sender_1
-                .send(InternalClientMessage::SubscribeLatestBlock(client_1_id))
+                .send(InternalClientMessage::Request(
+                    client_1_id,
+                    ClientMessage::SubscribeLatestBlock
+                ))
                 .await,
             Ok(()),
         );
 
         assert_eq!(
             internal_client_message_sender_1
-                .send(InternalClientMessage::SubscribeLatestBlock(client_2_id))
+                .send(InternalClientMessage::Request(
+                    client_2_id,
+                    ClientMessage::SubscribeLatestBlock
+                ))
                 .await,
             Ok(()),
         );
@@ -1829,14 +1842,20 @@ pub mod tests {
 
         assert_eq!(
             internal_client_message_sender_1
-                .send(InternalClientMessage::SubscribeNodeIdentity(client_1_id))
+                .send(InternalClientMessage::Request(
+                    client_1_id,
+                    ClientMessage::SubscribeNodeIdentity
+                ))
                 .await,
             Ok(()),
         );
 
         assert_eq!(
             internal_client_message_sender_1
-                .send(InternalClientMessage::SubscribeNodeIdentity(client_2_id))
+                .send(InternalClientMessage::Request(
+                    client_2_id,
+                    ClientMessage::SubscribeNodeIdentity
+                ))
                 .await,
             Ok(()),
         );
@@ -1972,14 +1991,20 @@ pub mod tests {
 
         assert_eq!(
             internal_client_message_sender_1
-                .send(InternalClientMessage::SubscribeVoters(client_1_id))
+                .send(InternalClientMessage::Request(
+                    client_1_id,
+                    ClientMessage::SubscribeVoters
+                ))
                 .await,
             Ok(()),
         );
 
         assert_eq!(
             internal_client_message_sender_1
-                .send(InternalClientMessage::SubscribeVoters(client_2_id))
+                .send(InternalClientMessage::Request(
+                    client_2_id,
+                    ClientMessage::SubscribeVoters
+                ))
                 .await,
             Ok(()),
         );

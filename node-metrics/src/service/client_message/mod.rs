@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// [ClientMessage] represents the messages that the client can send to the
 /// server for a request.
 ///
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ClientMessage {
     SubscribeLatestBlock,
     SubscribeNodeIdentity,
@@ -25,64 +25,14 @@ pub enum InternalClientMessage<K> {
     Connected(K),
     Disconnected(ClientId),
 
-    SubscribeLatestBlock(ClientId),
-    SubscribeNodeIdentity(ClientId),
-    SubscribeVoters(ClientId),
-
-    RequestBlocksSnapshot(ClientId),
-    RequestNodeIdentitySnapshot(ClientId),
-    RequestHistogramSnapshot(ClientId),
-    RequestVotersSnapshot(ClientId),
-}
-
-impl<K> PartialEq for InternalClientMessage<K> {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            // We don't care about the [Sender] here, as it is unable to be
-            // compared.
-            (Self::Connected(_), Self::Connected(_)) => true,
-            (Self::Disconnected(lhs), Self::Disconnected(rhs)) => lhs == rhs,
-            (Self::SubscribeLatestBlock(lhs), Self::SubscribeLatestBlock(rhs)) => lhs == rhs,
-            (Self::SubscribeNodeIdentity(lhs), Self::SubscribeNodeIdentity(rhs)) => lhs == rhs,
-            (Self::SubscribeVoters(lhs), Self::SubscribeVoters(rhs)) => lhs == rhs,
-            (Self::RequestBlocksSnapshot(lhs), Self::RequestBlocksSnapshot(rhs)) => lhs == rhs,
-            (Self::RequestNodeIdentitySnapshot(lhs), Self::RequestNodeIdentitySnapshot(rhs)) => {
-                lhs == rhs
-            }
-            (Self::RequestHistogramSnapshot(lhs), Self::RequestHistogramSnapshot(rhs)) => {
-                lhs == rhs
-            }
-            (Self::RequestVotersSnapshot(lhs), Self::RequestVotersSnapshot(rhs)) => lhs == rhs,
-            _ => false,
-        }
-    }
+    Request(ClientId, ClientMessage),
 }
 
 impl ClientMessage {
     /// [to_internal_with_client_id] converts the [ClientMessage] into an
     /// [InternalClientMessage] with the given [ClientId].
     pub fn to_internal_with_client_id<K>(&self, client_id: ClientId) -> InternalClientMessage<K> {
-        match self {
-            ClientMessage::SubscribeLatestBlock => {
-                InternalClientMessage::SubscribeLatestBlock(client_id)
-            }
-            ClientMessage::SubscribeNodeIdentity => {
-                InternalClientMessage::SubscribeNodeIdentity(client_id)
-            }
-            ClientMessage::SubscribeVoters => InternalClientMessage::SubscribeVoters(client_id),
-            ClientMessage::RequestBlocksSnapshot => {
-                InternalClientMessage::RequestBlocksSnapshot(client_id)
-            }
-            ClientMessage::RequestNodeIdentitySnapshot => {
-                InternalClientMessage::RequestNodeIdentitySnapshot(client_id)
-            }
-            ClientMessage::RequestHistogramSnapshot => {
-                InternalClientMessage::RequestHistogramSnapshot(client_id)
-            }
-            ClientMessage::RequestVotersSnapshot => {
-                InternalClientMessage::RequestVotersSnapshot(client_id)
-            }
-        }
+        InternalClientMessage::Request(client_id, *self)
     }
 }
 
@@ -93,6 +43,22 @@ mod tests {
     use crate::service::server_message::ServerMessage;
     use futures::channel::mpsc::Sender;
     use std::iter::zip;
+
+    impl<K> PartialEq for InternalClientMessage<K> {
+        fn eq(&self, other: &Self) -> bool {
+            match (self, other) {
+                // We don't care about the [Sender] here, as it is unable to be
+                // compared.
+                (Self::Connected(_), Self::Connected(_)) => true,
+                (Self::Disconnected(lhs), Self::Disconnected(rhs)) => lhs == rhs,
+                (
+                    Self::Request(lhs_client_id, lhs_message),
+                    Self::Request(rhs_client_id, rhs_message),
+                ) => lhs_client_id == rhs_client_id && lhs_message == rhs_message,
+                _ => false,
+            }
+        }
+    }
 
     #[test]
     fn test_client_message_partial_eq() {
@@ -173,22 +139,7 @@ mod tests {
                 let internal_client_message =
                     message.to_internal_with_client_id::<Sender<ServerMessage>>(client_id);
                 match internal_client_message {
-                    InternalClientMessage::SubscribeLatestBlock(id) => {
-                        assert_eq!(id, client_id);
-                    }
-                    InternalClientMessage::SubscribeNodeIdentity(id) => {
-                        assert_eq!(id, client_id);
-                    }
-                    InternalClientMessage::SubscribeVoters(id) => {
-                        assert_eq!(id, client_id);
-                    }
-                    InternalClientMessage::RequestBlocksSnapshot(id) => {
-                        assert_eq!(id, client_id);
-                    }
-                    InternalClientMessage::RequestNodeIdentitySnapshot(id) => {
-                        assert_eq!(id, client_id);
-                    }
-                    InternalClientMessage::RequestHistogramSnapshot(id) => {
+                    InternalClientMessage::Request(id, _) => {
                         assert_eq!(id, client_id);
                     }
                     _ => panic!("Unexpected InternalClientMessage"),
@@ -203,12 +154,27 @@ mod tests {
         let messages = [
             InternalClientMessage::Connected(sender),
             InternalClientMessage::Disconnected(ClientId::from_count(1)),
-            InternalClientMessage::SubscribeLatestBlock(ClientId::from_count(1)),
-            InternalClientMessage::SubscribeNodeIdentity(ClientId::from_count(1)),
-            InternalClientMessage::SubscribeVoters(ClientId::from_count(1)),
-            InternalClientMessage::RequestBlocksSnapshot(ClientId::from_count(1)),
-            InternalClientMessage::RequestNodeIdentitySnapshot(ClientId::from_count(1)),
-            InternalClientMessage::RequestHistogramSnapshot(ClientId::from_count(1)),
+            InternalClientMessage::Request(
+                ClientId::from_count(1),
+                ClientMessage::SubscribeLatestBlock,
+            ),
+            InternalClientMessage::Request(
+                ClientId::from_count(1),
+                ClientMessage::SubscribeNodeIdentity,
+            ),
+            InternalClientMessage::Request(ClientId::from_count(1), ClientMessage::SubscribeVoters),
+            InternalClientMessage::Request(
+                ClientId::from_count(1),
+                ClientMessage::RequestBlocksSnapshot,
+            ),
+            InternalClientMessage::Request(
+                ClientId::from_count(1),
+                ClientMessage::RequestNodeIdentitySnapshot,
+            ),
+            InternalClientMessage::Request(
+                ClientId::from_count(1),
+                ClientMessage::RequestHistogramSnapshot,
+            ),
         ];
 
         for (l, r) in zip(messages.iter(), messages.iter()) {
@@ -227,12 +193,30 @@ mod tests {
         for j in 2..12 {
             let iter_messages = [
                 InternalClientMessage::Disconnected(ClientId::from_count(j)),
-                InternalClientMessage::SubscribeLatestBlock(ClientId::from_count(j)),
-                InternalClientMessage::SubscribeNodeIdentity(ClientId::from_count(j)),
-                InternalClientMessage::SubscribeVoters(ClientId::from_count(j)),
-                InternalClientMessage::RequestBlocksSnapshot(ClientId::from_count(j)),
-                InternalClientMessage::RequestNodeIdentitySnapshot(ClientId::from_count(j)),
-                InternalClientMessage::RequestHistogramSnapshot(ClientId::from_count(j)),
+                InternalClientMessage::Request(
+                    ClientId::from_count(j),
+                    ClientMessage::SubscribeLatestBlock,
+                ),
+                InternalClientMessage::Request(
+                    ClientId::from_count(j),
+                    ClientMessage::SubscribeNodeIdentity,
+                ),
+                InternalClientMessage::Request(
+                    ClientId::from_count(j),
+                    ClientMessage::SubscribeVoters,
+                ),
+                InternalClientMessage::Request(
+                    ClientId::from_count(j),
+                    ClientMessage::RequestBlocksSnapshot,
+                ),
+                InternalClientMessage::Request(
+                    ClientId::from_count(j),
+                    ClientMessage::RequestNodeIdentitySnapshot,
+                ),
+                InternalClientMessage::Request(
+                    ClientId::from_count(j),
+                    ClientMessage::RequestHistogramSnapshot,
+                ),
             ];
 
             // We skip the first message, as we don't want to include the
