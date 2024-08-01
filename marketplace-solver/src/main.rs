@@ -11,8 +11,7 @@ use marketplace_solver::{
     state::{GlobalState, SolverState, StakeTable},
     DatabaseOptions, EventsServiceClient, SolverError,
 };
-use tide_disco::App;
-use url::Url;
+use tide_disco::{App, Url};
 use vbs::version::StaticVersionType;
 
 type Version = <SeqTypes as NodeType>::Base;

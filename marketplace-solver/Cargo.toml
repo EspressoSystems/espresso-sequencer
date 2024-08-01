@@ -1,0 +1,45 @@
+[package]
+name = "marketplace-solver"
+version = "0.1.0"
+authors = ["Espresso Systems <hello@espressosys.com>"]
+edition = "2021"
+
+[features]
+testing = [
+	"hotshot-query-service",
+	"portpicker",
+	
+]
+
+[dependencies]
+anyhow = { workspace = true }
+async-compatibility-layer = { workspace = true }
+async-std = { workspace = true }
+async-trait = { workspace = true }
+bincode = { workspace = true }
+clap = { workspace = true }
+cld = { workspace = true }
+committable = { workspace = true }
+espresso-types = { path = "../types", features = [ "testing" ] }
+futures = { workspace = true }
+hotshot = { workspace = true }
+hotshot-events-service = { workspace = true }
+hotshot-query-service = { workspace = true, optional = true }
+hotshot-types = { workspace = true }
+jf-signature = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
+  "std",
+] }
+portpicker = { workspace = true, optional = true } 
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { version = "0.7.4", features = [ "postgres", "macros" ] }
+surf-disco = { workspace = true }
+thiserror = { workspace = true }
+tide-disco = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+vbs = { workspace = true }
+
+[dev-dependencies]
+portpicker = { workspace = true }

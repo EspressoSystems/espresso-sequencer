@@ -77,7 +77,7 @@ jf-rescue = { workspace = true }
 jf-signature = { workspace = true, features = ["bls", "schnorr"] }
 jf-vid = { workspace = true }
 libp2p = { workspace = true } 
-marketplace-solver = { git = "https://github.com/EspressoSystems/marketplace-solver.git", tag = "0.1.2" }
+marketplace-solver = { path = "../marketplace-solver" }
 num-traits = "0.2.18"
 num_enum = "0.7"
 portpicker = { workspace = true }
