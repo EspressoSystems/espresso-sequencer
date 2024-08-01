@@ -139,7 +139,7 @@ pub mod mock {
             count = 1;
 
             let delay = 1000 + (u64::from(OsRng.next_u32()) % 1000);
-            tracing::warn!("sleeping for {delay:?}ms...");
+            tracing::info!("sleeping for {delay:?}ms...");
 
             sleep(Duration::from_millis(delay)).await
         }
