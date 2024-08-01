@@ -784,13 +784,11 @@ impl BlockHeader<SeqTypes> for Header {
         let mut validated_state = parent_state.clone();
 
         let chain_config = if version > instance_state.current_version {
-            match instance_state
-                .upgrades
-                .get(&version)
-                .map(|upgrade| match upgrade.upgrade_type {
+            match instance_state.upgrades.get(&version) {
+                Some(upgrade) => match upgrade.upgrade_type {
                     UpgradeType::ChainConfig { chain_config } => chain_config,
-                }) {
-                Some(cf) => cf,
+                    _ => Header::get_chain_config(&validated_state, instance_state).await,
+                },
                 None => Header::get_chain_config(&validated_state, instance_state).await,
             }
         } else {
@@ -903,13 +901,11 @@ impl BlockHeader<SeqTypes> for Header {
         let mut validated_state = parent_state.clone();
 
         let chain_config = if version > instance_state.current_version {
-            match instance_state
-                .upgrades
-                .get(&version)
-                .map(|upgrade| match upgrade.upgrade_type {
+            match instance_state.upgrades.get(&version) {
+                Some(upgrade) => match upgrade.upgrade_type {
                     UpgradeType::ChainConfig { chain_config } => chain_config,
-                }) {
-                Some(cf) => cf,
+                    _ => Header::get_chain_config(&validated_state, instance_state).await,
+                },
                 None => Header::get_chain_config(&validated_state, instance_state).await,
             }
         } else {

@@ -470,10 +470,8 @@ impl ValidatedState {
             return;
         };
 
-        match upgrade.upgrade_type {
-            UpgradeType::ChainConfig { chain_config } => {
-                self.chain_config = chain_config.into();
-            }
+        if let UpgradeType::ChainConfig { chain_config } = upgrade.upgrade_type {
+            self.chain_config = chain_config.into();
         }
     }
 
