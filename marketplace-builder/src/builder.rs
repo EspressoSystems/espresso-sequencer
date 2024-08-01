@@ -53,7 +53,7 @@ use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::StaticVersionType;
 
 use crate::{
-    hooks::{self, EspressoHooks},
+    hooks::{self, BidConfig, EspressoFallbackHooks, EspressoReserveHooks},
     run_builder_api_service,
 };
 
@@ -86,6 +86,7 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
 impl BuilderConfig {
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
+        is_reserve: bool,
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         tx_channel_capacity: NonZeroUsize,
@@ -99,8 +100,7 @@ impl BuilderConfig {
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
-        bid_amount: FeeAmount,
-        namespaces: impl IntoIterator<Item = NamespaceId>,
+        bid_config: Option<BidConfig>,
         solver_api_url: Url,
     ) -> anyhow::Result<Self> {
         tracing::info!(
@@ -202,31 +202,56 @@ impl BuilderConfig {
         let events_url = hotshot_events_api_url.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
 
-        let hooks = hooks::EspressoHooks {
-            namespaces: namespaces.into_iter().collect(),
-            solver_api_url,
-            builder_api_base_url: hotshot_builder_apis_url.clone(),
-            bid_key_pair: builder_key_pair,
-            bid_amount,
-        };
+        if is_reserve {
+            let Some(bid_config) = bid_config else {
+                panic!("Missing bid config for the reserve builder.");
+            };
+            let hooks = hooks::EspressoReserveHooks {
+                namespaces: bid_config.namespaces.into_iter().collect(),
+                solver_api_url,
+                builder_api_base_url: hotshot_builder_apis_url.clone(),
+                bid_key_pair: builder_key_pair,
+                bid_amount: bid_config.amount,
+            };
 
-        async_spawn(async move {
-            let res = run_non_permissioned_standalone_builder_service(
-                hooks,
-                BroadcastSenders {
-                    transactions: tx_sender,
-                    da_proposal: da_sender,
-                    quorum_proposal: qc_sender,
-                    decide: decide_sender,
-                },
-                events_url,
-            )
-            .await;
-            tracing::error!(?res, "builder service exited");
-            if res.is_err() {
-                panic!("Builder should restart.");
-            }
-        });
+            async_spawn(async move {
+                let res = run_non_permissioned_standalone_builder_service(
+                    hooks,
+                    BroadcastSenders {
+                        transactions: tx_sender,
+                        da_proposal: da_sender,
+                        quorum_proposal: qc_sender,
+                        decide: decide_sender,
+                    },
+                    events_url,
+                )
+                .await;
+                tracing::error!(?res, "builder service exited");
+                if res.is_err() {
+                    panic!("Builder should restart.");
+                }
+            });
+        } else {
+            let hooks = hooks::EspressoFallbackHooks { solver_api_url };
+
+            async_spawn(async move {
+                let res = run_non_permissioned_standalone_builder_service(
+                    hooks,
+                    BroadcastSenders {
+                        transactions: tx_sender,
+                        da_proposal: da_sender,
+                        quorum_proposal: qc_sender,
+                        decide: decide_sender,
+                    },
+                    events_url,
+                )
+                .await;
+                tracing::error!(?res, "builder service exited");
+                if res.is_err() {
+                    panic!("Builder should restart.");
+                }
+            });
+        }
 
         tracing::info!("Builder init finished");
         Ok(Self {
@@ -329,6 +354,7 @@ mod test {
 
         // Start the builder
         let init = BuilderConfig::init(
+            false,
             FeeAccount::test_key_pair(),
             ViewNumber::genesis(),
             NonZeroUsize::new(1024).unwrap(),
@@ -342,8 +368,10 @@ mod test {
             5,
             Duration::from_secs(2),
             FeeAmount::from(10),
-            FeeAmount::from(10),
-            vec![NamespaceId::from(10u32)],
+            Some(BidConfig {
+                namespaces: vec![NamespaceId::from(10u32)],
+                amount: FeeAmount::from(10),
+            }),
             format!("http://localhost:{}", 3000).parse().unwrap(),
         );
         let _builder_config = init.await;
