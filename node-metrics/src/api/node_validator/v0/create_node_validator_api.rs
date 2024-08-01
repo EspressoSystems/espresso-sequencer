@@ -280,13 +280,6 @@ pub async fn create_node_validator_processing(
     internal_client_message_receiver: Receiver<InternalClientMessage<Sender<ServerMessage>>>,
     leaf_receiver: Receiver<Leaf<SeqTypes>>,
 ) -> Result<NodeValidatorAPI<Sender<Url>>, CreateNodeValidatorProcessingError> {
-    let mut data_state = DataState::new(
-        Default::default(),
-        Default::default(),
-        Default::default(),
-        Default::default(),
-    );
-
     let client_thread_state = ClientThreadState::<Sender<ServerMessage>>::new(
         Default::default(),
         Default::default(),
@@ -301,7 +294,12 @@ pub async fn create_node_validator_processing(
         .await
         .map_err(CreateNodeValidatorProcessingError::FailedToGetStakeTable)?;
 
-    data_state.replace_stake_table(stake_table);
+    let data_state = DataState::new(
+        Default::default(),
+        Default::default(),
+        stake_table,
+        Default::default(),
+    );
 
     let data_state = Arc::new(RwLock::new(data_state));
     let client_thread_state = Arc::new(RwLock::new(client_thread_state));
