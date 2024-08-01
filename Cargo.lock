@@ -6187,7 +6187,6 @@ dependencies = [
  "cld",
  "committable",
  "dotenvy",
- "es-version",
  "espresso-types 0.1.0",
  "ethers",
  "futures",

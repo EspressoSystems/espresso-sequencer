@@ -248,8 +248,9 @@ mod test {
     use async_lock::RwLock;
     use async_std::{stream::StreamExt, task};
     use committable::Commitment;
-    use es_version::SequencerVersion;
-    use espresso_types::{mock::MockStateCatchup, FeeAccount, NamespaceId, PubKey, Transaction};
+    use espresso_types::{
+        mock::MockStateCatchup, FeeAccount, NamespaceId, PubKey, SeqTypes, Transaction,
+    };
     use ethers::utils::Anvil;
     use hotshot::types::BLSPrivKey;
     use hotshot_builder_api::v0_3::builder::BuildError;
@@ -348,7 +349,8 @@ mod test {
         let _builder_config = init.await;
 
         // Wait for at least one empty block to be sequenced (after consensus starts VID).
-        let sequencer_client: Client<ServerError, SequencerVersion> = Client::new(query_api_url);
+        let sequencer_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+            Client::new(query_api_url);
         sequencer_client.connect(None).await;
         sequencer_client
             .socket("availability/stream/leaves/0")
@@ -366,7 +368,8 @@ mod test {
         builder_client.connect(None).await;
 
         //  TODO(AG): workaround for version mismatch between bundle and submit APIs
-        let submission_client: Client<ServerError, SequencerVersion> = Client::new(builder_api_url);
+        let submission_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+            Client::new(builder_api_url);
         submission_client.connect(None).await;
 
         // Test getting a bundle
