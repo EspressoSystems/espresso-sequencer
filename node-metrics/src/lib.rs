@@ -245,7 +245,7 @@ pub async fn run_standalone_service(options: Options) {
 
     let (leaf_sender, leaf_receiver) = mpsc::channel(10);
 
-    let process_consume_leaves = ProcessProduceLeafStreamTask::new(
+    let _process_consume_leaves = ProcessProduceLeafStreamTask::new(
         HotshotQueryServiceLeafStreamRetriever::new(options.leaf_stream_base_url().clone()),
         leaf_sender,
     );
@@ -267,7 +267,7 @@ pub async fn run_standalone_service(options: Options) {
         }
     };
 
-    let cdn_tasks = if let Some(cdn_broker_url_string) = options.cdn_marshal_endpoint() {
+    let _cdn_tasks = if let Some(cdn_broker_url_string) = options.cdn_marshal_endpoint() {
         let (public_key, private_key) = PubKey::generated_from_seed_indexed([1; 32], 0);
         let cdn_network_result = PushCdnNetwork::<SeqTypes>::new(
             cdn_broker_url_string.to_string(),
@@ -305,12 +305,4 @@ pub async fn run_standalone_service(options: Options) {
     });
 
     app_serve_handle.await;
-
-    if let Some((broadcast_roll_call_task, cdn_receive_message_task)) = cdn_tasks {
-        drop(broadcast_roll_call_task);
-        drop(cdn_receive_message_task);
-    }
-
-    drop(node_validator_task_state);
-    drop(process_consume_leaves);
 }
