@@ -49,10 +49,10 @@ pub async fn connect_to_solver(
     Some(client)
 }
 
-/// Non-generic builder hooks for espresso sequencer.
+/// Reserve builder hooks for espresso sequencer.
 ///
 /// Provides bidding and transaction filtering on top of base builder functionality.
-pub(crate) struct EspressoNormalHooks {
+pub(crate) struct EspressoReserveHooks {
     /// IDs of namespaces to filter and bid for
     pub(crate) namespaces: HashSet<NamespaceId>,
     /// Base API to contact the solver
@@ -66,7 +66,7 @@ pub(crate) struct EspressoNormalHooks {
 }
 
 #[async_trait]
-impl BuilderHooks<SeqTypes> for EspressoNormalHooks {
+impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
     #[inline(always)]
     async fn process_transactions(
         &mut self,
@@ -115,16 +115,16 @@ impl BuilderHooks<SeqTypes> for EspressoNormalHooks {
     }
 }
 
-/// Generic builder hooks for espresso sequencer.
+/// Fallback builder hooks for espresso sequencer.
 ///
-/// Provides transaction filtering on top of base builder functionality.
-pub(crate) struct EspressoGenericHooks {
+/// Provides transaction filtering on top of base builder functionality for unregistered rollups.
+pub(crate) struct EspressoFallbackHooks {
     /// Base API to contact the solver
     pub(crate) solver_api_url: Url,
 }
 
 #[async_trait]
-impl BuilderHooks<SeqTypes> for EspressoGenericHooks {
+impl BuilderHooks<SeqTypes> for EspressoFallbackHooks {
     #[inline(always)]
     async fn process_transactions(
         &mut self,

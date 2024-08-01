@@ -18,9 +18,11 @@ use vbs::version::StaticVersionType;
 
 #[derive(Parser, Clone, Debug)]
 struct NonPermissionedBuilderOptions {
-    /// Whether this is a generic builder.
-    #[clap(short, long, env = "ESPRESSO_MARKETPLACE_BUILDER_IS_GENERIC")]
-    is_generic: bool,
+    /// Whether this is a reserve builder.
+    ///
+    /// If not, it's a fallback buidler that only builds for unregistered rollups.
+    #[clap(short, long, env = "ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE")]
+    is_reserve: bool,
 
     /// URL of hotshot events API running on Espresso Sequencer DA committee node
     /// The builder will subscribe to this server to receive hotshot events
@@ -142,14 +144,14 @@ async fn main() -> anyhow::Result<()> {
         events_max_block_range: 10000,
     };
 
-    let is_generic = opt.is_generic;
-    let bid_config = if is_generic {
+    let is_reserve = opt.is_reserve;
+    let bid_config = if opt.is_reserve {
+        None
+    } else {
         Some(BidConfig {
             amount: opt.bid_amount,
             namespaces: opt.namespaces.into_iter().map(NamespaceId::from).collect(),
         })
-    } else {
-        None
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
@@ -177,7 +179,7 @@ async fn main() -> anyhow::Result<()> {
     let buffer_view_num_count = opt.buffer_view_num_count;
 
     let init = BuilderConfig::init(
-        opt.is_generic,
+        is_reserve,
         builder_key_pair,
         bootstrapped_view,
         opt.tx_channel_capacity,

@@ -484,13 +484,13 @@ services:
       permissionless-builder:
         condition: service_healthy
 
-  marketplace-builder-normal:
+  marketplace-reserve-builder:
     image: ghcr.io/espressosystems/espresso-sequencer/marketplace-builder:main
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
     profiles: [marketplace]
     environment:
-      - ESPRESSO_MARKETPLACE_BUILDER_IS_GENERIC=false
+      - ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE=true
       - ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
       - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10000
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://sequencer0:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
@@ -513,13 +513,13 @@ services:
       fund-builder:
         condition: service_completed_successfully
 
-  marketplace-builder-generic:
+  marketplace-generic-builder:
     image: ghcr.io/espressosystems/espresso-sequencer/marketplace-builder:main
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
     profiles: [marketplace]
     environment:
-      - ESPRESSO_MARKETPLACE_BUILDER_IS_GENERIC=true
+      - ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE=false
       - ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
       - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10000
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://sequencer0:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT

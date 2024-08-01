@@ -53,7 +53,7 @@ use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::StaticVersionType;
 
 use crate::{
-    hooks::{self, BidConfig, EspressoGenericHooks, EspressoNormalHooks},
+    hooks::{self, BidConfig, EspressoFallbackHooks, EspressoReserveHooks},
     run_builder_api_service,
 };
 
@@ -86,7 +86,7 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
 impl BuilderConfig {
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
-        is_generic: bool,
+        is_reserve: bool,
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         tx_channel_capacity: NonZeroUsize,
@@ -202,8 +202,17 @@ impl BuilderConfig {
         let events_url = hotshot_events_api_url.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
 
-        if is_generic {
-            let hooks = hooks::EspressoGenericHooks { solver_api_url };
+        if is_reserve {
+            let Some(bid_config) = bid_config else {
+                panic!("Missing bid config for the reserve builder.");
+            };
+            let hooks = hooks::EspressoReserveHooks {
+                namespaces: bid_config.namespaces.into_iter().collect(),
+                solver_api_url,
+                builder_api_base_url: hotshot_builder_apis_url.clone(),
+                bid_key_pair: builder_key_pair,
+                bid_amount: bid_config.amount,
+            };
 
             async_spawn(async move {
                 let res = run_non_permissioned_standalone_builder_service(
@@ -223,16 +232,7 @@ impl BuilderConfig {
                 }
             });
         } else {
-            let Some(bid_config) = bid_config else {
-                panic!("Missing bid config for non-generic builder.");
-            };
-            let hooks = hooks::EspressoNormalHooks {
-                namespaces: bid_config.namespaces.into_iter().collect(),
-                solver_api_url,
-                builder_api_base_url: hotshot_builder_apis_url.clone(),
-                bid_key_pair: builder_key_pair,
-                bid_amount: bid_config.amount,
-            };
+            let hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(async move {
                 let res = run_non_permissioned_standalone_builder_service(
