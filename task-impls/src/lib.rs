@@ -44,7 +44,7 @@ pub mod builder;
 /// Helper functions used by any task
 pub mod helpers;
 
-/// Task which responsds to requests from the network
+/// Task which responses to requests from the network
 pub mod response;
 
 /// Task for requesting the network for things

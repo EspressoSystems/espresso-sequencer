@@ -64,7 +64,7 @@ pub struct NetworkRequestState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub quorum_membership: TYPES::Membership,
     /// This nodes public key
     pub public_key: TYPES::SignatureKey,
-    /// This nodes private/signign key, used to sign requests.
+    /// This nodes private/signing key, used to sign requests.
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// The node's id
     pub id: u64,
@@ -155,7 +155,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
             .for_each(|r| self.run_delay(r, sender.clone(), view));
     }
 
-    /// Creates the srequest structures for all types that are needed.
+    /// Creates the request structures for all types that are needed.
     #[instrument(skip_all, target = "NetworkRequestState", fields(id = self.id, view = *view))]
     async fn build_requests(&self, view: TYPES::Time) -> Vec<RequestKind<TYPES>> {
         let mut reqs = Vec::new();
@@ -182,7 +182,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
         };
         Some(signature)
     }
-    /// run a delayed request task for a request.  The first response
+    /// run a delayed request task for a request. The first response
     /// received will be sent over `sender`
     #[instrument(skip_all, fields(id = self.id, view = *self.view), name = "NetworkRequestState run_delay", level = "error")]
     fn run_delay(

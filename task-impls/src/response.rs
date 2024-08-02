@@ -208,7 +208,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
     }
 
     /// Helper to turn a `ResponseMessage` into a `Message` by filling
-    /// in the surrounding feilds and creating the `MessageKind`
+    /// in the surrounding fields and creating the `MessageKind`
     fn make_msg(&self, msg: ResponseMessage<TYPES>) -> Message<TYPES> {
         Message {
             sender: self.pub_key.clone(),

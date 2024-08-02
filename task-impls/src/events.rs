@@ -54,7 +54,7 @@ impl<TYPES: NodeType> Eq for ProposalMissing<TYPES> {}
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct HotShotTaskCompleted;
 
-/// All of the possible events that can be passed between Sequecning `HotShot` tasks
+/// All of the possible events that can be passed between Sequencing `HotShot` tasks
 #[derive(Eq, PartialEq, Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum HotShotEvent<TYPES: NodeType> {
@@ -64,7 +64,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
     QuorumProposalRecv(Proposal<TYPES, QuorumProposal<TYPES>>, TYPES::SignatureKey),
     /// A quorum vote has been received from the network; handled by the consensus task
     QuorumVoteRecv(QuorumVote<TYPES>),
-    /// A timeout vote recevied from the network; handled by consensus task
+    /// A timeout vote received from the network; handled by consensus task
     TimeoutVoteRecv(TimeoutVote<TYPES>),
     /// Send a timeout vote to the network; emitted by consensus task replicas
     TimeoutVoteSend(TimeoutVote<TYPES>),
@@ -74,7 +74,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
     DaProposalValidated(Proposal<TYPES, DaProposal<TYPES>>, TYPES::SignatureKey),
     /// A DA vote has been received by the network; handled by the DA task
     DaVoteRecv(DaVote<TYPES>),
-    /// A Data Availability Certificate (DAC) has been recieved by the network; handled by the consensus task
+    /// A Data Availability Certificate (DAC) has been received by the network; handled by the consensus task
     DaCertificateRecv(DaCertificate<TYPES>),
     /// A DAC is validated.
     DaCertificateValidated(DaCertificate<TYPES>),
@@ -91,7 +91,7 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// 3. The justify QC is valid
     /// 4. The proposal passes either liveness or safety check.
     QuorumProposalValidated(QuorumProposal<TYPES>, Leaf<TYPES>),
-    /// A quorum proposal is missing for a view that we meed
+    /// A quorum proposal is missing for a view that we need
     QuorumProposalRequest(ProposalMissing<TYPES>),
     /// Send a DA proposal to the DA committee; emitted by the DA leader (which is the same node as the leader of view v + 1) in the DA task
     DaProposalSend(Proposal<TYPES, DaProposal<TYPES>>, TYPES::SignatureKey),

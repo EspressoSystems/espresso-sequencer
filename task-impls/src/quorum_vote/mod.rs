@@ -494,7 +494,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
 
         let deps = vec![quorum_proposal_dependency, dac_dependency, vid_dependency];
         let dependency_chain = OrDependency::from_deps(vec![
-            // Either we fulfull the dependencies individiaully.
+            // Either we fulfill the dependencies individually.
             AndDependency::from_deps(deps),
             // Or we fulfill the single dependency that contains all the info that we need.
             AndDependency::from_deps(vec![vote_now_dependency]),

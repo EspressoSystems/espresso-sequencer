@@ -9,7 +9,6 @@ use hotshot_types::{
     data::{PackedBundle, VidDisperse, VidDisperseShare},
     message::Proposal,
     traits::{
-        election::Membership,
         node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
         BlockPayload,
@@ -137,12 +136,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> VidTaskState<TYPES, I> {
                     warn!("View changed by more than 1 going to view {:?}", view);
                 }
                 self.cur_view = view;
-
-                // If we are not the next leader, we should exit
-                if self.membership.leader(self.cur_view + 1) != self.public_key {
-                    // panic!("We are not the DA leader for view {}", *self.cur_view + 1);
-                    return None;
-                }
 
                 return None;
             }

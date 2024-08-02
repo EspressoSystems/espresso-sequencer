@@ -626,7 +626,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
 
         available_blocks.sort_by(|(l, _), (r, _)| {
             // We want the block with the highest fee per byte of data we're going to have to
-            // process, thus our comparision function is:
+            // process, thus our comparison function is:
             //      (l.offered_fee / l.block_size) < (r.offered_fee / r.block_size)
             // To avoid floating point math (which doesn't even have an `Ord` impl) we multiply
             // through by the denominators to get
