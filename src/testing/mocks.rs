@@ -22,6 +22,7 @@ use hotshot::traits::{
 };
 use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 use hotshot_example_types::{
+    auction_results_provider_types::TestAuctionResult,
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
@@ -44,6 +45,7 @@ use vbs::version::StaticVersion;
 pub type MockHeader = TestBlockHeader;
 pub type MockPayload = TestBlockPayload;
 pub type MockTransaction = TestTransaction;
+pub type MockAuctionResults = TestAuctionResult;
 
 pub fn mock_transaction(payload: Vec<u8>) -> MockTransaction {
     TestTransaction::new(payload)
@@ -135,6 +137,7 @@ impl NodeType for MockTypes {
     type BuilderSignatureKey = BLSPubKey;
     type Base = StaticVersion<0, 1>;
     type Upgrade = StaticVersion<0, 2>;
+    type AuctionResult = MockAuctionResults;
     const UPGRADE_HASH: [u8; 32] = [
         1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
         0, 0,
@@ -158,7 +161,7 @@ pub struct MockNodeImpl;
 impl NodeImplementation<MockTypes> for MockNodeImpl {
     type Network = MockNetwork;
     type Storage = MockStorage;
-    type AuctionResultsProvider = TestAuctionResultsProvider;
+    type AuctionResultsProvider = TestAuctionResultsProvider<MockTypes>;
 }
 
 pub type MockMerkleTree = UniversalMerkleTree<usize, Sha3Digest, usize, 8, Sha3Node>;
