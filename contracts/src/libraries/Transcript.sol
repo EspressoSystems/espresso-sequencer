@@ -40,22 +40,30 @@ library Transcript {
         self.transcript = abi.encodePacked(self.transcript, comm.x, comm.y);
     }
 
-    function getAndAppendChallenge(TranscriptData memory self) internal pure returns (uint256) {
+    function getAndAppendChallenge(TranscriptData memory self)
+        internal
+        pure
+        returns (uint256 ret)
+    {
         bytes memory transcript = self.transcript;
-        uint256 ret = uint256(keccak256(transcript)) % BN254.R_MOD;
+        uint256 p = BN254.R_MOD;
 
         assembly {
             let len := mload(transcript)
             let newLen := add(len, 32)
             let dataPtr := add(transcript, 0x20)
 
+            // uint256(keccak256(transcript)) % BN254.R_MOD;
+            ret := mod(keccak256(dataPtr, len), p)
+
+            // same as self.transcript = abi.encodePacked(self.transcript, ret);
             mstore(transcript, newLen)
             mstore(add(dataPtr, len), ret)
+
             // update free memory pointer since we extend the dynamic array
             // to prevent potential overwrite
             mstore(0x40, add(mload(0x40), 32))
         }
-        return ret;
     }
 
     /// @dev Append the verifying key and the public inputs to the transcript.
