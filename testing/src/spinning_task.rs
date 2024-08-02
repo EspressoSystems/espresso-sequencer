@@ -233,7 +233,7 @@ where
                                         marketplace_config.clone(),
                                         (
                                             node.handle.internal_channel_sender(),
-                                            node.handle.internal_event_stream_known_impl(),
+                                            node.handle.internal_event_stream_receiver_known_impl(),
                                         ),
                                         (
                                             node.handle.external_channel_sender(),
