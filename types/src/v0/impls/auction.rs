@@ -290,9 +290,9 @@ impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for SolverAuctionResultsProv
     async fn fetch_auction_result(
         &self,
         view_number: TYPES::Time,
-    ) -> anyhow::Result<Self::AuctionResult> {
+    ) -> anyhow::Result<TYPES::AuctionResult> {
         let resp = SurfClient::new(self.0.clone())
-            .get::<SolverAuctionResults>(&format!("/v0/api/auction_results/{}", *view_number))
+            .get::<TYPES::AuctionResult>(&format!("/v0/api/auction_results/{}", *view_number))
             .send()
             .await?;
         Ok(resp)
