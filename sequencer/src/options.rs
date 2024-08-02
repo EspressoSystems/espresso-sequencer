@@ -260,8 +260,6 @@ pub struct Identity {
     #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_NODE_NAME")]
     pub node_name: Option<String>,
 
-    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_WALLET_ADDRESS")]
-    pub wallet_address: Option<String>,
     #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_COMPANY_NAME")]
     pub company_name: Option<String>,
     #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_COMPANY_WEBSITE")]

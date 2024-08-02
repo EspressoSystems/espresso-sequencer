@@ -1223,7 +1223,6 @@ pub mod tests {
             NodeIdentity::new(
                 pub_key,
                 Some("a".to_string()),
-                Some(Default::default()),
                 Some("http://localhost/".parse().unwrap()),
                 Some("company".to_string()),
                 Some("https://example.com/".parse().unwrap()),
@@ -1242,7 +1241,6 @@ pub mod tests {
             NodeIdentity::new(
                 pub_key,
                 Some("b".to_string()),
-                Some(Default::default()),
                 Some("http://localhost/".parse().unwrap()),
                 Some("company".to_string()),
                 Some("https://example.com/".parse().unwrap()),
@@ -1261,7 +1259,6 @@ pub mod tests {
             NodeIdentity::new(
                 pub_key,
                 Some("b".to_string()),
-                Some(Default::default()),
                 Some("http://localhost/".parse().unwrap()),
                 Some("company".to_string()),
                 Some("https://example.com/".parse().unwrap()),

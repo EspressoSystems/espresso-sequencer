@@ -152,7 +152,6 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             "node_identity_general".into(),
             vec![
                 "name".into(),
-                "wallet".into(),
                 "company_name".into(),
                 "company_website".into(),
                 "operating_system".into(),
@@ -162,7 +161,6 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         )
         .create(vec![
             identity.node_name.unwrap_or("".into()),
-            identity.wallet_address.unwrap_or("".into()),
             identity.company_name.unwrap_or("".into()),
             identity
                 .company_website

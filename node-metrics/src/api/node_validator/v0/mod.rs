@@ -5,7 +5,7 @@ use crate::service::client_message::{ClientMessage, InternalClientMessage};
 use crate::service::data_state::{LocationDetails, NodeIdentity};
 use crate::service::server_message::ServerMessage;
 use async_std::task::JoinHandle;
-use espresso_types::{FeeAccount, SeqTypes};
+use espresso_types::SeqTypes;
 use futures::channel::mpsc::SendError;
 use futures::future::Either;
 use futures::{
@@ -629,21 +629,6 @@ fn populate_node_identity_general_from_scrape(
         .labels
         .get("operating_system")
         .map(|s| s.into());
-    // Wallet Address
-    let parsed_wallet_address_result = node_identity_general_sample
-        .labels
-        .get("wallet")
-        .map(FeeAccount::from_str);
-
-    match parsed_wallet_address_result {
-        Some(Ok(parsed_wallet_address)) => {
-            node_identity.wallet_address = Some(parsed_wallet_address);
-        }
-        Some(Err(err)) => {
-            tracing::info!("parsing wallet address failed: {}", err);
-        }
-        None => {}
-    }
 }
 
 /// [populate_node_location_from_scrape] populates the location information of a
@@ -911,11 +896,7 @@ impl Drop for ProcessNodeIdentityUrlStreamTask {
 
 #[cfg(test)]
 mod tests {
-    use espresso_types::FeeAccount;
-    use std::{
-        io::{BufRead, BufReader},
-        str::FromStr,
-    };
+    use std::io::{BufRead, BufReader};
 
     fn example_prometheus_output() -> &'static str {
         include_str!("example_prometheus_metrics_output.txt")
@@ -1036,10 +1017,6 @@ mod tests {
         assert_eq!(
             node_identity.operating_system(),
             &Some("Linux 5.15.153.1".to_string())
-        );
-        assert_eq!(
-            node_identity.wallet_address(),
-            &Some(FeeAccount::from_str("0x0000000000000000000000000000000000000000").unwrap())
         );
 
         assert!(node_identity.location().is_some());

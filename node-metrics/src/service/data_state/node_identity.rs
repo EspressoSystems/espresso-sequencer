@@ -1,5 +1,4 @@
 use super::LocationDetails;
-use espresso_types::FeeAccount;
 use hotshot_types::signature_key::BLSPubKey;
 use serde::{Deserialize, Serialize};
 use surf_disco::Url;
@@ -10,7 +9,6 @@ use surf_disco::Url;
 pub struct NodeIdentity {
     pub(crate) public_key: BLSPubKey,
     pub(crate) name: Option<String>,
-    pub(crate) wallet_address: Option<FeeAccount>,
     pub(crate) public_url: Option<Url>,
     pub(crate) company: Option<String>,
     pub(crate) company_website: Option<Url>,
@@ -54,7 +52,6 @@ impl NodeIdentity {
     pub fn new(
         public_key: BLSPubKey,
         name: Option<String>,
-        wallet_address: Option<FeeAccount>,
         public_url: Option<Url>,
         company: Option<String>,
         company_website: Option<Url>,
@@ -66,7 +63,6 @@ impl NodeIdentity {
         Self {
             public_key,
             name,
-            wallet_address,
             public_url,
             company,
             company_website,
@@ -83,10 +79,6 @@ impl NodeIdentity {
 
     pub fn name(&self) -> &Option<String> {
         &self.name
-    }
-
-    pub fn wallet_address(&self) -> &Option<FeeAccount> {
-        &self.wallet_address
     }
 
     pub fn public_url(&self) -> &Option<Url> {
@@ -121,7 +113,6 @@ impl NodeIdentity {
         Self {
             public_key,
             name: None,
-            wallet_address: None,
             public_url: None,
             company: None,
             company_website: None,
@@ -146,7 +137,6 @@ pub mod tests {
         NodeIdentity::new(
             pub_key,
             Some("a".to_string()),
-            Some(Default::default()),
             Some("https://espressosys.com/".parse().unwrap()),
             Some("company".to_string()),
             Some("https://example.com/".parse().unwrap()),
@@ -208,14 +198,6 @@ pub mod tests {
         let name = node_identity.name();
 
         assert_eq!(name, &Some("a".to_string()));
-    }
-
-    #[test]
-    fn test_node_identity_wallet_address() {
-        let node_identity = create_test_node(1);
-        let wallet_address = node_identity.wallet_address();
-
-        assert_eq!(wallet_address, &Some(Default::default()));
     }
 
     #[test]
