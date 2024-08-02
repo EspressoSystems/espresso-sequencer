@@ -117,7 +117,7 @@ where
                                             storage,
                                             memberships,
                                             config,
-                                            auction_results_provider,
+                                            marketplace_config,
                                         } = late_context_params;
 
                                         let initializer = HotShotInitializer::<TYPES>::from_reload(
@@ -147,7 +147,7 @@ where
                                             config,
                                             validator_config,
                                             storage,
-                                            auction_results_provider,
+                                            marketplace_config,
                                         )
                                         .await
                                     }
@@ -194,8 +194,8 @@ where
                                 let storage = node.handle.storage().clone();
                                 let memberships = node.handle.memberships.clone();
                                 let config = node.handle.hotshot.config.clone();
-                                let auction_results_provider =
-                                    node.handle.hotshot.auction_results_provider.clone();
+                                let marketplace_config =
+                                    node.handle.hotshot.marketplace_config.clone();
                                 let read_storage = storage.read().await;
                                 let initializer = HotShotInitializer::<TYPES>::from_reload(
                                     self.last_decided_leaf.clone(),
@@ -230,7 +230,7 @@ where
                                         config,
                                         validator_config,
                                         (*read_storage).clone(),
-                                        (*auction_results_provider).clone(),
+                                        marketplace_config.clone(),
                                         (
                                             node.handle.internal_channel_sender(),
                                             node.handle.internal_event_stream_known_impl(),

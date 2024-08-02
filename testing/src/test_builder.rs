@@ -4,7 +4,7 @@ use hotshot::{
     tasks::EventTransformerState,
     traits::{NetworkReliability, NodeImplementation, TestableNodeImplementation},
     types::SystemContextHandle,
-    HotShotInitializer, Memberships, SystemContext, TwinsHandlerState,
+    HotShotInitializer, MarketplaceConfig, Memberships, SystemContext, TwinsHandlerState,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
@@ -105,7 +105,7 @@ pub async fn create_test_handle<
     memberships: Memberships<TYPES>,
     config: HotShotConfig<TYPES::SignatureKey>,
     storage: I::Storage,
-    auction_results_provider: I::AuctionResultsProvider,
+    marketplace_config: MarketplaceConfig<TYPES, I>,
 ) -> SystemContextHandle<TYPES, I> {
     let initializer = HotShotInitializer::<TYPES>::from_genesis(TestInstanceState {})
         .await
@@ -135,7 +135,7 @@ pub async fn create_test_handle<
                     initializer,
                     ConsensusMetricsValue::default(),
                     storage,
-                    auction_results_provider,
+                    marketplace_config,
                 )
                 .await;
 
@@ -154,7 +154,7 @@ pub async fn create_test_handle<
                     initializer,
                     ConsensusMetricsValue::default(),
                     storage,
-                    auction_results_provider,
+                    marketplace_config,
                 )
                 .await
         }
@@ -169,7 +169,7 @@ pub async fn create_test_handle<
                 initializer,
                 ConsensusMetricsValue::default(),
                 storage,
-                auction_results_provider,
+                marketplace_config,
             );
 
             hotshot.run_tasks().await
@@ -365,6 +365,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Default for TestDescription<
 
 impl<TYPES: NodeType<InstanceState = TestInstanceState>, I: TestableNodeImplementation<TYPES>>
     TestDescription<TYPES, I>
+where
+    I: NodeImplementation<TYPES, AuctionResultsProvider = TestAuctionResultsProvider<TYPES>>,
 {
     /// turn a description of a test (e.g. a [`TestDescription`]) into
     /// a [`TestLauncher`] that can be used to launch the test.
@@ -478,8 +480,10 @@ impl<TYPES: NodeType<InstanceState = TestInstanceState>, I: TestableNodeImplemen
                 ),
                 storage: Box::new(|_| TestStorage::<TYPES>::default()),
                 config,
-                auction_results_provider: Box::new(|_| {
-                    TestAuctionResultsProvider::<TYPES>::default()
+                marketplace_config: Box::new(|_| MarketplaceConfig::<TYPES, I> {
+                    auction_results_provider: TestAuctionResultsProvider::<TYPES>::default().into(),
+                    // TODO: we need to pass a valid generic builder url here somehow
+                    generic_builder_url: Url::parse("http://localhost").unwrap(),
                 }),
             },
             metadata: self,

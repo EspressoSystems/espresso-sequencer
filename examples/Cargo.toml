@@ -115,6 +115,7 @@ vbs = { workspace = true }
 sha2.workspace = true
 local-ip-address = "0.6"
 vec1 = { workspace = true }
+url = { workspace = true }
 
 tracing = { workspace = true }
 

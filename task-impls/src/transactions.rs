@@ -29,6 +29,7 @@ use hotshot_types::{
     vid::{VidCommitment, VidPrecomputeData},
 };
 use tracing::{debug, error, instrument, warn};
+use url::Url;
 use vbs::version::StaticVersionType;
 use vec1::Vec1;
 
@@ -103,6 +104,8 @@ pub struct TransactionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     /// auction results provider
     pub auction_results_provider: Arc<I::AuctionResultsProvider>,
+    /// generic builder url
+    pub generic_builder_url: Url,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, I> {
@@ -267,7 +270,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
         {
             let start = Instant::now();
 
-            if let Ok(Ok(urls)) = async_timeout(
+            if let Ok(Ok(auction_result)) = async_timeout(
                 self.builder_timeout,
                 self.auction_results_provider
                     .fetch_auction_result(block_view),
@@ -276,7 +279,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
             {
                 let mut futures = Vec::new();
 
-                for url in urls.clone().urls() {
+                let mut builder_urls = auction_result.clone().urls();
+                builder_urls.push(self.generic_builder_url.clone());
+
+                for url in builder_urls {
                     futures.push(async_timeout(
                         self.builder_timeout.saturating_sub(start.elapsed()),
                         async {
@@ -323,7 +329,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
                             block_view,
                             sequencing_fees,
                             None,
-                            Some(urls),
+                            Some(auction_result),
                         ))),
                         event_stream,
                     )

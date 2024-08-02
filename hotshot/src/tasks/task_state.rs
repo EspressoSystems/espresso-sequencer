@@ -204,7 +204,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> CreateTaskState<TYPES, I>
                 .map(BuilderClient::new)
                 .collect(),
             decided_upgrade_certificate: Arc::clone(&handle.hotshot.decided_upgrade_certificate),
-            auction_results_provider: Arc::clone(&handle.hotshot.auction_results_provider),
+            auction_results_provider: Arc::clone(
+                &handle.hotshot.marketplace_config.auction_results_provider,
+            ),
+            generic_builder_url: handle
+                .hotshot
+                .marketplace_config
+                .generic_builder_url
+                .clone(),
         }
     }
 }

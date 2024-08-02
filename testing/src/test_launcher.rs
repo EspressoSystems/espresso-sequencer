@@ -1,9 +1,10 @@
 use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
-use hotshot::traits::{NodeImplementation, TestableNodeImplementation};
-use hotshot_example_types::{
-    auction_results_provider_types::TestAuctionResultsProvider, storage_types::TestStorage,
+use hotshot::{
+    traits::{NodeImplementation, TestableNodeImplementation},
+    MarketplaceConfig,
 };
+use hotshot_example_types::storage_types::TestStorage;
 use hotshot_types::{
     traits::{
         network::{AsyncGenerator, ConnectedNetwork},
@@ -28,8 +29,8 @@ pub struct ResourceGenerators<TYPES: NodeType, I: TestableNodeImplementation<TYP
     pub storage: Generator<TestStorage<TYPES>>,
     /// configuration used to generate each hotshot node
     pub config: HotShotConfig<TYPES::SignatureKey>,
-    /// generate a new auction results connector for each node
-    pub auction_results_provider: Generator<TestAuctionResultsProvider<TYPES>>,
+    /// generate a new marketplace config for each node
+    pub marketplace_config: Generator<MarketplaceConfig<TYPES, I>>,
 }
 
 /// test launcher

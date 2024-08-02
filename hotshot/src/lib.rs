@@ -8,6 +8,7 @@ pub mod documentation;
 use futures::future::{select, Either};
 use hotshot_types::traits::network::BroadcastDelay;
 use rand::Rng;
+use url::Url;
 use vbs::version::StaticVersionType;
 
 /// Contains traits consumed by [`SystemContext`]
@@ -70,6 +71,15 @@ use crate::{
 pub const H_512: usize = 64;
 /// Length, in bytes, of a 256 bit hash
 pub const H_256: usize = 32;
+
+#[derive(Clone)]
+/// Wrapper for all marketplace config that needs to be passed when creating a new instance of HotShot
+pub struct MarketplaceConfig<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+    /// auction results provider
+    pub auction_results_provider: Arc<I::AuctionResultsProvider>,
+    /// generic builder
+    pub generic_builder_url: Url,
+}
 
 /// Bundle of all the memberships a consensus instance uses
 #[derive(Clone)]
@@ -141,8 +151,8 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// a potential upgrade certificate that has been decided on by the consensus tasks.
     pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
 
-    /// Reference to the AuctionResultsProvider type for acquiring solver results.
-    pub auction_results_provider: Arc<I::AuctionResultsProvider>,
+    /// Marketplace config for this instance of HotShot
+    pub marketplace_config: MarketplaceConfig<TYPES, I>,
 }
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Clone for SystemContext<TYPES, I> {
     #![allow(deprecated)]
@@ -165,7 +175,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Clone for SystemContext<TYPE
             id: self.id,
             storage: Arc::clone(&self.storage),
             decided_upgrade_certificate: Arc::clone(&self.decided_upgrade_certificate),
-            auction_results_provider: Arc::clone(&self.auction_results_provider),
+            marketplace_config: self.marketplace_config.clone(),
         }
     }
 }
@@ -189,7 +199,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
         storage: I::Storage,
-        auction_results_provider: I::AuctionResultsProvider,
+        marketplace_config: MarketplaceConfig<TYPES, I>,
     ) -> Arc<Self> {
         let interal_chan = broadcast(EVENT_CHANNEL_SIZE);
         let external_chan = broadcast(EXTERNAL_EVENT_CHANNEL_SIZE);
@@ -204,7 +214,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             initializer,
             metrics,
             storage,
-            auction_results_provider,
+            marketplace_config,
             interal_chan,
             external_chan,
         )
@@ -228,7 +238,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
         storage: I::Storage,
-        auction_results_provider: I::AuctionResultsProvider,
+        marketplace_config: MarketplaceConfig<TYPES, I>,
         internal_channel: (
             Sender<Arc<HotShotEvent<TYPES>>>,
             Receiver<Arc<HotShotEvent<TYPES>>>,
@@ -326,7 +336,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             anchored_leaf: anchored_leaf.clone(),
             storage: Arc::new(RwLock::new(storage)),
             decided_upgrade_certificate,
-            auction_results_provider: Arc::new(auction_results_provider),
+            marketplace_config,
         });
 
         inner
@@ -565,7 +575,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
         storage: I::Storage,
-        auction_results_provider: I::AuctionResultsProvider,
+        marketplace_config: MarketplaceConfig<TYPES, I>,
     ) -> Result<
         (
             SystemContextHandle<TYPES, I>,
@@ -584,7 +594,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             initializer,
             metrics,
             storage,
-            auction_results_provider,
+            marketplace_config,
         );
         let handle = Arc::clone(&hotshot).run_tasks().await;
         let (tx, rx) = hotshot.internal_event_stream.clone();
@@ -725,7 +735,7 @@ where
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
         storage: I::Storage,
-        auction_results_provider: I::AuctionResultsProvider,
+        marketplace_config: MarketplaceConfig<TYPES, I>,
     ) -> (SystemContextHandle<TYPES, I>, SystemContextHandle<TYPES, I>) {
         let left_system_context = SystemContext::new(
             public_key.clone(),
@@ -737,7 +747,7 @@ where
             initializer.clone(),
             metrics.clone(),
             storage.clone(),
-            auction_results_provider.clone(),
+            marketplace_config.clone(),
         );
         let right_system_context = SystemContext::new(
             public_key,
@@ -749,7 +759,7 @@ where
             initializer,
             metrics,
             storage,
-            auction_results_provider,
+            marketplace_config,
         );
 
         // create registries for both handles

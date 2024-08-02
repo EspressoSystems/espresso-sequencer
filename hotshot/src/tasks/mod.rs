@@ -35,8 +35,8 @@ use vbs::version::StaticVersionType;
 
 use crate::{
     tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi,
-    ConsensusMetricsValue, ConsensusTaskRegistry, HotShotConfig, HotShotInitializer, Memberships,
-    NetworkTaskRegistry, SignatureKey, SystemContext,
+    ConsensusMetricsValue, ConsensusTaskRegistry, HotShotConfig, HotShotInitializer,
+    MarketplaceConfig, Memberships, NetworkTaskRegistry, SignatureKey, SystemContext,
 };
 
 /// event for global event stream
@@ -232,7 +232,7 @@ where
         initializer: HotShotInitializer<TYPES>,
         metrics: ConsensusMetricsValue,
         storage: I::Storage,
-        auction_results_provider: I::AuctionResultsProvider,
+        marketplace_config: MarketplaceConfig<TYPES, I>,
     ) -> SystemContextHandle<TYPES, I> {
         let hotshot = SystemContext::new(
             public_key,
@@ -244,7 +244,7 @@ where
             initializer,
             metrics,
             storage,
-            auction_results_provider,
+            marketplace_config,
         );
         let consensus_registry = ConsensusTaskRegistry::new();
         let network_registry = NetworkTaskRegistry::new();

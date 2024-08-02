@@ -1,16 +1,19 @@
 use hotshot::tasks::task_state::CreateTaskState;
 use hotshot_example_types::{
+    block_types::TestMetadata,
     node_types::{MemoryImpl, TestConsecutiveLeaderTypes},
-    block_types::TestMetadata
 };
 use hotshot_task_impls::{
-    events::HotShotEvent, harness::run_harness, transactions::TransactionTaskState
+    events::HotShotEvent, harness::run_harness, transactions::TransactionTaskState,
 };
 use hotshot_testing::helpers::build_system_handle;
 use hotshot_types::{
-    data::{ViewNumber, null_block, PackedBundle},
-    traits::{node_implementation::ConsensusTime, election::Membership, block_contents::precompute_vid_commitment},
-    constants::BaseVersion
+    constants::BaseVersion,
+    data::{null_block, PackedBundle, ViewNumber},
+    traits::{
+        block_contents::precompute_vid_commitment, election::Membership,
+        node_implementation::ConsensusTime,
+    },
 };
 use vbs::version::StaticVersionType;
 
@@ -23,7 +26,9 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
 
     // Build the API for node 2.
     let node_id = 2;
-    let handle = build_system_handle::<TestConsecutiveLeaderTypes, MemoryImpl>(node_id).await.0;
+    let handle = build_system_handle::<TestConsecutiveLeaderTypes, MemoryImpl>(node_id)
+        .await
+        .0;
 
     let mut input = Vec::new();
     let mut output = Vec::new();
@@ -32,9 +37,8 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
     input.push(HotShotEvent::ViewChange(current_view));
     input.push(HotShotEvent::Shutdown);
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
-    
-    let (_, precompute_data) =
-        precompute_vid_commitment(&[], quorum_membership.total_nodes());
+
+    let (_, precompute_data) = precompute_vid_commitment(&[], quorum_membership.total_nodes());
 
     // current view
     let mut exp_packed_bundle = PackedBundle::new(
@@ -55,6 +59,7 @@ async fn test_transaction_task_leader_two_views_in_a_row() {
     exp_packed_bundle.view_number = current_view + 1;
     output.push(HotShotEvent::BlockRecv(exp_packed_bundle));
 
-    let transaction_state = TransactionTaskState::<TestConsecutiveLeaderTypes, MemoryImpl>::create_from(&handle).await;
+    let transaction_state =
+        TransactionTaskState::<TestConsecutiveLeaderTypes, MemoryImpl>::create_from(&handle).await;
     run_harness(input, output, transaction_state, false).await;
 }

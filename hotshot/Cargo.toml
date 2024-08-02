@@ -59,6 +59,7 @@ jf-signature.workspace = true
 hotshot-orchestrator = { path = "../orchestrator" }
 blake3.workspace = true
 sha2 = { workspace = true }
+url = { workspace = true }
 num_enum = "0.7"
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]

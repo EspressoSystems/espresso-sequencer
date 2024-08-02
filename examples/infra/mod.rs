@@ -27,7 +27,7 @@ use hotshot::{
         BlockPayload, NodeImplementation,
     },
     types::SystemContextHandle,
-    Memberships, SystemContext,
+    MarketplaceConfig, Memberships, SystemContext,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider,
@@ -396,6 +396,12 @@ pub trait RunDa<
             view_sync_membership: quorum_membership,
         };
 
+        let marketplace_config = MarketplaceConfig {
+            auction_results_provider: TestAuctionResultsProvider::<TYPES>::default().into(),
+            // TODO: we need to pass a valid generic builder url here somehow
+            generic_builder_url: url::Url::parse("http://localhost").unwrap(),
+        };
+
         SystemContext::init(
             pk,
             sk,
@@ -406,7 +412,7 @@ pub trait RunDa<
             initializer,
             ConsensusMetricsValue::default(),
             TestStorage::<TYPES>::default(),
-            TestAuctionResultsProvider::<TYPES>::default(),
+            marketplace_config,
         )
         .await
         .expect("Could not init hotshot")
