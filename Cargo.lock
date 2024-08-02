@@ -6111,6 +6111,7 @@ dependencies = [
  "jf-signature",
  "libp2p",
  "marketplace-builder-core",
+ "marketplace-solver",
  "portpicker",
  "rand 0.8.5",
  "sequencer",

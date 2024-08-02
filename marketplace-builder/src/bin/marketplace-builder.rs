@@ -29,7 +29,7 @@ struct NonPermissionedBuilderOptions {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL",
-        default_value = "http://localhost:8081"
+        default_value = "http://localhost:22001"
     )]
     hotshot_event_streaming_url: Url,
 
@@ -146,12 +146,12 @@ async fn main() -> anyhow::Result<()> {
 
     let is_reserve = opt.is_reserve;
     let bid_config = if opt.is_reserve {
-        None
-    } else {
         Some(BidConfig {
             amount: opt.bid_amount,
             namespaces: opt.namespaces.into_iter().map(NamespaceId::from).collect(),
         })
+    } else {
+        None
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;

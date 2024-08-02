@@ -19,6 +19,7 @@ use espresso_types::NamespaceId;
 
 use hotshot_types::traits::node_implementation::NodeType;
 
+use marketplace_solver::SolverError;
 use surf_disco::Client;
 
 use tide_disco::Url;
@@ -35,9 +36,9 @@ pub struct BidConfig {
 
 pub async fn connect_to_solver(
     solver_api_url: Url,
-) -> Option<Client<hotshot_events_service::events::Error, <SeqTypes as NodeType>::Base>> {
-    let client = Client::<hotshot_events_service::events::Error, <SeqTypes as NodeType>::Base>::new(
-        solver_api_url.join("v0/marketplace-solver/").unwrap(),
+) -> Option<Client<SolverError, <SeqTypes as NodeType>::Base>> {
+    let client = Client::<SolverError, <SeqTypes as NodeType>::Base>::new(
+        solver_api_url.join("marketplace-solver/").unwrap(),
     );
 
     if !(client.connect(None).await) {
@@ -82,7 +83,7 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
             let bid_tx = match BidTxBody::new(
                 self.bid_key_pair.fee_account(),
                 self.bid_amount,
-                view_number + 3, // We submit a bid three views in advance.
+                view_number + 10, // We submit a bid ten views in advance.
                 self.namespaces.iter().cloned().collect(),
                 self.builder_api_base_url.clone(),
             )

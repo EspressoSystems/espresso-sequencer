@@ -27,7 +27,9 @@ processes:
   deploy-sequencer-contracts:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
     # script will think they're already deployed.
-    command: unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --only fee-contract
+    command:
+      unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --only
+      fee-contract
     depends_on:
       demo-l1-network:
         condition: process_healthy
@@ -35,7 +37,9 @@ processes:
   deploy-prover-contracts:
     # The contract addresses are implicitly inherited from .env. We need to unset these or else the
     # script will think they're already deployed.
-    command: unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy --use-mock-contract --only hotshot,light-client
+    command:
+      unset ESPRESSO_SEQUENCER_HOTSHOT_ADDRESS ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS && deploy
+      --use-mock-contract --only hotshot,light-client
     depends_on:
       demo-l1-network:
         condition: process_healthy
@@ -63,7 +67,7 @@ processes:
 
   orchestrator:
     command: orchestrator
-    environment: 
+    environment:
       - ESPRESSO_ORCHESTRATOR_BUILDER_URLS=http://localhost:$ESPRESSO_BUILDER_SERVER_PORT
     readiness_probe:
       http_get:
@@ -282,7 +286,7 @@ processes:
         path: /healthcheck
       failure_threshold: 100
 
-  # We use KeyDB (a Redis variant) to maintain consistency between 
+  # We use KeyDB (a Redis variant) to maintain consistency between
   # different parts of the CDN
   # Cheating a bit here too, but KeyDB is not available as a Nix package.
   # Could do local (SQLite) discovery, but removes some of the spirit
@@ -298,10 +302,7 @@ processes:
 
   # The CDN system's main entry point; where users contact first.
   marshal_0:
-    command: cdn-marshal 
-      -d "redis://:changeme!@localhost:6379"
-      -b $ESPRESSO_CDN_SERVER_PORT
-      -m 127.0.0.1:9093
+    command: cdn-marshal -d "redis://:changeme!@localhost:6379" -b $ESPRESSO_CDN_SERVER_PORT -m 127.0.0.1:9093
     depends_on:
       keydb:
         condition: process_healthy
@@ -312,7 +313,6 @@ processes:
         port: 9093
         path: /metrics
       failure_threshold: 100
-
 
   # A broker is the main message-routing unit of the CDN
   broker_0:
@@ -331,13 +331,10 @@ processes:
   # A broker is the main message-routing unit of the CDN
   # as we're running a local demo, we need to operate on different ports
   broker_1:
-    command: RUST_LOG=debug cdn-broker 
-      --public-bind-endpoint 0.0.0.0:1740
-      --public-advertise-endpoint local_ip:1740
-      --private-bind-endpoint 0.0.0.0:1741
-      --private-advertise-endpoint local_ip:1741
-      -d "redis://:changeme!@localhost:6379"
-      -m 127.0.0.1:9092
+    command:
+      RUST_LOG=debug cdn-broker --public-bind-endpoint 0.0.0.0:1740 --public-advertise-endpoint local_ip:1740
+      --private-bind-endpoint 0.0.0.0:1741 --private-advertise-endpoint local_ip:1741 -d
+      "redis://:changeme!@localhost:6379" -m 127.0.0.1:9092
     depends_on:
       keydb:
         condition: process_healthy
@@ -350,9 +347,7 @@ processes:
       failure_threshold: 100
 
   cdn-whitelist:
-    command: cdn-whitelist 
-      -d redis://:changeme!@localhost:6379 
-      -o http://localhost:$ESPRESSO_ORCHESTRATOR_PORT
+    command: cdn-whitelist -d redis://:changeme!@localhost:6379 -o http://localhost:$ESPRESSO_ORCHESTRATOR_PORT
     depends_on:
       orchestrator:
         condition: process_healthy
@@ -415,7 +410,7 @@ processes:
 
   marketplace-reserve-builder:
     disabled: true
-    command: marketplace-reserve-builder
+    command: marketplace-builder
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
     environment:
@@ -438,10 +433,11 @@ processes:
 
   marketplace-fallback-builder:
     disabled: true
-    command: marketplace-fallback-builder
+    command: marketplace-builder
     ports:
-      - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
+      - "$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT:$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT"
     environment:
+      - ESPRESSO_BUILDER_SERVER_PORT=$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT
       - ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE=false
       - ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
       - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10000
@@ -518,7 +514,8 @@ processes:
       failure_threshold: 100
 
   sequencer-db-0:
-    command: docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $ESPRESSO_SEQUENCER0_DB_PORT:5432 postgres
+    command:
+      docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $ESPRESSO_SEQUENCER0_DB_PORT:5432 postgres
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=root
@@ -535,7 +532,8 @@ processes:
       failure_threshold: 20
 
   sequencer-db-1:
-    command: docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $ESPRESSO_SEQUENCER1_DB_PORT:5432 postgres
+    command:
+      docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $ESPRESSO_SEQUENCER1_DB_PORT:5432 postgres
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=root
@@ -550,9 +548,10 @@ processes:
       # See https://github.com/docker-library/postgres/issues/146 for discussion.
       success_threshold: 2
       failure_threshold: 20
-  
+
   solver-db:
-    command: docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $MARKETPLACE_SOLVER_POSTGRES_PORT:5432 postgres
+    command:
+      docker run -e POSTGRES_PASSWORD -e POSTGRES_USER -e POSTGRES_DB -p $MARKETPLACE_SOLVER_POSTGRES_PORT:5432 postgres
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=root
@@ -569,7 +568,9 @@ processes:
       failure_threshold: 20
 
   block-explorer:
-    command: docker run --rm -p $ESPRESSO_BLOCK_EXPLORER_PORT:3000 -e QUERY_SERVICE_URI ghcr.io/espressosystems/espresso-block-explorer:main
+    command:
+      docker run --rm -p $ESPRESSO_BLOCK_EXPLORER_PORT:3000 -e QUERY_SERVICE_URI
+      ghcr.io/espressosystems/espresso-block-explorer:main
     depends_on:
       sequencer1:
         condition: process_healthy

@@ -35,6 +35,7 @@ jf-merkle-tree = { workspace = true }
 jf-signature = { workspace = true, features = ["bls"] }
 libp2p = { workspace = true }
 marketplace-builder-core = { workspace = true }
+marketplace-solver = { path = "../marketplace-solver" }
 portpicker = { workspace = true }
 rand = "0.8.5"
 sequencer = { path = "../sequencer", features = ["testing"] }

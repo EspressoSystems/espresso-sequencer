@@ -19,7 +19,7 @@ struct NonPermissionedBuilderOptions {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL",
-        default_value = "http://localhost:8081"
+        default_value = "http://localhost:22001"
     )]
     hotshot_event_streaming_url: Url,
 
