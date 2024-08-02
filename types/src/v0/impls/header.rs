@@ -745,7 +745,6 @@ impl From<anyhow::Error> for InvalidBlockHeader {
 
 impl BlockHeader<SeqTypes> for Header {
     type Error = InvalidBlockHeader;
-    type AuctionResult = SolverAuctionResults;
 
     /// Get the results of the auction for this Header. Only used in post-marketplace versions
     fn get_auction_results(&self) -> Option<SolverAuctionResults> {
