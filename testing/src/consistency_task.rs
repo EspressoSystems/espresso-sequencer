@@ -148,7 +148,7 @@ pub struct ConsistencyTask<TYPES: NodeType> {
     /// A map from node ids to (leaves keyed on view number)
     pub consensus_leaves: NetworkMap<TYPES>,
     /// safety task requirements
-    pub safety_properties: OverallSafetyPropertiesDescription,
+    pub safety_properties: OverallSafetyPropertiesDescription<TYPES>,
 }
 
 #[async_trait]

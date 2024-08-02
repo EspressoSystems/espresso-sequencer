@@ -71,6 +71,11 @@ pub enum OverallSafetyTaskErr<TYPES: NodeType> {
 
         failed_views: HashSet<TYPES::Time>,
     },
+    /// mismatched expected failed view vs actual failed view
+    InconsistentFailedViews {
+        expected_failed_views: HashSet<TYPES::Time>,
+        actual_failed_views: HashSet<TYPES::Time>,
+    },
 }
 
 /// Data availability task state
@@ -80,11 +85,40 @@ pub struct OverallSafetyTask<TYPES: NodeType, I: TestableNodeImplementation<TYPE
     /// ctx
     pub ctx: RoundCtx<TYPES>,
     /// configure properties
-    pub properties: OverallSafetyPropertiesDescription,
+    pub properties: OverallSafetyPropertiesDescription<TYPES>,
     /// error
     pub error: Option<Box<OverallSafetyTaskErr<TYPES>>>,
     /// sender to test event channel
     pub test_sender: Sender<TestEvent>,
+}
+
+impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> OverallSafetyTask<TYPES, I> {
+    async fn handle_view_failure(&mut self, num_failed_views: usize, view_number: TYPES::Time) {
+        let expected_view_to_fail = &mut self.properties.expected_views_to_fail;
+
+        self.ctx.failed_views.insert(view_number);
+        if self.ctx.failed_views.len() > num_failed_views {
+            let _ = self.test_sender.broadcast(TestEvent::Shutdown).await;
+            self.error = Some(Box::new(OverallSafetyTaskErr::<TYPES>::TooManyFailures {
+                failed_views: self.ctx.failed_views.clone(),
+            }));
+        } else if !expected_view_to_fail.is_empty() {
+            match expected_view_to_fail.get(&view_number) {
+                Some(_) => {
+                    expected_view_to_fail.insert(view_number, true);
+                }
+                None => {
+                    let _ = self.test_sender.broadcast(TestEvent::Shutdown).await;
+                    self.error = Some(Box::new(
+                        OverallSafetyTaskErr::<TYPES>::InconsistentFailedViews {
+                            expected_failed_views: expected_view_to_fail.keys().cloned().collect(),
+                            actual_failed_views: self.ctx.failed_views.clone(),
+                        },
+                    ));
+                }
+            }
+        }
+    }
 }
 
 #[async_trait]
@@ -95,14 +129,15 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
 
     /// Handles an event from one of multiple receivers.
     async fn handle_event(&mut self, (message, id): (Self::Event, usize)) -> Result<()> {
-        let OverallSafetyPropertiesDescription {
+        let OverallSafetyPropertiesDescription::<TYPES> {
             check_leaf,
             check_block,
             num_failed_views,
             num_successful_views,
             threshold_calculator,
             transaction_threshold,
-        }: OverallSafetyPropertiesDescription = self.properties.clone();
+            ..
+        }: OverallSafetyPropertiesDescription<TYPES> = self.properties.clone();
         let Event { view_number, event } = message;
         let key = match event {
             EventType::Error { error } => {
@@ -168,14 +203,9 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
                     return Ok(());
                 }
                 ViewStatus::Failed => {
-                    self.ctx.failed_views.insert(view_number);
-                    if self.ctx.failed_views.len() > num_failed_views {
-                        let _ = self.test_sender.broadcast(TestEvent::Shutdown).await;
-                        self.error =
-                            Some(Box::new(OverallSafetyTaskErr::<TYPES>::TooManyFailures {
-                                failed_views: self.ctx.failed_views.clone(),
-                            }));
-                    }
+                    self.handle_view_failure(num_failed_views, view_number)
+                        .await;
+
                     return Ok(());
                 }
                 ViewStatus::Err(e) => {
@@ -189,13 +219,8 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
             }
         } else if view.check_if_failed(threshold, len) {
             view.status = ViewStatus::Failed;
-            self.ctx.failed_views.insert(view_number);
-            if self.ctx.failed_views.len() > num_failed_views {
-                let _ = self.test_sender.broadcast(TestEvent::Shutdown).await;
-                self.error = Some(Box::new(OverallSafetyTaskErr::<TYPES>::TooManyFailures {
-                    failed_views: self.ctx.failed_views.clone(),
-                }));
-            }
+            self.handle_view_failure(num_failed_views, view_number)
+                .await;
             return Ok(());
         }
         Ok(())
@@ -206,14 +231,15 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
             return TestResult::Fail(e.clone());
         }
 
-        let OverallSafetyPropertiesDescription {
+        let OverallSafetyPropertiesDescription::<TYPES> {
             check_leaf: _,
             check_block: _,
             num_failed_views: num_failed_rounds_total,
             num_successful_views,
             threshold_calculator: _,
             transaction_threshold: _,
-        }: OverallSafetyPropertiesDescription = self.properties.clone();
+            expected_views_to_fail,
+        }: OverallSafetyPropertiesDescription<TYPES> = self.properties.clone();
 
         let num_incomplete_views = self.ctx.round_results.len()
             - self.ctx.successful_views.len()
@@ -230,6 +256,18 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> TestTaskState
             return TestResult::Fail(Box::new(OverallSafetyTaskErr::<TYPES>::TooManyFailures {
                 failed_views: self.ctx.failed_views.clone(),
             }));
+        }
+
+        if !expected_views_to_fail
+            .values()
+            .all(|&view_failed| view_failed)
+        {
+            return TestResult::Fail(Box::new(
+                OverallSafetyTaskErr::<TYPES>::InconsistentFailedViews {
+                    actual_failed_views: self.ctx.failed_views.clone(),
+                    expected_failed_views: expected_views_to_fail.keys().cloned().collect(),
+                },
+            ));
         }
 
         // We should really be able to include a check like this:
@@ -495,7 +533,7 @@ impl<TYPES: NodeType> RoundResult<TYPES> {
 
 /// cross node safety properties
 #[derive(Clone)]
-pub struct OverallSafetyPropertiesDescription {
+pub struct OverallSafetyPropertiesDescription<TYPES: NodeType> {
     /// required number of successful views
     pub num_successful_views: usize,
     /// whether or not to check the leaf
@@ -512,9 +550,11 @@ pub struct OverallSafetyPropertiesDescription {
     /// threshold calculator. Given number of live and total nodes, provide number of successes
     /// required to mark view as successful
     pub threshold_calculator: Arc<dyn Fn(usize, usize) -> usize + Send + Sync>,
+    /// pass in the views that we expect to fail
+    pub expected_views_to_fail: HashMap<TYPES::Time, bool>,
 }
 
-impl std::fmt::Debug for OverallSafetyPropertiesDescription {
+impl<TYPES: NodeType> std::fmt::Debug for OverallSafetyPropertiesDescription<TYPES> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OverallSafetyPropertiesDescription")
             .field("num successful views", &self.num_successful_views)
@@ -522,11 +562,12 @@ impl std::fmt::Debug for OverallSafetyPropertiesDescription {
             .field("check_block", &self.check_block)
             .field("num_failed_rounds_total", &self.num_failed_views)
             .field("transaction_threshold", &self.transaction_threshold)
+            .field("expected views to fail", &self.expected_views_to_fail)
             .finish_non_exhaustive()
     }
 }
 
-impl Default for OverallSafetyPropertiesDescription {
+impl<TYPES: NodeType> Default for OverallSafetyPropertiesDescription<TYPES> {
     fn default() -> Self {
         Self {
             num_successful_views: 50,
@@ -536,6 +577,7 @@ impl Default for OverallSafetyPropertiesDescription {
             transaction_threshold: 0,
             // very strict
             threshold_calculator: Arc::new(|_num_live, num_total| 2 * num_total / 3 + 1),
+            expected_views_to_fail: HashMap::new(),
         }
     }
 }

@@ -67,7 +67,7 @@ pub struct TestDescription<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Size of the non-staked DA committee for the test
     pub da_non_staked_committee_size: usize,
     /// overall safety property description
-    pub overall_safety_properties: OverallSafetyPropertiesDescription,
+    pub overall_safety_properties: OverallSafetyPropertiesDescription<TYPES>,
     /// spinning properties
     pub spinning_properties: SpinningTaskDescription,
     /// txns timing
@@ -230,13 +230,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TestDescription<TYPES, I> {
             num_nodes_with_stake,
             num_nodes_without_stake,
             start_nodes: num_nodes_with_stake,
-            overall_safety_properties: OverallSafetyPropertiesDescription {
+            overall_safety_properties: OverallSafetyPropertiesDescription::<TYPES> {
                 num_successful_views: 50,
                 check_leaf: true,
                 check_block: true,
                 num_failed_views: 15,
                 transaction_threshold: 0,
                 threshold_calculator: Arc::new(|_active, total| (2 * total / 3 + 1)),
+                expected_views_to_fail: HashMap::new(),
             },
             timing_data: TimingData {
                 next_view_timeout: 2000,
@@ -263,13 +264,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TestDescription<TYPES, I> {
             num_nodes_with_stake,
             num_nodes_without_stake,
             start_nodes: num_nodes_with_stake,
-            overall_safety_properties: OverallSafetyPropertiesDescription {
+            overall_safety_properties: OverallSafetyPropertiesDescription::<TYPES> {
                 num_successful_views: 20,
                 check_leaf: true,
                 check_block: true,
                 num_failed_views: 8,
                 transaction_threshold: 0,
                 threshold_calculator: Arc::new(|_active, total| (2 * total / 3 + 1)),
+                expected_views_to_fail: HashMap::new(),
             },
             timing_data: TimingData {
                 start_delay: 120_000,
