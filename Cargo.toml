@@ -63,7 +63,7 @@ ark-serialize = "0.4.2"
 async-compatibility-layer = { version = "1.1", default-features = false, features = [
 	"logging-utils",
 ] }
-async-lock = "3.3.0"
+async-lock = "2.8"
 async-std = { version = "1.9.0", features = ["unstable", "attributes"] }
 async-trait = "0.1"
 bincode = "1.3"
