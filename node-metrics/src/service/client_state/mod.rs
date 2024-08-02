@@ -942,8 +942,8 @@ impl InternalClientMessageProcessingTask {
             let message = if let Some(message) = message_result {
                 message
             } else {
-                tracing::info!("internal client message handler closed.");
-                return;
+                tracing::error!("internal client message handler closed.");
+                panic!("InternalClientMessageProcessingTask stream closed, unable to process new requests from clients.");
             };
 
             if let Err(err) =
@@ -1020,7 +1020,7 @@ impl ProcessDistributeBlockDetailHandlingTask {
             let block_detail = if let Some(block_detail) = block_detail_result {
                 block_detail
             } else {
-                tracing::info!(
+                tracing::error!(
                     "block detail stream closed.  shutting down client handling stream.",
                 );
                 return;
@@ -1091,7 +1091,7 @@ impl ProcessDistributeNodeIdentityHandlingTask {
             let node_identity = if let Some(node_identity) = node_identity_result {
                 node_identity
             } else {
-                tracing::info!(
+                tracing::error!(
                     "node identity stream closed.  shutting down client handling stream.",
                 );
                 return;
@@ -1161,7 +1161,7 @@ impl ProcessDistributeVotersHandlingTask {
             let voters = if let Some(voters) = voters_result {
                 voters
             } else {
-                tracing::info!("voters stream closed.  shutting down client handling stream.",);
+                tracing::error!("voters stream closed.  shutting down client handling stream.",);
                 return;
             };
 

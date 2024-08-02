@@ -181,14 +181,18 @@ pub fn create_block_detail_from_leaf(leaf: &Leaf<SeqTypes>) -> BlockDetail<SeqTy
 /// a [Leaf].
 #[derive(Debug)]
 pub enum ProcessLeafError {
-    SendError(SendError),
+    BlockSendError(SendError),
+    VotersSendError(SendError),
 }
 
 impl std::fmt::Display for ProcessLeafError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProcessLeafError::SendError(err) => {
+            ProcessLeafError::BlockSendError(err) => {
                 write!(f, "error sending block detail to sender: {}", err)
+            }
+            ProcessLeafError::VotersSendError(err) => {
+                write!(f, "error sending voters to sender: {}", err)
             }
         }
     }
@@ -197,7 +201,8 @@ impl std::fmt::Display for ProcessLeafError {
 impl std::error::Error for ProcessLeafError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            ProcessLeafError::SendError(err) => Some(err),
+            ProcessLeafError::BlockSendError(err) => Some(err),
+            ProcessLeafError::VotersSendError(err) => Some(err),
         }
     }
 }
@@ -293,12 +298,12 @@ where
 
     if let Err(err) = block_sender.send(block_detail_copy).await {
         // We have an error that prevents us from continuing
-        return Err(ProcessLeafError::SendError(err));
+        return Err(ProcessLeafError::BlockSendError(err));
     }
 
     if let Err(err) = voters_sender.send(voters_bitvec).await {
         // We have an error that prevents us from continuing
-        return Err(ProcessLeafError::SendError(err));
+        return Err(ProcessLeafError::VotersSendError(err));
     }
 
     Ok(())
@@ -360,7 +365,7 @@ impl ProcessLeafStreamTask {
                 leaf
             } else {
                 // We have reached the end of the stream
-                tracing::info!("process leaf stream: end of stream reached for leaf stream.");
+                tracing::error!("process leaf stream: end of stream reached for leaf stream.");
                 return;
             };
 
@@ -373,8 +378,19 @@ impl ProcessLeafStreamTask {
             .await
             {
                 // We have an error that prevents us from continuing
-                tracing::info!("process leaf stream: error processing leaf: {}", err);
-                break;
+                tracing::error!("process leaf stream: error processing leaf: {}", err);
+
+                // At the moment, all underlying errors are due to `SendError`
+                // which will ultimately mean that further processing attempts
+                // will fail, and be fruitless.
+                match err {
+                    ProcessLeafError::BlockSendError(_) => {
+                        panic!("ProcessLeafStreamTask: process_incoming_leaf failed, underlying sink is closed, blocks will stagnate: {}", err)
+                    }
+                    ProcessLeafError::VotersSendError(_) => {
+                        panic!("ProcessLeafStreamTask: process_incoming_leaf failed, underlying sink is closed, voters will stagnate: {}", err)
+                    }
+                }
             }
         }
     }
@@ -509,11 +525,16 @@ impl ProcessNodeIdentityStreamTask {
             .await
             {
                 // We have an error that prevents us from continuing
-                tracing::info!(
+                tracing::error!(
                     "process node identity stream: error processing node identity: {}",
                     err
                 );
-                break;
+
+                // The only underlying class of errors that can be returned from
+                // `process_incoming_node_identity` are due to `SendError` which
+                // will ultimately mean that further processing attempts will fail
+                // and be fruitless.
+                panic!("ProcessNodeIdentityStreamTask: process_incoming_node_identity failed, underlying sink is closed, node identities will stagnate: {}", err);
             }
         }
     }
@@ -558,11 +579,11 @@ mod tests {
         assert!(receive_result.is_err());
         let err = receive_result.unwrap_err();
 
-        let process_leaf_err = super::ProcessLeafError::SendError(err);
+        let process_leaf_err = super::ProcessLeafError::BlockSendError(err);
 
         assert_eq!(
             format!("{:?}", process_leaf_err),
-            "SendError(SendError { kind: Disconnected })"
+            "BlockSendError(SendError { kind: Disconnected })"
         );
     }
 

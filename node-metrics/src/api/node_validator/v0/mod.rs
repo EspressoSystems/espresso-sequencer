@@ -889,8 +889,11 @@ impl ProcessNodeIdentityUrlStreamTask {
 
             let send_result = node_identity_sender.send(node_identity).await;
             if let Err(err) = send_result {
-                tracing::info!("node identity sender closed: {}", err);
-                return;
+                tracing::error!("node identity sender closed: {}", err);
+
+                // We will be unable to provide any additional node identity
+                // updates. This is considered a critical error.
+                panic!("ProcessNodeIdentityUrlStreamTask node_identity_sender closed, future node identity information will stagnate: {}", err);
             }
         }
     }

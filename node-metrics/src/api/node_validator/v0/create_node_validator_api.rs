@@ -130,8 +130,8 @@ impl HotShotEventProcessingTask {
 
                         let send_result = leaf_sender.send(leaf).await;
                         if let Err(err) = send_result {
-                            tracing::info!("leaf sender closed: {}", err);
-                            return;
+                            tracing::error!("leaf sender closed: {}", err);
+                            panic!("HotShotEventProcessingTask leaf sender is closed, unrecoverable, the block state will stagnate.");
                         }
                     }
                 }
@@ -159,8 +159,8 @@ impl HotShotEventProcessingTask {
                     // Send the the discovered public url to the sink
                     let send_result = url_sender.send(public_api_url).await;
                     if let Err(err) = send_result {
-                        tracing::info!("url sender closed: {}", err);
-                        continue;
+                        tracing::error!("url sender closed: {}", err);
+                        panic!("HotShotEventProcessingTask url sender is closed, unrecoverable, the node state will stagnate.");
                     }
                 }
                 _ => {
@@ -233,7 +233,7 @@ impl ProcessExternalMessageHandlingTask {
             let external_message = match external_message_result {
                 Some(external_message) => external_message,
                 None => {
-                    tracing::info!("external message receiver closed");
+                    tracing::error!("external message receiver closed");
                     break;
                 }
             };
@@ -244,7 +244,7 @@ impl ProcessExternalMessageHandlingTask {
 
                     let send_result = url_sender.send(public_api_url).await;
                     if let Err(err) = send_result {
-                        tracing::info!("url sender closed: {}", err);
+                        tracing::error!("url sender closed: {}", err);
                         break;
                     }
                 }
