@@ -50,6 +50,7 @@ tagged-base64.workspace = true
 vec1 = { workspace = true }
 reqwest = { workspace = true }
 url = { workspace = true }
+itertools = "0.13.0"
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 tokio = { workspace = true }

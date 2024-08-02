@@ -83,13 +83,19 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
         self.output_event_stream.1.activate_cloned()
     }
 
+    /// HACK so we can create dependency tasks when running tests
+    #[must_use]
+    pub fn internal_event_stream_sender(&self) -> Sender<Arc<HotShotEvent<TYPES>>> {
+        self.internal_event_stream.0.clone()
+    }
+
     /// HACK so we can know the types when running tests...
     /// there are two cleaner solutions:
     /// - make the stream generic and in nodetypes or nodeimpelmentation
     /// - type wrapper
     /// NOTE: this is only used for sanity checks in our tests
     #[must_use]
-    pub fn internal_event_stream_known_impl(&self) -> Receiver<Arc<HotShotEvent<TYPES>>> {
+    pub fn internal_event_stream_receiver_known_impl(&self) -> Receiver<Arc<HotShotEvent<TYPES>>> {
         self.internal_event_stream.1.activate_cloned()
     }
 

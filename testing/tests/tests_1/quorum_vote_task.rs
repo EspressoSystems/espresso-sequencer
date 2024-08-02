@@ -276,3 +276,4 @@ async fn test_quorum_vote_task_incorrect_dependency() {
     };
     run_test![inputs, script].await;
 }
+

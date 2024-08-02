@@ -116,7 +116,7 @@ where
             event_rxs.push(r);
         }
         for node in &self.nodes {
-            let r = node.handle.internal_event_stream_known_impl();
+            let r = node.handle.internal_event_stream_receiver_known_impl();
             internal_event_rxs.push(r);
         }
 

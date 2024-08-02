@@ -59,30 +59,29 @@ enum VoteDependency {
 }
 
 /// Handler for the vote dependency.
-#[allow(dead_code)]
-struct VoteDependencyHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct VoteDependencyHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Public key.
     pub public_key: TYPES::SignatureKey,
     /// Private Key.
     pub private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
     /// Reference to consensus. The replica will require a write lock on this.
-    consensus: OuterConsensus<TYPES>,
+    pub consensus: OuterConsensus<TYPES>,
     /// Immutable instance state
-    instance_state: Arc<TYPES::InstanceState>,
+    pub instance_state: Arc<TYPES::InstanceState>,
     /// Membership for Quorum certs/votes.
-    quorum_membership: Arc<TYPES::Membership>,
+    pub quorum_membership: Arc<TYPES::Membership>,
     /// Reference to the storage.
     pub storage: Arc<RwLock<I::Storage>>,
     /// View number to vote on.
-    view_number: TYPES::Time,
+    pub view_number: TYPES::Time,
     /// Event sender.
-    sender: Sender<Arc<HotShotEvent<TYPES>>>,
+    pub sender: Sender<Arc<HotShotEvent<TYPES>>>,
     /// Event receiver.
-    receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
+    pub receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     /// An upgrade certificate that has been decided on, if any.
     pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     /// The node's id
-    id: u64,
+    pub id: u64,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> VoteDependencyHandle<TYPES, I> {
