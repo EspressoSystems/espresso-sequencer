@@ -14,7 +14,7 @@ use hotshot_types::{
         signature_key::BuilderSignatureKey,
     },
 };
-use std::{str::FromStr, thread::sleep, time::Duration};
+use std::str::FromStr;
 use thiserror::Error;
 use tide_disco::error::ServerError;
 use url::Url;
