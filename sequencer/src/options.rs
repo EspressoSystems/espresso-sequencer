@@ -211,7 +211,7 @@ pub struct Options {
     #[clap(flatten)]
     pub logging: logging::Config,
 
-    #[clap(skip)]
+    #[clap(flatten)]
     pub identity: Identity,
 }
 
@@ -266,42 +266,18 @@ pub struct Identity {
     pub company_name: Option<String>,
     #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_COMPANY_WEBSITE")]
     pub company_website: Option<Url>,
-    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_OPERATING_SYSTEM")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_OPERATING_SYSTEM", default_value = std::env::consts::OS)]
     pub operating_system: Option<String>,
-    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_NODE_TYPE")]
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_NODE_TYPE", default_value = get_default_node_type())]
     pub node_type: Option<String>,
     #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_NETWORK_TYPE")]
     pub network_type: Option<String>,
 }
 
-impl Default for Identity {
-    fn default() -> Self {
-        let Identity {
-            country_code,
-            latitude,
-            longitude,
-            node_name,
-            wallet_address,
-            company_name,
-            company_website,
-            operating_system,
-            node_type,
-            network_type,
-        } = Self::parse();
-
-        Self {
-            country_code,
-            latitude,
-            longitude,
-            node_name,
-            wallet_address,
-            company_name,
-            company_website,
-            operating_system: operating_system.or(Some(std::env::consts::OS.to_string())),
-            node_type: node_type.or(Some(format!("sequencer-{}", env!("CARGO_PKG_VERSION")))),
-            network_type,
-        }
-    }
+/// get_default_node_type returns the current public facing binary name and
+/// version of this program.
+fn get_default_node_type() -> String {
+    format!("espresso-sequencer {}", env!("CARGO_PKG_VERSION"))
 }
 
 // The Debug implementation for Url is noisy, we just want to see the URL
