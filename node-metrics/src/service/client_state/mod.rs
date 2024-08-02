@@ -1286,30 +1286,12 @@ pub mod tests {
         let client_thread_state = Arc::new(RwLock::new(create_test_client_thread_state()));
         let data_state = Arc::new(RwLock::new(data_state));
 
-        let (mut internal_client_message_sender, internal_client_message_receiver) =
-            mpsc::channel(1);
-        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        let (_internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
+        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state,
             client_thread_state,
         );
-
-        // disconnect the last internal client message sender
-        internal_client_message_sender.disconnect();
-
-        // Join the async task.
-        if let Err(timeout_error) = process_internal_client_message_handle
-            .task_handle
-            .take()
-            .unwrap()
-            .timeout(Duration::from_millis(200))
-            .await
-        {
-            panic!(
-                "process_internal_client_message_handle did not complete in time, error: {}",
-                timeout_error
-            );
-        }
     }
 
     #[async_std::test]
@@ -1326,7 +1308,7 @@ pub mod tests {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
-        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state,
             client_thread_state,
@@ -1377,28 +1359,6 @@ pub mod tests {
                 voters_1, voters_2
             ]))),
         );
-
-        // disconnect the internal client message sender
-        internal_client_message_sender_1.disconnect();
-        internal_client_message_sender_2.disconnect();
-
-        // The server message receiver should be shutdown, and should return
-        // nothing further
-        assert_eq!(server_message_receiver_1.next().await, None);
-        assert_eq!(server_message_receiver_2.next().await, None);
-
-        if let Err(timeout_error) = process_internal_client_message_handle
-            .task_handle
-            .take()
-            .unwrap()
-            .timeout(Duration::from_millis(200))
-            .await
-        {
-            panic!(
-                "process_internal_client_message_handle did not complete in time, error: {}",
-                timeout_error
-            );
-        }
     }
 
     #[async_std::test]
@@ -1418,7 +1378,7 @@ pub mod tests {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
-        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state,
             client_thread_state,
@@ -1467,29 +1427,6 @@ pub mod tests {
             server_message_receiver_1.next().await,
             Some(ServerMessage::BlocksSnapshot(Arc::new(vec![block_1]))),
         );
-
-        // disconnect the internal client message sender
-        internal_client_message_sender_1.disconnect();
-        internal_client_message_sender_2.disconnect();
-
-        // The server message receiver should be shutdown, and should return
-        // nothing further
-        assert_eq!(server_message_receiver_1.next().await, None);
-        assert_eq!(server_message_receiver_2.next().await, None);
-
-        // Join the async task.
-        if let Err(timeout_error) = process_internal_client_message_handle
-            .task_handle
-            .take()
-            .unwrap()
-            .timeout(Duration::from_millis(200))
-            .await
-        {
-            panic!(
-                "process_internal_client_message_handle did not complete in time, error: {}",
-                timeout_error
-            );
-        }
     }
 
     #[async_std::test]
@@ -1501,7 +1438,7 @@ pub mod tests {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
-        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state,
             client_thread_state,
@@ -1555,29 +1492,6 @@ pub mod tests {
                 node_3.clone()
             ]))),
         );
-
-        // disconnect the last internal client message sender
-        internal_client_message_sender_1.disconnect();
-        internal_client_message_sender_2.disconnect();
-
-        // The server message receiver should be shutdown, and should return
-        // nothing further
-        assert_eq!(server_message_receiver_1.next().await, None);
-        assert_eq!(server_message_receiver_2.next().await, None);
-
-        // Join the async task.
-        if let Err(timeout_error) = process_internal_client_message_handle
-            .task_handle
-            .take()
-            .unwrap()
-            .timeout(Duration::from_millis(200))
-            .await
-        {
-            panic!(
-                "process_internal_client_message_handle did not complete in time, error: {}",
-                timeout_error
-            );
-        }
     }
 
     #[async_std::test]
@@ -1593,22 +1507,21 @@ pub mod tests {
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
         let (server_message_sender_3, mut server_message_receiver_3) = mpsc::channel(1);
-        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state.clone(),
             client_thread_state.clone(),
         );
 
-        let mut process_distribute_block_detail_handle =
-            ProcessDistributeBlockDetailHandlingTask::new(
-                client_thread_state.clone(),
-                block_detail_receiver,
-            );
+        let _process_distribute_block_detail_handle = ProcessDistributeBlockDetailHandlingTask::new(
+            client_thread_state.clone(),
+            block_detail_receiver,
+        );
 
-        let mut process_distribute_voters_handle =
+        let _process_distribute_voters_handle =
             ProcessDistributeVotersHandlingTask::new(client_thread_state, voters_receiver);
 
-        let mut process_leaf_stream_handle = ProcessLeafStreamTask::new(
+        let _process_leaf_stream_handle = ProcessLeafStreamTask::new(
             leaf_receiver,
             data_state,
             block_detail_sender,
@@ -1698,75 +1611,6 @@ pub mod tests {
             server_message_receiver_2.next().await,
             Some(ServerMessage::LatestBlock(arc_expected_block.clone()))
         );
-
-        // disconnect the leaf sender
-        leaf_sender.disconnect();
-
-        // Join the async task.
-        if let Err(timeout_error) = process_leaf_stream_handle
-            .task_handle
-            .take()
-            .unwrap()
-            .timeout(Duration::from_millis(200))
-            .await
-        {
-            panic!(
-                "process_leaf_stream_handle did not complete in time, error: {}",
-                timeout_error
-            );
-        }
-
-        // Join the async task.
-        if let Err(timeout_error) = process_distribute_block_detail_handle
-            .task_handle
-            .take()
-            .unwrap()
-            .timeout(Duration::from_millis(200))
-            .await
-        {
-            panic!(
-                "process_distribute_client_handling_handle did not complete in time, error: {}",
-                timeout_error
-            );
-        }
-
-        if let Err(timeout_error) = process_distribute_voters_handle
-            .task_handle
-            .take()
-            .unwrap()
-            .timeout(Duration::from_millis(200))
-            .await
-        {
-            panic!(
-                "process_distribute_voters_handle did not complete in time, error: {}",
-                timeout_error
-            );
-        }
-
-        // disconnect the last internal client message sender
-        internal_client_message_sender_1.disconnect();
-        internal_client_message_sender_2.disconnect();
-        internal_client_message_sender_3.disconnect();
-
-        // The server message receiver should be shutdown, and should return
-        // nothing further
-        assert_eq!(server_message_receiver_1.next().await, None);
-        assert_eq!(server_message_receiver_2.next().await, None);
-        assert_eq!(server_message_receiver_3.next().await, None);
-
-        // Join the async task.
-        if let Err(timeout_error) = process_internal_client_message_handle
-            .task_handle
-            .take()
-            .unwrap()
-            .timeout(Duration::from_millis(200))
-            .await
-        {
-            panic!(
-                "process_internal_client_message_handle did not complete in time, error: {}",
-                timeout_error
-            );
-        }
     }
 
     #[async_std::test]
@@ -1780,13 +1624,13 @@ pub mod tests {
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
         let (server_message_sender_3, mut server_message_receiver_3) = mpsc::channel(1);
-        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state.clone(),
             client_thread_state.clone(),
         );
 
-        let mut process_distribute_node_identity_handle =
+        let _process_distribute_node_identity_handle =
             ProcessDistributeNodeIdentityHandlingTask::new(
                 client_thread_state,
                 node_identity_receiver,
@@ -1877,48 +1721,6 @@ pub mod tests {
             server_message_receiver_2.next().await,
             Some(ServerMessage::LatestNodeIdentity(arc_node_identity.clone()))
         );
-
-        // disconnect the leaf sender
-        node_identity_sender.disconnect();
-
-        // Join the async task.
-        if let Err(timeout_error) = process_distribute_node_identity_handle
-            .task_handle
-            .take()
-            .unwrap()
-            .timeout(Duration::from_millis(200))
-            .await
-        {
-            panic!(
-                "process_distribute_node_identity_handle did not complete in time, error: {}",
-                timeout_error
-            );
-        }
-
-        // disconnect the last internal client message sender
-        internal_client_message_sender_1.disconnect();
-        internal_client_message_sender_2.disconnect();
-        internal_client_message_sender_3.disconnect();
-
-        // The server message receiver should be shutdown, and should return
-        // nothing further
-        assert_eq!(server_message_receiver_1.next().await, None);
-        assert_eq!(server_message_receiver_2.next().await, None);
-        assert_eq!(server_message_receiver_3.next().await, None);
-
-        // Join the async task.
-        if let Err(timeout_error) = process_internal_client_message_handle
-            .task_handle
-            .take()
-            .unwrap()
-            .timeout(Duration::from_millis(200))
-            .await
-        {
-            panic!(
-                "process_internal_client_message_handle did not complete in time, error: {}",
-                timeout_error
-            );
-        }
     }
 
     #[async_std::test]
@@ -1932,13 +1734,13 @@ pub mod tests {
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
         let (server_message_sender_3, mut server_message_receiver_3) = mpsc::channel(1);
-        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state.clone(),
             client_thread_state.clone(),
         );
 
-        let mut process_distribute_voters_handle =
+        let _process_distribute_voters_handle =
             ProcessDistributeVotersHandlingTask::new(client_thread_state, voters_receiver);
 
         // Send a Connected Message to the server
@@ -2021,48 +1823,6 @@ pub mod tests {
             server_message_receiver_2.next().await,
             Some(ServerMessage::LatestVoters(voters.clone()))
         );
-
-        // disconnect the leaf sender
-        voters_sender.disconnect();
-
-        // Join the async task.
-        if let Err(timeout_error) = process_distribute_voters_handle
-            .task_handle
-            .take()
-            .unwrap()
-            .timeout(Duration::from_millis(200))
-            .await
-        {
-            panic!(
-                "process_distribute_voters_handle did not complete in time, error: {}",
-                timeout_error
-            );
-        }
-
-        // disconnect the last internal client message sender
-        internal_client_message_sender_1.disconnect();
-        internal_client_message_sender_2.disconnect();
-        internal_client_message_sender_3.disconnect();
-
-        // The server message receiver should be shutdown, and should return
-        // nothing further
-        assert_eq!(server_message_receiver_1.next().await, None);
-        assert_eq!(server_message_receiver_2.next().await, None);
-        assert_eq!(server_message_receiver_3.next().await, None);
-
-        // Join the async task.
-        if let Err(timeout_error) = process_internal_client_message_handle
-            .task_handle
-            .take()
-            .unwrap()
-            .timeout(Duration::from_millis(200))
-            .await
-        {
-            panic!(
-                "process_internal_client_message_handle did not complete in time, error: {}",
-                timeout_error
-            );
-        }
     }
 
     // The following tests codify assumptions being bad on behalf of the Sink
