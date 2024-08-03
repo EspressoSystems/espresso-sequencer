@@ -5197,8 +5197,8 @@ dependencies = [
 
 [[package]]
 name = "jf-plonk"
-version = "0.4.4"
-source = "git+https://github.com/EspressoSystems/jellyfish?tag=0.4.5#7d71dbeff14f1a501b0b0dc391f1dffa1b8374fb"
+version = "0.5.0"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=jf-plonk-v0.5.0#89b9345dc018d9bdb3d385aefd2036d5e42e9f17"
 dependencies = [
  "ark-ec",
  "ark-ff",

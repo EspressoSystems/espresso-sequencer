@@ -6,7 +6,7 @@ pragma solidity ^0.8.0;
 
 // Libraries
 import "forge-std/Test.sol";
-import { BN254, Utils } from "bn254/BN254.sol";
+import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
 import { LightClientStateUpdateVKMock as VkTest } from "./mocks/LightClientStateUpdateVKMock.sol";
 
@@ -32,8 +32,6 @@ contract Transcript_appendMessage_Test is Test {
 
         transcript.appendMessage(message);
         assertEq(updated.transcript, transcript.transcript);
-        assertEq(updated.state[0], transcript.state[0]);
-        assertEq(updated.state[1], transcript.state[1]);
     }
 }
 
@@ -57,12 +55,9 @@ contract Transcript_appendFieldElement_Test is Test {
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
 
-        transcript.transcript =
-            abi.encodePacked(transcript.transcript, Utils.reverseEndianness(fieldElement));
+        transcript.transcript = abi.encodePacked(transcript.transcript, fieldElement);
 
         assertEq(updated.transcript, transcript.transcript);
-        assertEq(updated.state[0], transcript.state[0]);
-        assertEq(updated.state[1], transcript.state[1]);
     }
 }
 
@@ -88,12 +83,9 @@ contract Transcript_appendGroupElement_Test is Test {
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
 
-        transcript.transcript =
-            abi.encodePacked(transcript.transcript, BN254.g1Serialize(randPoint));
+        transcript.transcript = abi.encodePacked(transcript.transcript, randPoint.x, randPoint.y);
 
         assertEq(updated.transcript, transcript.transcript);
-        assertEq(updated.state[0], transcript.state[0]);
-        assertEq(updated.state[1], transcript.state[1]);
     }
 
     /// @dev Test special case where the identity point (or infinity) is appended.
@@ -110,10 +102,8 @@ contract Transcript_appendGroupElement_Test is Test {
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));
 
-        transcript.transcript = abi.encodePacked(transcript.transcript, BN254.g1Serialize(infinity));
+        transcript.transcript = abi.encodePacked(transcript.transcript, infinity.x, infinity.y);
         assertEq(updated.transcript, transcript.transcript);
-        assertEq(updated.state[0], transcript.state[0]);
-        assertEq(updated.state[1], transcript.state[1]);
     }
 }
 
@@ -134,8 +124,6 @@ contract Transcript_getAndAppendChallenge_Test is Test {
         uint256 challenge = transcript.getAndAppendChallenge();
 
         assertEq(updated.transcript, transcript.transcript);
-        assertEq(updated.state[0], transcript.state[0]);
-        assertEq(updated.state[1], transcript.state[1]);
         assertEq(chal, challenge);
     }
 }
@@ -172,8 +160,6 @@ contract Transcript_appendVkAndPubInput_Test is Test {
         transcript.appendVkAndPubInput(vk, publicInput);
 
         assertEq(updated.transcript, transcript.transcript, "transcript field mismatch");
-        assertEq(updated.state[0], transcript.state[0], "state[0] field mismatch");
-        assertEq(updated.state[1], transcript.state[1], "state[1] field mismatch");
     }
 }
 
@@ -194,7 +180,5 @@ contract Transcript_appendProofEvaluations_Test is Test {
         transcript.appendProofEvaluations(proof);
 
         assertEq(updated.transcript, transcript.transcript, "transcript field mismatch");
-        assertEq(updated.state[0], transcript.state[0], "state[0] field mismatch");
-        assertEq(updated.state[1], transcript.state[1], "state[1] field mismatch");
     }
 }
