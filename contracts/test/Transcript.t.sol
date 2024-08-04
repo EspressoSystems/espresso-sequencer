@@ -136,23 +136,30 @@ contract Transcript_appendVkAndPubInput_Test is Test {
         T.TranscriptData memory transcript,
         uint256[8] memory _publicInput
     ) external {
-        uint256[] memory publicInput = new uint256[](8);
+        uint256[8] memory publicInput;
         for (uint256 i = 0; i < 8; i++) {
             publicInput[i] = _publicInput[i];
         }
 
+        // TODO Philippe call sanitizeScalarFields instead
         for (uint256 i = 0; i < publicInput.length; i++) {
             publicInput[i] = bound(publicInput[i], 0, BN254.R_MOD - 1);
             BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
         }
         IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
 
+        // TODO Philippe change the rust code to avoid this
+        uint256[] memory publicInputDyn = new uint256[](8);
+        for (uint256 i = 0; i < 8; i++) {
+            publicInputDyn[i] = publicInput[i];
+        }
+
         string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "transcript-append-vk-and-pi";
         cmds[2] = vm.toString(abi.encode(transcript));
         cmds[3] = vm.toString(abi.encode(vk));
-        cmds[4] = vm.toString(abi.encode(publicInput));
+        cmds[4] = vm.toString(abi.encode(publicInputDyn));
 
         bytes memory result = vm.ffi(cmds);
         (T.TranscriptData memory updated) = abi.decode(result, (T.TranscriptData));

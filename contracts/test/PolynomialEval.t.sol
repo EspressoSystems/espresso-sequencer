@@ -75,11 +75,13 @@ contract PolynomialEval_evalDataGen_Test is Test {
     function testFuzz_evalDataGen_matches(
         uint256 logSize,
         uint256 zeta,
-        uint256[] memory publicInput
+        uint256[8] memory publicInput
     ) external {
         logSize = bound(logSize, 16, 20);
         zeta = bound(zeta, 0, BN254.R_MOD - 1);
         BN254.validateScalarField(BN254.ScalarField.wrap(zeta));
+
+        // TODO Philipp use sanitizeScalarFields
         // Since these user-provided `publicInputs` were checked outside before passing in via
         // `BN254.validateScalarField()`, it suffices to assume they are proper for our test here.
         for (uint256 i = 0; i < publicInput.length; i++) {
@@ -93,12 +95,17 @@ contract PolynomialEval_evalDataGen_Test is Test {
         vm.assume(zeta != 1); // otherwise divisor of lagrange_1_poly would be zero
         vm.assume(zeta != domain.groupGenInv); // otherwise divisor of lagrange_n_poly would be zero
 
+        uint256[] memory publicInputDyn = new uint256[](8);
+        for (uint256 i = 0; i < 8; i++) {
+            publicInputDyn[i] = publicInput[i];
+        }
+
         string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "eval-data-gen";
         cmds[2] = vm.toString(logSize);
         cmds[3] = vm.toString(bytes32(zeta));
-        cmds[4] = vm.toString(abi.encode(publicInput));
+        cmds[4] = vm.toString(abi.encode(publicInputDyn));
 
         bytes memory result = vm.ffi(cmds);
         (uint256 vanishEval, uint256 lagrangeOne, uint256 piEval) =
@@ -152,17 +159,15 @@ contract PolynomialEval_evalDataGen_Test is Test {
         Poly.EvalDomain memory domain = Poly.newEvalDomain(size);
 
         uint256[] memory elements = Poly.domainElements(domain, size);
-        uint256 piLen = 10;
-        uint256[] memory publicInputs = new uint256[](piLen);
-        // arbitrarily pick public input length = 10, and fill in arbitrary values
-        for (uint256 i = 0; i < piLen; i++) {
+        uint256[8] memory publicInputs;
+        for (uint256 i = 0; i < 8; i++) {
             publicInputs[i] = 2 ** i;
         }
 
         for (uint256 i = 0; i < size; i++) {
             uint256 zeta = elements[i];
             uint256 vanishEval = Poly.evaluateVanishingPoly(domain, zeta);
-            if (i < piLen) {
+            if (i < 8) {
                 assertEq(
                     Poly.evaluatePiPoly(domain, publicInputs, zeta, vanishEval), publicInputs[i]
                 );

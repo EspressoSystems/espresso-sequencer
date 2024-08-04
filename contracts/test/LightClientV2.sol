@@ -213,9 +213,9 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function preparePublicInput(LightClientState memory state)
         internal
         view
-        returns (uint256[] memory)
+        returns (uint256[8] memory)
     {
-        uint256[] memory publicInput = new uint256[](8);
+        uint256[8] memory publicInput;
         publicInput[0] = votingThreshold;
         publicInput[1] = uint256(state.viewNum);
         publicInput[2] = uint256(state.blockHeight);
@@ -234,7 +234,7 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         virtual
     {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
-        uint256[] memory publicInput = preparePublicInput(state);
+        uint256[8] memory publicInput = preparePublicInput(state);
 
         if (!PlonkVerifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();

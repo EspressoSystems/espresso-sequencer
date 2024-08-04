@@ -41,6 +41,19 @@ contract PlonkVerifierCommonTest is Test {
         return a;
     }
 
+    /// @dev Sanitize all values in `a` to be valid scalar fields Bn254::Fr.
+    /// This is helpful to sanitize fuzzer-generated random `uint[]` values.
+    function sanitizeScalarFieldsFixedSize(uint256[8] memory a)
+        public
+        pure
+        returns (uint256[8] memory)
+    {
+        for (uint256 i = 0; i < 8; i++) {
+            a[i] = sanitizeScalarField(a[i]);
+        }
+        return a;
+    }
+
     /// @dev Sanitize dummy verifyingKey such that it matches with the length of publicInput,
     /// This is only used for fuzz-generated-dummy-valued tests.
     function sanitizeVk(IPlonkVerifier.VerifyingKey memory vk, uint256 piLength)
@@ -77,7 +90,7 @@ contract PlonkVerifierCommonTest is Test {
     /// @dev helper function to generate some dummy but format-valid arguments for
     /// `prepareOpeningProof` step. The verifyingKey should be fixed/loaded from library,
     /// proof should be generated via `dummyProof()`, other inputs are from fuzzers.
-    function dummyArgsForOpeningProof(uint64 seed, uint256[] memory publicInput)
+    function dummyArgsForOpeningProof(uint64 seed, uint256[8] memory publicInput)
         public
         returns (
             IPlonkVerifier.VerifyingKey memory,
@@ -150,8 +163,13 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
         );
 
+        uint256[8] memory publicInput;
+        for (uint256 i = 0; i < 8; i++) {
+            publicInput[i] = publicInputs[0][i];
+        }
+
         vm.resumeGasMetering();
-        assert(V.verify(verifyingKeys[0], publicInputs[0], proofs[0]));
+        assert(V.verify(verifyingKeys[0], publicInput, proofs[0]));
     }
 
     /// @dev Test when bad verifying key is supplied, the verification should fail
@@ -193,17 +211,22 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             mstore(badPointRef, badPoint)
         }
 
-        assert(!V.verify(verifyingKeys[0], publicInputs[0], proofs[0]));
+        uint256[8] memory publicInput;
+        for (uint256 i = 0; i < 8; i++) {
+            publicInput[i] = publicInputs[0][i];
+        }
+
+        assert(!V.verify(verifyingKeys[0], publicInput, proofs[0]));
     }
 
     // @dev Test when bad public input is supplied, the verification should fail
     // We know our `gen_circuit_for_test` in `diff_test.rs` has only 8 public inputs
     function testFuzz_badPublicInput_fails(uint256[8] calldata randPublicInput) external {
-        uint256[] memory badPublicInput = new uint256[](8);
+        uint256[8] memory badPublicInput;
         for (uint256 i = 0; i < 8; i++) {
             badPublicInput[i] = randPublicInput[i];
         }
-        badPublicInput = sanitizeScalarFields(badPublicInput);
+        badPublicInput = sanitizeScalarFieldsFixedSize(badPublicInput);
 
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
@@ -239,7 +262,12 @@ contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
             (IPlonkVerifier.VerifyingKey[], uint256[][], IPlonkVerifier.PlonkProof[], bytes[])
         );
 
-        assert(!V.verify(verifyingKeys[0], publicInputs[0], badProof));
+        uint256[8] memory publicInput;
+        for (uint256 i = 0; i < 8; i++) {
+            publicInput[i] = publicInputs[0][i];
+        }
+
+        assert(!V.verify(verifyingKeys[0], publicInput, badProof));
     }
 }
 
@@ -306,22 +334,28 @@ contract PlonkVerifier_preparePcsInfo_Test is PlonkVerifierCommonTest {
     function testFuzz_preparePcsInfo_matches(uint64 seed, uint256[8] memory _publicInput)
         external
     {
-        uint256[] memory publicInput = new uint256[](8);
+        uint256[8] memory publicInput;
         for (uint256 i = 0; i < 8; i++) {
             publicInput[i] = _publicInput[i];
         }
 
-        publicInput = sanitizeScalarFields(publicInput);
+        publicInput = sanitizeScalarFieldsFixedSize(publicInput);
         IPlonkVerifier.VerifyingKey memory vk = sanitizeVk(VkTest.getVk(), publicInput.length);
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
 
         V.PcsInfo memory info = V._preparePcsInfo(vk, publicInput, proof);
 
+        // TODO Philippe change the rust code to avoid this
+        uint256[] memory publicInputDyn = new uint256[](8);
+        for (uint256 i = 0; i < 8; i++) {
+            publicInputDyn[i] = publicInput[i];
+        }
+
         string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
         cmds[1] = "plonk-prepare-pcs-info";
         cmds[2] = vm.toString(abi.encode(vk));
-        cmds[3] = vm.toString(abi.encode(publicInput));
+        cmds[3] = vm.toString(abi.encode(publicInputDyn));
         cmds[4] = vm.toString(abi.encode(proof));
 
         bytes memory result = vm.ffi(cmds);
@@ -362,20 +396,26 @@ contract PlonkVerifier_computeChallenges_Test is PlonkVerifierCommonTest {
     function testFuzz_computeChallenges_matches(uint64 seed, uint256[8] memory _publicInput)
         external
     {
-        uint256[] memory publicInput = new uint256[](8);
+        uint256[8] memory publicInput;
+
         for (uint256 i = 0; i < 8; i++) {
             publicInput[i] = _publicInput[i];
         }
 
         IPlonkVerifier.VerifyingKey memory vk = VkTest.getVk();
         IPlonkVerifier.PlonkProof memory proof = dummyProof(seed);
-        publicInput = sanitizeScalarFields(publicInput);
+        publicInput = sanitizeScalarFieldsFixedSize(publicInput);
+
+        uint256[] memory publicInputDyn = new uint256[](8);
+        for (uint256 i = 0; i < 8; i++) {
+            publicInputDyn[i] = publicInput[i];
+        }
 
         string[] memory cmds = new string[](6);
         cmds[0] = "diff-test";
         cmds[1] = "plonk-compute-chal";
         cmds[2] = vm.toString(abi.encode(vk));
-        cmds[3] = vm.toString(abi.encode(publicInput));
+        cmds[3] = vm.toString(abi.encode(publicInputDyn));
         cmds[4] = vm.toString(abi.encode(proof));
         cmds[5] = vm.toString(abi.encode(""));
 

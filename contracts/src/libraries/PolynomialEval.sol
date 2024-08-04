@@ -149,12 +149,19 @@ library PolynomialEval {
     /// @dev Evaluate public input polynomial at point `zeta`.
     function evaluatePiPoly(
         EvalDomain memory self,
-        uint256[] memory pi,
+        uint256[8] memory pi,
         uint256 zeta,
         uint256 vanishEval
     ) internal view returns (uint256 res) {
         uint256 p = BN254.R_MOD;
-        uint256 length = pi.length;
+
+        // TODO Philippe if we don't do this the test fails...
+        uint256[] memory piDyn = new uint256[](8);
+        for (uint256 i = 0; i < 8; i++) {
+            piDyn[i] = pi[i];
+        }
+
+        uint256 length = piDyn.length;
 
         // when zeta is one of the eval domain, vanishEval = 0
         // lagrange coeffs for all but the one corresponding to zeta are zero
@@ -163,7 +170,7 @@ library PolynomialEval {
             uint256 group = 1;
             for (uint256 i = 0; i < length; i++) {
                 if (zeta == group) {
-                    return pi[i];
+                    return piDyn[i];
                 }
                 group = mulmod(group, self.groupGen, p);
             }
@@ -239,7 +246,7 @@ library PolynomialEval {
 
                 // multiply by pub_input[i] and update res
                 // tmp points to public input
-                tmp := mload(add(add(pi, 0x20), mul(i, 0x20)))
+                tmp := mload(add(add(piDyn, 0x20), mul(i, 0x20)))
                 ithLagrange := mulmod(ithLagrange, tmp, p)
                 res := addmod(res, ithLagrange, p)
             }
@@ -274,7 +281,7 @@ library PolynomialEval {
     }
 
     /// @dev compute the EvalData for a given domain and a challenge zeta
-    function evalDataGen(EvalDomain memory self, uint256 zeta, uint256[] memory publicInput)
+    function evalDataGen(EvalDomain memory self, uint256 zeta, uint256[8] memory publicInput)
         internal
         view
         returns (EvalData memory evalData)
