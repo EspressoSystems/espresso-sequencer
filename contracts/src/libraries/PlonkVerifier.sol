@@ -90,7 +90,7 @@ library PlonkVerifier {
     /// @return _ A boolean indicating successful verification, false otherwise
     function verify(
         IPlonkVerifier.VerifyingKey memory verifyingKey,
-        uint256[] memory publicInput,
+        uint256[8] memory publicInput,
         IPlonkVerifier.PlonkProof memory proof
     ) internal view returns (bool) {
         _validateProof(proof);
@@ -139,7 +139,7 @@ library PlonkVerifier {
 
     function _preparePcsInfo(
         IPlonkVerifier.VerifyingKey memory verifyingKey,
-        uint256[] memory publicInput,
+        uint256[8] memory publicInput,
         IPlonkVerifier.PlonkProof memory proof
     ) internal view returns (PcsInfo memory res) {
         if (publicInput.length != verifyingKey.numInputs) revert WrongPlonkVK();
@@ -172,7 +172,7 @@ library PlonkVerifier {
 
     function _computeChallenges(
         IPlonkVerifier.VerifyingKey memory verifyingKey,
-        uint256[] memory publicInput,
+        uint256[8] memory publicInput,
         IPlonkVerifier.PlonkProof memory proof
     ) internal pure returns (Challenges memory res) {
         Transcript.TranscriptData memory transcript;

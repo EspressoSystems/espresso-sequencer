@@ -72,7 +72,7 @@ library Transcript {
     function appendVkAndPubInput(
         TranscriptData memory self,
         IPlonkVerifier.VerifyingKey memory verifyingKey,
-        uint256[] memory publicInput
+        uint256[8] memory publicInput
     ) internal pure {
         uint32 sizeInBits = 254;
 
