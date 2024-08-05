@@ -19,12 +19,13 @@ var srcIndex = new Map(JSON.parse('[\
 ["keygen",["",[],["keygen.rs"]]],\
 ["marketplace_solver",["",[],["api.rs","database.rs","events.rs","lib.rs","options.rs","state.rs"]]],\
 ["nasty_client",["",[],["nasty-client.rs"]]],\
+["node_metrics",["",[["api",[["node_validator",[["v0",[["cdn",[],["mod.rs"]]],["create_node_validator_api.rs","mod.rs"]]],["mod.rs"]]],["mod.rs"]],["service",[["client_id",[],["mod.rs"]],["client_message",[],["mod.rs"]],["client_state",[],["mod.rs"]],["data_state",[],["location_details.rs","mod.rs","node_identity.rs"]],["node_type",[],["mod.rs"]],["server_message",[],["mod.rs"]]],["mod.rs"]]],["lib.rs"]]],\
 ["orchestrator",["",[],["orchestrator.rs"]]],\
 ["permissioned_builder",["",[],["permissioned-builder.rs"]]],\
 ["permissionless_builder",["",[],["permissionless-builder.rs"]]],\
 ["pub_key",["",[],["pub-key.rs"]]],\
 ["reset_storage",["",[],["reset-storage.rs"]]],\
-["sequencer",["",[["api",[],["data_source.rs","endpoints.rs","fs.rs","options.rs","sql.rs","update.rs"]],["network",[],["cdn.rs","libp2p.rs","mod.rs"]],["persistence",[],["fs.rs","no_storage.rs","sql.rs"]],["state_signature",[],["relay_server.rs"]]],["api.rs","catchup.rs","context.rs","genesis.rs","hotshot_commitment.rs","lib.rs","options.rs","persistence.rs","state.rs","state_signature.rs"]]],\
+["sequencer",["",[["api",[],["data_source.rs","endpoints.rs","fs.rs","options.rs","sql.rs","update.rs"]],["network",[],["cdn.rs","libp2p.rs","mod.rs"]],["persistence",[],["fs.rs","no_storage.rs","sql.rs"]],["state_signature",[],["relay_server.rs"]]],["api.rs","catchup.rs","context.rs","external_event_handler.rs","genesis.rs","hotshot_commitment.rs","lib.rs","options.rs","persistence.rs","state.rs","state_signature.rs"]]],\
 ["sequencer_utils",["",[],["deployer.rs","lib.rs","logging.rs","ser.rs","test_utils.rs"]]],\
 ["state_prover",["",[],["state-prover.rs"]]],\
 ["state_relay_server",["",[],["state-relay-server.rs"]]],\

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["empty_builder_commitment","init_node"],"mod":["api","catchup","context","genesis","hotshot_commitment","network","options","persistence","state","state_signature","testing"],"struct":["L1Params","NetworkParams","Node"]};
+window.SIDEBAR_ITEMS = {"fn":["empty_builder_commitment","init_node"],"mod":["api","catchup","context","external_event_handler","genesis","hotshot_commitment","network","options","persistence","state","state_signature","testing"],"struct":["L1Params","NetworkParams","Node"]};

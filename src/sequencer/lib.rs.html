@@ -884,11 +884,63 @@
 <a href="#884" id="884">884</a>
 <a href="#885" id="885">885</a>
 <a href="#886" id="886">886</a>
+<a href="#887" id="887">887</a>
+<a href="#888" id="888">888</a>
+<a href="#889" id="889">889</a>
+<a href="#890" id="890">890</a>
+<a href="#891" id="891">891</a>
+<a href="#892" id="892">892</a>
+<a href="#893" id="893">893</a>
+<a href="#894" id="894">894</a>
+<a href="#895" id="895">895</a>
+<a href="#896" id="896">896</a>
+<a href="#897" id="897">897</a>
+<a href="#898" id="898">898</a>
+<a href="#899" id="899">899</a>
+<a href="#900" id="900">900</a>
+<a href="#901" id="901">901</a>
+<a href="#902" id="902">902</a>
+<a href="#903" id="903">903</a>
+<a href="#904" id="904">904</a>
+<a href="#905" id="905">905</a>
+<a href="#906" id="906">906</a>
+<a href="#907" id="907">907</a>
+<a href="#908" id="908">908</a>
+<a href="#909" id="909">909</a>
+<a href="#910" id="910">910</a>
+<a href="#911" id="911">911</a>
+<a href="#912" id="912">912</a>
+<a href="#913" id="913">913</a>
+<a href="#914" id="914">914</a>
+<a href="#915" id="915">915</a>
+<a href="#916" id="916">916</a>
+<a href="#917" id="917">917</a>
+<a href="#918" id="918">918</a>
+<a href="#919" id="919">919</a>
+<a href="#920" id="920">920</a>
+<a href="#921" id="921">921</a>
+<a href="#922" id="922">922</a>
+<a href="#923" id="923">923</a>
+<a href="#924" id="924">924</a>
+<a href="#925" id="925">925</a>
+<a href="#926" id="926">926</a>
+<a href="#927" id="927">927</a>
+<a href="#928" id="928">928</a>
+<a href="#929" id="929">929</a>
+<a href="#930" id="930">930</a>
+<a href="#931" id="931">931</a>
+<a href="#932" id="932">932</a>
+<a href="#933" id="933">933</a>
+<a href="#934" id="934">934</a>
+<a href="#935" id="935">935</a>
+<a href="#936" id="936">936</a>
+<a href="#937" id="937">937</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
 <span class="kw">pub mod </span>genesis;
 
+<span class="kw">mod </span>external_event_handler;
 <span class="kw">pub mod </span>hotshot_commitment;
 <span class="kw">pub mod </span>options;
 <span class="kw">pub mod </span>state_signature;
@@ -908,6 +960,7 @@
 <span class="comment">// Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 </span><span class="kw">use </span>libp2p::Multiaddr;
 <span class="kw">use </span>network::libp2p::split_off_peer_id;
+<span class="kw">use </span>options::Identity;
 <span class="kw">use </span>state_signature::static_stake_table_commitment;
 <span class="kw">use </span>url::Url;
 <span class="kw">pub mod </span>persistence;
@@ -990,6 +1043,8 @@
     <span class="kw">pub </span>state_peers: Vec&lt;Url&gt;,
     <span class="kw">pub </span>config_peers: <span class="prelude-ty">Option</span>&lt;Vec&lt;Url&gt;&gt;,
     <span class="kw">pub </span>catchup_backoff: BackoffParams,
+    <span class="doccomment">/// The address to advertise as our public API's URL
+    </span><span class="kw">pub </span>public_api_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
 
     <span class="doccomment">/// The address to send to other Libp2p nodes to contact us
     </span><span class="kw">pub </span>libp2p_advertise_address: SocketAddr,
@@ -1005,7 +1060,8 @@
     <span class="kw">pub </span>events_max_block_range: u64,
 }
 
-<span class="kw">pub async fn </span>init_node&lt;P: PersistenceOptions, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+<span class="attr">#[allow(clippy::too_many_arguments)]
+</span><span class="kw">pub async fn </span>init_node&lt;P: PersistenceOptions, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
     genesis: Genesis,
     network_params: NetworkParams,
     metrics: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Metrics,
@@ -1013,6 +1069,7 @@
     l1_params: L1Params,
     bind_version: Ver,
     is_da: bool,
+    identity: Identity,
 ) -&gt; anyhow::Result&lt;SequencerContext&lt;network::Production, P::Persistence, Ver&gt;&gt; {
     <span class="comment">// Expose git information via status API.
     </span>metrics
@@ -1024,6 +1081,49 @@
             <span class="macro">env!</span>(<span class="string">"VERGEN_GIT_SHA"</span>).into(),
             <span class="macro">env!</span>(<span class="string">"VERGEN_GIT_DESCRIBE"</span>).into(),
             <span class="macro">env!</span>(<span class="string">"VERGEN_GIT_COMMIT_TIMESTAMP"</span>).into(),
+        ]);
+
+    <span class="comment">// Expose Node Entity Information via the status/metrics API
+    </span>metrics
+        .text_family(
+            <span class="string">"node_identity_general"</span>.into(),
+            <span class="macro">vec!</span>[
+                <span class="string">"name"</span>.into(),
+                <span class="string">"company_name"</span>.into(),
+                <span class="string">"company_website"</span>.into(),
+                <span class="string">"operating_system"</span>.into(),
+                <span class="string">"node_type"</span>.into(),
+                <span class="string">"network_type"</span>.into(),
+            ],
+        )
+        .create(<span class="macro">vec!</span>[
+            identity.node_name.unwrap_or(<span class="string">""</span>.into()),
+            identity.company_name.unwrap_or(<span class="string">""</span>.into()),
+            identity
+                .company_website
+                .map(|u| u.into())
+                .unwrap_or(<span class="string">""</span>.into()),
+            identity.operating_system.unwrap_or(<span class="string">""</span>.into()),
+            identity.node_type.unwrap_or(<span class="string">""</span>.into()),
+            identity.network_type.unwrap_or(<span class="string">""</span>.into()),
+        ]);
+
+    <span class="comment">// Expose Node Identity Location via the status/metrics API
+    </span>metrics
+        .text_family(
+            <span class="string">"node_identity_location"</span>.into(),
+            <span class="macro">vec!</span>[<span class="string">"country"</span>.into(), <span class="string">"latitude"</span>.into(), <span class="string">"longitude"</span>.into()],
+        )
+        .create(<span class="macro">vec!</span>[
+            identity.country_code.unwrap_or(<span class="string">""</span>.into()),
+            identity
+                .latitude
+                .map(|l| l.to_string())
+                .unwrap_or(<span class="string">""</span>.into()),
+            identity
+                .longitude
+                .map(|l| l.to_string())
+                .unwrap_or(<span class="string">""</span>.into()),
         ]);
 
     <span class="comment">// Stick our public key in `metrics` so it is easily accessible via the status API.
@@ -1240,6 +1340,7 @@
         <span class="prelude-val">Some</span>(network_params.state_relay_server_url),
         metrics,
         genesis.stake_table.capacity,
+        network_params.public_api_url,
         bind_version,
     )
     .<span class="kw">await</span><span class="question-mark">?</span>;
@@ -1587,7 +1688,8 @@
                 <span class="self">self</span>.state_relay_url.clone(),
                 metrics,
                 stake_table_capacity,
-                bind_version,
+                <span class="prelude-val">None</span>, <span class="comment">// The public API URL
+                </span>bind_version,
             )
             .<span class="kw">await
             </span>.unwrap()

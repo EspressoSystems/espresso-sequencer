@@ -381,6 +381,29 @@
 <a href="#381" id="381">381</a>
 <a href="#382" id="382">382</a>
 <a href="#383" id="383">383</a>
+<a href="#384" id="384">384</a>
+<a href="#385" id="385">385</a>
+<a href="#386" id="386">386</a>
+<a href="#387" id="387">387</a>
+<a href="#388" id="388">388</a>
+<a href="#389" id="389">389</a>
+<a href="#390" id="390">390</a>
+<a href="#391" id="391">391</a>
+<a href="#392" id="392">392</a>
+<a href="#393" id="393">393</a>
+<a href="#394" id="394">394</a>
+<a href="#395" id="395">395</a>
+<a href="#396" id="396">396</a>
+<a href="#397" id="397">397</a>
+<a href="#398" id="398">398</a>
+<a href="#399" id="399">399</a>
+<a href="#400" id="400">400</a>
+<a href="#401" id="401">401</a>
+<a href="#402" id="402">402</a>
+<a href="#403" id="403">403</a>
+<a href="#404" id="404">404</a>
+<a href="#405" id="405">405</a>
+<a href="#406" id="406">406</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::Display;
 
 <span class="kw">use </span>anyhow::Context;
@@ -398,7 +421,7 @@
 };
 <span class="kw">use </span>hotshot::{
     traits::election::static_committee::GeneralStaticCommittee,
-    types::{Event, SystemContextHandle},
+    types::{Event, EventType, SystemContextHandle},
     Memberships, SystemContext,
 };
 <span class="kw">use </span>hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
@@ -417,7 +440,11 @@
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
-<span class="kw">use crate</span>::{state_signature::StateSigner, static_stake_table_commitment, Node, SeqTypes};
+<span class="kw">use crate</span>::{
+    external_event_handler::{<span class="self">self</span>, ExternalEventHandler},
+    state_signature::StateSigner,
+    static_stake_table_commitment, Node, SeqTypes,
+};
 <span class="doccomment">/// The consensus handle
 </span><span class="kw">pub type </span>Consensus&lt;N, P&gt; = SystemContextHandle&lt;SeqTypes, Node&lt;N, P&gt;&gt;;
 
@@ -466,6 +493,7 @@
         state_relay_server: <span class="prelude-ty">Option</span>&lt;Url&gt;,
         metrics: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Metrics,
         stake_table_capacity: u64,
+        public_api_url: <span class="prelude-ty">Option</span>&lt;Url&gt;,
         <span class="kw">_</span>: Ver,
     ) -&gt; anyhow::Result&lt;<span class="self">Self</span>&gt; {
         <span class="kw">let </span>config = <span class="kw-2">&amp;</span>network_config.config;
@@ -524,7 +552,7 @@
             instance_state.node_id,
             config.clone(),
             memberships,
-            network,
+            network.clone(),
             initializer,
             ConsensusMetricsValue::new(metrics),
             persistence.clone(),
@@ -538,10 +566,18 @@
             state_signer = state_signer.with_relay_server(url);
         }
 
+        <span class="comment">// Create the roll call info we will be using
+        </span><span class="kw">let </span>roll_call_info = external_event_handler::RollCallInfo { public_api_url };
+
+        <span class="comment">// Create the external event handler
+        </span><span class="kw">let </span>external_event_handler = ExternalEventHandler::new(network, roll_call_info, pub_key)
+            .with_context(|| <span class="string">"Failed to create external event handler"</span>)<span class="question-mark">?</span>;
+
         <span class="prelude-val">Ok</span>(<span class="self">Self</span>::new(
             handle,
             persistence,
             state_signer,
+            external_event_handler,
             event_streamer,
             instance_state,
             network_config,
@@ -553,6 +589,7 @@
         handle: Consensus&lt;N, P&gt;,
         persistence: Arc&lt;RwLock&lt;P&gt;&gt;,
         state_signer: StateSigner&lt;Ver&gt;,
+        external_event_handler: ExternalEventHandler,
         event_streamer: Arc&lt;RwLock&lt;EventsStreamer&lt;SeqTypes&gt;&gt;&gt;,
         node_state: NodeState,
         config: NetworkConfig&lt;PubKey&gt;,
@@ -575,6 +612,7 @@
                 events,
                 persistence,
                 ctx.state_signer.clone(),
+                external_event_handler,
                 <span class="prelude-val">Some</span>(event_streamer.clone()),
             ),
         );
@@ -701,6 +739,7 @@
     <span class="kw-2">mut </span>events: <span class="kw">impl </span>Stream&lt;Item = Event&lt;SeqTypes&gt;&gt; + Unpin,
     persistence: Arc&lt;RwLock&lt;<span class="kw">impl </span>SequencerPersistence&gt;&gt;,
     state_signer: Arc&lt;StateSigner&lt;Ver&gt;&gt;,
+    external_event_handler: ExternalEventHandler,
     events_streamer: <span class="prelude-ty">Option</span>&lt;Arc&lt;RwLock&lt;EventsStreamer&lt;SeqTypes&gt;&gt;&gt;&gt;,
 ) {
     <span class="kw">while let </span><span class="prelude-val">Some</span>(event) = events.next().<span class="kw">await </span>{
@@ -713,6 +752,13 @@
         }
         <span class="comment">// Generate state signature.
         </span>state_signer.handle_event(<span class="kw-2">&amp;</span>event).<span class="kw">await</span>;
+
+        <span class="comment">// Handle external messages
+        </span><span class="kw">if let </span>EventType::ExternalMessageReceived(external_message_bytes) = <span class="kw-2">&amp;</span>event.event {
+            <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = external_event_handler.handle_event(external_message_bytes) {
+                <span class="macro">tracing::warn!</span>(<span class="string">"Failed to handle external message: {:?}"</span>, err);
+            };
+        }
 
         <span class="comment">// Send the event via the event streaming service
         </span><span class="kw">if let </span><span class="prelude-val">Some</span>(events_streamer) = events_streamer.as_ref() {
