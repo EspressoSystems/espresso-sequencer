@@ -38,8 +38,7 @@ use hotshot_types::{
 };
 use marketplace_builder_core::{
     builder_state::{
-        BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromProposedBlock, MessageType,
-        ResponseMessage,
+        BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
     },
     service::{
         run_non_permissioned_standalone_builder_service, BroadcastSenders, GlobalState,
@@ -114,22 +113,10 @@ impl BuilderConfig {
             "initializing builder",
         );
 
-        // tx channel
-        let (mut tx_sender, tx_receiver) =
-            broadcast::<Arc<ReceivedTransaction<SeqTypes>>>(tx_channel_capacity.get());
-        tx_sender.set_overflow(true);
+        let (mut senders, receivers) =
+            marketplace_builder_core::service::broadcast_channels(event_channel_capacity.get());
 
-        // da channel
-        let (da_sender, da_receiver) =
-            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
-
-        // qc channel
-        let (qc_sender, qc_receiver) =
-            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
-
-        // decide channel
-        let (decide_sender, decide_receiver) =
-            broadcast::<MessageType<SeqTypes>>(event_channel_capacity.get());
+        senders.transactions.set_capacity(tx_channel_capacity.get());
 
         // builder api request channel
         let (req_sender, req_receiver) =
@@ -150,7 +137,7 @@ impl BuilderConfig {
         // create the global state
         let global_state: GlobalState<SeqTypes> = GlobalState::<SeqTypes>::new(
             req_sender,
-            tx_sender.clone(),
+            senders.transactions.clone(),
             vid_commitment,
             bootstrapped_view,
             bootstrapped_view,
@@ -167,11 +154,8 @@ impl BuilderConfig {
                 leaf_commit: fake_commitment(),
                 builder_commitment,
             },
-            decide_receiver,
-            da_receiver,
-            qc_receiver,
+            &receivers,
             req_receiver,
-            tx_receiver,
             Vec::new() /* tx_queue */,
             global_state_clone,
             node_count,
@@ -215,17 +199,9 @@ impl BuilderConfig {
             };
 
             async_spawn(async move {
-                let res = run_non_permissioned_standalone_builder_service(
-                    hooks,
-                    BroadcastSenders {
-                        transactions: tx_sender,
-                        da_proposal: da_sender,
-                        quorum_proposal: qc_sender,
-                        decide: decide_sender,
-                    },
-                    events_url,
-                )
-                .await;
+                let res =
+                    run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
+                        .await;
                 tracing::error!(?res, "builder service exited");
                 if res.is_err() {
                     panic!("Builder should restart.");
@@ -235,17 +211,9 @@ impl BuilderConfig {
             let hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(async move {
-                let res = run_non_permissioned_standalone_builder_service(
-                    hooks,
-                    BroadcastSenders {
-                        transactions: tx_sender,
-                        da_proposal: da_sender,
-                        quorum_proposal: qc_sender,
-                        decide: decide_sender,
-                    },
-                    events_url,
-                )
-                .await;
+                let res =
+                    run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
+                        .await;
                 tracing::error!(?res, "builder service exited");
                 if res.is_err() {
                     panic!("Builder should restart.");

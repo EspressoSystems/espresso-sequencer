@@ -90,7 +90,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> NodeImplementation<Se
 {
     type Network = N;
     type Storage = Arc<RwLock<P>>;
-    type AuctionResultsProvider = TestAuctionResultsProvider;
+    type AuctionResultsProvider = TestAuctionResultsProvider<SeqTypes>;
 }
 
 #[derive(Clone, Debug)]
