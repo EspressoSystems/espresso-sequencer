@@ -24,8 +24,7 @@ use hotshot_builder_api::v0_1::builder::{
 };
 use hotshot_builder_core::{
     builder_state::{
-        BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromProposedBlock, MessageType,
-        ResponseMessage,
+        BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
     },
     service::{
         run_non_permissioned_standalone_builder_service, GlobalState, ProxyGlobalState,
@@ -229,18 +228,14 @@ mod test {
     };
     use async_lock::RwLock;
     use async_std::task;
-    use es_version::SequencerVersion;
     use espresso_types::{FeeAccount, NamespaceId, Transaction};
     use hotshot_builder_api::v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
-    use hotshot_builder_core::{
-        builder_state::BuilderProgress,
-        service::{
-            run_non_permissioned_standalone_builder_service,
-            run_permissioned_standalone_builder_service,
-        },
+    use hotshot_builder_core::service::{
+        run_non_permissioned_standalone_builder_service,
+        run_permissioned_standalone_builder_service,
     };
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -257,6 +252,7 @@ mod test {
     use sequencer::persistence::no_storage::{self, NoStorage};
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
+    use vbs::version::StaticVersion;
 
     use super::*;
     use crate::testing::{
@@ -270,7 +266,7 @@ mod test {
     async fn test_non_permissioned_builder() {
         setup_test();
 
-        let ver = SequencerVersion::instance();
+        let ver = StaticVersion::<0, 1>::instance();
         // Hotshot Test Config
         let hotshot_config = HotShotTestConfig::default();
 
@@ -316,10 +312,10 @@ mod test {
         let builder_pub_key = builder_config.fee_account;
 
         // Start a builder api client
-        let builder_client = Client::<
-            hotshot_builder_api::v0_1::builder::Error,
-            <SeqTypes as NodeType>::Base,
-        >::new(hotshot_builder_api_url.clone());
+        let builder_client =
+            Client::<hotshot_builder_api::v0_1::builder::Error, StaticVersion<0, 1>>::new(
+                hotshot_builder_api_url.clone(),
+            );
         assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
 
         let seed = [207_u8; 32];

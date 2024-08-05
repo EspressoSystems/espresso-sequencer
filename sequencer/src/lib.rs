@@ -92,7 +92,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> NodeImplementation<Se
 {
     type Network = N;
     type Storage = Arc<RwLock<P>>;
-    type AuctionResultsProvider = TestAuctionResultsProvider;
+    type AuctionResultsProvider = TestAuctionResultsProvider<SeqTypes>;
 }
 
 #[derive(Clone, Debug)]
@@ -728,6 +728,7 @@ pub mod testing {
                 L1Client::new(self.l1_url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
             )
+            .with_current_version(Ver::version())
             .with_genesis(state)
             .with_upgrades(upgrades);
 
@@ -799,7 +800,7 @@ pub mod testing {
 
 #[cfg(test)]
 mod test {
-    use es_version::SequencerVersion;
+
     use espresso_types::{Header, NamespaceId, Payload, Transaction};
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
@@ -818,7 +819,7 @@ mod test {
     #[async_std::test]
     async fn test_skeleton_instantiation() {
         setup_test();
-        let ver = SequencerVersion::instance();
+        let ver = <SeqTypes as NodeType>::Base::instance();
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();
@@ -860,7 +861,7 @@ mod test {
         setup_test();
 
         let success_height = 30;
-        let ver = SequencerVersion::instance();
+        let ver = <SeqTypes as NodeType>::Base::instance();
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();

@@ -5,7 +5,6 @@ use std::{
 use anyhow::{bail, Context};
 use builder::permissioned::init_node;
 use clap::Parser;
-use es_version::SEQUENCER_VERSION;
 use espresso_types::eth_signature_key::EthKeyPair;
 use ethers::types::Address;
 use hotshot_types::{
@@ -20,6 +19,7 @@ use sequencer::{
 };
 use sequencer_utils::logging;
 use url::Url;
+use vbs::version::{StaticVersion, StaticVersionType};
 
 #[derive(Parser, Clone, Debug)]
 pub struct PermissionedBuilderOptions {
@@ -261,7 +261,7 @@ async fn main() -> anyhow::Result<()> {
         catchup_backoff: Default::default(),
     };
 
-    let sequencer_version = SEQUENCER_VERSION;
+    let sequencer_version = StaticVersion::<0, 1>::instance();
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
