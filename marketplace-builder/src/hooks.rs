@@ -83,7 +83,7 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
             let bid_tx = match BidTxBody::new(
                 self.bid_key_pair.fee_account(),
                 self.bid_amount,
-                view_number + 10, // We submit a bid ten views in advance.
+                view_number + 3, // We submit a bid 3 views in advance.
                 self.namespaces.iter().cloned().collect(),
                 self.builder_api_base_url.clone(),
             )
