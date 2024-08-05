@@ -598,12 +598,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ViewSyncReplicaTaskState<TYP
                 );
 
                 broadcast_event(
-                    Arc::new(HotShotEvent::ViewChange(self.next_view - 1)),
-                    &event_stream,
-                )
-                .await;
-
-                broadcast_event(
                     Arc::new(HotShotEvent::ViewChange(self.next_view)),
                     &event_stream,
                 )

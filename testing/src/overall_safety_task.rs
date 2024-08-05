@@ -94,7 +94,7 @@ pub struct OverallSafetyTask<TYPES: NodeType, I: TestableNodeImplementation<TYPE
 
 impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> OverallSafetyTask<TYPES, I> {
     async fn handle_view_failure(&mut self, num_failed_views: usize, view_number: TYPES::Time) {
-        let expected_view_to_fail = &mut self.properties.expected_views_to_fail;
+        let expected_views_to_fail = &mut self.properties.expected_views_to_fail;
 
         self.ctx.failed_views.insert(view_number);
         if self.ctx.failed_views.len() > num_failed_views {
@@ -102,16 +102,16 @@ impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> OverallSafetyTask<TY
             self.error = Some(Box::new(OverallSafetyTaskErr::<TYPES>::TooManyFailures {
                 failed_views: self.ctx.failed_views.clone(),
             }));
-        } else if !expected_view_to_fail.is_empty() {
-            match expected_view_to_fail.get(&view_number) {
-                Some(_) => {
-                    expected_view_to_fail.insert(view_number, true);
+        } else if !expected_views_to_fail.is_empty() {
+            match expected_views_to_fail.entry(view_number) {
+                Entry::Occupied(mut view_seen) => {
+                    *view_seen.get_mut() = true;
                 }
-                None => {
+                Entry::Vacant(_v) => {
                     let _ = self.test_sender.broadcast(TestEvent::Shutdown).await;
                     self.error = Some(Box::new(
                         OverallSafetyTaskErr::<TYPES>::InconsistentFailedViews {
-                            expected_failed_views: expected_view_to_fail.keys().cloned().collect(),
+                            expected_failed_views: expected_views_to_fail.keys().cloned().collect(),
                             actual_failed_views: self.ctx.failed_views.clone(),
                         },
                     ));
