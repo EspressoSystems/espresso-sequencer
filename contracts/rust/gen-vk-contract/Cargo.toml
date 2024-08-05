@@ -7,6 +7,7 @@ edition = { workspace = true }
 
 [dependencies]
 ark-srs = { workspace = true }
+ethers = { version = "2.0.4" }
 hotshot-contract-adapter = { path = "../adapter" }
 hotshot-stake-table = { workspace = true }
 hotshot-state-prover = { path = "../../../hotshot-state-prover" }

@@ -73,7 +73,7 @@ cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = 
   "global-permits",
 ], tag = "0.4.2", package = "cdn-marshal" }
 
-jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "jf-plonk-v0.5.0", features = [
+jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", branch = "commonprefix-patch", features = [
   "test-apis",
 ] }
 jf-crhf = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }

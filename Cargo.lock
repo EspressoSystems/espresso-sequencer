@@ -3706,6 +3706,7 @@ name = "gen-vk-contract"
 version = "0.1.0"
 dependencies = [
  "ark-srs",
+ "ethers",
  "hotshot-contract-adapter",
  "hotshot-stake-table",
  "hotshot-state-prover",
@@ -5198,7 +5199,7 @@ dependencies = [
 [[package]]
 name = "jf-plonk"
 version = "0.5.0"
-source = "git+https://github.com/EspressoSystems/jellyfish?tag=jf-plonk-v0.5.0#89b9345dc018d9bdb3d385aefd2036d5e42e9f17"
+source = "git+https://github.com/EspressoSystems/jellyfish?branch=commonprefix-patch#e30e6753e1c810368a71ec56a6f216178cfbe10a"
 dependencies = [
  "ark-ec",
  "ark-ff",
@@ -7568,7 +7569,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.68",
@@ -9135,7 +9136,7 @@ version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a4812a669da00d17d8266a0439eddcacbc88b17f732f927e52eeb9d196f7fb5"
 dependencies = [
- "heck 0.5.0",
+ "heck 0.4.1",
  "proc-macro2",
  "quote",
  "syn 2.0.68",

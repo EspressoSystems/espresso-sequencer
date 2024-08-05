@@ -83,6 +83,9 @@ library Transcript {
             uint64(verifyingKey.numInputs)
         );
 
+        // G2 point from KZG SRS
+        self.transcript = abi.encodePacked(self.transcript, verifyingKey.g2LSB, verifyingKey.g2MSB);
+
         // =====================
         // k: coset representatives
         // =====================
