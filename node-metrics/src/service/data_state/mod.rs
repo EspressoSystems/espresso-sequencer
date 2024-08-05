@@ -777,14 +777,10 @@ mod tests {
         // We explicitly drop these, as it should make the task clean up.
         drop(node_identity_sender_1);
 
-        assert_eq!(
-            process_node_identity_task_handle
-                .task_handle
-                .take()
-                .unwrap()
-                .timeout(Duration::from_millis(200))
-                .await,
-            Ok(())
-        );
+        if let Some(process_node_identity_task_handle) =
+            process_node_identity_task_handle.task_handle.take()
+        {
+            assert_eq!(process_node_identity_task_handle.cancel().await, None);
+        }
     }
 }

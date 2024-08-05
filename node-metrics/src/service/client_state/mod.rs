@@ -1378,7 +1378,7 @@ pub mod tests {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
-        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state,
             client_thread_state,
@@ -1427,6 +1427,12 @@ pub mod tests {
             server_message_receiver_1.next().await,
             Some(ServerMessage::BlocksSnapshot(Arc::new(vec![block_1]))),
         );
+
+        if let Some(process_internal_client_message_handle) =
+            process_internal_client_message_handle.task_handle.take()
+        {
+            assert_eq!(process_internal_client_message_handle.cancel().await, None);
+        }
     }
 
     #[async_std::test]
@@ -1438,7 +1444,7 @@ pub mod tests {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
-        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state,
             client_thread_state,
@@ -1492,6 +1498,12 @@ pub mod tests {
                 node_3.clone()
             ]))),
         );
+
+        if let Some(process_internal_client_message_handle) =
+            process_internal_client_message_handle.task_handle.take()
+        {
+            assert_eq!(process_internal_client_message_handle.cancel().await, None);
+        }
     }
 
     #[async_std::test]
@@ -1507,21 +1519,22 @@ pub mod tests {
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
         let (server_message_sender_3, mut server_message_receiver_3) = mpsc::channel(1);
-        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state.clone(),
             client_thread_state.clone(),
         );
 
-        let _process_distribute_block_detail_handle = ProcessDistributeBlockDetailHandlingTask::new(
-            client_thread_state.clone(),
-            block_detail_receiver,
-        );
+        let mut process_distribute_block_detail_handle =
+            ProcessDistributeBlockDetailHandlingTask::new(
+                client_thread_state.clone(),
+                block_detail_receiver,
+            );
 
-        let _process_distribute_voters_handle =
+        let mut process_distribute_voters_handle =
             ProcessDistributeVotersHandlingTask::new(client_thread_state, voters_receiver);
 
-        let _process_leaf_stream_handle = ProcessLeafStreamTask::new(
+        let mut process_leaf_stream_handle = ProcessLeafStreamTask::new(
             leaf_receiver,
             data_state,
             block_detail_sender,
@@ -1611,6 +1624,34 @@ pub mod tests {
             server_message_receiver_2.next().await,
             Some(ServerMessage::LatestBlock(arc_expected_block.clone()))
         );
+
+        if server_message_receiver_3
+            .next()
+            .timeout(Duration::from_millis(10))
+            .await
+            .is_ok()
+        {
+            panic!("receiver 3 should not have received the latest block.");
+        }
+
+        if let Some(process_internal_client_message_handle) =
+            process_internal_client_message_handle.task_handle.take()
+        {
+            assert_eq!(process_internal_client_message_handle.cancel().await, None);
+        }
+        if let Some(process_distribute_block_detail_handle) =
+            process_distribute_block_detail_handle.task_handle.take()
+        {
+            assert_eq!(process_distribute_block_detail_handle.cancel().await, None);
+        }
+        if let Some(process_distribute_voters_handle) =
+            process_distribute_voters_handle.task_handle.take()
+        {
+            assert_eq!(process_distribute_voters_handle.cancel().await, None);
+        }
+        if let Some(process_leaf_stream_handle) = process_leaf_stream_handle.task_handle.take() {
+            assert_eq!(process_leaf_stream_handle.cancel().await, None);
+        }
     }
 
     #[async_std::test]
@@ -1624,13 +1665,13 @@ pub mod tests {
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
         let (server_message_sender_3, mut server_message_receiver_3) = mpsc::channel(1);
-        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state.clone(),
             client_thread_state.clone(),
         );
 
-        let _process_distribute_node_identity_handle =
+        let mut process_distribute_node_identity_handle =
             ProcessDistributeNodeIdentityHandlingTask::new(
                 client_thread_state,
                 node_identity_receiver,
@@ -1668,7 +1709,7 @@ pub mod tests {
         );
 
         // Send another Connected Message to the server
-        let mut internal_client_message_sender_3 = internal_client_message_sender;
+        let mut internal_client_message_sender_3 = internal_client_message_sender.clone();
         assert_eq!(
             internal_client_message_sender_3
                 .send(InternalClientMessage::Connected(server_message_sender_3))
@@ -1721,6 +1762,18 @@ pub mod tests {
             server_message_receiver_2.next().await,
             Some(ServerMessage::LatestNodeIdentity(arc_node_identity.clone()))
         );
+
+        if let Some(process_internal_client_message_handle) =
+            process_internal_client_message_handle.task_handle.take()
+        {
+            assert_eq!(process_internal_client_message_handle.cancel().await, None);
+        }
+
+        if let Some(process_distribute_node_identity_handle) =
+            process_distribute_node_identity_handle.task_handle.take()
+        {
+            assert_eq!(process_distribute_node_identity_handle.cancel().await, None);
+        }
     }
 
     #[async_std::test]
@@ -1734,13 +1787,13 @@ pub mod tests {
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
         let (server_message_sender_3, mut server_message_receiver_3) = mpsc::channel(1);
-        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        let mut process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state.clone(),
             client_thread_state.clone(),
         );
 
-        let _process_distribute_voters_handle =
+        let mut process_distribute_voters_handle =
             ProcessDistributeVotersHandlingTask::new(client_thread_state, voters_receiver);
 
         // Send a Connected Message to the server
@@ -1823,6 +1876,17 @@ pub mod tests {
             server_message_receiver_2.next().await,
             Some(ServerMessage::LatestVoters(voters.clone()))
         );
+
+        if let Some(process_internal_client_message_handle) =
+            process_internal_client_message_handle.task_handle.take()
+        {
+            assert_eq!(process_internal_client_message_handle.cancel().await, None);
+        }
+        if let Some(process_distribute_voters_handle) =
+            process_distribute_voters_handle.task_handle.take()
+        {
+            assert_eq!(process_distribute_voters_handle.cancel().await, None);
+        }
     }
 
     // The following tests codify assumptions being bad on behalf of the Sink
