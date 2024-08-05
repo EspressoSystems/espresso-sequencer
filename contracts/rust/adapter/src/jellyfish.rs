@@ -158,7 +158,7 @@ impl FromStr for ParsedVerifyingKey {
 
 impl From<VerifyingKey<Bn254>> for ParsedVerifyingKey {
     fn from(vk: VerifyingKey<Bn254>) -> Self {
-        let g2_bytes = to_bytes!(&vk.open_key.beta_h).unwrap();
+        let g2_bytes = to_bytes!(&vk.open_key.powers_of_h[1]).unwrap();
         assert!(g2_bytes.len() == 64);
         let mut g2_lsb = [0u8; 32];
         let mut g2_msb = [0u8; 32];
