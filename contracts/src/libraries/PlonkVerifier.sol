@@ -766,7 +766,7 @@ library PlonkVerifier {
 
         // ============================================
         // Compute coefficient for the last wire sigma polynomial commitment.
-        // secondScalar = alpha * beta * z_w
+        // secondScalar = - alpha * beta * z_w
         //              * (wireEval0 + gamma + beta * sigmaEval0)
         //              * (wireEval1 + gamma + beta * sigmaEval1)
         //              * ...
