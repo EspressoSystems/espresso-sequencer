@@ -169,6 +169,10 @@ impl BuilderConfig {
         );
 
         // spawn the builder event loop
+        // Note: we don't do anything with the handle because BuilderState's
+        // event loop is going to be spawning child BuilderStates and will exit
+        // when the view it's building for is decided, so we don't care about
+        // it eventually finishing.
         async_spawn(async move {
             builder_state.event_loop();
         });

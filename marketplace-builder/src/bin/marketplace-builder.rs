@@ -20,7 +20,7 @@ use vbs::version::StaticVersionType;
 struct NonPermissionedBuilderOptions {
     /// Whether this is a reserve builder.
     ///
-    /// If not, it's a fallback buidler that only builds for unregistered rollups.
+    /// If not, it's a fallback builder that only builds for unregistered rollups.
     #[clap(short, long, env = "ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE")]
     is_reserve: bool,
 
