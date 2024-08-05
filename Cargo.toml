@@ -17,7 +17,7 @@ derivative = "2.2"
 derive_more = "0.99"
 either = { version = "1.12", features = ["serde"] }
 futures = "0.3"
-hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.68" }
+hotshot-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.68" }
 rand = "0.8.5"
 serde = { version = "1.0", features = ["derive"] }
 snafu = "0.8"
@@ -28,6 +28,6 @@ tracing = "0.1"
 vbs = "0.1.4"
 
 [dev-dependencies]
-hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.68" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.68" }
 portpicker = "0.1.1"
 surf-disco = "0.9"
