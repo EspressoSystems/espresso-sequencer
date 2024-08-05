@@ -53,8 +53,7 @@ use hotshot_builder_api::v0_1::builder::{
 };
 use hotshot_builder_core::{
     builder_state::{
-        BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromProposedBlock, MessageType,
-        ResponseMessage,
+        BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
     },
     service::{
         run_non_permissioned_standalone_builder_service,
@@ -559,12 +558,9 @@ mod test {
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
-    use hotshot_builder_core::{
-        builder_state::BuilderProgress,
-        service::{
-            run_non_permissioned_standalone_builder_service,
-            run_permissioned_standalone_builder_service,
-        },
+    use hotshot_builder_core::service::{
+        run_non_permissioned_standalone_builder_service,
+        run_permissioned_standalone_builder_service,
     };
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},

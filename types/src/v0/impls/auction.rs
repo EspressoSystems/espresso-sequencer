@@ -10,8 +10,8 @@ use ethers::types::Signature;
 use hotshot_types::{
     data::ViewNumber,
     traits::{
-        auction_results_provider::{AuctionResultsProvider, HasUrls},
-        node_implementation::{ConsensusTime, NodeType},
+        auction_results_provider::AuctionResultsProvider,
+        node_implementation::{ConsensusTime, HasUrls, NodeType},
         signature_key::BuilderSignatureKey,
     },
 };
@@ -288,19 +288,27 @@ type SurfClient<Ver> = surf_disco::Client<ServerError, Ver>;
 
 #[async_trait]
 impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for SolverAuctionResults {
-    type AuctionResult = SolverAuctionResults;
-
     /// Fetch the auction results.
     async fn fetch_auction_result(
         &self,
         view_number: TYPES::Time,
-    ) -> anyhow::Result<Self::AuctionResult> {
+    ) -> anyhow::Result<TYPES::AuctionResult> {
         let resp = SurfClient::<Ver>::new(Url::from_str(SOLVER_URL).unwrap())
-            .get::<SolverAuctionResults>(&format!("/v0/api/auction_results/{}", *view_number))
+            .get::<TYPES::AuctionResult>(&format!("/v0/api/auction_results/{}", *view_number))
             .send()
             .await
             .unwrap();
         Ok(resp)
+    }
+}
+
+impl Default for SolverAuctionResults {
+    fn default() -> Self {
+        Self {
+            view_number: ViewNumber::genesis(),
+            reserve_bids: Vec::default(),
+            winning_bids: Vec::default(),
+        }
     }
 }
 
