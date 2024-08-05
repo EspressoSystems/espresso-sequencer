@@ -510,6 +510,8 @@ services:
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
     depends_on:
+      sequencer0:
+        condition: service_healthy
       fund-builder:
         condition: service_completed_successfully
 
@@ -539,6 +541,8 @@ services:
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
     depends_on:
+      sequencer0:
+        condition: service_healthy
       fund-builder:
         condition: service_completed_successfully
 
@@ -564,6 +568,8 @@ services:
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
     depends_on:
+      sequencer0:
+        condition: service_healthy
       fund-builder:
         condition: service_completed_successfully
 

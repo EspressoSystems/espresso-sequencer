@@ -152,7 +152,7 @@ async fn main() -> anyhow::Result<()> {
         txn_timeout_duration,
         base_fee,
     )
-    .await;
+    .await?;
 
     // Sleep forever
     async_std::future::pending::<()>().await;

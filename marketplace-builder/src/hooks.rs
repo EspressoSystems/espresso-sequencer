@@ -45,7 +45,10 @@ pub async fn connect_to_solver(
         return None;
     }
 
-    tracing::info!("Builder client connected to the solver api");
+    tracing::info!(
+        %solver_api_url,
+        "Builder client connected to the solver api"
+    );
 
     Some(client)
 }
@@ -109,6 +112,7 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
                 .await
             {
                 error!("Failed to submit the bid: {:?}.", e);
+                return;
             }
 
             info!("Submitted bid for view {}", *view_number);

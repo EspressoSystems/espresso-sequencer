@@ -178,7 +178,7 @@ async fn main() -> anyhow::Result<()> {
 
     let buffer_view_num_count = opt.buffer_view_num_count;
 
-    let init = BuilderConfig::init(
+    let _builder_config = BuilderConfig::init(
         is_reserve,
         builder_key_pair,
         bootstrapped_view,
@@ -195,8 +195,8 @@ async fn main() -> anyhow::Result<()> {
         base_fee,
         bid_config,
         opt.solver_url,
-    );
-    let _builder_config = init.await;
+    )
+    .await?;
 
     // Sleep forever
     async_std::future::pending::<()>().await;

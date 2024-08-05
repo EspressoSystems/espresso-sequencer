@@ -421,6 +421,8 @@ processes:
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
       - ESPRESSO_BUILDER_GENESIS_FILE
     depends_on:
+      sequencer0:
+        condition: process_healthy
       fund-builder:
         condition: process_completed
     readiness_probe:
@@ -445,13 +447,15 @@ processes:
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
       - ESPRESSO_BUILDER_GENESIS_FILE
     depends_on:
+      sequencer0:
+        condition: process_healthy
       fund-builder:
         condition: process_completed
     readiness_probe:
       http_get:
         scheme: http
         host: localhost
-        port: $ESPRESSO_BUILDER_SERVER_PORT
+        port: $ESPRESSO_FALLBACK_BUILDER_SERVER_PORT
         path: /healthcheck
       failure_threshold: 100
 
@@ -464,6 +468,8 @@ processes:
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://localhost:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
       - ESPRESSO_BUILDER_GENESIS_FILE
     depends_on:
+      sequencer0:
+        condition: process_healthy
       fund-builder:
         condition: process_completed
     readiness_probe:
