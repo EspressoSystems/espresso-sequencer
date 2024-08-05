@@ -412,9 +412,6 @@ library PlonkVerifier {
 
         commScalars[28] = vBase;
         commBases[28] = verifyingKey.sigma3;
-        assembly {
-            vBase := mulmod(vBase, v, p)
-        }
 
         // Add poly commitments to be evaluated at point `zeta * g`.
         commScalars[29] = chal.u;
@@ -487,7 +484,7 @@ library PlonkVerifier {
                 scalars = new BN254.ScalarField[](totalScalarsLen);
                 bases = new BN254.G1Point[](totalScalarsLen);
             }
-            uint256 sumEvals = 0;
+
             uint256 idx = 0;
 
             for (uint256 j = 0; j < pcsInfo.commScalars.length; j++) {
@@ -515,14 +512,7 @@ library PlonkVerifier {
             bases[idx] = pcsInfo.shiftedOpeningProof;
             idx += 1;
 
-            {
-                uint256 eval = pcsInfo.eval;
-                assembly {
-                    sumEvals := addmod(sumEvals, eval, p)
-                }
-            }
-
-            scalars[idx] = BN254.negate(BN254.ScalarField.wrap(sumEvals));
+            scalars[idx] = BN254.negate(BN254.ScalarField.wrap(pcsInfo.eval));
             bases[idx] = BN254.P1();
             b1 = BN254.negate(BN254.multiScalarMul(bases, scalars));
         }
