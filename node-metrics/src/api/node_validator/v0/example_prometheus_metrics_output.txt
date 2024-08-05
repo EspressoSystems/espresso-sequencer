@@ -1,0 +1,89 @@
+# HELP consensus_cdn_num_failed_messages num_failed_messages
+# TYPE consensus_cdn_num_failed_messages counter
+consensus_cdn_num_failed_messages 0
+# HELP consensus_current_view current_view
+# TYPE consensus_current_view gauge
+consensus_current_view 7
+# HELP consensus_invalid_qc invalid_qc
+# TYPE consensus_invalid_qc gauge
+consensus_invalid_qc 0
+# HELP consensus_last_decided_time last_decided_time
+# TYPE consensus_last_decided_time gauge
+consensus_last_decided_time 1720537017
+# HELP consensus_last_decided_view last_decided_view
+# TYPE consensus_last_decided_view gauge
+consensus_last_decided_view 4
+# HELP consensus_last_synced_block_height last_synced_block_height
+# TYPE consensus_last_synced_block_height gauge
+consensus_last_synced_block_height 4
+# HELP consensus_libp2p_num_connected_peers num_connected_peers
+# TYPE consensus_libp2p_num_connected_peers gauge
+consensus_libp2p_num_connected_peers 4
+# HELP consensus_libp2p_num_failed_messages num_failed_messages
+# TYPE consensus_libp2p_num_failed_messages counter
+consensus_libp2p_num_failed_messages 0
+# HELP consensus_node node
+# TYPE consensus_node gauge
+consensus_node{key="BLS_VER_KEY~bQszS-QKYvUij2g20VqS8asttGSb95NrTu2PUj0uMh1CBUxNy1FqyPDjZqB29M7ZbjWqj79QkEOWkpga84AmDYUeTuWmy-0P1AdKHD3ehc-dKvei78BDj5USwXPJiDUlCxvYs_9rWYhagaq-5_LXENr78xel17spftNd5MA1Mw5U"} 1
+# HELP consensus_node_identity_general node_identity_general
+# TYPE consensus_node_identity_general gauge
+consensus_node_identity_general{company_name="Espresso Systems",company_website="https://www.espressosys.com/",name="sequencer0",network_type="local",node_type="espresso-sequencer 0.1",operating_system="Linux 5.15.153.1",wallet="0x0000000000000000000000000000000000000000"} 1
+# HELP consensus_node_identity_location node_identity_location
+# TYPE consensus_node_identity_location gauge
+consensus_node_identity_location{country="US",latitude="-40.7128",longitude="-74.0060"} 1
+# HELP consensus_node_index node_index
+# TYPE consensus_node_index gauge
+consensus_node_index 4
+# HELP consensus_number_of_empty_blocks_proposed number_of_empty_blocks_proposed
+# TYPE consensus_number_of_empty_blocks_proposed counter
+consensus_number_of_empty_blocks_proposed 1
+# HELP consensus_number_of_timeouts number_of_timeouts
+# TYPE consensus_number_of_timeouts counter
+consensus_number_of_timeouts 0
+# HELP consensus_number_of_timeouts_as_leader number_of_timeouts_as_leader
+# TYPE consensus_number_of_timeouts_as_leader counter
+consensus_number_of_timeouts_as_leader 0
+# HELP consensus_number_of_views_per_decide_event number_of_views_per_decide_event
+# TYPE consensus_number_of_views_per_decide_event histogram
+consensus_number_of_views_per_decide_event_bucket{le="0.005"} 0
+consensus_number_of_views_per_decide_event_bucket{le="0.01"} 0
+consensus_number_of_views_per_decide_event_bucket{le="0.025"} 0
+consensus_number_of_views_per_decide_event_bucket{le="0.05"} 0
+consensus_number_of_views_per_decide_event_bucket{le="0.1"} 0
+consensus_number_of_views_per_decide_event_bucket{le="0.25"} 0
+consensus_number_of_views_per_decide_event_bucket{le="0.5"} 0
+consensus_number_of_views_per_decide_event_bucket{le="1"} 0
+consensus_number_of_views_per_decide_event_bucket{le="2.5"} 0
+consensus_number_of_views_per_decide_event_bucket{le="5"} 4
+consensus_number_of_views_per_decide_event_bucket{le="10"} 4
+consensus_number_of_views_per_decide_event_bucket{le="+Inf"} 4
+consensus_number_of_views_per_decide_event_sum 12
+consensus_number_of_views_per_decide_event_count 4
+# HELP consensus_number_of_views_since_last_decide number_of_views_since_last_decide
+# TYPE consensus_number_of_views_since_last_decide gauge
+consensus_number_of_views_since_last_decide 4
+# HELP consensus_outstanding_transactions outstanding_transactions
+# TYPE consensus_outstanding_transactions gauge
+consensus_outstanding_transactions 0
+# HELP consensus_outstanding_transactions_memory_size outstanding_transactions_memory_size
+# TYPE consensus_outstanding_transactions_memory_size gauge
+consensus_outstanding_transactions_memory_size 0
+# HELP consensus_version version
+# TYPE consensus_version gauge
+consensus_version{desc="20240701-15-gbd0957fd-dirty",rev="bd0957fddad19caab010dc59e5a92bc1c95cbc07",timestamp="1980-01-01T00:00:00.000000000Z"} 1
+# HELP consensus_view_duration_as_leader view_duration_as_leader
+# TYPE consensus_view_duration_as_leader histogram
+consensus_view_duration_as_leader_bucket{le="0.005"} 0
+consensus_view_duration_as_leader_bucket{le="0.01"} 0
+consensus_view_duration_as_leader_bucket{le="0.025"} 0
+consensus_view_duration_as_leader_bucket{le="0.05"} 0
+consensus_view_duration_as_leader_bucket{le="0.1"} 0
+consensus_view_duration_as_leader_bucket{le="0.25"} 0
+consensus_view_duration_as_leader_bucket{le="0.5"} 0
+consensus_view_duration_as_leader_bucket{le="1"} 0
+consensus_view_duration_as_leader_bucket{le="2.5"} 1
+consensus_view_duration_as_leader_bucket{le="5"} 1
+consensus_view_duration_as_leader_bucket{le="10"} 1
+consensus_view_duration_as_leader_bucket{le="+Inf"} 1
+consensus_view_duration_as_leader_sum 2
+consensus_view_duration_as_leader_count 1
