@@ -9,12 +9,14 @@ pub use diff_test_bn254::{field_to_u256, u256_to_field, ParsedG1Point};
 use ethers::{
     abi::AbiDecode,
     prelude::{AbiError, EthAbiCodec, EthAbiType},
-    types::{Bytes, U256},
+    types::{Bytes, H256, U256},
+    utils::hex::ToHex,
 };
 use jf_pcs::prelude::Commitment;
 use jf_plonk::proof_system::structs::{OpenKey, Proof, ProofEvaluations, VerifyingKey};
 use jf_plonk::testing_apis::Challenges;
 use jf_plonk::transcript::SolidityTranscript;
+use jf_utils::to_bytes;
 use num_bigint::BigUint;
 use num_traits::Num;
 
@@ -142,6 +144,8 @@ pub struct ParsedVerifyingKey {
     pub q_h_3: ParsedG1Point,
     pub q_h_4: ParsedG1Point,
     pub q_ecc: ParsedG1Point,
+    pub g2_lsb: H256,
+    pub g2_msb: H256,
 }
 
 impl FromStr for ParsedVerifyingKey {
@@ -154,6 +158,29 @@ impl FromStr for ParsedVerifyingKey {
 
 impl From<VerifyingKey<Bn254>> for ParsedVerifyingKey {
     fn from(vk: VerifyingKey<Bn254>) -> Self {
+        let g2_bytes = to_bytes!(&vk.open_key.beta_h).unwrap();
+        assert!(g2_bytes.len() == 64);
+        let mut g2_lsb = [0u8; 32];
+        let mut g2_msb = [0u8; 32];
+        g2_lsb.copy_from_slice(&g2_bytes[..32]);
+        g2_msb.copy_from_slice(&g2_bytes[32..]);
+
+        // since G2 point from the Aztec's SRS we use is fixed
+        // remove these sanity check if using other SRS
+        // generated via:
+        // ```rust
+        // let srs = ark_srs::kzg10::aztec20::setup(2u64.pow(6) as usize + 2).expect("Aztec SRS fail to load");
+        // println!("{}", hex::encode(jf_utils::to_bytes!(&srs.beta_h).unwrap()));
+        // ````
+        assert_eq!(
+            g2_lsb.encode_hex::<String>(),
+            String::from("b0838893ec1f237e8b07323b0744599f4e97b598b3b589bcc2bc37b8d5c41801")
+        );
+        assert_eq!(
+            g2_msb.encode_hex::<String>(),
+            String::from("c18393c0fa30fe4e8b038e357ad851eae8de9107584effe7c7f1f651b2010e26")
+        );
+
         Self {
             domain_size: U256::from(vk.domain_size),
             num_inputs: U256::from(vk.num_inputs),
@@ -175,6 +202,8 @@ impl From<VerifyingKey<Bn254>> for ParsedVerifyingKey {
             q_o: vk.selector_comms[10].0.into(),
             q_c: vk.selector_comms[11].0.into(),
             q_ecc: vk.selector_comms[12].0.into(),
+            g2_lsb: g2_lsb.into(),
+            g2_msb: g2_msb.into(),
         }
     }
 }
