@@ -89,6 +89,7 @@ where
         libp2p_bootstrap_nodes: opt.libp2p_bootstrap_nodes,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
+        public_api_url: opt.public_api_url,
         private_staking_key,
         private_state_key,
         state_peers: opt.state_peers,
@@ -140,6 +141,7 @@ where
                                 l1_params,
                                 bind_version,
                                 opt.is_da,
+                                opt.identity,
                             )
                             .await
                             .unwrap()
@@ -159,6 +161,7 @@ where
                 l1_params,
                 bind_version,
                 opt.is_da,
+                opt.identity,
             )
             .await?
         }

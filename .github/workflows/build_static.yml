@@ -92,6 +92,7 @@ jobs:
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/espresso-bridge
             ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/espresso-dev-node
              ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/marketplace-solver
+            ${{ env.CARGO_TARGET_DIR }}/${{ env.TARGET_TRIPLET }}/release/node-metrics
 
   static-dockers:
     runs-on: ubuntu-latest
@@ -214,6 +215,13 @@ jobs:
         id: marketplace-solver
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/marketplace-solver
+          flavor: suffix=musl
+
+      - name: Generate node-validator metadata
+        uses: docker/metadata-action@v5
+        id: node-validator
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/node-validator
           flavor: suffix=musl
 
       - name: Build and push sequencer docker
@@ -345,3 +353,13 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.marketplace-solver.outputs.tags }}
           labels: ${{ steps.marketplace-solver.outputs.labels }}
+
+      - name: Build and push node-validator docker
+        uses: docker/build-push-action@v6
+        with:
+          context: ./
+          file: ./docker/node-validator.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.node-validator.outputs.tags }}
+          labels: ${{ steps.node-validator.outputs.labels }}

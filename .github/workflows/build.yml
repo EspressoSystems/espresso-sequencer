@@ -82,6 +82,7 @@ jobs:
             target/release/espresso-bridge
             target/release/marketplace-solver
             target/release/marketplace-builder
+            target/release/node-metrics
 
   build-arm:
     runs-on: buildjet-4vcpu-ubuntu-2204-arm
@@ -135,6 +136,7 @@ jobs:
             target/release/espresso-bridge
             target/release/marketplace-solver
             target/release/marketplace-builder
+            target/release/node-metrics
 
   build-dockers:
     runs-on: ubuntu-latest
@@ -156,6 +158,7 @@ jobs:
       bridge-tag: ${{ steps.bridge.outputs.tags }}
       marketplace-solver-tag: ${{ steps.marketplace-solver.outputs.tags }}
       marketplace-builder-tag: ${{ steps.marketplace-builder.outputs.tags }}
+      node-validator-tag: ${{ steps.node-validator.outputs.tags }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -280,6 +283,12 @@ jobs:
         id: marketplace-builder
         with:
           images: ghcr.io/espressosystems/espresso-sequencer/marketplace-builder
+
+      - name: Generate node-validator metadata
+        uses: docker/metadata-action@v5
+        id: node-validator
+        with:
+          images: ghcr.io/espressosystems/espresso-sequencer/node-validator
 
       - name: Build and push sequencer docker
         uses: docker/build-push-action@v6
@@ -440,6 +449,16 @@ jobs:
           tags: ${{ steps.marketplace-builder.outputs.tags }}
           labels: ${{ steps.marketplace-builder.outputs.labels }}
 
+      - name: Build and push node-validator docker
+        uses: docker/build-push-action@v6
+        with:
+          context: ./
+          file: ./docker/node-validator.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.node-validator.outputs.tags }}
+          labels: ${{ steps.node-validator.outputs.labels }}
+
   test-demo:
     if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
@@ -470,7 +489,8 @@ jobs:
           docker pull ${{ needs.build-dockers.outputs.bridge-tag }}
           docker pull ${{ needs.build-dockers.outputs.marketplace-solver-tag }}
           docker pull ${{ needs.build-dockers.outputs.marketplace-builder-tag }}
-
+          docker pull ${{ needs.build-dockers.outputs.node-validator-tag }}
+          
       - name: Tag new docker images
         run: |
           docker tag ${{ needs.build-dockers.outputs.sequencer-tag }} ghcr.io/espressosystems/espresso-sequencer/sequencer:main
@@ -488,6 +508,7 @@ jobs:
           docker tag ${{ needs.build-dockers.outputs.bridge-tag }} ghcr.io/espressosystems/espresso-sequencer/bridge:main
           docker tag ${{ needs.build-dockers.outputs.marketplace-solver-tag }} ghcr.io/espressosystems/espresso-sequencer/marketplace-solver:main
           docker tag ${{ needs.build-dockers.outputs.marketplace-builder-tag }} ghcr.io/espressosystems/espresso-sequencer/marketplace-builder:main
+          docker tag ${{ needs.build-dockers.outputs.node-validator-tag }} ghcr.io/espressosystems/espresso-sequencer/node-validator:main
 
       - name: Test docker demo
         run: |
