@@ -152,6 +152,8 @@
 <a href="#152" id="152">152</a>
 <a href="#153" id="153">153</a>
 <a href="#154" id="154">154</a>
+<a href="#155" id="155">155</a>
+<a href="#156" id="156">156</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>hotshot::traits::election::static_committee::GeneralStaticCommittee;
 <span class="kw">use </span>hotshot_types::{
     data::ViewNumber,
@@ -288,6 +290,7 @@
     <span class="kw">type </span>BuilderSignatureKey = FeeAccount;
     <span class="kw">type </span>Base = StaticVersion&lt;<span class="number">0</span>, <span class="number">1</span>&gt;;
     <span class="kw">type </span>Upgrade = StaticVersion&lt;<span class="number">0</span>, <span class="number">2</span>&gt;;
+    <span class="kw">type </span>AuctionResult = SolverAuctionResults;
     <span class="kw">const </span>UPGRADE_HASH: [u8; <span class="number">32</span>] = [
         <span class="number">1</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">1</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>, <span class="number">0</span>,
         <span class="number">0</span>, <span class="number">0</span>,
@@ -306,4 +309,5 @@
     BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
     NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
+<span class="kw">use </span><span class="kw">crate</span>::v0_3::SolverAuctionResults;
 </code></pre></div></section></main></body></html>
