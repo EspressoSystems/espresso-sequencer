@@ -147,6 +147,7 @@ library PolynomialEval {
     }
 
     /// @dev Compute suffix product array for the given local domain elements.
+    // credit: @shresthagrawal and @jakovmitrovski from CommonPrefix
     function _computeSuffixProduct(uint256[] memory localDomainElements, uint256 zeta, uint256 p)
         internal
         pure
@@ -241,6 +242,8 @@ library PolynomialEval {
         // Compute suffix product
         // This optimization keeps the 1 inversion but reduces the number of multiplications from
         // n(n - 1) to 3n
+        //
+        // credit: @shresthagrawal and @jakovmitrovski from CommonPrefix
         uint256[] memory suffix = _computeSuffixProduct(localDomainElements, zeta, p);
 
         uint256 fullProduct;
