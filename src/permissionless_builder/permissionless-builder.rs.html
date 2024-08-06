@@ -180,7 +180,7 @@
     </span><span class="attr">#[clap(
         long,
         env = <span class="string">"ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL"</span>,
-        default_value = <span class="string">"http://localhost:8081"
+        default_value = <span class="string">"http://localhost:22001"
     </span>)]
     </span>hotshot_event_streaming_url: Url,
 
@@ -313,7 +313,7 @@
         txn_timeout_duration,
         base_fee,
     )
-    .<span class="kw">await</span>;
+    .<span class="kw">await</span><span class="question-mark">?</span>;
 
     <span class="comment">// Sleep forever
     </span>async_std::future::pending::&lt;()&gt;().<span class="kw">await</span>;
