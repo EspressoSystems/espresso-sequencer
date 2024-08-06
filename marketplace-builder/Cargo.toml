@@ -55,4 +55,4 @@ vec1 = { workspace = true }
 hotshot-query-service = { workspace = true }
 sequencer = { path = "../sequencer", features = ["testing"] }
 sequencer-utils = { path = "../utils" }
-tempfile = "3.10.1"
+tempfile = "3.11.0"
