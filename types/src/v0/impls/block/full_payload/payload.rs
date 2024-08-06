@@ -3,6 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use async_trait::async_trait;
 use committable::Committable;
 use hotshot_query_service::availability::QueryablePayload;
+use hotshot_types::data::ViewNumber;
 use hotshot_types::{
     traits::{BlockPayload, EncodeBytes},
     utils::BuilderCommitment,
@@ -10,6 +11,7 @@ use hotshot_types::{
 };
 use jf_vid::VidScheme;
 use sha2::Digest;
+use thiserror::Error;
 
 use crate::{
     v0::impls::{NodeState, ValidatedState},
@@ -17,6 +19,22 @@ use crate::{
     Index, Iter, NamespaceId, NsIndex, NsPayload, NsPayloadBuilder, NsPayloadRange, NsTable,
     NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction, TxProof,
 };
+
+#[derive(serde::Deserialize, serde::Serialize, Error, Debug, Eq, PartialEq)]
+pub enum BlockBuildingError {
+    #[error("Parent state commitment {0} of block doesn't match current state commitment")]
+    IncorrectParent(String),
+    #[error("New view number ({new:?}) isn't strictly after current view ({curr:?})")]
+    IncorrectView { new: ViewNumber, curr: ViewNumber },
+    #[error("Genesis block either has zero or more than one transaction")]
+    GenesisWrongSize,
+    #[error("Genesis transaction not present in genesis block")]
+    MissingGenesis,
+    #[error("Genesis transaction in non-genesis block")]
+    UnexpectedGenesis,
+    #[error("failed to build block err: {0}")]
+    Custom(String),
+}
 
 impl Payload {
     pub fn ns_table(&self) -> &NsTable {
@@ -61,9 +79,12 @@ impl Payload {
         <Self as BlockPayload<SeqTypes>>::Error,
     > {
         // accounting for block byte length limit
-        let max_block_byte_len: usize = u64::from(chain_config.max_block_size)
-            .try_into()
-            .map_err(|_| <Self as BlockPayload<SeqTypes>>::Error::BlockBuilding)?;
+        let max_block_byte_len: usize =
+            u64::from(chain_config.max_block_size)
+                .try_into()
+                .map_err(|_| {
+                    <Self as BlockPayload<SeqTypes>>::Error::Custom("cast u64 to usize".to_string())
+                })?;
         let mut block_byte_len = NsTableBuilder::header_byte_len();
 
         // add each tx to its namespace
@@ -118,7 +139,7 @@ impl Payload {
 impl BlockPayload<SeqTypes> for Payload {
     // TODO BlockPayload trait eliminate unneeded args, return vals of type
     // `Self::Metadata` https://github.com/EspressoSystems/HotShot/issues/3300
-    type Error = crate::Error;
+    type Error = BlockBuildingError;
     type Transaction = Transaction;
     type Instance = NodeState;
     type Metadata = NsTable;

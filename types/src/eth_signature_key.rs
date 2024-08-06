@@ -14,7 +14,7 @@ use ethers::{
 };
 use hotshot_types::traits::signature_key::BuilderSignatureKey;
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
+use thiserror::Error;
 
 use crate::FeeAccount;
 
@@ -113,8 +113,9 @@ impl Ord for EthKeyPair {
     }
 }
 
-#[derive(Clone, Debug, Snafu)]
-pub struct SigningError;
+#[derive(Debug, Error)]
+#[error("Failed to sign builder message")]
+pub struct SigningError(#[from] WalletError);
 
 pub type BuilderSignature = Signature;
 
@@ -133,7 +134,7 @@ impl BuilderSignatureKey for FeeAccount {
     ) -> Result<Self::BuilderSignature, Self::SignError> {
         let wallet = private_key.signer();
         let message_hash = ethers::utils::hash_message(data);
-        wallet.sign_hash(message_hash).map_err(|_| SigningError)
+        wallet.sign_hash(message_hash).map_err(Into::into)
     }
 
     fn generated_from_seed_indexed(seed: [u8; 32], index: u64) -> (Self, Self::BuilderPrivateKey) {

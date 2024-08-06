@@ -20,7 +20,7 @@ use async_std::{
 use clap::Parser;
 use committable::Committable;
 use derivative::Derivative;
-use espresso_types::{v0_3::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
+use espresso_types::{parse_duration, v0_3::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
 use futures::{
     future::{FutureExt, TryFuture, TryFutureExt},
     stream::{Peekable, StreamExt},
@@ -38,7 +38,7 @@ use jf_merkle_tree::{
     ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
 use rand::{seq::SliceRandom, RngCore};
-use sequencer::{api::endpoints::NamespaceProofQueryData, options::parse_duration};
+use sequencer::api::endpoints::NamespaceProofQueryData;
 use sequencer_utils::logging;
 use serde::de::DeserializeOwned;
 use std::{

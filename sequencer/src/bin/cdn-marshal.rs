@@ -4,8 +4,8 @@
 use anyhow::{Context, Result};
 use cdn_marshal::{Config, Marshal};
 use clap::Parser;
-use espresso_types::SeqTypes;
-use sequencer::{network::cdn::ProductionDef, options::parse_size};
+use espresso_types::{parse_size, SeqTypes};
+use sequencer::network::cdn::ProductionDef;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]

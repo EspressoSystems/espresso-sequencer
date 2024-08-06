@@ -8,13 +8,14 @@ use std::{
 
 use anyhow::Context;
 use async_std::task::sleep;
+use bytesize::ByteSize;
 use clap::Parser;
 use derive_more::{Display, From, Into};
 use futures::future::BoxFuture;
 use rand::Rng;
 use sequencer_utils::{impl_serde_from_string_or_integer, ser::FromStringOrInteger};
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
+use thiserror::Error;
 use time::{format_description::well_known::Rfc3339 as TimestampFormat, OffsetDateTime};
 
 /// Information about the genesis state which feeds into the genesis block header.
@@ -107,16 +108,14 @@ impl Ord for Ratio {
     }
 }
 
-#[derive(Debug, Snafu)]
+#[derive(Debug, Error)]
 pub enum ParseRatioError {
-    #[snafu(display("numerator and denominator must be separated by :"))]
+    #[error("numerator and denominator must be separated by :")]
     MissingDelimiter,
-    InvalidNumerator {
-        err: ParseIntError,
-    },
-    InvalidDenominator {
-        err: ParseIntError,
-    },
+    #[error("Invalid numerator {err:?}")]
+    InvalidNumerator { err: ParseIntError },
+    #[error("Invalid denominator {err:?}")]
+    InvalidDenominator { err: ParseIntError },
 }
 
 impl FromStr for Ratio {
@@ -135,7 +134,8 @@ impl FromStr for Ratio {
     }
 }
 
-#[derive(Clone, Debug, Snafu)]
+#[derive(Clone, Debug, Error)]
+#[error("Failed to parse duration {reason}")]
 pub struct ParseDurationError {
     reason: String,
 }
@@ -146,6 +146,16 @@ pub fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
         .map_err(|err| ParseDurationError {
             reason: err.to_string(),
         })
+}
+
+#[derive(Clone, Debug, From, Error)]
+#[error("failed to parse size. {msg}")]
+pub struct ParseSizeError {
+    msg: String,
+}
+
+pub fn parse_size(s: &str) -> Result<u64, ParseSizeError> {
+    Ok(s.parse::<ByteSize>()?.0)
 }
 
 pub const MIN_RETRY_DELAY: Duration = Duration::from_millis(500);

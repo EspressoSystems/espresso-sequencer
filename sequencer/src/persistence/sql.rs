@@ -9,8 +9,7 @@ use async_trait::async_trait;
 use clap::Parser;
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
-    BackoffParams, Leaf, NetworkConfig,
+    parse_duration, v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup}, BackoffParams, Leaf, NetworkConfig
 };
 use futures::future::{BoxFuture, FutureExt};
 use hotshot_query_service::data_source::{
@@ -31,7 +30,7 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 
-use crate::{catchup::SqlStateCatchup, options::parse_duration, SeqTypes, ViewNumber};
+use crate::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
 
 /// Options for Postgres-backed persistence.
 #[derive(Parser, Clone, Derivative, Default)]

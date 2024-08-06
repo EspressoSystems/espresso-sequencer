@@ -51,6 +51,9 @@ pub(super) type AvailState<N, P, D, Ver> = Arc<RwLock<StorageState<N, P, D, Ver>
 
 type AvailabilityApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, availability::Error, Ver>;
 
+// TODO (abdul): replace snafu with `this_error` in  hotshot query service
+// Snafu has been replaced by `this_error` everywhere.
+// However, the query service still uses snafu
 pub(super) fn availability<N, P, D, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
 ) -> Result<AvailabilityApi<N, P, D, Ver>>
