@@ -1,17 +1,29 @@
-use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
+use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, time::Duration};
 
-use builder::non_permissioned::{build_instance_state, BuilderConfig};
+use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use espresso_types::{eth_signature_key::EthKeyPair, parse_duration};
+use cld::ClDuration;
+use espresso_types::{eth_signature_key::EthKeyPair, FeeAmount, NamespaceId, SeqTypes};
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use marketplace_builder::{
+    builder::{build_instance_state, BuilderConfig},
+    hooks::BidConfig,
+};
+use marketplace_builder_core::testing::basic_test::NodeType;
 use sequencer::{Genesis, L1Params};
-use sequencer_utils::logging;
+use snafu::Snafu;
 use url::Url;
-use vbs::version::{StaticVersion, StaticVersionType};
+use vbs::version::StaticVersionType;
 
 #[derive(Parser, Clone, Debug)]
 struct NonPermissionedBuilderOptions {
+    /// Whether this is a reserve builder.
+    ///
+    /// If not, it's a fallback builder that only builds for unregistered rollups.
+    #[clap(short, long, env = "ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE")]
+    is_reserve: bool,
+
     /// URL of hotshot events API running on Espresso Sequencer DA committee node
     /// The builder will subscribe to this server to receive hotshot events
     #[clap(
@@ -82,20 +94,64 @@ struct NonPermissionedBuilderOptions {
     #[clap(long, name = "GENESIS_FILE", env = "ESPRESSO_BUILDER_GENESIS_FILE")]
     genesis_file: PathBuf,
 
-    #[clap(flatten)]
-    logging: logging::Config,
+    /// Namespace to build for
+    #[clap(
+        short,
+        long,
+        env = "ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE",
+        default_value = "1",
+        value_delimiter = ','
+    )]
+    pub namespaces: Vec<u32>,
+
+    /// Url we will use to communicate to solver
+    #[clap(long, env = "ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL")]
+    solver_url: Url,
+
+    /// Bid amount in WEI.
+    /// Builder will submit the same bid for every view
+    #[clap(
+        long,
+        env = "ESPRESSO_MARKETPLACE_BUILDER_BID_AMOUNT",
+        default_value = "1"
+    )]
+    bid_amount: FeeAmount,
+}
+
+#[derive(Clone, Debug, Snafu)]
+struct ParseDurationError {
+    reason: String,
+}
+
+fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
+    ClDuration::from_str(s)
+        .map(Duration::from)
+        .map_err(|err| ParseDurationError {
+            reason: err.to_string(),
+        })
 }
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
-    let opt = NonPermissionedBuilderOptions::parse();
-    opt.logging.init();
+    setup_logging();
+    setup_backtrace();
 
+    let opt = NonPermissionedBuilderOptions::parse();
     let genesis = Genesis::from_file(&opt.genesis_file)?;
 
     let l1_params = L1Params {
         url: opt.l1_provider_url,
         events_max_block_range: 10000,
+    };
+
+    let is_reserve = opt.is_reserve;
+    let bid_config = if opt.is_reserve {
+        Some(BidConfig {
+            amount: opt.bid_amount,
+            namespaces: opt.namespaces.into_iter().map(NamespaceId::from).collect(),
+        })
+    } else {
+        None
     };
 
     let builder_key_pair = EthKeyPair::from_mnemonic(&opt.eth_mnemonic, opt.eth_account_index)?;
@@ -107,7 +163,7 @@ async fn main() -> anyhow::Result<()> {
         genesis.chain_config,
         l1_params,
         opt.state_peers,
-        StaticVersion::<0, 1>::instance(),
+        <SeqTypes as NodeType>::Base::instance(),
     )
     .unwrap();
 
@@ -123,6 +179,7 @@ async fn main() -> anyhow::Result<()> {
     let buffer_view_num_count = opt.buffer_view_num_count;
 
     let _builder_config = BuilderConfig::init(
+        is_reserve,
         builder_key_pair,
         bootstrapped_view,
         opt.tx_channel_capacity,
@@ -136,6 +193,8 @@ async fn main() -> anyhow::Result<()> {
         buffer_view_num_count,
         txn_timeout_duration,
         base_fee,
+        bid_config,
+        opt.solver_url,
     )
     .await?;
 

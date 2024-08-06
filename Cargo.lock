@@ -6086,6 +6086,92 @@ dependencies = [
 ]
 
 [[package]]
+name = "marketplace-builder"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 3.4.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "cld",
+ "committable",
+ "dotenvy",
+ "espresso-types",
+ "ethers",
+ "futures",
+ "hotshot",
+ "hotshot-builder-api",
+ "hotshot-events-service",
+ "hotshot-example-types",
+ "hotshot-orchestrator",
+ "hotshot-query-service",
+ "hotshot-stake-table",
+ "hotshot-state-prover",
+ "hotshot-types",
+ "jf-merkle-tree",
+ "jf-signature",
+ "libp2p",
+ "marketplace-builder-core",
+ "marketplace-solver",
+ "portpicker",
+ "rand 0.8.5",
+ "sequencer",
+ "sequencer-utils",
+ "serde",
+ "snafu 0.8.4",
+ "surf",
+ "surf-disco",
+ "tagged-base64",
+ "tempfile",
+ "tide-disco",
+ "toml",
+ "tracing",
+ "url",
+ "vbs",
+ "vec1",
+]
+
+[[package]]
+name = "marketplace-builder-core"
+version = "0.0.2"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.0.2#2df34726a644181b47a1fb50c4bce2e1c7ce5066"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 3.4.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "committable",
+ "derivative",
+ "futures",
+ "hex",
+ "hotshot",
+ "hotshot-builder-api",
+ "hotshot-events-service",
+ "hotshot-task-impls",
+ "hotshot-types",
+ "lru 0.12.4",
+ "multimap",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "snafu 0.8.4",
+ "surf-disco",
+ "tagged-base64",
+ "tide-disco",
+ "tokio",
+ "toml",
+ "tracing",
+ "url",
+ "vbs",
+]
+
+[[package]]
 name = "marketplace-solver"
 version = "0.1.0"
 dependencies = [
@@ -6300,6 +6386,15 @@ dependencies = [
  "core2",
  "serde",
  "unsigned-varint 0.7.2",
+]
+
+[[package]]
+name = "multimap"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "defc4c55412d89136f966bbb339008b474350e5e6e78d2714439c386b3137a03"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

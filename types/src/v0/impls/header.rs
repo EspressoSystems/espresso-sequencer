@@ -3,6 +3,7 @@ use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
+    constants::MarketplaceVersion,
     traits::{
         block_contents::{BlockHeader, BuilderFee},
         node_implementation::NodeType,
@@ -21,7 +22,7 @@ use serde_json::{Map, Value};
 use std::fmt;
 use thiserror::Error;
 use time::OffsetDateTime;
-use vbs::version::Version;
+use vbs::version::{StaticVersionType, Version};
 
 use crate::{
     v0::header::{EitherOrVersion, VersionedHeader},
@@ -427,15 +428,23 @@ impl Header {
             fee_amount,
         } in &builder_fee
         {
-            ensure!(
-                fee_account.validate_fee_signature(
-                    fee_signature,
-                    *fee_amount,
-                    &ns_table,
-                    &payload_commitment,
-                ),
-                "invalid builder signature"
-            );
+            if version < MarketplaceVersion::VERSION {
+                ensure!(
+                    fee_account.validate_fee_signature(
+                        fee_signature,
+                        *fee_amount,
+                        &ns_table,
+                        &payload_commitment,
+                    ),
+                    "invalid builder signature"
+                );
+            } else {
+                ensure!(
+                    fee_account
+                        .validate_sequencing_fee_signature_marketplace(fee_signature, *fee_amount,),
+                    "invalid builder signature"
+                );
+            }
 
             let fee_info = FeeInfo::new(*fee_account, *fee_amount);
             state
