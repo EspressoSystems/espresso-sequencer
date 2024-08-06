@@ -152,6 +152,7 @@
               enable = true;
               description = "Update gas benchmark in .gas-snapshot";
               entry = "just gas-benchmarks";
+              types_or = [ "solidity" ];
               pass_filenames = false;
             };
             contract-bindings = {
