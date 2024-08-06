@@ -1,0 +1,58 @@
+[package]
+name = "marketplace-builder"
+description = "A standalone builder service, marketplace version"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+
+[features]
+default = ["libp2p"]
+libp2p = ["sequencer/libp2p"]
+
+[dependencies]
+anyhow = { workspace = true }
+async-broadcast = "0.7.0"
+async-compatibility-layer = { workspace = true }
+async-lock = "3.4.0"
+async-std = { workspace = true }
+async-trait = { workspace = true }
+clap = { workspace = true }
+cld = { workspace = true }
+committable = { workspace = true }
+dotenvy = { workspace = true }
+espresso-types = { path = "../types", features = ["testing"] }
+ethers = { workspace = true }
+futures = { workspace = true }
+hotshot = { workspace = true }
+hotshot-builder-api = { workspace = true }
+hotshot-events-service = { workspace = true }
+hotshot-example-types = { workspace = true }
+hotshot-orchestrator = { workspace = true }
+hotshot-stake-table = { workspace = true }
+hotshot-state-prover = { path = "../hotshot-state-prover" }
+hotshot-types = { workspace = true }
+jf-merkle-tree = { workspace = true }
+jf-signature = { workspace = true, features = ["bls"] }
+libp2p = { workspace = true }
+marketplace-builder-core = { workspace = true }
+marketplace-solver = { path = "../marketplace-solver" }
+portpicker = { workspace = true }
+rand = "0.8.5"
+sequencer = { path = "../sequencer", features = ["testing"] }
+serde = { workspace = true }
+snafu = { workspace = true }
+surf = "2.3.1"
+surf-disco = { workspace = true }
+tagged-base64 = { workspace = true }
+tide-disco = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+vbs = { workspace = true }
+vec1 = { workspace = true }
+
+[dev-dependencies]
+hotshot-query-service = { workspace = true }
+sequencer = { path = "../sequencer", features = ["testing"] }
+sequencer-utils = { path = "../utils" }
+tempfile = "3.10.1"

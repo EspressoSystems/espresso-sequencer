@@ -1,9 +1,9 @@
 use std::net::ToSocketAddrs;
 
 use clap::Parser;
-use es_version::SEQUENCER_VERSION;
+use espresso_types::SeqTypes;
 use futures::future::FutureExt;
-use hotshot_types::traits::metrics::NoMetrics;
+use hotshot_types::traits::{metrics::NoMetrics, node_implementation::NodeType};
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
     init_node,
@@ -21,16 +21,28 @@ async fn main() -> anyhow::Result<()> {
     tracing::warn!(?modules, "sequencer starting up");
 
     if let Some(storage) = modules.storage_fs.take() {
-        init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await
+        init_with_storage(
+            modules,
+            opt,
+            storage,
+            <SeqTypes as NodeType>::Base::instance(),
+        )
+        .await
     } else if let Some(storage) = modules.storage_sql.take() {
-        init_with_storage(modules, opt, storage, SEQUENCER_VERSION).await
+        init_with_storage(
+            modules,
+            opt,
+            storage,
+            <SeqTypes as NodeType>::Base::instance(),
+        )
+        .await
     } else {
         // Persistence is required. If none is provided, just use the local file system.
         init_with_storage(
             modules,
             opt,
             persistence::fs::Options::default(),
-            SEQUENCER_VERSION,
+            <SeqTypes as NodeType>::Base::instance(),
         )
         .await
     }
@@ -77,6 +89,7 @@ where
         libp2p_bootstrap_nodes: opt.libp2p_bootstrap_nodes,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
+        public_api_url: opt.public_api_url,
         private_staking_key,
         private_state_key,
         state_peers: opt.state_peers,
@@ -128,6 +141,7 @@ where
                                 l1_params,
                                 bind_version,
                                 opt.is_da,
+                                opt.identity,
                             )
                             .await
                             .unwrap()
@@ -147,6 +161,7 @@ where
                 l1_params,
                 bind_version,
                 opt.is_da,
+                opt.identity,
             )
             .await?
         }
@@ -164,9 +179,12 @@ mod test {
     use std::time::Duration;
 
     use async_std::task::spawn;
-    use es_version::SequencerVersion;
-    use espresso_types::PubKey;
-    use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey};
+
+    use espresso_types::{PubKey, SeqTypes};
+    use hotshot_types::{
+        light_client::StateKeyPair,
+        traits::{node_implementation::NodeType, signature_key::SignatureKey},
+    };
     use portpicker::pick_unused_port;
     use sequencer::{
         api::options::{Http, Status},
@@ -224,7 +242,7 @@ mod test {
                 modules,
                 opt,
                 fs::Options::new(tmp.path().into()),
-                SEQUENCER_VERSION,
+                <SeqTypes as NodeType>::Base::instance(),
             )
             .await
             {
@@ -236,7 +254,7 @@ mod test {
         // orchestrator.
         tracing::info!("waiting for API to start");
         let url: Url = format!("http://localhost:{port}").parse().unwrap();
-        let client = Client::<ClientError, SequencerVersion>::new(url.clone());
+        let client = Client::<ClientError, <SeqTypes as NodeType>::Base>::new(url.clone());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
         client.get::<()>("healthcheck").send().await.unwrap();
 

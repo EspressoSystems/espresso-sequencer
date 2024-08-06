@@ -10,6 +10,7 @@ use hotshot_types::{
     },
     vid::{VidCommon, VidSchemeType},
 };
+
 use itertools::Itertools;
 use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Digest, Sha3Node},
@@ -750,16 +751,15 @@ impl MerklizedState<SeqTypes, { Self::ARITY }> for FeeMerkleTree {
 mod test {
     use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
     use ethers::types::U256;
-    use hotshot_types::traits::{block_contents::BlockHeader, signature_key::BuilderSignatureKey};
-    use hotshot_types::vid::vid_scheme;
+    use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
     use jf_vid::VidScheme;
     use sequencer_utils::ser::FromStringOrInteger;
 
     use super::*;
     use crate::{
         eth_signature_key::{BuilderSignature, EthKeyPair},
-        v0_1,
-        v0_3::BidTx,
+        v0_1, v0_2,
+        v0_3::{self, BidTx},
         BlockSize, FeeAccountProof, FeeMerkleProof,
     };
 
@@ -1048,7 +1048,16 @@ mod test {
                 fee_info: FeeInfo::new(account, data),
                 ..header
             }),
-            _ => unimplemented!(),
+            Header::V2(header) => Header::V2(v0_2::Header {
+                builder_signature: Some(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            Header::V3(header) => Header::V3(v0_3::Header {
+                builder_signature: vec![sig],
+                fee_info: vec![FeeInfo::new(account, data)],
+                ..header
+            }),
         };
 
         validate_builder_fee(&header).unwrap();
@@ -1067,7 +1076,16 @@ mod test {
                 fee_info: FeeInfo::new(account, data),
                 ..header
             }),
-            _ => unimplemented!(),
+            Header::V2(header) => Header::V2(v0_2::Header {
+                builder_signature: Some(sig),
+                fee_info: FeeInfo::new(account, data),
+                ..header
+            }),
+            Header::V3(header) => Header::V3(v0_3::Header {
+                builder_signature: vec![sig],
+                fee_info: vec![FeeInfo::new(account, data)],
+                ..header
+            }),
         };
 
         let sig: Vec<BuilderSignature> = header.builder_signature();

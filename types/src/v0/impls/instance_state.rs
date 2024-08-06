@@ -92,6 +92,11 @@ impl NodeState {
         self.upgrades = upgrades;
         self
     }
+
+    pub fn with_current_version(mut self, ver: Version) -> Self {
+        self.current_version = ver;
+        self
+    }
 }
 
 // This allows us to turn on `Default` on InstanceState trait
