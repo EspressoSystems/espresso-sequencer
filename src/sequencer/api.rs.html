@@ -1726,6 +1726,27 @@
 <a href="#1726" id="1726">1726</a>
 <a href="#1727" id="1727">1727</a>
 <a href="#1728" id="1728">1728</a>
+<a href="#1729" id="1729">1729</a>
+<a href="#1730" id="1730">1730</a>
+<a href="#1731" id="1731">1731</a>
+<a href="#1732" id="1732">1732</a>
+<a href="#1733" id="1733">1733</a>
+<a href="#1734" id="1734">1734</a>
+<a href="#1735" id="1735">1735</a>
+<a href="#1736" id="1736">1736</a>
+<a href="#1737" id="1737">1737</a>
+<a href="#1738" id="1738">1738</a>
+<a href="#1739" id="1739">1739</a>
+<a href="#1740" id="1740">1740</a>
+<a href="#1741" id="1741">1741</a>
+<a href="#1742" id="1742">1742</a>
+<a href="#1743" id="1743">1743</a>
+<a href="#1744" id="1744">1744</a>
+<a href="#1745" id="1745">1745</a>
+<a href="#1746" id="1746">1746</a>
+<a href="#1747" id="1747">1747</a>
+<a href="#1748" id="1748">1748</a>
+<a href="#1749" id="1749">1749</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::pin::Pin;
 
 <span class="kw">use </span>anyhow::{bail, Context};
@@ -2773,7 +2794,8 @@
     <span class="kw">use </span>espresso_types::{
         mock::MockStateCatchup,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        FeeAccount, FeeAmount, Header, Upgrade, UpgradeType, ValidatedState,
+        FeeAccount, FeeAmount, Header, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType,
+        ValidatedState,
     };
     <span class="kw">use </span>ethers::utils::Anvil;
     <span class="kw">use </span>futures::{
@@ -2795,13 +2817,14 @@
     };
     <span class="kw">use </span>jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     <span class="kw">use </span>portpicker::pick_unused_port;
-    <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
+    <span class="kw">use </span>sequencer_utils::{ser::FromStringOrInteger, test_utils::setup_test};
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
         TestNetwork, TestNetworkConfigBuilder,
     };
     <span class="kw">use </span>tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
+    <span class="kw">use </span>time::OffsetDateTime;
 
     <span class="kw">use </span><span class="self">self</span>::{
         data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
@@ -3157,9 +3180,33 @@
     }
 
     <span class="attr">#[async_std::test]
-    </span><span class="kw">async fn </span>test_chain_config_upgrade() {
+    </span><span class="kw">async fn </span>test_chain_config_upgrade_view_based() {
         setup_test();
 
+        test_chain_config_upgrade_helper(UpgradeMode::View(ViewBasedUpgrade {
+            start_voting_view: <span class="prelude-val">None</span>,
+            stop_voting_view: <span class="prelude-val">None</span>,
+            start_proposing_view: <span class="number">1</span>,
+            stop_proposing_view: <span class="number">10</span>,
+        }))
+        .<span class="kw">await</span>;
+    }
+
+    <span class="attr">#[async_std::test]
+    </span><span class="kw">async fn </span>test_chain_config_upgrade_time_based() {
+        setup_test();
+
+        <span class="kw">let </span>now = OffsetDateTime::now_utc().unix_timestamp() <span class="kw">as </span>u64;
+        test_chain_config_upgrade_helper(UpgradeMode::Time(TimeBasedUpgrade {
+            start_proposing_time: Timestamp::from_integer(now).unwrap(),
+            stop_proposing_time: Timestamp::from_integer(now + <span class="number">500</span>).unwrap(),
+            start_voting_time: <span class="prelude-val">None</span>,
+            stop_voting_time: <span class="prelude-val">None</span>,
+        }))
+        .<span class="kw">await</span>;
+    }
+
+    <span class="kw">async fn </span>test_chain_config_upgrade_helper(mode: UpgradeMode) {
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
@@ -3174,12 +3221,7 @@
         upgrades.insert(
             &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Upgrade::VERSION,
             Upgrade {
-                mode: UpgradeMode::View(ViewBasedUpgrade {
-                    start_voting_view: <span class="prelude-val">None</span>,
-                    stop_voting_view: <span class="prelude-val">None</span>,
-                    start_proposing_view: <span class="number">1</span>,
-                    stop_proposing_view: <span class="number">10</span>,
-                }),
+                mode,
                 upgrade_type: UpgradeType::ChainConfig {
                     chain_config: chain_config_upgrade,
                 },

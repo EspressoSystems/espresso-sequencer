@@ -228,8 +228,6 @@
 <a href="#228" id="228">228</a>
 <a href="#229" id="229">229</a>
 <a href="#230" id="230">230</a>
-<a href="#231" id="231">231</a>
-<a href="#232" id="232">232</a>
 </pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
     v0::traits::StateCatchup, v0_3::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
     SeqTypes, Timestamp, Upgrade, UpgradeMode,
@@ -364,11 +362,9 @@
                 config.start_proposing_time = t.start_proposing_time.unix_timestamp();
                 config.stop_proposing_time = t.stop_proposing_time.unix_timestamp();
                 config.start_voting_time = t.start_voting_time.unwrap_or_default().unix_timestamp();
-                <span class="comment">// this should not panic because Timestamp::max() constructs the maximum possible Unix timestamp
-                // using i64::MAX
-                </span>config.stop_voting_time = t
+                config.stop_voting_time = t
                     .stop_voting_time
-                    .unwrap_or(Timestamp::max().expect(<span class="string">"overflow"</span>))
+                    .unwrap_or(Timestamp::max())
                     .unix_timestamp();
                 config.start_proposing_view = <span class="number">0</span>;
                 config.stop_proposing_view = u64::MAX;
