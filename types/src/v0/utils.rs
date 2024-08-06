@@ -149,7 +149,7 @@ pub fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
 }
 
 #[derive(Clone, Debug, From, Error)]
-#[error("failed to parse size. {msg}")]
+#[error("failed to parse ByteSize. {msg}")]
 pub struct ParseSizeError {
     msg: String,
 }
