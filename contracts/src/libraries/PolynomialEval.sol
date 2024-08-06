@@ -292,7 +292,12 @@ library PolynomialEval {
         uint256 nInverted = self.sizeInv;
 
         // 1/(z-1)
-        uint256 inverseZetaMinusOne = zeta - 1;
+        uint256 inverseZetaMinusOne;
+        if (zeta == 0) {
+            inverseZetaMinusOne = p - 1;
+        } else {
+            inverseZetaMinusOne = zeta - 1;
+        }
         inverseZetaMinusOne =
             BN254.ScalarField.unwrap((BN254.invert(BN254.ScalarField.wrap(inverseZetaMinusOne))));
 
