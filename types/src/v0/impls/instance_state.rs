@@ -136,7 +136,7 @@ impl Upgrade {
                 // using i64::MAX
                 config.stop_voting_time = t
                     .stop_voting_time
-                    .unwrap_or(Timestamp::max().expect("overflow"))
+                    .unwrap_or(Timestamp::max())
                     .unix_timestamp();
                 config.start_proposing_view = 0;
                 config.stop_proposing_view = u64::MAX;
