@@ -132,8 +132,6 @@ impl Upgrade {
                 config.start_proposing_time = t.start_proposing_time.unix_timestamp();
                 config.stop_proposing_time = t.stop_proposing_time.unix_timestamp();
                 config.start_voting_time = t.start_voting_time.unwrap_or_default().unix_timestamp();
-                // this should not panic because Timestamp::max() constructs the maximum possible Unix timestamp
-                // using i64::MAX
                 config.stop_voting_time = t
                     .stop_voting_time
                     .unwrap_or(Timestamp::max())
