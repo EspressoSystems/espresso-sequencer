@@ -856,14 +856,14 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         // DELAY_THRESHOLD = 6
         uint8 numUpdates = 5;
 
-        uint256[] memory blockNumberUpdates = new uint256[](numUpdates);
+        uint64[] memory blockNumberUpdates = new uint64[](numUpdates);
         blockNumberUpdates[0] = 1;
         blockNumberUpdates[1] = blockNumberUpdates[0] + DELAY_THRESHOLD / 2; // 4
         blockNumberUpdates[2] = blockNumberUpdates[1] + DELAY_THRESHOLD / 2; // 7
         blockNumberUpdates[3] = blockNumberUpdates[2] + DELAY_THRESHOLD + 5; // 18
         blockNumberUpdates[4] = blockNumberUpdates[3] + DELAY_THRESHOLD / 2; // 21
 
-        uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
+        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
             blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
@@ -901,7 +901,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     function test_hotshotIsDownWhenADelayExists() public {
         // DELAY_THRESHOLD = 6
         uint8 numUpdates = 5;
-        uint256[] memory blockNumberUpdates = new uint256[](numUpdates);
+        uint64[] memory blockNumberUpdates = new uint64[](numUpdates);
         blockNumberUpdates[0] = 1;
         blockNumberUpdates[1] = blockNumberUpdates[0] + DELAY_THRESHOLD / 2; // 4
         blockNumberUpdates[2] = blockNumberUpdates[1] + DELAY_THRESHOLD / 2; // 7
@@ -914,7 +914,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
-        uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
+        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
             blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
@@ -944,7 +944,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     function test_revertWhenThereAreOnlyTwoUpdates() public {
         uint8 numUpdates = 2;
 
-        uint256[] memory updates = new uint256[](numUpdates);
+        uint64[] memory updates = new uint64[](numUpdates);
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD + 5; //12
 
@@ -954,7 +954,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
-        uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
+        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
             blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
@@ -980,7 +980,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     function test_revertWhenThereIsOnlyOneUpdate() public {
         uint8 numUpdates = 1;
 
-        uint256[] memory updates = new uint256[](numUpdates);
+        uint64[] memory updates = new uint64[](numUpdates);
         updates[0] = 1;
 
         LC.HotShotCommitment memory hotShotCommitment =
@@ -989,7 +989,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
-        uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
+        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
             blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
@@ -1016,7 +1016,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         // DELAY_THRESHOLD = 6
         uint8 numUpdates = 3;
 
-        uint256[] memory updates = new uint256[](numUpdates);
+        uint64[] memory updates = new uint64[](numUpdates);
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
@@ -1027,7 +1027,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
-        uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
+        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
             blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
@@ -1062,7 +1062,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         uint8 numUpdates = 3;
 
         // DELAY_THRESHOLD = 6
-        uint256[] memory updates = new uint256[](numUpdates);
+        uint64[] memory updates = new uint64[](numUpdates);
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
@@ -1073,7 +1073,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
-        uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
+        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
             blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
@@ -1103,7 +1103,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         // DELAY_THRESHOLD = 6
         uint8 numUpdates = 3;
 
-        uint256[] memory updates = new uint256[](numUpdates);
+        uint64[] memory updates = new uint64[](numUpdates);
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
         updates[2] = updates[1] + DELAY_THRESHOLD / 2; // 7
@@ -1114,7 +1114,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
-        uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
+        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
             blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
@@ -1140,7 +1140,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         // DELAY_THRESHOLD = 6
         uint8 numUpdates = 2;
 
-        uint256[] memory updates = new uint256[](numUpdates);
+        uint64[] memory updates = new uint64[](numUpdates);
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
 
@@ -1150,7 +1150,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
-        uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
+        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
             blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }
@@ -1178,7 +1178,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         // DELAY_THRESHOLD = 6
         uint8 numUpdates = 2;
 
-        uint256[] memory updates = new uint256[](numUpdates);
+        uint64[] memory updates = new uint64[](numUpdates);
         updates[0] = 1;
         updates[1] = updates[0] + DELAY_THRESHOLD / 2; // 4
 
@@ -1188,7 +1188,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         LC.StateHistoryCommitment[] memory stateHistoryCommitments =
             new LC.StateHistoryCommitment[](numUpdates);
 
-        uint256[] memory blockTimestampUpdates = new uint256[](numUpdates);
+        uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
             blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
         }

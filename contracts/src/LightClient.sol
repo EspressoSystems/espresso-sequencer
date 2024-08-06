@@ -136,8 +136,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @param l1BlockTimestamp the block timestamp of l1 when this state update was stored
     /// @param hotShotCommitment The HotShot commitment info of the latest finalized HotShot block
     struct StateHistoryCommitment {
-        uint256 l1BlockHeight;
-        uint256 l1BlockTimestamp;
+        uint64 l1BlockHeight;
+        uint64 l1BlockTimestamp;
         HotShotCommitment hotShotCommitment;
     }
 
@@ -242,7 +242,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         frozenStakeTableCommitment = initStakeTableComm;
         frozenThreshold = genesis.threshold;
 
-        updateStateHistory(block.number, block.timestamp, genesis);
+        updateStateHistory(uint64(block.number), uint64(block.timestamp), genesis);
     }
 
     // === State Modifying APIs ===
@@ -300,7 +300,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // upon successful verification, update the latest finalized state
         states[finalizedState] = newState;
 
-        updateStateHistory(block.number, block.timestamp, newState);
+        updateStateHistory(uint64(block.number), uint64(block.timestamp), newState);
 
         emit NewState(newState.viewNum, newState.blockHeight, newState.blockCommRoot);
     }
@@ -408,12 +408,10 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// reading the array,
     /// since the length of the array is not reduced even after deletion.
     function updateStateHistory(
-        uint256 blockNumber,
-        uint256 blockTimestamp,
+        uint64 blockNumber,
+        uint64 blockTimestamp,
         LightClientState memory state
     ) internal {
-        if (maxStateHistoryDuration < 86400) revert InvalidMaxStateHistory();
-
         if (
             stateHistoryCommitments.length != 0
                 && stateHistoryCommitments[stateHistoryCommitments.length - 1].l1BlockTimestamp
