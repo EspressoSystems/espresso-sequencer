@@ -20,8 +20,8 @@ contract LightClientCommonTest is Test {
     LC.LightClientState public genesis;
     uint32 public constant BLOCKS_PER_EPOCH_TEST = 3;
     uint32 public constant DELAY_THRESHOLD = 6;
-    uint64 oneDaySeconds = 86400;
-    uint64 initialEpoch = oneDaySeconds;
+    uint32 oneDaySeconds = 86400;
+    uint32 initialEpoch = oneDaySeconds;
     // this constant should be consistent with `hotshot_contract::light_client.rs`
     uint64 internal constant STAKE_TABLE_CAPACITY = 10;
     DeployLightClientTestScript public deployer = new DeployLightClientTestScript();
@@ -629,7 +629,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertGe(lc.maxStateHistoryDuration(), oneDaySeconds);
     }
 
-    function setMaxStateHistoryDuration(uint64 duration) internal {
+    function setMaxStateHistoryDuration(uint32 duration) internal {
         // Set the new max block states allowed to half of the number of states available
         vm.prank(admin);
         lc.setMaxStateHistoryDuration(duration);
@@ -680,11 +680,11 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertEq(lc.getStateHistoryCount(), blockUpdatesCount + 1);
     }
 
-    function testFuzz_setMaxStateHistoryDuration(uint64 maxBlocksAllowed) public {
+    function testFuzz_setMaxStateHistoryDuration(uint32 maxHistorySeconds) public {
         vm.prank(admin);
-        vm.assume(maxBlocksAllowed >= oneDaySeconds);
-        lc.setMaxStateHistoryDuration(maxBlocksAllowed);
-        assertEq(maxBlocksAllowed, lc.maxStateHistoryDuration());
+        vm.assume(maxHistorySeconds >= oneDaySeconds);
+        lc.setMaxStateHistoryDuration(maxHistorySeconds);
+        assertEq(maxHistorySeconds, lc.maxStateHistoryDuration());
     }
 
     function test_revertNonAdminSetMaxStateHistoryAllowed() public {
@@ -707,7 +707,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         cmds[4] = vm.toString(uint64(5));
         cmds[5] = vm.toString(uint64(5));
 
-        uint64 numDays = 1;
+        uint32 numDays = 1;
 
         assertInitialStateHistoryConditions();
 
@@ -783,7 +783,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         cmds[3] = vm.toString(STAKE_TABLE_CAPACITY / 2);
         cmds[4] = vm.toString(uint64(5));
         cmds[5] = vm.toString(uint64(5));
-        uint64 numDays = 2;
+        uint32 numDays = 2;
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =

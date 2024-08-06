@@ -89,7 +89,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     ///@notice Max number of seconds worth of state commitments to record based on this block
     /// timestamp
-    uint64 public maxStateHistoryDuration;
+    uint32 public maxStateHistoryDuration;
 
     ///@notice index of first block in block state series
     ///@dev use this instead of index 0 since old states would be set to zero to keep storage costs
@@ -523,7 +523,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice set Max Block States allowed
     /// @param historySeconds The maximum number of block states allowed to be stored
-    function setMaxStateHistoryDuration(uint64 historySeconds) public onlyOwner {
+    function setMaxStateHistoryDuration(uint32 historySeconds) public onlyOwner {
         if (historySeconds < 86400) revert InvalidMaxStateHistory();
 
         maxStateHistoryDuration = historySeconds;
