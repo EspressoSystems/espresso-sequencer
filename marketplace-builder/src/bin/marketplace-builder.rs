@@ -1,9 +1,10 @@
-use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, time::Duration};
+use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use cld::ClDuration;
-use espresso_types::{eth_signature_key::EthKeyPair, FeeAmount, NamespaceId, SeqTypes};
+use espresso_types::{
+    eth_signature_key::EthKeyPair, parse_duration, FeeAmount, NamespaceId, SeqTypes,
+};
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use marketplace_builder::{
@@ -12,7 +13,6 @@ use marketplace_builder::{
 };
 use marketplace_builder_core::testing::basic_test::NodeType;
 use sequencer::{Genesis, L1Params};
-use snafu::Snafu;
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -116,19 +116,6 @@ struct NonPermissionedBuilderOptions {
         default_value = "1"
     )]
     bid_amount: FeeAmount,
-}
-
-#[derive(Clone, Debug, Snafu)]
-struct ParseDurationError {
-    reason: String,
-}
-
-fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
-    ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError {
-            reason: err.to_string(),
-        })
 }
 
 #[async_std::main]
