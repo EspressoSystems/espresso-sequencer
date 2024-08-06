@@ -312,9 +312,10 @@ async fn test_all_restart() {
     let mut catchup_nodes = vec![];
     for i in 1..20 {
         catchup_nodes.push(ChangeNode {
-        idx: i,
-        updown: UpDown::Restart,
-    })};
+            idx: i,
+            updown: UpDown::Restart,
+        })
+    }
 
     metadata.timing_data = timing_data;
     metadata.start_nodes = 20;
