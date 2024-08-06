@@ -204,11 +204,11 @@ library PolynomialEval {
             uint256 group = 1;
             for (uint256 i = 0; i < 8; i++) {
                 if (zeta == group) {
-                    return (pi[i],0); // TODO
+                    return (pi[i], 1);
                 }
                 group = mulmod(group, self.groupGen, p);
             }
-            return (0,0); // TODO
+            return (0, 0);
         }
 
         uint256[] memory localDomainElements = domainElements(self, pi.length);
@@ -284,7 +284,6 @@ library PolynomialEval {
             fullProduct := currentElementPrefix
         }
 
-
         // 1 / fullProduct
         uint256 invertedProduct =
             BN254.ScalarField.unwrap(BN254.invert(BN254.ScalarField.wrap(fullProduct)));
@@ -292,13 +291,21 @@ library PolynomialEval {
         // 1 / n
         uint256 nInverted = self.sizeInv;
 
+        // 1/(z-1)
+        uint256 inverseZetaMinusOne = zeta - 1;
+        inverseZetaMinusOne =
+            BN254.ScalarField.unwrap((BN254.invert(BN254.ScalarField.wrap(inverseZetaMinusOne))));
+
         assembly {
             // Final computation
             // (vanishingPolyEval / ( n * fullProduct )) * sum
             res := mulmod(vanishingPolyEval, nInverted, p)
+
+            // evalLagrangeOne = vanishingPolyEval * 1/ n * 1/(z-1)
+            evalLagrangeOne := mulmod(res, inverseZetaMinusOne, p)
+
             res := mulmod(res, invertedProduct, p)
             res := mulmod(res, sum, p)
-            evalLagrangeOne := 0 // TODO
         }
     }
 
@@ -338,12 +345,14 @@ library PolynomialEval {
         uint256 evalDatapiEvalUint;
         uint256 evalDataLagrangeOneUint;
         evalData.vanishEval = BN254.ScalarField.wrap(evaluateVanishingPoly(self, zeta));
-        (evalDatapiEvalUint, evalDataLagrangeOneUint) =  evaluatePiPoly(self, publicInput, zeta, BN254.ScalarField.unwrap(evalData.vanishEval));
-        evalData.piEval =  BN254.ScalarField.wrap(evalDatapiEvalUint);
+        (evalDatapiEvalUint, evalDataLagrangeOneUint) =
+            evaluatePiPoly(self, publicInput, zeta, BN254.ScalarField.unwrap(evalData.vanishEval));
+        evalData.piEval = BN254.ScalarField.wrap(evalDatapiEvalUint);
         evalData.lagrangeOne = BN254.ScalarField.wrap(evalDataLagrangeOneUint);
-//            evaluateLagrangeOne(self, BN254.ScalarField.wrap(zeta), evalData.vanishEval);
-//        evalData.piEval = BN254.ScalarField.wrap(
-//            evaluatePiPoly(self, publicInput, zeta, BN254.ScalarField.unwrap(evalData.vanishEval))
+        //            evaluateLagrangeOne(self, BN254.ScalarField.wrap(zeta), evalData.vanishEval);
+        //        evalData.piEval = BN254.ScalarField.wrap(
+        //            evaluatePiPoly(self, publicInput, zeta,
+        // BN254.ScalarField.unwrap(evalData.vanishEval))
         //);
     }
 }

@@ -162,17 +162,15 @@ contract PolynomialEval_evalDataGen_Test is Test {
         for (uint256 i = 0; i < size; i++) {
             uint256 zeta = elements[i];
             uint256 vanishEval = Poly.evaluateVanishingPoly(domain, zeta);
-            // TODO improve
+
             uint256 piPolyEval;
-            uint256 lagrangeOne;
-            (piPolyEval, lagrangeOne) = Poly.evaluatePiPoly(domain, publicInputs, zeta, vanishEval);
+
+            (piPolyEval,) = Poly.evaluatePiPoly(domain, publicInputs, zeta, vanishEval);
 
             if (i < piLen) {
-                assertEq(piPolyEval,publicInputs[i]);
-                assertEq(lagrangeOne,0);
+                assertEq(piPolyEval, publicInputs[i]);
             } else {
-                assertEq(piPolyEval,0);
-                assertEq(lagrangeOne,0);
+                assertEq(piPolyEval, 0);
             }
         }
     }
