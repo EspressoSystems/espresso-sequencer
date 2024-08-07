@@ -23,7 +23,7 @@ use futures::future::{join_all, try_join_all};
 use hotshot::{
     traits::implementations::{MasterMap, MemoryNetwork},
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, SystemContext,
+    HotShotInitializer, MarketplaceConfig, Memberships, SystemContext,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
@@ -48,7 +48,7 @@ use hotshot_types::{
     traits::{election::Membership, network::Topic},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
-use std::{num::NonZeroUsize, time::Duration};
+use std::{num::NonZeroUsize, str::FromStr, time::Duration};
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -275,7 +275,10 @@ async fn init_consensus(
                         .unwrap(),
                     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                     storage,
-                    TestAuctionResultsProvider::default(),
+                    MarketplaceConfig {
+                        auction_results_provider: Arc::new(TestAuctionResultsProvider::default()),
+                        generic_builder_url: Url::from_str("https://some.url").unwrap(),
+                    },
                 )
                 .await
                 .unwrap()

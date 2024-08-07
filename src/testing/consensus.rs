@@ -29,7 +29,7 @@ use futures::{
 use hotshot::{
     traits::implementations::{MasterMap, MemoryNetwork},
     types::{Event, SystemContextHandle},
-    HotShotInitializer, Memberships, SystemContext,
+    HotShotInitializer, MarketplaceConfig, Memberships, SystemContext,
 };
 use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
@@ -43,9 +43,9 @@ use hotshot_types::{
     traits::{election::Membership, network::Topic, signature_key::SignatureKey as _},
     ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
 };
-use std::fmt::Display;
 use std::num::NonZeroUsize;
 use std::time::Duration;
+use std::{fmt::Display, str::FromStr};
 use tracing::{info_span, Instrument};
 use url::Url;
 
@@ -207,7 +207,12 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                                 .unwrap(),
                             ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                             hs_storage,
-                            TestAuctionResultsProvider::default(),
+                            MarketplaceConfig {
+                                auction_results_provider: Arc::new(
+                                    TestAuctionResultsProvider::default(),
+                                ),
+                                generic_builder_url: Url::from_str("https://some.url").unwrap(),
+                            },
                         )
                         .await
                         .unwrap()
