@@ -5,7 +5,7 @@ use std::{
 use anyhow::{bail, Context};
 use builder::permissioned::init_node;
 use clap::Parser;
-use espresso_types::eth_signature_key::EthKeyPair;
+use espresso_types::{eth_signature_key::EthKeyPair, parse_duration};
 use ethers::types::Address;
 use hotshot_types::{
     data::ViewNumber,
@@ -14,9 +14,7 @@ use hotshot_types::{
     traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
 };
 use libp2p::Multiaddr;
-use sequencer::{
-    options::parse_duration, persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams,
-};
+use sequencer::{persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams};
 use sequencer_utils::logging;
 use url::Url;
 use vbs::version::{StaticVersion, StaticVersionType};

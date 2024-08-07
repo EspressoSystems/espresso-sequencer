@@ -165,7 +165,6 @@ pub mod testing {
     use portpicker::pick_unused_port;
     use sequencer::state_signature::StateSignatureMemStorage;
     use serde::{Deserialize, Serialize};
-    use snafu::{guide::feature_flags, *};
     use vbs::version::StaticVersion;
 
     use super::*;

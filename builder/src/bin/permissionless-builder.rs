@@ -1,14 +1,12 @@
-use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, time::Duration};
+use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 
 use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
-use cld::ClDuration;
-use espresso_types::eth_signature_key::EthKeyPair;
+use espresso_types::{eth_signature_key::EthKeyPair, parse_duration};
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use sequencer::{Genesis, L1Params};
 use sequencer_utils::logging;
-use snafu::Snafu;
 use url::Url;
 use vbs::version::{StaticVersion, StaticVersionType};
 
@@ -86,19 +84,6 @@ struct NonPermissionedBuilderOptions {
 
     #[clap(flatten)]
     logging: logging::Config,
-}
-
-#[derive(Clone, Debug, Snafu)]
-struct ParseDurationError {
-    reason: String,
-}
-
-fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
-    ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError {
-            reason: err.to_string(),
-        })
 }
 
 #[async_std::main]
