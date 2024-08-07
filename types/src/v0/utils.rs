@@ -1,11 +1,3 @@
-use std::{
-    cmp::{min, Ordering},
-    fmt::{self, Debug, Display, Formatter},
-    num::ParseIntError,
-    str::FromStr,
-    time::Duration,
-};
-
 use anyhow::Context;
 use async_std::task::sleep;
 use bytesize::ByteSize;
@@ -15,8 +7,17 @@ use futures::future::BoxFuture;
 use rand::Rng;
 use sequencer_utils::{impl_serde_from_string_or_integer, ser::FromStringOrInteger};
 use serde::{Deserialize, Serialize};
+use std::{
+    cmp::{min, Ordering},
+    fmt::{self, Debug, Display, Formatter},
+    num::ParseIntError,
+    str::FromStr,
+    time::Duration,
+};
 use thiserror::Error;
-use time::{format_description::well_known::Rfc3339 as TimestampFormat, OffsetDateTime};
+use time::{
+    format_description::well_known::Rfc3339 as TimestampFormat, macros::time, Date, OffsetDateTime,
+};
 
 /// Information about the genesis state which feeds into the genesis block header.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -41,10 +42,8 @@ impl Timestamp {
         self.0.unix_timestamp() as u64
     }
 
-    pub fn max() -> anyhow::Result<Self> {
-        Ok(Self(
-            OffsetDateTime::from_unix_timestamp(i64::MAX).context("overflow")?,
-        ))
+    pub fn max() -> Self {
+        Self(OffsetDateTime::new_utc(Date::MAX, time!(23:59)))
     }
 }
 
