@@ -1,3 +1,9 @@
+// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+// This file is part of the HotShot repository.
+
+// You should have received a copy of the MIT License
+// along with the HotShot repository. If not, see <https://mit-license.org/>.
+
 //! The whitelist is an adaptor that is able to update the allowed public keys for
 //! all brokers. Right now, we do this by asking the orchestrator for the list of
 //! allowed public keys. In the future, we will pull the stake table from the L1.

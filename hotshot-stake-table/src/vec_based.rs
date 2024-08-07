@@ -1,3 +1,9 @@
+// Copyright (c) 2021-2024 Espresso Systems (espressosys.com)
+// This file is part of the HotShot repository.
+
+// You should have received a copy of the MIT License
+// along with the HotShot repository. If not, see <https://mit-license.org/>.
+
 //! A vector based stake table implementation. The commitment is the rescue hash of the list of (key, amount) pairs;
 
 use ark_std::{collections::HashMap, hash::Hash, rand::SeedableRng};
