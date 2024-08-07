@@ -11,7 +11,9 @@ use async_compatibility_layer::{
     channel::{Receiver, SendError, UnboundedReceiver, UnboundedRecvError, UnboundedSender},
 };
 use futures::channel::oneshot;
-use hotshot_types::traits::network::NetworkError as HotshotNetworkError;
+use hotshot_types::traits::{
+    network::NetworkError as HotshotNetworkError, signature_key::SignatureKey,
+};
 use libp2p::{request_response::ResponseChannel, Multiaddr};
 use libp2p_identity::PeerId;
 use snafu::{ResultExt, Snafu};
@@ -28,9 +30,9 @@ use crate::network::{
 /// - A reference to the state
 /// - Controls for the swarm
 #[derive(Debug, Clone)]
-pub struct NetworkNodeHandle {
+pub struct NetworkNodeHandle<K: SignatureKey + 'static> {
     /// network configuration
-    network_config: NetworkNodeConfig,
+    network_config: NetworkNodeConfig<K>,
 
     /// send an action to the networkbehaviour
     send_network: UnboundedSender<ClientRequest>,
@@ -76,10 +78,10 @@ impl NetworkNodeReceiver {
 /// Spawn a network node task task and return the handle and the receiver for it
 /// # Errors
 /// Errors if spawning the task fails
-pub async fn spawn_network_node(
-    config: NetworkNodeConfig,
+pub async fn spawn_network_node<K: SignatureKey + 'static>(
+    config: NetworkNodeConfig<K>,
     id: usize,
-) -> Result<(NetworkNodeReceiver, NetworkNodeHandle), NetworkNodeHandleError> {
+) -> Result<(NetworkNodeReceiver, NetworkNodeHandle<K>), NetworkNodeHandleError> {
     let mut network = NetworkNode::new(config.clone())
         .await
         .context(NetworkSnafu)?;
@@ -113,7 +115,7 @@ pub async fn spawn_network_node(
     Ok((receiver, handle))
 }
 
-impl NetworkNodeHandle {
+impl<K: SignatureKey + 'static> NetworkNodeHandle<K> {
     /// Cleanly shuts down a swarm node
     /// This is done by sending a message to
     /// the swarm itself to spin down
@@ -493,7 +495,7 @@ impl NetworkNodeHandle {
 
     /// Return a reference to the network config
     #[must_use]
-    pub fn config(&self) -> &NetworkNodeConfig {
+    pub fn config(&self) -> &NetworkNodeConfig<K> {
         &self.network_config
     }
 }

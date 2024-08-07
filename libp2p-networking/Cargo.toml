@@ -36,6 +36,7 @@ tide = { version = "0.16", optional = true, default-features = false, features =
 tracing = { workspace = true }
 void = "1"
 lazy_static = { workspace = true }
+pin-project = "1"
 
 [target.'cfg(all(async_executor_impl = "tokio"))'.dependencies]
 libp2p = { workspace = true, features = ["tokio"] }

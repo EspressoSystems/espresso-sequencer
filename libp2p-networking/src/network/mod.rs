@@ -12,10 +12,13 @@ mod def;
 pub mod error;
 /// functionality of a libp2p network node
 mod node;
+/// Alternative Libp2p transport implementations
+pub mod transport;
 
 use std::{collections::HashSet, fmt::Debug, str::FromStr};
 
 use futures::channel::oneshot::{self, Sender};
+use hotshot_types::traits::signature_key::SignatureKey;
 #[cfg(async_executor_impl = "async-std")]
 use libp2p::dns::async_std::Transport as DnsTransport;
 #[cfg(async_executor_impl = "tokio")]
@@ -37,6 +40,7 @@ use quic::async_std::Transport as QuicTransport;
 use quic::tokio::Transport as QuicTransport;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
+use transport::StakeTableAuthentication;
 
 use self::behaviours::request_response::{Request, Response};
 pub use self::{
@@ -211,31 +215,43 @@ pub fn gen_multiaddr(port: u16) -> Multiaddr {
 /// This type is used to represent a transport in the libp2p network framework. The `PeerId` is a unique identifier for each peer in the network, and the `StreamMuxerBox` is a type of multiplexer that can handle multiple substreams over a single connection.
 type BoxedTransport = Boxed<(PeerId, StreamMuxerBox)>;
 
-/// Generate authenticated transport
+/// Generates an authenticated transport checked against the stake table.
+/// If the stake table or authentication message is not provided, the transport will
+/// not participate in stake table authentication.
+///
 /// # Errors
-/// could not sign the quic key with `identity`
+/// If we could not create a DNS transport
 #[instrument(skip(identity))]
-pub async fn gen_transport(identity: Keypair) -> Result<BoxedTransport, NetworkError> {
-    let quic_transport = {
+pub async fn gen_transport<K: SignatureKey + 'static>(
+    identity: Keypair,
+    stake_table: Option<HashSet<K>>,
+    auth_message: Option<Vec<u8>>,
+) -> Result<BoxedTransport, NetworkError> {
+    // Create the initial `Quic` transport
+    let transport = {
         let mut config = quic::Config::new(&identity);
         config.handshake_timeout = std::time::Duration::from_secs(20);
         QuicTransport::new(config)
     };
 
-    let dns_quic = {
+    // Require authentication against the stake table
+    let transport = StakeTableAuthentication::new(transport, stake_table, auth_message);
+
+    // Support DNS resolution
+    let transport = {
         #[cfg(async_executor_impl = "async-std")]
         {
-            DnsTransport::system(quic_transport).await
+            DnsTransport::system(transport).await
         }
 
         #[cfg(async_executor_impl = "tokio")]
         {
-            DnsTransport::system(quic_transport)
+            DnsTransport::system(transport)
         }
     }
     .map_err(|e| NetworkError::TransportLaunch { source: e })?;
 
-    Ok(dns_quic
+    Ok(transport
         .map(|(peer_id, connection), _| (peer_id, StreamMuxerBox::new(connection)))
         .boxed())
 }

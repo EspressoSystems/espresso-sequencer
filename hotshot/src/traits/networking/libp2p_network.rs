@@ -64,7 +64,9 @@ use libp2p_identity::{
 use libp2p_networking::{
     network::{
         behaviours::request_response::{Request, Response},
-        spawn_network_node, MeshParams,
+        spawn_network_node,
+        transport::construct_auth_message,
+        MeshParams,
         NetworkEvent::{self, DirectRequest, DirectResponse, GossipMsg},
         NetworkNodeConfig, NetworkNodeConfigBuilder, NetworkNodeHandle, NetworkNodeReceiver,
         NetworkNodeType, DEFAULT_REPLICATION_FACTOR,
@@ -150,7 +152,7 @@ struct Libp2pNetworkInner<K: SignatureKey + 'static> {
     /// this node's public key
     pk: K,
     /// handle to control the network
-    handle: Arc<NetworkNodeHandle>,
+    handle: Arc<NetworkNodeHandle<K>>,
     /// Message Receiver
     receiver: UnboundedReceiver<Vec<u8>>,
     /// Receiver for Requests for Data, includes the request and the response chan
@@ -407,7 +409,24 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
         .parse()?;
 
         // Build our libp2p configuration from our global, network configuration
-        let mut config_builder: NetworkNodeConfigBuilder = NetworkNodeConfigBuilder::default();
+        let mut config_builder = NetworkNodeConfigBuilder::default();
+
+        // Extrapolate the stake table from the known nodes
+        let stake_table: HashSet<K> = config
+            .config
+            .known_nodes_with_stake
+            .iter()
+            .map(|node| K::public_key(&node.stake_table_entry))
+            .collect();
+
+        let auth_message =
+            construct_auth_message(pub_key, &keypair.public().to_peer_id(), priv_key)
+                .with_context(|| "Failed to construct auth message")?;
+
+        // Set the auth message and stake table
+        config_builder
+            .stake_table(Some(stake_table))
+            .auth_message(Some(auth_message));
 
         // The replication factor is the minimum of [the default and 2/3 the number of nodes]
         let Some(default_replication_factor) = DEFAULT_REPLICATION_FACTOR else {
@@ -500,7 +519,7 @@ impl<K: SignatureKey + 'static> Libp2pNetwork<K> {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         metrics: Libp2pMetricsValue,
-        config: NetworkNodeConfig,
+        config: NetworkNodeConfig<K>,
         pk: K,
         bootstrap_addrs: BootstrapAddrs,
         id: usize,

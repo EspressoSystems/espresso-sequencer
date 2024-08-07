@@ -23,7 +23,9 @@ use async_compatibility_layer::{
     channel::{unbounded, UnboundedReceiver, UnboundedRecvError, UnboundedSender},
 };
 use futures::{channel::mpsc, select, FutureExt, SinkExt, StreamExt};
-use hotshot_types::constants::KAD_DEFAULT_REPUB_INTERVAL_SEC;
+use hotshot_types::{
+    constants::KAD_DEFAULT_REPUB_INTERVAL_SEC, traits::signature_key::SignatureKey,
+};
 use libp2p::{
     autonat,
     core::transport::ListenerId,
@@ -82,7 +84,7 @@ pub const ESTABLISHED_LIMIT_UNWR: u32 = 10;
 
 /// Network definition
 #[derive(custom_debug::Debug)]
-pub struct NetworkNode {
+pub struct NetworkNode<K: SignatureKey + 'static> {
     /// pub/private key from with peer_id is derived
     identity: Keypair,
     /// peer id of network node
@@ -91,7 +93,7 @@ pub struct NetworkNode {
     #[debug(skip)]
     swarm: Swarm<NetworkDef>,
     /// the configuration parameters of the netework
-    config: NetworkNodeConfig,
+    config: NetworkNodeConfig<K>,
     /// the listener id we are listening on, if it exists
     listener_id: Option<ListenerId>,
     /// Handler for requests and response behavior events.
@@ -106,7 +108,7 @@ pub struct NetworkNode {
     bootstrap_tx: Option<mpsc::Sender<bootstrap::InputEvent>>,
 }
 
-impl NetworkNode {
+impl<K: SignatureKey + 'static> NetworkNode<K> {
     /// Returns number of peers this node is connected to
     pub fn num_connected(&self) -> usize {
         self.swarm.connected_peers().count()
@@ -164,17 +166,25 @@ impl NetworkNode {
     ///   * Generates a connection to the "broadcast" topic
     ///   * Creates a swarm to manage peers and events
     #[instrument]
-    pub async fn new(config: NetworkNodeConfig) -> Result<Self, NetworkError> {
-        // Generate a random PeerId
+    pub async fn new(config: NetworkNodeConfig<K>) -> Result<Self, NetworkError> {
+        // Generate a random `KeyPair` if one is not specified
         let identity = if let Some(ref kp) = config.identity {
             kp.clone()
         } else {
             Keypair::generate_ed25519()
         };
+
+        // Get the `PeerId` from the `KeyPair`
         let peer_id = PeerId::from(identity.public());
-        debug!(?peer_id);
-        let transport: BoxedTransport = gen_transport(identity.clone()).await?;
-        debug!("Launched network transport");
+
+        // Generate the transport from the identity, stake table, and auth message
+        let transport: BoxedTransport = gen_transport::<K>(
+            identity.clone(),
+            config.stake_table.clone(),
+            config.auth_message.clone(),
+        )
+        .await?;
+
         // Generate the swarm
         let mut swarm: Swarm<NetworkDef> = {
             // Use the hash of the message's contents as the ID
