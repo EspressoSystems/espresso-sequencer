@@ -107,11 +107,11 @@ contract Transcript_appendGroupElement_Test is Test {
     }
 }
 
-contract Transcript_getAndAppendChallenge_Test is Test {
+contract Transcript_getChallenge_Test is Test {
     using T for T.TranscriptData;
 
-    /// @dev Test if `getAndAppendChallenge` matches that of Jellyfish
-    function testFuzz_getAndAppendChallenge_matches(T.TranscriptData memory transcript) external {
+    /// @dev Test if `getChallenge` matches that of Jellyfish
+    function testFuzz_getChallenge_matches(T.TranscriptData memory transcript) external {
         string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "transcript-get-chal";
@@ -121,7 +121,7 @@ contract Transcript_getAndAppendChallenge_Test is Test {
         (T.TranscriptData memory updated, uint256 chal) =
             abi.decode(result, (T.TranscriptData, uint256));
 
-        uint256 challenge = transcript.getAndAppendChallenge();
+        uint256 challenge = transcript.getChallenge();
 
         assertEq(updated.transcript, transcript.transcript);
         assertEq(chal, challenge);

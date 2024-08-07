@@ -7,6 +7,7 @@ import { IPlonkVerifier } from "../interfaces/IPlonkVerifier.sol";
 
 library Transcript {
     struct TranscriptData {
+        bytes32 state;
         bytes transcript;
     }
 
@@ -40,29 +41,39 @@ library Transcript {
         self.transcript = abi.encodePacked(self.transcript, comm.x, comm.y);
     }
 
-    function getAndAppendChallenge(TranscriptData memory self)
-        internal
-        pure
-        returns (uint256 ret)
-    {
-        bytes memory transcript = self.transcript;
+    // 1. state = hash(state | transcript)
+    // 2. transcript = Vec::new()
+    // 3. challenge = bytes_to_field(state)
+    //
+    // Note: every challenge generation is implicitly domain-separated, thus it's safe
+    // to call it multiple times in a row (e.g. multiple challenges in a single round)
+    // to get multiple different challenges.
+    function getChallenge(TranscriptData memory self) internal pure returns (uint256 ret) {
+        // memory layout:
+        // offset 0x00: state
+        // offset 0x20: pointer to transcript (i.e. 0x40)
+        // offset 0x40: length of transcript
+        // offset 0x60: transcript bytes
         uint256 p = BN254.R_MOD;
 
+        // Instead of using free memory for scratch pad, we do the following trick:
+        // 1. overwrite offset 0x40 with current state
+        // 2. compute keccak of "state | transcript" (continuous in memory)
+        // 3. store the hash to offset 0x00 and update the length of transcript to 0
+        // 4. compute challenge from current state
         assembly {
-            let len := mload(transcript)
-            let newLen := add(len, 32)
-            let dataPtr := add(transcript, 0x20)
+            let lenPtr := mload(add(self, 0x20))
+            // step 1
+            let len := mload(lenPtr)
+            mstore(lenPtr, mload(self))
 
-            // uint256(keccak256(transcript)) % BN254.R_MOD;
-            ret := mod(keccak256(dataPtr, len), p)
-
-            // same as self.transcript = abi.encodePacked(self.transcript, ret);
-            mstore(transcript, newLen)
-            mstore(add(dataPtr, len), ret)
-
-            // update free memory pointer since we extend the dynamic array
-            // to prevent potential overwrite
-            mstore(0x40, add(mload(0x40), 32))
+            // step 2
+            let hash := keccak256(lenPtr, add(len, 0x20))
+            // step 3
+            mstore(self, hash)
+            mstore(lenPtr, 0)
+            // step 4
+            ret := mod(hash, p)
         }
     }
 
