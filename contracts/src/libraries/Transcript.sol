@@ -91,7 +91,8 @@ library Transcript {
             self.transcript,
             uint32(sizeInBits),
             uint64(verifyingKey.domainSize),
-            uint64(verifyingKey.numInputs)
+            uint64(verifyingKey.numInputs),
+            bytes12(0) // padding to align with word size
         );
 
         // G2 point from KZG SRS
