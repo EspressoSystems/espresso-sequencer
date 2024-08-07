@@ -102,8 +102,8 @@
 </span><span class="kw">use </span>anyhow::{Context, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>cdn_marshal::{Config, Marshal};
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>espresso_types::SeqTypes;
-<span class="kw">use </span>sequencer::{network::cdn::ProductionDef, options::parse_size};
+<span class="kw">use </span>espresso_types::{parse_size, SeqTypes};
+<span class="kw">use </span>sequencer::network::cdn::ProductionDef;
 <span class="kw">use </span>tracing_subscriber::EnvFilter;
 
 <span class="attr">#[derive(Parser, Debug)]

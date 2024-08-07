@@ -1100,6 +1100,46 @@
 <a href="#1100" id="1100">1100</a>
 <a href="#1101" id="1101">1101</a>
 <a href="#1102" id="1102">1102</a>
+<a href="#1103" id="1103">1103</a>
+<a href="#1104" id="1104">1104</a>
+<a href="#1105" id="1105">1105</a>
+<a href="#1106" id="1106">1106</a>
+<a href="#1107" id="1107">1107</a>
+<a href="#1108" id="1108">1108</a>
+<a href="#1109" id="1109">1109</a>
+<a href="#1110" id="1110">1110</a>
+<a href="#1111" id="1111">1111</a>
+<a href="#1112" id="1112">1112</a>
+<a href="#1113" id="1113">1113</a>
+<a href="#1114" id="1114">1114</a>
+<a href="#1115" id="1115">1115</a>
+<a href="#1116" id="1116">1116</a>
+<a href="#1117" id="1117">1117</a>
+<a href="#1118" id="1118">1118</a>
+<a href="#1119" id="1119">1119</a>
+<a href="#1120" id="1120">1120</a>
+<a href="#1121" id="1121">1121</a>
+<a href="#1122" id="1122">1122</a>
+<a href="#1123" id="1123">1123</a>
+<a href="#1124" id="1124">1124</a>
+<a href="#1125" id="1125">1125</a>
+<a href="#1126" id="1126">1126</a>
+<a href="#1127" id="1127">1127</a>
+<a href="#1128" id="1128">1128</a>
+<a href="#1129" id="1129">1129</a>
+<a href="#1130" id="1130">1130</a>
+<a href="#1131" id="1131">1131</a>
+<a href="#1132" id="1132">1132</a>
+<a href="#1133" id="1133">1133</a>
+<a href="#1134" id="1134">1134</a>
+<a href="#1135" id="1135">1135</a>
+<a href="#1136" id="1136">1136</a>
+<a href="#1137" id="1137">1137</a>
+<a href="#1138" id="1138">1138</a>
+<a href="#1139" id="1139">1139</a>
+<a href="#1140" id="1140">1140</a>
+<a href="#1141" id="1141">1141</a>
+<a href="#1142" id="1142">1142</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::bail;
 <span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>ethers::types::Address;
@@ -1128,8 +1168,8 @@
 <span class="kw">use </span>vbs::version::Version;
 
 <span class="kw">use super</span>::{
-    auction::ExecutionError, fee_info::FeeError, header::ProposalValidationError,
-    instance_state::NodeState,
+    auction::ExecutionError, fee_info::FeeError, instance_state::NodeState, BlockMerkleCommitment,
+    BlockSize, FeeMerkleCommitment,
 };
 <span class="kw">use crate</span>::{
     v0_3::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
@@ -1137,6 +1177,15 @@
     NsTableValidationError, PayloadByteLen, SeqTypes, UpgradeType, BLOCK_MERKLE_TREE_HEIGHT,
     FEE_MERKLE_TREE_HEIGHT,
 };
+
+<span class="doccomment">/// This enum is not used in code but functions as an index of
+/// possible validation errors.
+</span><span class="attr">#[allow(dead_code)]
+</span><span class="kw">pub enum </span>StateValidationError {
+    ProposalValidation(ProposalValidationError),
+    BuilderValidation(BuilderValidationError),
+    Fee(FeeError),
+}
 
 <span class="doccomment">/// Possible builder validation failures
 </span><span class="attr">#[derive(Error, Debug, Eq, PartialEq)]
@@ -1149,13 +1198,44 @@
     </span>InvalidBuilderSignature,
 }
 
-<span class="doccomment">/// This enum is not used in code but functions as an index of
-/// possible validation errors.
-</span><span class="attr">#[allow(dead_code)]
-</span><span class="kw">pub enum </span>StateValidationError {
-    ProposalValidation(ProposalValidationError),
-    BuilderValidation(BuilderValidationError),
-    Fee(FeeError),
+<span class="doccomment">/// Possible proposal validation failures
+</span><span class="attr">#[derive(Error, Debug, Eq, PartialEq)]
+</span><span class="kw">pub enum </span>ProposalValidationError {
+    <span class="attr">#[error(<span class="string">"Invalid ChainConfig: expected={expected}, proposal={proposal}"</span>)]
+    </span>InvalidChainConfig { expected: String, proposal: String },
+
+    <span class="attr">#[error(
+        <span class="string">"Invalid Payload Size: (max_block_size={max_block_size}, proposed_block_size={block_size})"
+    </span>)]
+    </span>MaxBlockSizeExceeded {
+        max_block_size: BlockSize,
+        block_size: BlockSize,
+    },
+    <span class="attr">#[error(<span class="string">"Insufficient Fee: block_size={max_block_size}, base_fee={base_fee}, proposed_fee={proposed_fee}"</span>)]
+    </span>InsufficientFee {
+        max_block_size: BlockSize,
+        base_fee: FeeAmount,
+        proposed_fee: FeeAmount,
+    },
+    <span class="attr">#[error(<span class="string">"Invalid Height: parent_height={parent_height}, proposal_height={proposal_height}"</span>)]
+    </span>InvalidHeight {
+        parent_height: u64,
+        proposal_height: u64,
+    },
+    <span class="attr">#[error(<span class="string">"Invalid Block Root Error: expected={expected_root}, proposal={proposal_root}"</span>)]
+    </span>InvalidBlockRoot {
+        expected_root: BlockMerkleCommitment,
+        proposal_root: BlockMerkleCommitment,
+    },
+    <span class="attr">#[error(<span class="string">"Invalid Fee Root Error: expected={expected_root}, proposal={proposal_root}"</span>)]
+    </span>InvalidFeeRoot {
+        expected_root: FeeMerkleCommitment,
+        proposal_root: FeeMerkleCommitment,
+    },
+    <span class="attr">#[error(<span class="string">"Invalid namespace table: {err}"</span>)]
+    </span>InvalidNsTable { err: NsTableValidationError },
+    <span class="attr">#[error(<span class="string">"Some fee amount or their sum total out of range"</span>)]
+    </span>SomeFeeAmountOutOfRange,
 }
 
 <span class="kw">impl </span>StateDelta <span class="kw">for </span>Delta {}

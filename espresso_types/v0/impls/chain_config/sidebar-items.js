@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["parse_size"],"struct":["ParseSizeError","ParseSizeSnafu"]};
+window.SIDEBAR_ITEMS = {};

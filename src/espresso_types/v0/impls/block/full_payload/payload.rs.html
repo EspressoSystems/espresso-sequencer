@@ -303,11 +303,28 @@
 <a href="#303" id="303">303</a>
 <a href="#304" id="304">304</a>
 <a href="#305" id="305">305</a>
+<a href="#306" id="306">306</a>
+<a href="#307" id="307">307</a>
+<a href="#308" id="308">308</a>
+<a href="#309" id="309">309</a>
+<a href="#310" id="310">310</a>
+<a href="#311" id="311">311</a>
+<a href="#312" id="312">312</a>
+<a href="#313" id="313">313</a>
+<a href="#314" id="314">314</a>
+<a href="#315" id="315">315</a>
+<a href="#316" id="316">316</a>
+<a href="#317" id="317">317</a>
+<a href="#318" id="318">318</a>
+<a href="#319" id="319">319</a>
+<a href="#320" id="320">320</a>
+<a href="#321" id="321">321</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, sync::Arc};
 
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>hotshot_query_service::availability::QueryablePayload;
+<span class="kw">use </span>hotshot_types::data::ViewNumber;
 <span class="kw">use </span>hotshot_types::{
     traits::{BlockPayload, EncodeBytes},
     utils::BuilderCommitment,
@@ -315,6 +332,7 @@
 };
 <span class="kw">use </span>jf_vid::VidScheme;
 <span class="kw">use </span>sha2::Digest;
+<span class="kw">use </span>thiserror::Error;
 
 <span class="kw">use crate</span>::{
     v0::impls::{NodeState, ValidatedState},
@@ -322,6 +340,20 @@
     Index, Iter, NamespaceId, NsIndex, NsPayload, NsPayloadBuilder, NsPayloadRange, NsTable,
     NsTableBuilder, Payload, PayloadByteLen, SeqTypes, Transaction, TxProof,
 };
+
+<span class="attr">#[derive(serde::Deserialize, serde::Serialize, Error, Debug, Eq, PartialEq)]
+</span><span class="kw">pub enum </span>BlockBuildingError {
+    <span class="attr">#[error(<span class="string">"Parent state commitment {0} of block doesn't match current state commitment"</span>)]
+    </span>IncorrectParent(String),
+    <span class="attr">#[error(<span class="string">"New view number ({new:?}) isn't strictly after current view ({curr:?})"</span>)]
+    </span>IncorrectView { new: ViewNumber, curr: ViewNumber },
+    <span class="attr">#[error(<span class="string">"Genesis block either has zero or more than one transaction"</span>)]
+    </span>GenesisWrongSize,
+    <span class="attr">#[error(<span class="string">"Genesis transaction not present in genesis block"</span>)]
+    </span>MissingGenesis,
+    <span class="attr">#[error(<span class="string">"Genesis transaction in non-genesis block"</span>)]
+    </span>UnexpectedGenesis,
+}
 
 <span class="kw">impl </span>Payload {
     <span class="kw">pub fn </span>ns_table(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>NsTable {
@@ -368,7 +400,7 @@
         <span class="comment">// accounting for block byte length limit
         </span><span class="kw">let </span>max_block_byte_len: usize = u64::from(chain_config.max_block_size)
             .try_into()
-            .map_err(|<span class="kw">_</span>| &lt;<span class="self">Self </span><span class="kw">as </span>BlockPayload&lt;SeqTypes&gt;&gt;::Error::BlockBuilding)<span class="question-mark">?</span>;
+            .expect(<span class="string">"too large max block size for architecture"</span>);
         <span class="kw">let </span><span class="kw-2">mut </span>block_byte_len = NsTableBuilder::header_byte_len();
 
         <span class="comment">// add each tx to its namespace
@@ -423,7 +455,7 @@
 </span><span class="kw">impl </span>BlockPayload&lt;SeqTypes&gt; <span class="kw">for </span>Payload {
     <span class="comment">// TODO BlockPayload trait eliminate unneeded args, return vals of type
     // `Self::Metadata` https://github.com/EspressoSystems/HotShot/issues/3300
-    </span><span class="kw">type </span>Error = <span class="kw">crate</span>::Error;
+    </span><span class="kw">type </span>Error = BlockBuildingError;
     <span class="kw">type </span>Transaction = Transaction;
     <span class="kw">type </span>Instance = NodeState;
     <span class="kw">type </span>Metadata = NsTable;

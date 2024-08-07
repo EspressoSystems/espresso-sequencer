@@ -147,21 +147,15 @@
 <a href="#147" id="147">147</a>
 <a href="#148" id="148">148</a>
 <a href="#149" id="149">149</a>
-<a href="#150" id="150">150</a>
-<a href="#151" id="151">151</a>
-<a href="#152" id="152">152</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{io, time::Duration};
 
 <span class="kw">use </span>async_std::task::spawn;
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>espresso_types::SeqTypes;
+<span class="kw">use </span>espresso_types::{parse_duration, SeqTypes};
 <span class="kw">use </span>ethers::prelude::<span class="kw-2">*</span>;
 <span class="kw">use </span>futures::FutureExt;
 <span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
-<span class="kw">use </span>sequencer::{
-    hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
-    options::parse_duration,
-};
+<span class="kw">use </span>sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>tide_disco::{error::ServerError, Api};
 <span class="kw">use </span>url::Url;

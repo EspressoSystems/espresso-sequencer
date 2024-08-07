@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["parse_duration"],"struct":["DatabaseOptions","Options","ParseDurationError"]};
+window.SIDEBAR_ITEMS = {"struct":["DatabaseOptions","Options"]};

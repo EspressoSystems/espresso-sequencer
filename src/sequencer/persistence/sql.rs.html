@@ -666,6 +666,7 @@
 <a href="#666" id="666">666</a>
 <a href="#667" id="667">667</a>
 <a href="#668" id="668">668</a>
+<a href="#669" id="669">669</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
@@ -677,6 +678,7 @@
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>derivative::Derivative;
 <span class="kw">use </span>espresso_types::{
+    parse_duration,
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
     BackoffParams, Leaf, NetworkConfig,
 };
@@ -699,7 +701,7 @@
     vote::HasViewNumber,
 };
 
-<span class="kw">use crate</span>::{catchup::SqlStateCatchup, options::parse_duration, SeqTypes, ViewNumber};
+<span class="kw">use crate</span>::{catchup::SqlStateCatchup, SeqTypes, ViewNumber};
 
 <span class="doccomment">/// Options for Postgres-backed persistence.
 </span><span class="attr">#[derive(Parser, Clone, Derivative, Default)]

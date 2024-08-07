@@ -144,32 +144,15 @@
 <a href="#144" id="144">144</a>
 <a href="#145" id="145">145</a>
 <a href="#146" id="146">146</a>
-<a href="#147" id="147">147</a>
-<a href="#148" id="148">148</a>
-<a href="#149" id="149">149</a>
-<a href="#150" id="150">150</a>
-<a href="#151" id="151">151</a>
-<a href="#152" id="152">152</a>
-<a href="#153" id="153">153</a>
-<a href="#154" id="154">154</a>
-<a href="#155" id="155">155</a>
-<a href="#156" id="156">156</a>
-<a href="#157" id="157">157</a>
-<a href="#158" id="158">158</a>
-<a href="#159" id="159">159</a>
-<a href="#160" id="160">160</a>
-<a href="#161" id="161">161</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, path::PathBuf, str::FromStr, time::Duration};
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 
 <span class="kw">use </span>builder::non_permissioned::{build_instance_state, BuilderConfig};
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>cld::ClDuration;
-<span class="kw">use </span>espresso_types::eth_signature_key::EthKeyPair;
+<span class="kw">use </span>espresso_types::{eth_signature_key::EthKeyPair, parse_duration};
 <span class="kw">use </span>hotshot::traits::ValidatedState;
 <span class="kw">use </span>hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 <span class="kw">use </span>sequencer::{Genesis, L1Params};
 <span class="kw">use </span>sequencer_utils::logging;
-<span class="kw">use </span>snafu::Snafu;
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType};
 
@@ -247,19 +230,6 @@
 
     <span class="attr">#[clap(flatten)]
     </span>logging: logging::Config,
-}
-
-<span class="attr">#[derive(Clone, Debug, Snafu)]
-</span><span class="kw">struct </span>ParseDurationError {
-    reason: String,
-}
-
-<span class="kw">fn </span>parse_duration(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Duration, ParseDurationError&gt; {
-    ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError {
-            reason: err.to_string(),
-        })
 }
 
 <span class="attr">#[async_std::main]

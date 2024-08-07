@@ -296,8 +296,6 @@
 <a href="#296" id="296">296</a>
 <a href="#297" id="297">297</a>
 <a href="#298" id="298">298</a>
-<a href="#299" id="299">299</a>
-<a href="#300" id="300">300</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     collections::HashMap, net::ToSocketAddrs, num::NonZeroUsize, path::PathBuf, time::Duration,
 };
@@ -305,7 +303,7 @@
 <span class="kw">use </span>anyhow::{bail, Context};
 <span class="kw">use </span>builder::permissioned::init_node;
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>espresso_types::eth_signature_key::EthKeyPair;
+<span class="kw">use </span>espresso_types::{eth_signature_key::EthKeyPair, parse_duration};
 <span class="kw">use </span>ethers::types::Address;
 <span class="kw">use </span>hotshot_types::{
     data::ViewNumber,
@@ -314,9 +312,7 @@
     traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
 };
 <span class="kw">use </span>libp2p::Multiaddr;
-<span class="kw">use </span>sequencer::{
-    options::parse_duration, persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams,
-};
+<span class="kw">use </span>sequencer::{persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams};
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::{StaticVersion, StaticVersionType};

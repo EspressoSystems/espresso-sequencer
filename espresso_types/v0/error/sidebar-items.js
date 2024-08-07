@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Error"],"struct":["BlockBuildingSnafu","GenesisWrongSizeSnafu","IncorrectParentSnafu","IncorrectViewSnafu","MerkleTreeSnafu","MissingGenesisSnafu","UnexpectedGenesisSnafu"]};

@@ -211,6 +211,7 @@
 <a href="#211" id="211">211</a>
 <a href="#212" id="212">212</a>
 <a href="#213" id="213">213</a>
+<a href="#214" id="214">214</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     fmt::{Display, Formatter},
     hash::Hash,
@@ -227,7 +228,7 @@
 };
 <span class="kw">use </span>hotshot_types::traits::signature_key::BuilderSignatureKey;
 <span class="kw">use </span>serde::{Deserialize, Serialize};
-<span class="kw">use </span>snafu::Snafu;
+<span class="kw">use </span>thiserror::Error;
 
 <span class="kw">use </span><span class="kw">crate</span>::FeeAccount;
 
@@ -326,8 +327,9 @@
     }
 }
 
-<span class="attr">#[derive(Clone, Debug, Snafu)]
-</span><span class="kw">pub struct </span>SigningError;
+<span class="attr">#[derive(Debug, Error)]
+#[error(<span class="string">"Failed to sign builder message"</span>)]
+</span><span class="kw">pub struct </span>SigningError(<span class="attr">#[from] </span>WalletError);
 
 <span class="kw">pub type </span>BuilderSignature = Signature;
 
@@ -346,7 +348,7 @@
     ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::BuilderSignature, <span class="self">Self</span>::SignError&gt; {
         <span class="kw">let </span>wallet = private_key.signer();
         <span class="kw">let </span>message_hash = ethers::utils::hash_message(data);
-        wallet.sign_hash(message_hash).map_err(|<span class="kw">_</span>| SigningError)
+        wallet.sign_hash(message_hash).map_err(SigningError::from)
     }
 
     <span class="kw">fn </span>generated_from_seed_indexed(seed: [u8; <span class="number">32</span>], index: u64) -&gt; (<span class="self">Self</span>, <span class="self">Self</span>::BuilderPrivateKey) {

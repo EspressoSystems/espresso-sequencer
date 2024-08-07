@@ -1306,6 +1306,8 @@
 <a href="#1306" id="1306">1306</a>
 <a href="#1307" id="1307">1307</a>
 <a href="#1308" id="1308">1308</a>
+<a href="#1309" id="1309">1309</a>
+<a href="#1310" id="1310">1310</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Adversarial Espresso client.
 //!
 //! This program runs a randomized client for the Espresso query service. It is designed to hit
@@ -1328,7 +1330,9 @@
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>committable::Committable;
 <span class="kw">use </span>derivative::Derivative;
-<span class="kw">use </span>espresso_types::{v0_3::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes};
+<span class="kw">use </span>espresso_types::{
+    parse_duration, v0_3::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes,
+};
 <span class="kw">use </span>futures::{
     future::{FutureExt, TryFuture, TryFutureExt},
     stream::{Peekable, StreamExt},
@@ -1346,7 +1350,7 @@
     ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
 <span class="kw">use </span>rand::{seq::SliceRandom, RngCore};
-<span class="kw">use </span>sequencer::{api::endpoints::NamespaceProofQueryData, options::parse_duration};
+<span class="kw">use </span>sequencer::api::endpoints::NamespaceProofQueryData;
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>serde::de::DeserializeOwned;
 <span class="kw">use </span>std::{

@@ -345,6 +345,9 @@
 <a href="#345" id="345">345</a>
 <a href="#346" id="346">346</a>
 <a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a>
+<a href="#349" id="349">349</a>
+<a href="#350" id="350">350</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Sequencer-specific API endpoint handlers.
 
 </span><span class="kw">use </span>std::{
@@ -398,7 +401,10 @@
 
 <span class="kw">type </span>AvailabilityApi&lt;N, P, D, Ver&gt; = Api&lt;AvailState&lt;N, P, D, Ver&gt;, availability::Error, Ver&gt;;
 
-<span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>availability&lt;N, P, D, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
+<span class="comment">// TODO (abdul): replace snafu with `this_error` in  hotshot query service
+// Snafu has been replaced by `this_error` everywhere.
+// However, the query service still uses snafu
+</span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>availability&lt;N, P, D, Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
     bind_version: Ver,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;AvailabilityApi&lt;N, P, D, Ver&gt;&gt;
 <span class="kw">where

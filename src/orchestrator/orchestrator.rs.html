@@ -163,18 +163,16 @@
 <a href="#163" id="163">163</a>
 <a href="#164" id="164">164</a>
 <a href="#165" id="165">165</a>
-<a href="#166" id="166">166</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>derive_more::From;
-<span class="kw">use </span>espresso_types::PubKey;
+<span class="kw">use </span>espresso_types::{parse_duration, PubKey, Ratio};
 <span class="kw">use </span>ethers::utils::hex::{<span class="self">self</span>, FromHexError};
 <span class="kw">use </span>hotshot_orchestrator::{
     config::{Libp2pConfig, NetworkConfig},
     run_orchestrator,
 };
-<span class="kw">use </span>sequencer::options::{parse_duration, Ratio};
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>snafu::Snafu;
 <span class="kw">use </span>url::Url;

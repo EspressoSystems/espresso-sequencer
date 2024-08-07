@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ProposalValidationError"],"macro":["field","field_mut"],"struct":["InvalidBlockHeader","InvalidBlockHeaderSnafu"]};
+window.SIDEBAR_ITEMS = {"macro":["field","field_mut"],"struct":["InvalidBlockHeader"]};

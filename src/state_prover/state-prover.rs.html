@@ -124,26 +124,10 @@
 <a href="#124" id="124">124</a>
 <a href="#125" id="125">125</a>
 <a href="#126" id="126">126</a>
-<a href="#127" id="127">127</a>
-<a href="#128" id="128">128</a>
-<a href="#129" id="129">129</a>
-<a href="#130" id="130">130</a>
-<a href="#131" id="131">131</a>
-<a href="#132" id="132">132</a>
-<a href="#133" id="133">133</a>
-<a href="#134" id="134">134</a>
-<a href="#135" id="135">135</a>
-<a href="#136" id="136">136</a>
-<a href="#137" id="137">137</a>
-<a href="#138" id="138">138</a>
-<a href="#139" id="139">139</a>
-<a href="#140" id="140">140</a>
-<a href="#141" id="141">141</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::{str::FromStr <span class="kw">as _</span>, time::Duration};
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::time::Duration;
 
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>cld::ClDuration;
-<span class="kw">use </span>espresso_types::SeqTypes;
+<span class="kw">use </span>espresso_types::{parse_duration, SeqTypes};
 <span class="kw">use </span>ethers::{
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
@@ -153,7 +137,6 @@
 <span class="kw">use </span>hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
 <span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
 <span class="kw">use </span>sequencer_utils::logging;
-<span class="kw">use </span>snafu::Snafu;
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
@@ -224,19 +207,6 @@
 
     <span class="attr">#[clap(flatten)]
     </span>logging: logging::Config,
-}
-
-<span class="attr">#[derive(Clone, Debug, Snafu)]
-</span><span class="kw">pub struct </span>ParseDurationError {
-    reason: String,
-}
-
-<span class="kw">fn </span>parse_duration(s: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Duration, ParseDurationError&gt; {
-    ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError {
-            reason: err.to_string(),
-        })
 }
 
 <span class="attr">#[async_std::main]

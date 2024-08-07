@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["SolverError"],"fn":["define_api","handle_events","parse_duration"],"mod":["api","database","events","options","state"],"struct":["ApiOptions","DatabaseOptions","EventsServiceClient","Options","ParseDurationError"],"type":["SolverResult"]};
+window.SIDEBAR_ITEMS = {"enum":["SolverError"],"fn":["define_api","handle_events"],"mod":["api","database","events","options","state"],"struct":["ApiOptions","DatabaseOptions","EventsServiceClient","Options"],"type":["SolverResult"]};

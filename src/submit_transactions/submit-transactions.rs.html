@@ -479,7 +479,6 @@
 <a href="#479" id="479">479</a>
 <a href="#480" id="480">480</a>
 <a href="#481" id="481">481</a>
-<a href="#482" id="482">482</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utility program to submit random transactions to an Espresso Sequencer.
 
 </span><span class="kw">use </span>std::{
@@ -490,7 +489,7 @@
 <span class="kw">use </span>async_std::task::{sleep, spawn};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>committable::{Commitment, Committable};
-<span class="kw">use </span>espresso_types::{SeqTypes, Transaction};
+<span class="kw">use </span>espresso_types::{parse_duration, parse_size, SeqTypes, Transaction};
 <span class="kw">use </span>futures::{
     channel::mpsc::{<span class="self">self</span>, Sender},
     sink::SinkExt,
@@ -501,7 +500,6 @@
 <span class="kw">use </span>rand::{Rng, RngCore, SeedableRng};
 <span class="kw">use </span>rand_chacha::ChaChaRng;
 <span class="kw">use </span>rand_distr::Distribution;
-<span class="kw">use </span>sequencer::options::{parse_duration, parse_size};
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>surf_disco::{Client, Url};
 <span class="kw">use </span>tide_disco::{error::ServerError, App};

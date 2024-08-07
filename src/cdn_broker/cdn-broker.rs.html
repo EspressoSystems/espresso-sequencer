@@ -141,20 +141,14 @@
 <a href="#141" id="141">141</a>
 <a href="#142" id="142">142</a>
 <a href="#143" id="143">143</a>
-<a href="#144" id="144">144</a>
-<a href="#145" id="145">145</a>
-<a href="#146" id="146">146</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! The following is the main `Broker` binary, which just instantiates and runs
 //! a `Broker` object.
 </span><span class="kw">use </span>anyhow::{Context, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>cdn_broker::{reexports::crypto::signature::KeyPair, Broker, Config};
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>espresso_types::SeqTypes;
+<span class="kw">use </span>espresso_types::{parse_size, SeqTypes};
 <span class="kw">use </span>hotshot_types::traits::{node_implementation::NodeType, signature_key::SignatureKey};
-<span class="kw">use </span>sequencer::{
-    network::cdn::{ProductionDef, WrappedSignatureKey},
-    options::parse_size,
-};
+<span class="kw">use </span>sequencer::network::cdn::{ProductionDef, WrappedSignatureKey};
 <span class="kw">use </span>sha2::Digest;
 <span class="kw">use </span>tracing_subscriber::EnvFilter;
 
