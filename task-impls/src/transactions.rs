@@ -379,7 +379,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
                 block_view,
                 vec1::vec1![null_fee],
                 Some(precompute_data),
-                None,
+                Some(TYPES::AuctionResult::default()),
             ))),
             event_stream,
         )
