@@ -4,7 +4,7 @@ pragma solidity ^0.8.19;
 import { Script } from "forge-std/Script.sol";
 
 import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
-import { LightClient as LC } from "../src/LightClient.sol";
+import { LightClientV3 as LCV3 } from "../test/LightClientV3.sol";
 
 contract UpgradeLightClientScript is Script {
     /// @notice runs the upgrade
@@ -18,7 +18,7 @@ contract UpgradeLightClientScript is Script {
         string memory seedPhrase = vm.envString("MNEMONIC");
         (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
         vm.startBroadcast(admin);
-        address proxy = upgradeLightClient(mostRecentlyDeployedProxy, address(new LCV2()), newField);
+        address proxy = upgradeLightClient(mostRecentlyDeployedProxy, address(new LCV3()), newField);
         return proxy;
     }
 
@@ -32,9 +32,9 @@ contract UpgradeLightClientScript is Script {
         public
         returns (address)
     {
-        LC proxy = LC(proxyAddress); //make the function call on the previous implementation
+        LCV2 proxy = LCV2(proxyAddress); //make the function call on the previous implementation
 
-        proxy.upgradeToAndCall(newLightClient, abi.encodeCall(LCV2.initializeV2, newField)); //proxy
+        proxy.upgradeToAndCall(newLightClient, abi.encodeCall(LCV3.initializeV3, newField)); //proxy
             // address now points to the new
             // implementation
         vm.stopBroadcast();

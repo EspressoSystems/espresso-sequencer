@@ -187,10 +187,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     // @dev Initialization of contract variables happens in this method because the LightClient
     // contract is upgradable and thus has its constructor method disabled.
-    function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch)
-        internal
-        virtual
-    {
+    function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch) internal {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.

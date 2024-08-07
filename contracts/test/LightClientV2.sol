@@ -3,12 +3,6 @@
 pragma solidity ^0.8.0;
 pragma experimental ABIEncoderV2;
 
-import { OwnableUpgradeable } from
-    "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import { UUPSUpgradeable } from
-    "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
 import { PlonkVerifier } from "../src/libraries/PlonkVerifier.sol";
@@ -23,6 +17,10 @@ contract LightClientV2 is LightClient {
     /// that has the new struct type, or put the struct inside a map.
     uint256 public newField;
 
+    /// @notice this field is used to check initialized versions so that one can ensure that the
+    /// initialization only happens once
+    uint8 internal _initializedVersion;
+
     struct ExtendedLightClientState {
         uint256 extraField;
     }
@@ -30,11 +28,13 @@ contract LightClientV2 is LightClient {
     /// @notice mapping to store the extended light client states in order to simplify upgrades
     mapping(uint32 index => ExtendedLightClientState state) public extendedStates;
 
-    /// @notice since the constructor initializes storage on this contract we disable it
-    /// @dev storage is on the proxy contract since it calls this contract via delegatecall
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
+    /// @notice Initialize v2
+    /// @param _newField   New field amount
+    ///
+    function initializeV2(uint256 _newField) external {
+        require(_initializedVersion == 0);
+        newField = _newField;
+        _initializedVersion = 2;
     }
 
     /// @notice Use this to get the implementation contract version
