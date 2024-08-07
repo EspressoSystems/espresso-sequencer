@@ -532,6 +532,7 @@ mod test {
 
     const STAKE_TABLE_CAPACITY_FOR_TEST: usize = 10;
     const BLOCKS_PER_EPOCH: u32 = 10;
+    const MAX_HISTORY_SECONDS: u32 = 86400;
 
     const NUM_INIT_VALIDATORS: u32 = (STAKE_TABLE_CAPACITY_FOR_TEST / 2) as u32;
 
@@ -644,7 +645,7 @@ mod test {
         let address = deployer::deploy_mock_light_client_contract(
             l1_wallet.clone(),
             &mut contracts,
-            Some((genesis.into(), BLOCKS_PER_EPOCH)),
+            Some((genesis.into(), BLOCKS_PER_EPOCH, MAX_HISTORY_SECONDS)),
         )
         .await?;
 

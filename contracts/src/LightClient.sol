@@ -180,16 +180,20 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice This contract is called by the proxy when you deploy this contract
     /// @param genesis The initial state of the light client
     /// @param numBlocksPerEpoch The number of blocks per epoch
+    /// @param maxHistorySeconds The maximum duration worth of state history updates to store based
+    /// on the block timestamp
     /// @param owner The address of the contract owner
-    function initialize(LightClientState memory genesis, uint32 numBlocksPerEpoch, address owner)
-        public
-        initializer
-    {
+    function initialize(
+        LightClientState memory genesis,
+        uint32 numBlocksPerEpoch,
+        uint32 maxHistorySeconds,
+        address owner
+    ) public initializer {
         __Ownable_init(owner); //sets owner of the contract
         __UUPSUpgradeable_init();
         genesisState = 0;
         finalizedState = 1;
-        _initializeState(genesis, numBlocksPerEpoch);
+        _initializeState(genesis, numBlocksPerEpoch, maxHistorySeconds);
     }
 
     /// @notice Use this to get the implementation contract version
@@ -213,7 +217,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// contract is upgradable and thus has its constructor method disabled.
     /// @param genesis The initial state of the light client
     /// @param numBlockPerEpoch The number of blocks per epoch
-    function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch) internal {
+    /// @param maxHistorySeconds The maximum duration worth of state history updates to store based
+    /// on the block timestamp
+    function _initializeState(
+        LightClientState memory genesis,
+        uint32 numBlockPerEpoch,
+        uint32 maxHistorySeconds
+    ) internal {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
@@ -234,7 +244,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         blocksPerEpoch = numBlockPerEpoch;
 
-        maxStateHistoryDuration = 86400; // set to one day epoch by default
+        maxStateHistoryDuration = maxHistorySeconds;
 
         bytes32 initStakeTableComm = computeStakeTableComm(genesis);
         votingStakeTableCommitment = initStakeTableComm;
@@ -522,7 +532,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice set Max Block States allowed
-    /// @param historySeconds The maximum number of block states allowed to be stored
+    /// @param historySeconds The maximum duration worth of state history updates to store based on
+    /// the block timestamp
     function setMaxStateHistoryDuration(uint32 historySeconds) public onlyOwner {
         if (historySeconds < 86400) revert InvalidMaxStateHistory();
 

@@ -20,6 +20,7 @@ contract LightClientCommonTest is Test {
     LC.LightClientState public genesis;
     uint32 public constant BLOCKS_PER_EPOCH_TEST = 3;
     uint32 public constant DELAY_THRESHOLD = 6;
+    uint32 public constant MAX_HISTORY_SECONDS = 86400;
     uint32 oneDaySeconds = 86400;
     uint32 initialEpoch = oneDaySeconds;
     // this constant should be consistent with `hotshot_contract::light_client.rs`
@@ -29,13 +30,15 @@ contract LightClientCommonTest is Test {
     address public admin = makeAddr("admin");
     address public permissionedProver = makeAddr("prover");
 
-    function deployAndInitProxy(LC.LightClientState memory state, uint32 numBlocksPerEpoch)
-        public
-        returns (address payable, address)
-    {
+    function deployAndInitProxy(
+        LC.LightClientState memory state,
+        uint32 numBlocksPerEpoch,
+        uint32 maxHistorySeconds
+    ) public returns (address payable, address) {
         vm.warp(oneDaySeconds);
         //deploy light client test with a proxy
-        (lcTestProxy, admin, state) = deployer.deployContract(state, numBlocksPerEpoch, admin);
+        (lcTestProxy, admin, state) =
+            deployer.deployContract(state, numBlocksPerEpoch, maxHistorySeconds, admin);
 
         //cast the proxy to be of type light client test
         lc = LCMock(lcTestProxy);
@@ -61,7 +64,8 @@ contract LightClientCommonTest is Test {
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
         genesis = state;
 
-        (lcTestProxy, admin) = deployAndInitProxy(genesis, BLOCKS_PER_EPOCH_TEST);
+        (lcTestProxy, admin) =
+            deployAndInitProxy(genesis, BLOCKS_PER_EPOCH_TEST, MAX_HISTORY_SECONDS);
 
         bytes32 expectedStakeTableComm = lc.computeStakeTableComm(state);
         assertEq(votingSTComm, expectedStakeTableComm);
@@ -94,11 +98,13 @@ contract LightClient_constructor_Test is LightClientCommonTest {
     }
 
     // @dev helper function to be able to initialize the contract and capture the revert error
-    function initWithExpectRevert(LC.LightClientState memory _genesis, uint32 _blocksPerEpoch)
-        private
-    {
+    function initWithExpectRevert(
+        LC.LightClientState memory _genesis,
+        uint32 _blocksPerEpoch,
+        uint32 _maxHistorySeconds
+    ) private {
         vm.expectRevert(LC.InvalidArgs.selector);
-        lc = new LCMock(_genesis, _blocksPerEpoch);
+        lc = new LCMock(_genesis, _blocksPerEpoch, _maxHistorySeconds);
     }
 
     function test_RevertWhen_InvalidGenesis() external {
@@ -106,33 +112,33 @@ contract LightClient_constructor_Test is LightClientCommonTest {
 
         // wrong viewNum would revert
         badGenesis.viewNum = 1;
-        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST, MAX_HISTORY_SECONDS);
         badGenesis.viewNum = genesis.viewNum; // revert to correct
 
         // wrong blockHeight would revert
         badGenesis.blockHeight = 1;
-        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST, MAX_HISTORY_SECONDS);
         badGenesis.blockHeight = genesis.blockHeight; // revert to correct
 
         // zero-valued stake table commitments would revert
         badGenesis.stakeTableBlsKeyComm = BN254.ScalarField.wrap(0);
-        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST, MAX_HISTORY_SECONDS);
         badGenesis.stakeTableBlsKeyComm = genesis.stakeTableBlsKeyComm; // revert to correct
         badGenesis.stakeTableSchnorrKeyComm = BN254.ScalarField.wrap(0);
-        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST, MAX_HISTORY_SECONDS);
         badGenesis.stakeTableSchnorrKeyComm = genesis.stakeTableSchnorrKeyComm; // revert to correct
         badGenesis.stakeTableAmountComm = BN254.ScalarField.wrap(0);
 
-        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST, MAX_HISTORY_SECONDS);
         badGenesis.stakeTableAmountComm = genesis.stakeTableAmountComm; // revert to correct
 
         // zero-valued threshold would revert
         badGenesis.threshold = 0;
-        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST);
+        initWithExpectRevert(badGenesis, BLOCKS_PER_EPOCH_TEST, MAX_HISTORY_SECONDS);
         badGenesis.threshold = genesis.threshold; // revert to correct
 
         // zero-valued BLOCK_PER_EPOCH would revert
-        initWithExpectRevert(genesis, 0);
+        initWithExpectRevert(genesis, 0, MAX_HISTORY_SECONDS);
     }
 }
 
@@ -334,7 +340,8 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
         genesis = state;
-        (lcTestProxy, admin) = deployAndInitProxy(genesis, BLOCKS_PER_EPOCH_TEST);
+        (lcTestProxy, admin) =
+            deployAndInitProxy(genesis, BLOCKS_PER_EPOCH_TEST, MAX_HISTORY_SECONDS);
 
         genesis = state;
 
@@ -395,7 +402,7 @@ contract LightClient_newFinalizedState_Test is LightClientCommonTest {
         numBlockSkipped = uint32(bound(numBlockSkipped, 1, numBlockPerEpoch - 1));
 
         // re-assign LightClient with the same genesis but different numBlockPerEpoch
-        deployAndInitProxy(genesis, numBlockPerEpoch);
+        deployAndInitProxy(genesis, numBlockPerEpoch, MAX_HISTORY_SECONDS);
 
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";

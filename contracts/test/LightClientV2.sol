@@ -65,15 +65,13 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice a flag that indicates when a permissioned provrer is needed
     bool public permissionedProverEnabled;
 
-    ///@notice Max number of blockStates to record
-    uint64 public maxStateHistoryAllowed;
-
-    ///@notice number of block states recorded
-    uint64 public stateHistoryCount;
+    ///@notice Max number of seconds worth of state commitments to record based on this block
+    /// timestamp
+    uint32 public maxStateHistoryDuration;
 
     ///@notice index of first block in block state series
     ///@dev use this instead of index 0 since old states would be set to zero to keep storage costs
-    /// constant to maxStateHistoryAllowed
+    /// constant to maxStateHistoryDuration
     uint64 public stateHistoryFirstIndex;
 
     /// @notice an array to store the L1 block heights, HotShot Block Heights and their respective
@@ -163,10 +161,17 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit Upgrade(newImplementation);
     }
 
-    function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch)
-        internal
-        onlyOwner
-    {
+    /// @dev Initialization of contract variables happens in this method because the LightClient
+    /// contract is upgradable and thus has its constructor method disabled.
+    /// @param genesis The initial state of the light client
+    /// @param numBlockPerEpoch The number of blocks per epoch
+    /// @param maxHistorySeconds The maximum duration worth of state history updates to store based
+    /// on the block timestamp
+    function _initializeState(
+        LightClientState memory genesis,
+        uint32 numBlockPerEpoch,
+        uint32 maxHistorySeconds
+    ) internal {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
@@ -180,12 +185,14 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         ) {
             revert InvalidArgs();
         }
-
         states[genesisState] = genesis;
         states[finalizedState] = genesis;
+
         currentEpoch = 0;
 
         blocksPerEpoch = numBlockPerEpoch;
+
+        maxStateHistoryDuration = maxHistorySeconds;
 
         bytes32 initStakeTableComm = computeStakeTableComm(genesis);
         votingStakeTableCommitment = initStakeTableComm;
