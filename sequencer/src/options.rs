@@ -76,6 +76,11 @@ pub struct Options {
     )]
     pub libp2p_bind_address: String,
 
+    /// The URL we advertise to other nodes as being for our public API.
+    /// Should be supplied in `http://host:port` form.
+    #[clap(long, env = "ESPRESSO_SEQUENCER_PUBLIC_API_URL")]
+    pub public_api_url: Option<Url>,
+
     /// The address we advertise to other nodes as being a Libp2p endpoint.
     /// Should be supplied in `host:port` form.
     #[clap(
@@ -205,6 +210,9 @@ pub struct Options {
 
     #[clap(flatten)]
     pub logging: logging::Config,
+
+    #[clap(flatten)]
+    pub identity: Identity,
 }
 
 impl Options {
@@ -233,6 +241,41 @@ impl Options {
             bail!("neither key file nor full set of private keys was provided")
         }
     }
+}
+
+/// Identity represents identifying information concerning the sequencer node.
+/// This information is used to populate relevant information in the metrics
+/// endpoint.  This information will also potentially be scraped and displayed
+/// in a public facing dashboard.
+#[derive(Parser, Clone, Derivative)]
+#[derivative(Debug(bound = ""))]
+pub struct Identity {
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_COUNTRY_CODE")]
+    pub country_code: Option<String>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_LATITUDE")]
+    pub latitude: Option<f64>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_LONGITUDE")]
+    pub longitude: Option<f64>,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_NODE_NAME")]
+    pub node_name: Option<String>,
+
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_COMPANY_NAME")]
+    pub company_name: Option<String>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_COMPANY_WEBSITE")]
+    pub company_website: Option<Url>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_OPERATING_SYSTEM", default_value = std::env::consts::OS)]
+    pub operating_system: Option<String>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_NODE_TYPE", default_value = get_default_node_type())]
+    pub node_type: Option<String>,
+    #[clap(long, env = "ESPRESSO_SEQUENCER_IDENTITY_NETWORK_TYPE")]
+    pub network_type: Option<String>,
+}
+
+/// get_default_node_type returns the current public facing binary name and
+/// version of this program.
+fn get_default_node_type() -> String {
+    format!("espresso-sequencer {}", env!("CARGO_PKG_VERSION"))
 }
 
 // The Debug implementation for Url is noisy, we just want to see the URL

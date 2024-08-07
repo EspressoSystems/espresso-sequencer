@@ -68,7 +68,7 @@ use sequencer::{
     L1Params, NetworkParams, Node,
 };
 use tide_disco::{app, method::ReadState, App, Url};
-use vbs::version::StaticVersionType;
+use vbs::version::{StaticVersion, StaticVersionType};
 
 pub mod non_permissioned;
 pub mod permissioned;
@@ -86,7 +86,7 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     let private_mempool_api = hotshot_builder_api::v0_1::builder::submit_api::<
         ProxyGlobalState<SeqTypes>,
         SeqTypes,
-        <SeqTypes as NodeType>::Base,
+        StaticVersion<0, 1>,
     >(&HotshotBuilderApiOptions::default())
     .expect("Failed to construct the builder API for private mempool txns");
 
@@ -98,7 +98,7 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     app.register_module("txn_submit", private_mempool_api)
         .expect("Failed to register the private mempool API");
 
-    async_spawn(app.serve(url, <SeqTypes as NodeType>::Base::instance()));
+    async_spawn(app.serve(url, StaticVersion::<0, 1>::instance()));
 }
 
 #[cfg(test)]
@@ -118,6 +118,7 @@ pub mod testing {
     use async_lock::RwLock;
     use async_trait::async_trait;
     use committable::Committable;
+
     use espresso_types::{
         mock::MockStateCatchup, v0_3::ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey,
         PubKey, Transaction, ValidatedState,
@@ -406,6 +407,7 @@ pub mod testing {
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), 1),
                 MockStateCatchup::default(),
             )
+            .with_current_version(Ver::VERSION)
             .with_genesis(ValidatedState::default());
 
             tracing::info!("Before init hotshot");
@@ -448,7 +450,7 @@ pub mod testing {
             let hotshot_events_api = hotshot_events_service::events::define_api::<
                 Arc<RwLock<EventsStreamer<SeqTypes>>>,
                 SeqTypes,
-                <SeqTypes as NodeType>::Base,
+                StaticVersion<0, 1>,
             >(&EventStreamingApiOptions::default())
             .expect("Failed to define hotshot eventsAPI");
 
@@ -457,7 +459,7 @@ pub mod testing {
             app.register_module("hotshot-events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");
 
-            async_spawn(app.serve(url, <SeqTypes as NodeType>::Base::instance()));
+            async_spawn(app.serve(url, StaticVersion::<0, 1>::instance()));
         }
         // enable hotshot event streaming
         pub fn enable_hotshot_node_event_streaming<P: SequencerPersistence>(
@@ -547,6 +549,7 @@ pub mod testing {
                 ),
                 MockStateCatchup::default(),
             )
+            .with_current_version(StaticVersion::<0, 1>::VERSION)
             .with_genesis(ValidatedState::default());
 
             // generate builder keys
@@ -615,6 +618,7 @@ pub mod testing {
                 ),
                 MockStateCatchup::default(),
             )
+            .with_current_version(Ver::VERSION)
             .with_genesis(ValidatedState::default());
 
             // generate builder keys
@@ -670,7 +674,6 @@ pub mod testing {
 mod test {
     use async_std::stream::IntoStream;
     use clap::builder;
-    use es_version::SequencerVersion;
     use espresso_types::{Header, NodeState, Payload, ValidatedState};
     use ethers::providers::Quorum;
     use futures::StreamExt;
@@ -686,6 +689,7 @@ mod test {
     };
     use sequencer_utils::test_utils::setup_test;
     use testing::{wait_for_decide_on_handle, HotShotTestConfig};
+    use vbs::version::StaticVersion;
 
     use super::*;
 
@@ -697,7 +701,7 @@ mod test {
     async fn test_non_voting_hotshot_node() {
         setup_test();
 
-        let ver = SequencerVersion::instance();
+        let ver = StaticVersion::<0, 1>::instance();
 
         let success_height = 5;
         // Assign `config` so it isn't dropped early.

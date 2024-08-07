@@ -15,7 +15,7 @@ use futures::{
 };
 use hotshot::{
     traits::election::static_committee::GeneralStaticCommittee,
-    types::{Event, SystemContextHandle},
+    types::{Event, EventType, SystemContextHandle},
     Memberships, SystemContext,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
@@ -34,7 +34,11 @@ use hotshot_types::{
 use url::Url;
 use vbs::version::StaticVersionType;
 
-use crate::{state_signature::StateSigner, static_stake_table_commitment, Node, SeqTypes};
+use crate::{
+    external_event_handler::{self, ExternalEventHandler},
+    state_signature::StateSigner,
+    static_stake_table_commitment, Node, SeqTypes,
+};
 /// The consensus handle
 pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>>;
 
@@ -83,6 +87,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         state_relay_server: Option<Url>,
         metrics: &dyn Metrics,
         stake_table_capacity: u64,
+        public_api_url: Option<Url>,
         _: Ver,
     ) -> anyhow::Result<Self> {
         let config = &network_config.config;
@@ -141,7 +146,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             instance_state.node_id,
             config.clone(),
             memberships,
-            network,
+            network.clone(),
             initializer,
             ConsensusMetricsValue::new(metrics),
             persistence.clone(),
@@ -155,10 +160,18 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             state_signer = state_signer.with_relay_server(url);
         }
 
+        // Create the roll call info we will be using
+        let roll_call_info = external_event_handler::RollCallInfo { public_api_url };
+
+        // Create the external event handler
+        let external_event_handler = ExternalEventHandler::new(network, roll_call_info, pub_key)
+            .with_context(|| "Failed to create external event handler")?;
+
         Ok(Self::new(
             handle,
             persistence,
             state_signer,
+            external_event_handler,
             event_streamer,
             instance_state,
             network_config,
@@ -170,6 +183,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         handle: Consensus<N, P>,
         persistence: Arc<RwLock<P>>,
         state_signer: StateSigner<Ver>,
+        external_event_handler: ExternalEventHandler,
         event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
         node_state: NodeState,
         config: NetworkConfig<PubKey>,
@@ -192,6 +206,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
                 events,
                 persistence,
                 ctx.state_signer.clone(),
+                external_event_handler,
                 Some(event_streamer.clone()),
             ),
         );
@@ -318,6 +333,7 @@ async fn handle_events<Ver: StaticVersionType>(
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,
     persistence: Arc<RwLock<impl SequencerPersistence>>,
     state_signer: Arc<StateSigner<Ver>>,
+    external_event_handler: ExternalEventHandler,
     events_streamer: Option<Arc<RwLock<EventsStreamer<SeqTypes>>>>,
 ) {
     while let Some(event) = events.next().await {
@@ -330,6 +346,13 @@ async fn handle_events<Ver: StaticVersionType>(
         }
         // Generate state signature.
         state_signer.handle_event(&event).await;
+
+        // Handle external messages
+        if let EventType::ExternalMessageReceived(external_message_bytes) = &event.event {
+            if let Err(err) = external_event_handler.handle_event(external_message_bytes) {
+                tracing::warn!("Failed to handle external message: {:?}", err);
+            };
+        }
 
         // Send the event via the event streaming service
         if let Some(events_streamer) = events_streamer.as_ref() {

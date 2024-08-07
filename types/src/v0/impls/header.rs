@@ -3,6 +3,7 @@ use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
+    constants::MarketplaceVersion,
     traits::{
         block_contents::{BlockHeader, BuilderFee},
         node_implementation::NodeType,
@@ -22,7 +23,7 @@ use snafu::Snafu;
 use std::fmt;
 use thiserror::Error;
 use time::OffsetDateTime;
-use vbs::version::Version;
+use vbs::version::{StaticVersionType, Version};
 
 use crate::{
     v0::header::{EitherOrVersion, VersionedHeader},
@@ -469,15 +470,23 @@ impl Header {
             fee_amount,
         } in &builder_fee
         {
-            ensure!(
-                fee_account.validate_fee_signature(
-                    fee_signature,
-                    *fee_amount,
-                    &ns_table,
-                    &payload_commitment,
-                ),
-                "invalid builder signature"
-            );
+            if version < MarketplaceVersion::VERSION {
+                ensure!(
+                    fee_account.validate_fee_signature(
+                        fee_signature,
+                        *fee_amount,
+                        &ns_table,
+                        &payload_commitment,
+                    ),
+                    "invalid builder signature"
+                );
+            } else {
+                ensure!(
+                    fee_account
+                        .validate_sequencing_fee_signature_marketplace(fee_signature, *fee_amount,),
+                    "invalid builder signature"
+                );
+            }
 
             let fee_info = FeeInfo::new(*fee_account, *fee_amount);
             state
@@ -745,7 +754,6 @@ impl From<anyhow::Error> for InvalidBlockHeader {
 
 impl BlockHeader<SeqTypes> for Header {
     type Error = InvalidBlockHeader;
-    type AuctionResult = SolverAuctionResults;
 
     /// Get the results of the auction for this Header. Only used in post-marketplace versions
     fn get_auction_results(&self) -> Option<SolverAuctionResults> {
@@ -1429,7 +1437,7 @@ mod test_headers {
         *parent_header.block_merkle_tree_root_mut() = block_merkle_tree_root;
         let mut proposal = parent_header.clone();
 
-        let ver = StaticVersion::<1, 0>::version();
+        let ver = StaticVersion::<0, 1>::version();
 
         // Pass a different chain config to trigger a chain config validation error.
         let state = validated_state
@@ -1508,8 +1516,9 @@ mod test_headers {
         setup_test();
 
         let anvil = Anvil::new().block_time(1u32).spawn();
-        let mut genesis_state =
-            NodeState::mock().with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1));
+        let mut genesis_state = NodeState::mock()
+            .with_l1(L1Client::new(anvil.endpoint().parse().unwrap(), 1))
+            .with_current_version(StaticVersion::<0, 1>::version());
 
         let genesis = GenesisForTest::default().await;
         let vid_common = vid_scheme(1).disperse([]).unwrap().common;
@@ -1564,7 +1573,7 @@ mod test_headers {
             ns_table,
             builder_fee,
             vid_common.clone(),
-            <SeqTypes as NodeType>::Base::version(),
+            StaticVersion::<0, 1>::version(),
         )
         .await
         .unwrap();
@@ -1586,7 +1595,7 @@ mod test_headers {
                 &genesis_state,
                 &parent_leaf,
                 &proposal,
-                StaticVersion::<1, 0>::version(),
+                StaticVersion::<0, 1>::version(),
             )
             .await
             .unwrap()
