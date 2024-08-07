@@ -12,7 +12,7 @@ contract LightClientV3 is LightClientV2 {
 
     /// @param _newField   New field amount
     function initializeV3(uint256 _newField) external {
-        require(_initializedVersion == 2);
+        require(_initializedVersion == 2, "already initialized");
         anotherField = _newField;
         _initializedVersion = 3;
     }

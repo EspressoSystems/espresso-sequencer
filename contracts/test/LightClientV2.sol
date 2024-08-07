@@ -30,7 +30,6 @@ contract LightClientV2 is LightClient {
 
     /// @notice Initialize v2
     /// @param _newField   New field amount
-    ///
     function initializeV2(uint256 _newField) external {
         require(_initializedVersion == 0);
         newField = _newField;

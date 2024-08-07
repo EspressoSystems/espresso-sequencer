@@ -3,7 +3,7 @@ pragma solidity ^0.8.19;
 
 import { Script } from "forge-std/Script.sol";
 
-import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
+import { LightClientV2 as LCV2 } from "./LightClientV2.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
 
 contract UpgradeLightClientScript is Script {
@@ -11,14 +11,13 @@ contract UpgradeLightClientScript is Script {
     /// @param mostRecentlyDeployedProxy address of deployed proxy
     /// @return address of the proxy
     /// TODO get the most recent deployment from the devops tooling
-    function run(uint32 seedPhraseOffset, address mostRecentlyDeployedProxy, uint256 newField)
+    function run(address mostRecentlyDeployedProxy, uint256 newField, address admin)
         external
         returns (address)
     {
-        string memory seedPhrase = vm.envString("MNEMONIC");
-        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
         vm.startBroadcast(admin);
         address proxy = upgradeLightClient(mostRecentlyDeployedProxy, address(new LCV2()), newField);
+        vm.stopBroadcast();
         return proxy;
     }
 
@@ -37,7 +36,6 @@ contract UpgradeLightClientScript is Script {
         proxy.upgradeToAndCall(newLightClient, abi.encodeCall(LCV2.initializeV2, newField)); //proxy
             // address now points to the new
             // implementation
-        vm.stopBroadcast();
         return address(proxy);
     }
 }

@@ -7,8 +7,10 @@ import { LightClient as LCV1 } from "../src/LightClient.sol";
 import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
 import { LightClientV3 as LCV3 } from "../test/LightClientV3.sol";
 import { DeployLightClientContractScript } from "../script/LightClient.s.sol";
-import { UpgradeLightClientScript } from "../script/UpgradeLightClientToV2.s.sol";
-import { UpgradeLightClientScript as ULCV3 } from "../script/UpgradeLightClientToV3.s.sol";
+import { UpgradeLightClientScript } from "./UpgradeLightClientToV2.s.sol";
+import { UpgradeLightClientScript as ULCV3 } from "./UpgradeLightClientToV3.s.sol";
+import { OwnableUpgradeable } from
+    "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 contract LightClientUpgradeToVxTest is Test {
     LCV1 public lcV1Proxy;
@@ -46,12 +48,12 @@ contract LightClientUpgradeToVxTest is Test {
     }
 
     // that the data remains the same after upgrading the implementation
-    function testUpgradeSameData() public {
+    function testUpgradeSameDataV1ToV2() public {
         // Upgrade LightClient and check that the genesis state is not changed and that the new
         // field
         // of the upgraded contract is set to 0
         uint256 myNewField = 123;
-        lcV2Proxy = LCV2(upgraderV2.run(0, proxy, myNewField));
+        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, admin));
 
         assertEq(lcV2Proxy.newField(), myNewField);
         assertEq(lcV2Proxy.blocksPerEpoch(), 10);
@@ -85,7 +87,7 @@ contract LightClientUpgradeToVxTest is Test {
         // of the upgraded contract is set to 0
         uint256 myNewField = 123;
         uint256 myNewFieldV3 = 456;
-        lcV2Proxy = LCV2(upgraderV2.run(0, proxy, myNewField));
+        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, admin));
 
         assertEq(lcV2Proxy.newField(), myNewField);
         assertEq(lcV2Proxy.blocksPerEpoch(), 10);
@@ -112,7 +114,7 @@ contract LightClientUpgradeToVxTest is Test {
         );
 
         // upgrade to v3
-        lcV3Proxy = LCV3(upgraderV3.run(0, proxy, myNewFieldV3));
+        lcV3Proxy = LCV3(upgraderV3.run(proxy, myNewFieldV3, admin));
 
         assertEq(lcV3Proxy.newField(), myNewField);
         assertEq(lcV3Proxy.anotherField(), myNewFieldV3);
@@ -134,7 +136,7 @@ contract LightClientUpgradeToVxTest is Test {
         assertEq(patch, 0);
 
         //upgrade box
-        lcV2Proxy = LCV2(upgraderV2.run(0, proxy, 123));
+        lcV2Proxy = LCV2(upgraderV2.run(proxy, 123, admin));
         assertEq(address(lcV2Proxy), address(lcV1Proxy));
         (uint8 majorV2, uint8 minorV2, uint8 patchV2) = lcV2Proxy.getVersion();
         assertEq(majorV2, 2);
@@ -142,12 +144,25 @@ contract LightClientUpgradeToVxTest is Test {
         assertEq(patchV2, 0);
     }
 
-    function testMaliciousUpgradeFails() public {
+    function testMaliciousUpgradeToV2Fails() public {
         address attacker = makeAddr("attacker");
 
         //attempted upgrade as attacker will revert
-        vm.prank(attacker);
-        vm.expectRevert();
-        lcV2Proxy = LCV2(upgraderV2.run(0, address(proxy), 123));
+        vm.expectRevert(
+            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, attacker)
+        );
+
+        lcV2Proxy = LCV2(upgraderV2.run(address(proxy), 123, attacker));
+    }
+
+    function testMaliciousUpgradeToV32Fails() public {
+        address attacker = makeAddr("attacker");
+
+        //attempted upgrade as attacker will revert
+
+        vm.expectRevert(
+            abi.encodeWithSelector(OwnableUpgradeable.OwnableUnauthorizedAccount.selector, attacker)
+        );
+        lcV3Proxy = LCV3(upgraderV3.run(address(proxy), 456, attacker));
     }
 }
