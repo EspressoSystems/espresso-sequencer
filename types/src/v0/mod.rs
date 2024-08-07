@@ -6,12 +6,10 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 
-mod error;
 mod header;
 mod impls;
 pub mod traits;
 mod utils;
-pub use error::*;
 pub use header::Header;
 pub use impls::{
     mock, validate_proposal, BuilderValidationError, FeeError, ProposalValidationError,

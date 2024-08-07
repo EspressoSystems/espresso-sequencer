@@ -1,13 +1,12 @@
-use bytesize::ByteSize;
-use derive_more::From;
 use ethers::types::U256;
 use sequencer_utils::{
     impl_serde_from_string_or_integer, impl_to_fixed_bytes, ser::FromStringOrInteger,
 };
-use snafu::Snafu;
 use std::str::FromStr;
 
 use crate::{BlockSize, ChainId};
+
+use super::parse_size;
 
 impl_serde_from_string_or_integer!(ChainId);
 impl_to_fixed_bytes!(ChainId, U256);
@@ -72,15 +71,6 @@ impl FromStringOrInteger for BlockSize {
     fn to_string(&self) -> anyhow::Result<String> {
         Ok(format!("{self}"))
     }
-}
-
-#[derive(Clone, Debug, From, Snafu)]
-pub struct ParseSizeError {
-    msg: String,
-}
-
-pub fn parse_size(s: &str) -> Result<u64, ParseSizeError> {
-    Ok(s.parse::<ByteSize>()?.0)
 }
 
 #[cfg(test)]

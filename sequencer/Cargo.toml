@@ -88,7 +88,7 @@ sequencer-utils = { path = "../utils" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10"                                                      # TODO temporary, used only for VID, should be set in hotshot
-snafu = { workspace = true }
+snafu = "0.8"
 static_assertions = "1"
 strum = { workspace = true }
 surf-disco = { workspace = true }
@@ -101,7 +101,6 @@ tracing-subscriber = "0.3.18"
 url = { workspace = true }
 vbs = { workspace = true }
 vec1 = { workspace = true }
-
 [package.metadata.cargo-udeps.ignore]
 normal = ["hotshot-testing"]
 
