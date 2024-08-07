@@ -19,7 +19,6 @@ use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
 };
 use serde_json::{Map, Value};
-use snafu::Snafu;
 use std::fmt;
 use thiserror::Error;
 use time::OffsetDateTime;
@@ -29,52 +28,11 @@ use crate::{
     v0::header::{EitherOrVersion, VersionedHeader},
     v0_1, v0_2,
     v0_3::{self, ChainConfig, IterableFeeInfo, SolverAuctionResults},
-    BlockMerkleCommitment, BlockSize, BuilderSignature, FeeAccount, FeeAmount, FeeInfo,
-    FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable,
-    NsTableValidationError, SeqTypes, UpgradeType,
+    BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
+    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, UpgradeType,
 };
 
 use super::{instance_state::NodeState, state::ValidatedState};
-
-/// Possible proposal validation failures
-#[derive(Error, Debug, Eq, PartialEq)]
-pub enum ProposalValidationError {
-    #[error("Invalid ChainConfig: expected={expected}, proposal={proposal}")]
-    InvalidChainConfig { expected: String, proposal: String },
-
-    #[error(
-        "Invalid Payload Size: (max_block_size={max_block_size}, proposed_block_size={block_size})"
-    )]
-    MaxBlockSizeExceeded {
-        max_block_size: BlockSize,
-        block_size: BlockSize,
-    },
-    #[error("Insufficient Fee: block_size={max_block_size}, base_fee={base_fee}, proposed_fee={proposed_fee}")]
-    InsufficientFee {
-        max_block_size: BlockSize,
-        base_fee: FeeAmount,
-        proposed_fee: FeeAmount,
-    },
-    #[error("Invalid Height: parent_height={parent_height}, proposal_height={proposal_height}")]
-    InvalidHeight {
-        parent_height: u64,
-        proposal_height: u64,
-    },
-    #[error("Invalid Block Root Error: expected={expected_root}, proposal={proposal_root}")]
-    InvalidBlockRoot {
-        expected_root: BlockMerkleCommitment,
-        proposal_root: BlockMerkleCommitment,
-    },
-    #[error("Invalid Fee Root Error: expected={expected_root}, proposal={proposal_root}")]
-    InvalidFeeRoot {
-        expected_root: FeeMerkleCommitment,
-        proposal_root: FeeMerkleCommitment,
-    },
-    #[error("Invalid namespace table: {err}")]
-    InvalidNsTable { err: NsTableValidationError },
-    #[error("Some fee amount or their sum total out of range")]
-    SomeFeeAmountOutOfRange,
-}
 
 impl v0_1::Header {
     pub(crate) fn commit(&self) -> Commitment<Header> {
@@ -735,8 +693,8 @@ impl Header {
     }
 }
 
-#[derive(Debug, Snafu)]
-#[snafu(display("Invalid Block Header {msg}"))]
+#[derive(Debug, Error)]
+#[error("Invalid Block Header {msg}")]
 pub struct InvalidBlockHeader {
     msg: String,
 }
@@ -1130,7 +1088,7 @@ mod test_headers {
     use super::*;
     use crate::{
         eth_signature_key::EthKeyPair, v0::impls::instance_state::mock::MockStateCatchup,
-        validate_proposal,
+        validate_proposal, ProposalValidationError,
     };
 
     #[derive(Debug, Default)]

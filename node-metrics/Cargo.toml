@@ -21,6 +21,9 @@ futures = { workspace = true }
 hotshot = { workspace = true }
 hotshot-query-service = { workspace = true }
 hotshot-stake-table = { workspace = true }
+
+# Dependencies for feature `testing`
+hotshot-testing = { workspace = true, optional = true }
 hotshot-types = { workspace = true }
 prometheus-parse = { version = "^0.2.5" }
 reqwest = { workspace = true }
@@ -34,6 +37,3 @@ toml = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 vbs = { workspace = true }
-
-# Dependencies for feature `testing`
-hotshot-testing = { workspace = true, optional = true }

@@ -5,22 +5,15 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::{self, Formatter},
     iter::once,
-    num::ParseIntError,
     path::PathBuf,
-    str::FromStr,
-    time::Duration,
 };
 
 use anyhow::{bail, Context};
-use bytesize::ByteSize;
 use clap::{error::ErrorKind, Args, FromArgMatches, Parser};
-use cld::ClDuration;
 use derivative::Derivative;
-use derive_more::From;
 use espresso_types::BackoffParams;
 use hotshot_types::{light_client::StateSignKey, signature_key::BLSPrivKey};
 use libp2p::Multiaddr;
-use snafu::Snafu;
 use url::Url;
 
 use crate::{api, persistence};
@@ -304,28 +297,6 @@ fn fmt_opt_urls(
     Ok(())
 }
 
-#[derive(Clone, Debug, Snafu)]
-pub struct ParseDurationError {
-    reason: String,
-}
-
-pub fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
-    ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError {
-            reason: err.to_string(),
-        })
-}
-
-#[derive(Clone, Debug, From, Snafu)]
-pub struct ParseSizeError {
-    msg: String,
-}
-
-pub fn parse_size(s: &str) -> Result<u64, ParseSizeError> {
-    Ok(s.parse::<ByteSize>()?.0)
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Ratio {
     pub numerator: u64,
@@ -353,34 +324,6 @@ impl PartialOrd for Ratio {
 impl Ord for Ratio {
     fn cmp(&self, other: &Self) -> Ordering {
         (self.numerator * other.denominator).cmp(&(other.numerator * self.denominator))
-    }
-}
-
-#[derive(Debug, Snafu)]
-pub enum ParseRatioError {
-    #[snafu(display("numerator and denominator must be separated by :"))]
-    MissingDelimiter,
-    InvalidNumerator {
-        err: ParseIntError,
-    },
-    InvalidDenominator {
-        err: ParseIntError,
-    },
-}
-
-impl FromStr for Ratio {
-    type Err = ParseRatioError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (num, den) = s.split_once(':').ok_or(ParseRatioError::MissingDelimiter)?;
-        Ok(Self {
-            numerator: num
-                .parse()
-                .map_err(|err| ParseRatioError::InvalidNumerator { err })?,
-            denominator: den
-                .parse()
-                .map_err(|err| ParseRatioError::InvalidDenominator { err })?,
-        })
     }
 }
 

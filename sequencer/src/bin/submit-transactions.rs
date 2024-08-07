@@ -8,7 +8,7 @@ use std::{
 use async_std::task::{sleep, spawn};
 use clap::Parser;
 use committable::{Commitment, Committable};
-use espresso_types::{SeqTypes, Transaction};
+use espresso_types::{parse_duration, parse_size, SeqTypes, Transaction};
 use futures::{
     channel::mpsc::{self, Sender},
     sink::SinkExt,
@@ -19,7 +19,6 @@ use hotshot_types::traits::node_implementation::NodeType;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
-use sequencer::options::{parse_duration, parse_size};
 use sequencer_utils::logging;
 use surf_disco::{Client, Url};
 use tide_disco::{error::ServerError, App};

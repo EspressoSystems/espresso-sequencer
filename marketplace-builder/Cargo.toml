@@ -40,7 +40,6 @@ portpicker = { workspace = true }
 rand = "0.8.5"
 sequencer = { path = "../sequencer", features = ["testing"] }
 serde = { workspace = true }
-snafu = { workspace = true }
 surf = "2.3.1"
 surf-disco = { workspace = true }
 tagged-base64 = { workspace = true }
