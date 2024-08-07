@@ -134,7 +134,7 @@ impl BuilderSignatureKey for FeeAccount {
     ) -> Result<Self::BuilderSignature, Self::SignError> {
         let wallet = private_key.signer();
         let message_hash = ethers::utils::hash_message(data);
-        wallet.sign_hash(message_hash).map_err(Into::into)
+        wallet.sign_hash(message_hash).map_err(SigningError::from)
     }
 
     fn generated_from_seed_indexed(seed: [u8; 32], index: u64) -> (Self, Self::BuilderPrivateKey) {

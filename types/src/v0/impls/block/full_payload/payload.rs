@@ -32,8 +32,6 @@ pub enum BlockBuildingError {
     MissingGenesis,
     #[error("Genesis transaction in non-genesis block")]
     UnexpectedGenesis,
-    #[error("failed to build block err: {0}")]
-    Custom(String),
 }
 
 impl Payload {
@@ -79,12 +77,9 @@ impl Payload {
         <Self as BlockPayload<SeqTypes>>::Error,
     > {
         // accounting for block byte length limit
-        let max_block_byte_len: usize =
-            u64::from(chain_config.max_block_size)
-                .try_into()
-                .map_err(|_| {
-                    <Self as BlockPayload<SeqTypes>>::Error::Custom("cast u64 to usize".to_string())
-                })?;
+        let max_block_byte_len: usize = u64::from(chain_config.max_block_size)
+            .try_into()
+            .expect("too large max block size for architecture");
         let mut block_byte_len = NsTableBuilder::header_byte_len();
 
         // add each tx to its namespace
