@@ -5,7 +5,6 @@ pragma solidity ^0.8.0;
 import { BN254 } from "bn254/BN254.sol";
 import { PolynomialEval as Poly } from "./PolynomialEval.sol";
 import { IPlonkVerifier } from "../interfaces/IPlonkVerifier.sol";
-import { Transcript } from "./Transcript.sol";
 
 /* solhint-disable no-inline-assembly */
 
@@ -21,8 +20,6 @@ library PlonkVerifier {
     error InvalidPlonkArgs();
     /// Plonk: wrong verification key used.
     error WrongPlonkVK();
-
-    using Transcript for Transcript.TranscriptData;
 
     // _COSET_K0 = 1, has no effect during multiplication, thus avoid declaring it here.
     uint256 internal constant COSET_K1 =
@@ -171,84 +168,245 @@ library PlonkVerifier {
     }
 
     function _computeChallenges(
-        IPlonkVerifier.VerifyingKey memory verifyingKey,
-        uint256[] memory publicInput,
+        IPlonkVerifier.VerifyingKey memory vk,
+        uint256[] memory pi,
         IPlonkVerifier.PlonkProof memory proof
     ) internal pure returns (Challenges memory res) {
-        Transcript.TranscriptData memory transcript;
         uint256 p = BN254.R_MOD;
 
-        transcript.appendVkAndPubInput(verifyingKey, publicInput);
-
-        transcript.transcript = abi.encodePacked(
-            transcript.transcript,
-            proof.wire0.x,
-            proof.wire0.y,
-            proof.wire1.x,
-            proof.wire1.y,
-            proof.wire2.x,
-            proof.wire2.y
-        );
-        transcript.transcript = abi.encodePacked(
-            transcript.transcript, proof.wire3.x, proof.wire3.y, proof.wire4.x, proof.wire4.y
-        );
-
-        res.beta = transcript.getChallenge();
-        res.gamma = transcript.getChallenge();
-
-        transcript.transcript =
-            abi.encodePacked(transcript.transcript, proof.prodPerm.x, proof.prodPerm.y);
-
-        res.alpha = transcript.getChallenge();
-
-        transcript.transcript = abi.encodePacked(
-            transcript.transcript,
-            proof.split0.x,
-            proof.split0.y,
-            proof.split1.x,
-            proof.split1.y,
-            proof.split2.x,
-            proof.split2.y
-        );
-        transcript.transcript = abi.encodePacked(
-            transcript.transcript, proof.split3.x, proof.split3.y, proof.split4.x, proof.split4.y
-        );
-
-        res.zeta = transcript.getChallenge();
-
-        // Append proof evaluations
-        transcript.transcript = abi.encodePacked(
-            transcript.transcript,
-            proof.wireEval0,
-            proof.wireEval1,
-            proof.wireEval2,
-            proof.wireEval3,
-            proof.wireEval4
-        );
-
-        transcript.transcript = abi.encodePacked(
-            transcript.transcript,
-            proof.sigmaEval0,
-            proof.sigmaEval1,
-            proof.sigmaEval2,
-            proof.sigmaEval3,
-            proof.prodPermZetaOmegaEval
-        );
-
-        res.v = transcript.getChallenge();
-
-        transcript.transcript = abi.encodePacked(
-            transcript.transcript, proof.zeta.x, proof.zeta.y, proof.zetaOmega.x, proof.zetaOmega.y
-        );
-
-        res.u = transcript.getChallenge();
-
         assembly {
-            let alpha := mload(res)
-            let alpha2 := mulmod(alpha, alpha, p)
-            let alpha3 := mulmod(alpha2, alpha, p)
-            mstore(add(res, 0x20), alpha2)
-            mstore(add(res, 0x40), alpha3)
+            // use free memory space for scratch pad, 0x40: free memory ptr
+            let statePtr := mload(0x40)
+            let dataPtr := add(statePtr, 0x20)
+
+            // Start of transcript (unit: bytes)
+            // sizeInBits (4)  | domainSize (8) | numInputs (8) | pad (12)
+            mstore(dataPtr, 0) // initialize to 0 first
+            mstore(dataPtr, shl(224, 254)) // sizeInBits
+            mstore(add(dataPtr, 4), shl(192, mload(vk))) // domainSize
+            mstore(add(dataPtr, 12), shl(192, mload(add(vk, 0x20)))) // numInputs
+
+            // G2 from SRS
+            mstore(add(dataPtr, 0x20), mload(add(vk, 0x280))) // g2LSB (32)
+            mstore(add(dataPtr, 0x40), mload(add(vk, 0x2a0))) // g2MSB (32)
+
+            // k0 ~ k4
+            mstore(add(dataPtr, 0x60), 0x1)
+            mstore(
+                add(dataPtr, 0x80),
+                0x2f8dd1f1a7583c42c4e12a44e110404c73ca6c94813f85835da4fb7bb1301d4a
+            )
+            mstore(
+                add(dataPtr, 0xa0),
+                0x1ee678a0470a75a6eaa8fe837060498ba828a3703b311d0f77f010424afeb025
+            )
+            mstore(
+                add(dataPtr, 0xc0),
+                0x2042a587a90c187b0a087c03e29c968b950b1db26d5c82d666905a6895790c0a
+            )
+            mstore(
+                add(dataPtr, 0xe0),
+                0x2e2b91456103698adf57b799969dea1c8f739da5d8d40dd3eb9222db7c81e881
+            )
+
+            // selectors
+            let q1Ptr := mload(add(vk, 0xe0))
+            mstore(add(dataPtr, 0x100), mload(q1Ptr)) // q1.x
+            mstore(add(dataPtr, 0x120), mload(add(q1Ptr, 0x20))) // q1.y
+            let q2Ptr := mload(add(vk, 0x100))
+            mstore(add(dataPtr, 0x140), mload(q2Ptr)) // q2.x
+            mstore(add(dataPtr, 0x160), mload(add(q2Ptr, 0x20))) // q2.y
+            let q3Ptr := mload(add(vk, 0x120))
+            mstore(add(dataPtr, 0x180), mload(q3Ptr)) // q3.x
+            mstore(add(dataPtr, 0x1a0), mload(add(q3Ptr, 0x20))) // q3.y
+            let q4Ptr := mload(add(vk, 0x140))
+            mstore(add(dataPtr, 0x1c0), mload(q4Ptr)) // q4.x
+            mstore(add(dataPtr, 0x1e0), mload(add(q4Ptr, 0x20))) // q4.y
+            let qM12Ptr := mload(add(vk, 0x160))
+            mstore(add(dataPtr, 0x200), mload(qM12Ptr)) // qM12.x
+            mstore(add(dataPtr, 0x220), mload(add(qM12Ptr, 0x20))) // qM12.y
+            let qM34Ptr := mload(add(vk, 0x180))
+            mstore(add(dataPtr, 0x240), mload(qM34Ptr)) // qM34.x
+            mstore(add(dataPtr, 0x260), mload(add(qM34Ptr, 0x20))) // qM34.y
+            let qH1Ptr := mload(add(vk, 0x1e0))
+            mstore(add(dataPtr, 0x280), mload(qH1Ptr)) // qH1.x
+            mstore(add(dataPtr, 0x2a0), mload(add(qH1Ptr, 0x20))) // qH1.y
+            let qH2Ptr := mload(add(vk, 0x200))
+            mstore(add(dataPtr, 0x2c0), mload(qH2Ptr)) // qH2.x
+            mstore(add(dataPtr, 0x2e0), mload(add(qH2Ptr, 0x20))) // qH2.y
+            let qH3Ptr := mload(add(vk, 0x220))
+            mstore(add(dataPtr, 0x300), mload(qH3Ptr)) // qH3.x
+            mstore(add(dataPtr, 0x320), mload(add(qH3Ptr, 0x20))) // qH3.y
+            let qH4Ptr := mload(add(vk, 0x240))
+            mstore(add(dataPtr, 0x340), mload(qH4Ptr)) // qH4.x
+            mstore(add(dataPtr, 0x360), mload(add(qH4Ptr, 0x20))) // qH4.y
+            let qOPtr := mload(add(vk, 0x1a0))
+            mstore(add(dataPtr, 0x380), mload(qOPtr)) // qO.x
+            mstore(add(dataPtr, 0x3a0), mload(add(qOPtr, 0x20))) // qO.y
+            let qCPtr := mload(add(vk, 0x1c0))
+            mstore(add(dataPtr, 0x3c0), mload(qCPtr)) // qC.x
+            mstore(add(dataPtr, 0x3e0), mload(add(qCPtr, 0x20))) // qC.y
+            let qECCPtr := mload(add(vk, 0x260))
+            mstore(add(dataPtr, 0x400), mload(qECCPtr)) // qECC.x
+            mstore(add(dataPtr, 0x420), mload(add(qECCPtr, 0x20))) // qECC.y
+
+            // sigmas
+            let sigma0Ptr := mload(add(vk, 0x40))
+            mstore(add(dataPtr, 0x440), mload(sigma0Ptr)) // sigma0.x
+            mstore(add(dataPtr, 0x460), mload(add(sigma0Ptr, 0x20))) // sigma0.y
+            let sigma1Ptr := mload(add(vk, 0x60))
+            mstore(add(dataPtr, 0x480), mload(sigma1Ptr)) // sigma1.x
+            mstore(add(dataPtr, 0x4a0), mload(add(sigma1Ptr, 0x20))) // sigma1.y
+            let sigma2Ptr := mload(add(vk, 0x80))
+            mstore(add(dataPtr, 0x4c0), mload(sigma2Ptr)) // sigma2.x
+            mstore(add(dataPtr, 0x4e0), mload(add(sigma2Ptr, 0x20))) // sigma2.y
+            let sigma3Ptr := mload(add(vk, 0xa0))
+            mstore(add(dataPtr, 0x500), mload(sigma3Ptr)) // sigma3.x
+            mstore(add(dataPtr, 0x520), mload(add(sigma3Ptr, 0x20))) // sigma3.y
+            let sigma4Ptr := mload(add(vk, 0xc0))
+            mstore(add(dataPtr, 0x540), mload(sigma4Ptr)) // sigma4.x
+            mstore(add(dataPtr, 0x560), mload(add(sigma4Ptr, 0x20))) // sigma4.y
+
+            // public inputs
+            // TODO: update these when change PI from dynamic array to fixed length
+            mstore(add(dataPtr, 0x580), mload(add(pi, 0x20))) // PI[0]
+            mstore(add(dataPtr, 0x5a0), mload(add(pi, 0x40))) // PI[1]
+            mstore(add(dataPtr, 0x5c0), mload(add(pi, 0x60))) // PI[2]
+            mstore(add(dataPtr, 0x5e0), mload(add(pi, 0x80))) // PI[3]
+            mstore(add(dataPtr, 0x600), mload(add(pi, 0xa0))) // PI[4]
+            mstore(add(dataPtr, 0x620), mload(add(pi, 0xc0))) // PI[5]
+            mstore(add(dataPtr, 0x640), mload(add(pi, 0xe0))) // PI[6]
+            mstore(add(dataPtr, 0x660), mload(add(pi, 0x100))) // PI[7]
+
+            // proof
+            let wire0Ptr := mload(proof)
+            mstore(add(dataPtr, 0x680), mload(wire0Ptr)) // wire0.x
+            mstore(add(dataPtr, 0x6a0), mload(add(wire0Ptr, 0x20))) // wire0.y
+            let wire1Ptr := mload(add(proof, 0x20))
+            mstore(add(dataPtr, 0x6c0), mload(wire1Ptr)) // wire1.x
+            mstore(add(dataPtr, 0x6e0), mload(add(wire1Ptr, 0x20))) // wire1.y
+            let wire2Ptr := mload(add(proof, 0x40))
+            mstore(add(dataPtr, 0x700), mload(wire2Ptr)) // wire2.x
+            mstore(add(dataPtr, 0x720), mload(add(wire2Ptr, 0x20))) // wire2.y
+            let wire3Ptr := mload(add(proof, 0x60))
+            mstore(add(dataPtr, 0x740), mload(wire3Ptr)) // wire3.x
+            mstore(add(dataPtr, 0x760), mload(add(wire3Ptr, 0x20))) // wire3.y
+            let wire4Ptr := mload(add(proof, 0x80))
+            mstore(add(dataPtr, 0x780), mload(wire4Ptr)) // wire4.x
+            mstore(add(dataPtr, 0x7a0), mload(add(wire4Ptr, 0x20))) // wire4.y
+
+            // challenge: beta
+            {
+                mstore(statePtr, 0x0) // init state
+                // preimage len: state(0x20) + transcript(0x7c0)
+                mstore(add(dataPtr, 0x7c0), keccak256(statePtr, 0x7e0))
+                // update new state (by updating state pointer)
+                statePtr := add(dataPtr, 0x7c0)
+                // empty transcript
+                dataPtr := add(statePtr, 0x20)
+                // (mod p) to get beta
+                mstore(add(res, 0x60), mod(mload(statePtr), p))
+            }
+
+            // challenge: gamma
+            {
+                // preimage len: state(0x20) + transcript(0x0)
+                mstore(dataPtr, keccak256(statePtr, 0x20))
+                // update new state (by updating state pointer)
+                statePtr := dataPtr
+                // empty transcript
+                dataPtr := add(statePtr, 0x20)
+                // (mod p) to get gamma
+                mstore(add(res, 0x80), mod(mload(statePtr), p))
+            }
+
+            let prodPermPtr := mload(add(proof, 0xa0))
+            mstore(dataPtr, mload(prodPermPtr)) // prodPerm.x
+            mstore(add(dataPtr, 0x20), mload(add(prodPermPtr, 0x20))) // prodPerm.y
+
+            // challenge: alpha, alpha2, alpha3
+            {
+                // preimage len: state(0x20) + transcript(0x40)
+                let alpha := keccak256(statePtr, 0x60)
+                // update new state (by updating state pointer)
+                statePtr := add(dataPtr, 0x40)
+                mstore(statePtr, alpha)
+                // empty transcript
+                dataPtr := add(statePtr, 0x20)
+                // (mod p) to get challenge
+                mstore(res, mod(alpha, p))
+
+                let alpha2 := mulmod(alpha, alpha, p)
+                let alpha3 := mulmod(alpha2, alpha, p)
+                mstore(add(res, 0x20), alpha2)
+                mstore(add(res, 0x40), alpha3)
+            }
+
+            let split0Ptr := mload(add(proof, 0xc0))
+            mstore(dataPtr, mload(split0Ptr)) // split0.x
+            mstore(add(dataPtr, 0x20), mload(add(split0Ptr, 0x20))) // split0.y
+            let split1Ptr := mload(add(proof, 0xe0))
+            mstore(add(dataPtr, 0x40), mload(split1Ptr)) // split1.x
+            mstore(add(dataPtr, 0x60), mload(add(split1Ptr, 0x20))) // split1.y
+            let split2Ptr := mload(add(proof, 0x100))
+            mstore(add(dataPtr, 0x80), mload(split2Ptr)) // split2.x
+            mstore(add(dataPtr, 0xa0), mload(add(split2Ptr, 0x20))) // split2.y
+            let split3Ptr := mload(add(proof, 0x120))
+            mstore(add(dataPtr, 0xc0), mload(split3Ptr)) // split3.x
+            mstore(add(dataPtr, 0xe0), mload(add(split3Ptr, 0x20))) // split3.y
+            let split4Ptr := mload(add(proof, 0x140))
+            mstore(add(dataPtr, 0x100), mload(split4Ptr)) // split4.x
+            mstore(add(dataPtr, 0x120), mload(add(split4Ptr, 0x20))) // split4.y
+
+            // challenge: zeta
+            {
+                // preimage len: state(0x20) + transcript(0x140)
+                mstore(add(dataPtr, 0x140), keccak256(statePtr, 0x160))
+                // update new state (by updating state pointer)
+                statePtr := add(dataPtr, 0x140)
+                // empty transcript
+                dataPtr := add(statePtr, 0x20)
+                // (mod p) to get challenge
+                mstore(add(res, 0xa0), mod(mload(statePtr), p))
+            }
+
+            mstore(dataPtr, mload(add(proof, 0x1a0))) // wireEval0
+            mstore(add(dataPtr, 0x20), mload(add(proof, 0x1c0))) // wireEval1
+            mstore(add(dataPtr, 0x40), mload(add(proof, 0x1e0))) // wireEval2
+            mstore(add(dataPtr, 0x60), mload(add(proof, 0x200))) // wireEval3
+            mstore(add(dataPtr, 0x80), mload(add(proof, 0x220))) // wireEval4
+            mstore(add(dataPtr, 0xa0), mload(add(proof, 0x240))) // sigmaEval0
+            mstore(add(dataPtr, 0xc0), mload(add(proof, 0x260))) // sigmaEval1
+            mstore(add(dataPtr, 0xe0), mload(add(proof, 0x280))) // sigmaEval2
+            mstore(add(dataPtr, 0x100), mload(add(proof, 0x2a0))) // sigmaEval3
+            mstore(add(dataPtr, 0x120), mload(add(proof, 0x2c0))) // prodPermZetaOmegaEval
+
+            // challenge: v
+            {
+                // preimage len: state(0x20) + transcript(0x140)
+                mstore(add(dataPtr, 0x140), keccak256(statePtr, 0x160))
+                // update new state (by updating state pointer)
+                statePtr := add(dataPtr, 0x140)
+                // empty transcript
+                dataPtr := add(statePtr, 0x20)
+                // (mod p) to get challenge
+                mstore(add(res, 0xc0), mod(mload(statePtr), p))
+            }
+
+            let zetaPtr := mload(add(proof, 0x160))
+            mstore(dataPtr, mload(zetaPtr)) // zeta.x
+            mstore(add(dataPtr, 0x20), mload(add(zetaPtr, 0x20))) // zeta.y
+            let zetaOmegaPtr := mload(add(proof, 0x180))
+            mstore(add(dataPtr, 0x40), mload(zetaOmegaPtr)) // zetaOmega.x
+            mstore(add(dataPtr, 0x60), mload(add(zetaOmegaPtr, 0x20))) // zetaOmega.y
+
+            // challenge: u
+            {
+                // preimage len: state(0x20) + transcript(0x80)
+                let hash := keccak256(statePtr, 0xa0)
+                // (mod p) to get challenge
+                mstore(add(res, 0xe0), mod(hash, p))
+            }
         }
     }
 
