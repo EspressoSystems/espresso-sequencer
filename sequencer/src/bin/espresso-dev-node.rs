@@ -584,7 +584,7 @@ mod tests {
             .send()
             .await;
         while tx_result.is_err() {
-            sleep(Duration::from_secs(3)).await;
+            sleep(Duration::from_secs(1)).await;
 
             tx_result = api_client
                 .get::<TransactionQueryData<SeqTypes>>(&format!(
@@ -615,7 +615,7 @@ mod tests {
             .await;
         while tx_result.is_err() {
             tracing::info!("waiting for large tx");
-            sleep(Duration::from_secs(3)).await;
+            sleep(Duration::from_secs(1)).await;
 
             tx_result = api_client
                 .get::<TransactionQueryData<SeqTypes>>(&format!(
@@ -658,7 +658,7 @@ mod tests {
                 .send()
                 .await;
             while result.is_err() {
-                sleep(Duration::from_secs(3)).await;
+                sleep(Duration::from_secs(1)).await;
 
                 result = api_client
                     .get::<TransactionQueryData<SeqTypes>>(&format!(
@@ -711,7 +711,7 @@ mod tests {
                 .await
                 .is_err()
             {
-                sleep(Duration::from_secs(3)).await;
+                sleep(Duration::from_secs(1)).await;
             }
         }
 
@@ -784,8 +784,8 @@ mod tests {
             }
         }
 
-        drop(db);
         drop(process);
+        drop(db);
     }
 
     #[async_std::test]
@@ -799,7 +799,7 @@ mod tests {
         let instance = AnvilOptions::default().spawn().await;
         let l1_url = instance.url();
 
-        let alt_anvil = AnvilOptions::default().spawn().await;
+        let alt_anvil = AnvilOptions::default().chain_id(122).spawn().await;
         let alt_provider = alt_anvil.url();
 
         let db = TmpDb::init().await;
@@ -868,7 +868,7 @@ mod tests {
             let light_client = LightClient::new(light_client_address, Arc::new(signer.clone()));
 
             while light_client
-                .get_hot_shot_commitment(U256::from(5))
+                .get_hot_shot_commitment(U256::from(1))
                 .call()
                 .await
                 .is_err()
@@ -887,7 +887,7 @@ mod tests {
                 let light_client = LightClient::new(light_client_address, Arc::new(signer.clone()));
 
                 while light_client
-                    .get_hot_shot_commitment(U256::from(5))
+                    .get_hot_shot_commitment(U256::from(1))
                     .call()
                     .await
                     .is_err()
@@ -898,8 +898,8 @@ mod tests {
             }
         }
 
-        drop(db);
-        drop(alt_provider);
         drop(process);
+        drop(alt_provider);
+        drop(db);
     }
 }
