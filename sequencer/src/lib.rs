@@ -22,12 +22,10 @@ use ethers::types::U256;
 #[cfg(feature = "libp2p")]
 use futures::FutureExt;
 use genesis::L1Finalized;
-use hotshot_state_prover::QCVerKey;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
 use network::libp2p::split_off_peer_id;
 use options::Identity;
-use persistence::no_storage::NoStorage;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 pub mod persistence;

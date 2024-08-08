@@ -1,8 +1,9 @@
-use std::net::ToSocketAddrs;
+use std::{net::ToSocketAddrs, sync::Arc};
 
 use clap::Parser;
-use espresso_types::SeqTypes;
+use espresso_types::{SeqTypes, SolverAuctionResultsProvider};
 use futures::future::FutureExt;
+use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::NodeType};
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
@@ -98,7 +99,9 @@ where
     };
 
     let marketplace_config = MarketplaceConfig {
-        auction_results_provider: Arc::new(SolverAuctionResultsProvider(solver_url)),
+        auction_results_provider: Arc::new(SolverAuctionResultsProvider(
+            opt.auction_results_solver_url,
+        )),
         generic_builder_url: opt.generic_builder_url,
     };
 
