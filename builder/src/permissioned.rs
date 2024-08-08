@@ -48,7 +48,7 @@ use hotshot::{
         BlockPayload,
     },
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, SystemContext,
+    HotShotInitializer, MarketplaceConfig, Memberships, SystemContext,
 };
 use hotshot_builder_api::v0_1::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
@@ -386,8 +386,13 @@ pub async fn init_hotshot<
             .unwrap(),
         ConsensusMetricsValue::new(metrics),
         da_storage,
-        // TODO I think this is ok b/c this provider isn't actually used in this builder.
-        SolverAuctionResultsProvider(Url::from_str("http://some.url").unwrap()),
+        // TODO if this builder is to be used for marketplace, we need real urls.
+        MarketplaceConfig {
+            auction_results_provider: Arc::new(SolverAuctionResultsProvider(
+                Url::from_str("https://some.solver").unwrap(),
+            )),
+            generic_builder_url: Url::from_str("https://some.builder").unwrap(),
+        },
     )
     .await
     .unwrap()
