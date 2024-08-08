@@ -15,7 +15,10 @@ use futures::{
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::election::static_committee::GeneralStaticCommittee,
+    traits::{
+        election::static_committee::GeneralStaticCommittee, implementations::MemoryNetwork,
+        NodeImplementation,
+    },
     types::{Event, EventType, SystemContextHandle},
     MarketplaceConfig, Memberships, SystemContext,
 };
@@ -23,6 +26,7 @@ use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 
 use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
 use hotshot_query_service::Leaf;
+use hotshot_state_prover::QCVerKey;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
@@ -37,6 +41,7 @@ use vbs::version::StaticVersionType;
 
 use crate::{
     external_event_handler::{self, ExternalEventHandler},
+    persistence::no_storage::NoStorage,
     state_signature::StateSigner,
     static_stake_table_commitment, Node, SeqTypes,
 };
@@ -90,7 +95,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         stake_table_capacity: u64,
         public_api_url: Option<Url>,
         _: Ver,
-        marketplace_config: MarketplaceConfig,
+        marketplace_config: MarketplaceConfig<SeqTypes, Node<MemoryNetwork<QCVerKey>, NoStorage>>,
     ) -> anyhow::Result<Self> {
         let config = &network_config.config;
         let pub_key = config.my_own_validator_config.public_key;

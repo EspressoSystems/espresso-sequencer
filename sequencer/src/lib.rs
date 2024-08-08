@@ -22,10 +22,12 @@ use ethers::types::U256;
 #[cfg(feature = "libp2p")]
 use futures::FutureExt;
 use genesis::L1Finalized;
+use hotshot_state_prover::QCVerKey;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
 use network::libp2p::split_off_peer_id;
 use options::Identity;
+use persistence::no_storage::NoStorage;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 pub mod persistence;
@@ -136,7 +138,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
     is_da: bool,
     identity: Identity,
-    marketplace_config: MarketplaceConfig,
+    marketplace_config: MarketplaceConfig<SeqTypes, Node<MemoryNetwork<QCVerKey>, NoStorage>>,
 ) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
     // Expose git information via status API.
     metrics
@@ -444,7 +446,9 @@ pub mod testing {
         },
         types::EventType::Decide,
     };
+    use hotshot_query_service::testing::mocks::{MockNodeImpl, MockTypes};
     use hotshot_stake_table::vec_based::StakeTable;
+    use hotshot_state_prover::QCVerKey;
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
@@ -758,7 +762,12 @@ pub mod testing {
                 stake_table_capacity,
                 None, // The public API URL
                 bind_version,
-                Url::from_str("https://some.url").unwrap(),
+                MarketplaceConfig::<SeqTypes, Node<MemoryNetwork<QCVerKey>, NoStorage>> {
+                    auction_results_provider: Arc::new(SolverAuctionResultsProvider(
+                        Url::from_str("https://some.solver").unwrap(),
+                    )),
+                    generic_builder_url: Url::from_str("https://some.builder").unwrap(),
+                },
             )
             .await
             .unwrap()
