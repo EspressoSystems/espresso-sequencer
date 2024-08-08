@@ -7,7 +7,7 @@
 use std::time::Duration;
 
 use hotshot_example_types::{
-    node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl},
+    node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl, TestConsecutiveLeaderTypes},
     state_types::TestTypes,
 };
 use hotshot_macros::cross_tests;
@@ -15,6 +15,7 @@ use hotshot_testing::{
     block_builder::SimpleBuilderImplementation,
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
     test_builder::TestDescription,
+    view_sync_task::ViewSyncTaskDescription,
 };
 #[cfg(async_executor_impl = "async-std")]
 use {
@@ -94,4 +95,24 @@ cross_tests!(
 
         metadata
     },
+);
+
+cross_tests!(
+    TestName: test_with_double_leader_no_failures,
+    Impls: [MemoryImpl, Libp2pImpl, PushCdnImpl],
+    Types: [TestConsecutiveLeaderTypes],
+    Ignore: false,
+    Metadata: {
+        let mut metadata = TestDescription::default_more_nodes();
+        metadata.num_bootstrap_nodes = 10;
+        metadata.num_nodes_with_stake = 12;
+        metadata.da_staked_committee_size = 12;
+        metadata.start_nodes = 12;
+
+        metadata.overall_safety_properties.num_failed_views = 0;
+
+        metadata.view_sync_properties = ViewSyncTaskDescription::Threshold(0, 0);
+
+        metadata
+    }
 );
