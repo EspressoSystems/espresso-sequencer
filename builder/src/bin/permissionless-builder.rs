@@ -1,14 +1,12 @@
-use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, time::Duration};
+use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 
 use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
-use cld::ClDuration;
-use espresso_types::eth_signature_key::EthKeyPair;
+use espresso_types::{eth_signature_key::EthKeyPair, parse_duration};
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use sequencer::{Genesis, L1Params};
 use sequencer_utils::logging;
-use snafu::Snafu;
 use url::Url;
 use vbs::version::{StaticVersion, StaticVersionType};
 
@@ -19,7 +17,7 @@ struct NonPermissionedBuilderOptions {
     #[clap(
         long,
         env = "ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL",
-        default_value = "http://localhost:8081"
+        default_value = "http://localhost:22001"
     )]
     hotshot_event_streaming_url: Url,
 
@@ -88,19 +86,6 @@ struct NonPermissionedBuilderOptions {
     logging: logging::Config,
 }
 
-#[derive(Clone, Debug, Snafu)]
-struct ParseDurationError {
-    reason: String,
-}
-
-fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
-    ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError {
-            reason: err.to_string(),
-        })
-}
-
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
     let opt = NonPermissionedBuilderOptions::parse();
@@ -152,7 +137,7 @@ async fn main() -> anyhow::Result<()> {
         txn_timeout_duration,
         base_fee,
     )
-    .await;
+    .await?;
 
     // Sleep forever
     async_std::future::pending::<()>().await;

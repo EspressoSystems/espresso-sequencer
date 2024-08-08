@@ -1045,7 +1045,8 @@ mod test {
     use espresso_types::{
         mock::MockStateCatchup,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        FeeAccount, FeeAmount, Header, Upgrade, UpgradeType, ValidatedState,
+        FeeAccount, FeeAmount, Header, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType,
+        ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1067,13 +1068,14 @@ mod test {
     };
     use jf_merkle_tree::prelude::{MerkleProof, Sha3Node};
     use portpicker::pick_unused_port;
-    use sequencer_utils::test_utils::setup_test;
+    use sequencer_utils::{ser::FromStringOrInteger, test_utils::setup_test};
     use surf_disco::Client;
     use test_helpers::{
         catchup_test_helper, state_signature_test_helper, status_test_helper, submit_test_helper,
         TestNetwork, TestNetworkConfigBuilder,
     };
     use tide_disco::{app::AppHealth, error::ServerError, healthcheck::HealthStatus};
+    use time::OffsetDateTime;
 
     use self::{
         data_source::{testing::TestableSequencerDataSource, PublicHotShotConfig},
@@ -1429,9 +1431,33 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_chain_config_upgrade() {
+    async fn test_chain_config_upgrade_view_based() {
         setup_test();
 
+        test_chain_config_upgrade_helper(UpgradeMode::View(ViewBasedUpgrade {
+            start_voting_view: None,
+            stop_voting_view: None,
+            start_proposing_view: 1,
+            stop_proposing_view: 10,
+        }))
+        .await;
+    }
+
+    #[async_std::test]
+    async fn test_chain_config_upgrade_time_based() {
+        setup_test();
+
+        let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
+        test_chain_config_upgrade_helper(UpgradeMode::Time(TimeBasedUpgrade {
+            start_proposing_time: Timestamp::from_integer(now).unwrap(),
+            stop_proposing_time: Timestamp::from_integer(now + 500).unwrap(),
+            start_voting_time: None,
+            stop_voting_time: None,
+        }))
+        .await;
+    }
+
+    async fn test_chain_config_upgrade_helper(mode: UpgradeMode) {
         let port = pick_unused_port().expect("No ports free");
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
@@ -1446,12 +1472,7 @@ mod test {
         upgrades.insert(
             <SeqTypes as NodeType>::Upgrade::VERSION,
             Upgrade {
-                mode: UpgradeMode::View(ViewBasedUpgrade {
-                    start_voting_view: None,
-                    stop_voting_view: None,
-                    start_proposing_view: 1,
-                    stop_proposing_view: 10,
-                }),
+                mode,
                 upgrade_type: UpgradeType::ChainConfig {
                     chain_config: chain_config_upgrade,
                 },

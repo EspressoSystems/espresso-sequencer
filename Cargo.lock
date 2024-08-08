@@ -1323,7 +1323,6 @@ dependencies = [
  "sequencer",
  "sequencer-utils",
  "serde",
- "snafu 0.8.3",
  "surf",
  "surf-disco",
  "tide-disco",
@@ -1683,6 +1682,12 @@ dependencies = [
  "crypto-common",
  "inout",
 ]
+
+[[package]]
+name = "circular-buffer"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da987586004ae7c43b7df5e3f7693775068522e1086f8d9b2d74c778a0f43313"
 
 [[package]]
 name = "clap"
@@ -2931,7 +2936,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.8",
- "snafu 0.8.3",
  "static_assertions",
  "surf-disco",
  "tagged-base64",
@@ -4379,7 +4383,6 @@ dependencies = [
  "reqwest 0.12.5",
  "sequencer-utils",
  "serde",
- "snafu 0.8.3",
  "surf-disco",
  "tide-disco",
  "time 0.3.36",
@@ -6079,6 +6082,91 @@ dependencies = [
 ]
 
 [[package]]
+name = "marketplace-builder"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 3.4.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "cld",
+ "committable",
+ "dotenvy",
+ "espresso-types",
+ "ethers",
+ "futures",
+ "hotshot",
+ "hotshot-builder-api",
+ "hotshot-events-service",
+ "hotshot-example-types",
+ "hotshot-orchestrator",
+ "hotshot-query-service",
+ "hotshot-stake-table",
+ "hotshot-state-prover",
+ "hotshot-types",
+ "jf-merkle-tree",
+ "jf-signature",
+ "libp2p",
+ "marketplace-builder-core",
+ "marketplace-solver",
+ "portpicker",
+ "rand 0.8.5",
+ "sequencer",
+ "sequencer-utils",
+ "serde",
+ "surf",
+ "surf-disco",
+ "tagged-base64",
+ "tempfile",
+ "tide-disco",
+ "toml",
+ "tracing",
+ "url",
+ "vbs",
+ "vec1",
+]
+
+[[package]]
+name = "marketplace-builder-core"
+version = "0.0.2"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.0.2#2df34726a644181b47a1fb50c4bce2e1c7ce5066"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 3.4.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "committable",
+ "derivative",
+ "futures",
+ "hex",
+ "hotshot",
+ "hotshot-builder-api",
+ "hotshot-events-service",
+ "hotshot-task-impls",
+ "hotshot-types",
+ "lru 0.12.3",
+ "multimap",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "snafu 0.8.3",
+ "surf-disco",
+ "tagged-base64",
+ "tide-disco",
+ "tokio",
+ "toml",
+ "tracing",
+ "url",
+ "vbs",
+]
+
+[[package]]
 name = "marketplace-solver"
 version = "0.1.0"
 dependencies = [
@@ -6295,6 +6383,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "multimap"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "defc4c55412d89136f966bbb339008b474350e5e6e78d2714439c386b3137a03"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "multistream-select"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6441,6 +6538,38 @@ dependencies = [
  "bitflags 1.3.2",
  "cfg-if",
  "libc",
+]
+
+[[package]]
+name = "node-metrics"
+version = "0.1.0"
+dependencies = [
+ "async-compatibility-layer",
+ "async-std",
+ "async-trait",
+ "bincode",
+ "bitvec",
+ "circular-buffer",
+ "clap",
+ "espresso-types",
+ "futures",
+ "hotshot",
+ "hotshot-query-service",
+ "hotshot-stake-table",
+ "hotshot-testing",
+ "hotshot-types",
+ "prometheus-parse",
+ "reqwest 0.12.5",
+ "serde",
+ "serde_json",
+ "surf-disco",
+ "tagged-base64",
+ "tide-disco",
+ "time 0.3.36",
+ "toml",
+ "tracing",
+ "url",
+ "vbs",
 ]
 
 [[package]]
@@ -7303,6 +7432,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.66",
+]
+
+[[package]]
+name = "prometheus-parse"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "811031bea65e5a401fb2e1f37d802cca6601e204ac463809a3189352d13b78a5"
+dependencies = [
+ "chrono",
+ "itertools 0.12.1",
+ "once_cell",
+ "regex",
 ]
 
 [[package]]

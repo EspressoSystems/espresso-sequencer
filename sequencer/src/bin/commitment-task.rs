@@ -2,14 +2,11 @@ use std::{io, time::Duration};
 
 use async_std::task::spawn;
 use clap::Parser;
-use espresso_types::SeqTypes;
+use espresso_types::{parse_duration, SeqTypes};
 use ethers::prelude::*;
 use futures::FutureExt;
 use hotshot_types::traits::node_implementation::NodeType;
-use sequencer::{
-    hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions},
-    options::parse_duration,
-};
+use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
 use sequencer_utils::logging;
 use tide_disco::{error::ServerError, Api};
 use url::Url;

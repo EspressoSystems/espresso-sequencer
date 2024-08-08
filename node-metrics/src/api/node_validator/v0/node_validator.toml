@@ -1,0 +1,39 @@
+# Copyright (c) 2022 Espresso Systems (espressosys.com)
+# This file is part of the HotShot Query Service library.
+#
+# This program is free software: you can redistribute it and/or modify it under the terms of the GNU
+# General Public License as published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+# This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+# even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# General Public License for more details.
+# You should have received a copy of the GNU General Public License along with this program. If not,
+# see <https://www.gnu.org/licenses/>.
+
+[meta]
+FORMAT_VERSION = "0.1.0"
+NAME = "node-validator"
+DESCRIPTION = """
+The node-validator API provides an endpoint that allows for the near real-time
+streaming of the HotShot blockchain, and the sequencer nodes that are connected
+and contributing to the HotShot blockchain.
+
+The data that is provided by this API can be used to construct a dashboard to
+provide near real-time updates / views of the current blockchain state and
+nodes.
+
+Additionally, this gives participating nodes the ability to be identified and
+represented for public view, and transparency.
+"""
+
+[route.details]
+PATH = ["details"]
+METHOD = "SOCKET"
+DOC = """
+The details endpoint allows a client to opt-in to specific stream updates in a
+single connection.  All information that is provided by this endpoint is opt-in.
+It will only provide what is requested across the WebSocket.
+
+Opens a WebSocket connection that will send events and responses to specifically
+requested data.
+"""

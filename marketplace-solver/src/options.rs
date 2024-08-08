@@ -1,7 +1,7 @@
-use std::{str::FromStr, time::Duration};
+use std::time::Duration;
 
 use clap::Parser;
-use thiserror::Error;
+use espresso_types::parse_duration;
 use tide_disco::Url;
 
 use crate::database::PostgresClient;
@@ -67,14 +67,4 @@ impl DatabaseOptions {
     pub async fn connect(self) -> anyhow::Result<PostgresClient> {
         PostgresClient::connect(self).await
     }
-}
-
-#[derive(Clone, Debug, Error)]
-#[error("failed to parse `{0}`")]
-pub struct ParseDurationError(String);
-
-pub fn parse_duration(s: &str) -> Result<Duration, ParseDurationError> {
-    cld::ClDuration::from_str(s)
-        .map(Duration::from)
-        .map_err(|err| ParseDurationError(err.to_string()))
 }
