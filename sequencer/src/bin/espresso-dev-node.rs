@@ -443,7 +443,7 @@ struct DevInfo {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct SetHotshotDownReqBody {
-    // return l1 light client if not provided
+    // return l1 light client address if not provided
     pub chain_id: Option<u64>,
     pub height: u64,
 }
@@ -468,6 +468,7 @@ mod tests {
         availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
         data_source::sql::testing::TmpDb,
     };
+    use hotshot_state_prover::service::AltChainInfo;
     use hotshot_types::traits::node_implementation::NodeType;
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
@@ -475,6 +476,7 @@ mod tests {
     use sequencer_utils::{init_signer, test_utils::setup_test, AnvilOptions};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
+
     use vbs::version::StaticVersion;
 
     use crate::{DevInfo, SetHotshotDownReqBody};
@@ -517,6 +519,7 @@ mod tests {
             .run()
             .unwrap()
             .command()
+            .env("RUST_LOG", "INFO")
             .env("ESPRESSO_SEQUENCER_L1_PROVIDER", l1_url.to_string())
             .env("ESPRESSO_BUILDER_PORT", builder_port.to_string())
             .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
@@ -533,11 +536,11 @@ mod tests {
             .spawn()
             .unwrap();
 
-        let _process = BackgroundProcess(process);
+        let process = BackgroundProcess(process);
 
         let api_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
-        api_client.connect(None).await;
+        api_client.connect(Some(Duration::from_secs(120))).await;
 
         tracing::info!("waiting for blocks");
         let _ = api_client
@@ -552,7 +555,9 @@ mod tests {
 
         let builder_api_client: Client<ServerError, StaticVersion<0, 1>> =
             Client::new(format!("http://localhost:{builder_port}").parse().unwrap());
-        builder_api_client.connect(None).await;
+        builder_api_client
+            .connect(Some(Duration::from_secs(120)))
+            .await;
 
         let builder_address = builder_api_client
             .get::<String>("block_info/builderaddress")
@@ -715,7 +720,9 @@ mod tests {
 
         let dev_node_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
             Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
-        dev_node_client.connect(None).await;
+        dev_node_client
+            .connect(Some(Duration::from_secs(120)))
+            .await;
 
         // Check the dev node api
         {
@@ -783,5 +790,124 @@ mod tests {
         }
 
         drop(db);
+        drop(process);
+    }
+
+    #[async_std::test]
+    async fn dev_node_multiple_lc_providers_test() {
+        setup_test();
+
+        let builder_port = pick_unused_port().unwrap();
+        let api_port = pick_unused_port().unwrap();
+        let dev_node_port = pick_unused_port().unwrap();
+
+        let instance = AnvilOptions::default().spawn().await;
+        let l1_url = instance.url();
+
+        let alt_anvil = AnvilOptions::default().spawn().await;
+        let alt_provider = alt_anvil.url();
+
+        let db = TmpDb::init().await;
+        let postgres_port = db.port();
+
+        let process = CargoBuild::new()
+            .bin("espresso-dev-node")
+            .features("testing")
+            .current_target()
+            .run()
+            .unwrap()
+            .command()
+            .env("RUST_LOG", "INFO")
+            .env("ESPRESSO_SEQUENCER_L1_PROVIDER", l1_url.to_string())
+            .env("ESPRESSO_BUILDER_PORT", builder_port.to_string())
+            .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
+            .env("ESPRESSO_SEQUENCER_POSTGRES_HOST", "localhost")
+            .env("ESPRESSO_SEQUENCER_ETH_MNEMONIC", TEST_MNEMONIC)
+            .env("ESPRESSO_DEPLOYER_ACCOUNT_INDEX", "0")
+            .env("ESPRESSO_DEV_NODE_PORT", dev_node_port.to_string())
+            .env(
+                "ESPRESSO_SEQUENCER_POSTGRES_PORT",
+                postgres_port.to_string(),
+            )
+            .env("ESPRESSO_SEQUENCER_POSTGRES_USER", "postgres")
+            .env("ESPRESSO_SEQUENCER_POSTGRES_PASSWORD", "password")
+            .env(
+                "ESPRESSO_DEPLOYER_ALT_CHAIN_PROVIDERS",
+                alt_provider.to_string(),
+            )
+            .spawn()
+            .unwrap();
+
+        let process = BackgroundProcess(process);
+
+        let api_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+            Client::new(format!("http://localhost:{api_port}").parse().unwrap());
+        api_client.connect(Some(Duration::from_secs(120))).await;
+
+        tracing::info!("waiting for blocks");
+        let _ = api_client
+            .socket("availability/stream/blocks/0")
+            .subscribe::<BlockQueryData<SeqTypes>>()
+            .await
+            .unwrap()
+            .take(5)
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap();
+
+        let dev_node_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+            Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
+        dev_node_client
+            .connect(Some(Duration::from_secs(120)))
+            .await;
+
+        // Check the dev node api
+        {
+            tracing::info!("checking the dev node api");
+            let dev_info = dev_node_client
+                .get::<DevInfo>("api/dev-info")
+                .send()
+                .await
+                .unwrap();
+
+            let light_client_address = dev_info.l1_light_client_address;
+
+            let signer = init_signer(&l1_url, TEST_MNEMONIC, 0).await.unwrap();
+            let light_client = LightClient::new(light_client_address, Arc::new(signer.clone()));
+
+            while light_client
+                .get_hot_shot_commitment(U256::from(5))
+                .call()
+                .await
+                .is_err()
+            {
+                tracing::info!("waiting for commitment");
+                sleep(Duration::from_secs(3)).await;
+            }
+
+            for AltChainInfo {
+                provider_url,
+                light_client_address,
+                ..
+            } in dev_info.alt_chains
+            {
+                let signer = init_signer(&provider_url, TEST_MNEMONIC, 0).await.unwrap();
+                let light_client = LightClient::new(light_client_address, Arc::new(signer.clone()));
+
+                while light_client
+                    .get_hot_shot_commitment(U256::from(5))
+                    .call()
+                    .await
+                    .is_err()
+                {
+                    tracing::info!("waiting for commitment");
+                    sleep(Duration::from_secs(3)).await;
+                }
+            }
+        }
+
+        drop(db);
+        drop(alt_provider);
+        drop(process);
     }
 }

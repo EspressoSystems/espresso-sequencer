@@ -434,9 +434,9 @@ impl ReadState for ApiState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AltChainInfo {
-    chain_id: u64,
-    provider_url: Url,
-    light_client_address: Address,
+    pub chain_id: u64,
+    pub provider_url: Url,
+    pub light_client_address: Address,
 }
 
 impl AltChainInfo {
