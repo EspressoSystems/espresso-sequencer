@@ -134,9 +134,3 @@ rand = "0.8.5"
 time = "0.3"
 trait-set = "0.3.0"
 
-# [patch."https://github.com/EspressoSystems/hotshot-events-service.git"]
-# hotshot-events-service = { path = "../hotshot-events-service" }
-# [patch."https://github.com/EspressoSystems/marketplace-builder-core.git"]
-# marketplace-builder-core = { path = "../marketplace-builder-core" }
-# [patch."https://github.com/EspressoSystems/hotshot-builder-core.git"]
-# hotshot-builder-core = { path = "../hotshot-builder-core" }
