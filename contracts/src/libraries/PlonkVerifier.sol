@@ -193,13 +193,13 @@ library PlonkVerifier {
             transcript.transcript, proof.wire3.x, proof.wire3.y, proof.wire4.x, proof.wire4.y
         );
 
-        res.beta = transcript.getAndAppendChallenge();
-        res.gamma = transcript.getAndAppendChallenge();
+        res.beta = transcript.getChallenge();
+        res.gamma = transcript.getChallenge();
 
         transcript.transcript =
             abi.encodePacked(transcript.transcript, proof.prodPerm.x, proof.prodPerm.y);
 
-        res.alpha = transcript.getAndAppendChallenge();
+        res.alpha = transcript.getChallenge();
 
         transcript.transcript = abi.encodePacked(
             transcript.transcript,
@@ -214,7 +214,7 @@ library PlonkVerifier {
             transcript.transcript, proof.split3.x, proof.split3.y, proof.split4.x, proof.split4.y
         );
 
-        res.zeta = transcript.getAndAppendChallenge();
+        res.zeta = transcript.getChallenge();
 
         // Append proof evaluations
         transcript.transcript = abi.encodePacked(
@@ -235,13 +235,13 @@ library PlonkVerifier {
             proof.prodPermZetaOmegaEval
         );
 
-        res.v = transcript.getAndAppendChallenge();
+        res.v = transcript.getChallenge();
 
         transcript.transcript = abi.encodePacked(
             transcript.transcript, proof.zeta.x, proof.zeta.y, proof.zetaOmega.x, proof.zetaOmega.y
         );
 
-        res.u = transcript.getAndAppendChallenge();
+        res.u = transcript.getChallenge();
 
         assembly {
             let alpha := mload(res)

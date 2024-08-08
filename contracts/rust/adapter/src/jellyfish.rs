@@ -13,6 +13,7 @@ use ethers::{
     utils::hex::ToHex,
 };
 use jf_pcs::prelude::Commitment;
+use jf_plonk::constants::KECCAK256_STATE_SIZE;
 use jf_plonk::proof_system::structs::{OpenKey, Proof, ProofEvaluations, VerifyingKey};
 use jf_plonk::testing_apis::Challenges;
 use jf_plonk::transcript::SolidityTranscript;
@@ -95,6 +96,7 @@ pub fn open_key() -> OpenKey<Bn254> {
 /// an intermediate representation of the transcript parsed from abi.encode(transcript) from Solidity.
 #[derive(Clone, EthAbiType, EthAbiCodec)]
 pub struct ParsedTranscript {
+    pub(crate) state: H256,
     pub(crate) transcript: Bytes,
 }
 
@@ -108,8 +110,9 @@ impl FromStr for ParsedTranscript {
 
 impl From<SolidityTranscript> for ParsedTranscript {
     fn from(t: SolidityTranscript) -> Self {
-        let transcript = t.internal();
+        let (state, transcript) = t.internal();
         Self {
+            state: H256::from_slice(&state),
             transcript: transcript.into(),
         }
     }
@@ -117,7 +120,9 @@ impl From<SolidityTranscript> for ParsedTranscript {
 
 impl From<ParsedTranscript> for SolidityTranscript {
     fn from(t: ParsedTranscript) -> Self {
-        Self::from_internal(t.transcript.to_vec())
+        let mut state = [0u8; KECCAK256_STATE_SIZE];
+        state.copy_from_slice(&t.state.to_fixed_bytes());
+        Self::from_internal(state, t.transcript.to_vec())
     }
 }
 

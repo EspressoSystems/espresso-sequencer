@@ -172,7 +172,7 @@ fn main() {
             let field = u256_to_field::<Fr>(cli.args[1].parse::<U256>().unwrap());
 
             let mut t: SolidityTranscript = t_parsed.into();
-            t.append_challenge::<Bn254>(&[], &field).unwrap();
+            t.append_field_elem::<Bn254>(&[], &field).unwrap();
             let res: ParsedTranscript = t.into();
             println!("{}", (res,).encode_hex());
         }
@@ -198,7 +198,7 @@ fn main() {
             let t_parsed = cli.args[0].parse::<ParsedTranscript>().unwrap();
 
             let mut t: SolidityTranscript = t_parsed.into();
-            let chal = t.get_and_append_challenge::<Bn254>(&[]).unwrap();
+            let chal = t.get_challenge::<Bn254>(&[]).unwrap();
 
             let updated_t: ParsedTranscript = t.into();
             let res = (updated_t, field_to_u256(chal));
@@ -233,7 +233,7 @@ fn main() {
             let proof: Proof<Bn254> = proof_parsed.clone().into();
 
             let mut t: SolidityTranscript = t_parsed.into();
-            <SolidityTranscript as PlonkTranscript<Fr>>::append_proof_evaluations::<Bn254>(
+            <SolidityTranscript as PlonkTranscript<Fq>>::append_proof_evaluations::<Bn254>(
                 &mut t,
                 &proof.poly_evals,
             )
