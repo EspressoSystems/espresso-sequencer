@@ -519,7 +519,6 @@ mod tests {
             .run()
             .unwrap()
             .command()
-            .env("RUST_LOG", "INFO")
             .env("ESPRESSO_SEQUENCER_L1_PROVIDER", l1_url.to_string())
             .env("ESPRESSO_BUILDER_PORT", builder_port.to_string())
             .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
@@ -540,7 +539,7 @@ mod tests {
 
         let api_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
-        api_client.connect(Some(Duration::from_secs(120))).await;
+        api_client.connect(None).await;
 
         tracing::info!("waiting for blocks");
         let _ = api_client
@@ -555,9 +554,7 @@ mod tests {
 
         let builder_api_client: Client<ServerError, StaticVersion<0, 1>> =
             Client::new(format!("http://localhost:{builder_port}").parse().unwrap());
-        builder_api_client
-            .connect(Some(Duration::from_secs(120)))
-            .await;
+        builder_api_client.connect(None).await;
 
         let builder_address = builder_api_client
             .get::<String>("block_info/builderaddress")
@@ -720,9 +717,7 @@ mod tests {
 
         let dev_node_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
             Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
-        dev_node_client
-            .connect(Some(Duration::from_secs(120)))
-            .await;
+        dev_node_client.connect(None).await;
 
         // Check the dev node api
         {
@@ -817,7 +812,6 @@ mod tests {
             .run()
             .unwrap()
             .command()
-            .env("RUST_LOG", "INFO")
             .env("ESPRESSO_SEQUENCER_L1_PROVIDER", l1_url.to_string())
             .env("ESPRESSO_BUILDER_PORT", builder_port.to_string())
             .env("ESPRESSO_SEQUENCER_API_PORT", api_port.to_string())
@@ -842,7 +836,7 @@ mod tests {
 
         let api_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
-        api_client.connect(Some(Duration::from_secs(120))).await;
+        api_client.connect(None).await;
 
         tracing::info!("waiting for blocks");
         let _ = api_client
@@ -857,9 +851,7 @@ mod tests {
 
         let dev_node_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
             Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
-        dev_node_client
-            .connect(Some(Duration::from_secs(120)))
-            .await;
+        dev_node_client.connect(None).await;
 
         // Check the dev node api
         {
