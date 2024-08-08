@@ -51,7 +51,7 @@ futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.70" }
 # Hotshot imports
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "rc-0.5.70" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.38" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "rc-0.1.40" }
 marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", rev = "c1e60e76893557f21e8aea7e86994ebe107b4914" }
 hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.39" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "rc-0.5.70" }
@@ -138,3 +138,5 @@ trait-set = "0.3.0"
 # hotshot-events-service = { path = "../hotshot-events-service" }
 # [patch."https://github.com/EspressoSystems/marketplace-builder-core.git"]
 # marketplace-builder-core = { path = "../marketplace-builder-core" }
+# [patch."https://github.com/EspressoSystems/hotshot-builder-core.git"]
+# hotshot-builder-core = { path = "../hotshot-builder-core" }
