@@ -20,7 +20,7 @@ use hotshot_task_impls::{
 };
 use hotshot_testing::{
     helpers::{build_fake_view_with_leaf_and_state, build_system_handle},
-    predicates::event::{all_predicates, exact, quorum_proposal_missing, vote_now},
+    predicates::event::{all_predicates, exact, quorum_proposal_missing},
     script::InputOrder,
     serial,
     view_generator::TestViewGenerator,
@@ -127,10 +127,7 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
         helpers::{build_fake_view_with_leaf, build_fake_view_with_leaf_and_state},
         script::{Expectations, TaskScript},
     };
-    use hotshot_types::{
-        data::Leaf,
-        vote::{HasViewNumber, VoteDependencyData},
-    };
+    use hotshot_types::{data::Leaf, vote::HasViewNumber};
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
@@ -209,7 +206,6 @@ async fn test_quorum_proposal_recv_task_liveness_check() {
         )),
         quorum_proposal_missing(),
         exact(HighQcUpdated(proposals[2].data.justify_qc.clone())),
-        vote_now(),
     ])];
 
     let state = QuorumProposalRecvTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;

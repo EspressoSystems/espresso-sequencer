@@ -25,7 +25,7 @@ use hotshot_types::{
         node_implementation::{NodeImplementation, NodeType},
         signature_key::SignatureKey,
     },
-    vote::{HasViewNumber, VoteDependencyData},
+    vote::HasViewNumber,
 };
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
@@ -36,7 +36,6 @@ use self::handlers::handle_quorum_proposal_recv;
 use crate::{
     events::{HotShotEvent, ProposalMissing},
     helpers::{broadcast_event, cancel_task, parent_leaf_and_state},
-    quorum_proposal_recv::handlers::QuorumProposalValidity,
 };
 
 /// Event handlers for this task.
@@ -125,61 +124,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
         #[cfg(feature = "dependency-tasks")]
         if let HotShotEvent::QuorumProposalRecv(proposal, sender) = event.as_ref() {
             match handle_quorum_proposal_recv(proposal, sender, &event_stream, self).await {
-                Ok(QuorumProposalValidity::Fully) => {
+                Ok(()) => {
                     self.cancel_tasks(proposal.data.view_number()).await;
-                }
-                Ok(QuorumProposalValidity::Liveness) => {
-                    // Build the parent leaf since we didn't find it during the proposal check.
-                    let parent_leaf = match parent_leaf_and_state(
-                        proposal.data.view_number() + 1,
-                        &event_stream,
-                        Arc::clone(&self.quorum_membership),
-                        self.public_key.clone(),
-                        OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
-                    )
-                    .await
-                    {
-                        Ok((parent_leaf, _ /* state */)) => parent_leaf,
-                        Err(error) => {
-                            warn!("Failed to get parent leaf and state during VoteNow data construction; error = {error:#}");
-                            return;
-                        }
-                    };
-
-                    let view_number = proposal.data.view_number();
-                    self.cancel_tasks(view_number).await;
-                    let consensus = self.consensus.read().await;
-                    let Some(vid_shares) = consensus.vid_shares().get(&view_number) else {
-                        debug!(
-                                "We have not seen the VID share for this view {:?} yet, so we cannot vote.",
-                                view_number
-                            );
-                        return;
-                    };
-                    let Some(vid_share) = vid_shares.get(&self.public_key) else {
-                        error!("Did not get a VID share for our public key, aborting vote");
-                        return;
-                    };
-                    let Some(da_cert) = consensus.saved_da_certs().get(&view_number) else {
-                        debug!(
-                            "Received VID share, but couldn't find DAC cert for view {:?}",
-                            view_number
-                        );
-                        return;
-                    };
-                    broadcast_event(
-                        Arc::new(HotShotEvent::VoteNow(
-                            view_number,
-                            VoteDependencyData {
-                                quorum_proposal: proposal.data.clone(),
-                                parent_leaf,
-                                vid_share: vid_share.clone(),
-                                da_cert: da_cert.clone(),
-                            },
-                        )),
-                        &event_stream,
-                    )
-                    .await;
                 }
                 Err(e) => debug!(?e, "Failed to validate the proposal"),
             }

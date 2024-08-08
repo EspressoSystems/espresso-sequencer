@@ -284,16 +284,6 @@ where
     Box::new(EventPredicate { check, info })
 }
 
-pub fn vote_now<TYPES>() -> Box<EventPredicate<TYPES>>
-where
-    TYPES: NodeType,
-{
-    let info = "VoteNow".to_string();
-    let check: EventCallback<TYPES> =
-        Arc::new(move |e: Arc<HotShotEvent<TYPES>>| matches!(e.as_ref(), VoteNow(..)));
-    Box::new(EventPredicate { check, info })
-}
-
 pub fn validated_state_updated<TYPES>() -> Box<EventPredicate<TYPES>>
 where
     TYPES: NodeType,

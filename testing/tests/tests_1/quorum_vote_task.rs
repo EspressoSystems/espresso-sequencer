@@ -98,57 +98,6 @@ async fn test_quorum_vote_task_success() {
 #[cfg(test)]
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
-async fn test_quorum_vote_task_vote_now() {
-    use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState};
-    use hotshot_testing::{
-        helpers::build_system_handle,
-        predicates::event::{exact, quorum_vote_send, validated_state_updated},
-        view_generator::TestViewGenerator,
-    };
-    use hotshot_types::vote::VoteDependencyData;
-
-    async_compatibility_layer::logging::setup_logging();
-    async_compatibility_layer::logging::setup_backtrace();
-
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(2).await.0;
-    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
-    let da_membership = handle.hotshot.memberships.da_membership.clone();
-
-    let mut generator = TestViewGenerator::generate(quorum_membership.clone(), da_membership);
-
-    generator.next().await;
-    let view = generator.current_view.clone().unwrap();
-
-    let vote_dependency_data = VoteDependencyData {
-        quorum_proposal: view.quorum_proposal.data.clone(),
-        parent_leaf: view.leaf.clone(),
-        vid_share: view.vid_proposal.0[0].clone(),
-        da_cert: view.da_certificate.clone(),
-    };
-
-    // Submit an event with just the `VoteNow` event which should successfully send a vote.
-    let inputs = vec![serial![VoteNow(view.view_number, vote_dependency_data),]];
-
-    let expectations = vec![Expectations::from_outputs(vec![
-        exact(QuorumVoteDependenciesValidated(ViewNumber::new(1))),
-        validated_state_updated(),
-        quorum_vote_send(),
-    ])];
-
-    let quorum_vote_state =
-        QuorumVoteTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
-
-    let mut script = TaskScript {
-        timeout: TIMEOUT,
-        state: quorum_vote_state,
-        expectations,
-    };
-    run_test![inputs, script].await;
-}
-
-#[cfg(test)]
-#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
-#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_vote_task_miss_dependency() {
     use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::QuorumVoteTaskState};
     use hotshot_testing::{

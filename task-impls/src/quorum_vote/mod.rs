@@ -14,7 +14,7 @@ use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use committable::Committable;
 use hotshot_task::{
-    dependency::{AndDependency, Dependency, EventDependency, OrDependency},
+    dependency::{AndDependency, Dependency, EventDependency},
     dependency_task::{DependencyTask, HandleDepOutput},
     task::TaskState,
 };
@@ -40,7 +40,7 @@ use hotshot_types::{
 use jf_vid::VidScheme;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
-use tracing::{debug, error, info, instrument, trace, warn};
+use tracing::{debug, error, instrument, trace, warn};
 
 use crate::{
     events::HotShotEvent,
@@ -60,8 +60,6 @@ enum VoteDependency {
     Dac,
     /// For the `VidShareRecv` event.
     Vid,
-    /// For the `VoteNow` event.
-    VoteNow,
 }
 
 /// Handler for the vote dependency.
@@ -312,10 +310,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> HandleDepOutput
                         payload_commitment = Some(vid_payload_commitment);
                     }
                 }
-                HotShotEvent::VoteNow(_, vote_dependency_data) => {
-                    leaf = Some(vote_dependency_data.parent_leaf.clone());
-                    vid_share = Some(vote_dependency_data.vid_share.clone());
-                }
                 _ => {}
             }
         }
@@ -434,13 +428,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                             return false;
                         }
                     }
-                    VoteDependency::VoteNow => {
-                        if let HotShotEvent::VoteNow(view, _) = event {
-                            *view
-                        } else {
-                            return false;
-                        }
-                    }
                 };
                 if event_view == view_number {
                     trace!("Vote dependency {:?} completed", dependency_type);
@@ -479,32 +466,15 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
             self.create_event_dependency(VoteDependency::Dac, view_number, event_receiver.clone());
         let vid_dependency =
             self.create_event_dependency(VoteDependency::Vid, view_number, event_receiver.clone());
-        let mut vote_now_dependency = self.create_event_dependency(
-            VoteDependency::VoteNow,
-            view_number,
-            event_receiver.clone(),
-        );
-
         // If we have an event provided to us
         if let Some(event) = event {
-            match event.as_ref() {
-                HotShotEvent::VoteNow(..) => {
-                    vote_now_dependency.mark_as_completed(event);
-                }
-                HotShotEvent::QuorumProposalValidated(..) => {
-                    quorum_proposal_dependency.mark_as_completed(event);
-                }
-                _ => {}
+            if let HotShotEvent::QuorumProposalValidated(..) = event.as_ref() {
+                quorum_proposal_dependency.mark_as_completed(event);
             }
         }
 
         let deps = vec![quorum_proposal_dependency, dac_dependency, vid_dependency];
-        let dependency_chain = OrDependency::from_deps(vec![
-            // Either we fulfill the dependencies individually.
-            AndDependency::from_deps(deps),
-            // Or we fulfill the single dependency that contains all the info that we need.
-            AndDependency::from_deps(vec![vote_now_dependency]),
-        ]);
+        let dependency_chain = AndDependency::from_deps(deps);
 
         let dependency_task = DependencyTask::new(
             dependency_chain,
@@ -559,15 +529,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
         event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
     ) {
         match event.as_ref() {
-            HotShotEvent::VoteNow(view, ..) => {
-                info!("Vote NOW for view {:?}", *view);
-                self.create_dependency_task_if_new(
-                    *view,
-                    event_receiver,
-                    &event_sender,
-                    Some(event),
-                );
-            }
             HotShotEvent::QuorumProposalValidated(proposal, _leaf) => {
                 trace!("Received Proposal for view {}", *proposal.view_number());
 
