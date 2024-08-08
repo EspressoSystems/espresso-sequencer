@@ -32,42 +32,54 @@ Steps:
 
 1. Run the Deployment command.
 
-   ```bash
+#### Without OpenZeppelin Defender (current method)
+
+```bash
    source .env.contracts && \
    forge clean && \
-   FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript \
+   forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDeployScript $SAFE_MULTISIG_ADDRESS \
+   --sig 'run(address)' \
    --ffi \
    --rpc-url https://ethereum-sepolia.publicnode.com  \
-   --build-info true
-   source .env.contracts && \
-   forge clean && \
-   FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript \
-   --ffi \
-   --rpc-url https://ethereum-sepolia.publicnode.com  \
-   --build-info true
-   ```
+   --build-info true \
+   --legacy \
+   --broadcast
+```
 
-   1. Go to the [deploy](https://defender.openzeppelin.com/v2/#/deploy) tab OpenZeppelin Defender's UI and click on the
-      current environment to see the transaction. The transaction should be visible with status "SUBMITTED". The page
-      may need to be refreshed a few times. It occasionally may take minutes for transactions to appear.
-   2. Click that transaction, then "Open in Safe App" which opens up the Safe UI where your signers for that Safe
-      multi-sig wallet can confirm the transaction. The two transactions to be confirmed are: (i) deployment of
-      implementation contract (ii) deployment of proxy contract
-   3. If the transaction looks correct click "confirm".
-   4. Click "Execute".
-   5. Confirm the transaction with your wallet (e. g. metamask).
-   6. Repeat steps 1 to 5 for the deployment of the proxy contract. You may need to refresh the OpenZeppelin Defender
-      "deploy" tab a few times until the second transaction appears.
+#### With OpenZeppelin Defender
 
-2. Verify the Implementation contract on Etherscan (Use another window as step would not have completed yet)
+```bash
+source .env.contracts && \
+forge clean && \
+forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com  \
+--build-info true \
+```
+
+1.  Go to the [deploy](https://defender.openzeppelin.com/v2/#/deploy) tab OpenZeppelin Defender's UI and click on the
+    current environment to see the transaction. The transaction should be visible with status "SUBMITTED". The page may
+    need to be refreshed a few times. It occasionally may take minutes for transactions to appear.
+2.  Click that transaction, then "Open in Safe App" which opens up the Safe UI where your signers for that Safe
+    multi-sig wallet can confirm the transaction. The two transactions to be confirmed are: (i) deployment of
+    implementation contract (ii) deployment of proxy contract
+3.  If the transaction looks correct click "confirm".
+4.  Click "Execute".
+5.  Confirm the transaction with your wallet (e. g. metamask).
+6.  Repeat steps 1 to 5 for the deployment of the proxy contract. You may need to refresh the OpenZeppelin Defender
+    "deploy" tab a few times until the second transaction appears.
+
+7.  Verify the Implementation contract on Etherscan (Use another window as step would not have completed yet)
 
 ```bash
 forge verify-contract --chain-id 11155111 \
 --watch --etherscan-api-key $ETHERSCAN_API_KEY \
 --compiler-version $SOLC_VERSION \
 $FEE_CONTRACT_ADDRESS \
-contracts/src/FeeContract.sol:FeeContract --watch
+contracts/src/FeeContract.sol:FeeContract
 ```
+
+You can get the `$SOLC_VERSION` by running the command `solc version`.
 
 3. Inform Etherscan that it's a Proxy When the proxy is deployed, go to Etherscan. Go to Contract > Code > More Options
    and select the 'is this a proxy?' option. You should then be able to interact with the implementation contract via a

@@ -10,6 +10,30 @@ import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { FeeContract as FC } from "../src/FeeContract.sol";
 import { UtilsScript } from "./Utils.s.sol";
 
+contract FeeContractDeployScript is Script {
+    string internal contractName = "FeeContract.sol";
+    UtilsScript internal utils = new UtilsScript();
+    uint256 internal contractSalt = uint256(vm.envInt("FEE_CONTRACT_SALT"));
+
+    function run(address owner)
+        public
+        returns (address payable proxy, address implementationAddress)
+    {
+        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+
+        address proxyAddress =
+            Upgrades.deployUUPSProxy(contractName, abi.encodeCall(FC.initialize, (owner)));
+
+        // Get the implementation address
+        implementationAddress = Upgrades.getImplementationAddress(proxyAddress);
+
+        vm.stopBroadcast();
+
+        return (payable(proxyAddress), implementationAddress);
+    }
+}
+
 contract FeeContractDefenderDeployScript is Script {
     string internal contractName = "FeeContract.sol";
     UtilsScript internal utils = new UtilsScript();

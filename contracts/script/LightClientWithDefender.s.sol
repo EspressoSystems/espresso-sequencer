@@ -82,7 +82,6 @@ contract LightClientDefenderUpgradeScript is Script {
 
     function run() public returns (string memory proposalId, string memory proposalUrl) {
         //get the previous salt from the salt history - this assumes there was first a deployment
-        // using `FeeContractDefenderDeployScript`
         (string memory saltFilePath,) = utils.generateSaltFilePath(originalContractName);
         (, string memory saltData) = utils.readFile(saltFilePath);
         uint256 prevContractSalt = vm.parseJsonUint(saltData, ".previousSalt");
