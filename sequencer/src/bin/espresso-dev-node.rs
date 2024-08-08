@@ -369,16 +369,14 @@ async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone
                     )
                 })?
             } else {
-                state
-                    .0
-                    .first_key_value()
-                    .ok_or_else(|| {
-                        ServerError::catch_all(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "L1 light client contract not found ".to_string(),
-                        )
-                    })?
-                    .1
+                let (_, contract) = state.0.first_key_value().ok_or_else(|| {
+                    ServerError::catch_all(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "L1 light client contract not found ".to_string(),
+                    )
+                })?;
+
+                contract
             };
 
             let contract_call = contract.set_hot_shot_down_since(U256::from(body.height));
@@ -407,16 +405,14 @@ async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone
                     )
                 })?
             } else {
-                state
-                    .0
-                    .first_key_value()
-                    .ok_or_else(|| {
-                        ServerError::catch_all(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "l1 light client ontract not found".to_string(),
-                        )
-                    })?
-                    .1
+                let (_, light_client_address) = state.0.first_key_value().ok_or_else(|| {
+                    ServerError::catch_all(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "l1 light client ontract not found".to_string(),
+                    )
+                })?;
+
+                light_client_address
             };
 
             contract.set_hot_shot_up().send().await.map_err(|err| {
@@ -447,7 +443,7 @@ struct DevInfo {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct SetHotshotDownReqBody {
-    // use L1 chain id (1) if not provided
+    // return l1 light client if not provided
     pub chain_id: Option<u64>,
     pub height: u64,
 }
@@ -466,10 +462,7 @@ mod tests {
     use contract_bindings::light_client::LightClient;
     use escargot::CargoBuild;
     use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
-    use ethers::{
-        providers::Middleware,
-        types::{Address, U256},
-    };
+    use ethers::{providers::Middleware, types::U256};
     use futures::TryStreamExt;
     use hotshot_query_service::{
         availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
@@ -677,24 +670,6 @@ mod tests {
 
         let tx_block_height = tx_result.unwrap().block_height();
 
-        let light_client_address = "0xdc64a140aa3e981100a9beca4e685f962f0cf6c9";
-
-        let signer = init_signer(&l1_url, TEST_MNEMONIC, 0).await.unwrap();
-        let light_client = LightClient::new(
-            light_client_address.parse::<Address>().unwrap(),
-            Arc::new(signer.clone()),
-        );
-
-        while light_client
-            .get_hot_shot_commitment(U256::from(1))
-            .call()
-            .await
-            .is_err()
-        {
-            tracing::info!("waiting for commitment");
-            sleep(Duration::from_secs(3)).await;
-        }
-
         // Check the namespace proof
         let proof = api_client
             .get::<NamespaceProofQueryData>(&format!(
@@ -745,11 +720,26 @@ mod tests {
         // Check the dev node api
         {
             tracing::info!("checking the dev node api");
-            dev_node_client
+            let dev_info = dev_node_client
                 .get::<DevInfo>("api/dev-info")
                 .send()
                 .await
                 .unwrap();
+
+            let light_client_address = dev_info.l1_light_client_address;
+
+            let signer = init_signer(&l1_url, TEST_MNEMONIC, 0).await.unwrap();
+            let light_client = LightClient::new(light_client_address, Arc::new(signer.clone()));
+
+            while light_client
+                .get_hot_shot_commitment(U256::from(1))
+                .call()
+                .await
+                .is_err()
+            {
+                tracing::info!("waiting for commitment");
+                sleep(Duration::from_secs(3)).await;
+            }
 
             let height = signer.get_block_number().await.unwrap().as_u64();
             dev_node_client
