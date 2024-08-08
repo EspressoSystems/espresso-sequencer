@@ -138,7 +138,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     bind_version: Ver,
     is_da: bool,
     identity: Identity,
-    marketplace_config: MarketplaceConfig<SeqTypes, Node<MemoryNetwork<QCVerKey>, NoStorage>>,
+    marketplace_config: MarketplaceConfig<SeqTypes, Node<network::Production, P::Persistence>>,
 ) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
     // Expose git information via status API.
     metrics
@@ -762,7 +762,7 @@ pub mod testing {
                 stake_table_capacity,
                 None, // The public API URL
                 bind_version,
-                MarketplaceConfig::<SeqTypes, Node<MemoryNetwork<QCVerKey>, NoStorage>> {
+                MarketplaceConfig::<SeqTypes, Node<network::Memory, P::Persistence>> {
                     auction_results_provider: Arc::new(SolverAuctionResultsProvider(
                         Url::from_str("https://some.solver").unwrap(),
                     )),

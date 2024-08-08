@@ -95,7 +95,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         stake_table_capacity: u64,
         public_api_url: Option<Url>,
         _: Ver,
-        marketplace_config: MarketplaceConfig<SeqTypes, Node<MemoryNetwork<QCVerKey>, NoStorage>>,
+        marketplace_config: MarketplaceConfig<SeqTypes, Node<N, P>>,
     ) -> anyhow::Result<Self> {
         let config = &network_config.config;
         let pub_key = config.my_own_validator_config.public_key;
