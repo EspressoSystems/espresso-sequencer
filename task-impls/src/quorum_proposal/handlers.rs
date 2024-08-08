@@ -190,6 +190,7 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
                 self.instance_state.as_ref(),
                 &parent_leaf,
                 commitment_and_metadata.commitment,
+                commitment_and_metadata.builder_commitment,
                 commitment_and_metadata.metadata,
                 commitment_and_metadata.fees.to_vec(),
                 vid_share.data.common.clone(),

@@ -189,7 +189,7 @@ pub trait BlockHeader<TYPES: NodeType>:
     type Error: Error + Debug + Send + Sync;
 
     /// Build a header with the parent validate state, instance-level state, parent leaf, payload
-    /// commitment, and metadata. This is only used in pre-marketplace versions
+    /// and builder commitments, and metadata. This is only used in pre-marketplace versions
     #[allow(clippy::too_many_arguments)]
     fn new_legacy(
         parent_state: &TYPES::ValidatedState,
@@ -204,13 +204,15 @@ pub trait BlockHeader<TYPES: NodeType>:
     ) -> impl Future<Output = Result<Self, Self::Error>> + Send;
 
     /// Build a header with the parent validate state, instance-level state, parent leaf, payload
-    /// commitment, metadata, and auction results. This is only used in post-marketplace versions
+    /// and builder commitments, metadata, and auction results. This is only used in post-marketplace
+    /// versions
     #[allow(clippy::too_many_arguments)]
     fn new_marketplace(
         parent_state: &TYPES::ValidatedState,
         instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
         parent_leaf: &Leaf<TYPES>,
         payload_commitment: VidCommitment,
+        builder_commitment: BuilderCommitment,
         metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         builder_fee: Vec<BuilderFee<TYPES>>,
         vid_common: VidCommon,

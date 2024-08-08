@@ -1,6 +1,5 @@
 #![cfg(feature = "dependency-tasks")]
 
-use itertools::Itertools;
 use std::time::Duration;
 
 use async_compatibility_layer::art::async_timeout;
@@ -25,6 +24,7 @@ use hotshot_types::{
     consensus::OuterConsensus, data::ViewNumber, traits::node_implementation::ConsensusTime,
     vote::HasViewNumber,
 };
+use itertools::Itertools;
 
 const TIMEOUT: Duration = Duration::from_millis(35);
 

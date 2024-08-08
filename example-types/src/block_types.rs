@@ -245,6 +245,29 @@ pub struct TestBlockHeader {
     pub timestamp: u64,
 }
 
+impl TestBlockHeader {
+    fn new<TYPES: NodeType<BlockHeader = Self>>(
+        parent_leaf: &Leaf<TYPES>,
+        payload_commitment: VidCommitment,
+        builder_commitment: BuilderCommitment,
+    ) -> Self {
+        let parent = parent_leaf.block_header();
+
+        let mut timestamp = OffsetDateTime::now_utc().unix_timestamp() as u64;
+        if timestamp < parent.timestamp {
+            // Prevent decreasing timestamps.
+            timestamp = parent.timestamp;
+        }
+
+        Self {
+            block_number: parent.block_number + 1,
+            payload_commitment,
+            builder_commitment,
+            timestamp,
+        }
+    }
+}
+
 impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> BlockHeader<TYPES>
     for TestBlockHeader
 {
@@ -261,34 +284,30 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
         _vid_common: VidCommon,
         _version: Version,
     ) -> Result<Self, Self::Error> {
-        let parent = parent_leaf.block_header();
-
-        let mut timestamp = OffsetDateTime::now_utc().unix_timestamp() as u64;
-        if timestamp < parent.timestamp {
-            // Prevent decreasing timestamps.
-            timestamp = parent.timestamp;
-        }
-
-        Ok(Self {
-            block_number: parent.block_number + 1,
+        Ok(Self::new(
+            parent_leaf,
             payload_commitment,
             builder_commitment,
-            timestamp,
-        })
+        ))
     }
 
     async fn new_marketplace(
         _parent_state: &TYPES::ValidatedState,
         _instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
-        _parent_leaf: &Leaf<TYPES>,
-        _payload_commitment: VidCommitment,
+        parent_leaf: &Leaf<TYPES>,
+        payload_commitment: VidCommitment,
+        builder_commitment: BuilderCommitment,
         _metadata: <TYPES::BlockPayload as BlockPayload<TYPES>>::Metadata,
         _builder_fee: Vec<BuilderFee<TYPES>>,
         _vid_common: VidCommon,
         _auction_results: Option<TYPES::AuctionResult>,
         _version: Version,
     ) -> Result<Self, Self::Error> {
-        unimplemented!()
+        Ok(Self::new(
+            parent_leaf,
+            payload_commitment,
+            builder_commitment,
+        ))
     }
 
     fn genesis(
