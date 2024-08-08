@@ -1,6 +1,7 @@
-use std::{io, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, io, iter::once, sync::Arc, time::Duration};
 
 use async_std::task::spawn;
+use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
 use espresso_types::SeqTypes;
@@ -10,9 +11,9 @@ use ethers::{
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
     types::{Address, U256},
 };
-use futures::FutureExt;
+use futures::{future::BoxFuture, FutureExt};
 use hotshot_state_prover::service::{
-    one_honest_threshold, run_prover_service_with_stake_table, StateProverConfig,
+    one_honest_threshold, run_prover_service_with_stake_table, AltChain, StateProverConfig,
 };
 use hotshot_types::traits::{
     node_implementation::NodeType,
@@ -33,7 +34,7 @@ use sequencer_utils::{
     logging, AnvilOptions,
 };
 use serde::{Deserialize, Serialize};
-use tide_disco::{error::ServerError, Api, Error as _, StatusCode};
+use tide_disco::{error::ServerError, method::ReadState, Api, Error as _, StatusCode};
 use url::Url;
 use vbs::version::StaticVersionType;
 
@@ -113,19 +114,36 @@ struct Args {
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
-    let mut cli_params = Args::parse();
-    cli_params.logging.init();
+    let cli_params = Args::parse();
+
+    let Args {
+        rpc_url,
+        mnemonic,
+        account_index,
+        alt_chain_providers,
+        alt_mnemonics,
+        alt_account_indices,
+        sequencer_api_port,
+        sequencer_api_max_connections,
+        builder_port,
+        prover_port,
+        dev_node_port,
+        sql,
+        logging,
+    } = cli_params;
+
+    logging.init();
 
     let api_options = options::Options::from(options::Http {
-        port: cli_params.sequencer_api_port,
-        max_connections: cli_params.sequencer_api_max_connections,
+        port: sequencer_api_port,
+        max_connections: sequencer_api_max_connections,
     })
     .status(Default::default())
     .state(Default::default())
     .submit(Default::default())
-    .query_sql(Default::default(), cli_params.sql);
+    .query_sql(Default::default(), sql);
 
-    let (url, _anvil) = if let Some(url) = cli_params.rpc_url {
+    let (l1_url, _anvil) = if let Some(url) = rpc_url {
         (url, None)
     } else {
         tracing::warn!("L1 url is not provided. running an anvil node");
@@ -141,9 +159,9 @@ async fn main() -> anyhow::Result<()> {
         .unwrap();
 
     let network_config = TestConfigBuilder::default()
-        .builder_port(cli_params.builder_port)
+        .builder_port(builder_port)
         .state_relay_url(relay_server_url.clone())
-        .l1_url(url.clone())
+        .l1_url(l1_url.clone())
         .build();
 
     const NUM_NODES: usize = 2;
@@ -158,41 +176,31 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Hotshot config {config:?}");
 
     let contracts = Contracts::new();
-
-    tracing::info!("deploying the contracts");
-
     let light_client_genesis = network.light_client_genesis();
-
-    let chain_providers = {
-        let mut urls = vec![url.clone()];
-        urls.append(&mut cli_params.alt_chain_providers);
-        urls
-    };
-
-    let num_providers = chain_providers.len();
-
-    let mnemonics = {
-        let mut mnem = vec![cli_params.mnemonic.clone()];
-        mnem.append(&mut cli_params.alt_mnemonics);
-        mnem.resize(num_providers, cli_params.mnemonic.clone());
-        mnem
-    };
-
-    let account_indices = {
-        let mut indices = vec![cli_params.account_index];
-        indices.append(&mut cli_params.alt_account_indices);
-        indices.resize(num_providers, cli_params.account_index);
-        indices
-    };
 
     let mut wallets = vec![];
     let mut light_client_addresses = vec![];
+    let mut mock_contracts = BTreeMap::new();
 
-    for (i, provider_url) in chain_providers.clone().into_iter().enumerate() {
+    for (url, mnemonic, account_index) in once((l1_url.clone(), mnemonic.clone(), account_index))
+        .chain(
+            alt_chain_providers
+                .iter()
+                .zip(alt_mnemonics.into_iter().chain(std::iter::repeat(mnemonic)))
+                .zip(
+                    alt_account_indices
+                        .into_iter()
+                        .chain(std::iter::repeat(account_index)),
+                )
+                .map(|((u, m), i)| (u.clone(), m, i)),
+        )
+    {
+        tracing::info!("deploying the contract for provider: {url:?}");
+
         let contracts = deploy(
-            provider_url,
-            mnemonics[i].clone(),
-            account_indices[i],
+            url.clone(),
+            mnemonic.clone(),
+            account_index,
             true,
             None,
             async { Ok(light_client_genesis.clone()) }.boxed(),
@@ -200,13 +208,12 @@ async fn main() -> anyhow::Result<()> {
         )
         .await?;
 
-        // Run the relay server
         let provider = Provider::<Http>::try_from(url.as_str()).unwrap();
         let chain_id = provider.get_chainid().await.unwrap().as_u64();
 
         let wallet = MnemonicBuilder::<English>::default()
-            .phrase(cli_params.mnemonic.as_str())
-            .index(cli_params.account_index)
+            .phrase(mnemonic.as_str())
+            .index(account_index)
             .expect("error building wallet")
             .build()
             .expect("error opening wallet")
@@ -215,8 +222,16 @@ async fn main() -> anyhow::Result<()> {
         let light_client_address = contracts
             .get_contract_address(Contract::LightClientProxy)
             .unwrap();
-        light_client_addresses.push(light_client_address);
-        wallets.push(wallet);
+
+        mock_contracts.insert(
+            chain_id,
+            LightClientMock::new(
+                light_client_address,
+                Arc::new(provider.with_signer(wallet.clone())),
+            ),
+        );
+        light_client_addresses.push((chain_id, light_client_address));
+        wallets.push(wallet.clone());
     }
 
     let st = network.cfg.stake_table();
@@ -232,28 +247,46 @@ async fn main() -> anyhow::Result<()> {
 
     let update_interval = Duration::from_secs(20);
     let retry_interval = Duration::from_secs(2);
-    let prover_port = cli_params
-        .prover_port
-        .unwrap_or_else(|| pick_unused_port().unwrap());
+    let prover_port = prover_port.unwrap_or_else(|| pick_unused_port().unwrap());
 
-    let config = StateProverConfig {
+    let mut signing_keys = wallets
+        .iter()
+        .map(|wallet| wallet.signer().clone())
+        .collect::<Vec<_>>();
+
+    let (_, l1_lc) = light_client_addresses.remove(0);
+
+    let l1_signig_key = signing_keys.remove(0);
+
+    let alt_chains = alt_chain_providers
+        .iter()
+        .zip(light_client_addresses.clone())
+        .zip(signing_keys)
+        .map(
+            |((provider, (chain_id, light_client_address)), signing_key)| AltChain {
+                provider: provider.clone(),
+                chain_id,
+                light_client_address,
+                signing_key,
+            },
+        )
+        .collect();
+
+    let prover_config = StateProverConfig {
         relay_server: relay_server_url.clone(),
         update_interval,
         retry_interval,
-        chain_providers: chain_providers.clone(),
-        light_client_addresses: light_client_addresses.clone(),
-        eth_signing_keys: wallets
-            .clone()
-            .into_iter()
-            .map(|wallet| wallet.signer().clone())
-            .collect(),
-        sequencer_url: "http://localhost".parse().unwrap(), // This should not be used in dev-node
+        sequencer_url: "http://localhost".parse().unwrap(),
         port: Some(prover_port),
         stake_table_capacity: STAKE_TABLE_CAPACITY_FOR_TEST as usize,
+        l1_provider: l1_url.clone(),
+        light_client_address: l1_lc,
+        eth_signing_key: l1_signig_key,
+        alt_chains,
     };
 
     spawn(run_prover_service_with_stake_table(
-        config,
+        prover_config,
         <SeqTypes as NodeType>::Base::instance(),
         Arc::new(st),
     ));
@@ -261,19 +294,18 @@ async fn main() -> anyhow::Result<()> {
     let dev_info = DevInfo {
         builder_url: network.cfg.hotshot_config().builder_urls[0].clone(),
         prover_port,
-        l1_url: chain_providers[0].clone(),
-        light_client_address: light_client_addresses[0],
+        l1_url,
+        l1_light_client_address: l1_lc,
+        alt_chains: alt_chain_providers
+            .into_iter()
+            .zip(light_client_addresses)
+            .map(|(p, (c, u))| AltChainInfo::new(p, c, u))
+            .collect(),
     };
 
-    let base_provider = Provider::<Http>::try_from(chain_providers[0].as_str()).unwrap();
-    let mock_contract = LightClientMock::new(
-        light_client_addresses[0],
-        Arc::new(base_provider.with_signer(wallets[0].clone())),
-    );
-
     run_dev_node_server(
-        cli_params.dev_node_port,
-        mock_contract,
+        dev_node_port,
+        mock_contracts,
         dev_info,
         <SeqTypes as NodeType>::Base::instance(),
     )
@@ -282,50 +314,104 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+pub struct ApiState<S: Signer + Clone + 'static>(
+    BTreeMap<u64, LightClientMock<SignerMiddleware<Provider<Http>, S>>>,
+);
+
+#[async_trait]
+impl<S: Signer + Clone + 'static> ReadState for ApiState<S> {
+    type State = ApiState<S>;
+    async fn read<T>(
+        &self,
+        op: impl Send + for<'a> FnOnce(&'a Self::State) -> BoxFuture<'a, T> + 'async_trait,
+    ) -> T {
+        op(self).await
+    }
+}
+
 async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone + 'static>(
     port: u16,
-    mock_contract: LightClientMock<SignerMiddleware<Provider<Http>, S>>,
+    contracts: BTreeMap<u64, LightClientMock<SignerMiddleware<Provider<Http>, S>>>,
     dev_info: DevInfo,
     bind_version: Ver,
 ) -> anyhow::Result<()> {
-    let mut app = tide_disco::App::<(), ServerError>::with_state(());
+    let mut app = tide_disco::App::<_, ServerError>::with_state(ApiState(contracts));
     let toml =
         toml::from_str::<toml::value::Value>(include_str!("../../api/espresso_dev_node.toml"))
             .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<(), ServerError, Ver>::new(toml)
+    let mut api = Api::<_, ServerError, Ver>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
     api.get("devinfo", move |_, _| {
         let info = dev_info.clone();
         async move { Ok(info.clone()) }.boxed()
     })
-    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    let contract = mock_contract.clone();
-    api.post("sethotshotdown", move |req, _| {
-        let contract = contract.clone();
+    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
+    .at("sethotshotdown", move |req, state: &ApiState<S>| {
         async move {
-            let height = req
-                .body_auto::<SetHotshotUpBody, Ver>(Ver::instance())
-                .map_err(ServerError::from_request_error)?
-                .height;
-            contract
-                .set_hot_shot_down_since(U256::from(height))
-                .send()
-                .await
-                .map_err(|err| {
-                    ServerError::catch_all(StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
-                })?;
+            let body = req
+                .body_auto::<SetHotshotDownReqBody, Ver>(Ver::instance())
+                .map_err(ServerError::from_request_error)?;
+
+            // if chain id is not provided, we use the base L1 light client contract
+            let contract = if let Some(chain_id) = body.chain_id {
+                state.0.get(&chain_id).ok_or_else(|| {
+                    ServerError::catch_all(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "light client ontract not found".to_string(),
+                    )
+                })?
+            } else {
+                state
+                    .0
+                    .first_key_value()
+                    .ok_or_else(|| {
+                        ServerError::catch_all(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "L1 light client contract not found".to_string(),
+                        )
+                    })?
+                    .1
+            };
+
+            let contract_call = contract.set_hot_shot_down_since(U256::from(body.height));
+
+            contract_call.send().await.map_err(|err| {
+                ServerError::catch_all(StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+            })?;
             Ok(())
         }
         .boxed()
     })
-    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
-    api.post("sethotshotup", move |_, _| {
-        let contract = mock_contract.clone();
+    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
+    .at("sethotshotup", move |req, state| {
         async move {
+            let chain_id = req
+                .body_auto::<Option<SetHotshotUpReqBody>, Ver>(Ver::instance())
+                .map_err(ServerError::from_request_error)?
+                .map(|b| b.chain_id);
+
+            // if chain id is not provided, we use the base L1 light client contract
+            let contract = if let Some(chain_id) = chain_id {
+                state.0.get(&chain_id).ok_or_else(|| {
+                    ServerError::catch_all(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "light client ontract not found".to_string(),
+                    )
+                })?
+            } else {
+                state
+                    .0
+                    .first_key_value()
+                    .ok_or_else(|| {
+                        ServerError::catch_all(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "l1 light client ontract not found".to_string(),
+                        )
+                    })?
+                    .1
+            };
+
             contract.set_hot_shot_up().send().await.map_err(|err| {
                 ServerError::catch_all(StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
             })?;
@@ -348,12 +434,37 @@ struct DevInfo {
     pub builder_url: Url,
     pub prover_port: u16,
     pub l1_url: Url,
-    pub light_client_address: Address,
+    pub l1_light_client_address: Address,
+    pub alt_chains: Vec<AltChainInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AltChainInfo {
+    provider_url: Url,
+    chain_id: u64,
+    light_client_address: Address,
+}
+
+impl AltChainInfo {
+    fn new(url: Url, chain_id: u64, lc_addr: Address) -> Self {
+        Self {
+            provider_url: url,
+            chain_id,
+            light_client_address: lc_addr,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct SetHotshotUpBody {
+struct SetHotshotDownReqBody {
+    // use L1 chain id (1) if not provided
+    pub chain_id: Option<u64>,
     pub height: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SetHotshotUpReqBody {
+    pub chain_id: u64,
 }
 
 #[cfg(test)]
@@ -383,7 +494,7 @@ mod tests {
     use tide_disco::error::ServerError;
     use vbs::version::StaticVersion;
 
-    use crate::{DevInfo, SetHotshotUpBody};
+    use crate::{DevInfo, SetHotshotDownReqBody};
 
     const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
@@ -653,7 +764,10 @@ mod tests {
             let height = signer.get_block_number().await.unwrap().as_u64();
             dev_node_client
                 .post::<()>("api/set-hotshot-down")
-                .body_json(&SetHotshotUpBody { height: height - 1 })
+                .body_json(&SetHotshotDownReqBody {
+                    chain_id: None,
+                    height: height - 1,
+                })
                 .unwrap()
                 .send()
                 .await
@@ -671,6 +785,8 @@ mod tests {
 
             dev_node_client
                 .post::<()>("api/set-hotshot-up")
+                .body_json(&())
+                .unwrap()
                 .send()
                 .await
                 .unwrap();

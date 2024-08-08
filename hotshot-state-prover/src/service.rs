@@ -1,7 +1,7 @@
 //! A light client prover service
 
 use std::{
-    iter,
+    iter::{self, once},
     time::{Duration, Instant},
 };
 
@@ -54,7 +54,15 @@ use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
 type F = ark_ed_on_bn254::Fq;
 
 /// A wallet with local signer and connected to network via http
-pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
+pub type SignerWallet = SignerMiddleware<Provider<Http>, LocalWallet>;
+
+#[derive(Debug, Clone)]
+pub struct AltChain {
+    pub provider: Url,
+    pub chain_id: u64,
+    pub light_client_address: Address,
+    pub signing_key: SigningKey,
+}
 
 /// Configuration/Parameters used for hotshot state prover
 #[derive(Debug, Clone)]
@@ -65,12 +73,15 @@ pub struct StateProverConfig {
     pub update_interval: Duration,
     /// Interval between retries if a state update fails
     pub retry_interval: Duration,
-    /// URLs of Ethereum JSON-RPC providers to submit proofs to
-    pub chain_providers: Vec<Url>,
-    /// Addresses of LightClient contracts
-    pub light_client_addresses: Vec<Address>,
-    /// Transaction signing keys for Ethereum
-    pub eth_signing_keys: Vec<SigningKey>,
+    /// URL of layer 1 Ethereum JSON-RPC provider.
+    pub l1_provider: Url,
+    /// Address of LightClient contract on layer 1.
+    pub light_client_address: Address,
+    /// Transaction signing key for Ethereum
+    pub eth_signing_key: SigningKey,
+
+    pub alt_chains: Vec<AltChain>,
+
     /// URL of a node that is currently providing the HotShot config.
     /// This is used to initialize the stake table.
     pub sequencer_url: Url,
@@ -247,25 +258,26 @@ pub async fn fetch_latest_state<Ver: StaticVersionType>(
 
 /// prepare a contract interface ready to be read from or written to
 async fn prepare_contract(
-    config: &StateProverConfig,
-    chain_index: usize,
-) -> Result<LightClient<L1Wallet>, ProverError> {
-    let provider = Provider::try_from(config.chain_providers[chain_index].to_string())
+    provider: Url,
+    key: SigningKey,
+    light_client_address: Address,
+) -> Result<LightClient<SignerWallet>, ProverError> {
+    let provider = Provider::try_from(provider.as_str())
         .expect("unable to instantiate Provider, likely wrong URL");
-    let signer = Wallet::from(config.eth_signing_keys[chain_index].clone())
-        .with_chain_id(provider.get_chainid().await?.as_u64());
-    let l1_wallet = Arc::new(L1Wallet::new(provider, signer));
+    let signer = Wallet::from(key).with_chain_id(provider.get_chainid().await?.as_u64());
+    let wallet = Arc::new(SignerWallet::new(provider, signer));
 
-    let contract = LightClient::new(config.light_client_addresses[chain_index], l1_wallet);
+    let contract = LightClient::new(light_client_address, wallet);
     Ok(contract)
 }
 
 /// get the `finalizedState` from the LightClient contract storage on L1
 pub async fn read_contract_state(
-    config: &StateProverConfig,
-    chain_index: usize,
+    provider: Url,
+    key: SigningKey,
+    light_client_address: Address,
 ) -> Result<LightClientState, ProverError> {
-    let contract = prepare_contract(config, chain_index).await?;
+    let contract = prepare_contract(provider, key, light_client_address).await?;
     let state: ParsedLightClientState = match contract.get_finalized_state().call().await {
         Ok(s) => s.into(),
         Err(e) => {
@@ -282,10 +294,11 @@ pub async fn read_contract_state(
 pub async fn submit_state_and_proof(
     proof: Proof,
     public_input: PublicInput,
-    config: &StateProverConfig,
-    chain_index: usize,
+    provider: Url,
+    key: SigningKey,
+    light_client_address: Address,
 ) -> Result<(), ProverError> {
-    let contract = prepare_contract(config, chain_index).await?;
+    let contract = prepare_contract(provider, key, light_client_address).await?;
 
     // prepare the input the contract call and the tx itself
     let proof: ParsedPlonkProof = proof.into();
@@ -311,16 +324,29 @@ pub async fn sync_state<Ver: StaticVersionType>(
     relay_server_client: &Client<ServerError, Ver>,
     config: &StateProverConfig,
 ) -> Result<(), ProverError> {
-    for chain_index in 0..config.chain_providers.len() {
+    for (provider, key, light_client_address) in once((
+        config.l1_provider.clone(),
+        config.eth_signing_key.clone(),
+        config.light_client_address,
+    ))
+    .chain(
+        config
+            .alt_chains
+            .clone()
+            .into_iter()
+            .map(|c| (c.provider, c.signing_key, c.light_client_address)),
+    ) {
         tracing::info!(
-            "Start syncing light client state for provider at url: {}",
-            config.chain_providers[chain_index]
+            ?light_client_address,
+            "Start syncing light client state for provider: {}",
+            provider,
         );
 
         let bundle = fetch_latest_state(relay_server_client).await?;
         tracing::info!("Bundle accumulated weight: {}", bundle.accumulated_weight);
         tracing::info!("Latest HotShot block height: {}", bundle.state.block_height);
-        let old_state = read_contract_state(config, chain_index).await?;
+        let old_state =
+            read_contract_state(provider.clone(), key.clone(), light_client_address).await?;
         tracing::info!(
             "Current HotShot block height on contract: {}",
             old_state.block_height
@@ -380,7 +406,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
         let proof_gen_elapsed = Instant::now().signed_duration_since(proof_gen_start);
         tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:.3}");
 
-        submit_state_and_proof(proof, public_input, config, chain_index).await?;
+        submit_state_and_proof(proof, public_input, provider, key, light_client_address).await?;
 
         tracing::info!("Successfully synced light client state.");
     }
@@ -389,7 +415,8 @@ pub async fn sync_state<Ver: StaticVersionType>(
 
 fn start_http_server<Ver: StaticVersionType + 'static>(
     port: u16,
-    lightclient_address: Address,
+    l1_light_client_addr: Address,
+    alt_chain_light_client_addresses: Vec<(Url, Address)>,
     bind_version: Ver,
 ) -> io::Result<()> {
     let mut app = tide_disco::App::<(), ServerError>::with_state(());
@@ -400,7 +427,15 @@ fn start_http_server<Ver: StaticVersionType + 'static>(
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     api.get("getlightclientcontract", move |_, _| {
-        async move { Ok(lightclient_address) }.boxed()
+        async move { Ok(l1_light_client_addr) }.boxed()
+    })
+    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
+    .get("getaltlightclientcontracts", move |_, _| {
+        {
+            let addresses = alt_chain_light_client_addresses.clone();
+            async move { Ok(addresses) }
+        }
+        .boxed()
     })
     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
@@ -431,16 +466,22 @@ pub async fn run_prover_service_with_stake_table<Ver: StaticVersionType + 'stati
     bind_version: Ver,
     st: Arc<StakeTable<BLSPubKey, StateVerKey, CircuitField>>,
 ) -> Result<()> {
-    tracing::info!(
-        "Light client addresses: {:?}",
-        config.light_client_addresses
-    );
+    let l1_lc_addr = config.light_client_address;
+    let alt_lc_addresses = config
+        .alt_chains
+        .iter()
+        .map(|c| (c.provider.clone(), c.light_client_address))
+        .collect();
+
+    tracing::info!("L1 Light client address: {:?}", l1_lc_addr);
+    tracing::info!("Alt chain Light client addresses: {:?}", alt_lc_addresses);
+
     let relay_server_client =
         Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
 
     // Start the HTTP server to get a functioning healthcheck before any heavy computations.
     if let Some(port) = config.port {
-        if let Err(err) = start_http_server(port, config.light_client_addresses[0], bind_version) {
+        if let Err(err) = start_http_server(port, l1_lc_addr, alt_lc_addresses, bind_version) {
             tracing::error!("Error starting http server: {}", err);
         }
     }
@@ -646,11 +687,11 @@ mod test {
     async fn deploy_contract_for_test(
         anvil: &AnvilInstance,
         genesis: ParsedLightClientState,
-    ) -> Result<(Arc<L1Wallet>, LightClient<L1Wallet>)> {
+    ) -> Result<(Arc<SignerWallet>, LightClient<SignerWallet>)> {
         let provider = Provider::<Http>::try_from(anvil.endpoint())?;
         let signer = Wallet::from(anvil.keys()[0].clone())
             .with_chain_id(provider.get_chainid().await?.as_u64());
-        let l1_wallet = Arc::new(L1Wallet::new(provider.clone(), signer));
+        let l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
 
         let mut contracts = deployer::Contracts::default();
         let address = deployer::deploy_mock_light_client_contract(
@@ -668,9 +709,9 @@ mod test {
     impl StateProverConfig {
         /// update only L1 related info
         fn update_l1_info(&mut self, anvil: &AnvilInstance, light_client_address: Address) {
-            self.chain_providers = vec![Url::parse(&anvil.endpoint()).unwrap()];
-            self.light_client_addresses = vec![light_client_address];
-            self.eth_signing_keys = vec![anvil.keys()[0].clone().into()];
+            self.l1_provider = Url::parse(&anvil.endpoint()).unwrap();
+            self.light_client_address = light_client_address;
+            self.eth_signing_key = anvil.keys()[0].clone().into();
         }
     }
     // only for testing purposes
@@ -680,9 +721,10 @@ mod test {
                 relay_server: Url::parse("http://localhost").unwrap(),
                 update_interval: Duration::default(),
                 retry_interval: Duration::default(),
-                chain_providers: vec![Url::parse("http://localhost").unwrap()],
-                light_client_addresses: vec![Address::default()],
-                eth_signing_keys: vec![SigningKey::random(&mut test_rng())],
+                l1_provider: Url::parse("http://localhost").unwrap(),
+                light_client_address: Address::default(),
+                eth_signing_key: SigningKey::random(&mut test_rng()),
+                alt_chains: Vec::new(),
                 sequencer_url: Url::parse("http://localhost").unwrap(),
                 port: None,
                 stake_table_capacity: 10,
@@ -704,7 +746,12 @@ mod test {
 
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
-        let state = super::read_contract_state(&config, 0).await?;
+        let state = super::read_contract_state(
+            config.l1_provider,
+            config.eth_signing_key,
+            config.light_client_address,
+        )
+        .await?;
         assert_eq!(state, genesis.into());
         Ok(())
     }
@@ -731,7 +778,14 @@ mod test {
         let (pi, proof) = gen_state_proof(&genesis, new_state.clone(), &state_keys, &st);
         tracing::info!("Successfully generated proof for new state.");
 
-        super::submit_state_and_proof(proof, pi, &config, 0).await?;
+        super::submit_state_and_proof(
+            proof,
+            pi,
+            config.l1_provider,
+            config.eth_signing_key,
+            config.light_client_address,
+        )
+        .await?;
         tracing::info!("Successfully submitted new finalized state to L1.");
         // test if new state is updated in l1
         let finalized_l1: ParsedLightClientState = contract.get_finalized_state().await?.into();

@@ -28,6 +28,7 @@ Set the hotshot down since the given L1 height.
 Body:
 ```
 {
+    "chain_id: Option<u64>
     "height": integer,
 }
 ```
@@ -40,6 +41,13 @@ PATH = ["set-hotshot-up"]
 METHOD = "POST"
 DOC = """
 Set the hotshot up in the light client contract.
+
+Body:
+```
+{
+    "chain_id": u64
+}
+
 
 This is intended to be used when `set-hotshot-down` has been called previously. By calling this,
 rollups will detect the reactivity of HotShot.

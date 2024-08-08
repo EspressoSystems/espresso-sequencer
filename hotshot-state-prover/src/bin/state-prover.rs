@@ -95,9 +95,9 @@ async fn main() {
         relay_server: args.relay_server,
         update_interval: args.update_interval,
         retry_interval: args.retry_interval,
-        chain_providers: vec![args.l1_provider],
-        light_client_addresses: vec![args.light_client_address],
-        eth_signing_keys: vec![MnemonicBuilder::<English>::default()
+        l1_provider: args.l1_provider,
+        light_client_address: args.light_client_address,
+        eth_signing_key: MnemonicBuilder::<English>::default()
             .phrase(args.eth_mnemonic.as_str())
             .index(args.eth_account_index)
             .expect("error building wallet")
@@ -105,7 +105,8 @@ async fn main() {
             .expect("error opening wallet")
             .with_chain_id(chain_id)
             .signer()
-            .clone()],
+            .clone(),
+        alt_chains: Vec::new(),
         sequencer_url: args.sequencer_url,
         port: args.port,
         stake_table_capacity: args.stake_table_capacity,
