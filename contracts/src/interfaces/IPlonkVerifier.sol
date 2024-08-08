@@ -93,12 +93,10 @@ interface IPlonkVerifier {
     /// @param verifyingKey The Plonk verification key
     /// @param publicInput The public input fields
     /// @param proof The TurboPlonk proof
-    /// @param extraTranscriptInitMsg Optional bytes for transcript init message
     /// @return _ A boolean indicating successful verification, false otherwise
     function verify(
         VerifyingKey memory verifyingKey,
-        uint256[] memory publicInput,
-        PlonkProof memory proof,
-        bytes memory extraTranscriptInitMsg
+        uint256[8] memory publicInput,
+        PlonkProof memory proof
     ) external view returns (bool);
 }

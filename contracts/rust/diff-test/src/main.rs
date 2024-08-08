@@ -16,7 +16,6 @@ use hotshot_contract_adapter::{jellyfish::*, light_client::ParsedLightClientStat
 use hotshot_state_prover::mock_ledger::{
     gen_plonk_proof_for_test, MockLedger, MockSystemParam, STAKE_TABLE_CAPACITY,
 };
-use itertools::multiunzip;
 use jf_pcs::prelude::Commitment;
 use jf_plonk::proof_system::structs::{Proof, VerifyingKey};
 use jf_plonk::proof_system::PlonkKzgSnark;
@@ -69,7 +68,7 @@ enum Action {
     /// Get jf_plonk::Verifier::prepare_pcs_info()
     PlonkPreparePcsInfo,
     /// Get jf_plonk::Verifier::batch_verify()
-    PlonkBatchVerify,
+    PlonkVerify,
     /// Get a random, dummy proof with correct format
     DummyProof,
     /// Test only logic
@@ -135,7 +134,7 @@ fn main() {
 
             let log_size = cli.args[0].parse::<u32>().unwrap();
             let zeta = u256_to_field::<Fr>(cli.args[1].parse::<U256>().unwrap());
-            let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[2]).unwrap();
+            let pi_u256: [U256; 8] = AbiDecode::decode_hex(&cli.args[2]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
 
             let verifier = Verifier::<Bn254>::new(2u32.pow(log_size) as usize).unwrap();
@@ -267,7 +266,7 @@ fn main() {
             }
 
             let vk = cli.args[0].parse::<ParsedVerifyingKey>().unwrap().into();
-            let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[1]).unwrap();
+            let pi_u256: [U256; 8] = AbiDecode::decode_hex(&cli.args[1]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
             let proof: Proof<Bn254> = cli.args[2].parse::<ParsedPlonkProof>().unwrap().into();
             let msg = {
@@ -317,7 +316,7 @@ fn main() {
             }
 
             let vk: VerifyingKey<Bn254> = cli.args[0].parse::<ParsedVerifyingKey>().unwrap().into();
-            let pi_u256: Vec<U256> = AbiDecode::decode_hex(&cli.args[1]).unwrap();
+            let pi_u256: [U256; 8] = AbiDecode::decode_hex(&cli.args[1]).unwrap();
             let pi: Vec<Fr> = pi_u256.into_iter().map(u256_to_field).collect();
             let proof: Proof<Bn254> = cli.args[2].parse::<ParsedPlonkProof>().unwrap().into();
 
@@ -349,47 +348,33 @@ fn main() {
             );
             println!("{}", res.encode_hex());
         }
-        Action::PlonkBatchVerify => {
-            if cli.args.len() != 1 {
-                panic!("Should provide arg1=numProof");
-            }
-
-            let num_proof = cli.args[0].parse::<u32>().unwrap();
-            let (proofs, vks, public_inputs, extra_msgs, _): (
-                Vec<Proof<Bn254>>,
-                Vec<VerifyingKey<Bn254>>,
-                Vec<Vec<Fr>>,
-                Vec<Option<Vec<u8>>>,
-                Vec<usize>,
-            ) = multiunzip(gen_plonk_proof_for_test(num_proof as usize));
+        Action::PlonkVerify => {
+            let (proof, vk, public_input, _, _): (
+                Proof<Bn254>,
+                VerifyingKey<Bn254>,
+                Vec<Fr>,
+                Option<Vec<u8>>, // won't use extraTranscriptMsg
+                usize,           // won't use circuit size
+            ) = gen_plonk_proof_for_test(1)[0].clone();
 
             // ensure they are correct params
-            let proofs_refs: Vec<&Proof<Bn254>> = proofs.iter().collect();
-            let vks_refs: Vec<&VerifyingKey<Bn254>> = vks.iter().collect();
-            let pi_refs: Vec<&[Fr]> = public_inputs
-                .iter()
-                .map(|pub_input| &pub_input[..])
-                .collect();
             assert!(PlonkKzgSnark::batch_verify::<SolidityTranscript>(
-                &vks_refs,
-                &pi_refs,
-                &proofs_refs,
-                &extra_msgs
+                &[&vk],
+                &[&public_input],
+                &[&proof],
+                &[None]
             )
             .is_ok());
 
-            let vks_parsed: Vec<ParsedVerifyingKey> = vks.into_iter().map(Into::into).collect();
-            let pis_parsed: Vec<Vec<U256>> = public_inputs
-                .into_iter()
-                .map(|pi| pi.into_iter().map(field_to_u256).collect())
-                .collect();
-            let proofs_parsed: Vec<ParsedPlonkProof> = proofs.into_iter().map(Into::into).collect();
-            let msgs_parsed: Vec<Bytes> = extra_msgs
-                .into_iter()
-                .map(|msg| msg.unwrap().into())
-                .collect();
+            let vk_parsed: ParsedVerifyingKey = vk.into();
+            let mut pi_parsed = [U256::default(); 8];
+            assert_eq!(public_input.len(), 8);
+            for (i, pi) in public_input.into_iter().enumerate() {
+                pi_parsed[i] = field_to_u256(pi);
+            }
+            let proof_parsed: ParsedPlonkProof = proof.into();
 
-            let res = (vks_parsed, pis_parsed, proofs_parsed, msgs_parsed);
+            let res = (vk_parsed, pi_parsed, proof_parsed);
             println!("{}", res.encode_hex());
         }
         Action::DummyProof => {

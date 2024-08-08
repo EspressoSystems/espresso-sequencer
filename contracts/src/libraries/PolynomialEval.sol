@@ -9,8 +9,6 @@ import { BN254 } from "bn254/BN254.sol";
 library PolynomialEval {
     /// Unsupported polynomial degree, currently size must in 2^{14~17}.
     error UnsupportedDegree();
-    /// Unexpected input arguments, some precondition assumptions violated.
-    error InvalidPolyEvalArgs();
 
     /// @dev a Radix 2 Evaluation Domain
     struct EvalDomain {
@@ -146,62 +144,18 @@ library PolynomialEval {
         }
     }
 
-    /// @dev Compute suffix product array for the given local domain elements.
-    // credit: @shresthagrawal and @jakovmitrovski from CommonPrefix
-    function _computeSuffixProduct(uint256[] memory localDomainElements, uint256 zeta, uint256 p)
-        internal
-        pure
-        returns (uint256[] memory suffix)
-    {
-        // Assume we have [a, b, c, d] where a = zeta - g^0, b = zeta - g^1, ...
-
-        // suffix[length - i - 1] = suffix[length - i] * (zeta - g^(length - i)) and
-        // suffix[length - 1] = 1
-        // suffix = [dcb, dc, d, 1]
-
-        uint256 length = localDomainElements.length;
-
-        suffix = new uint256[](length);
-
-        assembly {
-            let suffixPtr := add(suffix, mul(length, 0x20))
-            let localDomainElementsPtr := add(localDomainElements, mul(length, 0x20))
-
-            let currentElementSuffix := 1
-
-            // Last element of suffix is set to 1
-            mstore(suffixPtr, currentElementSuffix)
-
-            // Calculate prefix and suffix products
-            for { let i := 1 } lt(i, length) { i := add(i, 1) } {
-                // move suffix pointer
-                suffixPtr := sub(suffixPtr, 0x20)
-
-                // suffix[length - i - 1] = suffix[length - i] * (zeta - g^(length - i))
-                currentElementSuffix :=
-                    mulmod(
-                        currentElementSuffix, addmod(sub(p, mload(localDomainElementsPtr)), zeta, p), p
-                    )
-                mstore(suffixPtr, currentElementSuffix)
-
-                localDomainElementsPtr := sub(localDomainElementsPtr, 0x20)
-            }
-        }
-    }
-
     /// @dev Evaluate public input polynomial at point `zeta`.
     function evaluatePiPoly(
         EvalDomain memory self,
-        uint256[] memory pi,
+        uint256[8] memory pi,
         uint256 zeta,
         uint256 vanishingPolyEval
     ) internal view returns (uint256 res) {
-        uint256 length = pi.length;
         uint256 p = BN254.R_MOD;
 
         if (vanishingPolyEval == 0) {
             uint256 group = 1;
-            for (uint256 i = 0; i < length; i++) {
+            for (uint256 i = 0; i < 8; i++) {
                 if (zeta == group) {
                     return pi[i];
                 }
@@ -210,7 +164,26 @@ library PolynomialEval {
             return 0;
         }
 
-        uint256[] memory localDomainElements = domainElements(self, pi.length);
+        uint256[8] memory localDomainElements;
+        uint256 groupGen = self.groupGen;
+        assembly {
+            let tmp := 1
+            mstore(localDomainElements, tmp) // g^0
+            tmp := mulmod(tmp, groupGen, p)
+            mstore(add(localDomainElements, 0x20), tmp) // g^1
+            tmp := mulmod(tmp, groupGen, p)
+            mstore(add(localDomainElements, 0x40), tmp) // g^2
+            tmp := mulmod(tmp, groupGen, p)
+            mstore(add(localDomainElements, 0x60), tmp) // g^3
+            tmp := mulmod(tmp, groupGen, p)
+            mstore(add(localDomainElements, 0x80), tmp) // g^4
+            tmp := mulmod(tmp, groupGen, p)
+            mstore(add(localDomainElements, 0xa0), tmp) // g^5
+            tmp := mulmod(tmp, groupGen, p)
+            mstore(add(localDomainElements, 0xc0), tmp) // g^6
+            tmp := mulmod(tmp, groupGen, p)
+            mstore(add(localDomainElements, 0xe0), tmp) // g^7
+        }
 
         // In order to compute PiPoly(zeta) in an efficient way, we can do the following derivation:
 
@@ -244,21 +217,49 @@ library PolynomialEval {
         // n(n - 1) to 3n
         //
         // credit: @shresthagrawal and @jakovmitrovski from CommonPrefix
-        uint256[] memory suffix = _computeSuffixProduct(localDomainElements, zeta, p);
+        uint256[8] memory suffix;
+
+        // Assume we have [a, b, c, d] where a = zeta - g^0, b = zeta - g^1, ...
+        //
+        // suffix[length - i - 1] = suffix[length - i] * (zeta - g^(length - i)) and
+        // suffix[length - 1] = 1
+        // suffix = [dcb, dc, d, 1]
+        assembly {
+            let suffixPtr := add(suffix, mul(7, 0x20))
+            let localDomainElementsPtr := add(localDomainElements, mul(7, 0x20))
+            let currentElementSuffix := 1
+
+            // Last element of suffix is set to 1
+            mstore(suffixPtr, currentElementSuffix)
+
+            // Calculate prefix and suffix products
+            for { let i := 1 } lt(i, 8) { i := add(i, 1) } {
+                // move suffix pointer
+                suffixPtr := sub(suffixPtr, 0x20)
+
+                // suffix[length - i - 1] = suffix[length - i] * (zeta - g^(length - i))
+                currentElementSuffix :=
+                    mulmod(
+                        currentElementSuffix, addmod(sub(p, mload(localDomainElementsPtr)), zeta, p), p
+                    )
+                mstore(suffixPtr, currentElementSuffix)
+
+                localDomainElementsPtr := sub(localDomainElementsPtr, 0x20)
+            }
+        }
 
         uint256 fullProduct;
-
         uint256 sum = 0;
 
         assembly {
             let currentElementPrefix := 1
-            let suffixPtr := add(suffix, 0x20)
-            let piPtr := add(pi, 0x20)
-            let localDomainElementsPtr := add(localDomainElements, 0x20)
+            let suffixPtr := suffix
+            let piPtr := pi
+            let localDomainElementsPtr := localDomainElements
 
             // Compute the sum term \sum_{i=0}^{length} currentElementPrefix * suffix[i] * pi[i] *
             // g^i
-            for { let i := 0 } lt(i, length) { i := add(i, 1) } {
+            for { let i := 0 } lt(i, 8) { i := add(i, 1) } {
                 // sum += currentElementPrefix * suffix[i] * pi[i] * g^i
                 let currentTerm :=
                     mulmod(
@@ -287,11 +288,9 @@ library PolynomialEval {
         uint256 invertedProduct =
             BN254.ScalarField.unwrap(BN254.invert(BN254.ScalarField.wrap(fullProduct)));
 
-        // 1 / n
-        uint256 nInverted = self.sizeInv;
-
         assembly {
             // Final computation
+            let nInverted := mload(add(self, 0x40)) // 1/n
             // (vanishingPolyEval / ( n * fullProduct )) * sum
             res := mulmod(vanishingPolyEval, nInverted, p)
             res := mulmod(res, invertedProduct, p)
@@ -299,35 +298,8 @@ library PolynomialEval {
         }
     }
 
-    /// @dev Generate the domain elements for indexes 0..length
-    /// which are essentially g^0, g^1, ..., g^{length-1}
-    function domainElements(EvalDomain memory self, uint256 length)
-        internal
-        pure
-        returns (uint256[] memory elements)
-    {
-        if (length > self.size) revert InvalidPolyEvalArgs();
-        uint256 groupGen = self.groupGen;
-        uint256 tmp = 1;
-        uint256 p = BN254.R_MOD;
-        elements = new uint256[](length);
-        assembly {
-            if not(iszero(length)) {
-                let ptr := add(elements, 0x20)
-                let end := add(ptr, mul(0x20, length))
-                mstore(ptr, 1)
-                ptr := add(ptr, 0x20)
-                // for (; ptr < end; ptr += 32) loop through the memory of `elements`
-                for { } lt(ptr, end) { ptr := add(ptr, 0x20) } {
-                    tmp := mulmod(tmp, groupGen, p)
-                    mstore(ptr, tmp)
-                }
-            }
-        }
-    }
-
     /// @dev compute the EvalData for a given domain and a challenge zeta
-    function evalDataGen(EvalDomain memory self, uint256 zeta, uint256[] memory publicInput)
+    function evalDataGen(EvalDomain memory self, uint256 zeta, uint256[8] memory publicInput)
         internal
         view
         returns (EvalData memory evalData)

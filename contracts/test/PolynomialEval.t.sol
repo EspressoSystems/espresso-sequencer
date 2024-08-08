@@ -44,54 +44,72 @@ contract PolynomialEval_newEvalDomain_Test is Test {
     }
 }
 
-contract PolynomialEval_domainElements_Test is Test {
+/// @dev Come with some helper function
+contract PolynomialEvalTest is Test {
+    /// @dev Generate the domain elements for indexes 0..length
+    /// which are essentially g^0, g^1, ..., g^{length-1}
+    function domainElements(Poly.EvalDomain memory self, uint256 length)
+        internal
+        pure
+        returns (uint256[] memory elements)
+    {
+        uint256 groupGen = self.groupGen;
+        uint256 tmp = 1;
+        uint256 p = BN254.R_MOD;
+        elements = new uint256[](length);
+        assembly {
+            if not(iszero(length)) {
+                let ptr := add(elements, 0x20)
+                let end := add(ptr, mul(0x20, length))
+                mstore(ptr, 1)
+                ptr := add(ptr, 0x20)
+                // for (; ptr < end; ptr += 32) loop through the memory of `elements`
+                for { } lt(ptr, end) { ptr := add(ptr, 0x20) } {
+                    tmp := mulmod(tmp, groupGen, p)
+                    mstore(ptr, tmp)
+                }
+            }
+        }
+    }
+
     /// @dev Test if the domain elements are generated correctly
     function testFuzz_domainElements_matches(uint256 logSize, uint256 length) external {
         logSize = bound(logSize, 16, 20);
-        length = bound(length, 0, 10000);
         Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSize);
+        length = bound(length, 0, 1000);
 
-        if (length > domain.size) {
-            vm.expectRevert(Poly.InvalidPolyEvalArgs.selector);
-            Poly.domainElements(domain, length);
-        } else {
-            string[] memory cmds = new string[](4);
-            cmds[0] = "diff-test";
-            cmds[1] = "eval-domain-elements";
-            cmds[2] = vm.toString(logSize);
-            cmds[3] = vm.toString(length);
+        string[] memory cmds = new string[](4);
+        cmds[0] = "diff-test";
+        cmds[1] = "eval-domain-elements";
+        cmds[2] = vm.toString(logSize);
+        cmds[3] = vm.toString(length);
 
-            bytes memory result = vm.ffi(cmds);
-            (uint256[] memory elems) = abi.decode(result, (uint256[]));
+        bytes memory result = vm.ffi(cmds);
+        (uint256[] memory elems) = abi.decode(result, (uint256[]));
 
-            assertEq(elems, Poly.domainElements(domain, length));
-        }
+        assertEq(elems, domainElements(domain, length));
     }
 }
 
-contract PolynomialEval_evalDataGen_Test is Test {
+contract PolynomialEval_evalDataGen_Test is PolynomialEvalTest {
     /// @dev Test if evaluations on the vanishing poly, the lagrange one poly, and the public input
     /// poly are correct.
     function testFuzz_evalDataGen_matches(
         uint256 logSize,
         uint256 zeta,
-        uint256[] memory publicInput
+        uint256[8] memory publicInput
     ) external {
         logSize = bound(logSize, 16, 20);
         zeta = bound(zeta, 0, BN254.R_MOD - 1);
         BN254.validateScalarField(BN254.ScalarField.wrap(zeta));
         // Since these user-provided `publicInputs` were checked outside before passing in via
         // `BN254.validateScalarField()`, it suffices to assume they are proper for our test here.
-        for (uint256 i = 0; i < publicInput.length; i++) {
+        for (uint256 i = 0; i < 8; i++) {
             publicInput[i] = bound(publicInput[i], 0, BN254.R_MOD - 1);
             BN254.validateScalarField(BN254.ScalarField.wrap(publicInput[i]));
         }
 
         Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSize);
-        // NOTE: since zeta comes from CRH via `computeChallenges`, we can assume it's hard to
-        // be specifically preimage attacked, or accidentally collide with these values.
-        vm.assume(zeta != 1); // otherwise divisor of lagrange_1_poly would be zero
-        vm.assume(zeta != domain.groupGenInv); // otherwise divisor of lagrange_n_poly would be zero
 
         string[] memory cmds = new string[](5);
         cmds[0] = "diff-test";
@@ -117,7 +135,7 @@ contract PolynomialEval_evalDataGen_Test is Test {
         uint256 size = 2 ** 5;
         Poly.EvalDomain memory domain = Poly.newEvalDomain(size);
 
-        uint256[] memory elements = Poly.domainElements(domain, size);
+        uint256[] memory elements = domainElements(domain, size);
         uint256 vanishEval = Poly.evaluateVanishingPoly(domain, elements[0]);
 
         // L_0(g^0) = 1
@@ -151,18 +169,17 @@ contract PolynomialEval_evalDataGen_Test is Test {
         uint256 size = 2 ** 5;
         Poly.EvalDomain memory domain = Poly.newEvalDomain(size);
 
-        uint256[] memory elements = Poly.domainElements(domain, size);
-        uint256 piLen = 10;
-        uint256[] memory publicInputs = new uint256[](piLen);
+        uint256[] memory elements = domainElements(domain, size);
+        uint256[8] memory publicInputs;
         // arbitrarily pick public input length = 10, and fill in arbitrary values
-        for (uint256 i = 0; i < piLen; i++) {
+        for (uint256 i = 0; i < 8; i++) {
             publicInputs[i] = 2 ** i;
         }
 
         for (uint256 i = 0; i < size; i++) {
             uint256 zeta = elements[i];
             uint256 vanishEval = Poly.evaluateVanishingPoly(domain, zeta);
-            if (i < piLen) {
+            if (i < 8) {
                 assertEq(
                     Poly.evaluatePiPoly(domain, publicInputs, zeta, vanishEval), publicInputs[i]
                 );

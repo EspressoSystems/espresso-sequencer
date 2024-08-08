@@ -108,13 +108,14 @@ pub mod i_plonk_verifier {
                         },
                         ::ethers::core::abi::ethabi::Param {
                             name: ::std::borrow::ToOwned::to_owned("publicInput"),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Array(
+                            kind: ::ethers::core::abi::ethabi::ParamType::FixedArray(
                                 ::std::boxed::Box::new(
                                     ::ethers::core::abi::ethabi::ParamType::Uint(256usize),
                                 ),
+                                8usize,
                             ),
                             internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("uint256[]"),
+                                ::std::borrow::ToOwned::to_owned("uint256[8]"),
                             ),
                         },
                         ::ethers::core::abi::ethabi::Param {
@@ -189,13 +190,6 @@ pub mod i_plonk_verifier {
                                 ),
                             ),
                         },
-                        ::ethers::core::abi::ethabi::Param {
-                            name: ::std::borrow::ToOwned::to_owned("extraTranscriptInitMsg",),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Bytes,
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("bytes"),
-                            ),
-                        },
                     ],
                     outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
                         name: ::std::string::String::new(),
@@ -254,24 +248,15 @@ pub mod i_plonk_verifier {
                 client,
             ))
         }
-        ///Calls the contract's `verify` (0x37986a6e) function
+        ///Calls the contract's `verify` (0x64e4c59e) function
         pub fn verify(
             &self,
             verifying_key: VerifyingKey,
-            public_input: ::std::vec::Vec<::ethers::core::types::U256>,
+            public_input: [::ethers::core::types::U256; 8],
             proof: PlonkProof,
-            extra_transcript_init_msg: ::ethers::core::types::Bytes,
         ) -> ::ethers::contract::builders::ContractCall<M, bool> {
             self.0
-                .method_hash(
-                    [55, 152, 106, 110],
-                    (
-                        verifying_key,
-                        public_input,
-                        proof,
-                        extra_transcript_init_msg,
-                    ),
-                )
+                .method_hash([100, 228, 197, 158], (verifying_key, public_input, proof))
                 .expect("method not found (this should never happen)")
         }
     }
@@ -282,7 +267,7 @@ pub mod i_plonk_verifier {
             Self::new(contract.address(), contract.client())
         }
     }
-    ///Container type for all input parameters for the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),bytes32,bytes32),uint256[],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256),bytes)` and selector `0x37986a6e`
+    ///Container type for all input parameters for the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),bytes32,bytes32),uint256[8],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x64e4c59e`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -292,15 +277,14 @@ pub mod i_plonk_verifier {
     )]
     #[ethcall(
         name = "verify",
-        abi = "verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),bytes32,bytes32),uint256[],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256),bytes)"
+        abi = "verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),bytes32,bytes32),uint256[8],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))"
     )]
     pub struct VerifyCall {
         pub verifying_key: VerifyingKey,
-        pub public_input: ::std::vec::Vec<::ethers::core::types::U256>,
+        pub public_input: [::ethers::core::types::U256; 8],
         pub proof: PlonkProof,
-        pub extra_transcript_init_msg: ::ethers::core::types::Bytes,
     }
-    ///Container type for all return fields from the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),bytes32,bytes32),uint256[],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256),bytes)` and selector `0x37986a6e`
+    ///Container type for all return fields from the `verify` function with signature `verify((uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),bytes32,bytes32),uint256[8],((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x64e4c59e`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
