@@ -87,16 +87,6 @@ impl Committable for Header {
     }
 }
 
-impl Header {
-    pub fn version(&self) -> Version {
-        match self {
-            Self::V1(_) => Version { major: 0, minor: 1 },
-            Self::V2(_) => Version { major: 0, minor: 2 },
-            Self::V3(_) => Version { major: 0, minor: 3 },
-        }
-    }
-}
-
 impl Serialize for Header {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -242,6 +232,13 @@ impl<'de> Deserialize<'de> for Header {
 }
 
 impl Header {
+    pub fn version(&self) -> Version {
+        match self {
+            Self::V1(_) => Version { major: 0, minor: 1 },
+            Self::V2(_) => Version { major: 0, minor: 2 },
+            Self::V3(_) => Version { major: 0, minor: 3 },
+        }
+    }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn create(
         chain_config: ChainConfig,

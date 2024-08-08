@@ -146,7 +146,7 @@ pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey>;
 
-pub use self::impls::{NodeState, ValidatedState};
+pub use self::impls::{NodeState, SolverAuctionResultsProvider, ValidatedState};
 pub use crate::v0_1::{
     BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
     NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
