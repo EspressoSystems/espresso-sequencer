@@ -7,18 +7,14 @@ use async_std::{
 };
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::SequencerPersistence, NodeState, PubKey, SolverAuctionResultsProvider, Transaction,
-    ValidatedState,
+    v0::traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
 };
 use futures::{
     future::{join_all, Future},
     stream::{Stream, StreamExt},
 };
 use hotshot::{
-    traits::{
-        election::static_committee::GeneralStaticCommittee, implementations::MemoryNetwork,
-        NodeImplementation,
-    },
+    traits::election::static_committee::GeneralStaticCommittee,
     types::{Event, EventType, SystemContextHandle},
     MarketplaceConfig, Memberships, SystemContext,
 };
@@ -26,7 +22,6 @@ use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
 
 use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
 use hotshot_query_service::Leaf;
-use hotshot_state_prover::QCVerKey;
 use hotshot_types::{
     consensus::ConsensusMetricsValue,
     data::ViewNumber,
@@ -41,7 +36,6 @@ use vbs::version::StaticVersionType;
 
 use crate::{
     external_event_handler::{self, ExternalEventHandler},
-    persistence::no_storage::NoStorage,
     state_signature::StateSigner,
     static_stake_table_commitment, Node, SeqTypes,
 };

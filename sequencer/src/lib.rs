@@ -444,9 +444,7 @@ pub mod testing {
         },
         types::EventType::Decide,
     };
-    use hotshot_query_service::testing::mocks::{MockNodeImpl, MockTypes};
     use hotshot_stake_table::vec_based::StakeTable;
-    use hotshot_state_prover::QCVerKey;
     use hotshot_testing::block_builder::{
         BuilderTask, SimpleBuilderImplementation, TestBuilderImplementation,
     };
