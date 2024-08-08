@@ -88,6 +88,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         metrics: &dyn Metrics,
         stake_table_capacity: u64,
         public_api_url: Option<Url>,
+        generic_builder_url: Url,
         _: Ver,
     ) -> anyhow::Result<Self> {
         let config = &network_config.config;
@@ -150,7 +151,10 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             initializer,
             ConsensusMetricsValue::new(metrics),
             persistence.clone(),
-            TestAuctionResultsProvider::default(),
+            hotshot::MarketplaceConfig {
+                auction_results_provider: Arc::new(TestAuctionResultsProvider::default()),
+                generic_builder_url,
+            },
         )
         .await?
         .0;

@@ -738,6 +738,7 @@ impl BlockHeader<SeqTypes> for Header {
         instance_state: &<<SeqTypes as NodeType>::ValidatedState as hotshot_types::traits::ValidatedState<SeqTypes>>::Instance,
         parent_leaf: &hotshot_types::data::Leaf<SeqTypes>,
         payload_commitment: VidCommitment,
+        builder_commitment: BuilderCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: Vec<BuilderFee<SeqTypes>>,
         _vid_common: VidCommon,

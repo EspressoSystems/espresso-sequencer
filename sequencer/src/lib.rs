@@ -31,7 +31,10 @@ pub mod state;
 
 #[cfg(feature = "libp2p")]
 use std::time::Duration;
-use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, sync::Arc};
+use std::{
+    collections::BTreeMap, fmt::Debug, marker::PhantomData, net::SocketAddr, str::FromStr,
+    sync::Arc,
+};
 
 use derivative::Derivative;
 use espresso_types::v0::traits::{PersistenceOptions, SequencerPersistence};
@@ -404,6 +407,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         metrics,
         genesis.stake_table.capacity,
         network_params.public_api_url,
+        Url::from_str("http://localhost").unwrap(),
         bind_version,
     )
     .await?;
@@ -752,6 +756,7 @@ pub mod testing {
                 metrics,
                 stake_table_capacity,
                 None, // The public API URL
+                Url::from_str("http://localhost").unwrap(),
                 bind_version,
             )
             .await
