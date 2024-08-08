@@ -174,13 +174,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function getVersion()
         public
         pure
+        virtual
         returns (uint8 majorVersion, uint8 minorVersion, uint8 patchVersion)
     {
         return (1, 0, 0);
     }
 
     /// @notice only the owner can authorize an upgrade
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {
+    function _authorizeUpgrade(address newImplementation) internal virtual override onlyOwner {
         emit Upgrade(newImplementation);
     }
 
@@ -237,7 +238,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function newFinalizedState(
         LightClientState memory newState,
         IPlonkVerifier.PlonkProof memory proof
-    ) external {
+    ) external virtual {
         //revert if we're in permissionedProver mode and the permissioned prover has not been set
         if (permissionedProverEnabled && msg.sender != permissionedProver) {
             if (permissionedProver == address(0)) {
@@ -287,12 +288,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @dev Simple getter function for the genesis state
-    function getGenesisState() public view returns (LightClientState memory) {
+    function getGenesisState() public view virtual returns (LightClientState memory) {
         return states[genesisState];
     }
 
     /// @dev Simple getter function for the finalized state
-    function getFinalizedState() public view returns (LightClientState memory) {
+    function getFinalizedState() public view virtual returns (LightClientState memory) {
         return states[finalizedState];
     }
 
@@ -322,7 +323,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice Advance to the next epoch (without any precondition check!)
     /// @dev This meant to be invoked only internally after appropriate precondition checks are done
-    function _advanceEpoch() private {
+    function _advanceEpoch() internal virtual {
         bytes32 newStakeTableComm = computeStakeTableComm(states[finalizedState]);
         votingStakeTableCommitment = frozenStakeTableCommitment;
         frozenStakeTableCommitment = newStakeTableComm;
@@ -335,7 +336,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice Given the light client state, compute the short commitment of the stake table
-    function computeStakeTableComm(LightClientState memory state) public pure returns (bytes32) {
+    function computeStakeTableComm(LightClientState memory state)
+        public
+        pure
+        virtual
+        returns (bytes32)
+    {
         return keccak256(
             abi.encodePacked(
                 state.stakeTableBlsKeyComm,
@@ -349,7 +355,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// non-zero address provided
     /// @dev this function can also be used to update the permissioned prover once it's a different
     /// address
-    function setPermissionedProver(address prover) public onlyOwner {
+    function setPermissionedProver(address prover) public virtual onlyOwner {
         if (prover == address(0)) {
             revert InvalidAddress();
         }
@@ -363,7 +369,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice set the permissionedProverMode to false and set the permissionedProver to address(0)
     /// @dev if it was already disabled (permissioneProverMode == false), then revert with
-    function disablePermissionedProverMode() public onlyOwner {
+    function disablePermissionedProverMode() public virtual onlyOwner {
         if (permissionedProverEnabled) {
             permissionedProver = address(0);
             permissionedProverEnabled = false;
@@ -419,7 +425,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice get the number of L1 block updates
-    function getStateUpdateBlockNumbersCount() public view returns (uint256) {
+    function getStateUpdateBlockNumbersCount() public view virtual returns (uint256) {
         return stateUpdateBlockNumbers.length;
     }
 
@@ -429,6 +435,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function getHotShotCommitment(uint256 hotShotBlockHeight)
         public
         view
+        virtual
         returns (HotShotCommitment memory)
     {
         uint256 commitmentsHeight = hotShotCommitments.length;
@@ -447,7 +454,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @notice get the number of HotShot block commitments
-    function getHotShotBlockCommitmentsCount() public view returns (uint256) {
+    function getHotShotBlockCommitmentsCount() public view virtual returns (uint256) {
         return hotShotCommitments.length;
     }
 }
