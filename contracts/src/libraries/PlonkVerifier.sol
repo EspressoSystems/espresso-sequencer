@@ -268,7 +268,6 @@ library PlonkVerifier {
             mstore(add(dataPtr, 0x560), mload(add(sigma4Ptr, 0x20))) // sigma4.y
 
             // public inputs
-            // TODO: update these when change PI from dynamic array to fixed length
             mstore(add(dataPtr, 0x580), mload(pi)) // PI[0]
             mstore(add(dataPtr, 0x5a0), mload(add(pi, 0x20))) // PI[1]
             mstore(add(dataPtr, 0x5c0), mload(add(pi, 0x40))) // PI[2]
