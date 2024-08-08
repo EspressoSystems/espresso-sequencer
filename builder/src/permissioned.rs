@@ -386,7 +386,6 @@ pub async fn init_hotshot<
             .unwrap(),
         ConsensusMetricsValue::new(metrics),
         da_storage,
-        // TODO if this builder is to be used for marketplace, we need real urls.
         MarketplaceConfig {
             auction_results_provider: Arc::new(SolverAuctionResultsProvider(
                 Url::from_str("https://some.solver").unwrap(),
