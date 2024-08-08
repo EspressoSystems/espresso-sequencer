@@ -1,6 +1,7 @@
 //! A light client prover service
 
 use std::{
+    collections::BTreeMap,
     iter::{self, once},
     time::{Duration, Instant},
 };
@@ -11,6 +12,7 @@ use async_std::{
     sync::Arc,
     task::{sleep, spawn, spawn_blocking},
 };
+use async_trait::async_trait;
 use contract_bindings::light_client::{LightClient, LightClientErrors};
 use displaydoc::Display;
 use ethers::{
@@ -20,7 +22,7 @@ use ethers::{
     signers::{LocalWallet, Signer, Wallet},
     types::{Address, U256},
 };
-use futures::FutureExt;
+use futures::{future::BoxFuture, FutureExt};
 use hotshot_contract_adapter::{
     jellyfish::{u256_to_field, ParsedPlonkProof},
     light_client::ParsedLightClientState,
@@ -42,9 +44,9 @@ use jf_pcs::prelude::UnivariateUniversalParams;
 use jf_plonk::errors::PlonkError;
 use jf_relation::Circuit as _;
 use jf_signature::constants::CS_ID_SCHNORR;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use surf_disco::Client;
-use tide_disco::{error::ServerError, Api};
+use tide_disco::{error::ServerError, method::ReadState, Api, Error, StatusCode};
 use time::ext::InstantExt;
 use url::Url;
 use vbs::version::StaticVersionType;
@@ -57,10 +59,14 @@ type F = ark_ed_on_bn254::Fq;
 pub type SignerWallet = SignerMiddleware<Provider<Http>, LocalWallet>;
 
 #[derive(Debug, Clone)]
-pub struct AltChain {
+pub struct AltChainConfig {
+    /// URL of alt chain JSON-RPC provider.
     pub provider: Url,
+    /// Chain ID of the alt chain
     pub chain_id: u64,
+    /// Address of LightClient contract  
     pub light_client_address: Address,
+    /// Transaction signing key
     pub signing_key: SigningKey,
 }
 
@@ -79,9 +85,9 @@ pub struct StateProverConfig {
     pub light_client_address: Address,
     /// Transaction signing key for Ethereum
     pub eth_signing_key: SigningKey,
-
-    pub alt_chains: Vec<AltChain>,
-
+    /// An optional list of alt chain configs including the light client address deployed.
+    /// These alt chains can be used alongside the primary L1 chain
+    pub alt_chains: Vec<AltChainConfig>,
     /// URL of a node that is currently providing the HotShot config.
     /// This is used to initialize the stake table.
     pub sequencer_url: Url,
@@ -413,30 +419,97 @@ pub async fn sync_state<Ver: StaticVersionType>(
     Ok(())
 }
 
+pub struct ApiState(BTreeMap<u64, (Url, Address)>);
+
+#[async_trait]
+impl ReadState for ApiState {
+    type State = ApiState;
+    async fn read<T>(
+        &self,
+        op: impl Send + for<'a> FnOnce(&'a Self::State) -> BoxFuture<'a, T> + 'async_trait,
+    ) -> T {
+        op(self).await
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AltChainInfo {
+    chain_id: u64,
+    provider_url: Url,
+    light_client_address: Address,
+}
+
+impl AltChainInfo {
+    pub fn new(url: Url, chain_id: u64, lc_addr: Address) -> Self {
+        Self {
+            provider_url: url,
+            chain_id,
+            light_client_address: lc_addr,
+        }
+    }
+}
+
 fn start_http_server<Ver: StaticVersionType + 'static>(
     port: u16,
     l1_light_client_addr: Address,
-    alt_chain_light_client_addresses: Vec<(Url, Address)>,
+    alt_chains: Vec<AltChainConfig>,
     bind_version: Ver,
 ) -> io::Result<()> {
-    let mut app = tide_disco::App::<(), ServerError>::with_state(());
+    let state: BTreeMap<u64, (Url, Address)> = alt_chains
+        .into_iter()
+        .map(|a| (a.chain_id, (a.provider, a.light_client_address)))
+        .collect();
+
+    let mut app = tide_disco::App::<_, ServerError>::with_state(ApiState(state));
     let toml = toml::from_str::<toml::value::Value>(include_str!("../api/prover-service.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<(), ServerError, Ver>::new(toml)
+    let mut api = Api::<_, ServerError, Ver>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    api.get("getlightclientcontract", move |_, _| {
+    api.get("getlightclientcontract", move |_, _: &ApiState| {
         async move { Ok(l1_light_client_addr) }.boxed()
     })
     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
-    .get("getaltlightclientcontracts", move |_, _| {
-        {
-            let addresses = alt_chain_light_client_addresses.clone();
-            async move { Ok(addresses) }
-        }
-        .boxed()
-    })
+    .get(
+        "getaltchainlightclientcontracts",
+        move |_, state: &ApiState| {
+            let response = state
+                .0
+                .iter()
+                .map(|(k, v)| AltChainInfo {
+                    chain_id: *k,
+                    provider_url: v.0.clone(),
+                    light_client_address: v.1,
+                })
+                .collect::<Vec<_>>();
+
+            { async move { Ok(response) } }.boxed()
+        },
+    )
+    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
+    .get(
+        "getaltchainlightclientcontract",
+        move |req, state: &ApiState| {
+            {
+                async move {
+                    let chain_id = req
+                        .body_auto::<u64, Ver>(Ver::instance())
+                        .map_err(ServerError::from_request_error)?;
+
+                    let (_, addr) = state.0.get(&chain_id).ok_or_else(|| {
+                        ServerError::catch_all(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "light client contract not found for chain id {chain_id}".to_string(),
+                        )
+                    })?;
+
+                    Ok(*addr)
+                }
+            }
+            .boxed()
+        },
+    )
     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     app.register_module("api", api)
@@ -471,7 +544,7 @@ pub async fn run_prover_service_with_stake_table<Ver: StaticVersionType + 'stati
         .alt_chains
         .iter()
         .map(|c| (c.provider.clone(), c.light_client_address))
-        .collect();
+        .collect::<Vec<_>>();
 
     tracing::info!("L1 Light client address: {:?}", l1_lc_addr);
     tracing::info!("Alt chain Light client addresses: {:?}", alt_lc_addresses);
@@ -481,7 +554,9 @@ pub async fn run_prover_service_with_stake_table<Ver: StaticVersionType + 'stati
 
     // Start the HTTP server to get a functioning healthcheck before any heavy computations.
     if let Some(port) = config.port {
-        if let Err(err) = start_http_server(port, l1_lc_addr, alt_lc_addresses, bind_version) {
+        if let Err(err) =
+            start_http_server(port, l1_lc_addr, config.alt_chains.clone(), bind_version)
+        {
             tracing::error!("Error starting http server: {}", err);
         }
     }

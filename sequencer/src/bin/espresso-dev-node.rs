@@ -13,7 +13,8 @@ use ethers::{
 };
 use futures::{future::BoxFuture, FutureExt};
 use hotshot_state_prover::service::{
-    one_honest_threshold, run_prover_service_with_stake_table, AltChain, StateProverConfig,
+    one_honest_threshold, run_prover_service_with_stake_table, AltChainConfig, AltChainInfo,
+    StateProverConfig,
 };
 use hotshot_types::traits::{
     node_implementation::NodeType,
@@ -182,6 +183,7 @@ async fn main() -> anyhow::Result<()> {
     let mut light_client_addresses = vec![];
     let mut mock_contracts = BTreeMap::new();
 
+    // deploy contract for L1 and each alt chain
     for (url, mnemonic, account_index) in once((l1_url.clone(), mnemonic.clone(), account_index))
         .chain(
             alt_chain_providers
@@ -254,16 +256,20 @@ async fn main() -> anyhow::Result<()> {
         .map(|wallet| wallet.signer().clone())
         .collect::<Vec<_>>();
 
+    // we remove the first entry which is for L1 light client contract
+    // so only alt chain light client addresses are left
     let (_, l1_lc) = light_client_addresses.remove(0);
 
-    let l1_signig_key = signing_keys.remove(0);
+    // we remove the first entry which is for primary L1 chain signing key
+    // so only alt signing keys are left
+    let l1_signing_key = signing_keys.remove(0);
 
     let alt_chains = alt_chain_providers
         .iter()
         .zip(light_client_addresses.clone())
         .zip(signing_keys)
         .map(
-            |((provider, (chain_id, light_client_address)), signing_key)| AltChain {
+            |((provider, (chain_id, light_client_address)), signing_key)| AltChainConfig {
                 provider: provider.clone(),
                 chain_id,
                 light_client_address,
@@ -281,7 +287,7 @@ async fn main() -> anyhow::Result<()> {
         stake_table_capacity: STAKE_TABLE_CAPACITY_FOR_TEST as usize,
         l1_provider: l1_url.clone(),
         light_client_address: l1_lc,
-        eth_signing_key: l1_signig_key,
+        eth_signing_key: l1_signing_key,
         alt_chains,
     };
 
@@ -299,7 +305,7 @@ async fn main() -> anyhow::Result<()> {
         alt_chains: alt_chain_providers
             .into_iter()
             .zip(light_client_addresses)
-            .map(|(p, (c, u))| AltChainInfo::new(p, c, u))
+            .map(|(prov, (id, addr))| AltChainInfo::new(prov, id, addr))
             .collect(),
     };
 
@@ -314,6 +320,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+// ApiState is passed to the tide disco app so avoid cloning the contracts for each endpoint
 pub struct ApiState<S: Signer + Clone + 'static>(
     BTreeMap<u64, LightClientMock<SignerMiddleware<Provider<Http>, S>>>,
 );
@@ -353,12 +360,12 @@ async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone
                 .body_auto::<SetHotshotDownReqBody, Ver>(Ver::instance())
                 .map_err(ServerError::from_request_error)?;
 
-            // if chain id is not provided, we use the base L1 light client contract
+            // if chain id is not provided, primary L1 light client is used
             let contract = if let Some(chain_id) = body.chain_id {
                 state.0.get(&chain_id).ok_or_else(|| {
                     ServerError::catch_all(
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        "light client ontract not found".to_string(),
+                        "light client contract not found for chain id {chain_id}".to_string(),
                     )
                 })?
             } else {
@@ -368,7 +375,7 @@ async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone
                     .ok_or_else(|| {
                         ServerError::catch_all(
                             StatusCode::INTERNAL_SERVER_ERROR,
-                            "L1 light client contract not found".to_string(),
+                            "L1 light client contract not found ".to_string(),
                         )
                     })?
                     .1
@@ -436,23 +443,6 @@ struct DevInfo {
     pub l1_url: Url,
     pub l1_light_client_address: Address,
     pub alt_chains: Vec<AltChainInfo>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AltChainInfo {
-    provider_url: Url,
-    chain_id: u64,
-    light_client_address: Address,
-}
-
-impl AltChainInfo {
-    fn new(url: Url, chain_id: u64, lc_addr: Address) -> Self {
-        Self {
-            provider_url: url,
-            chain_id,
-            light_client_address: lc_addr,
-        }
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

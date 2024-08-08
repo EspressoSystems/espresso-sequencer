@@ -4366,6 +4366,7 @@ dependencies = [
  "ark-std",
  "async-compatibility-layer",
  "async-std",
+ "async-trait",
  "clap",
  "cld",
  "contract-bindings",
