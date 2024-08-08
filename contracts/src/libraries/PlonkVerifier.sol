@@ -87,7 +87,7 @@ library PlonkVerifier {
     /// @return _ A boolean indicating successful verification, false otherwise
     function verify(
         IPlonkVerifier.VerifyingKey memory verifyingKey,
-        uint256[] memory publicInput,
+        uint256[8] memory publicInput,
         IPlonkVerifier.PlonkProof memory proof
     ) internal view returns (bool) {
         _validateProof(proof);
@@ -136,10 +136,10 @@ library PlonkVerifier {
 
     function _preparePcsInfo(
         IPlonkVerifier.VerifyingKey memory verifyingKey,
-        uint256[] memory publicInput,
+        uint256[8] memory publicInput,
         IPlonkVerifier.PlonkProof memory proof
     ) internal view returns (PcsInfo memory res) {
-        if (publicInput.length != verifyingKey.numInputs) revert WrongPlonkVK();
+        if (publicInput.length != 8) revert WrongPlonkVK();
 
         Challenges memory chal = _computeChallenges(verifyingKey, publicInput, proof);
 
@@ -169,7 +169,7 @@ library PlonkVerifier {
 
     function _computeChallenges(
         IPlonkVerifier.VerifyingKey memory vk,
-        uint256[] memory pi,
+        uint256[8] memory pi,
         IPlonkVerifier.PlonkProof memory proof
     ) internal pure returns (Challenges memory res) {
         uint256 p = BN254.R_MOD;
@@ -269,14 +269,14 @@ library PlonkVerifier {
 
             // public inputs
             // TODO: update these when change PI from dynamic array to fixed length
-            mstore(add(dataPtr, 0x580), mload(add(pi, 0x20))) // PI[0]
-            mstore(add(dataPtr, 0x5a0), mload(add(pi, 0x40))) // PI[1]
-            mstore(add(dataPtr, 0x5c0), mload(add(pi, 0x60))) // PI[2]
-            mstore(add(dataPtr, 0x5e0), mload(add(pi, 0x80))) // PI[3]
-            mstore(add(dataPtr, 0x600), mload(add(pi, 0xa0))) // PI[4]
-            mstore(add(dataPtr, 0x620), mload(add(pi, 0xc0))) // PI[5]
-            mstore(add(dataPtr, 0x640), mload(add(pi, 0xe0))) // PI[6]
-            mstore(add(dataPtr, 0x660), mload(add(pi, 0x100))) // PI[7]
+            mstore(add(dataPtr, 0x580), mload(pi)) // PI[0]
+            mstore(add(dataPtr, 0x5a0), mload(add(pi, 0x20))) // PI[1]
+            mstore(add(dataPtr, 0x5c0), mload(add(pi, 0x40))) // PI[2]
+            mstore(add(dataPtr, 0x5e0), mload(add(pi, 0x60))) // PI[3]
+            mstore(add(dataPtr, 0x600), mload(add(pi, 0x80))) // PI[4]
+            mstore(add(dataPtr, 0x620), mload(add(pi, 0xa0))) // PI[5]
+            mstore(add(dataPtr, 0x640), mload(add(pi, 0xc0))) // PI[6]
+            mstore(add(dataPtr, 0x660), mload(add(pi, 0xe0))) // PI[7]
 
             // proof
             let wire0Ptr := mload(proof)
