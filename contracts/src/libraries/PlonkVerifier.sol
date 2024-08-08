@@ -314,6 +314,7 @@ library PlonkVerifier {
                 mstore(dataPtr, keccak256(statePtr, 0x20))
                 // update new state (by updating state pointer)
                 statePtr := dataPtr
+                // empty transcript
                 dataPtr := add(statePtr, 0x20)
                 // (mod p) to get gamma
                 mstore(add(res, 0x80), mod(mload(statePtr), p))
@@ -330,6 +331,7 @@ library PlonkVerifier {
                 // update new state (by updating state pointer)
                 statePtr := add(dataPtr, 0x40)
                 mstore(statePtr, alpha)
+                // empty transcript
                 dataPtr := add(statePtr, 0x20)
                 // (mod p) to get challenge
                 mstore(res, mod(alpha, p))
@@ -362,6 +364,7 @@ library PlonkVerifier {
                 mstore(add(dataPtr, 0x140), keccak256(statePtr, 0x160))
                 // update new state (by updating state pointer)
                 statePtr := add(dataPtr, 0x140)
+                // empty transcript
                 dataPtr := add(statePtr, 0x20)
                 // (mod p) to get challenge
                 mstore(add(res, 0xa0), mod(mload(statePtr), p))
@@ -384,6 +387,7 @@ library PlonkVerifier {
                 mstore(add(dataPtr, 0x140), keccak256(statePtr, 0x160))
                 // update new state (by updating state pointer)
                 statePtr := add(dataPtr, 0x140)
+                // empty transcript
                 dataPtr := add(statePtr, 0x20)
                 // (mod p) to get challenge
                 mstore(add(res, 0xc0), mod(mload(statePtr), p))
