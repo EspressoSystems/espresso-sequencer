@@ -51,9 +51,9 @@ library Transcript {
     function getChallenge(TranscriptData memory self) internal pure returns (uint256 ret) {
         // memory layout:
         // offset 0x00: state
-        // offset 0x20: pointer to transcript (i.e. 0x40)
-        // offset 0x40: length of transcript
-        // offset 0x60: transcript bytes
+        // offset 0x20: pointer to transcript (e.g. point to 0x1a0)
+        // (e.g.0x1a0): length of transcript
+        //      0x1c0 : transcript bytes
         uint256 p = BN254.R_MOD;
 
         // Instead of using free memory for scratch pad, we do the following trick:

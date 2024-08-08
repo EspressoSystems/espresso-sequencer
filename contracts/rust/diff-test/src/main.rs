@@ -172,7 +172,7 @@ fn main() {
             let field = u256_to_field::<Fr>(cli.args[1].parse::<U256>().unwrap());
 
             let mut t: SolidityTranscript = t_parsed.into();
-            t.append_field::<Bn254>(&[], &field).unwrap();
+            t.append_field_elem::<Bn254>(&[], &field).unwrap();
             let res: ParsedTranscript = t.into();
             println!("{}", (res,).encode_hex());
         }
