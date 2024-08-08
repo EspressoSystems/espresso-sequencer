@@ -1,2 +1,2 @@
-LightClient_newFinalizedState_Test:testCorrectUpdateBench() (gas: 620982)
-PlonkVerifier_verify_Test:test_verify_succeeds() (gas: 455622)
+LightClient_newFinalizedState_Test:testCorrectUpdateBench() (gas: 591187)
+PlonkVerifier_verify_Test:test_verify_succeeds() (gas: 425555)
