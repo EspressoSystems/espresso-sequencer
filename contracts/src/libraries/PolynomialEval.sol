@@ -13,10 +13,8 @@ library PolynomialEval {
     /// @dev a Radix 2 Evaluation Domain
     struct EvalDomain {
         uint256 logSize; // log_2(self.size)
-        uint256 size; // Size of the domain as a field element
         uint256 sizeInv; // Inverse of the size in the field
         uint256 groupGen; // A generator of the subgroup
-        uint256 groupGenInv; // Inverse of the generator of the subgroup
     }
 
     /// @dev stores vanishing poly, lagrange at 1, and Public input poly
@@ -32,52 +30,40 @@ library PolynomialEval {
         if (domainSize == 65536) {
             return EvalDomain(
                 16,
-                domainSize,
                 0x30641e0e92bebef818268d663bcad6dbcfd6c0149170f6d7d350b1b1fa6c1001,
-                0x00eeb2cb5981ed45649abebde081dcff16c8601de4347e7dd1628ba2daac43b7,
-                0x0b5d56b77fe704e8e92338c0082f37e091126414c830e4c6922d5ac802d842d4
+                0x00eeb2cb5981ed45649abebde081dcff16c8601de4347e7dd1628ba2daac43b7
             );
         } else if (domainSize == 131072) {
             return EvalDomain(
                 17,
-                domainSize,
                 0x30643640b9f82f90e83b698e5ea6179c7c05542e859533b48b9953a2f5360801,
-                0x1bf82deba7d74902c3708cc6e70e61f30512eca95655210e276e5858ce8f58e5,
-                0x244cf010c43ca87237d8b00bf9dd50c4c01c7f086bd4e8c920e75251d96f0d22
+                0x1bf82deba7d74902c3708cc6e70e61f30512eca95655210e276e5858ce8f58e5
             );
         } else if (domainSize == 262144) {
             return EvalDomain(
                 18,
-                domainSize,
                 0x30644259cd94e7dd5045d7a27013b7fcd21c9e3b7fa75222e7bda49b729b0401,
-                0x19ddbcaf3a8d46c15c0176fbb5b95e4dc57088ff13f4d1bd84c6bfa57dcdc0e0,
-                0x36853f083780e87f8d7c71d111119c57dbe118c22d5ad707a82317466c5174c
+                0x19ddbcaf3a8d46c15c0176fbb5b95e4dc57088ff13f4d1bd84c6bfa57dcdc0e0
             );
         } else if (domainSize == 524288) {
             return EvalDomain(
                 19,
-                domainSize,
                 0x3064486657634403844b0eac78ca882cfd284341fcb0615a15cfcd17b14d8201,
-                0x2260e724844bca5251829353968e4915305258418357473a5c1d597f613f6cbd,
-                0x6e402c0a314fb67a15cf806664ae1b722dbc0efe66e6c81d98f9924ca535321
+                0x2260e724844bca5251829353968e4915305258418357473a5c1d597f613f6cbd
             );
         } else if (domainSize == 1048576) {
             return EvalDomain(
                 20,
-                domainSize,
                 0x30644b6c9c4a72169e4daa317d25f04512ae15c53b34e8f5acd8e155d0a6c101,
-                0x26125da10a0ed06327508aba06d1e303ac616632dbed349f53422da953337857,
-                0x100c332d2100895fab6473bc2c51bfca521f45cb3baca6260852a8fde26c91f3
+                0x26125da10a0ed06327508aba06d1e303ac616632dbed349f53422da953337857
             );
         }
         if (domainSize == 32) {
             // useful for small-size test, in practice unlikely to be used.
             return EvalDomain(
                 5,
-                domainSize,
                 0x2ee12bff4a2813286a8dc388cd754d9a3ef2490635eba50cb9c2e5e750800001,
-                0x9c532c6306b93d29678200d47c0b2a99c18d51b838eeb1d3eed4c533bb512d0,
-                0x2724713603bfbd790aeaf3e7df25d8e7ef8f311334905b4d8c99980cf210979d
+                0x9c532c6306b93d29678200d47c0b2a99c18d51b838eeb1d3eed4c533bb512d0
             );
         } else {
             revert UnsupportedDegree();
@@ -290,7 +276,7 @@ library PolynomialEval {
 
         assembly {
             // Final computation
-            let nInverted := mload(add(self, 0x40)) // 1/n
+            let nInverted := mload(add(self, 0x20)) // 1/n
             // (vanishingPolyEval / ( n * fullProduct )) * sum
             res := mulmod(vanishingPolyEval, nInverted, p)
             res := mulmod(res, invertedProduct, p)

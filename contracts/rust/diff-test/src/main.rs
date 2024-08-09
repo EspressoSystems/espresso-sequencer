@@ -108,7 +108,6 @@ fn main() {
             let res = (
                 field_to_u256(domain.size_inv),
                 field_to_u256(domain.group_gen),
-                field_to_u256(domain.group_gen_inv),
             );
             println!("{}", res.encode_hex());
         }
