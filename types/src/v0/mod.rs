@@ -141,12 +141,12 @@ pub struct SeqVersions;
 
 impl Versions for SeqVersions {
     type Base = StaticVersion<0, 1>;
-    type Upgrade = StaticVersion<0, 2>;
+    type Upgrade = StaticVersion<0, 3>;
     type Marketplace = StaticVersion<0, 3>;
 
     const UPGRADE_HASH: [u8; 32] = [
         1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-        0, 0,
+        0, 1,
     ];
 }
 
