@@ -767,7 +767,7 @@ pub mod testing {
                     auction_results_provider: Arc::new(SolverAuctionResultsProvider(
                         Url::from_str("https://some.solver").unwrap(),
                     )),
-                    generic_builder_url: Url::from_str("https://some.builder").unwrap(),
+                    fallback_builder_url: Url::from_str("https://some.builder").unwrap(),
                 },
             )
             .await
