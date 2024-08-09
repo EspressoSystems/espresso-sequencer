@@ -277,7 +277,7 @@ async fn init_consensus(
                     storage,
                     MarketplaceConfig {
                         auction_results_provider: Arc::new(TestAuctionResultsProvider::default()),
-                        generic_builder_url: Url::from_str("https://some.url").unwrap(),
+                        fallback_builder_url: Url::from_str("https://some.url").unwrap(),
                     },
                 )
                 .await
