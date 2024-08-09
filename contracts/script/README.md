@@ -37,7 +37,7 @@ Steps:
 ```bash
    source .env.contracts && \
    forge clean && \
-   forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDeployScript $SAFE_MULTISIG_ADDRESS \
+   forge script contracts/script/FeeContractDefender.s.sol:FeeContractDeployScript $SAFE_MULTISIG_ADDRESS \
    --sig 'run(address)' \
    --ffi \
    --rpc-url https://ethereum-sepolia.publicnode.com  \
@@ -51,7 +51,7 @@ Steps:
 ```bash
 source .env.contracts && \
 forge clean && \
-forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderDeployScript \
+forge script contracts/script/FeeContractDefender.s.sol:FeeContractDefenderDeployScript \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com  \
 --build-info true \
@@ -112,7 +112,23 @@ referenced at deployment time. Thus ensure you've deployed the PlonkVerifier
 the command below. Each time modifications are made to the Plonk Verifier, contracts that depend on it such as the Light
 Client contract have to be upgraded and should use the new PlonkVerifier contract address as part of the deployment.
 
-1. Initiate the Deployment with OpenZeppelin Defender
+1. Run the deployment command
+
+#### Without OpenZeppelin Defender (current method)
+
+```bash
+   source .env.contracts && \
+   forge clean && \
+   forge script contracts/script/LightClientWithDefender.s.sol:LightClientDeployScript $NUM_BLOCKS_PER_EPOCH $NUM_INIT_VALIDATORS $SAFE_MULTISIG_ADDRESS \
+   --sig 'run(uint32, uint32, address)' \
+   --ffi \
+   --rpc-url https://ethereum-sepolia.publicnode.com  \
+   --build-info true \
+   --legacy \
+   --broadcast
+```
+
+#### With OpenZeppelin Defender
 
 ```bash
 source .env.contracts && \
@@ -163,7 +179,7 @@ Steps:
 source .env.contracts && \
 source .env.contracts && \
 forge clean && \
-forge script contracts/script/FeeContractWithDefender.s.sol:FeeContractDefenderUpgradeScript \
+forge script contracts/script/FeeContractDefender.s.sol:FeeContractDefenderUpgradeScript \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com  \
 --build-info true

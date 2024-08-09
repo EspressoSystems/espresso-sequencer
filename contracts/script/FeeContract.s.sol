@@ -10,10 +10,11 @@ import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { FeeContract as FC } from "../src/FeeContract.sol";
 import { UtilsScript } from "./Utils.s.sol";
 
+/// @notice use this script to deploy the upgradeable fee contract
+/// without openzepelin defender
+/// @dev be sure to pass the multisig wallet as the owner of this contract
 contract FeeContractDeployScript is Script {
     string internal contractName = "FeeContract.sol";
-    UtilsScript internal utils = new UtilsScript();
-    uint256 internal contractSalt = uint256(vm.envInt("FEE_CONTRACT_SALT"));
 
     function run(address owner)
         public

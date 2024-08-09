@@ -11,6 +11,45 @@ import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
 import { UtilsScript } from "./Utils.s.sol";
 
+/// @notice use this script to deploy the upgradeable light client contract
+/// without openzepelin defender
+/// @dev be sure to pass the multisig wallet as the owner of this contract
+contract LightClientDeployScript is Script {
+    string public contractName = "LightClient.sol";
+
+    function run(uint32 numBlocksPerEpoch, uint32 numInitValidators, address owner)
+        public
+        returns (
+            address proxyAddress,
+            address implementationAddress,
+            LC.LightClientState memory state
+        )
+    {
+        string[] memory cmds = new string[](4);
+        cmds[0] = "diff-test";
+        cmds[1] = "mock-genesis";
+        cmds[2] = vm.toString(numBlocksPerEpoch);
+        cmds[3] = vm.toString(uint256(numInitValidators));
+
+        bytes memory result = vm.ffi(cmds);
+        (state,,) = abi.decode(result, (LC.LightClientState, bytes32, bytes32));
+
+        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+
+        proxyAddress = Upgrades.deployUUPSProxy(
+            contractName, abi.encodeCall(LC.initialize, (state, numBlocksPerEpoch, owner))
+        );
+
+        // Get the implementation address
+        implementationAddress = Upgrades.getImplementationAddress(proxyAddress);
+
+        vm.stopBroadcast();
+
+        return (proxyAddress, implementationAddress, state);
+    }
+}
+
 contract LightClientDefenderDeployScript is Script {
     string public contractName = "LightClient.sol";
     UtilsScript public utils = new UtilsScript();
