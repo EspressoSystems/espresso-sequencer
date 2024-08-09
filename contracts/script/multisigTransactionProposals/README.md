@@ -23,7 +23,7 @@ Assuming you're in the root folder, run the following command:
 ts-node contracts/script/multisigTransactionProposals/safeSDK/modifyProverModeProposal.ts setProver
 ```
 
-Open the the URL shown in the console to sign the transaction in the Safe UI.
+Open the URL shown in the console to sign the transaction in the Safe UI.
 
 Once successful, all signers will see a transaction request on the SAFE UI e.g.
 `https://app.safe.global/transactions/queue?safe=$SAFE_MULTISIG_ADDRESS`
