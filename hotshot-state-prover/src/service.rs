@@ -71,9 +71,6 @@ pub struct StateProverConfig {
     pub light_client_address: Address,
     /// Transaction signing key for Ethereum or any other layer 2
     pub signing_key: SigningKey,
-    // /// An optional list of alt chain configs including the light client address deployed.
-    // /// These alt chains can be used alongside the primary L1 chain
-    // pub alt_chains: Vec<AltChainConfig>,
     /// URL of a node that is currently providing the HotShot config.
     /// This is used to initialize the stake table.
     pub sequencer_url: Url,
