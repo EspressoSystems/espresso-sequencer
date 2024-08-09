@@ -65,12 +65,19 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice a flag that indicates when a permissioned provrer is needed
     bool public permissionedProverEnabled;
 
-    /// @notice an array to store the L1 Block Heights where the finalizedState was updated
-    uint256[] public stateUpdateBlockNumbers;
+    ///@notice Max number of seconds worth of state commitments to record based on this block
+    /// timestamp
+    uint32 public maxStateHistoryDuration;
 
-    /// @notice an array to store the HotShot Block Heights and their respective HotShot
+    ///@notice index of first block in block state series
+    ///@dev use this instead of index 0 since old states would be set to zero to keep storage costs
+    /// constant to maxStateHistoryDuration
+    uint64 public stateHistoryFirstIndex;
+
+    /// @notice an array to store the L1 block heights, HotShot Block Heights and their respective
+    /// state history
     /// commitments
-    HotShotCommitment[] public hotShotCommitments;
+    StateHistoryCommitment[] public stateHistoryCommitments;
 
     /// @notice new field for testing purposes
     /// @dev In order to add a field to LightClientState struct one can: add a new contract variable
@@ -106,6 +113,16 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     struct HotShotCommitment {
         uint64 blockHeight;
         BN254.ScalarField blockCommRoot;
+    }
+
+    /// @notice Simplified HotShot commitment struct
+    /// @param l1BlockHeight the block height of l1 when this state update was stored
+    /// @param hotshotBlockHeight The block height of the latest finalized HotShot block
+    /// @param hotShotBlockCommRoot The merkle root of historical block commitments
+    /// (BN254::ScalarField)
+    struct StateHistoryCommitment {
+        uint256 l1BlockHeight;
+        HotShotCommitment hotShotCommitment;
     }
 
     /// @notice Event that a new finalized state has been successfully verified and updated
@@ -144,10 +161,17 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit Upgrade(newImplementation);
     }
 
-    function _initializeState(LightClientState memory genesis, uint32 numBlockPerEpoch)
-        internal
-        onlyOwner
-    {
+    /// @dev Initialization of contract variables happens in this method because the LightClient
+    /// contract is upgradable and thus has its constructor method disabled.
+    /// @param genesis The initial state of the light client
+    /// @param numBlockPerEpoch The number of blocks per epoch
+    /// @param maxHistorySeconds The maximum duration worth of state history updates to store based
+    /// on the block timestamp
+    function _initializeState(
+        LightClientState memory genesis,
+        uint32 numBlockPerEpoch,
+        uint32 maxHistorySeconds
+    ) internal {
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
@@ -161,12 +185,14 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         ) {
             revert InvalidArgs();
         }
-
         states[genesisState] = genesis;
         states[finalizedState] = genesis;
+
         currentEpoch = 0;
 
         blocksPerEpoch = numBlockPerEpoch;
+
+        maxStateHistoryDuration = maxHistorySeconds;
 
         bytes32 initStakeTableComm = computeStakeTableComm(genesis);
         votingStakeTableCommitment = initStakeTableComm;

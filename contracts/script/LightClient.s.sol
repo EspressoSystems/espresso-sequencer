@@ -7,7 +7,7 @@ import { LightClient as LC } from "../src/LightClient.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployLightClientContractScript is Script {
-    function run(uint32 numBlocksPerEpoch, uint32 numInitValidators)
+    function run(uint32 numBlocksPerEpoch, uint32 numInitValidators, uint32 maxHistorySeconds)
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
@@ -23,10 +23,10 @@ contract DeployLightClientContractScript is Script {
         (LC.LightClientState memory state,,) =
             abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
-        return deployContract(state, numBlocksPerEpoch);
+        return deployContract(state, numBlocksPerEpoch, maxHistorySeconds);
     }
 
-    function runDemo(uint32 numBlocksPerEpoch)
+    function runDemo(uint32 numBlocksPerEpoch, uint32 maxHistorySeconds)
         external
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
@@ -36,17 +36,18 @@ contract DeployLightClientContractScript is Script {
         bytes memory result = vm.ffi(cmds);
         LC.LightClientState memory state = abi.decode(result, (LC.LightClientState));
 
-        return deployContract(state, numBlocksPerEpoch);
+        return deployContract(state, numBlocksPerEpoch, maxHistorySeconds);
     }
 
     /// @notice deploys the impl, proxy & initializes the impl
     /// @return proxyAddress The address of the proxy
     /// @return admin The address of the admin
 
-    function deployContract(LC.LightClientState memory state, uint32 numBlocksPerEpoch)
-        private
-        returns (address payable proxyAddress, address admin, LC.LightClientState memory)
-    {
+    function deployContract(
+        LC.LightClientState memory state,
+        uint32 numBlocksPerEpoch,
+        uint32 maxHistorySeconds
+    ) private returns (address payable proxyAddress, address admin, LC.LightClientState memory) {
         string memory seedPhrase = vm.envString("MNEMONIC");
         (admin,) = deriveRememberKey(seedPhrase, 0);
         vm.startBroadcast(admin);
@@ -55,9 +56,10 @@ contract DeployLightClientContractScript is Script {
 
         // Encode the initializer function call
         bytes memory data = abi.encodeWithSignature(
-            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,address)",
+            "initialize((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),uint32,uint32,address)",
             state,
             numBlocksPerEpoch,
+            maxHistorySeconds,
             admin
         );
 

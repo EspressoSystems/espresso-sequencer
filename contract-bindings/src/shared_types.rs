@@ -53,6 +53,41 @@ pub struct PlonkProof {
     pub sigma_eval_3: ::ethers::core::types::U256,
     pub prod_perm_zeta_omega_eval: ::ethers::core::types::U256,
 }
+///`VerifyingKey(uint256,uint256,(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256))`
+#[derive(
+    Clone,
+    ::ethers::contract::EthAbiType,
+    ::ethers::contract::EthAbiCodec,
+    serde::Serialize,
+    serde::Deserialize,
+    Default,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+)]
+pub struct VerifyingKey {
+    pub domain_size: ::ethers::core::types::U256,
+    pub num_inputs: ::ethers::core::types::U256,
+    pub sigma_0: G1Point,
+    pub sigma_1: G1Point,
+    pub sigma_2: G1Point,
+    pub sigma_3: G1Point,
+    pub sigma_4: G1Point,
+    pub q_1: G1Point,
+    pub q_2: G1Point,
+    pub q_3: G1Point,
+    pub q_4: G1Point,
+    pub q_m12: G1Point,
+    pub q_m34: G1Point,
+    pub q_o: G1Point,
+    pub q_c: G1Point,
+    pub q_h1: G1Point,
+    pub q_h2: G1Point,
+    pub q_h3: G1Point,
+    pub q_h4: G1Point,
+    pub q_ecc: G1Point,
+}
 ///`HotShotCommitment(uint64,uint256)`
 #[derive(
     Clone,

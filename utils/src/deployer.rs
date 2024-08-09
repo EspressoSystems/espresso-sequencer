@@ -245,7 +245,7 @@ pub async fn deploy_light_client_contract<M: Middleware + 'static>(
 pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
     l1: Arc<M>,
     contracts: &mut Contracts,
-    constructor_args: Option<(LightClientState, u32)>,
+    constructor_args: Option<(LightClientState, u32, u32)>,
 ) -> anyhow::Result<Address> {
     // Deploy library contracts.
     let plonk_verifier = contracts
@@ -294,7 +294,11 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
     );
     let constructor_args = match constructor_args {
         Some(args) => args,
-        None => (ParsedLightClientState::dummy_genesis().into(), u32::MAX),
+        None => (
+            ParsedLightClientState::dummy_genesis().into(),
+            u32::MAX,
+            86400,
+        ),
     };
     let contract = light_client_factory
         .deploy(constructor_args)?
@@ -357,7 +361,7 @@ pub async fn deploy(
         let light_client = LightClient::new(lc_address, l1.clone());
 
         let data = light_client
-            .initialize(genesis.await?.into(), u32::MAX, owner)
+            .initialize(genesis.await?.into(), u32::MAX, 86400, owner)
             .calldata()
             .context("calldata for initialize transaction not available")?;
         contracts
