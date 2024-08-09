@@ -343,7 +343,7 @@ impl Header {
     #[allow(clippy::too_many_arguments)]
     fn from_info(
         payload_commitment: VidCommitment,
-        builder_commitment: Option<BuilderCommitment>,
+        builder_commitment: BuilderCommitment,
         ns_table: NsTable,
         parent_leaf: &Leaf,
         mut l1: L1Snapshot,
@@ -470,7 +470,7 @@ impl Header {
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment: builder_commitment.unwrap(),
+                builder_commitment,
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
@@ -486,7 +486,7 @@ impl Header {
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment: builder_commitment.unwrap(),
+                builder_commitment,
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
@@ -500,7 +500,7 @@ impl Header {
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment: builder_commitment.unwrap(),
+                builder_commitment,
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
@@ -836,7 +836,7 @@ impl BlockHeader<SeqTypes> for Header {
 
         Ok(Self::from_info(
             payload_commitment,
-            None,
+            builder_commitment,
             metadata,
             parent_leaf,
             l1_snapshot,
@@ -952,7 +952,7 @@ impl BlockHeader<SeqTypes> for Header {
 
         Ok(Self::from_info(
             payload_commitment,
-            Some(builder_commitment),
+            builder_commitment,
             metadata,
             parent_leaf,
             l1_snapshot,
@@ -1154,7 +1154,7 @@ mod test_headers {
 
             let header = Header::from_info(
                 genesis.header.payload_commitment(),
-                Some(genesis.header.builder_commitment().clone()),
+                genesis.header.builder_commitment().clone(),
                 genesis.ns_table,
                 &parent_leaf,
                 L1Snapshot {

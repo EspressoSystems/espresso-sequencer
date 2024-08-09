@@ -88,7 +88,6 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         metrics: &dyn Metrics,
         stake_table_capacity: u64,
         public_api_url: Option<Url>,
-        generic_builder_url: Url,
         _: Ver,
         marketplace_config: MarketplaceConfig<SeqTypes, Node<N, P>>,
     ) -> anyhow::Result<Self> {
