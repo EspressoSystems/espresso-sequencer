@@ -11,7 +11,7 @@ use ethers::{
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
     types::{Address, U256},
 };
-use futures::{future::BoxFuture, FutureExt};
+use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use hotshot_state_prover::service::{
     one_honest_threshold, run_prover_service_with_stake_table, AltChainConfig, AltChainInfo,
     StateProverConfig,
@@ -238,17 +238,25 @@ async fn main() -> anyhow::Result<()> {
 
     let st = network.cfg.stake_table();
     let total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
-    spawn(run_relay_server(
-        None,
-        one_honest_threshold(total_stake),
-        format!("http://0.0.0.0:{relay_server_port}")
-            .parse()
-            .unwrap(),
-        <SeqTypes as NodeType>::Base::instance(),
-    ));
 
-    let update_interval = Duration::from_secs(20);
-    let retry_interval = Duration::from_secs(2);
+    let mut handles = FuturesUnordered::new();
+    let relay_server_handle = spawn(async move {
+        let _ = run_relay_server(
+            None,
+            one_honest_threshold(total_stake),
+            format!("http://0.0.0.0:{relay_server_port}")
+                .parse()
+                .unwrap(),
+            <SeqTypes as NodeType>::Base::instance(),
+        )
+        .await;
+
+        Ok(())
+    });
+    handles.push(relay_server_handle);
+
+    let update_interval = Duration::from_secs(1);
+    let retry_interval = Duration::from_secs(1);
     let prover_port = prover_port.unwrap_or_else(|| pick_unused_port().unwrap());
 
     let mut signing_keys = wallets
@@ -291,12 +299,12 @@ async fn main() -> anyhow::Result<()> {
         alt_chains,
     };
 
-    spawn(run_prover_service_with_stake_table(
+    let prover_handle = spawn(run_prover_service_with_stake_table(
         prover_config,
         <SeqTypes as NodeType>::Base::instance(),
         Arc::new(st),
     ));
-
+    handles.push(prover_handle);
     let dev_info = DevInfo {
         builder_url: network.cfg.hotshot_config().builder_urls[0].clone(),
         prover_port,
@@ -309,13 +317,19 @@ async fn main() -> anyhow::Result<()> {
             .collect(),
     };
 
-    run_dev_node_server(
+    let dev_node_handle = spawn(run_dev_node_server(
         dev_node_port,
         mock_contracts,
         dev_info,
         <SeqTypes as NodeType>::Base::instance(),
-    )
-    .await?;
+    ));
+    handles.push(dev_node_handle);
+
+    // if any of the async task is complete then dev node binary exits
+    if (handles.next().await).is_some() {
+        tracing::error!("exiting dev node");
+        drop(network);
+    }
 
     Ok(())
 }
@@ -472,16 +486,19 @@ mod tests {
     use hotshot_types::traits::node_implementation::NodeType;
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
+    use rand::Rng;
     use sequencer::api::endpoints::NamespaceProofQueryData;
-    use sequencer_utils::{init_signer, test_utils::setup_test, AnvilOptions};
+    use sequencer_utils::{init_signer, test_utils::setup_test, Anvil, AnvilOptions};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
 
+    use url::Url;
     use vbs::version::StaticVersion;
 
     use crate::{DevInfo, SetHotshotDownReqBody};
 
     const TEST_MNEMONIC: &str = "test test test test test test test test test test test junk";
+    const NUM_ALT_CHAIN_PROVIDERS: usize = 2;
 
     pub struct BackgroundProcess(Child);
 
@@ -788,6 +805,26 @@ mod tests {
         drop(db);
     }
 
+    async fn alt_chain_providers() -> (Vec<Anvil>, Vec<Url>) {
+        let mut providers = Vec::new();
+        let mut urls = Vec::new();
+
+        for _ in 0..NUM_ALT_CHAIN_PROVIDERS {
+            let mut rng = rand::thread_rng();
+
+            let anvil = AnvilOptions::default()
+                .chain_id(rng.gen_range(2..u32::MAX) as u64)
+                .spawn()
+                .await;
+            let url = anvil.url();
+
+            providers.push(anvil);
+            urls.push(url);
+        }
+
+        (providers, urls)
+    }
+
     #[async_std::test]
     async fn dev_node_multiple_lc_providers_test() {
         setup_test();
@@ -796,11 +833,16 @@ mod tests {
         let api_port = pick_unused_port().unwrap();
         let dev_node_port = pick_unused_port().unwrap();
 
-        let instance = AnvilOptions::default().spawn().await;
+        let instance = AnvilOptions::default().chain_id(1).spawn().await;
         let l1_url = instance.url();
 
-        let alt_anvil = AnvilOptions::default().chain_id(122).spawn().await;
-        let alt_provider = alt_anvil.url();
+        let (alt_providers, alt_chain_urls) = alt_chain_providers().await;
+
+        let alt_chains_env_value = alt_chain_urls
+            .iter()
+            .map(|url| url.as_str())
+            .collect::<Vec<&str>>()
+            .join(",");
 
         let db = TmpDb::init().await;
         let postgres_port = db.port();
@@ -827,7 +869,7 @@ mod tests {
             .env("ESPRESSO_SEQUENCER_POSTGRES_PASSWORD", "password")
             .env(
                 "ESPRESSO_DEPLOYER_ALT_CHAIN_PROVIDERS",
-                alt_provider.to_string(),
+                alt_chains_env_value,
             )
             .spawn()
             .unwrap();
@@ -880,9 +922,11 @@ mod tests {
             for AltChainInfo {
                 provider_url,
                 light_client_address,
-                ..
+                chain_id,
             } in dev_info.alt_chains
             {
+                tracing::info!("checking hotshot commitment for {chain_id}");
+
                 let signer = init_signer(&provider_url, TEST_MNEMONIC, 0).await.unwrap();
                 let light_client = LightClient::new(light_client_address, Arc::new(signer.clone()));
 
@@ -899,7 +943,7 @@ mod tests {
         }
 
         drop(process);
-        drop(alt_provider);
+        drop(alt_providers);
         drop(db);
     }
 }
