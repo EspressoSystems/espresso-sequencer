@@ -2,27 +2,20 @@
 
 use std::time::Duration;
 
+use async_broadcast::broadcast;
 use async_compatibility_layer::art::async_timeout;
 use futures::StreamExt;
-use hotshot::tasks::task_state::CreateTaskState;
 use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
-use hotshot_macros::{run_test, test_scripts};
-use hotshot_task_impls::{
-    events::HotShotEvent::*,
-    quorum_vote::{QuorumVoteTaskState, VoteDependencyHandle},
-};
+use hotshot_task::dependency_task::HandleDepOutput;
+use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::VoteDependencyHandle};
 use hotshot_testing::{
-    all_predicates,
-    helpers::{build_fake_view_with_leaf, build_system_handle, vid_share},
+    helpers::{build_fake_view_with_leaf, build_system_handle},
     predicates::{event::*, Predicate, PredicateResult},
-    random,
-    script::{Expectations, InputOrder, TaskScript},
-    serial,
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
-    consensus::OuterConsensus, data::ViewNumber, traits::node_implementation::ConsensusTime,
-    vote::HasViewNumber,
+    consensus::OuterConsensus, data::ViewNumber, traits::consensus_api::ConsensusApi,
+    traits::node_implementation::ConsensusTime, vote::HasViewNumber,
 };
 use itertools::Itertools;
 
@@ -34,14 +27,11 @@ const TIMEOUT: Duration = Duration::from_millis(35);
 async fn test_vote_dependency_handle() {
     use std::sync::Arc;
 
-    use hotshot_task_impls::helpers::broadcast_event;
-
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
     // We use a node ID of 2 here abitrarily. We just need it to build the system handle.
     let node_id = 2;
-
     // Construct the system handle for the node ID to build all of the state objects.
     let handle = build_system_handle::<TestTypes, MemoryImpl>(node_id)
         .await
@@ -58,7 +48,7 @@ async fn test_vote_dependency_handle() {
     let mut vids = Vec::new();
     let consensus = handle.hotshot.consensus().clone();
     let mut consensus_writer = consensus.write().await;
-    for view in (&mut generator).take(2).collect::<Vec<_>>().await {
+    for view in (&mut generator).take(3).collect::<Vec<_>>().await {
         proposals.push(view.quorum_proposal.clone());
         leaves.push(view.leaf.clone());
         dacs.push(view.da_certificate.clone());
@@ -92,47 +82,41 @@ async fn test_vote_dependency_handle() {
             quorum_vote_send(),
         ];
 
-        // We only need this to be able to make the vote dependency handle state. It's not explicitly necessary, but it's easy.
-        let qv = QuorumVoteTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
-
-        let event_sender = handle.internal_event_stream_sender();
-        let mut event_receiver = handle.internal_event_stream_receiver_known_impl();
+        let (event_sender, mut event_receiver) = broadcast(1024);
         let view_number = ViewNumber::new(node_id);
 
         let vote_dependency_handle_state = VoteDependencyHandle::<TestTypes, MemoryImpl> {
-            public_key: qv.public_key.clone(),
-            private_key: qv.private_key.clone(),
-            consensus: OuterConsensus::new(Arc::clone(&qv.consensus.inner_consensus)),
-            instance_state: Arc::clone(&qv.instance_state),
-            quorum_membership: Arc::clone(&qv.quorum_membership),
-            storage: Arc::clone(&qv.storage),
+            public_key: handle.public_key().clone(),
+            private_key: handle.private_key().clone(),
+            consensus: OuterConsensus::new(consensus.clone()),
+            instance_state: handle.hotshot.instance_state(),
+            quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
+            storage: Arc::clone(&handle.storage()),
             view_number,
             sender: event_sender.clone(),
             receiver: event_receiver.clone(),
-            decided_upgrade_certificate: Arc::clone(&qv.decided_upgrade_certificate),
-            id: qv.id,
+            decided_upgrade_certificate: Arc::clone(&handle.hotshot.decided_upgrade_certificate),
+            id: handle.hotshot.id,
         };
 
-        let inputs_len = inputs.len();
-        for event in inputs.into_iter() {
-            broadcast_event(event.into(), &event_sender).await;
-        }
+        vote_dependency_handle_state
+            .handle_dep_result(inputs.clone().into_iter().map(|i| i.into()).collect())
+            .await;
 
         // We need to avoid re-processing the inputs during our output evaluation. This part here is not
         // strictly necessary, but it makes writing the outputs easier.
-        let mut i = 0;
         let mut output_events = vec![];
         while let Ok(Ok(received_output)) =
             async_timeout(TIMEOUT, event_receiver.recv_direct()).await
         {
-            // Skip over all inputs (the order is deterministic).
-            if i < inputs_len {
-                i += 1;
-                continue;
-            }
-
             output_events.push(received_output);
         }
+
+        assert_eq!(
+            output_events.len(),
+            outputs.len(),
+            "Output event count differs from expected"
+        );
 
         // Finally, evaluate that the test does what we expected. The control flow of the handle always
         // outputs in the same order.

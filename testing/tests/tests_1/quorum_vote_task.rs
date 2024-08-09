@@ -19,7 +19,6 @@ use hotshot_testing::{
     predicates::event::all_predicates,
     random,
     script::{Expectations, InputOrder, TaskScript},
-    serial,
 };
 use hotshot_types::{
     data::ViewNumber, traits::node_implementation::ConsensusTime, vote::HasViewNumber,
