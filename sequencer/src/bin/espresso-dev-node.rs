@@ -291,7 +291,7 @@ async fn main() -> anyhow::Result<()> {
             sequencer_url: "http://localhost".parse().unwrap(),
             port: Some(prover_port),
             stake_table_capacity: STAKE_TABLE_CAPACITY_FOR_TEST as usize,
-            provider: l1_url.clone(),
+            provider: url.clone(),
             light_client_address,
             signing_key: wallet.signer().clone(),
         };
