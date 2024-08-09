@@ -15,6 +15,7 @@ ark-srs = { workspace = true }
 ark-std = { workspace = true }
 async-compatibility-layer = { workspace = true }
 async-std = { workspace = true }
+async-trait = { workspace = true }
 clap = { workspace = true }
 cld = { workspace = true }
 contract-bindings = { path = "../contract-bindings" }
