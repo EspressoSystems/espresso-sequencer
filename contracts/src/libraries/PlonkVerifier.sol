@@ -192,22 +192,10 @@ library PlonkVerifier {
 
             // k0 ~ k4
             mstore(add(dataPtr, 0x60), 0x1)
-            mstore(
-                add(dataPtr, 0x80),
-                0x2f8dd1f1a7583c42c4e12a44e110404c73ca6c94813f85835da4fb7bb1301d4a
-            )
-            mstore(
-                add(dataPtr, 0xa0),
-                0x1ee678a0470a75a6eaa8fe837060498ba828a3703b311d0f77f010424afeb025
-            )
-            mstore(
-                add(dataPtr, 0xc0),
-                0x2042a587a90c187b0a087c03e29c968b950b1db26d5c82d666905a6895790c0a
-            )
-            mstore(
-                add(dataPtr, 0xe0),
-                0x2e2b91456103698adf57b799969dea1c8f739da5d8d40dd3eb9222db7c81e881
-            )
+            mstore(add(dataPtr, 0x80), COSET_K1)
+            mstore(add(dataPtr, 0xa0), COSET_K2)
+            mstore(add(dataPtr, 0xc0), COSET_K3)
+            mstore(add(dataPtr, 0xe0), COSET_K4)
 
             // selectors
             let q1Ptr := mload(add(vk, 0xe0))

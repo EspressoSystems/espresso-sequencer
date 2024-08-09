@@ -7,11 +7,11 @@ pragma solidity ^0.8.0;
 // Libraries
 import "forge-std/Test.sol";
 import { BN254 } from "bn254/BN254.sol";
-import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
-import { LightClientStateUpdateVKMock as VkTest } from "./mocks/LightClientStateUpdateVKMock.sol";
+import { IPlonkVerifier } from "../../src/interfaces/IPlonkVerifier.sol";
+import { LightClientStateUpdateVKMock as VkTest } from "../mocks/LightClientStateUpdateVKMock.sol";
 
 // Target contract
-import { Transcript as T } from "../src/libraries/Transcript.sol";
+import { Transcript as T } from "../../src/legacy/Transcript.sol";
 
 contract Transcript_appendMessage_Test is Test {
     using T for T.TranscriptData;
