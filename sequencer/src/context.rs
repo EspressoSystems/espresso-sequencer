@@ -16,10 +16,10 @@ use futures::{
 use hotshot::{
     traits::election::static_committee::GeneralStaticCommittee,
     types::{Event, EventType, SystemContextHandle},
-    Memberships, SystemContext,
+    MarketplaceConfig, Memberships, SystemContext,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
-use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
+
 use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
 use hotshot_query_service::Leaf;
 use hotshot_types::{
@@ -90,6 +90,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         public_api_url: Option<Url>,
         generic_builder_url: Url,
         _: Ver,
+        marketplace_config: MarketplaceConfig<SeqTypes, Node<N, P>>,
     ) -> anyhow::Result<Self> {
         let config = &network_config.config;
         let pub_key = config.my_own_validator_config.public_key;
@@ -151,10 +152,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             initializer,
             ConsensusMetricsValue::new(metrics),
             persistence.clone(),
-            hotshot::MarketplaceConfig {
-                auction_results_provider: Arc::new(TestAuctionResultsProvider::default()),
-                generic_builder_url,
-            },
+            marketplace_config,
         )
         .await?
         .0;

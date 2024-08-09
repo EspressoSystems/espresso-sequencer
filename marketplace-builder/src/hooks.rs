@@ -89,6 +89,7 @@ impl BuilderHooks<SeqTypes> for EspressoReserveHooks {
                 view_number + 3, // We submit a bid 3 views in advance.
                 self.namespaces.iter().cloned().collect(),
                 self.builder_api_base_url.clone(),
+                Default::default(),
             )
             .signed(&self.bid_key_pair)
             {
