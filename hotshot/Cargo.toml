@@ -37,7 +37,7 @@ clap = { workspace = true, optional = true }
 committable = { workspace = true }
 custom_debug = { workspace = true }
 dashmap = "6"
-derive_more = "0.99"
+derive_more = { workspace = true }
 either = { workspace = true }
 ethereum-types = { workspace = true }
 futures = { workspace = true }

@@ -104,7 +104,7 @@ serde = { workspace = true, features = ["rc"] }
 snafu = { workspace = true }
 surf-disco = { workspace = true }
 time = { workspace = true }
-derive_more = "0.99"
+derive_more = { workspace = true }
 portpicker = "0.1"
 lru = "0.12"
 hotshot-task = { path = "../task" }
