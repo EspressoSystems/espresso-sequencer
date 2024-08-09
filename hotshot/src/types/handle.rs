@@ -176,11 +176,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> SystemContextHandl
             .broadcast_direct(Arc::new(HotShotEvent::Shutdown))
             .await
             .inspect_err(|err| tracing::error!("Failed to send shutdown event: {err}"));
-        tracing::error!("Shutting down network tasks!");
-        self.network_registry.shutdown().await;
 
         tracing::error!("Shutting down the network!");
         self.hotshot.network.shut_down().await;
+
+        tracing::error!("Shutting down network tasks!");
+        self.network_registry.shutdown().await;
 
         tracing::error!("Shutting down consensus!");
         self.consensus_registry.shutdown().await;
