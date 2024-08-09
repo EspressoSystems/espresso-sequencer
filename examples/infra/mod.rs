@@ -404,8 +404,8 @@ pub trait RunDa<
 
         let marketplace_config = MarketplaceConfig {
             auction_results_provider: TestAuctionResultsProvider::<TYPES>::default().into(),
-            // TODO: we need to pass a valid generic builder url here somehow
-            generic_builder_url: url::Url::parse("http://localhost").unwrap(),
+            // TODO: we need to pass a valid fallback builder url here somehow
+            fallback_builder_url: url::Url::parse("http://localhost").unwrap(),
         };
 
         SystemContext::init(

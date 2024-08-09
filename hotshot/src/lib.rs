@@ -83,8 +83,8 @@ pub const H_256: usize = 32;
 pub struct MarketplaceConfig<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// auction results provider
     pub auction_results_provider: Arc<I::AuctionResultsProvider>,
-    /// generic builder
-    pub generic_builder_url: Url,
+    /// fallback builder
+    pub fallback_builder_url: Url,
 }
 
 /// Bundle of all the memberships a consensus instance uses

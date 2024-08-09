@@ -110,8 +110,8 @@ pub struct TransactionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     /// auction results provider
     pub auction_results_provider: Arc<I::AuctionResultsProvider>,
-    /// generic builder url
-    pub generic_builder_url: Url,
+    /// fallback builder url
+    pub fallback_builder_url: Url,
 }
 
 impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, I> {
@@ -276,17 +276,21 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
         {
             let start = Instant::now();
 
-            if let Ok(Ok(auction_result)) = async_timeout(
+            if let Ok(maybe_auction_result) = async_timeout(
                 self.builder_timeout,
                 self.auction_results_provider
                     .fetch_auction_result(block_view),
             )
             .await
             {
+                let auction_result = maybe_auction_result
+                    .map_err(|e| warn!("Failed to get auction results: {e:#}"))
+                    .unwrap_or_default(); // We continue here, as we still have fallback builder URL
+
                 let mut futures = Vec::new();
 
                 let mut builder_urls = auction_result.clone().urls();
-                builder_urls.push(self.generic_builder_url.clone());
+                builder_urls.push(self.fallback_builder_url.clone());
 
                 for url in builder_urls {
                     futures.push(async_timeout(
@@ -343,10 +347,12 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
 
                     return None;
                 }
+            } else {
+                warn!("Timeout while getting auction results");
             }
         }
 
-        // If we couldn't get any bundles (due to either the builders or solver failing to return a result), send an empty block
+        // If we couldn't get any bundles (due to either all of the builders or solver failing to return a result), send an empty block
         warn!(
             "Failed to get a block for view {:?}, proposing empty block",
             block_view

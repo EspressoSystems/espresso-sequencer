@@ -490,8 +490,7 @@ where
                 config,
                 marketplace_config: Box::new(|_| MarketplaceConfig::<TYPES, I> {
                     auction_results_provider: TestAuctionResultsProvider::<TYPES>::default().into(),
-                    // TODO: we need to pass a valid generic builder url here somehow
-                    generic_builder_url: Url::parse("http://localhost").unwrap(),
+                    fallback_builder_url: Url::parse("http://localhost").unwrap(),
                 }),
             },
             metadata: self,
