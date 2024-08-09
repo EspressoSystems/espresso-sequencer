@@ -22,7 +22,7 @@ contract PolynomialEval_newEvalDomain_Test is Test {
             cmds[2] = vm.toString(logSizes[i]);
 
             bytes memory result = vm.ffi(cmds);
-            (uint256 sizeInv, uint256 groupGen,) = abi.decode(result, (uint256, uint256, uint256));
+            (uint256 sizeInv, uint256 groupGen) = abi.decode(result, (uint256, uint256));
 
             Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSizes[i]);
             assertEq(sizeInv, domain.sizeInv);
