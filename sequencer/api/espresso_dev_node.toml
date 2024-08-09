@@ -12,9 +12,16 @@ Returns
 ```
 {
     "builder_url": string,
-    "prover_port": integer,
+    "l1_prover_port": integer,
     "l1_url": string,
-    "light_client_address:" address,
+    "l1_light_client_address": address,
+    "alt_chains": 
+        [{ 
+        "chain_id" : integer, 
+        "provider_url": string, 
+        "light_client_address": address
+        "prover_port" : integer
+        }]
 }
 ```
 """

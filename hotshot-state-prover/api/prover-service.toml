@@ -2,27 +2,3 @@
 PATH = ["/lightclient_contract"]
 METHOD = "GET"
 DOC = "Get the address of light client contract on Layer1."
-
-[route.getaltchainlightclientcontracts]
-PATH = ["/altchain_light_client_contracts"]
-METHOD = "GET"
-DOC = """
-Get the addresses of all alt chains light client contracts
-
-
-Returns
-```
-List of 
-{
-    chain_id,
-    provider_url,
-    light_client_address.
-}
-```
-"""
-
-[route.getaltchainlightclientcontract]
-PATH = ["/altchain_light_client_contract/:chain_id"]
-METHOD = "GET"
-":chain_id" = "Integer"
-DOC = "Get the address of light client contract of a specific alt chain"
