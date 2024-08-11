@@ -11,7 +11,7 @@ import { UUPSUpgradeable } from
 
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "./interfaces/IPlonkVerifier.sol";
-import { PlonkVerifier } from "./libraries/PlonkVerifier.sol";
+import { PlonkVerifier2 } from "./libraries/PlonkVerifier2.sol";
 import { LightClientStateUpdateVK as VkLib } from "./libraries/LightClientStateUpdateVK.sol";
 
 /// @title Light Client Contract
@@ -58,6 +58,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint32 internal finalizedState;
 
     // === Storage ===
+
+    /// @notice SNARK verifier
+    PlonkVerifier2 verifier;
 
     /// @notice current (finalized) epoch number
     uint64 public currentEpoch;
@@ -167,6 +170,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __UUPSUpgradeable_init();
         genesisState = 0;
         finalizedState = 1;
+        verifier = new PlonkVerifier2();
         _initializeState(genesis, numBlocksPerEpoch);
     }
 
@@ -315,7 +319,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         publicInput[6] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableSchnorrKeyComm);
         publicInput[7] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableAmountComm);
 
-        if (!PlonkVerifier.verify(vk, publicInput, proof)) {
+        if (!verifier.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
     }

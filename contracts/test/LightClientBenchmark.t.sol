@@ -12,7 +12,7 @@ import { IPlonkVerifier as V } from "../src/interfaces/IPlonkVerifier.sol";
 import { LightClient as LC } from "../src/LightClient.sol";
 import { LightClientCommonTest } from "./LightClient.t.sol";
 
-contract LightClient_newFinalizedState_Test is LightClientCommonTest {
+contract LightClientBench is LightClientCommonTest {
     function setUp() public {
         init();
     }
