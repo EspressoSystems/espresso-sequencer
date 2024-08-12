@@ -727,6 +727,33 @@
 <a href="#727" id="727">727</a>
 <a href="#728" id="728">728</a>
 <a href="#729" id="729">729</a>
+<a href="#730" id="730">730</a>
+<a href="#731" id="731">731</a>
+<a href="#732" id="732">732</a>
+<a href="#733" id="733">733</a>
+<a href="#734" id="734">734</a>
+<a href="#735" id="735">735</a>
+<a href="#736" id="736">736</a>
+<a href="#737" id="737">737</a>
+<a href="#738" id="738">738</a>
+<a href="#739" id="739">739</a>
+<a href="#740" id="740">740</a>
+<a href="#741" id="741">741</a>
+<a href="#742" id="742">742</a>
+<a href="#743" id="743">743</a>
+<a href="#744" id="744">744</a>
+<a href="#745" id="745">745</a>
+<a href="#746" id="746">746</a>
+<a href="#747" id="747">747</a>
+<a href="#748" id="748">748</a>
+<a href="#749" id="749">749</a>
+<a href="#750" id="750">750</a>
+<a href="#751" id="751">751</a>
+<a href="#752" id="752">752</a>
+<a href="#753" id="753">753</a>
+<a href="#754" id="754">754</a>
+<a href="#755" id="755">755</a>
+<a href="#756" id="756">756</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! A light client prover service
 
 </span><span class="kw">use </span>std::{
@@ -783,7 +810,7 @@
 <span class="kw">type </span>F = ark_ed_on_bn254::Fq;
 
 <span class="doccomment">/// A wallet with local signer and connected to network via http
-</span><span class="kw">pub type </span>L1Wallet = SignerMiddleware&lt;Provider&lt;Http&gt;, LocalWallet&gt;;
+</span><span class="kw">pub type </span>SignerWallet = SignerMiddleware&lt;Provider&lt;Http&gt;, LocalWallet&gt;;
 
 <span class="doccomment">/// Configuration/Parameters used for hotshot state prover
 </span><span class="attr">#[derive(Debug, Clone)]
@@ -794,12 +821,12 @@
     </span><span class="kw">pub </span>update_interval: Duration,
     <span class="doccomment">/// Interval between retries if a state update fails
     </span><span class="kw">pub </span>retry_interval: Duration,
-    <span class="doccomment">/// URL of layer 1 Ethereum JSON-RPC provider.
-    </span><span class="kw">pub </span>l1_provider: Url,
-    <span class="doccomment">/// Address of LightClient contract on layer 1.
+    <span class="doccomment">/// URL of the chain (layer 1  or any layer 2) JSON-RPC provider.
+    </span><span class="kw">pub </span>provider: Url,
+    <span class="doccomment">/// Address of LightClient contract
     </span><span class="kw">pub </span>light_client_address: Address,
-    <span class="doccomment">/// Transaction signing key for Ethereum
-    </span><span class="kw">pub </span>eth_signing_key: SigningKey,
+    <span class="doccomment">/// Transaction signing key for Ethereum or any other layer 2
+    </span><span class="kw">pub </span>signing_key: SigningKey,
     <span class="doccomment">/// URL of a node that is currently providing the HotShot config.
     /// This is used to initialize the stake table.
     </span><span class="kw">pub </span>sequencer_url: Url,
@@ -976,23 +1003,26 @@
 
 <span class="doccomment">/// prepare a contract interface ready to be read from or written to
 </span><span class="kw">async fn </span>prepare_contract(
-    config: <span class="kw-2">&amp;</span>StateProverConfig,
-) -&gt; <span class="prelude-ty">Result</span>&lt;LightClient&lt;L1Wallet&gt;, ProverError&gt; {
-    <span class="kw">let </span>provider = Provider::try_from(config.l1_provider.to_string())
+    provider: Url,
+    key: SigningKey,
+    light_client_address: Address,
+) -&gt; <span class="prelude-ty">Result</span>&lt;LightClient&lt;SignerWallet&gt;, ProverError&gt; {
+    <span class="kw">let </span>provider = Provider::try_from(provider.as_str())
         .expect(<span class="string">"unable to instantiate Provider, likely wrong URL"</span>);
-    <span class="kw">let </span>signer = Wallet::from(config.eth_signing_key.clone())
-        .with_chain_id(provider.get_chainid().<span class="kw">await</span><span class="question-mark">?</span>.as_u64());
-    <span class="kw">let </span>l1_wallet = Arc::new(L1Wallet::new(provider, signer));
+    <span class="kw">let </span>signer = Wallet::from(key).with_chain_id(provider.get_chainid().<span class="kw">await</span><span class="question-mark">?</span>.as_u64());
+    <span class="kw">let </span>wallet = Arc::new(SignerWallet::new(provider, signer));
 
-    <span class="kw">let </span>contract = LightClient::new(config.light_client_address, l1_wallet);
+    <span class="kw">let </span>contract = LightClient::new(light_client_address, wallet);
     <span class="prelude-val">Ok</span>(contract)
 }
 
 <span class="doccomment">/// get the `finalizedState` from the LightClient contract storage on L1
 </span><span class="kw">pub async fn </span>read_contract_state(
-    config: <span class="kw-2">&amp;</span>StateProverConfig,
+    provider: Url,
+    key: SigningKey,
+    light_client_address: Address,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;LightClientState, ProverError&gt; {
-    <span class="kw">let </span>contract = prepare_contract(config).<span class="kw">await</span><span class="question-mark">?</span>;
+    <span class="kw">let </span>contract = prepare_contract(provider, key, light_client_address).<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="kw">let </span>state: ParsedLightClientState = <span class="kw">match </span>contract.get_finalized_state().call().<span class="kw">await </span>{
         <span class="prelude-val">Ok</span>(s) =&gt; s.into(),
         <span class="prelude-val">Err</span>(e) =&gt; {
@@ -1009,9 +1039,11 @@
 </span><span class="kw">pub async fn </span>submit_state_and_proof(
     proof: Proof,
     public_input: PublicInput,
-    config: <span class="kw-2">&amp;</span>StateProverConfig,
+    provider: Url,
+    key: SigningKey,
+    light_client_address: Address,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;(), ProverError&gt; {
-    <span class="kw">let </span>contract = prepare_contract(config).<span class="kw">await</span><span class="question-mark">?</span>;
+    <span class="kw">let </span>contract = prepare_contract(provider, key, light_client_address).<span class="kw">await</span><span class="question-mark">?</span>;
 
     <span class="comment">// prepare the input the contract call and the tx itself
     </span><span class="kw">let </span>proof: ParsedPlonkProof = proof.into();
@@ -1037,12 +1069,21 @@
     relay_server_client: <span class="kw-2">&amp;</span>Client&lt;ServerError, Ver&gt;,
     config: <span class="kw-2">&amp;</span>StateProverConfig,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;(), ProverError&gt; {
-    <span class="macro">tracing::info!</span>(<span class="string">"Start syncing light client state."</span>);
+    <span class="kw">let </span>light_client_address = config.light_client_address;
+    <span class="kw">let </span>provider = config.provider.clone();
+    <span class="kw">let </span>key = config.signing_key.clone();
+
+    <span class="macro">tracing::info!</span>(
+        <span class="question-mark">?</span>light_client_address,
+        <span class="string">"Start syncing light client state for provider: {}"</span>,
+        provider,
+    );
 
     <span class="kw">let </span>bundle = fetch_latest_state(relay_server_client).<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="macro">tracing::info!</span>(<span class="string">"Bundle accumulated weight: {}"</span>, bundle.accumulated_weight);
     <span class="macro">tracing::info!</span>(<span class="string">"Latest HotShot block height: {}"</span>, bundle.state.block_height);
-    <span class="kw">let </span>old_state = read_contract_state(config).<span class="kw">await</span><span class="question-mark">?</span>;
+    <span class="kw">let </span>old_state =
+        read_contract_state(provider.clone(), key.clone(), light_client_address).<span class="kw">await</span><span class="question-mark">?</span>;
     <span class="macro">tracing::info!</span>(
         <span class="string">"Current HotShot block height on contract: {}"</span>,
         old_state.block_height
@@ -1084,11 +1125,12 @@
 
     <span class="macro">tracing::info!</span>(<span class="string">"Collected latest state and signatures. Start generating SNARK proof."</span>);
     <span class="kw">let </span>proof_gen_start = Instant::now();
+    <span class="kw">let </span>proving_key_clone = proving_key.clone();
     <span class="kw">let </span>stake_table_capacity = config.stake_table_capacity;
     <span class="kw">let </span>(proof, public_input) = spawn_blocking(<span class="kw">move </span>|| {
         generate_state_update_proof::&lt;<span class="kw">_</span>, <span class="kw">_</span>, <span class="kw">_</span>, <span class="kw">_</span>&gt;(
             <span class="kw-2">&amp;mut </span>ark_std::rand::thread_rng(),
-            <span class="kw-2">&amp;</span>proving_key,
+            <span class="kw-2">&amp;</span>proving_key_clone,
             <span class="kw-2">&amp;</span>entries,
             signer_bit_vec,
             signatures,
@@ -1101,7 +1143,7 @@
     <span class="kw">let </span>proof_gen_elapsed = Instant::now().signed_duration_since(proof_gen_start);
     <span class="macro">tracing::info!</span>(<span class="string">"Proof generation completed. Elapsed: {proof_gen_elapsed:.3}"</span>);
 
-    submit_state_and_proof(proof, public_input, config).<span class="kw">await</span><span class="question-mark">?</span>;
+    submit_state_and_proof(proof, public_input, provider, key, light_client_address).<span class="kw">await</span><span class="question-mark">?</span>;
 
     <span class="macro">tracing::info!</span>(<span class="string">"Successfully synced light client state."</span>);
     <span class="prelude-val">Ok</span>(())
@@ -1109,21 +1151,20 @@
 
 <span class="kw">fn </span>start_http_server&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
     port: u16,
-    lightclient_address: Address,
+    light_client_address: Address,
     bind_version: Ver,
 ) -&gt; io::Result&lt;()&gt; {
-    <span class="kw">let </span><span class="kw-2">mut </span>app = tide_disco::App::&lt;(), ServerError&gt;::with_state(());
+    <span class="kw">let </span><span class="kw-2">mut </span>app = tide_disco::App::&lt;<span class="kw">_</span>, ServerError&gt;::with_state(());
     <span class="kw">let </span>toml = toml::from_str::&lt;toml::value::Value&gt;(<span class="macro">include_str!</span>(<span class="string">"../api/prover-service.toml"</span>))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
 
-    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;(), ServerError, Ver&gt;::new(toml)
+    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;<span class="kw">_</span>, ServerError, Ver&gt;::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
 
     api.get(<span class="string">"getlightclientcontract"</span>, <span class="kw">move </span>|<span class="kw">_</span>, <span class="kw">_</span>| {
-        <span class="kw">async move </span>{ <span class="prelude-val">Ok</span>(lightclient_address) }.boxed()
+        <span class="kw">async move </span>{ <span class="prelude-val">Ok</span>(light_client_address) }.boxed()
     })
     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
-
     app.register_module(<span class="string">"api"</span>, api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
 
@@ -1152,6 +1193,7 @@
     st: Arc&lt;StakeTable&lt;BLSPubKey, StateVerKey, CircuitField&gt;&gt;,
 ) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
     <span class="macro">tracing::info!</span>(<span class="string">"Light client address: {:?}"</span>, config.light_client_address);
+
     <span class="kw">let </span>relay_server_client =
         Arc::new(Client::&lt;ServerError, Ver&gt;::new(config.relay_server.clone()));
 
@@ -1363,11 +1405,11 @@
     </span><span class="kw">async fn </span>deploy_contract_for_test(
         anvil: <span class="kw-2">&amp;</span>AnvilInstance,
         genesis: ParsedLightClientState,
-    ) -&gt; <span class="prelude-ty">Result</span>&lt;(Arc&lt;L1Wallet&gt;, LightClient&lt;L1Wallet&gt;)&gt; {
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;(Arc&lt;SignerWallet&gt;, LightClient&lt;SignerWallet&gt;)&gt; {
         <span class="kw">let </span>provider = Provider::&lt;Http&gt;::try_from(anvil.endpoint())<span class="question-mark">?</span>;
         <span class="kw">let </span>signer = Wallet::from(anvil.keys()[<span class="number">0</span>].clone())
             .with_chain_id(provider.get_chainid().<span class="kw">await</span><span class="question-mark">?</span>.as_u64());
-        <span class="kw">let </span>l1_wallet = Arc::new(L1Wallet::new(provider.clone(), signer));
+        <span class="kw">let </span>l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
 
         <span class="kw">let </span><span class="kw-2">mut </span>contracts = deployer::Contracts::default();
         <span class="kw">let </span>address = deployer::deploy_mock_light_client_contract(
@@ -1385,9 +1427,9 @@
     <span class="kw">impl </span>StateProverConfig {
         <span class="doccomment">/// update only L1 related info
         </span><span class="kw">fn </span>update_l1_info(<span class="kw-2">&amp;mut </span><span class="self">self</span>, anvil: <span class="kw-2">&amp;</span>AnvilInstance, light_client_address: Address) {
-            <span class="self">self</span>.l1_provider = Url::parse(<span class="kw-2">&amp;</span>anvil.endpoint()).unwrap();
+            <span class="self">self</span>.provider = Url::parse(<span class="kw-2">&amp;</span>anvil.endpoint()).unwrap();
             <span class="self">self</span>.light_client_address = light_client_address;
-            <span class="self">self</span>.eth_signing_key = anvil.keys()[<span class="number">0</span>].clone().into();
+            <span class="self">self</span>.signing_key = anvil.keys()[<span class="number">0</span>].clone().into();
         }
     }
     <span class="comment">// only for testing purposes
@@ -1397,9 +1439,9 @@
                 relay_server: Url::parse(<span class="string">"http://localhost"</span>).unwrap(),
                 update_interval: Duration::default(),
                 retry_interval: Duration::default(),
-                l1_provider: Url::parse(<span class="string">"http://localhost"</span>).unwrap(),
+                provider: Url::parse(<span class="string">"http://localhost"</span>).unwrap(),
                 light_client_address: Address::default(),
-                eth_signing_key: SigningKey::random(<span class="kw-2">&amp;mut </span>test_rng()),
+                signing_key: SigningKey::random(<span class="kw-2">&amp;mut </span>test_rng()),
                 sequencer_url: Url::parse(<span class="string">"http://localhost"</span>).unwrap(),
                 port: <span class="prelude-val">None</span>,
                 stake_table_capacity: <span class="number">10</span>,
@@ -1421,7 +1463,12 @@
 
         <span class="kw">let </span><span class="kw-2">mut </span>config = StateProverConfig::default();
         config.update_l1_info(<span class="kw-2">&amp;</span>anvil, contract.address());
-        <span class="kw">let </span>state = <span class="kw">super</span>::read_contract_state(<span class="kw-2">&amp;</span>config).<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let </span>state = <span class="kw">super</span>::read_contract_state(
+            config.provider,
+            config.signing_key,
+            config.light_client_address,
+        )
+        .<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="macro">assert_eq!</span>(state, genesis.into());
         <span class="prelude-val">Ok</span>(())
     }
@@ -1448,7 +1495,14 @@
         <span class="kw">let </span>(pi, proof) = gen_state_proof(<span class="kw-2">&amp;</span>genesis, new_state.clone(), <span class="kw-2">&amp;</span>state_keys, <span class="kw-2">&amp;</span>st);
         <span class="macro">tracing::info!</span>(<span class="string">"Successfully generated proof for new state."</span>);
 
-        <span class="kw">super</span>::submit_state_and_proof(proof, pi, <span class="kw-2">&amp;</span>config).<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">super</span>::submit_state_and_proof(
+            proof,
+            pi,
+            config.provider,
+            config.signing_key,
+            config.light_client_address,
+        )
+        .<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="macro">tracing::info!</span>(<span class="string">"Successfully submitted new finalized state to L1."</span>);
         <span class="comment">// test if new state is updated in l1
         </span><span class="kw">let </span>finalized_l1: ParsedLightClientState = contract.get_finalized_state().<span class="kw">await</span><span class="question-mark">?</span>.into();

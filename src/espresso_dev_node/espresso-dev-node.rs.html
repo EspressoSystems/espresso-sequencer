@@ -632,19 +632,405 @@
 <a href="#632" id="632">632</a>
 <a href="#633" id="633">633</a>
 <a href="#634" id="634">634</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::{io, sync::Arc, time::Duration};
+<a href="#635" id="635">635</a>
+<a href="#636" id="636">636</a>
+<a href="#637" id="637">637</a>
+<a href="#638" id="638">638</a>
+<a href="#639" id="639">639</a>
+<a href="#640" id="640">640</a>
+<a href="#641" id="641">641</a>
+<a href="#642" id="642">642</a>
+<a href="#643" id="643">643</a>
+<a href="#644" id="644">644</a>
+<a href="#645" id="645">645</a>
+<a href="#646" id="646">646</a>
+<a href="#647" id="647">647</a>
+<a href="#648" id="648">648</a>
+<a href="#649" id="649">649</a>
+<a href="#650" id="650">650</a>
+<a href="#651" id="651">651</a>
+<a href="#652" id="652">652</a>
+<a href="#653" id="653">653</a>
+<a href="#654" id="654">654</a>
+<a href="#655" id="655">655</a>
+<a href="#656" id="656">656</a>
+<a href="#657" id="657">657</a>
+<a href="#658" id="658">658</a>
+<a href="#659" id="659">659</a>
+<a href="#660" id="660">660</a>
+<a href="#661" id="661">661</a>
+<a href="#662" id="662">662</a>
+<a href="#663" id="663">663</a>
+<a href="#664" id="664">664</a>
+<a href="#665" id="665">665</a>
+<a href="#666" id="666">666</a>
+<a href="#667" id="667">667</a>
+<a href="#668" id="668">668</a>
+<a href="#669" id="669">669</a>
+<a href="#670" id="670">670</a>
+<a href="#671" id="671">671</a>
+<a href="#672" id="672">672</a>
+<a href="#673" id="673">673</a>
+<a href="#674" id="674">674</a>
+<a href="#675" id="675">675</a>
+<a href="#676" id="676">676</a>
+<a href="#677" id="677">677</a>
+<a href="#678" id="678">678</a>
+<a href="#679" id="679">679</a>
+<a href="#680" id="680">680</a>
+<a href="#681" id="681">681</a>
+<a href="#682" id="682">682</a>
+<a href="#683" id="683">683</a>
+<a href="#684" id="684">684</a>
+<a href="#685" id="685">685</a>
+<a href="#686" id="686">686</a>
+<a href="#687" id="687">687</a>
+<a href="#688" id="688">688</a>
+<a href="#689" id="689">689</a>
+<a href="#690" id="690">690</a>
+<a href="#691" id="691">691</a>
+<a href="#692" id="692">692</a>
+<a href="#693" id="693">693</a>
+<a href="#694" id="694">694</a>
+<a href="#695" id="695">695</a>
+<a href="#696" id="696">696</a>
+<a href="#697" id="697">697</a>
+<a href="#698" id="698">698</a>
+<a href="#699" id="699">699</a>
+<a href="#700" id="700">700</a>
+<a href="#701" id="701">701</a>
+<a href="#702" id="702">702</a>
+<a href="#703" id="703">703</a>
+<a href="#704" id="704">704</a>
+<a href="#705" id="705">705</a>
+<a href="#706" id="706">706</a>
+<a href="#707" id="707">707</a>
+<a href="#708" id="708">708</a>
+<a href="#709" id="709">709</a>
+<a href="#710" id="710">710</a>
+<a href="#711" id="711">711</a>
+<a href="#712" id="712">712</a>
+<a href="#713" id="713">713</a>
+<a href="#714" id="714">714</a>
+<a href="#715" id="715">715</a>
+<a href="#716" id="716">716</a>
+<a href="#717" id="717">717</a>
+<a href="#718" id="718">718</a>
+<a href="#719" id="719">719</a>
+<a href="#720" id="720">720</a>
+<a href="#721" id="721">721</a>
+<a href="#722" id="722">722</a>
+<a href="#723" id="723">723</a>
+<a href="#724" id="724">724</a>
+<a href="#725" id="725">725</a>
+<a href="#726" id="726">726</a>
+<a href="#727" id="727">727</a>
+<a href="#728" id="728">728</a>
+<a href="#729" id="729">729</a>
+<a href="#730" id="730">730</a>
+<a href="#731" id="731">731</a>
+<a href="#732" id="732">732</a>
+<a href="#733" id="733">733</a>
+<a href="#734" id="734">734</a>
+<a href="#735" id="735">735</a>
+<a href="#736" id="736">736</a>
+<a href="#737" id="737">737</a>
+<a href="#738" id="738">738</a>
+<a href="#739" id="739">739</a>
+<a href="#740" id="740">740</a>
+<a href="#741" id="741">741</a>
+<a href="#742" id="742">742</a>
+<a href="#743" id="743">743</a>
+<a href="#744" id="744">744</a>
+<a href="#745" id="745">745</a>
+<a href="#746" id="746">746</a>
+<a href="#747" id="747">747</a>
+<a href="#748" id="748">748</a>
+<a href="#749" id="749">749</a>
+<a href="#750" id="750">750</a>
+<a href="#751" id="751">751</a>
+<a href="#752" id="752">752</a>
+<a href="#753" id="753">753</a>
+<a href="#754" id="754">754</a>
+<a href="#755" id="755">755</a>
+<a href="#756" id="756">756</a>
+<a href="#757" id="757">757</a>
+<a href="#758" id="758">758</a>
+<a href="#759" id="759">759</a>
+<a href="#760" id="760">760</a>
+<a href="#761" id="761">761</a>
+<a href="#762" id="762">762</a>
+<a href="#763" id="763">763</a>
+<a href="#764" id="764">764</a>
+<a href="#765" id="765">765</a>
+<a href="#766" id="766">766</a>
+<a href="#767" id="767">767</a>
+<a href="#768" id="768">768</a>
+<a href="#769" id="769">769</a>
+<a href="#770" id="770">770</a>
+<a href="#771" id="771">771</a>
+<a href="#772" id="772">772</a>
+<a href="#773" id="773">773</a>
+<a href="#774" id="774">774</a>
+<a href="#775" id="775">775</a>
+<a href="#776" id="776">776</a>
+<a href="#777" id="777">777</a>
+<a href="#778" id="778">778</a>
+<a href="#779" id="779">779</a>
+<a href="#780" id="780">780</a>
+<a href="#781" id="781">781</a>
+<a href="#782" id="782">782</a>
+<a href="#783" id="783">783</a>
+<a href="#784" id="784">784</a>
+<a href="#785" id="785">785</a>
+<a href="#786" id="786">786</a>
+<a href="#787" id="787">787</a>
+<a href="#788" id="788">788</a>
+<a href="#789" id="789">789</a>
+<a href="#790" id="790">790</a>
+<a href="#791" id="791">791</a>
+<a href="#792" id="792">792</a>
+<a href="#793" id="793">793</a>
+<a href="#794" id="794">794</a>
+<a href="#795" id="795">795</a>
+<a href="#796" id="796">796</a>
+<a href="#797" id="797">797</a>
+<a href="#798" id="798">798</a>
+<a href="#799" id="799">799</a>
+<a href="#800" id="800">800</a>
+<a href="#801" id="801">801</a>
+<a href="#802" id="802">802</a>
+<a href="#803" id="803">803</a>
+<a href="#804" id="804">804</a>
+<a href="#805" id="805">805</a>
+<a href="#806" id="806">806</a>
+<a href="#807" id="807">807</a>
+<a href="#808" id="808">808</a>
+<a href="#809" id="809">809</a>
+<a href="#810" id="810">810</a>
+<a href="#811" id="811">811</a>
+<a href="#812" id="812">812</a>
+<a href="#813" id="813">813</a>
+<a href="#814" id="814">814</a>
+<a href="#815" id="815">815</a>
+<a href="#816" id="816">816</a>
+<a href="#817" id="817">817</a>
+<a href="#818" id="818">818</a>
+<a href="#819" id="819">819</a>
+<a href="#820" id="820">820</a>
+<a href="#821" id="821">821</a>
+<a href="#822" id="822">822</a>
+<a href="#823" id="823">823</a>
+<a href="#824" id="824">824</a>
+<a href="#825" id="825">825</a>
+<a href="#826" id="826">826</a>
+<a href="#827" id="827">827</a>
+<a href="#828" id="828">828</a>
+<a href="#829" id="829">829</a>
+<a href="#830" id="830">830</a>
+<a href="#831" id="831">831</a>
+<a href="#832" id="832">832</a>
+<a href="#833" id="833">833</a>
+<a href="#834" id="834">834</a>
+<a href="#835" id="835">835</a>
+<a href="#836" id="836">836</a>
+<a href="#837" id="837">837</a>
+<a href="#838" id="838">838</a>
+<a href="#839" id="839">839</a>
+<a href="#840" id="840">840</a>
+<a href="#841" id="841">841</a>
+<a href="#842" id="842">842</a>
+<a href="#843" id="843">843</a>
+<a href="#844" id="844">844</a>
+<a href="#845" id="845">845</a>
+<a href="#846" id="846">846</a>
+<a href="#847" id="847">847</a>
+<a href="#848" id="848">848</a>
+<a href="#849" id="849">849</a>
+<a href="#850" id="850">850</a>
+<a href="#851" id="851">851</a>
+<a href="#852" id="852">852</a>
+<a href="#853" id="853">853</a>
+<a href="#854" id="854">854</a>
+<a href="#855" id="855">855</a>
+<a href="#856" id="856">856</a>
+<a href="#857" id="857">857</a>
+<a href="#858" id="858">858</a>
+<a href="#859" id="859">859</a>
+<a href="#860" id="860">860</a>
+<a href="#861" id="861">861</a>
+<a href="#862" id="862">862</a>
+<a href="#863" id="863">863</a>
+<a href="#864" id="864">864</a>
+<a href="#865" id="865">865</a>
+<a href="#866" id="866">866</a>
+<a href="#867" id="867">867</a>
+<a href="#868" id="868">868</a>
+<a href="#869" id="869">869</a>
+<a href="#870" id="870">870</a>
+<a href="#871" id="871">871</a>
+<a href="#872" id="872">872</a>
+<a href="#873" id="873">873</a>
+<a href="#874" id="874">874</a>
+<a href="#875" id="875">875</a>
+<a href="#876" id="876">876</a>
+<a href="#877" id="877">877</a>
+<a href="#878" id="878">878</a>
+<a href="#879" id="879">879</a>
+<a href="#880" id="880">880</a>
+<a href="#881" id="881">881</a>
+<a href="#882" id="882">882</a>
+<a href="#883" id="883">883</a>
+<a href="#884" id="884">884</a>
+<a href="#885" id="885">885</a>
+<a href="#886" id="886">886</a>
+<a href="#887" id="887">887</a>
+<a href="#888" id="888">888</a>
+<a href="#889" id="889">889</a>
+<a href="#890" id="890">890</a>
+<a href="#891" id="891">891</a>
+<a href="#892" id="892">892</a>
+<a href="#893" id="893">893</a>
+<a href="#894" id="894">894</a>
+<a href="#895" id="895">895</a>
+<a href="#896" id="896">896</a>
+<a href="#897" id="897">897</a>
+<a href="#898" id="898">898</a>
+<a href="#899" id="899">899</a>
+<a href="#900" id="900">900</a>
+<a href="#901" id="901">901</a>
+<a href="#902" id="902">902</a>
+<a href="#903" id="903">903</a>
+<a href="#904" id="904">904</a>
+<a href="#905" id="905">905</a>
+<a href="#906" id="906">906</a>
+<a href="#907" id="907">907</a>
+<a href="#908" id="908">908</a>
+<a href="#909" id="909">909</a>
+<a href="#910" id="910">910</a>
+<a href="#911" id="911">911</a>
+<a href="#912" id="912">912</a>
+<a href="#913" id="913">913</a>
+<a href="#914" id="914">914</a>
+<a href="#915" id="915">915</a>
+<a href="#916" id="916">916</a>
+<a href="#917" id="917">917</a>
+<a href="#918" id="918">918</a>
+<a href="#919" id="919">919</a>
+<a href="#920" id="920">920</a>
+<a href="#921" id="921">921</a>
+<a href="#922" id="922">922</a>
+<a href="#923" id="923">923</a>
+<a href="#924" id="924">924</a>
+<a href="#925" id="925">925</a>
+<a href="#926" id="926">926</a>
+<a href="#927" id="927">927</a>
+<a href="#928" id="928">928</a>
+<a href="#929" id="929">929</a>
+<a href="#930" id="930">930</a>
+<a href="#931" id="931">931</a>
+<a href="#932" id="932">932</a>
+<a href="#933" id="933">933</a>
+<a href="#934" id="934">934</a>
+<a href="#935" id="935">935</a>
+<a href="#936" id="936">936</a>
+<a href="#937" id="937">937</a>
+<a href="#938" id="938">938</a>
+<a href="#939" id="939">939</a>
+<a href="#940" id="940">940</a>
+<a href="#941" id="941">941</a>
+<a href="#942" id="942">942</a>
+<a href="#943" id="943">943</a>
+<a href="#944" id="944">944</a>
+<a href="#945" id="945">945</a>
+<a href="#946" id="946">946</a>
+<a href="#947" id="947">947</a>
+<a href="#948" id="948">948</a>
+<a href="#949" id="949">949</a>
+<a href="#950" id="950">950</a>
+<a href="#951" id="951">951</a>
+<a href="#952" id="952">952</a>
+<a href="#953" id="953">953</a>
+<a href="#954" id="954">954</a>
+<a href="#955" id="955">955</a>
+<a href="#956" id="956">956</a>
+<a href="#957" id="957">957</a>
+<a href="#958" id="958">958</a>
+<a href="#959" id="959">959</a>
+<a href="#960" id="960">960</a>
+<a href="#961" id="961">961</a>
+<a href="#962" id="962">962</a>
+<a href="#963" id="963">963</a>
+<a href="#964" id="964">964</a>
+<a href="#965" id="965">965</a>
+<a href="#966" id="966">966</a>
+<a href="#967" id="967">967</a>
+<a href="#968" id="968">968</a>
+<a href="#969" id="969">969</a>
+<a href="#970" id="970">970</a>
+<a href="#971" id="971">971</a>
+<a href="#972" id="972">972</a>
+<a href="#973" id="973">973</a>
+<a href="#974" id="974">974</a>
+<a href="#975" id="975">975</a>
+<a href="#976" id="976">976</a>
+<a href="#977" id="977">977</a>
+<a href="#978" id="978">978</a>
+<a href="#979" id="979">979</a>
+<a href="#980" id="980">980</a>
+<a href="#981" id="981">981</a>
+<a href="#982" id="982">982</a>
+<a href="#983" id="983">983</a>
+<a href="#984" id="984">984</a>
+<a href="#985" id="985">985</a>
+<a href="#986" id="986">986</a>
+<a href="#987" id="987">987</a>
+<a href="#988" id="988">988</a>
+<a href="#989" id="989">989</a>
+<a href="#990" id="990">990</a>
+<a href="#991" id="991">991</a>
+<a href="#992" id="992">992</a>
+<a href="#993" id="993">993</a>
+<a href="#994" id="994">994</a>
+<a href="#995" id="995">995</a>
+<a href="#996" id="996">996</a>
+<a href="#997" id="997">997</a>
+<a href="#998" id="998">998</a>
+<a href="#999" id="999">999</a>
+<a href="#1000" id="1000">1000</a>
+<a href="#1001" id="1001">1001</a>
+<a href="#1002" id="1002">1002</a>
+<a href="#1003" id="1003">1003</a>
+<a href="#1004" id="1004">1004</a>
+<a href="#1005" id="1005">1005</a>
+<a href="#1006" id="1006">1006</a>
+<a href="#1007" id="1007">1007</a>
+<a href="#1008" id="1008">1008</a>
+<a href="#1009" id="1009">1009</a>
+<a href="#1010" id="1010">1010</a>
+<a href="#1011" id="1011">1011</a>
+<a href="#1012" id="1012">1012</a>
+<a href="#1013" id="1013">1013</a>
+<a href="#1014" id="1014">1014</a>
+<a href="#1015" id="1015">1015</a>
+<a href="#1016" id="1016">1016</a>
+<a href="#1017" id="1017">1017</a>
+<a href="#1018" id="1018">1018</a>
+<a href="#1019" id="1019">1019</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, io, iter::once, sync::Arc, time::Duration};
 
 <span class="kw">use </span>async_std::task::spawn;
+<span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>contract_bindings::light_client_mock::LightClientMock;
-<span class="kw">use </span>espresso_types::SeqTypes;
+<span class="kw">use </span>espresso_types::{parse_duration, SeqTypes};
 <span class="kw">use </span>ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
     types::{Address, U256},
 };
-<span class="kw">use </span>futures::FutureExt;
+<span class="kw">use </span>futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 <span class="kw">use </span>hotshot_state_prover::service::{
     one_honest_threshold, run_prover_service_with_stake_table, StateProverConfig,
 };
@@ -667,7 +1053,7 @@
     logging, AnvilOptions,
 };
 <span class="kw">use </span>serde::{Deserialize, Serialize};
-<span class="kw">use </span>tide_disco::{error::ServerError, Api, Error <span class="kw">as _</span>, StatusCode};
+<span class="kw">use </span>tide_disco::{error::ServerError, method::ReadState, Api, Error <span class="kw">as _</span>, StatusCode};
 <span class="kw">use </span>url::Url;
 <span class="kw">use </span>vbs::version::StaticVersionType;
 
@@ -696,6 +1082,43 @@
         default_value = <span class="string">"0"
     </span>)]
     </span>account_index: u32,
+
+    <span class="doccomment">/// Optional list of URLs representing alternate chains where the dev node will deploy LC contracts
+    /// and submit LC state updates.
+    ///
+    /// Useful for test environments involving L3s.
+    </span><span class="attr">#[arg(long, env = <span class="string">"ESPRESSO_DEPLOYER_ALT_CHAIN_PROVIDERS"</span>, num_args = <span class="number">1</span>.., value_delimiter = <span class="string">','</span>)]
+    </span>alt_chain_providers: Vec&lt;Url&gt;,
+
+    <span class="doccomment">/// Optional list of mnemonics for the alternate chains. If there are fewer mnemonics provided than chains, the base MNEMONIC will be used.
+    </span><span class="attr">#[arg(long, env = <span class="string">"ESPRESSO_DEPLOYER_ALT_MNEMONICS"</span>, num_args = <span class="number">1</span>.., value_delimiter = <span class="string">','</span>)]
+    </span>alt_mnemonics: Vec&lt;String&gt;,
+
+    <span class="doccomment">/// The frequency of updating the light client state, expressed in update interval
+    </span><span class="attr">#[clap( long, value_parser = parse_duration, default_value = <span class="string">"20s"</span>, env = <span class="string">"ESPRESSO_STATE_PROVER_UPDATE_INTERVAL"</span>)]
+    </span>update_interval: Duration,
+
+    <span class="doccomment">/// Interval between retries if a state update fails
+    </span><span class="attr">#[clap(long , value_parser = parse_duration, default_value = <span class="string">"2s"</span>, env = <span class="string">"ESPRESSO_STATE_PROVER_RETRY_INTERVAL"</span>)]
+    </span>retry_interval: Duration,
+    <span class="doccomment">/// The frequency of updating the light client state for alt chains.
+    /// If there are fewer intervals provided than chains, the base update interval will be used.
+
+    </span><span class="attr">#[clap(long, value_parser = parse_duration, env = <span class="string">"ESPRESSO_STATE_PROVER_ALT_UPDATE_INTERVALS"</span>, num_args = <span class="number">1</span>.., value_delimiter = <span class="string">','</span>)]
+    </span>alt_prover_update_intervals: Vec&lt;Duration&gt;,
+
+    <span class="doccomment">/// Interval between retries if a state update fails for alt chains
+    /// If there are fewer intervals provided than chains, the base update interval will be used.
+    </span><span class="attr">#[clap(long, value_parser = parse_duration, env = <span class="string">"ESPRESSO_STATE_PROVER_ALT_RETRY_INTERVALS"</span>, num_args = <span class="number">1</span>.., value_delimiter = <span class="string">','</span>)]
+    </span>alt_prover_retry_intervals: Vec&lt;Duration&gt;,
+
+    <span class="doccomment">/// Alternate account indices generated by the mnemonics to use when deploying the contracts. If there are fewer indices provided than chains, the base ACCOUNT_INDEX will be used.
+    </span><span class="attr">#[clap(
+        long,
+        env = <span class="string">"ESPRESSO_SEQUENCER_DEPLOYER_ALT_INDICES"</span>,
+        default_value = <span class="string">"0"
+    </span>)]
+    </span>alt_account_indices: Vec&lt;u32&gt;,
 
     <span class="doccomment">/// Port that the HTTP API will use.
     </span><span class="attr">#[clap(long, env = <span class="string">"ESPRESSO_SEQUENCER_API_PORT"</span>)]
@@ -726,21 +1149,50 @@
     </span>logging: logging::Config,
 }
 
+<span class="attr">#[derive(Debug, Clone, Serialize, Deserialize)]
+</span><span class="kw">struct </span>AltChainInfo {
+    <span class="kw">pub </span>chain_id: u64,
+    <span class="kw">pub </span>provider_url: Url,
+    <span class="kw">pub </span>light_client_address: Address,
+    <span class="kw">pub </span>prover_port: u16,
+}
+
 <span class="attr">#[async_std::main]
 </span><span class="kw">async fn </span>main() -&gt; anyhow::Result&lt;()&gt; {
     <span class="kw">let </span>cli_params = Args::parse();
-    cli_params.logging.init();
+
+    <span class="kw">let </span>Args {
+        rpc_url,
+        mnemonic,
+        account_index,
+        alt_chain_providers,
+        alt_mnemonics,
+        alt_account_indices,
+        sequencer_api_port,
+        sequencer_api_max_connections,
+        builder_port,
+        prover_port,
+        dev_node_port,
+        sql,
+        logging,
+        update_interval,
+        retry_interval,
+        alt_prover_retry_intervals,
+        alt_prover_update_intervals,
+    } = cli_params;
+
+    logging.init();
 
     <span class="kw">let </span>api_options = options::Options::from(options::Http {
-        port: cli_params.sequencer_api_port,
-        max_connections: cli_params.sequencer_api_max_connections,
+        port: sequencer_api_port,
+        max_connections: sequencer_api_max_connections,
     })
     .status(Default::default())
     .state(Default::default())
     .submit(Default::default())
-    .query_sql(Default::default(), cli_params.sql);
+    .query_sql(Default::default(), sql);
 
-    <span class="kw">let </span>(url, _anvil) = <span class="kw">if let </span><span class="prelude-val">Some</span>(url) = cli_params.rpc_url {
+    <span class="kw">let </span>(l1_url, _anvil) = <span class="kw">if let </span><span class="prelude-val">Some</span>(url) = rpc_url {
         (url, <span class="prelude-val">None</span>)
     } <span class="kw">else </span>{
         <span class="macro">tracing::warn!</span>(<span class="string">"L1 url is not provided. running an anvil node"</span>);
@@ -756,9 +1208,9 @@
         .unwrap();
 
     <span class="kw">let </span>network_config = TestConfigBuilder::default()
-        .builder_port(cli_params.builder_port)
+        .builder_port(builder_port)
         .state_relay_url(relay_server_url.clone())
-        .l1_url(url.clone())
+        .l1_url(l1_url.clone())
         .build();
 
     <span class="kw">const </span>NUM_NODES: usize = <span class="number">2</span>;
@@ -768,141 +1220,263 @@
         .build();
 
     <span class="kw">let </span>network = TestNetwork::new(config, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance()).<span class="kw">await</span>;
-
+    <span class="kw">let </span>st = network.cfg.stake_table();
+    <span class="kw">let </span>total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
     <span class="kw">let </span>config = network.cfg.hotshot_config();
+
     <span class="macro">tracing::info!</span>(<span class="string">"Hotshot config {config:?}"</span>);
-
-    <span class="kw">let </span>contracts = Contracts::new();
-
-    <span class="macro">tracing::info!</span>(<span class="string">"deploying the contracts"</span>);
 
     <span class="kw">let </span>light_client_genesis = network.light_client_genesis();
 
-    <span class="kw">let </span>contracts = deploy(
-        url.clone(),
-        cli_params.mnemonic.clone(),
-        cli_params.account_index,
-        <span class="bool-val">true</span>,
-        <span class="prelude-val">None</span>,
-        <span class="kw">async </span>{ <span class="prelude-val">Ok</span>(light_client_genesis) }.boxed(),
-        contracts,
-    )
-    .<span class="kw">await</span><span class="question-mark">?</span>;
-
-    <span class="comment">// Run the relay server
-    </span><span class="kw">let </span>st = network.cfg.stake_table();
-    <span class="kw">let </span>total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
-    spawn(run_relay_server(
-        <span class="prelude-val">None</span>,
-        one_honest_threshold(total_stake),
-        <span class="macro">format!</span>(<span class="string">"http://0.0.0.0:{relay_server_port}"</span>)
-            .parse()
-            .unwrap(),
-        &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance(),
-    ));
-
-    <span class="kw">let </span>provider = Provider::&lt;Http&gt;::try_from(url.as_str()).unwrap();
-    <span class="kw">let </span>chain_id = provider.get_chainid().<span class="kw">await</span>.unwrap().as_u64();
-
-    <span class="kw">let </span>wallet = MnemonicBuilder::&lt;English&gt;::default()
-        .phrase(cli_params.mnemonic.as_str())
-        .index(cli_params.account_index)
-        .expect(<span class="string">"error building wallet"</span>)
-        .build()
-        .expect(<span class="string">"error opening wallet"</span>)
-        .with_chain_id(chain_id);
-
-    <span class="kw">let </span>update_interval = Duration::from_secs(<span class="number">20</span>);
-    <span class="kw">let </span>retry_interval = Duration::from_secs(<span class="number">2</span>);
-    <span class="kw">let </span>prover_port = cli_params
-        .prover_port
-        .unwrap_or_else(|| pick_unused_port().unwrap());
-    <span class="kw">let </span>light_client_address = contracts
-        .get_contract_address(Contract::LightClientProxy)
-        .unwrap();
-    <span class="kw">let </span>config = StateProverConfig {
-        relay_server: relay_server_url,
+    <span class="kw">let </span>contracts = Contracts::new();
+    <span class="kw">let </span><span class="kw-2">mut </span>light_client_addresses = <span class="macro">vec!</span>[];
+    <span class="kw">let </span><span class="kw-2">mut </span>prover_ports = Vec::new();
+    <span class="kw">let </span><span class="kw-2">mut </span>mock_contracts = BTreeMap::new();
+    <span class="kw">let </span><span class="kw-2">mut </span>handles = FuturesUnordered::new();
+    <span class="comment">// deploy contract for L1 and each alt chain
+    </span><span class="kw">for </span>(url, mnemonic, account_index, update_interval, retry_interval) <span class="kw">in </span>once((
+        l1_url.clone(),
+        mnemonic.clone(),
+        account_index,
         update_interval,
         retry_interval,
-        l1_provider: url.clone(),
-        light_client_address,
-        eth_signing_key: wallet.signer().clone(),
-        sequencer_url: <span class="string">"http://localhost"</span>.parse().unwrap(), <span class="comment">// This should not be used in dev-node
-        </span>port: <span class="prelude-val">Some</span>(prover_port),
-        stake_table_capacity: STAKE_TABLE_CAPACITY_FOR_TEST <span class="kw">as </span>usize,
-    };
+    ))
+    .chain(
+        alt_chain_providers
+            .iter()
+            .zip(alt_mnemonics.into_iter().chain(std::iter::repeat(mnemonic)))
+            .zip(
+                alt_account_indices
+                    .into_iter()
+                    .chain(std::iter::repeat(account_index)),
+            )
+            .zip(
+                alt_prover_update_intervals
+                    .into_iter()
+                    .chain(std::iter::repeat(update_interval)),
+            )
+            .zip(
+                alt_prover_retry_intervals
+                    .into_iter()
+                    .chain(std::iter::repeat(retry_interval)),
+            )
+            .map(|((((url, mnc), idx), update), retry)| (url.clone(), mnc, idx, update, retry)),
+    ) {
+        <span class="macro">tracing::info!</span>(<span class="string">"deploying the contract for provider: {url:?}"</span>);
 
-    spawn(run_prover_service_with_stake_table(
-        config,
-        &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance(),
-        Arc::new(st),
-    ));
+        <span class="kw">let </span>contracts = deploy(
+            url.clone(),
+            mnemonic.clone(),
+            account_index,
+            <span class="bool-val">true</span>,
+            <span class="prelude-val">None</span>,
+            <span class="kw">async </span>{ <span class="prelude-val">Ok</span>(light_client_genesis.clone()) }.boxed(),
+            contracts.clone(),
+        )
+        .<span class="kw">await</span><span class="question-mark">?</span>;
 
-    <span class="kw">let </span>dev_info = DevInfo {
+        <span class="kw">let </span>provider = Provider::&lt;Http&gt;::try_from(url.as_str()).unwrap();
+        <span class="kw">let </span>chain_id = provider.get_chainid().<span class="kw">await</span>.unwrap().as_u64();
+
+        <span class="kw">let </span>wallet = MnemonicBuilder::&lt;English&gt;::default()
+            .phrase(mnemonic.as_str())
+            .index(account_index)
+            .expect(<span class="string">"error building wallet"</span>)
+            .build()
+            .expect(<span class="string">"error opening wallet"</span>)
+            .with_chain_id(chain_id);
+
+        <span class="kw">let </span>light_client_address = contracts
+            .get_contract_address(Contract::LightClientProxy)
+            .unwrap();
+
+        mock_contracts.insert(
+            chain_id,
+            LightClientMock::new(
+                light_client_address,
+                Arc::new(provider.with_signer(wallet.clone())),
+            ),
+        );
+        light_client_addresses.push((chain_id, light_client_address));
+
+        <span class="kw">let </span>prover_port = prover_port.unwrap_or_else(|| pick_unused_port().unwrap());
+
+        prover_ports.push(prover_port);
+
+        <span class="kw">let </span>prover_config = StateProverConfig {
+            relay_server: relay_server_url.clone(),
+            update_interval,
+            retry_interval,
+            sequencer_url: <span class="string">"http://localhost"</span>.parse().unwrap(),
+            port: <span class="prelude-val">Some</span>(prover_port),
+            stake_table_capacity: STAKE_TABLE_CAPACITY_FOR_TEST <span class="kw">as </span>usize,
+            provider: url.clone(),
+            light_client_address,
+            signing_key: wallet.signer().clone(),
+        };
+
+        <span class="kw">let </span>prover_handle = spawn(run_prover_service_with_stake_table(
+            prover_config,
+            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance(),
+            Arc::new(st.clone()),
+        ));
+        handles.push(prover_handle);
+    }
+
+    <span class="kw">let </span>relay_server_handle = spawn(<span class="kw">async move </span>{
+        <span class="kw">let _ </span>= run_relay_server(
+            <span class="prelude-val">None</span>,
+            one_honest_threshold(total_stake),
+            <span class="macro">format!</span>(<span class="string">"http://0.0.0.0:{relay_server_port}"</span>)
+                .parse()
+                .unwrap(),
+            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance(),
+        )
+        .<span class="kw">await</span>;
+
+        <span class="prelude-val">Ok</span>(())
+    });
+    handles.push(relay_server_handle);
+
+    <span class="comment">// we remove the first entry which is for L1 light client contract
+    // so only alt chain light client addresses are left
+    </span><span class="kw">let </span>(<span class="kw">_</span>, l1_lc) = light_client_addresses.remove(<span class="number">0</span>);
+    <span class="kw">let </span>l1_prover_port = prover_ports.remove(<span class="number">0</span>);
+    <span class="comment">// we remove the first entry which is for primary L1 chain signing key
+    // so only alt signing keys are left
+
+    </span><span class="kw">let </span>dev_info = DevInfo {
         builder_url: network.cfg.hotshot_config().builder_urls[<span class="number">0</span>].clone(),
-        prover_port,
-        l1_url: url,
-        light_client_address,
+        l1_prover_port,
+        l1_url,
+        l1_light_client_address: l1_lc,
+        alt_chains: alt_chain_providers
+            .into_iter()
+            .zip(light_client_addresses)
+            .zip(prover_ports)
+            .map(
+                |((provider_url, (chain_id, light_client_address)), prover_port)| AltChainInfo {
+                    chain_id,
+                    provider_url,
+                    light_client_address,
+                    prover_port,
+                },
+            )
+            .collect(),
     };
 
-    <span class="kw">let </span>mock_contract =
-        LightClientMock::new(light_client_address, Arc::new(provider.with_signer(wallet)));
-
-    run_dev_node_server(
-        cli_params.dev_node_port,
-        mock_contract,
+    <span class="kw">let </span>dev_node_handle = spawn(run_dev_node_server(
+        dev_node_port,
+        mock_contracts,
         dev_info,
         &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance(),
-    )
-    .<span class="kw">await</span><span class="question-mark">?</span>;
+    ));
+    handles.push(dev_node_handle);
+
+    <span class="comment">// if any of the async task is complete then dev node binary exits
+    </span><span class="kw">if </span>(handles.next().<span class="kw">await</span>).is_some() {
+        <span class="macro">tracing::error!</span>(<span class="string">"exiting dev node"</span>);
+        drop(network);
+    }
 
     <span class="prelude-val">Ok</span>(())
 }
 
+<span class="comment">// ApiState is passed to the tide disco app so avoid cloning the contracts for each endpoint
+</span><span class="kw">pub struct </span>ApiState&lt;S: Signer + Clone + <span class="lifetime">'static</span>&gt;(
+    BTreeMap&lt;u64, LightClientMock&lt;SignerMiddleware&lt;Provider&lt;Http&gt;, S&gt;&gt;&gt;,
+);
+
+<span class="attr">#[async_trait]
+</span><span class="kw">impl</span>&lt;S: Signer + Clone + <span class="lifetime">'static</span>&gt; ReadState <span class="kw">for </span>ApiState&lt;S&gt; {
+    <span class="kw">type </span>State = ApiState&lt;S&gt;;
+    <span class="kw">async fn </span>read&lt;T&gt;(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        op: <span class="kw">impl </span>Send + <span class="kw">for</span>&lt;<span class="lifetime">'a</span>&gt; FnOnce(<span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">Self</span>::State) -&gt; BoxFuture&lt;<span class="lifetime">'a</span>, T&gt; + <span class="lifetime">'async_trait</span>,
+    ) -&gt; T {
+        op(<span class="self">self</span>).<span class="kw">await
+    </span>}
+}
+
 <span class="kw">async fn </span>run_dev_node_server&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>, S: Signer + Clone + <span class="lifetime">'static</span>&gt;(
     port: u16,
-    mock_contract: LightClientMock&lt;SignerMiddleware&lt;Provider&lt;Http&gt;, S&gt;&gt;,
+    contracts: BTreeMap&lt;u64, LightClientMock&lt;SignerMiddleware&lt;Provider&lt;Http&gt;, S&gt;&gt;&gt;,
     dev_info: DevInfo,
     bind_version: Ver,
 ) -&gt; anyhow::Result&lt;()&gt; {
-    <span class="kw">let </span><span class="kw-2">mut </span>app = tide_disco::App::&lt;(), ServerError&gt;::with_state(());
+    <span class="kw">let </span><span class="kw-2">mut </span>app = tide_disco::App::&lt;<span class="kw">_</span>, ServerError&gt;::with_state(ApiState(contracts));
     <span class="kw">let </span>toml =
         toml::from_str::&lt;toml::value::Value&gt;(<span class="macro">include_str!</span>(<span class="string">"../../api/espresso_dev_node.toml"</span>))
             .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
 
-    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;(), ServerError, Ver&gt;::new(toml)
+    <span class="kw">let </span><span class="kw-2">mut </span>api = Api::&lt;<span class="kw">_</span>, ServerError, Ver&gt;::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
-
     api.get(<span class="string">"devinfo"</span>, <span class="kw">move </span>|<span class="kw">_</span>, <span class="kw">_</span>| {
         <span class="kw">let </span>info = dev_info.clone();
         <span class="kw">async move </span>{ <span class="prelude-val">Ok</span>(info.clone()) }.boxed()
     })
-    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
-
-    <span class="kw">let </span>contract = mock_contract.clone();
-    api.post(<span class="string">"sethotshotdown"</span>, <span class="kw">move </span>|req, <span class="kw">_</span>| {
-        <span class="kw">let </span>contract = contract.clone();
+    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?
+    </span>.at(<span class="string">"sethotshotdown"</span>, <span class="kw">move </span>|req, state: <span class="kw-2">&amp;</span>ApiState&lt;S&gt;| {
         <span class="kw">async move </span>{
-            <span class="kw">let </span>height = req
-                .body_auto::&lt;SetHotshotUpBody, Ver&gt;(Ver::instance())
-                .map_err(ServerError::from_request_error)<span class="question-mark">?
-                </span>.height;
-            contract
-                .set_hot_shot_down_since(U256::from(height))
-                .send()
-                .<span class="kw">await
-                </span>.map_err(|err| {
-                    ServerError::catch_all(StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+            <span class="kw">let </span>body = req
+                .body_auto::&lt;SetHotshotDownReqBody, Ver&gt;(Ver::instance())
+                .map_err(ServerError::from_request_error)<span class="question-mark">?</span>;
+
+            <span class="comment">// if chain id is not provided, primary L1 light client is used
+            </span><span class="kw">let </span>contract = <span class="kw">if let </span><span class="prelude-val">Some</span>(chain_id) = body.chain_id {
+                state.<span class="number">0</span>.get(<span class="kw-2">&amp;</span>chain_id).ok_or_else(|| {
+                    ServerError::catch_all(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        <span class="string">"light client contract not found for chain id {chain_id}"</span>.to_string(),
+                    )
+                })<span class="question-mark">?
+            </span>} <span class="kw">else </span>{
+                <span class="kw">let </span>(<span class="kw">_</span>, contract) = state.<span class="number">0</span>.first_key_value().ok_or_else(|| {
+                    ServerError::catch_all(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        <span class="string">"L1 light client contract not found "</span>.to_string(),
+                    )
                 })<span class="question-mark">?</span>;
+
+                contract
+            };
+
+            <span class="kw">let </span>contract_call = contract.set_hot_shot_down_since(U256::from(body.height));
+
+            contract_call.send().<span class="kw">await</span>.map_err(|err| {
+                ServerError::catch_all(StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
+            })<span class="question-mark">?</span>;
             <span class="prelude-val">Ok</span>(())
         }
         .boxed()
     })
-    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?</span>;
-
-    api.post(<span class="string">"sethotshotup"</span>, <span class="kw">move </span>|<span class="kw">_</span>, <span class="kw">_</span>| {
-        <span class="kw">let </span>contract = mock_contract.clone();
+    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))<span class="question-mark">?
+    </span>.at(<span class="string">"sethotshotup"</span>, <span class="kw">move </span>|req, state| {
         <span class="kw">async move </span>{
+            <span class="kw">let </span>chain_id = req
+                .body_auto::&lt;<span class="prelude-ty">Option</span>&lt;SetHotshotUpReqBody&gt;, Ver&gt;(Ver::instance())
+                .map_err(ServerError::from_request_error)<span class="question-mark">?
+                </span>.map(|b| b.chain_id);
+
+            <span class="comment">// if chain id is not provided, we use the base L1 light client contract
+            </span><span class="kw">let </span>contract = <span class="kw">if let </span><span class="prelude-val">Some</span>(chain_id) = chain_id {
+                state.<span class="number">0</span>.get(<span class="kw-2">&amp;</span>chain_id).ok_or_else(|| {
+                    ServerError::catch_all(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        <span class="string">"light client ontract not found"</span>.to_string(),
+                    )
+                })<span class="question-mark">?
+            </span>} <span class="kw">else </span>{
+                <span class="kw">let </span>(<span class="kw">_</span>, light_client_address) = state.<span class="number">0</span>.first_key_value().ok_or_else(|| {
+                    ServerError::catch_all(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        <span class="string">"l1 light client ontract not found"</span>.to_string(),
+                    )
+                })<span class="question-mark">?</span>;
+
+                light_client_address
+            };
+
             contract.set_hot_shot_up().send().<span class="kw">await</span>.map_err(|err| {
                 ServerError::catch_all(StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
             })<span class="question-mark">?</span>;
@@ -923,29 +1497,35 @@
 <span class="attr">#[derive(Debug, Clone, Serialize, Deserialize)]
 </span><span class="kw">struct </span>DevInfo {
     <span class="kw">pub </span>builder_url: Url,
-    <span class="kw">pub </span>prover_port: u16,
+    <span class="kw">pub </span>l1_prover_port: u16,
     <span class="kw">pub </span>l1_url: Url,
-    <span class="kw">pub </span>light_client_address: Address,
+    <span class="kw">pub </span>l1_light_client_address: Address,
+    <span class="kw">pub </span>alt_chains: Vec&lt;AltChainInfo&gt;,
 }
 
 <span class="attr">#[derive(Debug, Serialize, Deserialize)]
-</span><span class="kw">struct </span>SetHotshotUpBody {
+</span><span class="kw">struct </span>SetHotshotDownReqBody {
+    <span class="comment">// return l1 light client address if not provided
+    </span><span class="kw">pub </span>chain_id: <span class="prelude-ty">Option</span>&lt;u64&gt;,
     <span class="kw">pub </span>height: u64,
+}
+
+<span class="attr">#[derive(Debug, Serialize, Deserialize)]
+</span><span class="kw">struct </span>SetHotshotUpReqBody {
+    <span class="kw">pub </span>chain_id: u64,
 }
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>tests {
     <span class="kw">use </span>std::{process::Child, sync::Arc, time::Duration};
 
+    <span class="kw">use </span><span class="kw">crate</span>::AltChainInfo;
     <span class="kw">use </span>async_std::{stream::StreamExt, task::sleep};
     <span class="kw">use </span>committable::{Commitment, Committable};
     <span class="kw">use </span>contract_bindings::light_client::LightClient;
     <span class="kw">use </span>escargot::CargoBuild;
     <span class="kw">use </span>espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
-    <span class="kw">use </span>ethers::{
-        providers::Middleware,
-        types::{Address, U256},
-    };
+    <span class="kw">use </span>ethers::{providers::Middleware, types::U256};
     <span class="kw">use </span>futures::TryStreamExt;
     <span class="kw">use </span>hotshot_query_service::{
         availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
@@ -954,15 +1534,19 @@
     <span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
     <span class="kw">use </span>jf_merkle_tree::MerkleTreeScheme;
     <span class="kw">use </span>portpicker::pick_unused_port;
+    <span class="kw">use </span>rand::Rng;
     <span class="kw">use </span>sequencer::api::endpoints::NamespaceProofQueryData;
-    <span class="kw">use </span>sequencer_utils::{init_signer, test_utils::setup_test, AnvilOptions};
+    <span class="kw">use </span>sequencer_utils::{init_signer, test_utils::setup_test, Anvil, AnvilOptions};
     <span class="kw">use </span>surf_disco::Client;
     <span class="kw">use </span>tide_disco::error::ServerError;
+
+    <span class="kw">use </span>url::Url;
     <span class="kw">use </span>vbs::version::StaticVersion;
 
-    <span class="kw">use crate</span>::{DevInfo, SetHotshotUpBody};
+    <span class="kw">use crate</span>::{DevInfo, SetHotshotDownReqBody, SetHotshotUpReqBody};
 
     <span class="kw">const </span>TEST_MNEMONIC: <span class="kw-2">&amp;</span>str = <span class="string">"test test test test test test test test test test test junk"</span>;
+    <span class="kw">const </span>NUM_ALT_CHAIN_PROVIDERS: usize = <span class="number">1</span>;
 
     <span class="kw">pub struct </span>BackgroundProcess(Child);
 
@@ -1016,7 +1600,7 @@
             .spawn()
             .unwrap();
 
-        <span class="kw">let </span>_process = BackgroundProcess(process);
+        <span class="kw">let </span>process = BackgroundProcess(process);
 
         <span class="kw">let </span>api_client: Client&lt;ServerError, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{api_port}"</span>).parse().unwrap());
@@ -1065,7 +1649,7 @@
             .send()
             .<span class="kw">await</span>;
         <span class="kw">while </span>tx_result.is_err() {
-            sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
+            sleep(Duration::from_secs(<span class="number">1</span>)).<span class="kw">await</span>;
 
             tx_result = api_client
                 .get::&lt;TransactionQueryData&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
@@ -1096,7 +1680,7 @@
             .<span class="kw">await</span>;
         <span class="kw">while </span>tx_result.is_err() {
             <span class="macro">tracing::info!</span>(<span class="string">"waiting for large tx"</span>);
-            sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
+            sleep(Duration::from_secs(<span class="number">1</span>)).<span class="kw">await</span>;
 
             tx_result = api_client
                 .get::&lt;TransactionQueryData&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
@@ -1139,7 +1723,7 @@
                 .send()
                 .<span class="kw">await</span>;
             <span class="kw">while </span>result.is_err() {
-                sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
+                sleep(Duration::from_secs(<span class="number">1</span>)).<span class="kw">await</span>;
 
                 result = api_client
                     .get::&lt;TransactionQueryData&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(
@@ -1152,24 +1736,6 @@
         }
 
         <span class="kw">let </span>tx_block_height = tx_result.unwrap().block_height();
-
-        <span class="kw">let </span>light_client_address = <span class="string">"0xdc64a140aa3e981100a9beca4e685f962f0cf6c9"</span>;
-
-        <span class="kw">let </span>signer = init_signer(<span class="kw-2">&amp;</span>l1_url, TEST_MNEMONIC, <span class="number">0</span>).<span class="kw">await</span>.unwrap();
-        <span class="kw">let </span>light_client = LightClient::new(
-            light_client_address.parse::&lt;Address&gt;().unwrap(),
-            Arc::new(signer.clone()),
-        );
-
-        <span class="kw">while </span>light_client
-            .get_hot_shot_commitment(U256::from(<span class="number">1</span>))
-            .call()
-            .<span class="kw">await
-            </span>.is_err()
-        {
-            <span class="macro">tracing::info!</span>(<span class="string">"waiting for commitment"</span>);
-            sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
-        }
 
         <span class="comment">// Check the namespace proof
         </span><span class="kw">let </span>proof = api_client
@@ -1210,7 +1776,7 @@
                 .<span class="kw">await
                 </span>.is_err()
             {
-                sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
+                sleep(Duration::from_secs(<span class="number">1</span>)).<span class="kw">await</span>;
             }
         }
 
@@ -1221,16 +1787,34 @@
         <span class="comment">// Check the dev node api
         </span>{
             <span class="macro">tracing::info!</span>(<span class="string">"checking the dev node api"</span>);
-            dev_node_client
+            <span class="kw">let </span>dev_info = dev_node_client
                 .get::&lt;DevInfo&gt;(<span class="string">"api/dev-info"</span>)
                 .send()
                 .<span class="kw">await
                 </span>.unwrap();
 
+            <span class="kw">let </span>light_client_address = dev_info.l1_light_client_address;
+
+            <span class="kw">let </span>signer = init_signer(<span class="kw-2">&amp;</span>l1_url, TEST_MNEMONIC, <span class="number">0</span>).<span class="kw">await</span>.unwrap();
+            <span class="kw">let </span>light_client = LightClient::new(light_client_address, Arc::new(signer.clone()));
+
+            <span class="kw">while </span>light_client
+                .get_hot_shot_commitment(U256::from(<span class="number">1</span>))
+                .call()
+                .<span class="kw">await
+                </span>.is_err()
+            {
+                <span class="macro">tracing::info!</span>(<span class="string">"waiting for commitment"</span>);
+                sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
+            }
+
             <span class="kw">let </span>height = signer.get_block_number().<span class="kw">await</span>.unwrap().as_u64();
             dev_node_client
                 .post::&lt;()&gt;(<span class="string">"api/set-hotshot-down"</span>)
-                .body_json(<span class="kw-2">&amp;</span>SetHotshotUpBody { height: height - <span class="number">1 </span>})
+                .body_json(<span class="kw-2">&amp;</span>SetHotshotDownReqBody {
+                    chain_id: <span class="prelude-val">None</span>,
+                    height: height - <span class="number">1</span>,
+                })
                 .unwrap()
                 .send()
                 .<span class="kw">await
@@ -1248,6 +1832,8 @@
 
             dev_node_client
                 .post::&lt;()&gt;(<span class="string">"api/set-hotshot-up"</span>)
+                .body_json(<span class="kw-2">&amp;</span>())
+                .unwrap()
                 .send()
                 .<span class="kw">await
                 </span>.unwrap();
@@ -1263,6 +1849,190 @@
             }
         }
 
+        drop(process);
+        drop(db);
+    }
+
+    <span class="kw">async fn </span>alt_chain_providers() -&gt; (Vec&lt;Anvil&gt;, Vec&lt;Url&gt;) {
+        <span class="kw">let </span><span class="kw-2">mut </span>providers = Vec::new();
+        <span class="kw">let </span><span class="kw-2">mut </span>urls = Vec::new();
+
+        <span class="kw">for _ in </span><span class="number">0</span>..NUM_ALT_CHAIN_PROVIDERS {
+            <span class="kw">let </span><span class="kw-2">mut </span>rng = rand::thread_rng();
+
+            <span class="kw">let </span>anvil = AnvilOptions::default()
+                .chain_id(rng.gen_range(<span class="number">2</span>..u32::MAX) <span class="kw">as </span>u64)
+                .spawn()
+                .<span class="kw">await</span>;
+            <span class="kw">let </span>url = anvil.url();
+
+            providers.push(anvil);
+            urls.push(url);
+        }
+
+        (providers, urls)
+    }
+
+    <span class="attr">#[async_std::test]
+    </span><span class="kw">async fn </span>dev_node_multiple_lc_providers_test() {
+        setup_test();
+
+        <span class="kw">let </span>builder_port = pick_unused_port().unwrap();
+        <span class="kw">let </span>api_port = pick_unused_port().unwrap();
+        <span class="kw">let </span>dev_node_port = pick_unused_port().unwrap();
+
+        <span class="kw">let </span>instance = AnvilOptions::default().chain_id(<span class="number">1</span>).spawn().<span class="kw">await</span>;
+        <span class="kw">let </span>l1_url = instance.url();
+
+        <span class="kw">let </span>(alt_providers, alt_chain_urls) = alt_chain_providers().<span class="kw">await</span>;
+
+        <span class="kw">let </span>alt_chains_env_value = alt_chain_urls
+            .iter()
+            .map(|url| url.as_str())
+            .collect::&lt;Vec&lt;<span class="kw-2">&amp;</span>str&gt;&gt;()
+            .join(<span class="string">","</span>);
+
+        <span class="kw">let </span>db = TmpDb::init().<span class="kw">await</span>;
+        <span class="kw">let </span>postgres_port = db.port();
+
+        <span class="kw">let </span>process = CargoBuild::new()
+            .bin(<span class="string">"espresso-dev-node"</span>)
+            .features(<span class="string">"testing"</span>)
+            .current_target()
+            .run()
+            .unwrap()
+            .command()
+            .env(<span class="string">"ESPRESSO_SEQUENCER_L1_PROVIDER"</span>, l1_url.to_string())
+            .env(<span class="string">"ESPRESSO_BUILDER_PORT"</span>, builder_port.to_string())
+            .env(<span class="string">"ESPRESSO_SEQUENCER_API_PORT"</span>, api_port.to_string())
+            .env(<span class="string">"ESPRESSO_SEQUENCER_POSTGRES_HOST"</span>, <span class="string">"localhost"</span>)
+            .env(<span class="string">"ESPRESSO_SEQUENCER_ETH_MNEMONIC"</span>, TEST_MNEMONIC)
+            .env(<span class="string">"ESPRESSO_DEPLOYER_ACCOUNT_INDEX"</span>, <span class="string">"0"</span>)
+            .env(<span class="string">"ESPRESSO_DEV_NODE_PORT"</span>, dev_node_port.to_string())
+            .env(
+                <span class="string">"ESPRESSO_SEQUENCER_POSTGRES_PORT"</span>,
+                postgres_port.to_string(),
+            )
+            .env(<span class="string">"ESPRESSO_SEQUENCER_POSTGRES_USER"</span>, <span class="string">"postgres"</span>)
+            .env(<span class="string">"ESPRESSO_SEQUENCER_POSTGRES_PASSWORD"</span>, <span class="string">"password"</span>)
+            .env(
+                <span class="string">"ESPRESSO_DEPLOYER_ALT_CHAIN_PROVIDERS"</span>,
+                alt_chains_env_value,
+            )
+            .spawn()
+            .unwrap();
+
+        <span class="kw">let </span>process = BackgroundProcess(process);
+
+        <span class="kw">let </span>api_client: Client&lt;ServerError, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base&gt; =
+            Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{api_port}"</span>).parse().unwrap());
+        api_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
+
+        <span class="macro">tracing::info!</span>(<span class="string">"waiting for blocks"</span>);
+        <span class="kw">let _ </span>= api_client
+            .socket(<span class="string">"availability/stream/blocks/0"</span>)
+            .subscribe::&lt;BlockQueryData&lt;SeqTypes&gt;&gt;()
+            .<span class="kw">await
+            </span>.unwrap()
+            .take(<span class="number">5</span>)
+            .try_collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+            .<span class="kw">await
+            </span>.unwrap();
+
+        <span class="kw">let </span>dev_node_client: Client&lt;ServerError, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base&gt; =
+            Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{dev_node_port}"</span>).parse().unwrap());
+        dev_node_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
+
+        <span class="comment">// Check the dev node api
+        </span>{
+            <span class="macro">tracing::info!</span>(<span class="string">"checking the dev node api"</span>);
+            <span class="kw">let </span>dev_info = dev_node_client
+                .get::&lt;DevInfo&gt;(<span class="string">"api/dev-info"</span>)
+                .send()
+                .<span class="kw">await
+                </span>.unwrap();
+
+            <span class="kw">let </span>light_client_address = dev_info.l1_light_client_address;
+
+            <span class="kw">let </span>signer = init_signer(<span class="kw-2">&amp;</span>l1_url, TEST_MNEMONIC, <span class="number">0</span>).<span class="kw">await</span>.unwrap();
+            <span class="kw">let </span>light_client = LightClient::new(light_client_address, Arc::new(signer.clone()));
+
+            <span class="kw">while </span>light_client
+                .get_hot_shot_commitment(U256::from(<span class="number">1</span>))
+                .call()
+                .<span class="kw">await
+                </span>.is_err()
+            {
+                <span class="macro">tracing::info!</span>(<span class="string">"waiting for commitment"</span>);
+                sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
+            }
+
+            <span class="kw">for </span>AltChainInfo {
+                provider_url,
+                light_client_address,
+                chain_id,
+                ..
+            } <span class="kw">in </span>dev_info.alt_chains
+            {
+                <span class="macro">tracing::info!</span>(<span class="string">"checking hotshot commitment for {chain_id}"</span>);
+
+                <span class="kw">let </span>signer = init_signer(<span class="kw-2">&amp;</span>provider_url, TEST_MNEMONIC, <span class="number">0</span>).<span class="kw">await</span>.unwrap();
+                <span class="kw">let </span>light_client = LightClient::new(light_client_address, Arc::new(signer.clone()));
+
+                <span class="kw">while </span>light_client
+                    .get_hot_shot_commitment(U256::from(<span class="number">1</span>))
+                    .call()
+                    .<span class="kw">await
+                    </span>.is_err()
+                {
+                    <span class="macro">tracing::info!</span>(<span class="string">"waiting for commitment"</span>);
+                    sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
+                }
+
+                <span class="kw">let </span>height = signer.get_block_number().<span class="kw">await</span>.unwrap().as_u64();
+                dev_node_client
+                    .post::&lt;()&gt;(<span class="string">"api/set-hotshot-down"</span>)
+                    .body_json(<span class="kw-2">&amp;</span>SetHotshotDownReqBody {
+                        chain_id: <span class="prelude-val">Some</span>(chain_id),
+                        height: height - <span class="number">1</span>,
+                    })
+                    .unwrap()
+                    .send()
+                    .<span class="kw">await
+                    </span>.unwrap();
+
+                <span class="kw">while </span>!light_client
+                    .lag_over_escape_hatch_threshold(U256::from(height), U256::from(<span class="number">0</span>))
+                    .call()
+                    .<span class="kw">await
+                    </span>.unwrap_or(<span class="bool-val">false</span>)
+                {
+                    <span class="macro">tracing::info!</span>(<span class="string">"waiting for setting hotshot down"</span>);
+                    sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
+                }
+
+                dev_node_client
+                    .post::&lt;()&gt;(<span class="string">"api/set-hotshot-up"</span>)
+                    .body_json(<span class="kw-2">&amp;</span>SetHotshotUpReqBody { chain_id })
+                    .unwrap()
+                    .send()
+                    .<span class="kw">await
+                    </span>.unwrap();
+
+                <span class="kw">while </span>light_client
+                    .lag_over_escape_hatch_threshold(U256::from(height), U256::from(<span class="number">0</span>))
+                    .call()
+                    .<span class="kw">await
+                    </span>.unwrap_or(<span class="bool-val">true</span>)
+                {
+                    <span class="macro">tracing::info!</span>(<span class="string">"waiting for setting hotshot up"</span>);
+                    sleep(Duration::from_secs(<span class="number">3</span>)).<span class="kw">await</span>;
+                }
+            }
+        }
+
+        drop(process);
+        drop(alt_providers);
         drop(db);
     }
 }
