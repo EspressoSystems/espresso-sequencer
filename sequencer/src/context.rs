@@ -347,6 +347,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_events<Ver: StaticVersionType>(
     node_id: u64,
     mut events: impl Stream<Item = Event<SeqTypes>> + Unpin,

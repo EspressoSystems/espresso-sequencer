@@ -506,6 +506,11 @@ impl TestNetwork {
         .unwrap();
     }
 
+    /// Restart indicated number of DA and non-DA nodes.
+    ///
+    /// If possible (less than a quorum of nodes have been stopped), check that remaining nodes can
+    /// still make progress without the restarted nodes. In any case, check that the network as a
+    /// whole makes progress once the restarted nodes are back online.
     async fn restart(&mut self, da_nodes: usize, regular_nodes: usize) {
         tracing::info!(da_nodes, regular_nodes, "shutting down some nodes");
         join_all(
