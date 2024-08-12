@@ -168,9 +168,11 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         let roll_call_info = external_event_handler::RollCallInfo { public_api_url };
 
         // Create the external event handler
-        let external_event_handler = ExternalEventHandler::new(network, roll_call_info, pub_key)
-            .await
-            .with_context(|| "Failed to create external event handler")?;
+        let mut tasks = TaskList::default();
+        let external_event_handler =
+            ExternalEventHandler::new(&mut tasks, network, roll_call_info, pub_key)
+                .await
+                .with_context(|| "Failed to create external event handler")?;
 
         Ok(Self::new(
             handle,
@@ -182,7 +184,8 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             network_config,
             event_consumer,
             anchor_view,
-        ))
+        )
+        .with_task_list(tasks))
     }
 
     /// Constructor
