@@ -19,6 +19,8 @@ use syn::{
 struct CrossTestData {
     /// imlementations
     impls: ExprArray,
+    /// versions
+    versions: ExprArray,
     /// types
     types: ExprArray,
     /// name of the test
@@ -34,6 +36,7 @@ impl CrossTestDataBuilder {
     fn is_ready(&self) -> bool {
         self.impls.is_some()
             && self.types.is_some()
+            && self.versions.is_some()
             && self.test_name.is_some()
             && self.metadata.is_some()
             && self.test_name.is_some()
@@ -48,6 +51,8 @@ struct TestData {
     ty: ExprPath,
     /// impl
     imply: ExprPath,
+    /// impl
+    version: ExprPath,
     /// name of test
     test_name: Ident,
     /// test description
@@ -101,6 +106,7 @@ impl TestData {
         let TestData {
             ty,
             imply,
+            version,
             test_name,
             metadata,
             ignore,
@@ -124,7 +130,7 @@ impl TestData {
             async fn #test_name() {
                 async_compatibility_layer::logging::setup_logging();
                 async_compatibility_layer::logging::setup_backtrace();
-                TestDescription::<#ty, #imply>::gen_launcher((#metadata), 0).launch().run_test::<SimpleBuilderImplementation>().await;
+                TestDescription::<#ty, #imply, #version>::gen_launcher((#metadata), 0).launch().run_test::<SimpleBuilderImplementation>().await;
             }
         }
     }
@@ -137,6 +143,7 @@ mod keywords {
     syn::custom_keyword!(TestName);
     syn::custom_keyword!(Types);
     syn::custom_keyword!(Impls);
+    syn::custom_keyword!(Versions);
 }
 
 impl Parse for CrossTestData {
@@ -156,6 +163,11 @@ impl Parse for CrossTestData {
                 input.parse::<Token![:]>()?;
                 let impls = input.parse::<ExprArray>()?;
                 description.impls(impls);
+            } else if input.peek(keywords::Versions) {
+                let _ = input.parse::<keywords::Versions>()?;
+                input.parse::<Token![:]>()?;
+                let versions = input.parse::<ExprArray>()?;
+                description.versions(versions);
             } else if input.peek(keywords::TestName) {
                 let _ = input.parse::<keywords::TestName>()?;
                 input.parse::<Token![:]>()?;
@@ -173,7 +185,7 @@ impl Parse for CrossTestData {
                 description.ignore(ignore);
             } else {
                 panic!(
-                    "Unexpected token. Expected one of: Metadata, Ignore, Impls, Types, Testname"
+                    "Unexpected token. Expected one of: Metadata, Ignore, Impls, Versions, Types, Testname"
                 );
             }
             if input.peek(Token![,]) {
@@ -204,28 +216,38 @@ fn cross_tests_internal(test_spec: CrossTestData) -> TokenStream {
         p
     });
 
+    let versions = test_spec.versions.elems.iter().map(|t| {
+        let Expr::Path(p) = t else {
+            panic!("Expected Path for Version! Got {t:?}");
+        };
+        p
+    });
+
     let mut result = quote! {};
     for ty in types.clone() {
         let mut type_mod = quote! {};
         for imp in impls.clone() {
-            let test_data = TestDataBuilder::create_empty()
-                .test_name(test_spec.test_name.clone())
-                .metadata(test_spec.metadata.clone())
-                .ignore(test_spec.ignore.clone())
-                .imply(imp.clone())
-                .ty(ty.clone())
-                .build()
-                .unwrap();
-            let test = test_data.generate_test();
+            for version in versions.clone() {
+                let test_data = TestDataBuilder::create_empty()
+                    .test_name(test_spec.test_name.clone())
+                    .metadata(test_spec.metadata.clone())
+                    .ignore(test_spec.ignore.clone())
+                    .version(version.clone())
+                    .imply(imp.clone())
+                    .ty(ty.clone())
+                    .build()
+                    .unwrap();
+                let test = test_data.generate_test();
 
-            let impl_str = format_ident!("{}", imp.to_lower_snake_str());
-            let impl_result = quote! {
-                pub mod #impl_str {
-                    use super::*;
-                    #test
-                }
-            };
-            type_mod.extend(impl_result);
+                let impl_str = format_ident!("{}", imp.to_lower_snake_str());
+                let impl_result = quote! {
+                    pub mod #impl_str {
+                        use super::*;
+                        #test
+                    }
+                };
+                type_mod.extend(impl_result);
+            }
         }
         let ty_str = format_ident!("{}", ty.to_lower_snake_str());
         let typ_result = quote! {

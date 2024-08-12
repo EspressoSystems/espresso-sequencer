@@ -252,7 +252,7 @@ impl<TYPES: NodeType> SimpleBuilderSource<TYPES> {
         app.register_module::<Error, _>("block_info", builder_api)
             .expect("Failed to register the builder API");
 
-        async_spawn(app.serve(url, TYPES::Base::instance()));
+        async_spawn(app.serve(url, hotshot_builder_api::v0_1::Version::instance()));
     }
 }
 

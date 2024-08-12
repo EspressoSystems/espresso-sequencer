@@ -37,7 +37,7 @@ use hotshot_types::{
     traits::{
         election::Membership,
         network::{ConnectedNetwork, Topic},
-        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
     },
     HotShotConfig, ValidatorConfig,
 };
@@ -70,8 +70,9 @@ impl<T: std::error::Error + Sync + Send + 'static> TaskErr for T {}
 impl<
         TYPES: NodeType<InstanceState = TestInstanceState, ValidatedState = TestValidatedState>,
         I: TestableNodeImplementation<TYPES>,
+        V: Versions,
         N: ConnectedNetwork<TYPES::SignatureKey>,
-    > TestRunner<TYPES, I, N>
+    > TestRunner<TYPES, I, V, N>
 where
     I: TestableNodeImplementation<TYPES>,
     I: NodeImplementation<
@@ -190,7 +191,7 @@ where
             .await,
             async_delay_config: self.launcher.metadata.async_delay_config,
         };
-        let spinning_task = TestTask::<SpinningTask<TYPES, I>>::new(
+        let spinning_task = TestTask::<SpinningTask<TYPES, I, V>>::new(
             spinning_task_state,
             event_rxs.clone(),
             test_receiver.clone(),
@@ -215,7 +216,7 @@ where
             test_receiver.clone(),
         );
 
-        let overall_safety_task = TestTask::<OverallSafetyTask<TYPES, I>>::new(
+        let overall_safety_task = TestTask::<OverallSafetyTask<TYPES, I, V>>::new(
             overall_safety_task_state,
             event_rxs.clone(),
             test_receiver.clone(),
@@ -590,7 +591,7 @@ where
         validator_config: ValidatorConfig<TYPES::SignatureKey>,
         storage: I::Storage,
         marketplace_config: MarketplaceConfig<TYPES, I>,
-    ) -> Arc<SystemContext<TYPES, I>> {
+    ) -> Arc<SystemContext<TYPES, I, V>> {
         // Get key pair for certificate aggregation
         let private_key = validator_config.private_key.clone();
         let public_key = validator_config.public_key.clone();
@@ -627,7 +628,7 @@ where
             Receiver<Arc<HotShotEvent<TYPES>>>,
         ),
         external_channel: (Sender<Event<TYPES>>, Receiver<Event<TYPES>>),
-    ) -> Arc<SystemContext<TYPES, I>> {
+    ) -> Arc<SystemContext<TYPES, I, V>> {
         // Get key pair for certificate aggregation
         let private_key = validator_config.private_key.clone();
         let public_key = validator_config.public_key.clone();
@@ -650,13 +651,13 @@ where
 }
 
 /// a node participating in a test
-pub struct Node<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+pub struct Node<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> {
     /// The node's unique identifier
     pub node_id: u64,
     /// The underlying network belonging to the node
     pub network: Network<TYPES, I>,
     /// The handle to the node's internals
-    pub handle: SystemContextHandle<TYPES, I>,
+    pub handle: SystemContextHandle<TYPES, I, V>,
 }
 
 /// This type combines all of the paramters needed to build the context for a node that started
@@ -677,10 +678,10 @@ pub struct LateNodeContextParameters<TYPES: NodeType, I: TestableNodeImplementat
 
 /// The late node context dictates how we're building a node that started late during the test.
 #[allow(clippy::large_enum_variant)]
-pub enum LateNodeContext<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+pub enum LateNodeContext<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> {
     /// The system context that we're passing directly to the node, this means the node is already
     /// initialized successfully.
-    InitializedContext(Arc<SystemContext<TYPES, I>>),
+    InitializedContext(Arc<SystemContext<TYPES, I, V>>),
 
     /// The system context that we're passing to the node when it is not yet initialized, so we're
     /// initializing it based on the received leaf and init parameters.
@@ -690,12 +691,12 @@ pub enum LateNodeContext<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> 
 }
 
 /// A yet-to-be-started node that participates in tests
-pub struct LateStartNode<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+pub struct LateStartNode<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> {
     /// The underlying network belonging to the node
     pub network: Network<TYPES, I>,
     /// Either the context to which we will use to launch HotShot for initialized node when it's
     /// time, or the parameters that will be used to initialize the node and launch HotShot.
-    pub context: LateNodeContext<TYPES, I>,
+    pub context: LateNodeContext<TYPES, I, V>,
 }
 
 /// The runner of a test network
@@ -703,16 +704,17 @@ pub struct LateStartNode<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> 
 pub struct TestRunner<
     TYPES: NodeType,
     I: TestableNodeImplementation<TYPES>,
+    V: Versions,
     N: ConnectedNetwork<TYPES::SignatureKey>,
 > {
     /// test launcher, contains a bunch of useful metadata and closures
-    pub(crate) launcher: TestLauncher<TYPES, I>,
+    pub(crate) launcher: TestLauncher<TYPES, I, V>,
     /// nodes in the test
-    pub(crate) nodes: Vec<Node<TYPES, I>>,
+    pub(crate) nodes: Vec<Node<TYPES, I, V>>,
     /// the solver server running in the test
     pub(crate) solver_server: Option<(Url, JoinHandle<()>)>,
     /// nodes with a late start
-    pub(crate) late_start: HashMap<u64, LateStartNode<TYPES, I>>,
+    pub(crate) late_start: HashMap<u64, LateStartNode<TYPES, I, V>>,
     /// the next node unique identifier
     pub(crate) next_node_id: u64,
     /// Phantom for N

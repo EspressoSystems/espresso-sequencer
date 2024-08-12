@@ -12,7 +12,7 @@ use futures::StreamExt;
 use hotshot::{tasks::task_state::CreateTaskState, traits::ValidatedState};
 use hotshot_example_types::{
     block_types::TestMetadata,
-    node_types::{MemoryImpl, TestTypes},
+    node_types::{MemoryImpl, TestTypes, TestVersions},
     state_types::TestValidatedState,
 };
 use hotshot_macros::{run_test, test_scripts};
@@ -29,7 +29,10 @@ use hotshot_testing::{
 use hotshot_types::{
     data::{null_block, Leaf, ViewChangeEvidence, ViewNumber},
     simple_vote::{TimeoutData, ViewSyncFinalizeData},
-    traits::{election::Membership, node_implementation::ConsensusTime},
+    traits::{
+        election::Membership,
+        node_implementation::{ConsensusTime, Versions},
+    },
     utils::BuilderCommitment,
     vote::HasViewNumber,
 };
@@ -43,14 +46,13 @@ const TIMEOUT: Duration = Duration::from_millis(35);
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_task_quorum_proposal_view_1() {
     use hotshot_testing::script::{Expectations, TaskScript};
-    use hotshot_types::constants::BaseVersion;
     use vbs::version::StaticVersionType;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
     let node_id = 1;
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(node_id)
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
         .await
         .0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
@@ -83,8 +85,11 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
     // We must send the genesis cert here to initialize hotshot successfully.
     let genesis_cert = proposals[0].data.justify_qc.clone();
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
-    let builder_fee =
-        null_block::builder_fee(quorum_membership.total_nodes(), BaseVersion::version()).unwrap();
+    let builder_fee = null_block::builder_fee::<TestTypes, TestVersions>(
+        quorum_membership.total_nodes(),
+        <TestVersions as Versions>::Base::VERSION,
+    )
+    .unwrap();
     drop(consensus_writer);
 
     let inputs = vec![
@@ -119,7 +124,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
     ];
 
     let quorum_proposal_task_state =
-        QuorumProposalTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+        QuorumProposalTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
 
     let mut script = TaskScript {
         timeout: TIMEOUT,
@@ -133,14 +138,13 @@ async fn test_quorum_proposal_task_quorum_proposal_view_1() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
-    use hotshot_types::constants::BaseVersion;
     use vbs::version::StaticVersionType;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
     let node_id = 3;
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(node_id)
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
         .await
         .0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
@@ -187,8 +191,11 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
     drop(consensus_writer);
 
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
-    let builder_fee =
-        null_block::builder_fee(quorum_membership.total_nodes(), BaseVersion::version()).unwrap();
+    let builder_fee = null_block::builder_fee::<TestTypes, TestVersions>(
+        quorum_membership.total_nodes(),
+        <TestVersions as Versions>::Base::VERSION,
+    )
+    .unwrap();
 
     let inputs = vec![
         random![
@@ -302,7 +309,7 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
     ];
 
     let quorum_proposal_task_state =
-        QuorumProposalTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+        QuorumProposalTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
 
     let mut script = TaskScript {
         timeout: TIMEOUT,
@@ -317,14 +324,13 @@ async fn test_quorum_proposal_task_quorum_proposal_view_gt_1() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_task_qc_timeout() {
-    use hotshot_types::constants::BaseVersion;
     use vbs::version::StaticVersionType;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
     let node_id = 3;
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(node_id)
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
         .await
         .0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
@@ -372,10 +378,11 @@ async fn test_quorum_proposal_task_qc_timeout() {
             builder_commitment,
             TestMetadata,
             ViewNumber::new(3),
-            vec1![
-                null_block::builder_fee(quorum_membership.total_nodes(), BaseVersion::version())
-                    .unwrap()
-            ],
+            vec1![null_block::builder_fee::<TestTypes, TestVersions>(
+                quorum_membership.total_nodes(),
+                <TestVersions as Versions>::Base::VERSION
+            )
+            .unwrap()],
             None,
         ),
         VidDisperseSend(vid_dispersals[2].clone(), handle.public_key()),
@@ -388,7 +395,7 @@ async fn test_quorum_proposal_task_qc_timeout() {
     let expectations = vec![Expectations::from_outputs(vec![quorum_proposal_send()])];
 
     let quorum_proposal_task_state =
-        QuorumProposalTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+        QuorumProposalTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
 
     let mut script = TaskScript {
         timeout: TIMEOUT,
@@ -403,14 +410,14 @@ async fn test_quorum_proposal_task_qc_timeout() {
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_task_view_sync() {
     use hotshot_example_types::block_types::TestMetadata;
-    use hotshot_types::{constants::BaseVersion, data::null_block};
+    use hotshot_types::data::null_block;
     use vbs::version::StaticVersionType;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
     let node_id = 2;
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(node_id)
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
         .await
         .0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
@@ -460,10 +467,11 @@ async fn test_quorum_proposal_task_view_sync() {
             builder_commitment,
             TestMetadata,
             ViewNumber::new(2),
-            vec1![
-                null_block::builder_fee(quorum_membership.total_nodes(), BaseVersion::version())
-                    .unwrap()
-            ],
+            vec1![null_block::builder_fee::<TestTypes, TestVersions>(
+                quorum_membership.total_nodes(),
+                <TestVersions as Versions>::Base::VERSION
+            )
+            .unwrap()],
             None,
         ),
         VidDisperseSend(vid_dispersals[1].clone(), handle.public_key()),
@@ -476,7 +484,7 @@ async fn test_quorum_proposal_task_view_sync() {
     let expectations = vec![Expectations::from_outputs(vec![quorum_proposal_send()])];
 
     let quorum_proposal_task_state =
-        QuorumProposalTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+        QuorumProposalTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
 
     let mut script = TaskScript {
         timeout: TIMEOUT,
@@ -490,14 +498,13 @@ async fn test_quorum_proposal_task_view_sync() {
 #[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
 #[cfg_attr(async_executor_impl = "async-std", async_std::test)]
 async fn test_quorum_proposal_task_liveness_check() {
-    use hotshot_types::constants::BaseVersion;
     use vbs::version::StaticVersionType;
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
     let node_id = 3;
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(node_id)
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
         .await
         .0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
@@ -533,8 +540,11 @@ async fn test_quorum_proposal_task_liveness_check() {
     drop(consensus_writer);
 
     let builder_commitment = BuilderCommitment::from_raw_digest(sha2::Sha256::new().finalize());
-    let builder_fee =
-        null_block::builder_fee(quorum_membership.total_nodes(), BaseVersion::version()).unwrap();
+    let builder_fee = null_block::builder_fee::<TestTypes, TestVersions>(
+        quorum_membership.total_nodes(),
+        <TestVersions as Versions>::Base::VERSION,
+    )
+    .unwrap();
 
     // We need to handle the views where we aren't the leader to ensure that the states are
     // updated properly.
@@ -657,7 +667,7 @@ async fn test_quorum_proposal_task_liveness_check() {
     ];
 
     let quorum_proposal_task_state =
-        QuorumProposalTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+        QuorumProposalTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
 
     let mut script = TaskScript {
         timeout: TIMEOUT,
@@ -674,7 +684,9 @@ async fn test_quorum_proposal_task_with_incomplete_events() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(2).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
+        .await
+        .0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -700,7 +712,7 @@ async fn test_quorum_proposal_task_with_incomplete_events() {
     let expectations = vec![Expectations::from_outputs(vec![])];
 
     let quorum_proposal_task_state =
-        QuorumProposalTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+        QuorumProposalTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
 
     let mut script = TaskScript {
         timeout: TIMEOUT,

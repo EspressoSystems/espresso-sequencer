@@ -12,7 +12,7 @@ use std::{
 };
 
 use hotshot_example_types::{
-    node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl, TestConsecutiveLeaderTypes},
+    node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl, TestConsecutiveLeaderTypes, TestVersions},
     state_types::TestTypes,
 };
 use hotshot_macros::cross_tests;
@@ -31,6 +31,7 @@ cross_tests!(
     TestName: test_with_failures_2,
     Impls: [MemoryImpl, Libp2pImpl, PushCdnImpl],
     Types: [TestTypes],
+    Versions: [TestVersions],
     Ignore: false,
     Metadata: {
         let mut metadata = TestDescription::default_more_nodes();
@@ -72,6 +73,7 @@ cross_tests!(
     TestName: dishonest_leader,
     Impls: [MemoryImpl],
     Types: [TestTypes],
+    Versions: [TestVersions],
     Ignore: false,
     Metadata: {
         let behaviour = Rc::new(|node_id| {
@@ -113,6 +115,7 @@ cross_tests!(
     TestName: test_with_double_leader_failures,
     Impls: [MemoryImpl, Libp2pImpl, PushCdnImpl],
     Types: [TestConsecutiveLeaderTypes],
+    Versions: [TestVersions],
     Ignore: false,
     Metadata: {
         let mut metadata = TestDescription::default_more_nodes();

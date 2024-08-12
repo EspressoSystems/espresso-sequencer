@@ -10,7 +10,7 @@ use async_broadcast::Sender;
 use async_compatibility_layer::art::async_timeout;
 use async_lock::RwLock;
 use hotshot::traits::implementations::MemoryNetwork;
-use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
+use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
 use hotshot_task::task::{ConsensusTaskRegistry, Task};
 use hotshot_task_impls::{
     events::HotShotEvent,
@@ -22,6 +22,7 @@ use hotshot_testing::{
 };
 use hotshot_types::{
     data::ViewNumber,
+    message::UpgradeLock,
     traits::{
         election::Membership,
         node_implementation::{ConsensusTime, NodeType},
@@ -41,8 +42,9 @@ async fn test_network_task() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let builder: TestDescription<TestTypes, MemoryImpl> =
+    let builder: TestDescription<TestTypes, MemoryImpl, TestVersions> =
         TestDescription::default_multiple_rounds();
+    let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
     let node_id = 1;
 
     let launcher = builder.gen_launcher(node_id);
@@ -60,13 +62,13 @@ async fn test_network_task() {
         Topic::Global,
         config.fixed_leader_for_gpuvid,
     );
-    let network_state: NetworkEventTaskState<TestTypes, MemoryNetwork<_>, _> =
+    let network_state: NetworkEventTaskState<TestTypes, TestVersions, MemoryNetwork<_>, _> =
         NetworkEventTaskState {
             channel: network.clone(),
             view: ViewNumber::new(0),
             membership: membership.clone(),
             filter: network::quorum_filter,
-            decided_upgrade_certificate: None,
+            upgrade_lock: upgrade_lock.clone(),
             storage,
         };
     let (tx, rx) = async_broadcast::broadcast(10);
@@ -83,6 +85,7 @@ async fn test_network_task() {
     add_network_message_test_task(
         out_tx_internal.clone(),
         out_tx_external.clone(),
+        upgrade_lock,
         network.clone(),
     )
     .await;
@@ -114,7 +117,7 @@ async fn test_network_storage_fail() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let builder: TestDescription<TestTypes, MemoryImpl> =
+    let builder: TestDescription<TestTypes, MemoryImpl, TestVersions> =
         TestDescription::default_multiple_rounds();
     let node_id = 1;
 
@@ -127,6 +130,7 @@ async fn test_network_storage_fail() {
     let config = launcher.resource_generator.config.clone();
     let public_key = config.my_own_validator_config.public_key;
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
+    let upgrade_lock = UpgradeLock::<TestTypes, TestVersions>::new();
 
     let membership = <TestTypes as NodeType>::Membership::create_election(
         known_nodes_with_stake.clone(),
@@ -134,13 +138,13 @@ async fn test_network_storage_fail() {
         Topic::Global,
         config.fixed_leader_for_gpuvid,
     );
-    let network_state: NetworkEventTaskState<TestTypes, MemoryNetwork<_>, _> =
+    let network_state: NetworkEventTaskState<TestTypes, TestVersions, MemoryNetwork<_>, _> =
         NetworkEventTaskState {
             channel: network.clone(),
             view: ViewNumber::new(0),
             membership: membership.clone(),
             filter: network::quorum_filter,
-            decided_upgrade_certificate: None,
+            upgrade_lock: upgrade_lock.clone(),
             storage,
         };
     let (tx, rx) = async_broadcast::broadcast(10);
@@ -158,6 +162,7 @@ async fn test_network_storage_fail() {
     add_network_message_test_task(
         out_tx_internal.clone(),
         out_tx_external.clone(),
+        upgrade_lock,
         network.clone(),
     )
     .await;

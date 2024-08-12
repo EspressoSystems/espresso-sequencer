@@ -22,13 +22,12 @@ use hotshot_types::{
     consensus::OuterConsensus,
     data::{Leaf, VidDisperseShare, ViewNumber},
     event::Event,
-    message::Proposal,
-    simple_certificate::{version, UpgradeCertificate},
+    message::{Proposal, UpgradeLock},
     simple_vote::{QuorumData, QuorumVote},
     traits::{
         block_contents::BlockHeader,
         election::Membership,
-        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
         storage::Storage,
         ValidatedState,
@@ -63,7 +62,7 @@ enum VoteDependency {
 }
 
 /// Handler for the vote dependency.
-pub struct VoteDependencyHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct VoteDependencyHandle<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// Public key.
     pub public_key: TYPES::SignatureKey,
     /// Private Key.
@@ -82,13 +81,15 @@ pub struct VoteDependencyHandle<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub sender: Sender<Arc<HotShotEvent<TYPES>>>,
     /// Event receiver.
     pub receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
-    /// An upgrade certificate that has been decided on, if any.
-    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
+    /// Lock for a decided upgrade
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
     /// The node's id
     pub id: u64,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> VoteDependencyHandle<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
+    VoteDependencyHandle<TYPES, I, V>
+{
     /// Updates the shared consensus state with the new voting data.
     #[instrument(skip_all, target = "VoteDependencyHandle", fields(id = self.id, view = *self.view_number))]
     async fn update_shared_state(
@@ -130,10 +131,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> VoteDependencyHand
 
         drop(consensus_reader);
 
-        let version = version(
-            self.view_number,
-            &self.decided_upgrade_certificate.read().await.clone(),
-        )?;
+        let version = self.upgrade_lock.version(self.view_number).await?;
+
         let (validated_state, state_delta) = parent_state
             .validate_and_apply_header(
                 &self.instance_state,
@@ -230,8 +229,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> VoteDependencyHand
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> HandleDepOutput
-    for VoteDependencyHandle<TYPES, I>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions> HandleDepOutput
+    for VoteDependencyHandle<TYPES, I, V>
 {
     type Output = Vec<Arc<HotShotEvent<TYPES>>>;
 
@@ -353,7 +352,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static> HandleDepOutput
 /// The state for the quorum vote task.
 ///
 /// Contains all of the information for the quorum vote.
-pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// Public key.
     pub public_key: TYPES::SignatureKey,
 
@@ -390,11 +389,11 @@ pub struct QuorumVoteTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Reference to the storage.
     pub storage: Arc<RwLock<I::Storage>>,
 
-    /// An upgrade certificate that has been decided on, if any.
-    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
+    /// Lock for a decided upgrade
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> QuorumVoteTaskState<TYPES, I, V> {
     /// Create an event dependency.
     #[instrument(skip_all, fields(id = self.id, latest_voted_view = *self.latest_voted_view), name = "Quorum vote create event dependency", level = "error")]
     fn create_event_dependency(
@@ -479,7 +478,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
 
         let dependency_task = DependencyTask::new(
             dependency_chain,
-            VoteDependencyHandle::<TYPES, I> {
+            VoteDependencyHandle::<TYPES, I, V> {
                 public_key: self.public_key.clone(),
                 private_key: self.private_key.clone(),
                 consensus: OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
@@ -489,7 +488,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
                 view_number,
                 sender: event_sender.clone(),
                 receiver: event_receiver.clone(),
-                decided_upgrade_certificate: Arc::clone(&self.decided_upgrade_certificate),
+                upgrade_lock: self.upgrade_lock.clone(),
                 id: self.id,
             },
         );
@@ -646,7 +645,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumVoteTaskState<TYPES, I
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for QuorumVoteTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
+    for QuorumVoteTaskState<TYPES, I, V>
+{
     type Event = HotShotEvent<TYPES>;
 
     async fn handle_event(

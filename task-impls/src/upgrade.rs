@@ -19,12 +19,12 @@ use hotshot_types::{
     },
     data::UpgradeProposal,
     event::{Event, EventType},
-    message::Proposal,
+    message::{Proposal, UpgradeLock},
     simple_certificate::UpgradeCertificate,
     simple_vote::{UpgradeProposalData, UpgradeVote},
     traits::{
         election::Membership,
-        node_implementation::{ConsensusTime, NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
     },
     vote::HasViewNumber,
@@ -44,7 +44,7 @@ use crate::{
 type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYPES, VOTE, CERT>>;
 
 /// Tracks state of a DA task
-pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// Output events to application
     pub output_event_stream: async_broadcast::Sender<Event<TYPES>>,
 
@@ -93,14 +93,18 @@ pub struct UpgradeTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Unix time in seconds at which we stop voting on an upgrade
     pub stop_voting_time: u64,
 
-    /// Upgrade certificate that has been decided on, if any
-    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
+    /// Lock for a decided upgrade
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> UpgradeTaskState<TYPES, I, V> {
     /// Check if we have decided on an upgrade certificate
     async fn upgraded(&self) -> bool {
-        self.decided_upgrade_certificate.read().await.is_some()
+        self.upgrade_lock
+            .decided_upgrade_certificate
+            .read()
+            .await
+            .is_some()
     }
 
     /// main task event handler
@@ -120,7 +124,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
                 if self.upgraded().await {
                     info!(
                         "Already upgraded to {:?}, skip voting.",
-                        TYPES::Upgrade::VERSION
+                        V::Upgrade::VERSION
                     );
                     return None;
                 }
@@ -139,9 +143,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
                 }
 
                 // If the proposal does not match our upgrade target, we immediately exit.
-                if proposal.data.upgrade_proposal.new_version_hash != TYPES::UPGRADE_HASH
-                    || proposal.data.upgrade_proposal.old_version != TYPES::Base::VERSION
-                    || proposal.data.upgrade_proposal.new_version != TYPES::Upgrade::VERSION
+                if proposal.data.upgrade_proposal.new_version_hash != V::UPGRADE_HASH
+                    || proposal.data.upgrade_proposal.old_version != V::Base::VERSION
+                    || proposal.data.upgrade_proposal.new_version != V::Upgrade::VERSION
                 {
                     return None;
                 }
@@ -284,9 +288,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
                         == self.public_key
                 {
                     let upgrade_proposal_data = UpgradeProposalData {
-                        old_version: TYPES::Base::VERSION,
-                        new_version: TYPES::Upgrade::VERSION,
-                        new_version_hash: TYPES::UPGRADE_HASH.to_vec(),
+                        old_version: V::Base::VERSION,
+                        new_version: V::Upgrade::VERSION,
+                        new_version_hash: V::UPGRADE_HASH.to_vec(),
                         // We schedule the upgrade to begin 15 views in the future
                         old_version_last_view: TYPES::Time::new(view + UPGRADE_BEGIN_OFFSET),
                         // and end 20 views in the future
@@ -337,7 +341,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> UpgradeTaskState<TYPES, I> {
 
 #[async_trait]
 /// task state implementation for the upgrade task
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for UpgradeTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
+    for UpgradeTaskState<TYPES, I, V>
+{
     type Event = HotShotEvent<TYPES>;
 
     async fn handle_event(

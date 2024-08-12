@@ -12,10 +12,12 @@
 pub mod documentation;
 
 use futures::future::{select, Either};
-use hotshot_types::traits::network::BroadcastDelay;
+use hotshot_types::{
+    message::UpgradeLock,
+    traits::{network::BroadcastDelay, node_implementation::Versions},
+};
 use rand::Rng;
 use url::Url;
-use vbs::version::StaticVersionType;
 
 /// Contains traits consumed by [`SystemContext`]
 pub mod traits;
@@ -47,8 +49,8 @@ use hotshot_types::{
     constants::{EVENT_CHANNEL_SIZE, EXTERNAL_EVENT_CHANNEL_SIZE},
     data::{Leaf, QuorumProposal},
     event::{EventType, LeafInfo},
-    message::{DataMessage, Message, MessageKind, Proposal, VersionedMessage},
-    simple_certificate::{QuorumCertificate, UpgradeCertificate},
+    message::{DataMessage, Message, MessageKind, Proposal},
+    simple_certificate::QuorumCertificate,
     traits::{
         consensus_api::ConsensusApi,
         election::Membership,
@@ -65,7 +67,6 @@ use hotshot_types::{
 /// Reexport rand crate
 pub use rand;
 use tracing::{debug, instrument, trace};
-use vbs::version::Version;
 
 use crate::{
     tasks::{add_consensus_tasks, add_network_tasks},
@@ -101,7 +102,7 @@ pub struct Memberships<TYPES: NodeType> {
 }
 
 /// Holds the state needed to participate in `HotShot` consensus
-pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// The public key of this node
     public_key: TYPES::SignatureKey,
 
@@ -125,9 +126,6 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
 
     /// Immutable instance state
     instance_state: Arc<TYPES::InstanceState>,
-
-    /// The network version
-    version: Arc<RwLock<Version>>,
 
     /// The view to enter when first starting consensus
     start_view: TYPES::Time,
@@ -154,13 +152,15 @@ pub struct SystemContext<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// Reference to the internal storage for consensus datum.
     pub storage: Arc<RwLock<I::Storage>>,
 
-    /// a potential upgrade certificate that has been decided on by the consensus tasks.
-    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
+    /// shared lock for upgrade information
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
 
     /// Marketplace config for this instance of HotShot
     pub marketplace_config: MarketplaceConfig<TYPES, I>,
 }
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Clone for SystemContext<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Clone
+    for SystemContext<TYPES, I, V>
+{
     #![allow(deprecated)]
     fn clone(&self) -> Self {
         Self {
@@ -172,7 +172,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Clone for SystemContext<TYPE
             metrics: Arc::clone(&self.metrics),
             consensus: self.consensus.clone(),
             instance_state: Arc::clone(&self.instance_state),
-            version: Arc::clone(&self.version),
             start_view: self.start_view,
             output_event_stream: self.output_event_stream.clone(),
             external_event_stream: self.external_event_stream.clone(),
@@ -180,13 +179,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Clone for SystemContext<TYPE
             internal_event_stream: self.internal_event_stream.clone(),
             id: self.id,
             storage: Arc::clone(&self.storage),
-            decided_upgrade_certificate: Arc::clone(&self.decided_upgrade_certificate),
+            upgrade_lock: self.upgrade_lock.clone(),
             marketplace_config: self.marketplace_config.clone(),
         }
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<TYPES, I, V> {
     #![allow(deprecated)]
     /// Creates a new [`Arc<SystemContext>`] with the given configuration options.
     ///
@@ -260,7 +259,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         let (internal_tx, internal_rx) = internal_channel;
         let (mut external_tx, mut external_rx) = external_channel;
 
-        let decided_upgrade_certificate = Arc::new(RwLock::new(None));
+        let upgrade_lock = UpgradeLock::<TYPES, V>::new();
 
         // Allow overflow on the channel, otherwise sending to it may block.
         external_rx.set_overflow(true);
@@ -318,20 +317,18 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         );
 
         let consensus = Arc::new(RwLock::new(consensus));
-        let version = Arc::new(RwLock::new(TYPES::Base::VERSION));
 
         // This makes it so we won't block on broadcasting if there is not a receiver
         // Our own copy of the receiver is inactive so it doesn't count.
         external_tx.set_await_active(false);
 
-        let inner: Arc<SystemContext<TYPES, I>> = Arc::new(SystemContext {
+        let inner: Arc<SystemContext<TYPES, I, V>> = Arc::new(SystemContext {
             id: nonce,
             consensus: OuterConsensus::new(consensus),
             instance_state: Arc::new(instance_state),
             public_key,
             private_key,
             config,
-            version,
             start_view: initializer.start_view,
             network,
             memberships: Arc::new(memberships),
@@ -341,7 +338,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             external_event_stream: (external_tx, external_rx.deactivate()),
             anchored_leaf: anchored_leaf.clone(),
             storage: Arc::new(RwLock::new(storage)),
-            decided_upgrade_certificate,
+            upgrade_lock,
             marketplace_config,
         });
 
@@ -457,7 +454,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     pub async fn publish_transaction_async(
         &self,
         transaction: TYPES::Transaction,
-        decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
     ) -> Result<(), HotShotError<TYPES>> {
         trace!("Adding transaction to our own queue");
 
@@ -472,10 +468,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             kind: MessageKind::from(message_kind),
         };
 
-        let cert = decided_upgrade_certificate.read().await.clone();
-
-        let serialized_message = message
-            .serialize(&cert)
+        let serialized_message = self
+            .upgrade_lock
+            .serialize(&message)
+            .await
             .map_err(|_| HotShotError::FailedToSerialize)?;
 
         async_spawn(async move {
@@ -584,7 +580,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
         marketplace_config: MarketplaceConfig<TYPES, I>,
     ) -> Result<
         (
-            SystemContextHandle<TYPES, I>,
+            SystemContextHandle<TYPES, I, V>,
             Sender<Arc<HotShotEvent<TYPES>>>,
             Receiver<Arc<HotShotEvent<TYPES>>>,
         ),
@@ -614,11 +610,11 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
     }
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> SystemContext<TYPES, I, V> {
     /// Spawn all tasks that operate on [`SystemContextHandle`].
     ///
     /// For a list of which tasks are being spawned, see this module's documentation.
-    pub async fn run_tasks(&self) -> SystemContextHandle<TYPES, I> {
+    pub async fn run_tasks(&self) -> SystemContextHandle<TYPES, I, V> {
         let consensus_registry = ConsensusTaskRegistry::new();
         let network_registry = NetworkTaskRegistry::new();
 
@@ -636,8 +632,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> SystemContext<TYPES, I> {
             memberships: Arc::clone(&self.memberships),
         };
 
-        add_network_tasks::<TYPES, I>(&mut handle).await;
-        add_consensus_tasks::<TYPES, I>(&mut handle).await;
+        add_network_tasks::<TYPES, I, V>(&mut handle).await;
+        add_consensus_tasks::<TYPES, I, V>(&mut handle).await;
 
         handle
     }
@@ -648,11 +644,12 @@ type Channel<S> = (Sender<Arc<S>>, Receiver<Arc<S>>);
 
 #[async_trait]
 /// Trait for handling messages for a node with a twin copy of consensus
-pub trait TwinsHandlerState<TYPES, I>
+pub trait TwinsHandlerState<TYPES, I, V>
 where
     Self: std::fmt::Debug + Send + Sync,
     TYPES: NodeType,
     I: NodeImplementation<TYPES>,
+    V: Versions,
 {
     /// Handle a message sent to the twin from the network task, forwarding it to one of the two twins.
     async fn send_handler(
@@ -742,7 +739,10 @@ where
         metrics: ConsensusMetricsValue,
         storage: I::Storage,
         marketplace_config: MarketplaceConfig<TYPES, I>,
-    ) -> (SystemContextHandle<TYPES, I>, SystemContextHandle<TYPES, I>) {
+    ) -> (
+        SystemContextHandle<TYPES, I, V>,
+        SystemContextHandle<TYPES, I, V>,
+    ) {
         let left_system_context = SystemContext::new(
             public_key.clone(),
             private_key.clone(),
@@ -822,8 +822,8 @@ where
         };
 
         // add consensus tasks to each handle, using their individual internal event streams
-        add_consensus_tasks::<TYPES, I>(&mut left_handle).await;
-        add_consensus_tasks::<TYPES, I>(&mut right_handle).await;
+        add_consensus_tasks::<TYPES, I, V>(&mut left_handle).await;
+        add_consensus_tasks::<TYPES, I, V>(&mut right_handle).await;
 
         // fuse the event streams from both handles before initializing the network tasks
         let fused_internal_event_stream = self.fuse_channels(
@@ -838,7 +838,7 @@ where
         );
 
         // add the network tasks to the left handle. note: because the left handle has the fused event stream, the network tasks on the left handle will handle messages from both handles.
-        add_network_tasks::<TYPES, I>(&mut left_handle).await;
+        add_network_tasks::<TYPES, I, V>(&mut left_handle).await;
 
         // revert to the original event stream on the left handle, for any applications that want to listen to it
         left_handle.internal_event_stream = left_internal_event_stream.clone();
@@ -853,7 +853,7 @@ where
 pub struct RandomTwinsHandler;
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TwinsHandlerState<TYPES, I>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TwinsHandlerState<TYPES, I, V>
     for RandomTwinsHandler
 {
     async fn send_handler(
@@ -885,7 +885,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TwinsHandlerState<TYPES, I>
 pub struct DoubleTwinsHandler;
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TwinsHandlerState<TYPES, I>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TwinsHandlerState<TYPES, I, V>
     for DoubleTwinsHandler
 {
     async fn send_handler(
@@ -906,8 +906,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TwinsHandlerState<TYPES, I>
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusApi<TYPES, I>
-    for SystemContextHandle<TYPES, I>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusApi<TYPES, I>
+    for SystemContextHandle<TYPES, I, V>
 {
     fn total_nodes(&self) -> NonZeroUsize {
         self.hotshot.config.num_nodes_with_stake

@@ -17,13 +17,12 @@ use hotshot_types::{
     event::{Event, EventType, HotShotAction},
     message::{
         DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message, MessageKind, Proposal,
-        SequencingMessage, VersionedMessage,
+        SequencingMessage, UpgradeLock,
     },
-    simple_certificate::UpgradeCertificate,
     traits::{
         election::Membership,
         network::{BroadcastDelay, ConnectedNetwork, TransmitType, ViewMessage},
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         storage::Storage,
     },
     vote::{HasViewNumber, Vote},
@@ -210,6 +209,7 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
 /// network event task state
 pub struct NetworkEventTaskState<
     TYPES: NodeType,
+    V: Versions,
     COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
     S: Storage<TYPES>,
 > {
@@ -224,16 +224,17 @@ pub struct NetworkEventTaskState<
     pub filter: fn(&Arc<HotShotEvent<TYPES>>) -> bool,
     /// Storage to store actionable events
     pub storage: Arc<RwLock<S>>,
-    /// Decided upgrade certificate
-    pub decided_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
+    /// Lock for a decided upgrade
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
 }
 
 #[async_trait]
 impl<
         TYPES: NodeType,
+        V: Versions,
         COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
         S: Storage<TYPES> + 'static,
-    > TaskState for NetworkEventTaskState<TYPES, COMMCHANNEL, S>
+    > TaskState for NetworkEventTaskState<TYPES, V, COMMCHANNEL, S>
 {
     type Event = HotShotEvent<TYPES>;
 
@@ -257,9 +258,10 @@ impl<
 
 impl<
         TYPES: NodeType,
+        V: Versions,
         COMMCHANNEL: ConnectedNetwork<TYPES::SignatureKey>,
         S: Storage<TYPES> + 'static,
-    > NetworkEventTaskState<TYPES, COMMCHANNEL, S>
+    > NetworkEventTaskState<TYPES, V, COMMCHANNEL, S>
 {
     /// Handle the given event.
     ///
@@ -297,7 +299,7 @@ impl<
                     )
                 }
                 HotShotEvent::VidDisperseSend(proposal, sender) => {
-                    self.handle_vid_disperse_proposal(proposal, &sender);
+                    self.handle_vid_disperse_proposal(proposal, &sender).await;
                     return;
                 }
                 HotShotEvent::DaProposalSend(proposal, sender) => {
@@ -404,10 +406,6 @@ impl<
                         .await;
                     return;
                 }
-                HotShotEvent::UpgradeDecided(cert) => {
-                    self.decided_upgrade_certificate = Some(cert.clone());
-                    return;
-                }
                 _ => {
                     return;
                 }
@@ -428,9 +426,9 @@ impl<
         let committee_topic = membership.committee_topic();
         let net = Arc::clone(&self.channel);
         let storage = Arc::clone(&self.storage);
-        let decided_upgrade_certificate = self.decided_upgrade_certificate.clone();
+        let upgrade_lock = self.upgrade_lock.clone();
         async_spawn(async move {
-            if NetworkEventTaskState::<TYPES, COMMCHANNEL, S>::maybe_record_action(
+            if NetworkEventTaskState::<TYPES, V, COMMCHANNEL, S>::maybe_record_action(
                 maybe_action,
                 Arc::clone(&storage),
                 view,
@@ -449,7 +447,7 @@ impl<
                 }
             }
 
-            let serialized_message = match message.serialize(&decided_upgrade_certificate) {
+            let serialized_message = match upgrade_lock.serialize(&message).await {
                 Ok(serialized) => serialized,
                 Err(e) => {
                     error!("Failed to serialize message: {}", e);
@@ -479,7 +477,7 @@ impl<
     }
 
     /// handle `VidDisperseSend`
-    fn handle_vid_disperse_proposal(
+    async fn handle_vid_disperse_proposal(
         &self,
         vid_proposal: Proposal<TYPES, VidDisperse<TYPES>>,
         sender: &<TYPES as NodeType>::SignatureKey,
@@ -496,7 +494,7 @@ impl<
                     DaConsensusMessage::VidDisperseMsg(proposal),
                 )), // TODO not a DaConsensusMessage https://github.com/EspressoSystems/HotShot/issues/1696
             };
-            let serialized_message = match message.serialize(&self.decided_upgrade_certificate) {
+            let serialized_message = match self.upgrade_lock.serialize(&message).await {
                 Ok(serialized) => serialized,
                 Err(e) => {
                     error!("Failed to serialize message: {}", e);
@@ -510,7 +508,7 @@ impl<
         let net = Arc::clone(&self.channel);
         let storage = Arc::clone(&self.storage);
         async_spawn(async move {
-            if NetworkEventTaskState::<TYPES, COMMCHANNEL, S>::maybe_record_action(
+            if NetworkEventTaskState::<TYPES, V, COMMCHANNEL, S>::maybe_record_action(
                 Some(HotShotAction::VidDisperse),
                 storage,
                 view,

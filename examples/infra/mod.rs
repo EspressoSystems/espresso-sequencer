@@ -59,7 +59,7 @@ use hotshot_types::{
         block_contents::{BlockHeader, TestableBlock},
         election::Membership,
         network::{ConnectedNetwork, Topic},
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         states::TestableState,
     },
     HotShotConfig, PeerConfig, ValidatorConfig,
@@ -347,6 +347,7 @@ pub trait RunDa<
         Storage = TestStorage<TYPES>,
         AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
     >,
+    V: Versions,
 > where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
@@ -364,7 +365,7 @@ pub trait RunDa<
     /// # Panics if it cannot generate a genesis block, fails to initialize HotShot, or cannot
     /// get the anchored view
     /// Note: sequencing leaf does not have state, so does not return state
-    async fn initialize_state_and_hotshot(&self) -> SystemContextHandle<TYPES, NODE> {
+    async fn initialize_state_and_hotshot(&self) -> SystemContextHandle<TYPES, NODE, V> {
         let initializer =
             hotshot::HotShotInitializer::<TYPES>::from_genesis(TestInstanceState::default())
                 .await
@@ -430,7 +431,7 @@ pub trait RunDa<
     #[allow(clippy::too_many_lines)]
     async fn run_hotshot(
         &self,
-        context: SystemContextHandle<TYPES, NODE>,
+        context: SystemContextHandle<TYPES, NODE, V>,
         transactions: &mut Vec<TestTransaction>,
         transactions_to_send_per_round: u64,
         transaction_size_in_bytes: u64,
@@ -619,7 +620,8 @@ impl<
             Storage = TestStorage<TYPES>,
             AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
         >,
-    > RunDa<TYPES, PushCdnNetwork<TYPES>, NODE> for PushCdnDaRun<TYPES>
+        V: Versions,
+    > RunDa<TYPES, PushCdnNetwork<TYPES>, NODE, V> for PushCdnDaRun<TYPES>
 where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
@@ -696,7 +698,8 @@ impl<
             Storage = TestStorage<TYPES>,
             AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
         >,
-    > RunDa<TYPES, Libp2pNetwork<TYPES::SignatureKey>, NODE> for Libp2pDaRun<TYPES>
+        V: Versions,
+    > RunDa<TYPES, Libp2pNetwork<TYPES::SignatureKey>, NODE, V> for Libp2pDaRun<TYPES>
 where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
@@ -782,7 +785,8 @@ impl<
             Storage = TestStorage<TYPES>,
             AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
         >,
-    > RunDa<TYPES, CombinedNetworks<TYPES>, NODE> for CombinedDaRun<TYPES>
+        V: Versions,
+    > RunDa<TYPES, CombinedNetworks<TYPES>, NODE, V> for CombinedDaRun<TYPES>
 where
     <TYPES as NodeType>::ValidatedState: TestableState<TYPES>,
     <TYPES as NodeType>::BlockPayload: TestableBlock<TYPES>,
@@ -794,20 +798,21 @@ where
         libp2p_advertise_address: Option<SocketAddr>,
     ) -> CombinedDaRun<TYPES> {
         // Initialize our Libp2p network
-        let libp2p_network: Libp2pDaRun<TYPES> = <Libp2pDaRun<TYPES> as RunDa<
-            TYPES,
-            Libp2pNetwork<TYPES::SignatureKey>,
-            Libp2pImpl,
-        >>::initialize_networking(
-            config.clone(), libp2p_advertise_address
-        )
-        .await;
+        let libp2p_network: Libp2pDaRun<TYPES> =
+            <Libp2pDaRun<TYPES> as RunDa<
+                TYPES,
+                Libp2pNetwork<TYPES::SignatureKey>,
+                Libp2pImpl,
+                V,
+            >>::initialize_networking(config.clone(), libp2p_advertise_address)
+            .await;
 
         // Initialize our CDN network
         let cdn_network: PushCdnDaRun<TYPES> = <PushCdnDaRun<TYPES> as RunDa<
             TYPES,
             PushCdnNetwork<TYPES>,
             PushCdnImpl,
+            V,
         >>::initialize_networking(
             config.clone(), libp2p_advertise_address
         )
@@ -852,7 +857,8 @@ pub async fn main_entry_point<
         Storage = TestStorage<TYPES>,
         AuctionResultsProvider = TestAuctionResultsProvider<TYPES>,
     >,
-    RUNDA: RunDa<TYPES, NETWORK, NODE>,
+    V: Versions,
+    RUNDA: RunDa<TYPES, NETWORK, NODE, V>,
 >(
     args: ValidatorArgs,
 ) where

@@ -6,7 +6,7 @@
 
 use std::time::{Duration, Instant};
 
-use hotshot_example_types::node_types::{Libp2pImpl, TestTypes};
+use hotshot_example_types::node_types::{Libp2pImpl, TestTypes, TestVersions};
 use hotshot_testing::{
     block_builder::SimpleBuilderImplementation,
     completion_task::{CompletionTaskDescription, TimeBasedCompletionTaskDescription},
@@ -24,7 +24,7 @@ use tracing::instrument;
 async fn libp2p_network_sync() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata: TestDescription<TestTypes, Libp2pImpl> = TestDescription {
+    let metadata: TestDescription<TestTypes, Libp2pImpl, TestVersions> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
             ..Default::default()
@@ -62,7 +62,7 @@ async fn test_memory_network_sync() {
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata: TestDescription<TestTypes, MemoryImpl> = TestDescription {
+    let metadata: TestDescription<TestTypes, MemoryImpl, TestVersions> = TestDescription {
         // allow more time to pass in CI
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
@@ -89,7 +89,7 @@ async fn test_memory_network_sync() {
 async fn libp2p_network_async() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata: TestDescription<TestTypes, Libp2pImpl> = TestDescription {
+    let metadata: TestDescription<TestTypes, Libp2pImpl, TestVersions> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
             num_failed_views: 50,
@@ -103,7 +103,8 @@ async fn libp2p_network_async() {
         timing_data: TimingData {
             timeout_ratio: (1, 1),
             next_view_timeout: 25000,
-            ..TestDescription::<TestTypes, Libp2pImpl>::default_multiple_rounds().timing_data
+            ..TestDescription::<TestTypes, Libp2pImpl, TestVersions>::default_multiple_rounds()
+                .timing_data
         },
         unreliable_network: Some(Box::new(AsynchronousNetwork {
             keep_numerator: 9,
@@ -136,7 +137,7 @@ async fn test_memory_network_async() {
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata: TestDescription<TestTypes, MemoryImpl> = TestDescription {
+    let metadata: TestDescription<TestTypes, MemoryImpl, TestVersions> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
             num_failed_views: 5000,
@@ -151,7 +152,8 @@ async fn test_memory_network_async() {
         timing_data: TimingData {
             timeout_ratio: (1, 1),
             next_view_timeout: 1000,
-            ..TestDescription::<TestTypes, MemoryImpl>::default_multiple_rounds().timing_data
+            ..TestDescription::<TestTypes, MemoryImpl, TestVersions>::default_multiple_rounds()
+                .timing_data
         },
         unreliable_network: Some(Box::new(AsynchronousNetwork {
             keep_numerator: 95,
@@ -182,7 +184,7 @@ async fn test_memory_network_partially_sync() {
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata: TestDescription<TestTypes, MemoryImpl> = TestDescription {
+    let metadata: TestDescription<TestTypes, MemoryImpl, TestVersions> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             num_failed_views: 0,
             ..Default::default()
@@ -226,7 +228,7 @@ async fn test_memory_network_partially_sync() {
 async fn libp2p_network_partially_sync() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata: TestDescription<TestTypes, Libp2pImpl> = TestDescription {
+    let metadata: TestDescription<TestTypes, Libp2pImpl, TestVersions> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             num_failed_views: 0,
             ..Default::default()
@@ -275,7 +277,7 @@ async fn test_memory_network_chaos() {
 
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata: TestDescription<TestTypes, MemoryImpl> = TestDescription {
+    let metadata: TestDescription<TestTypes, MemoryImpl, TestVersions> = TestDescription {
         // allow more time to pass in CI
         completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
             TimeBasedCompletionTaskDescription {
@@ -306,7 +308,7 @@ async fn test_memory_network_chaos() {
 async fn libp2p_network_chaos() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
-    let metadata: TestDescription<TestTypes, Libp2pImpl> = TestDescription {
+    let metadata: TestDescription<TestTypes, Libp2pImpl, TestVersions> = TestDescription {
         overall_safety_properties: OverallSafetyPropertiesDescription {
             check_leaf: true,
             ..Default::default()

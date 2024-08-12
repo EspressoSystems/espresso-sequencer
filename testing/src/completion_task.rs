@@ -13,7 +13,7 @@ use async_lock::RwLock;
 use async_std::task::JoinHandle;
 use hotshot::traits::TestableNodeImplementation;
 use hotshot_task_impls::helpers::broadcast_event;
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::node_implementation::{NodeType, Versions};
 use snafu::Snafu;
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::JoinHandle;
@@ -27,17 +27,19 @@ use crate::{test_runner::Node, test_task::TestEvent};
 pub struct CompletionTaskErr {}
 
 /// Completion task state
-pub struct CompletionTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
+pub struct CompletionTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions> {
     pub tx: Sender<TestEvent>,
 
     pub rx: Receiver<TestEvent>,
     /// handles to the nodes in the test
-    pub(crate) handles: Arc<RwLock<Vec<Node<TYPES, I>>>>,
+    pub(crate) handles: Arc<RwLock<Vec<Node<TYPES, I, V>>>>,
     /// Duration of the task.
     pub duration: Duration,
 }
 
-impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> CompletionTask<TYPES, I> {
+impl<TYPES: NodeType, I: TestableNodeImplementation<TYPES>, V: Versions>
+    CompletionTask<TYPES, I, V>
+{
     pub fn run(mut self) -> JoinHandle<()> {
         async_spawn(async move {
             if async_timeout(self.duration, self.wait_for_shutdown())

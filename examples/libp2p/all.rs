@@ -12,7 +12,7 @@ use async_compatibility_layer::{
     art::async_spawn,
     logging::{setup_backtrace, setup_logging},
 };
-use hotshot_example_types::state_types::TestTypes;
+use hotshot_example_types::{node_types::TestVersions, state_types::TestTypes};
 use hotshot_orchestrator::client::ValidatorArgs;
 use infra::{gen_local_address, BUILDER_BASE_PORT, VALIDATOR_BASE_PORT};
 use tracing::instrument;
@@ -51,12 +51,14 @@ async fn main() {
         let builder_address = gen_local_address::<BUILDER_BASE_PORT>(i);
         let orchestrator_url = orchestrator_url.clone();
         let node = async_spawn(async move {
-            infra::main_entry_point::<TestTypes, Network, NodeImpl, ThisRun>(ValidatorArgs {
-                url: orchestrator_url,
-                advertise_address: Some(advertise_address),
-                builder_address: Some(builder_address),
-                network_config_file: None,
-            })
+            infra::main_entry_point::<TestTypes, Network, NodeImpl, TestVersions, ThisRun>(
+                ValidatorArgs {
+                    url: orchestrator_url,
+                    advertise_address: Some(advertise_address),
+                    builder_address: Some(builder_address),
+                    network_config_file: None,
+                },
+            )
             .await;
         });
         nodes.push(node);

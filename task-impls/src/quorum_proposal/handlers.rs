@@ -20,10 +20,9 @@ use hotshot_task::{
 };
 use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
-    constants::MarketplaceVersion,
     data::{Leaf, QuorumProposal, VidDisperse, ViewChangeEvidence},
     message::Proposal,
-    simple_certificate::{version, UpgradeCertificate},
+    simple_certificate::UpgradeCertificate,
     traits::{
         block_contents::BlockHeader, node_implementation::NodeType, signature_key::SignatureKey,
     },
@@ -34,6 +33,7 @@ use vbs::version::StaticVersionType;
 use crate::{
     events::HotShotEvent,
     helpers::{broadcast_event, fetch_proposal, parent_leaf_and_state},
+    quorum_proposal::{UpgradeLock, Versions},
 };
 
 /// Proposal dependency types. These types represent events that precipitate a proposal.
@@ -59,7 +59,7 @@ pub(crate) enum ProposalDependency {
 }
 
 /// Handler for the proposal dependency
-pub struct ProposalDependencyHandle<TYPES: NodeType> {
+pub struct ProposalDependencyHandle<TYPES: NodeType, V: Versions> {
     /// Latest view number that has been proposed for (proxy for cur_view).
     pub latest_proposed_view: TYPES::Time,
 
@@ -98,14 +98,14 @@ pub struct ProposalDependencyHandle<TYPES: NodeType> {
     /// since they will be present in the leaf we propose off of.
     pub formed_upgrade_certificate: Option<UpgradeCertificate<TYPES>>,
 
-    /// An upgrade certificate that has been decided on, if any.
-    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
+    /// Lock for a decided upgrade
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
 
     /// The node's id
     pub id: u64,
 }
 
-impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
+impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
     /// Publishes a proposal given the [`CommitmentAndMetadata`], [`VidDisperse`]
     /// and high qc [`hotshot_types::simple_certificate::QuorumCertificate`],
     /// with optional [`ViewChangeEvidence`].
@@ -165,12 +165,9 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
             "Cannot propose because our VID payload commitment and metadata is for an older view."
         );
 
-        let version = version(
-            self.view_number,
-            &self.decided_upgrade_certificate.read().await.clone(),
-        )?;
+        let version = self.upgrade_lock.version(self.view_number).await?;
 
-        let block_header = if version < MarketplaceVersion::VERSION {
+        let block_header = if version < V::Marketplace::VERSION {
             TYPES::BlockHeader::new_legacy(
                 state.as_ref(),
                 self.instance_state.as_ref(),
@@ -246,7 +243,7 @@ impl<TYPES: NodeType> ProposalDependencyHandle<TYPES> {
         Ok(())
     }
 }
-impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
+impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<TYPES, V> {
     type Output = Vec<Vec<Vec<Arc<HotShotEvent<TYPES>>>>>;
 
     #[allow(clippy::no_effect_underscore_binding)]
@@ -347,7 +344,7 @@ impl<TYPES: NodeType> HandleDepOutput for ProposalDependencyHandle<TYPES> {
                 vid_share.unwrap(),
                 proposal_cert,
                 self.formed_upgrade_certificate.clone(),
-                Arc::clone(&self.decided_upgrade_certificate),
+                Arc::clone(&self.upgrade_lock.decided_upgrade_certificate),
             )
             .await
         {

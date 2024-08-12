@@ -12,22 +12,20 @@ use std::{
 use anyhow::{bail, Result};
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_timeout};
-use async_lock::RwLock;
 use async_trait::async_trait;
 use futures::{future::join_all, stream::FuturesUnordered, StreamExt};
 use hotshot_builder_api::v0_1::block_info::AvailableBlockInfo;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
-    constants::MarketplaceVersion,
     data::{null_block, PackedBundle},
     event::{Event, EventType},
-    simple_certificate::{version, UpgradeCertificate},
+    message::UpgradeLock,
     traits::{
         auction_results_provider::AuctionResultsProvider,
         block_contents::{precompute_vid_commitment, BuilderFee, EncodeBytes},
         election::Membership,
-        node_implementation::{ConsensusTime, HasUrls, NodeImplementation, NodeType},
+        node_implementation::{ConsensusTime, HasUrls, NodeImplementation, NodeType, Versions},
         signature_key::{BuilderSignatureKey, SignatureKey},
         BlockPayload,
     },
@@ -76,7 +74,7 @@ pub struct BuilderResponse<TYPES: NodeType> {
 }
 
 /// Tracks state of a Transaction task
-pub struct TransactionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct TransactionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// The state's api
     pub builder_timeout: Duration,
 
@@ -106,25 +104,22 @@ pub struct TransactionTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     pub instance_state: Arc<TYPES::InstanceState>,
     /// This state's ID
     pub id: u64,
-    /// Decided upgrade certificate
-    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
+    /// Lock for a decided upgrade
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
     /// auction results provider
     pub auction_results_provider: Arc<I::AuctionResultsProvider>,
     /// fallback builder url
     pub fallback_builder_url: Url,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTaskState<TYPES, I, V> {
     /// handle view change decide legacy or not
     pub async fn handle_view_change(
         &mut self,
         event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
         block_view: TYPES::Time,
     ) -> Option<HotShotTaskCompleted> {
-        let version = match version(
-            block_view,
-            &self.decided_upgrade_certificate.read().await.clone(),
-        ) {
+        let version = match self.upgrade_lock.version(block_view).await {
             Ok(v) => v,
             Err(e) => {
                 tracing::error!("Failed to calculate version: {:?}", e);
@@ -132,7 +127,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
             }
         };
 
-        if version < MarketplaceVersion::VERSION {
+        if version < V::Marketplace::VERSION {
             self.handle_view_change_legacy(event_stream, block_view)
                 .await
         } else {
@@ -148,15 +143,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
         event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
         block_view: TYPES::Time,
     ) -> Option<HotShotTaskCompleted> {
-        let version = match hotshot_types::simple_certificate::version(
-            block_view,
-            &self
-                .decided_upgrade_certificate
-                .read()
-                .await
-                .as_ref()
-                .cloned(),
-        ) {
+        let version = match self.upgrade_lock.version(block_view).await {
             Ok(v) => v,
             Err(err) => {
                 error!("Upgrade certificate requires unsupported version, refusing to request blocks: {}", err);
@@ -167,6 +154,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
         // Request a block from the builder unless we are between versions.
         let block = {
             if self
+                .upgrade_lock
                 .decided_upgrade_certificate
                 .read()
                 .await
@@ -214,7 +202,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
                 .add(1);
 
             let membership_total_nodes = self.membership.total_nodes();
-            let Some(null_fee) = null_block::builder_fee(self.membership.total_nodes(), version)
+            let Some(null_fee) =
+                null_block::builder_fee::<TYPES, V>(self.membership.total_nodes(), version)
             else {
                 error!("Failed to get null fee");
                 return None;
@@ -250,15 +239,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
         event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
         block_view: TYPES::Time,
     ) -> Option<HotShotTaskCompleted> {
-        let version = match hotshot_types::simple_certificate::version(
-            block_view,
-            &self
-                .decided_upgrade_certificate
-                .read()
-                .await
-                .as_ref()
-                .cloned(),
-        ) {
+        let version = match self.upgrade_lock.version(block_view).await {
             Ok(v) => v,
             Err(err) => {
                 error!("Upgrade certificate requires unsupported version, refusing to request blocks: {}", err);
@@ -268,6 +249,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
 
         // Only request bundles and propose with a nonempty block if we are not between versions.
         if !self
+            .upgrade_lock
             .decided_upgrade_certificate
             .read()
             .await
@@ -367,7 +349,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
             .add(1);
 
         let membership_total_nodes = self.membership.total_nodes();
-        let Some(null_fee) = null_block::builder_fee(self.membership.total_nodes(), version) else {
+        let Some(null_fee) =
+            null_block::builder_fee::<TYPES, V>(self.membership.total_nodes(), version)
+        else {
             error!("Failed to get null fee");
             return None;
         };
@@ -738,7 +722,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TransactionTaskState<TYPES, 
 
 #[async_trait]
 /// task state implementation for Transactions Task
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for TransactionTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
+    for TransactionTaskState<TYPES, I, V>
+{
     type Event = HotShotEvent<TYPES>;
 
     async fn handle_event(

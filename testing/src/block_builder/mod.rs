@@ -85,7 +85,7 @@ pub fn run_builder_source<TYPES, Source>(
             let mut app: App<Source, Error> = App::with_state(source);
             app.register_module("block_info", builder_api)
                 .expect("Failed to register the builder API");
-            async_spawn(app.serve(url, TYPES::Base::instance()))
+            async_spawn(app.serve(url, hotshot_builder_api::v0_1::Version::instance()))
         };
 
         let mut handle = Some(start_builder(url.clone(), source.clone()));

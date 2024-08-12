@@ -26,8 +26,8 @@ pub struct RewindTaskState<TYPES: NodeType> {
 
 impl<TYPES: NodeType> RewindTaskState<TYPES> {
     /// Handles all events, storing them to the private state
-    pub fn handle(&mut self, event: Arc<HotShotEvent<TYPES>>) {
-        self.events.push(Arc::clone(&event));
+    pub fn handle(&mut self, event: &Arc<HotShotEvent<TYPES>>) {
+        self.events.push(Arc::clone(event));
     }
 }
 
@@ -41,7 +41,7 @@ impl<TYPES: NodeType> TaskState for RewindTaskState<TYPES> {
         _sender: &Sender<Arc<Self::Event>>,
         _receiver: &Receiver<Arc<Self::Event>>,
     ) -> Result<()> {
-        self.handle(event);
+        self.handle(&event);
         Ok(())
     }
 

@@ -20,9 +20,10 @@ use hotshot_types::{
     consensus::{Consensus, OuterConsensus},
     data::{Leaf, ViewChangeEvidence},
     event::Event,
+    message::UpgradeLock,
     simple_certificate::UpgradeCertificate,
     traits::{
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::{NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
     },
     vote::HasViewNumber,
@@ -43,7 +44,7 @@ mod handlers;
 
 /// The state for the quorum proposal task. Contains all of the information for
 /// handling [`HotShotEvent::QuorumProposalRecv`] events.
-pub struct QuorumProposalRecvTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct QuorumProposalRecvTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// Our public key
     pub public_key: TYPES::SignatureKey,
 
@@ -96,11 +97,13 @@ pub struct QuorumProposalRecvTaskState<TYPES: NodeType, I: NodeImplementation<TY
     /// The node's id
     pub id: u64,
 
-    /// An upgrade certificate that has been decided on, if any.
-    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
+    /// Lock for a decided upgrade
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
+    QuorumProposalRecvTaskState<TYPES, I, V>
+{
     /// Cancel all tasks the consensus tasks has spawned before the given view
     pub async fn cancel_tasks(&mut self, view: TYPES::Time) {
         let keep = self.spawned_tasks.split_off(&view);
@@ -134,8 +137,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> QuorumProposalRecvTaskState<
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState
-    for QuorumProposalRecvTaskState<TYPES, I>
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
+    for QuorumProposalRecvTaskState<TYPES, I, V>
 {
     type Event = HotShotEvent<TYPES>;
 

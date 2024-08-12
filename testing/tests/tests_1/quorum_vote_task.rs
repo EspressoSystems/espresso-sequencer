@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use hotshot::tasks::task_state::CreateTaskState;
-use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
+use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
 use hotshot_macros::{run_test, test_scripts};
 use hotshot_testing::{
     all_predicates,
@@ -40,7 +40,9 @@ async fn test_quorum_vote_task_success() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(2).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
+        .await
+        .0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -84,7 +86,7 @@ async fn test_quorum_vote_task_success() {
     ])];
 
     let quorum_vote_state =
-        QuorumVoteTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+        QuorumVoteTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
 
     let mut script = TaskScript {
         timeout: TIMEOUT,
@@ -106,7 +108,9 @@ async fn test_quorum_vote_task_miss_dependency() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(2).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
+        .await
+        .0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -169,7 +173,7 @@ async fn test_quorum_vote_task_miss_dependency() {
     ];
 
     let quorum_vote_state =
-        QuorumVoteTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+        QuorumVoteTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
 
     let mut script = TaskScript {
         timeout: TIMEOUT,
@@ -191,7 +195,9 @@ async fn test_quorum_vote_task_incorrect_dependency() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(2).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(2)
+        .await
+        .0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -221,7 +227,7 @@ async fn test_quorum_vote_task_incorrect_dependency() {
     ])];
 
     let quorum_vote_state =
-        QuorumVoteTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+        QuorumVoteTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
 
     let mut script = TaskScript {
         timeout: TIMEOUT,

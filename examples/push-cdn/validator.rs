@@ -7,7 +7,7 @@
 //! A validator
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
-use hotshot_example_types::state_types::TestTypes;
+use hotshot_example_types::{node_types::TestVersions, state_types::TestTypes};
 use hotshot_orchestrator::client::ValidatorArgs;
 use tracing::{debug, instrument};
 
@@ -28,5 +28,5 @@ async fn main() {
     setup_backtrace();
     let args = ValidatorArgs::parse();
     debug!("connecting to orchestrator at {:?}", args.url);
-    infra::main_entry_point::<TestTypes, Network, NodeImpl, ThisRun>(args).await;
+    infra::main_entry_point::<TestTypes, Network, NodeImpl, TestVersions, ThisRun>(args).await;
 }

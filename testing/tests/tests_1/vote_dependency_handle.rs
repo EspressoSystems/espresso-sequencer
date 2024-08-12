@@ -5,7 +5,7 @@ use std::time::Duration;
 use async_broadcast::broadcast;
 use async_compatibility_layer::art::async_timeout;
 use futures::StreamExt;
-use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
+use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
 use hotshot_task::dependency_task::HandleDepOutput;
 use hotshot_task_impls::{events::HotShotEvent::*, quorum_vote::VoteDependencyHandle};
 use hotshot_testing::{
@@ -14,8 +14,10 @@ use hotshot_testing::{
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
-    consensus::OuterConsensus, data::ViewNumber, traits::consensus_api::ConsensusApi,
-    traits::node_implementation::ConsensusTime, vote::HasViewNumber,
+    consensus::OuterConsensus,
+    data::ViewNumber,
+    traits::{consensus_api::ConsensusApi, node_implementation::ConsensusTime},
+    vote::HasViewNumber,
 };
 use itertools::Itertools;
 
@@ -33,7 +35,7 @@ async fn test_vote_dependency_handle() {
     // We use a node ID of 2 here abitrarily. We just need it to build the system handle.
     let node_id = 2;
     // Construct the system handle for the node ID to build all of the state objects.
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(node_id)
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(node_id)
         .await
         .0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
@@ -85,19 +87,20 @@ async fn test_vote_dependency_handle() {
         let (event_sender, mut event_receiver) = broadcast(1024);
         let view_number = ViewNumber::new(node_id);
 
-        let vote_dependency_handle_state = VoteDependencyHandle::<TestTypes, MemoryImpl> {
-            public_key: handle.public_key().clone(),
-            private_key: handle.private_key().clone(),
-            consensus: OuterConsensus::new(consensus.clone()),
-            instance_state: handle.hotshot.instance_state(),
-            quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
-            storage: Arc::clone(&handle.storage()),
-            view_number,
-            sender: event_sender.clone(),
-            receiver: event_receiver.clone(),
-            decided_upgrade_certificate: Arc::clone(&handle.hotshot.decided_upgrade_certificate),
-            id: handle.hotshot.id,
-        };
+        let vote_dependency_handle_state =
+            VoteDependencyHandle::<TestTypes, MemoryImpl, TestVersions> {
+                public_key: handle.public_key().clone(),
+                private_key: handle.private_key().clone(),
+                consensus: OuterConsensus::new(consensus.clone()),
+                instance_state: handle.hotshot.instance_state(),
+                quorum_membership: handle.hotshot.memberships.quorum_membership.clone().into(),
+                storage: Arc::clone(&handle.storage()),
+                view_number,
+                sender: event_sender.clone(),
+                receiver: event_receiver.clone(),
+                upgrade_lock: handle.hotshot.upgrade_lock.clone(),
+                id: handle.hotshot.id,
+            };
 
         vote_dependency_handle_state
             .handle_dep_result(inputs.clone().into_iter().map(|i| i.into()).collect())

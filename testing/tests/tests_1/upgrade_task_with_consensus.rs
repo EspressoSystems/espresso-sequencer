@@ -15,7 +15,7 @@ use futures::StreamExt;
 use hotshot::{tasks::task_state::CreateTaskState, types::SystemContextHandle};
 use hotshot_example_types::{
     block_types::{TestMetadata, TestTransaction},
-    node_types::{MemoryImpl, TestTypes},
+    node_types::{MemoryImpl, TestTypes, TestVersions},
     state_types::TestInstanceState,
 };
 use hotshot_macros::test_scripts;
@@ -29,10 +29,12 @@ use hotshot_testing::{
     view_generator::TestViewGenerator,
 };
 use hotshot_types::{
-    constants::BaseVersion,
     data::{null_block, ViewNumber},
     simple_vote::UpgradeProposalData,
-    traits::{election::Membership, node_implementation::ConsensusTime},
+    traits::{
+        election::Membership,
+        node_implementation::{ConsensusTime, Versions},
+    },
     vote::HasViewNumber,
 };
 use vbs::version::{StaticVersionType, Version};
@@ -47,7 +49,9 @@ async fn test_upgrade_task_vote() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(1).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(1)
+        .await
+        .0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -180,7 +184,8 @@ async fn test_upgrade_task_vote() {
         },
     ];
 
-    let consensus_state = ConsensusTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+    let consensus_state =
+        ConsensusTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
     let mut consensus_script = TaskScript {
         timeout: Duration::from_millis(65),
         state: consensus_state,
@@ -204,7 +209,9 @@ async fn test_upgrade_task_propose() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(3).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(3)
+        .await
+        .0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
@@ -255,8 +262,10 @@ async fn test_upgrade_task_propose() {
         .iter()
         .map(|h| views[2].create_upgrade_vote(upgrade_data.clone(), &h.0));
 
-    let consensus_state = ConsensusTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
-    let upgrade_state = UpgradeTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+    let consensus_state =
+        ConsensusTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
+    let upgrade_state =
+        UpgradeTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
 
     let upgrade_vote_recvs: Vec<_> = upgrade_votes.map(UpgradeVoteRecv).collect();
 
@@ -279,9 +288,9 @@ async fn test_upgrade_task_propose() {
                 proposals[2].data.block_header.builder_commitment.clone(),
                 TestMetadata,
                 ViewNumber::new(3),
-                vec1![null_block::builder_fee(
+                vec1![null_block::builder_fee::<TestTypes, TestVersions>(
                     quorum_membership.total_nodes(),
-                    BaseVersion::version()
+                    <TestVersions as Versions>::Base::VERSION
                 )
                 .unwrap()],
                 None,
@@ -366,15 +375,20 @@ async fn test_upgrade_task_blank_blocks() {
     async_compatibility_layer::logging::setup_logging();
     async_compatibility_layer::logging::setup_backtrace();
 
-    let handle = build_system_handle::<TestTypes, MemoryImpl>(6).await.0;
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(6)
+        .await
+        .0;
     let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
     let da_membership = handle.hotshot.memberships.da_membership.clone();
 
     let old_version = Version { major: 0, minor: 1 };
     let new_version = Version { major: 0, minor: 2 };
 
-    let builder_fee =
-        null_block::builder_fee(quorum_membership.total_nodes(), BaseVersion::version()).unwrap();
+    let builder_fee = null_block::builder_fee::<TestTypes, TestVersions>(
+        quorum_membership.total_nodes(),
+        <TestVersions as Versions>::Base::VERSION,
+    )
+    .unwrap();
 
     let upgrade_data: UpgradeProposalData<TestTypes> = UpgradeProposalData {
         old_version,
@@ -452,8 +466,10 @@ async fn test_upgrade_task_blank_blocks() {
         views.push(view.clone());
     }
 
-    let consensus_state = ConsensusTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
-    let upgrade_state = UpgradeTaskState::<TestTypes, MemoryImpl>::create_from(&handle).await;
+    let consensus_state =
+        ConsensusTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
+    let upgrade_state =
+        UpgradeTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
 
     let inputs = vec![
         vec![

@@ -9,13 +9,13 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use hotshot_example_types::node_types::{MemoryImpl, TestTypes};
+use hotshot_example_types::node_types::{MemoryImpl, TestTypes, TestVersions};
 use hotshot_task_impls::consensus::ConsensusTaskState;
 use hotshot_types::simple_certificate::UpgradeCertificate;
 
 use crate::predicates::{Predicate, PredicateResult};
 
-type ConsensusTaskTestState = ConsensusTaskState<TestTypes, MemoryImpl>;
+type ConsensusTaskTestState = ConsensusTaskState<TestTypes, MemoryImpl, TestVersions>;
 
 type UpgradeCertCallback =
     Arc<dyn Fn(Arc<Option<UpgradeCertificate<TestTypes>>>) -> bool + Send + Sync>;
@@ -34,7 +34,12 @@ impl std::fmt::Debug for UpgradeCertPredicate {
 #[async_trait]
 impl Predicate<ConsensusTaskTestState> for UpgradeCertPredicate {
     async fn evaluate(&self, input: &ConsensusTaskTestState) -> PredicateResult {
-        let upgrade_cert = input.decided_upgrade_certificate.read().await.clone();
+        let upgrade_cert = input
+            .upgrade_lock
+            .decided_upgrade_certificate
+            .read()
+            .await
+            .clone();
         PredicateResult::from((self.check)(upgrade_cert.into()))
     }
 

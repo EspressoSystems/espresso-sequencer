@@ -4,8 +4,6 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-#![cfg(not(feature = "dependency-tasks"))]
-
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::Result;
@@ -21,12 +19,12 @@ use hotshot_types::{
     consensus::{CommitmentAndMetadata, OuterConsensus},
     data::{QuorumProposal, VidDisperseShare, ViewChangeEvidence},
     event::{Event, EventType},
-    message::Proposal,
+    message::{Proposal, UpgradeLock},
     simple_certificate::{QuorumCertificate, TimeoutCertificate, UpgradeCertificate},
     simple_vote::{QuorumVote, TimeoutData, TimeoutVote},
     traits::{
         election::Membership,
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::{NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
         storage::Storage,
     },
@@ -58,7 +56,7 @@ type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYP
 
 /// The state for the consensus task.  Contains all of the information for the implementation
 /// of consensus
-pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// Our public key
     pub public_key: TYPES::SignatureKey,
     /// Our Private Key
@@ -132,11 +130,11 @@ pub struct ConsensusTaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// This node's storage ref
     pub storage: Arc<RwLock<I::Storage>>,
 
-    /// an upgrade certificate that has been decided on, if any
-    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
+    /// Lock for a decided upgrade
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
 }
 
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskState<TYPES, I, V> {
     /// Cancel all tasks the consensus tasks has spawned before the given view
     pub async fn cancel_tasks(&mut self, view: TYPES::Time) {
         let keep = self.spawned_tasks.split_off(&view);
@@ -210,7 +208,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
             OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
             self.round_start_delay,
             self.formed_upgrade_certificate.clone(),
-            Arc::clone(&self.decided_upgrade_certificate),
+            self.upgrade_lock.clone(),
             self.payload_commitment_and_metadata.clone(),
             self.proposal_cert.clone(),
             Arc::clone(&self.instance_state),
@@ -240,7 +238,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
         if proposal.view_number() != view {
             return;
         }
-        let upgrade = Arc::clone(&self.decided_upgrade_certificate);
+        let upgrade = self.upgrade_lock.clone();
         let pub_key = self.public_key.clone();
         let priv_key = self.private_key.clone();
         let consensus = OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus));
@@ -250,7 +248,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
         let instance_state = Arc::clone(&self.instance_state);
         let id = self.id;
         let handle = async_spawn(async move {
-            update_state_and_vote_if_able::<TYPES, I>(
+            update_state_and_vote_if_able::<TYPES, I, V>(
                 view,
                 proposal,
                 pub_key,
@@ -489,7 +487,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
 
                 // If we have a decided upgrade certificate, the protocol version may also have
                 // been upgraded.
-                if let Some(cert) = self.decided_upgrade_certificate.read().await.clone() {
+                if let Some(cert) = self
+                    .upgrade_lock
+                    .decided_upgrade_certificate
+                    .read()
+                    .await
+                    .clone()
+                {
                     if new_view == cert.data.new_version_first_view {
                         error!(
                             "Version upgraded based on a decided upgrade cert: {:?}",
@@ -703,7 +707,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ConsensusTaskState<TYPES, I>
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for ConsensusTaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
+    for ConsensusTaskState<TYPES, I, V>
+{
     type Event = HotShotEvent<TYPES>;
 
     async fn handle_event(

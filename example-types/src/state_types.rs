@@ -5,6 +5,8 @@
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
 //! Implementations for examples and tests only
+use std::fmt::Debug;
+
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use hotshot_types::{
@@ -19,7 +21,6 @@ use hotshot_types::{
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
 use vbs::version::Version;
 
 pub use crate::node_types::TestTypes;

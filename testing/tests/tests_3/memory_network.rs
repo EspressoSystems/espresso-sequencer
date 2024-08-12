@@ -19,12 +19,13 @@ use hotshot::{
 use hotshot_example_types::{
     auction_results_provider_types::{TestAuctionResult, TestAuctionResultsProvider},
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
+    node_types::TestVersions,
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
 };
 use hotshot_types::{
     data::ViewNumber,
-    message::{DataMessage, Message, MessageKind, VersionedMessage},
+    message::{DataMessage, Message, MessageKind, UpgradeLock},
     signature_key::{BLSPubKey, BuilderKey},
     traits::{
         network::{BroadcastDelay, ConnectedNetwork, TestableNetworkingImplementation, Topic},
@@ -34,7 +35,6 @@ use hotshot_types::{
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use serde::{Deserialize, Serialize};
 use tracing::{instrument, trace};
-use vbs::version::StaticVersion;
 
 #[derive(
     Copy,
@@ -53,12 +53,6 @@ pub struct Test;
 
 impl NodeType for Test {
     type AuctionResult = TestAuctionResult;
-    type Base = StaticVersion<0, 1>;
-    type Upgrade = StaticVersion<0, 2>;
-    const UPGRADE_HASH: [u8; 32] = [
-        1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-        0, 0,
-    ];
     type Time = ViewNumber;
     type BlockHeader = TestBlockHeader;
     type BlockPayload = TestBlockPayload;
@@ -167,10 +161,12 @@ async fn memory_network_direct_queue() {
 
     let first_messages: Vec<Message<Test>> = gen_messages(5, 100, pub_key_1);
 
+    let upgrade_lock = UpgradeLock::<Test, TestVersions>::new();
+
     // Test 1 -> 2
     // Send messages
     for sent_message in first_messages {
-        let serialized_message = VersionedMessage::serialize(&sent_message, &None).unwrap();
+        let serialized_message = upgrade_lock.serialize(&sent_message).await.unwrap();
         network1
             .direct_message(serialized_message.clone(), pub_key_2)
             .await
@@ -180,7 +176,7 @@ async fn memory_network_direct_queue() {
             .await
             .expect("Failed to receive message");
         let recv_message = recv_messages.pop().unwrap();
-        let deserialized_message = VersionedMessage::deserialize(&recv_message, &None).unwrap();
+        let deserialized_message = upgrade_lock.deserialize(&recv_message).await.unwrap();
         assert!(recv_messages.is_empty());
         fake_message_eq(sent_message, deserialized_message);
     }
@@ -190,7 +186,7 @@ async fn memory_network_direct_queue() {
     // Test 2 -> 1
     // Send messages
     for sent_message in second_messages {
-        let serialized_message = VersionedMessage::serialize(&sent_message, &None).unwrap();
+        let serialized_message = upgrade_lock.serialize(&sent_message).await.unwrap();
         network2
             .direct_message(serialized_message.clone(), pub_key_1)
             .await
@@ -200,7 +196,7 @@ async fn memory_network_direct_queue() {
             .await
             .expect("Failed to receive message");
         let recv_message = recv_messages.pop().unwrap();
-        let deserialized_message = VersionedMessage::deserialize(&recv_message, &None).unwrap();
+        let deserialized_message = upgrade_lock.deserialize(&recv_message).await.unwrap();
         assert!(recv_messages.is_empty());
         fake_message_eq(sent_message, deserialized_message);
     }
@@ -220,10 +216,12 @@ async fn memory_network_broadcast_queue() {
 
     let first_messages: Vec<Message<Test>> = gen_messages(5, 100, pub_key_1);
 
+    let upgrade_lock = UpgradeLock::<Test, TestVersions>::new();
+
     // Test 1 -> 2
     // Send messages
     for sent_message in first_messages {
-        let serialized_message = VersionedMessage::serialize(&sent_message, &None).unwrap();
+        let serialized_message = upgrade_lock.serialize(&sent_message).await.unwrap();
         network1
             .broadcast_message(serialized_message.clone(), Topic::Da, BroadcastDelay::None)
             .await
@@ -233,7 +231,7 @@ async fn memory_network_broadcast_queue() {
             .await
             .expect("Failed to receive message");
         let recv_message = recv_messages.pop().unwrap();
-        let deserialized_message = VersionedMessage::deserialize(&recv_message, &None).unwrap();
+        let deserialized_message = upgrade_lock.deserialize(&recv_message).await.unwrap();
         assert!(recv_messages.is_empty());
         fake_message_eq(sent_message, deserialized_message);
     }
@@ -243,7 +241,7 @@ async fn memory_network_broadcast_queue() {
     // Test 2 -> 1
     // Send messages
     for sent_message in second_messages {
-        let serialized_message = VersionedMessage::serialize(&sent_message, &None).unwrap();
+        let serialized_message = upgrade_lock.serialize(&sent_message).await.unwrap();
         network2
             .broadcast_message(
                 serialized_message.clone(),
@@ -257,7 +255,7 @@ async fn memory_network_broadcast_queue() {
             .await
             .expect("Failed to receive message");
         let recv_message = recv_messages.pop().unwrap();
-        let deserialized_message = VersionedMessage::deserialize(&recv_message, &None).unwrap();
+        let deserialized_message = upgrade_lock.deserialize(&recv_message).await.unwrap();
         assert!(recv_messages.is_empty());
         fake_message_eq(sent_message, deserialized_message);
     }
@@ -289,8 +287,10 @@ async fn memory_network_test_in_flight_message_count() {
         Some(0)
     );
 
+    let upgrade_lock = UpgradeLock::<Test, TestVersions>::new();
+
     for (count, message) in messages.iter().enumerate() {
-        let serialized_message = VersionedMessage::serialize(message, &None).unwrap();
+        let serialized_message = upgrade_lock.serialize(message).await.unwrap();
 
         network1
             .direct_message(serialized_message.clone(), pub_key_2)

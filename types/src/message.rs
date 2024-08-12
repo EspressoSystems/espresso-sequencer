@@ -9,9 +9,10 @@
 //! This module contains types used to represent the various types of messages that
 //! `HotShot` nodes can send among themselves.
 
-use std::{fmt, fmt::Debug, marker::PhantomData};
+use std::{fmt, fmt::Debug, marker::PhantomData, sync::Arc};
 
 use anyhow::{bail, ensure, Context, Result};
+use async_lock::RwLock;
 use cdn_proto::util::mnemonic;
 use committable::Committable;
 use derivative::Derivative;
@@ -24,7 +25,7 @@ use vbs::{
 use crate::{
     data::{DaProposal, Leaf, QuorumProposal, UpgradeProposal, VidDisperseShare},
     simple_certificate::{
-        version, DaCertificate, UpgradeCertificate, ViewSyncCommitCertificate2,
+        DaCertificate, UpgradeCertificate, ViewSyncCommitCertificate2,
         ViewSyncFinalizeCertificate2, ViewSyncPreCommitCertificate2,
     },
     simple_vote::{
@@ -34,7 +35,7 @@ use crate::{
     traits::{
         election::Membership,
         network::{DataRequest, ResponseMessage, ViewMessage},
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         signature_key::SignatureKey,
     },
     vote::HasViewNumber,
@@ -50,74 +51,6 @@ pub struct Message<TYPES: NodeType> {
     /// The message kind
     pub kind: MessageKind<TYPES>,
 }
-
-/// Trait for messages that have a versioned serialization.
-pub trait VersionedMessage<'a, TYPES>
-where
-    TYPES: NodeType,
-    Self: Serialize + Deserialize<'a> + HasViewNumber<TYPES> + Sized,
-{
-    /// Serialize a message with a version number, using `message.view_number()` and an optional decided upgrade certificate to determine the message's version.
-    ///
-    /// # Errors
-    ///
-    /// Errors if serialization fails.
-    fn serialize(
-        &self,
-        upgrade_certificate: &Option<UpgradeCertificate<TYPES>>,
-    ) -> Result<Vec<u8>> {
-        let view = self.view_number();
-
-        let version = version(view, upgrade_certificate)?;
-
-        let serialized_message = match version {
-            // Associated constants cannot be used in pattern matches, so we do this trick instead.
-            v if v == TYPES::Base::VERSION => Serializer::<TYPES::Base>::serialize(&self),
-            v if v == TYPES::Upgrade::VERSION => Serializer::<TYPES::Upgrade>::serialize(&self),
-            _ => {
-                bail!("Attempted to serialize with an incompatible version. This should be impossible.");
-            }
-        };
-
-        serialized_message.context("Failed to serialize message!")
-    }
-
-    /// Deserialize a message with a version number, using `message.view_number()` and an optional decided upgrade certificate to determine the message's version. This function will fail on improperly versioned messages.
-    ///
-    /// # Errors
-    ///
-    /// Errors if deserialization fails.
-    fn deserialize(
-        message: &'a [u8],
-        upgrade_certificate: &Option<UpgradeCertificate<TYPES>>,
-    ) -> Result<Self> {
-        let actual_version = Version::deserialize(message)
-            .context("Failed to read message version!")?
-            .0;
-
-        let deserialized_message: Self = match actual_version {
-            v if v == TYPES::Base::VERSION => Serializer::<TYPES::Base>::deserialize(message),
-            v if v == TYPES::Upgrade::VERSION => Serializer::<TYPES::Upgrade>::deserialize(message),
-            _ => {
-                bail!("Cannot deserialize message!");
-            }
-        }
-        .context("Failed to deserialize message!")?;
-
-        let view = deserialized_message.view_number();
-
-        let expected_version = version(view, upgrade_certificate)?;
-
-        ensure!(
-            actual_version == expected_version,
-            "Message has invalid version number for its view. Expected: {expected_version}, Actual: {actual_version}, View: {view:?}"
-        );
-
-        Ok(deserialized_message)
-    }
-}
-
-impl<'a, TYPES> VersionedMessage<'a, TYPES> for Message<TYPES> where TYPES: NodeType {}
 
 impl<TYPES: NodeType> fmt::Debug for Message<TYPES> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -418,5 +351,110 @@ where
         );
 
         Ok(())
+    }
+}
+
+#[derive(Clone)]
+/// A lock for an upgrade certificate decided by HotShot, which doubles as `PhantomData` for an instance of the `Versions` trait.
+pub struct UpgradeLock<TYPES: NodeType, V: Versions> {
+    /// a shared lock to an upgrade certificate decided by consensus
+    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
+
+    /// phantom data for the `Versions` trait
+    pub _pd: PhantomData<V>,
+}
+
+impl<TYPES: NodeType, V: Versions> UpgradeLock<TYPES, V> {
+    #[allow(clippy::new_without_default)]
+    /// Create a new `UpgradeLock` for a fresh instance of HotShot
+    pub fn new() -> Self {
+        Self {
+            decided_upgrade_certificate: Arc::new(RwLock::new(None)),
+            _pd: PhantomData::<V>,
+        }
+    }
+
+    /// Calculate the version applied in a view, based on the provided upgrade lock.
+    ///
+    /// # Errors
+    /// Returns an error if we do not support the version required by the decided upgrade certificate.
+    pub async fn version(&self, view: TYPES::Time) -> Result<Version> {
+        let upgrade_certificate = self.decided_upgrade_certificate.read().await;
+
+        let version = match *upgrade_certificate {
+            Some(ref cert) => {
+                if view >= cert.data.new_version_first_view {
+                    if cert.data.new_version == V::Upgrade::VERSION {
+                        V::Upgrade::VERSION
+                    } else {
+                        bail!("The network has upgraded to a new version that we do not support!");
+                    }
+                } else {
+                    V::Base::VERSION
+                }
+            }
+            None => V::Base::VERSION,
+        };
+
+        Ok(version)
+    }
+
+    /// Serialize a message with a version number, using `message.view_number()` and an optional decided upgrade certificate to determine the message's version.
+    ///
+    /// # Errors
+    ///
+    /// Errors if serialization fails.
+    pub async fn serialize<M: HasViewNumber<TYPES> + Serialize>(
+        &self,
+        message: &M,
+    ) -> Result<Vec<u8>> {
+        let view = message.view_number();
+
+        let version = self.version(view).await?;
+
+        let serialized_message = match version {
+            // Associated constants cannot be used in pattern matches, so we do this trick instead.
+            v if v == V::Base::VERSION => Serializer::<V::Base>::serialize(&message),
+            v if v == V::Upgrade::VERSION => Serializer::<V::Upgrade>::serialize(&message),
+            _ => {
+                bail!("Attempted to serialize with an incompatible version. This should be impossible.");
+            }
+        };
+
+        serialized_message.context("Failed to serialize message!")
+    }
+
+    /// Deserialize a message with a version number, using `message.view_number()` to determine the message's version. This function will fail on improperly versioned messages.
+    ///
+    /// # Errors
+    ///
+    /// Errors if deserialization fails.
+    pub async fn deserialize<M: HasViewNumber<TYPES> + for<'a> Deserialize<'a>>(
+        &self,
+        message: &[u8],
+    ) -> Result<M> {
+        let actual_version = Version::deserialize(message)
+            .context("Failed to read message version!")?
+            .0;
+
+        let deserialized_message: M = match actual_version {
+            v if v == V::Base::VERSION => Serializer::<V::Base>::deserialize(message),
+            v if v == V::Upgrade::VERSION => Serializer::<V::Upgrade>::deserialize(message),
+            _ => {
+                bail!("Cannot deserialize message!");
+            }
+        }
+        .context("Failed to deserialize message!")?;
+
+        let view = deserialized_message.view_number();
+
+        let expected_version = self.version(view).await?;
+
+        ensure!(
+            actual_version == expected_version,
+            "Message has invalid version number for its view. Expected: {expected_version}, Actual: {actual_version}, View: {view:?}"
+        );
+
+        Ok(deserialized_message)
     }
 }

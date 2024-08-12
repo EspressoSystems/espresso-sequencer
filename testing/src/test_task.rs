@@ -16,8 +16,11 @@ use futures::future::select_all;
 use hotshot::types::Event;
 use hotshot_task_impls::{events::HotShotEvent, network::NetworkMessageTaskState};
 use hotshot_types::{
-    message::{Messages, VersionedMessage},
-    traits::{network::ConnectedNetwork, node_implementation::NodeType},
+    message::{Messages, UpgradeLock},
+    traits::{
+        network::ConnectedNetwork,
+        node_implementation::{NodeType, Versions},
+    },
 };
 #[cfg(async_executor_impl = "tokio")]
 use tokio::task::{spawn, JoinHandle};
@@ -109,10 +112,12 @@ impl<S: TestTaskState + Send + 'static> TestTask<S> {
 /// Add the network task to handle messages and publish events.
 pub async fn add_network_message_test_task<
     TYPES: NodeType,
+    V: Versions,
     NET: ConnectedNetwork<TYPES::SignatureKey>,
 >(
     internal_event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
     external_event_stream: Sender<Event<TYPES>>,
+    upgrade_lock: UpgradeLock<TYPES, V>,
     channel: Arc<NET>,
 ) -> JoinHandle<()> {
     let net = Arc::clone(&channel);
@@ -131,8 +136,7 @@ pub async fn add_network_message_test_task<
                     let mut deserialized_messages = Vec::new();
 
                     for msg in msgs {
-                        let deserialized_message = match VersionedMessage::deserialize(&msg, &None)
-                        {
+                        let deserialized_message = match upgrade_lock.deserialize(&msg).await {
                             Ok(deserialized) => deserialized,
                             Err(e) => {
                                 tracing::error!("Failed to deserialize message: {}", e);

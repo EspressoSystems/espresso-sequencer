@@ -16,10 +16,11 @@ use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
     event::Event,
-    simple_certificate::{QuorumCertificate, TimeoutCertificate, UpgradeCertificate},
+    message::UpgradeLock,
+    simple_certificate::{QuorumCertificate, TimeoutCertificate},
     simple_vote::{QuorumVote, TimeoutVote},
     traits::{
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::{NodeImplementation, NodeType, Versions},
         signature_key::SignatureKey,
     },
 };
@@ -39,7 +40,7 @@ type VoteCollectorOption<TYPES, VOTE, CERT> = Option<VoteCollectionTaskState<TYP
 mod handlers;
 
 /// Task state for the Consensus task.
-pub struct Consensus2TaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
+pub struct Consensus2TaskState<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> {
     /// Our public key
     pub public_key: TYPES::SignatureKey,
 
@@ -96,10 +97,10 @@ pub struct Consensus2TaskState<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     /// The node's id
     pub id: u64,
 
-    /// An upgrade certificate that has been decided on, if any.
-    pub decided_upgrade_certificate: Arc<RwLock<Option<UpgradeCertificate<TYPES>>>>,
+    /// Lock for a decided upgrade
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
 }
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Consensus2TaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Consensus2TaskState<TYPES, I, V> {
     /// Handles a consensus event received on the event stream
     #[instrument(skip_all, fields(id = self.id, cur_view = *self.cur_view, last_decided_view = *self.last_decided_view), name = "Consensus replica task", level = "error", target = "Consensus2TaskState")]
     pub async fn handle(
@@ -153,7 +154,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> Consensus2TaskState<TYPES, I
 }
 
 #[async_trait]
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for Consensus2TaskState<TYPES, I> {
+impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
+    for Consensus2TaskState<TYPES, I, V>
+{
     type Event = HotShotEvent<TYPES>;
 
     async fn handle_event(
