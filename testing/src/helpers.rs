@@ -72,9 +72,11 @@ pub async fn build_system_handle<
     let marketplace_config = (launcher.resource_generator.marketplace_config)(node_id);
     let config = launcher.resource_generator.config.clone();
 
-    let initializer = HotShotInitializer::<TYPES>::from_genesis(TestInstanceState {})
-        .await
-        .unwrap();
+    let initializer = HotShotInitializer::<TYPES>::from_genesis(TestInstanceState::new(
+        launcher.metadata.async_delay_config,
+    ))
+    .await
+    .unwrap();
 
     let known_nodes_with_stake = config.known_nodes_with_stake.clone();
     let private_key = config.my_own_validator_config.private_key.clone();

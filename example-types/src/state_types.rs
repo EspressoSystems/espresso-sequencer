@@ -5,8 +5,7 @@
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
 //! Implementations for examples and tests only
-use std::fmt::Debug;
-
+use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use hotshot_types::{
     data::{fake_commitment, BlockError, Leaf, ViewNumber},
@@ -20,16 +19,28 @@ use hotshot_types::{
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use vbs::version::Version;
 
-use crate::block_types::{TestBlockPayload, TestTransaction};
 pub use crate::node_types::TestTypes;
+use crate::{
+    block_types::{TestBlockPayload, TestTransaction},
+    testable_delay::{DelayConfig, SupportedTraitTypesForAsyncDelay, TestableDelay},
+};
 
 /// Instance-level state implementation for testing purposes.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct TestInstanceState {}
+#[derive(Clone, Debug, Default)]
+pub struct TestInstanceState {
+    pub delay_config: DelayConfig,
+}
 
 impl InstanceState for TestInstanceState {}
+
+impl TestInstanceState {
+    pub fn new(delay_config: DelayConfig) -> Self {
+        TestInstanceState { delay_config }
+    }
+}
 
 /// Application-specific state delta implementation for testing purposes.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -68,6 +79,17 @@ impl Default for TestValidatedState {
     }
 }
 
+#[async_trait]
+impl TestableDelay for TestValidatedState {
+    async fn run_delay_settings_from_config(delay_config: &DelayConfig) {
+        if let Some(settings) =
+            delay_config.get_setting(&SupportedTraitTypesForAsyncDelay::ValidatedState)
+        {
+            Self::handle_async_delay(settings).await;
+        }
+    }
+}
+
 impl<TYPES: NodeType> ValidatedState<TYPES> for TestValidatedState {
     type Error = BlockError;
 
@@ -79,12 +101,13 @@ impl<TYPES: NodeType> ValidatedState<TYPES> for TestValidatedState {
 
     async fn validate_and_apply_header(
         &self,
-        _instance: &Self::Instance,
+        instance: &Self::Instance,
         _parent_leaf: &Leaf<TYPES>,
         _proposed_header: &TYPES::BlockHeader,
         _vid_common: VidCommon,
         _version: Version,
     ) -> Result<(Self, Self::Delta), Self::Error> {
+        Self::run_delay_settings_from_config(&instance.delay_config).await;
         Ok((
             TestValidatedState {
                 block_height: self.block_height + 1,

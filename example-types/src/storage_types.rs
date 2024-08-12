@@ -22,6 +22,8 @@ use hotshot_types::{
     vote::HasViewNumber,
 };
 
+use crate::testable_delay::{DelayConfig, SupportedTraitTypesForAsyncDelay, TestableDelay};
+
 type VidShares<TYPES> = HashMap<
     <TYPES as NodeType>::Time,
     HashMap<<TYPES as NodeType>::SignatureKey, Proposal<TYPES, VidDisperseShare<TYPES>>>,
@@ -51,6 +53,7 @@ pub struct TestStorage<TYPES: NodeType> {
     inner: Arc<RwLock<TestStorageState<TYPES>>>,
     /// `should_return_err` is a testing utility to validate negative cases.
     pub should_return_err: bool,
+    pub delay_config: DelayConfig,
 }
 
 impl<TYPES: NodeType> Default for TestStorage<TYPES> {
@@ -58,6 +61,17 @@ impl<TYPES: NodeType> Default for TestStorage<TYPES> {
         Self {
             inner: Arc::new(RwLock::new(TestStorageState::default())),
             should_return_err: false,
+            delay_config: DelayConfig::default(),
+        }
+    }
+}
+
+#[async_trait]
+impl<TYPES: NodeType> TestableDelay for TestStorage<TYPES> {
+    async fn run_delay_settings_from_config(delay_config: &DelayConfig) {
+        if let Some(settings) = delay_config.get_setting(&SupportedTraitTypesForAsyncDelay::Storage)
+        {
+            Self::handle_async_delay(settings).await;
         }
     }
 }
@@ -79,6 +93,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
         if self.should_return_err {
             bail!("Failed to append VID proposal to storage");
         }
+        Self::run_delay_settings_from_config(&self.delay_config).await;
         let mut inner = self.inner.write().await;
         inner
             .vids
@@ -92,6 +107,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
         if self.should_return_err {
             bail!("Failed to append VID proposal to storage");
         }
+        Self::run_delay_settings_from_config(&self.delay_config).await;
         let mut inner = self.inner.write().await;
         inner
             .das
@@ -105,6 +121,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
         if self.should_return_err {
             bail!("Failed to append VID proposal to storage");
         }
+        Self::run_delay_settings_from_config(&self.delay_config).await;
         let mut inner = self.inner.write().await;
         inner
             .proposals
@@ -120,6 +137,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
         if self.should_return_err {
             bail!("Failed to append Action to storage");
         }
+        Self::run_delay_settings_from_config(&self.delay_config).await;
         Ok(())
     }
 
@@ -130,6 +148,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
         if self.should_return_err {
             bail!("Failed to update high qc to storage");
         }
+        Self::run_delay_settings_from_config(&self.delay_config).await;
         let mut inner = self.inner.write().await;
         if let Some(ref current_high_qc) = inner.high_qc {
             if new_high_qc.view_number() > current_high_qc.view_number() {
@@ -148,6 +167,7 @@ impl<TYPES: NodeType> Storage<TYPES> for TestStorage<TYPES> {
         if self.should_return_err {
             bail!("Failed to update high qc to storage");
         }
+        Self::run_delay_settings_from_config(&self.delay_config).await;
         Ok(())
     }
 }

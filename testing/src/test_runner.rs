@@ -178,13 +178,17 @@ where
             late_start,
             latest_view: None,
             changes,
-            last_decided_leaf: Leaf::genesis(&TestValidatedState::default(), &TestInstanceState {})
-                .await,
-            high_qc: QuorumCertificate::genesis(
+            last_decided_leaf: Leaf::genesis(
                 &TestValidatedState::default(),
-                &TestInstanceState {},
+                &TestInstanceState::default(),
             )
             .await,
+            high_qc: QuorumCertificate::genesis(
+                &TestValidatedState::default(),
+                &TestInstanceState::default(),
+            )
+            .await,
+            async_delay_config: self.launcher.metadata.async_delay_config,
         };
         let spinning_task = TestTask::<SpinningTask<TYPES, I>>::new(
             spinning_task_state,
@@ -470,10 +474,11 @@ where
                         },
                     );
                 } else {
-                    let initializer =
-                        HotShotInitializer::<TYPES>::from_genesis(TestInstanceState {})
-                            .await
-                            .unwrap();
+                    let initializer = HotShotInitializer::<TYPES>::from_genesis(
+                        TestInstanceState::new(self.launcher.metadata.async_delay_config.clone()),
+                    )
+                    .await
+                    .unwrap();
 
                     // See whether or not we should be DA
                     let is_da = node_id < config.da_staked_committee_size as u64;
@@ -536,9 +541,8 @@ where
         for (node_id, network, memberships, config, storage, marketplace_config) in
             uninitialized_nodes
         {
-            let behaviour = (self.launcher.metadata.behaviour)(node_id);
             let handle = create_test_handle(
-                behaviour,
+                self.launcher.metadata.clone(),
                 node_id,
                 network.clone(),
                 memberships,

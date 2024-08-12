@@ -18,6 +18,7 @@ use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider,
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
+    testable_delay::DelayConfig,
 };
 use hotshot_types::{
     data::Leaf,
@@ -58,6 +59,8 @@ pub struct SpinningTask<TYPES: NodeType, I: TestableNodeImplementation<TYPES>> {
     pub(crate) last_decided_leaf: Leaf<TYPES>,
     /// Highest qc seen in the test for restarting nodes
     pub(crate) high_qc: QuorumCertificate<TYPES>,
+    /// Add specified delay to async calls
+    pub(crate) async_delay_config: DelayConfig,
 }
 
 #[async_trait]
@@ -128,7 +131,7 @@ where
 
                                         let initializer = HotShotInitializer::<TYPES>::from_reload(
                                             self.last_decided_leaf.clone(),
-                                            TestInstanceState {},
+                                            TestInstanceState::new(self.async_delay_config.clone()),
                                             None,
                                             view_number,
                                             BTreeMap::new(),
@@ -205,14 +208,14 @@ where
                                 let read_storage = storage.read().await;
                                 let initializer = HotShotInitializer::<TYPES>::from_reload(
                                     self.last_decided_leaf.clone(),
-                                    TestInstanceState {},
+                                    TestInstanceState::new(self.async_delay_config.clone()),
                                     None,
                                     view_number,
                                     read_storage.proposals_cloned().await,
                                     read_storage.high_qc_cloned().await.unwrap_or(
                                         QuorumCertificate::genesis(
                                             &TestValidatedState::default(),
-                                            &TestInstanceState {},
+                                            &TestInstanceState::default(),
                                         )
                                         .await,
                                     ),

@@ -31,6 +31,7 @@ use vbs::version::Version;
 use crate::{
     node_types::TestTypes,
     state_types::{TestInstanceState, TestValidatedState},
+    testable_delay::{DelayConfig, SupportedTraitTypesForAsyncDelay, TestableDelay},
 };
 
 /// The transaction in a [`TestBlockPayload`].
@@ -268,14 +269,19 @@ impl TestBlockHeader {
     }
 }
 
-impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> BlockHeader<TYPES>
-    for TestBlockHeader
+impl<
+        TYPES: NodeType<
+            BlockHeader = Self,
+            BlockPayload = TestBlockPayload,
+            InstanceState = TestInstanceState,
+        >,
+    > BlockHeader<TYPES> for TestBlockHeader
 {
     type Error = std::convert::Infallible;
 
     async fn new_legacy(
         _parent_state: &TYPES::ValidatedState,
-        _instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
+        instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
         parent_leaf: &Leaf<TYPES>,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
@@ -284,6 +290,7 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
         _vid_common: VidCommon,
         _version: Version,
     ) -> Result<Self, Self::Error> {
+        Self::run_delay_settings_from_config(&instance_state.delay_config).await;
         Ok(Self::new(
             parent_leaf,
             payload_commitment,
@@ -293,7 +300,7 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
 
     async fn new_marketplace(
         _parent_state: &TYPES::ValidatedState,
-        _instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
+        instance_state: &<TYPES::ValidatedState as ValidatedState<TYPES>>::Instance,
         parent_leaf: &Leaf<TYPES>,
         payload_commitment: VidCommitment,
         builder_commitment: BuilderCommitment,
@@ -303,6 +310,7 @@ impl<TYPES: NodeType<BlockHeader = Self, BlockPayload = TestBlockPayload>> Block
         _auction_results: Option<TYPES::AuctionResult>,
         _version: Version,
     ) -> Result<Self, Self::Error> {
+        Self::run_delay_settings_from_config(&instance_state.delay_config).await;
         Ok(Self::new(
             parent_leaf,
             payload_commitment,
@@ -363,5 +371,16 @@ impl Committable for TestBlockHeader {
 
     fn tag() -> String {
         "TEST_HEADER".to_string()
+    }
+}
+
+#[async_trait]
+impl TestableDelay for TestBlockHeader {
+    async fn run_delay_settings_from_config(delay_config: &DelayConfig) {
+        if let Some(settings) =
+            delay_config.get_setting(&SupportedTraitTypesForAsyncDelay::BlockHeader)
+        {
+            Self::handle_async_delay(settings).await;
+        }
     }
 }
