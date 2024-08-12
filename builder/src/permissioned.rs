@@ -6,6 +6,7 @@ use std::{
     mem,
     net::{IpAddr, Ipv4Addr},
     num::NonZeroUsize,
+    str::FromStr,
     thread::Builder,
     time::Duration,
 };
@@ -25,7 +26,8 @@ use async_std::{
 use espresso_types::{
     eth_signature_key::EthKeyPair,
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
-    FeeAmount, L1Client, NodeState, Payload, PubKey, SeqTypes, ValidatedState,
+    FeeAmount, L1Client, NodeState, Payload, PubKey, SeqTypes, SolverAuctionResultsProvider,
+    ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -46,15 +48,14 @@ use hotshot::{
         BlockPayload,
     },
     types::{SignatureKey, SystemContextHandle},
-    HotShotInitializer, Memberships, SystemContext,
+    HotShotInitializer, MarketplaceConfig, Memberships, SystemContext,
 };
 use hotshot_builder_api::v0_1::builder::{
     BuildError, Error as BuilderApiError, Options as HotshotBuilderApiOptions,
 };
 use hotshot_builder_core::{
     builder_state::{
-        BuildBlockInfo, BuilderProgress, BuilderState, BuiltFromProposedBlock, MessageType,
-        ResponseMessage,
+        BuildBlockInfo, BuilderState, BuiltFromProposedBlock, MessageType, ResponseMessage,
     },
     service::{
         run_non_permissioned_standalone_builder_service,
@@ -385,7 +386,12 @@ pub async fn init_hotshot<
             .unwrap(),
         ConsensusMetricsValue::new(metrics),
         da_storage,
-        TestAuctionResultsProvider::default(),
+        MarketplaceConfig {
+            auction_results_provider: Arc::new(SolverAuctionResultsProvider(
+                Url::from_str("https://some.solver").unwrap(),
+            )),
+            generic_builder_url: Url::from_str("https://some.builder").unwrap(),
+        },
     )
     .await
     .unwrap()
@@ -559,12 +565,9 @@ mod test {
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
     };
-    use hotshot_builder_core::{
-        builder_state::BuilderProgress,
-        service::{
-            run_non_permissioned_standalone_builder_service,
-            run_permissioned_standalone_builder_service,
-        },
+    use hotshot_builder_core::service::{
+        run_non_permissioned_standalone_builder_service,
+        run_permissioned_standalone_builder_service,
     };
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},

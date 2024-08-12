@@ -3,6 +3,7 @@ pub mod catchup;
 pub mod context;
 pub mod genesis;
 
+mod external_event_handler;
 pub mod hotshot_commitment;
 pub mod options;
 pub mod state_signature;
@@ -13,15 +14,18 @@ use anyhow::Context;
 use async_std::sync::RwLock;
 use catchup::StatePeers;
 use context::SequencerContext;
-use espresso_types::{BackoffParams, L1Client, NodeState, PubKey, SeqTypes, ValidatedState};
+use espresso_types::{
+    BackoffParams, L1Client, NodeState, PubKey, SeqTypes, SolverAuctionResultsProvider,
+    ValidatedState,
+};
 use ethers::types::U256;
 #[cfg(feature = "libp2p")]
 use futures::FutureExt;
 use genesis::L1Finalized;
-use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
 // Should move `STAKE_TABLE_CAPACITY` in the sequencer repo when we have variate stake table support
 use libp2p::Multiaddr;
 use network::libp2p::split_off_peer_id;
+use options::Identity;
 use state_signature::static_stake_table_commitment;
 use url::Url;
 pub mod persistence;
@@ -42,6 +46,7 @@ use hotshot::{
         WrappedSignatureKey,
     },
     types::SignatureKey,
+    MarketplaceConfig,
 };
 use hotshot_orchestrator::{
     client::{OrchestratorClient, ValidatorArgs},
@@ -90,7 +95,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence> NodeImplementation<Se
 {
     type Network = N;
     type Storage = Arc<RwLock<P>>;
-    type AuctionResultsProvider = TestAuctionResultsProvider;
+    type AuctionResultsProvider = SolverAuctionResultsProvider;
 }
 
 #[derive(Clone, Debug)]
@@ -104,6 +109,8 @@ pub struct NetworkParams {
     pub state_peers: Vec<Url>,
     pub config_peers: Option<Vec<Url>>,
     pub catchup_backoff: BackoffParams,
+    /// The address to advertise as our public API's URL
+    pub public_api_url: Option<Url>,
 
     /// The address to send to other Libp2p nodes to contact us
     pub libp2p_advertise_address: SocketAddr,
@@ -119,6 +126,7 @@ pub struct L1Params {
     pub events_max_block_range: u64,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     genesis: Genesis,
     network_params: NetworkParams,
@@ -127,6 +135,8 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
     l1_params: L1Params,
     bind_version: Ver,
     is_da: bool,
+    identity: Identity,
+    marketplace_config: MarketplaceConfig<SeqTypes, Node<network::Production, P::Persistence>>,
 ) -> anyhow::Result<SequencerContext<network::Production, P::Persistence, Ver>> {
     // Expose git information via status API.
     metrics
@@ -138,6 +148,49 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
             env!("VERGEN_GIT_SHA").into(),
             env!("VERGEN_GIT_DESCRIBE").into(),
             env!("VERGEN_GIT_COMMIT_TIMESTAMP").into(),
+        ]);
+
+    // Expose Node Entity Information via the status/metrics API
+    metrics
+        .text_family(
+            "node_identity_general".into(),
+            vec![
+                "name".into(),
+                "company_name".into(),
+                "company_website".into(),
+                "operating_system".into(),
+                "node_type".into(),
+                "network_type".into(),
+            ],
+        )
+        .create(vec![
+            identity.node_name.unwrap_or("".into()),
+            identity.company_name.unwrap_or("".into()),
+            identity
+                .company_website
+                .map(|u| u.into())
+                .unwrap_or("".into()),
+            identity.operating_system.unwrap_or("".into()),
+            identity.node_type.unwrap_or("".into()),
+            identity.network_type.unwrap_or("".into()),
+        ]);
+
+    // Expose Node Identity Location via the status/metrics API
+    metrics
+        .text_family(
+            "node_identity_location".into(),
+            vec!["country".into(), "latitude".into(), "longitude".into()],
+        )
+        .create(vec![
+            identity.country_code.unwrap_or("".into()),
+            identity
+                .latitude
+                .map(|l| l.to_string())
+                .unwrap_or("".into()),
+            identity
+                .longitude
+                .map(|l| l.to_string())
+                .unwrap_or("".into()),
         ]);
 
     // Stick our public key in `metrics` so it is easily accessible via the status API.
@@ -354,7 +407,9 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
         Some(network_params.state_relay_server_url),
         metrics,
         genesis.stake_table.capacity,
+        network_params.public_api_url,
         bind_version,
+        marketplace_config,
     )
     .await?;
     if wait_for_orchestrator {
@@ -369,7 +424,7 @@ pub fn empty_builder_commitment() -> BuilderCommitment {
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use std::{collections::HashMap, time::Duration};
+    use std::{collections::HashMap, str::FromStr, time::Duration};
 
     use committable::Committable;
     use espresso_types::{
@@ -701,7 +756,14 @@ pub mod testing {
                 self.state_relay_url.clone(),
                 metrics,
                 stake_table_capacity,
+                None, // The public API URL
                 bind_version,
+                MarketplaceConfig::<SeqTypes, Node<network::Memory, P::Persistence>> {
+                    auction_results_provider: Arc::new(SolverAuctionResultsProvider(
+                        Url::from_str("https://some.solver").unwrap(),
+                    )),
+                    generic_builder_url: Url::from_str("https://some.builder").unwrap(),
+                },
             )
             .await
             .unwrap()

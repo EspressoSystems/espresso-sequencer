@@ -3,6 +3,7 @@ use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
+    constants::MarketplaceVersion,
     traits::{
         block_contents::{BlockHeader, BuilderFee},
         node_implementation::NodeType,
@@ -18,62 +19,20 @@ use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
 };
 use serde_json::{Map, Value};
-use snafu::Snafu;
 use std::fmt;
 use thiserror::Error;
 use time::OffsetDateTime;
-use vbs::version::Version;
+use vbs::version::{StaticVersionType, Version};
 
 use crate::{
     v0::header::{EitherOrVersion, VersionedHeader},
     v0_1, v0_2,
     v0_3::{self, ChainConfig, IterableFeeInfo, SolverAuctionResults},
-    BlockMerkleCommitment, BlockSize, BuilderSignature, FeeAccount, FeeAmount, FeeInfo,
-    FeeMerkleCommitment, Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable,
-    NsTableValidationError, SeqTypes, UpgradeType,
+    BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
+    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, UpgradeType,
 };
 
 use super::{instance_state::NodeState, state::ValidatedState};
-
-/// Possible proposal validation failures
-#[derive(Error, Debug, Eq, PartialEq)]
-pub enum ProposalValidationError {
-    #[error("Invalid ChainConfig: expected={expected}, proposal={proposal}")]
-    InvalidChainConfig { expected: String, proposal: String },
-
-    #[error(
-        "Invalid Payload Size: (max_block_size={max_block_size}, proposed_block_size={block_size})"
-    )]
-    MaxBlockSizeExceeded {
-        max_block_size: BlockSize,
-        block_size: BlockSize,
-    },
-    #[error("Insufficient Fee: block_size={max_block_size}, base_fee={base_fee}, proposed_fee={proposed_fee}")]
-    InsufficientFee {
-        max_block_size: BlockSize,
-        base_fee: FeeAmount,
-        proposed_fee: FeeAmount,
-    },
-    #[error("Invalid Height: parent_height={parent_height}, proposal_height={proposal_height}")]
-    InvalidHeight {
-        parent_height: u64,
-        proposal_height: u64,
-    },
-    #[error("Invalid Block Root Error: expected={expected_root}, proposal={proposal_root}")]
-    InvalidBlockRoot {
-        expected_root: BlockMerkleCommitment,
-        proposal_root: BlockMerkleCommitment,
-    },
-    #[error("Invalid Fee Root Error: expected={expected_root}, proposal={proposal_root}")]
-    InvalidFeeRoot {
-        expected_root: FeeMerkleCommitment,
-        proposal_root: FeeMerkleCommitment,
-    },
-    #[error("Invalid namespace table: {err}")]
-    InvalidNsTable { err: NsTableValidationError },
-    #[error("Some fee amount or their sum total out of range")]
-    SomeFeeAmountOutOfRange,
-}
 
 impl v0_1::Header {
     pub(crate) fn commit(&self) -> Commitment<Header> {
@@ -125,16 +84,6 @@ impl Committable for Header {
         // We use the tag "BLOCK" since blocks are identified by the hash of their header. This will
         // thus be more intuitive to users than "HEADER".
         "BLOCK".into()
-    }
-}
-
-impl Header {
-    pub fn version(&self) -> Version {
-        match self {
-            Self::V1(_) => Version { major: 0, minor: 1 },
-            Self::V2(_) => Version { major: 0, minor: 2 },
-            Self::V3(_) => Version { major: 0, minor: 3 },
-        }
     }
 }
 
@@ -283,6 +232,13 @@ impl<'de> Deserialize<'de> for Header {
 }
 
 impl Header {
+    pub fn version(&self) -> Version {
+        match self {
+            Self::V1(_) => Version { major: 0, minor: 1 },
+            Self::V2(_) => Version { major: 0, minor: 2 },
+            Self::V3(_) => Version { major: 0, minor: 3 },
+        }
+    }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn create(
         chain_config: ChainConfig,
@@ -469,15 +425,23 @@ impl Header {
             fee_amount,
         } in &builder_fee
         {
-            ensure!(
-                fee_account.validate_fee_signature(
-                    fee_signature,
-                    *fee_amount,
-                    &ns_table,
-                    &payload_commitment,
-                ),
-                "invalid builder signature"
-            );
+            if version < MarketplaceVersion::VERSION {
+                ensure!(
+                    fee_account.validate_fee_signature(
+                        fee_signature,
+                        *fee_amount,
+                        &ns_table,
+                        &payload_commitment,
+                    ),
+                    "invalid builder signature"
+                );
+            } else {
+                ensure!(
+                    fee_account
+                        .validate_sequencing_fee_signature_marketplace(fee_signature, *fee_amount,),
+                    "invalid builder signature"
+                );
+            }
 
             let fee_info = FeeInfo::new(*fee_account, *fee_amount);
             state
@@ -726,8 +690,8 @@ impl Header {
     }
 }
 
-#[derive(Debug, Snafu)]
-#[snafu(display("Invalid Block Header {msg}"))]
+#[derive(Debug, Error)]
+#[error("Invalid Block Header {msg}")]
 pub struct InvalidBlockHeader {
     msg: String,
 }
@@ -745,7 +709,6 @@ impl From<anyhow::Error> for InvalidBlockHeader {
 
 impl BlockHeader<SeqTypes> for Header {
     type Error = InvalidBlockHeader;
-    type AuctionResult = SolverAuctionResults;
 
     /// Get the results of the auction for this Header. Only used in post-marketplace versions
     fn get_auction_results(&self) -> Option<SolverAuctionResults> {
@@ -1118,7 +1081,7 @@ mod test_headers {
     use super::*;
     use crate::{
         eth_signature_key::EthKeyPair, v0::impls::instance_state::mock::MockStateCatchup,
-        validate_proposal,
+        validate_proposal, ProposalValidationError,
     };
 
     #[derive(Debug, Default)]

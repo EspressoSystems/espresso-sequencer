@@ -26,8 +26,8 @@ use thiserror::Error;
 use vbs::version::Version;
 
 use super::{
-    auction::ExecutionError, fee_info::FeeError, header::ProposalValidationError,
-    instance_state::NodeState,
+    auction::ExecutionError, fee_info::FeeError, instance_state::NodeState, BlockMerkleCommitment,
+    BlockSize, FeeMerkleCommitment,
 };
 use crate::{
     v0_3::{ChainConfig, FullNetworkTx, IterableFeeInfo, ResolvableChainConfig},
@@ -35,6 +35,15 @@ use crate::{
     NsTableValidationError, PayloadByteLen, SeqTypes, UpgradeType, BLOCK_MERKLE_TREE_HEIGHT,
     FEE_MERKLE_TREE_HEIGHT,
 };
+
+/// This enum is not used in code but functions as an index of
+/// possible validation errors.
+#[allow(dead_code)]
+pub enum StateValidationError {
+    ProposalValidation(ProposalValidationError),
+    BuilderValidation(BuilderValidationError),
+    Fee(FeeError),
+}
 
 /// Possible builder validation failures
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -47,13 +56,44 @@ pub enum BuilderValidationError {
     InvalidBuilderSignature,
 }
 
-/// This enum is not used in code but functions as an index of
-/// possible validation errors.
-#[allow(dead_code)]
-pub enum StateValidationError {
-    ProposalValidation(ProposalValidationError),
-    BuilderValidation(BuilderValidationError),
-    Fee(FeeError),
+/// Possible proposal validation failures
+#[derive(Error, Debug, Eq, PartialEq)]
+pub enum ProposalValidationError {
+    #[error("Invalid ChainConfig: expected={expected}, proposal={proposal}")]
+    InvalidChainConfig { expected: String, proposal: String },
+
+    #[error(
+        "Invalid Payload Size: (max_block_size={max_block_size}, proposed_block_size={block_size})"
+    )]
+    MaxBlockSizeExceeded {
+        max_block_size: BlockSize,
+        block_size: BlockSize,
+    },
+    #[error("Insufficient Fee: block_size={max_block_size}, base_fee={base_fee}, proposed_fee={proposed_fee}")]
+    InsufficientFee {
+        max_block_size: BlockSize,
+        base_fee: FeeAmount,
+        proposed_fee: FeeAmount,
+    },
+    #[error("Invalid Height: parent_height={parent_height}, proposal_height={proposal_height}")]
+    InvalidHeight {
+        parent_height: u64,
+        proposal_height: u64,
+    },
+    #[error("Invalid Block Root Error: expected={expected_root}, proposal={proposal_root}")]
+    InvalidBlockRoot {
+        expected_root: BlockMerkleCommitment,
+        proposal_root: BlockMerkleCommitment,
+    },
+    #[error("Invalid Fee Root Error: expected={expected_root}, proposal={proposal_root}")]
+    InvalidFeeRoot {
+        expected_root: FeeMerkleCommitment,
+        proposal_root: FeeMerkleCommitment,
+    },
+    #[error("Invalid namespace table: {err}")]
+    InvalidNsTable { err: NsTableValidationError },
+    #[error("Some fee amount or their sum total out of range")]
+    SomeFeeAmountOutOfRange,
 }
 
 impl StateDelta for Delta {}

@@ -1,8 +1,9 @@
-use std::net::ToSocketAddrs;
+use std::{net::ToSocketAddrs, sync::Arc};
 
 use clap::Parser;
-use espresso_types::SeqTypes;
+use espresso_types::{SeqTypes, SolverAuctionResultsProvider};
 use futures::future::FutureExt;
+use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::NodeType};
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
@@ -89,11 +90,19 @@ where
         libp2p_bootstrap_nodes: opt.libp2p_bootstrap_nodes,
         orchestrator_url: opt.orchestrator_url,
         state_relay_server_url: opt.state_relay_server_url,
+        public_api_url: opt.public_api_url,
         private_staking_key,
         private_state_key,
         state_peers: opt.state_peers,
         config_peers: opt.config_peers,
         catchup_backoff: opt.catchup_backoff,
+    };
+
+    let marketplace_config = MarketplaceConfig {
+        auction_results_provider: Arc::new(SolverAuctionResultsProvider(
+            opt.auction_results_solver_url,
+        )),
+        generic_builder_url: opt.generic_builder_url,
     };
 
     // Initialize HotShot. If the user requested the HTTP module, we must initialize the handle in
@@ -128,6 +137,7 @@ where
             if let Some(config) = modules.config {
                 http_opt = http_opt.config(config);
             }
+
             http_opt
                 .serve(
                     move |metrics| {
@@ -140,6 +150,8 @@ where
                                 l1_params,
                                 bind_version,
                                 opt.is_da,
+                                opt.identity,
+                                marketplace_config,
                             )
                             .await
                             .unwrap()
@@ -159,6 +171,8 @@ where
                 l1_params,
                 bind_version,
                 opt.is_da,
+                opt.identity,
+                marketplace_config,
             )
             .await?
         }

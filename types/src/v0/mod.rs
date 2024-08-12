@@ -6,12 +6,10 @@ use hotshot_types::{
 };
 use serde::{Deserialize, Serialize};
 
-mod error;
 mod header;
 mod impls;
 pub mod traits;
 mod utils;
-pub use error::*;
 pub use header::Header;
 pub use impls::{
     mock, validate_proposal, BuilderValidationError, FeeError, ProposalValidationError,
@@ -134,6 +132,7 @@ impl NodeType for SeqTypes {
     type BuilderSignatureKey = FeeAccount;
     type Base = StaticVersion<0, 1>;
     type Upgrade = StaticVersion<0, 2>;
+    type AuctionResult = SolverAuctionResults;
     const UPGRADE_HASH: [u8; 32] = [
         1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
         0, 0,
@@ -147,8 +146,9 @@ pub type PrivKey = <PubKey as SignatureKey>::PrivateKey;
 
 pub type NetworkConfig = hotshot_orchestrator::config::NetworkConfig<PubKey>;
 
-pub use self::impls::{NodeState, ValidatedState};
+pub use self::impls::{NodeState, SolverAuctionResultsProvider, ValidatedState};
 pub use crate::v0_1::{
     BLOCK_MERKLE_TREE_HEIGHT, FEE_MERKLE_TREE_HEIGHT, NS_ID_BYTE_LEN, NS_OFFSET_BYTE_LEN,
     NUM_NSS_BYTE_LEN, NUM_TXS_BYTE_LEN, TX_OFFSET_BYTE_LEN,
 };
+use crate::v0_3::SolverAuctionResults;
