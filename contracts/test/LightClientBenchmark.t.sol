@@ -13,13 +13,11 @@ import { LightClient as LC } from "../src/LightClient.sol";
 import { LightClientCommonTest } from "./LightClient.t.sol";
 
 contract LightClientBench is LightClientCommonTest {
+    LC.LightClientState state;
+    V.PlonkProof proof;
+
     function setUp() public {
         init();
-    }
-
-    /// @dev for benchmarking purposes only
-    function testCorrectUpdateBench() external {
-        vm.pauseGasMetering();
         // Generating a few consecutive states and proofs
         string[] memory cmds = new string[](6);
         cmds[0] = "diff-test";
@@ -32,8 +30,18 @@ contract LightClientBench is LightClientCommonTest {
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
+
+        state = states[0];
+        proof = proofs[0];
+    }
+
+    /// @dev for benchmarking purposes only
+    function testCorrectUpdateBench() external {
+        vm.pauseGasMetering();
+        LC.LightClientState memory st = state;
+        V.PlonkProof memory pf = proof;
         vm.prank(permissionedProver);
         vm.resumeGasMetering();
-        lc.newFinalizedState(states[0], proofs[0]);
+        lc.newFinalizedState(st, pf);
     }
 }
