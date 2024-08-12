@@ -140,11 +140,12 @@ contract PlonkVerifier_constants_Test is Test {
 // Mostly identical with `PlonkVerifier_batchVerify_Test`
 contract PlonkVerifier_verify_Test is PlonkVerifierCommonTest {
     /// @dev Test happy path of `verify`.
-    function test_verify_succeeds() external {
+    function testFuzz_verify_succeeds(uint64 seed) external {
         vm.pauseGasMetering();
-        string[] memory cmds = new string[](2);
+        string[] memory cmds = new string[](3);
         cmds[0] = "diff-test";
         cmds[1] = "plonk-verify";
+        cmds[2] = vm.toString(seed);
 
         bytes memory result = vm.ffi(cmds);
         (

@@ -348,13 +348,19 @@ fn main() {
             println!("{}", res.encode_hex());
         }
         Action::PlonkVerify => {
+            let seed: u64 = if cli.args.len() == 1 {
+                cli.args[0].parse().expect("Failed to parse argument")
+            } else {
+                0
+            };
+
             let (proof, vk, public_input, _, _): (
                 Proof<Bn254>,
                 VerifyingKey<Bn254>,
                 Vec<Fr>,
                 Option<Vec<u8>>, // won't use extraTranscriptMsg
                 usize,           // won't use circuit size
-            ) = gen_plonk_proof_for_test(1)[0].clone();
+            ) = gen_plonk_proof_for_test(1, seed)[0].clone();
 
             // ensure they are correct params
             assert!(PlonkKzgSnark::batch_verify::<SolidityTranscript>(
