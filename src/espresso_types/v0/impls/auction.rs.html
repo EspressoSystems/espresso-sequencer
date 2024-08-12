@@ -341,12 +341,18 @@
 <a href="#341" id="341">341</a>
 <a href="#342" id="342">342</a>
 <a href="#343" id="343">343</a>
+<a href="#344" id="344">344</a>
+<a href="#345" id="345">345</a>
+<a href="#346" id="346">346</a>
+<a href="#347" id="347">347</a>
+<a href="#348" id="348">348</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">super</span>::state::ValidatedState;
 <span class="kw">use crate</span>::{
     eth_signature_key::{EthKeyPair, SigningError},
     v0_3::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
     FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId, SeqTypes,
 };
+<span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_trait::async_trait;
 <span class="kw">use </span>committable::{Commitment, Committable};
 <span class="kw">use </span>hotshot_types::{
@@ -634,10 +640,14 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         view_number: TYPES::Time,
     ) -&gt; anyhow::Result&lt;TYPES::AuctionResult&gt; {
-        <span class="kw">let </span>resp = SurfClient::new(<span class="self">self</span>.<span class="number">0</span>.clone())
-            .get::&lt;TYPES::AuctionResult&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"/v0/api/auction_results/{}"</span>, <span class="kw-2">*</span>view_number))
-            .send()
-            .<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let </span>resp = SurfClient::new(
+            <span class="self">self</span>.<span class="number">0
+                </span>.join(<span class="string">"marketplace-solver/"</span>)
+                .context(<span class="string">"Malformed solver URL"</span>)<span class="question-mark">?</span>,
+        )
+        .get::&lt;TYPES::AuctionResult&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"auction_results/{}"</span>, <span class="kw-2">*</span>view_number))
+        .send()
+        .<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(resp)
     }
 }
