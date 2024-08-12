@@ -473,20 +473,16 @@ mod tests {
                 .await;
         }
 
-        // Now the `submit/submit` endpoint allows the extremely large transactions to be in the mempool.
-        // And we need to check whether this extremely large transaction blocks the building process.
-        // Currently the default value of `max_block_size` is 30720, and this transaction exceeds the limit.
-        // TODO: https://github.com/EspressoSystems/espresso-sequencer/issues/1777
         {
+            // transactions with size larger than max_block_size result in an error
             let extremely_large_tx = Transaction::new(100_u32.into(), vec![0; 50120]);
-            let extremely_large_hash: Commitment<Transaction> = api_client
-                .post("submit/submit")
+            api_client
+                .post::<Commitment<Transaction>>("submit/submit")
                 .body_json(&extremely_large_tx)
                 .unwrap()
                 .send()
                 .await
-                .unwrap();
-            assert_eq!(extremely_large_tx.commit(), extremely_large_hash);
+                .unwrap_err();
 
             // Now we send a small transaction to make sure this transaction can be included in a hotshot block.
             let tx = Transaction::new(100_u32.into(), vec![0; 3]);
