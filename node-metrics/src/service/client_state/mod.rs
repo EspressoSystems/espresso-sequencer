@@ -1308,7 +1308,7 @@ pub mod tests {
         let (internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(1);
         let (server_message_sender_1, mut server_message_receiver_1) = mpsc::channel(1);
         let (server_message_sender_2, mut server_message_receiver_2) = mpsc::channel(1);
-        let _process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        let process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state,
             client_thread_state,
@@ -1359,6 +1359,8 @@ pub mod tests {
                 voters_1, voters_2
             ]))),
         );
+
+        drop(process_internal_client_message_handle)
     }
 
     #[async_std::test]
