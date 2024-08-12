@@ -40,9 +40,6 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     // === Storage ===
 
-    /// @notice SNARK verifier
-    PlonkVerifier2 verifier;
-
     /// @notice current (finalized) epoch number
     uint64 public currentEpoch;
     /// @notice The commitment of the stake table used in current voting (i.e. snapshot at the start
@@ -127,8 +124,6 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         internal
         onlyOwner
     {
-        verifier = new PlonkVerifier2();
-
         // stake table commitments and threshold cannot be zero, otherwise it's impossible to
         // generate valid proof to move finalized state forward.
         // Whereas blockCommRoot can be zero, if we use special value zero to denote empty tree.
@@ -241,7 +236,7 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
         uint256[8] memory publicInput = preparePublicInput(state);
 
-        if (!verifier.verify(vk, publicInput, proof)) {
+        if (!PlonkVerifier2.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
     }

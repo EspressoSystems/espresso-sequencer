@@ -59,9 +59,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     // === Storage ===
 
-    /// @notice SNARK verifier
-    PlonkVerifier2 verifier;
-
     /// @notice current (finalized) epoch number
     uint64 public currentEpoch;
     /// @notice The commitment of the stake table used in current voting (i.e. snapshot at the start
@@ -170,7 +167,6 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __UUPSUpgradeable_init();
         genesisState = 0;
         finalizedState = 1;
-        verifier = new PlonkVerifier2();
         _initializeState(genesis, numBlocksPerEpoch);
     }
 
@@ -319,7 +315,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         publicInput[6] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableSchnorrKeyComm);
         publicInput[7] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableAmountComm);
 
-        if (!verifier.verify(vk, publicInput, proof)) {
+        if (!PlonkVerifier2.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
     }

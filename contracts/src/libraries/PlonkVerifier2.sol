@@ -6,7 +6,7 @@ import { BN254 } from "bn254/BN254.sol";
 import { PolynomialEval as Poly } from "./PolynomialEval.sol";
 import { IPlonkVerifier } from "../interfaces/IPlonkVerifier.sol";
 
-contract PlonkVerifier2 {
+library PlonkVerifier2 {
     // use notation from https://datatracker.ietf.org/doc/draft-irtf-cfrg-pairing-friendly-curves/
     //
     // Elliptic curve is defined over a prime field GF(p), with embedding degree k.

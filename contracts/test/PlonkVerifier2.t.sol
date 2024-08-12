@@ -24,12 +24,6 @@ import { PlonkVerifier2 as V } from "../src/libraries/PlonkVerifier2.sol";
 
 /// @dev Common helpers/utils for PlonkVerifier tests
 contract PlonkVerifierCommonTest is Test {
-    V verifier;
-
-    function setUp() public {
-        verifier = new V();
-    }
-
     /// @dev Sanitize a single value to be valid scalar field Bn254::Fr.
     function sanitizeScalarField(uint256 a) public pure returns (uint256) {
         a = bound(a, 0, BN254.R_MOD - 1);
@@ -75,7 +69,7 @@ contract PlonkVerifier2_verify_Test is PlonkVerifierCommonTest {
         ) = abi.decode(result, (IPlonkVerifier.VerifyingKey, uint256[8], IPlonkVerifier.PlonkProof));
 
         vm.resumeGasMetering();
-        assert(verifier.verify(verifyingKey, publicInput, proof));
+        assert(V.verify(verifyingKey, publicInput, proof));
     }
 
     /// @dev Test when bad verifying key is supplied, the verification should fail
@@ -110,7 +104,7 @@ contract PlonkVerifier2_verify_Test is PlonkVerifierCommonTest {
             mstore(badPointRef, badPoint)
         }
 
-        assert(!verifier.verify(verifyingKey, publicInput, proof));
+        assert(!V.verify(verifyingKey, publicInput, proof));
     }
 
     // @dev Test when bad public input is supplied, the verification should fail
@@ -130,7 +124,7 @@ contract PlonkVerifier2_verify_Test is PlonkVerifierCommonTest {
         (IPlonkVerifier.VerifyingKey memory verifyingKey,, IPlonkVerifier.PlonkProof memory proof) =
             abi.decode(result, (IPlonkVerifier.VerifyingKey, uint256[8], IPlonkVerifier.PlonkProof));
 
-        assert(!verifier.verify(verifyingKey, badPublicInput, proof));
+        assert(!V.verify(verifyingKey, badPublicInput, proof));
     }
 
     /// @dev Test when bad proof is supplied, the verification should fail
@@ -145,6 +139,6 @@ contract PlonkVerifier2_verify_Test is PlonkVerifierCommonTest {
         (IPlonkVerifier.VerifyingKey memory verifyingKey, uint256[8] memory publicInput,) =
             abi.decode(result, (IPlonkVerifier.VerifyingKey, uint256[8], IPlonkVerifier.PlonkProof));
 
-        assert(!verifier.verify(verifyingKey, publicInput, badProof));
+        assert(!V.verify(verifyingKey, publicInput, badProof));
     }
 }
