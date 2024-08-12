@@ -168,6 +168,20 @@
 <a href="#168" id="168">168</a>
 <a href="#169" id="169">169</a>
 <a href="#170" id="170">170</a>
+<a href="#171" id="171">171</a>
+<a href="#172" id="172">172</a>
+<a href="#173" id="173">173</a>
+<a href="#174" id="174">174</a>
+<a href="#175" id="175">175</a>
+<a href="#176" id="176">176</a>
+<a href="#177" id="177">177</a>
+<a href="#178" id="178">178</a>
+<a href="#179" id="179">179</a>
+<a href="#180" id="180">180</a>
+<a href="#181" id="181">181</a>
+<a href="#182" id="182">182</a>
+<a href="#183" id="183">183</a>
+<a href="#184" id="184">184</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{
     fs,
     path::{Path, PathBuf},
@@ -178,6 +192,7 @@
     NamespaceId,
 };
 <span class="kw">use </span>futures::FutureExt;
+<span class="kw">use </span>hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 <span class="kw">use </span>serde::{Deserialize, Serialize};
 <span class="kw">use </span>thiserror::Error;
 <span class="kw">use </span>tide_disco::{
@@ -271,11 +286,24 @@
     </span>api.post(<span class="string">"submit_bid"</span>, |_req, _state| {
         <span class="kw">async move </span>{ <span class="prelude-val">Ok</span>(<span class="string">"Bid Submitted"</span>) }.boxed()
     })<span class="question-mark">?
-    </span>.get(<span class="string">"auction_results"</span>, |_req, _state| {
-        <span class="kw">async move </span>{ <span class="prelude-val">Ok</span>(<span class="string">"Auction Results Gotten"</span>) }.boxed()
+    </span>.get(<span class="string">"auction_results"</span>, |req, state| {
+        <span class="kw">async move </span>{
+            <span class="kw">let </span>view_num: u64 = req.integer_param(<span class="string">"view_number"</span>)<span class="question-mark">?</span>;
+            state
+                .calculate_auction_results_permissionless(ViewNumber::new(view_num))
+                .<span class="kw">await
+        </span>}
+        .boxed()
     })<span class="question-mark">?
-    </span>.get(<span class="string">"auction_results_permissioned"</span>, |_req, _state| {
-        <span class="kw">async move </span>{ <span class="prelude-val">Ok</span>(<span class="string">"Permissioned Auction Results Gotten"</span>) }.boxed()
+    </span>.get(<span class="string">"auction_results_permissioned"</span>, |req, state| {
+        <span class="kw">async move </span>{
+            <span class="kw">let </span>view_num: u64 = req.integer_param(<span class="string">"view_number"</span>)<span class="question-mark">?</span>;
+            <span class="kw">let </span>signature = req.blob_param(<span class="string">"signature"</span>)<span class="question-mark">?</span>;
+            state
+                .calculate_auction_results_permissioned(ViewNumber::new(view_num), signature)
+                .<span class="kw">await
+        </span>}
+        .boxed()
     })<span class="question-mark">?
     </span>.post(<span class="string">"register_rollup"</span>, |req, state| {
         <span class="kw">async move </span>{
