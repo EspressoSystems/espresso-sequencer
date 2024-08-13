@@ -1,8 +1,9 @@
-use std::net::ToSocketAddrs;
+use std::{net::ToSocketAddrs, sync::Arc};
 
 use clap::Parser;
-use espresso_types::SeqTypes;
+use espresso_types::{SeqTypes, SolverAuctionResultsProvider};
 use futures::future::FutureExt;
+use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::NodeType};
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
@@ -97,6 +98,13 @@ where
         catchup_backoff: opt.catchup_backoff,
     };
 
+    let marketplace_config = MarketplaceConfig {
+        auction_results_provider: Arc::new(SolverAuctionResultsProvider(
+            opt.auction_results_solver_url,
+        )),
+        fallback_builder_url: opt.fallback_builder_url,
+    };
+
     // Initialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
@@ -129,6 +137,7 @@ where
             if let Some(config) = modules.config {
                 http_opt = http_opt.config(config);
             }
+
             http_opt
                 .serve(
                     move |metrics| {
@@ -142,6 +151,7 @@ where
                                 bind_version,
                                 opt.is_da,
                                 opt.identity,
+                                marketplace_config,
                             )
                             .await
                             .unwrap()
@@ -162,6 +172,7 @@ where
                 bind_version,
                 opt.is_da,
                 opt.identity,
+                marketplace_config,
             )
             .await?
         }
