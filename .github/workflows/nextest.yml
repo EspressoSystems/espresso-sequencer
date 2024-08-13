@@ -62,7 +62,7 @@ jobs:
           cargo nextest run --locked --release --workspace --all-features --verbose --test-threads 1 -E '!test(slow_)'
         timeout-minutes: 5
 
-       - name: SlowTest
+      - name: SlowTest
         env:
           CARGO_TERM_COLOR: always
         # Build test binary with `testing` feature, which requires `hotshot_example` config
