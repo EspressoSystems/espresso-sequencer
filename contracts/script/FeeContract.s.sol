@@ -35,6 +35,44 @@ contract FeeContractDeployScript is Script {
     }
 }
 
+contract FeeContractUpgradeScript is Script {
+    string internal originalContractName = "FeeContract.sol";
+    string internal upgradeContractName = vm.envString("FEE_CONTRACT_UPGRADE_NAME");
+
+    function run() public returns (address implementationAddress, bytes memory result) {
+        Options memory opts;
+        opts.referenceContract = originalContractName;
+
+        // validate that the new implementation contract is upgrade safe
+        Upgrades.validateUpgrade(upgradeContractName, opts);
+
+        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+
+        // deploy the new implementation contract
+        FC feeContract = new FC();
+
+        vm.stopBroadcast();
+
+        // call upgradeToAndCall command so that the proxy can be upgraded to call from the new
+        // implementation above and
+        // execute the command via the Safe Multisig wallet
+        string[] memory cmds = new string[](3);
+        cmds[0] = "bash";
+        cmds[1] = "-c";
+        cmds[2] = string(
+            abi.encodePacked(
+                "source .env.contracts && ts-node contracts/script/multisigTransactionProposals/safeSDK/upgradeProxy.ts upgradeProxy ",
+                address(feeContract)
+            )
+        );
+
+        result = vm.ffi(cmds);
+
+        return (address(feeContract), result);
+    }
+}
+
 contract FeeContractDefenderDeployScript is Script {
     string internal contractName = "FeeContract.sol";
     UtilsScript internal utils = new UtilsScript();

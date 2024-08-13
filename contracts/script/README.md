@@ -37,7 +37,7 @@ Steps:
 ```bash
    source .env.contracts && \
    forge clean && \
-   forge script contracts/script/FeeContractDefender.s.sol:FeeContractDeployScript $SAFE_MULTISIG_ADDRESS \
+   forge script contracts/script/FeeContract.s.sol:FeeContractDeployScript $SAFE_MULTISIG_ADDRESS \
    --sig 'run(address)' \
    --ffi \
    --rpc-url https://ethereum-sepolia.publicnode.com  \
@@ -51,7 +51,7 @@ Steps:
 ```bash
 source .env.contracts && \
 forge clean && \
-forge script contracts/script/FeeContractDefender.s.sol:FeeContractDefenderDeployScript \
+forge script contracts/script/FeeContract.s.sol:FeeContractDefenderDeployScript \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com  \
 --build-info true \
@@ -166,6 +166,8 @@ contracts/src/LightClient.sol:LightClient
 
 ### Upgrading the Fee Contract
 
+#### Without OpenZeppelin Defender
+
 Steps:
 
 1.  Ensure that the salt has been updated in the `.env.contracts` file. The upgrade script retrieves the proxyAddress
@@ -177,12 +179,13 @@ Steps:
 
 ```bash
 source .env.contracts && \
-source .env.contracts && \
 forge clean && \
-forge script contracts/script/FeeContractDefender.s.sol:FeeContractDefenderUpgradeScript \
+forge script contracts/script/FeeContract.s.sol:FeeContractUpgradeScript \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com  \
---build-info true
+--build-info true \
+--legacy \
+--broadcast
 ```
 
 2. This command requires you to go to OpenZeppelin Defender's UI to see the transaction. Click that transaction which
