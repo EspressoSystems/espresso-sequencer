@@ -25,31 +25,14 @@ library PolynomialEval {
     }
 
     /// @dev Create a new Radix2EvalDomain with `domainSize` which should be power of 2.
-    /// @dev Will revert if domainSize is not among {2^5, 2^16, 2^17, 2^18, 2^19, 2^20}
+    /// @dev Will revert if domainSize is not among {2^5, 2^16, 2^20}
     function newEvalDomain(uint256 domainSize) internal pure returns (EvalDomain memory) {
         if (domainSize == 65536) {
+            // For testing purposes
             return EvalDomain(
                 16,
                 0x30641e0e92bebef818268d663bcad6dbcfd6c0149170f6d7d350b1b1fa6c1001,
                 0x00eeb2cb5981ed45649abebde081dcff16c8601de4347e7dd1628ba2daac43b7
-            );
-        } else if (domainSize == 131072) {
-            return EvalDomain(
-                17,
-                0x30643640b9f82f90e83b698e5ea6179c7c05542e859533b48b9953a2f5360801,
-                0x1bf82deba7d74902c3708cc6e70e61f30512eca95655210e276e5858ce8f58e5
-            );
-        } else if (domainSize == 262144) {
-            return EvalDomain(
-                18,
-                0x30644259cd94e7dd5045d7a27013b7fcd21c9e3b7fa75222e7bda49b729b0401,
-                0x19ddbcaf3a8d46c15c0176fbb5b95e4dc57088ff13f4d1bd84c6bfa57dcdc0e0
-            );
-        } else if (domainSize == 524288) {
-            return EvalDomain(
-                19,
-                0x3064486657634403844b0eac78ca882cfd284341fcb0615a15cfcd17b14d8201,
-                0x2260e724844bca5251829353968e4915305258418357473a5c1d597f613f6cbd
             );
         } else if (domainSize == 1048576) {
             return EvalDomain(

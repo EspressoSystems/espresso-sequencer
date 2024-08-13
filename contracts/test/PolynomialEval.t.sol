@@ -14,8 +14,8 @@ import { PolynomialEval as Poly } from "../src/libraries/PolynomialEval.sol";
 contract PolynomialEval_newEvalDomain_Test is Test {
     /// @dev diff-test with Rust when `domainSize` is in {2^16 ~ 2^20, 2^5}
     function test_supportedDomainSize_matches() external {
-        uint256[6] memory logSizes = [uint256(5), 16, 17, 18, 19, 20];
-        for (uint256 i = 0; i < 6; i++) {
+        uint256[3] memory logSizes = [uint256(5), 16, 20];
+        for (uint256 i = 0; i < 3; i++) {
             string[] memory cmds = new string[](3);
             cmds[0] = "diff-test";
             cmds[1] = "new-poly-eval-domain";
@@ -71,8 +71,8 @@ contract PolynomialEvalTest is Test {
     }
 
     /// @dev Test if the domain elements are generated correctly
-    function testFuzz_domainElements_matches(uint256 logSize, uint256 length) external {
-        logSize = bound(logSize, 16, 20);
+    function testFuzz_domainElements_matches(uint256 length) external {
+        uint256 logSize = 20;
         Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSize);
         length = bound(length, 0, 1000);
 
@@ -92,12 +92,8 @@ contract PolynomialEvalTest is Test {
 contract PolynomialEval_evalDataGen_Test is PolynomialEvalTest {
     /// @dev Test if evaluations on the vanishing poly, the lagrange one poly, and the public input
     /// poly are correct.
-    function testFuzz_evalDataGen_matches(
-        uint256 logSize,
-        uint256 zeta,
-        uint256[8] memory publicInput
-    ) external {
-        logSize = bound(logSize, 16, 20);
+    function testFuzz_evalDataGen_matches(uint256 zeta, uint256[8] memory publicInput) external {
+        uint256 logSize = 20;
         zeta = bound(zeta, 0, BN254.R_MOD - 1);
         BN254.validateScalarField(BN254.ScalarField.wrap(zeta));
         // Since these user-provided `publicInputs` were checked outside before passing in via
