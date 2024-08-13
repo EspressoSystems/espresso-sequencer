@@ -46,6 +46,8 @@ async fn test_restart_helper(network: (usize, usize), restart: (usize, usize), c
     network.check_progress().await;
     // Restart some combination of nodes and ensure progress resumes.
     network.restart(restart.0, restart.1).await;
+
+    network.shut_down().await;
 }
 
 #[async_std::test]
@@ -592,6 +594,17 @@ impl TestNetwork {
         )
         .await;
         self.check_progress().await;
+    }
+
+    async fn shut_down(mut self) {
+        tracing::info!("shutting down test network");
+        join_all(
+            self.da_nodes
+                .iter_mut()
+                .map(TestNode::stop)
+                .chain(self.regular_nodes.iter_mut().map(TestNode::stop)),
+        )
+        .await;
     }
 
     fn num_nodes(&self) -> usize {
