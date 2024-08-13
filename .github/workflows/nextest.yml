@@ -56,6 +56,7 @@ jobs:
         timeout-minutes: 90
 
       - uses: cargo-bins/cargo-binstall@main
+      - run: cargo binstall cargo-nextest --secure
 
       - name: NexTest
         # Build test binary with `testing` feature, which requires `hotshot_example` config
