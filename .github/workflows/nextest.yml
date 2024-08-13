@@ -22,7 +22,7 @@ env:
   RUST_LOG: info,libp2p=off,node=error
 
 jobs:
-  test:
+  nextest:
     runs-on: ubuntu-latest
     steps:
       - name: Fix submodule permissions check
@@ -38,6 +38,8 @@ jobs:
         run: |
           sudo snap install --edge --classic just
           just --version
+
+      - uses: taiki-e/install-action@nextest
 
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -55,8 +57,6 @@ jobs:
           cargo build --locked --bin diff-test --release
           cargo nextest run --locked --release --workspace --all-features --no-run
         timeout-minutes: 90
-
-      - uses: taiki-e/install-action@nextest
 
       - name: NexTest
         env:
