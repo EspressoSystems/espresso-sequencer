@@ -11,7 +11,7 @@ pub enum UpgradeType {
     // Note: Wrapping this in a tuple variant causes deserialization to fail because
     // the 'chain_config' name is also provided in the TOML input.
     ChainConfig { chain_config: ChainConfig },
-    // todo (ab): use empty variant and fix serialization
+    // todo (ab): use empty
     Marketplace { marketplace: Marketplace },
 }
 

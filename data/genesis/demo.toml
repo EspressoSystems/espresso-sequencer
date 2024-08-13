@@ -24,7 +24,7 @@ fee_recipient = '0x0000000000000000000000000000000000000000'
 fee_contract = '0xa15bb66138824a1c7167f5e85b957d04dd34e468'
 
 [[upgrade]]
-version = "0.4"
+version = "0.3"
 start_proposing_view = 5
 stop_proposing_view = 15
 
