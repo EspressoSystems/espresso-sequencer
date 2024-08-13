@@ -289,4 +289,8 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             )
         );
     }
+
+    function setNewField(uint256 _newField) public onlyOwner {
+        newField = _newField;
+    }
 }

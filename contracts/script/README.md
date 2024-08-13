@@ -79,7 +79,7 @@ $FEE_CONTRACT_ADDRESS \
 contracts/src/FeeContract.sol:FeeContract
 ```
 
-You can get the `$SOLC_VERSION` by running the command `solc version`.
+You can get the `$SOLC_VERSION` by running the command `solc --version`.
 
 3. Inform Etherscan that it's a Proxy When the proxy is deployed, go to Etherscan. Go to Contract > Code > More Options
    and select the 'is this a proxy?' option. You should then be able to interact with the implementation contract via a
@@ -139,14 +139,14 @@ forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderD
 --libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
 ```
 
+```
 source .env.contracts && \
 forge clean && \
 forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderDeployScript \
 --ffi --rpc-url https://ethereum-sepolia.publicnode.com \
 --build-info true \
 --libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
-
-````
+```
 
 2. Verify the Contract
 
@@ -156,7 +156,7 @@ forge verify-contract --chain-id 11155111 \
 --compiler-version $SOLC_VERSION \
 $LIGHT_CLIENT_CONTRACT_ADDRESS \
 contracts/src/LightClient.sol:LightClient
-````
+```
 
 3. Inform Etherscan that it's a Proxy When the proxy is deployed, go to Etherscan. Go to Contract > Code > More Options
    and select the 'is this a proxy?' option. You should then be able to interact with the implementation contract via a
@@ -172,10 +172,6 @@ Steps:
 
 1.  Ensure that the salt has been updated in the `.env.contracts` file. The upgrade script retrieves the proxyAddress
     from the previous deployment by reading a file in the following path:
-1.  Ensure that the salt has been updated in the `.env.contracts` file. The upgrade script retrieves the proxyAddress
-    from the previous deployment by reading a file in the following path:
-    `script/output/defenderDeployments/$CONTRACT_NAME/$CHAIN_ID/$SALT.json`. It knows the salt from a previous
-    deployment by reading the `saltHistory.json` file. Run the following command:
 
 ```bash
 source .env.contracts && \
@@ -186,6 +182,21 @@ forge script contracts/script/FeeContract.s.sol:FeeContractUpgradeScript \
 --build-info true \
 --legacy \
 --broadcast
+```
+
+#### With OpenZeppelin Defender
+
+1.  Ensure that the salt has been updated in the `.env.contracts` file. The upgrade script retrieves the proxyAddress
+    from the previous deployment by reading a file in the following path:
+    `script/output/defenderDeployments/$CONTRACT_NAME/$CHAIN_ID/$SALT.json`. It knows the salt from a previous
+    deployment by reading the `saltHistory.json` file. Run the following command:
+
+```bash
+source .env.contracts && \
+forge script contracts/script/FeeContract.s.sol:FeeContractDefenderUpgradeScript \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com  \
+--build-info true
 ```
 
 2. This command requires you to go to OpenZeppelin Defender's UI to see the transaction. Click that transaction which
@@ -210,10 +221,28 @@ referenced at deployment time. Thus ensure you've deployed the PlonkVerifier
 the command below. Each time modifications are made to the Plonk Verifier, contracts that depend on it such as the Light
 Client contract have to be upgraded and should use the new PlonkVerifier contract address as part of the deployment.
 
+#### Without OpenZeppelin Defender
+
 Steps:
 
 1.  Ensure that the salt has been updated in the `.env.contracts` file. The upgrade script retrieves the proxyAddress
     from the previous deployment by reading a file in the following path:
+
+```bash
+source .env.contracts && \
+forge clean && \
+forge script contracts/script/LightClientWithDefender.s.sol:LightClientContractUpgradeScript \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com  \
+--build-info true \
+--legacy \
+--broadcast
+```
+
+#### With OpenZeppelin Defender
+
+Steps:
+
 1.  Ensure that the salt has been updated in the `.env.contracts` file. The upgrade script retrieves the proxyAddress
     from the previous deployment by reading a file in the following path:
     `script/output/defenderDeployments/$CONTRACT_NAME/$CHAIN_ID/$SALT.json`. It knows the salt from a previous
@@ -221,13 +250,6 @@ Steps:
 
 ```bash
 source .env.contracts && \
-source .env.contracts && \
-forge clean && \
-forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderUpgradeScript \
---ffi \
---rpc-url https://ethereum-sepolia.publicnode.com  \
---build-info true \
---libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
 forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderUpgradeScript \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com  \

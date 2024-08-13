@@ -9,7 +9,6 @@ import {
 import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { FeeContract as FC } from "../src/FeeContract.sol";
 import { UtilsScript } from "./Utils.s.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @notice use this script to deploy the upgradeable fee contract
 /// without openzepelin defender
@@ -36,11 +35,11 @@ contract FeeContractDeployScript is Script {
     }
 }
 
+/// @notice upgrade fee contract by deploying the new implementation using the deployer and then
+/// using the SAFE SDK to call the upgrade via the Safe Multisig wallet
 contract FeeContractUpgradeScript is Script {
     string internal originalContractName = "FeeContract.sol";
     string internal upgradeContractName = vm.envString("FEE_CONTRACT_UPGRADE_NAME");
-
-    using Strings for uint256;
 
     function run() public returns (address implementationAddress, bytes memory result) {
         Options memory opts;
@@ -53,11 +52,13 @@ contract FeeContractUpgradeScript is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // deploy the new implementation contract
-        FC feeContract = new FC();
+        FC implementationContract = new FC();
 
         vm.stopBroadcast();
 
-        string memory feeContractAddressStr = uint256(uint160(address(feeContract))).toHexString(20);
+        //replace with something like this if there is some initiation function to call
+        // abi.encodeWithSignature("setNewField(uint256)", 2);
+        bytes memory initData = "";
 
         // call upgradeToAndCall command so that the proxy can be upgraded to call from the new
         // implementation above and
@@ -68,14 +69,17 @@ contract FeeContractUpgradeScript is Script {
         cmds[2] = string(
             abi.encodePacked(
                 "source .env.contracts && ts-node contracts/script/multisigTransactionProposals/safeSDK/upgradeProxy.ts upgradeProxy ",
-                feeContractAddressStr,
-                " 0x"
+                vm.toString(vm.envAddress("FEE_CONTRACT_PROXY_ADDRESS")),
+                " ",
+                vm.toString(address(implementationContract)),
+                " ",
+                vm.toString(initData)
             )
         );
 
         result = vm.ffi(cmds);
 
-        return (address(feeContract), result);
+        return (address(implementationContract), result);
     }
 }
 

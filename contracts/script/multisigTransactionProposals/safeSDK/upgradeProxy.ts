@@ -10,6 +10,7 @@ const UPGRADE_PROXY_CMD = "upgradeProxy" as const;
 type LocalSafeTransaction = Awaited<ReturnType<Safe["createTransaction"]>>;
 
 interface UpgradeData {
+  proxyAddress: string;
   implementationAddress: string;
   initData: string;
 }
@@ -41,14 +42,7 @@ async function main() {
     const safeSdk = await Safe.create({ ethAdapter, safeAddress });
     const orchestratorSignerAddress = await orchestratorSigner.getAddress();
 
-    await proposeUpgradeTransaction(
-      safeSdk,
-      safeService,
-      orchestratorSignerAddress,
-      safeAddress,
-      upgradeData.implementationAddress,
-      upgradeData.initData,
-    );
+    await proposeUpgradeTransaction(safeSdk, safeService, orchestratorSignerAddress, safeAddress, upgradeData);
 
     console.log(
       `The other owners of the Safe Multisig wallet need to sign the transaction via the Safe UI https://app.safe.global/transactions/queue?safe=sep:${safeAddress}`,
@@ -75,11 +69,12 @@ function processCommandLineArguments(): UpgradeData {
   if (command !== UPGRADE_PROXY_CMD) {
     throw new Error(`Only ${UPGRADE_PROXY_CMD} command is supported.`);
   }
-  const implementationAddress = args[1];
+  const proxyAddress = args[1];
+  const implementationAddress = args[2];
   validateEthereumAddress(implementationAddress);
-  const initData = args[2];
+  const initData = args[3];
 
-  return { implementationAddress: implementationAddress, initData: initData };
+  return { proxyAddress: proxyAddress, implementationAddress: implementationAddress, initData: initData };
 }
 
 /**
@@ -96,17 +91,13 @@ export async function proposeUpgradeTransaction(
   safeService: SafeApiKit,
   signerAddress: string,
   safeAddress: string,
-  newContractAddress: string,
-  initData: string,
+  upgradeData: UpgradeData,
 ) {
   // Prepare the transaction data to upgrade the proxy
-  let data = createUpgradeTxData(newContractAddress, initData);
-
-  const contractAddress = getEnvVar("FEE_CONTRACT_PROXY_ADDRESS");
-  validateEthereumAddress(contractAddress);
+  let data = createUpgradeTxData(upgradeData.implementationAddress, upgradeData.initData);
 
   // Create the Safe Transaction Object
-  const safeTransaction = await createSafeTransaction(safeSDK, contractAddress, data, "0");
+  const safeTransaction = await createSafeTransaction(safeSDK, upgradeData.proxyAddress, data, "0");
 
   // Get the transaction hash and sign the transaction
   const safeTxHash = await safeSDK.getTransactionHash(safeTransaction);
