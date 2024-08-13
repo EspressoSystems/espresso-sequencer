@@ -110,7 +110,7 @@ pub struct CombinedImpl;
 pub type StaticMembership = StaticCommittee<TestTypes>;
 
 impl<TYPES: NodeType> NodeImplementation<TYPES> for PushCdnImpl {
-    type Network = PushCdnNetwork<TYPES>;
+    type Network = PushCdnNetwork<TYPES::SignatureKey>;
     type Storage = TestStorage<TYPES>;
     type AuctionResultsProvider = TestAuctionResultsProvider<TYPES>;
 }

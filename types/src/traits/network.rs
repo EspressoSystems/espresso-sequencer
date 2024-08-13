@@ -14,7 +14,7 @@ use async_std::future::TimeoutError;
 use derivative::Derivative;
 use dyn_clone::DynClone;
 use futures::{
-    channel::{mpsc, oneshot},
+    channel::mpsc::{self},
     Future,
 };
 #[cfg(async_executor_impl = "tokio")]
@@ -45,6 +45,7 @@ use super::{node_implementation::NodeType, signature_key::SignatureKey};
 use crate::{
     data::ViewNumber,
     message::{MessagePurpose, SequencingMessage},
+    request_response::NetworkMsgResponseChannel,
     BoxSyncFuture,
 };
 
@@ -72,20 +73,6 @@ pub enum PushCdnNetworkError {
     FailedToReceive,
     /// Failed to send a message to the server
     FailedToSend,
-}
-
-/// Web server specific errors
-#[derive(Debug, Snafu, Serialize, Deserialize)]
-#[snafu(visibility(pub))]
-pub enum WebServerNetworkError {
-    /// The injected consensus data is incorrect
-    IncorrectConsensusData,
-    /// The client returned an error
-    ClientError,
-    /// Endpoint parsed incorrectly
-    EndpointError,
-    /// Client disconnected
-    ClientDisconnected,
 }
 
 /// the type of transmission
@@ -127,12 +114,6 @@ pub enum NetworkError {
     CentralizedServer {
         /// source of error
         source: CentralizedServerNetworkError,
-    },
-
-    /// Web server specific errors
-    WebServer {
-        /// source of error
-        source: WebServerNetworkError,
     },
     /// unimplemented functionality
     UnimplementedFeature,
@@ -196,12 +177,6 @@ pub trait ViewMessage<TYPES: NodeType> {
     // TODO move out of this trait.
     /// get the purpose of the message
     fn purpose(&self) -> MessagePurpose;
-}
-
-/// Wraps a oneshot channel for responding to requests
-pub struct ResponseChannel<M: NetworkMsg> {
-    /// underlying sender for this channel
-    pub sender: oneshot::Sender<M>,
 }
 
 /// A request for some data that the consensus layer is asking for.
@@ -347,7 +322,7 @@ pub trait ConnectedNetwork<K: SignatureKey + 'static>: Clone + Send + Sync + 'st
     /// Returns `None`` if network does not support handling requests
     async fn spawn_request_receiver_task(
         &self,
-    ) -> Option<mpsc::Receiver<(Vec<u8>, ResponseChannel<Vec<u8>>)>> {
+    ) -> Option<mpsc::Receiver<(Vec<u8>, NetworkMsgResponseChannel<Vec<u8>>)>> {
         None
     }
 
@@ -363,7 +338,8 @@ pub trait ConnectedNetwork<K: SignatureKey + 'static>: Clone + Send + Sync + 'st
         Ok(())
     }
 
-    /// handles view update
+    /// Update view can be used for any reason, but mostly it's for canceling tasks,
+    /// and looking up the address of the leader of a future view.
     async fn update_view<'a, TYPES>(&'a self, _view: u64, _membership: &TYPES::Membership)
     where
         TYPES: NodeType<SignatureKey = K> + 'a,

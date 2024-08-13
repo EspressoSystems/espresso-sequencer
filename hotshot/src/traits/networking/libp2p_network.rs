@@ -34,28 +34,30 @@ use async_lock::{Mutex, RwLock};
 use async_trait::async_trait;
 use bimap::BiHashMap;
 use futures::{
-    channel::mpsc::{self, channel, Receiver, Sender},
+    channel::mpsc::{self, channel, Sender},
     future::{join_all, Either},
     FutureExt, StreamExt,
 };
 use hotshot_orchestrator::config::NetworkConfig;
-#[cfg(feature = "hotshot-testing")]
-use hotshot_types::traits::network::{
-    AsyncGenerator, NetworkReliability, TestableNetworkingImplementation,
-};
 use hotshot_types::{
     boxed_sync,
     constants::LOOK_AHEAD,
     data::ViewNumber,
     message::{DataMessage::DataResponse, Message, MessageKind},
+    request_response::{NetworkMsgResponseChannel, Request, Response},
     traits::{
         election::Membership,
         metrics::{Counter, Gauge, Metrics, NoMetrics},
-        network::{self, ConnectedNetwork, NetworkError, ResponseMessage, Topic},
+        network::{ConnectedNetwork, NetworkError, ResponseMessage, Topic},
         node_implementation::{ConsensusTime, NodeType},
         signature_key::SignatureKey,
     },
     BoxSyncFuture,
+};
+#[cfg(feature = "hotshot-testing")]
+use hotshot_types::{
+    request_response::TakeReceiver,
+    traits::network::{AsyncGenerator, NetworkReliability, TestableNetworkingImplementation},
 };
 use libp2p_identity::{
     ed25519::{self, SecretKey},
@@ -63,7 +65,6 @@ use libp2p_identity::{
 };
 use libp2p_networking::{
     network::{
-        behaviours::request_response::{Request, Response},
         spawn_network_node,
         transport::construct_auth_message,
         MeshParams,
@@ -139,9 +140,6 @@ impl<K: SignatureKey + 'static> Debug for Libp2pNetwork<K> {
         f.debug_struct("Libp2p").field("inner", &"inner").finish()
     }
 }
-
-/// Locked Option of a receiver for moving the value out of the option
-type TakeReceiver = Mutex<Option<Receiver<(Vec<u8>, ResponseChannel<Response>)>>>;
 
 /// Type alias for a shared collection of peerid, multiaddrs
 pub type PeerInfoVec = Arc<RwLock<Vec<(PeerId, Multiaddr)>>>;
@@ -879,7 +877,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
 
     async fn spawn_request_receiver_task(
         &self,
-    ) -> Option<mpsc::Receiver<(Vec<u8>, network::ResponseChannel<Vec<u8>>)>> {
+    ) -> Option<mpsc::Receiver<(Vec<u8>, NetworkMsgResponseChannel<Vec<u8>>)>> {
         let mut internal_rx = self.inner.requests_rx.lock().await.take()?;
         let handle = Arc::clone(&self.inner.handle);
         let (mut tx, rx) = mpsc::channel(100);
@@ -889,7 +887,7 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
                 if tx
                     .try_send((
                         request,
-                        network::ResponseChannel {
+                        NetworkMsgResponseChannel {
                             sender: response_tx,
                         },
                     ))
@@ -1125,7 +1123,18 @@ impl<K: SignatureKey + 'static> ConnectedNetwork<K> for Libp2pNetwork<K> {
             .try_send(Some((view_number, pk)))
     }
 
-    /// handles view update
+    /// The libp2p view update is a special operation intrinsic to its internal behavior.
+    ///
+    /// Libp2p needs to do a lookup because a libp2p address is not releated to
+    /// hotshot keys. So in libp2p we store a mapping of HotShot key to libp2p address
+    /// in a distributed hash table.
+    ///
+    /// This means to directly message someone on libp2p we need to lookup in the hash
+    /// table what their libp2p address is, using their HotShot public key as the key.
+    ///
+    /// So the logic with libp2p is to prefetch upcomming leaders libp2p address to
+    /// save time when we later need to direct message the leader our vote. Hence the
+    /// use of the future view and leader to queue the lookups.
     async fn update_view<'a, TYPES>(&'a self, view: u64, membership: &TYPES::Membership)
     where
         TYPES: NodeType<SignatureKey = K> + 'a,

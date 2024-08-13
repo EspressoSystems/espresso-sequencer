@@ -7,22 +7,10 @@
 use std::collections::HashMap;
 
 use futures::channel::oneshot::Sender;
+use hotshot_types::request_response::{Request, Response};
 use libp2p::request_response::{Message, OutboundRequestId};
-use serde::{Deserialize, Serialize};
 
 use crate::network::NetworkEvent;
-
-/// Request for Consenus data
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Request(#[serde(with = "serde_bytes")] pub Vec<u8>);
-
-/// Response for some VID data that we already collected
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Response(
-    /// Data
-    #[serde(with = "serde_bytes")]
-    pub Vec<u8>,
-);
 
 #[derive(Default, Debug)]
 /// Handler for request response messages

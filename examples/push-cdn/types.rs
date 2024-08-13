@@ -9,6 +9,7 @@ use hotshot_example_types::{
     auction_results_provider_types::TestAuctionResultsProvider, state_types::TestTypes,
     storage_types::TestStorage,
 };
+use hotshot_types::traits::node_implementation::NodeType;
 use serde::{Deserialize, Serialize};
 
 use crate::infra::PushCdnDaRun;
@@ -18,7 +19,7 @@ use crate::infra::PushCdnDaRun;
 pub struct NodeImpl {}
 
 /// Convenience type alias
-pub type Network = PushCdnNetwork<TestTypes>;
+pub type Network = PushCdnNetwork<<TestTypes as NodeType>::SignatureKey>;
 
 impl NodeImplementation<TestTypes> for NodeImpl {
     type Network = Network;

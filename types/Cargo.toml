@@ -48,12 +48,14 @@ jf-signature = { workspace = true, features = ["schnorr"] }
 jf-utils = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 tagged-base64 = { workspace = true }
 vbs = { workspace = true }
 displaydoc = { version = "0.2.5", default-features = false }
 dyn-clone = { git = "https://github.com/dtolnay/dyn-clone", tag = "1.0.17" }
 url = { workspace = true }
 vec1 = { workspace = true }
+libp2p = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

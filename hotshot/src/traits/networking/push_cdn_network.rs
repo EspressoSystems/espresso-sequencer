@@ -125,27 +125,27 @@ impl<T: SignatureKey> Serializable for WrappedSignatureKey<T> {
 
 /// The production run definition for the Push CDN.
 /// Uses the real protocols and a Redis discovery client.
-pub struct ProductionDef<TYPES: NodeType>(PhantomData<TYPES>);
-impl<TYPES: NodeType> RunDef for ProductionDef<TYPES> {
-    type User = UserDef<TYPES>;
-    type Broker = BrokerDef<TYPES>;
+pub struct ProductionDef<K: SignatureKey + 'static>(PhantomData<K>);
+impl<K: SignatureKey + 'static> RunDef for ProductionDef<K> {
+    type User = UserDef<K>;
+    type Broker = BrokerDef<K>;
     type DiscoveryClientType = Redis;
     type Topic = Topic;
 }
 
 /// The user definition for the Push CDN.
 /// Uses the Quic protocol and untrusted middleware.
-pub struct UserDef<TYPES: NodeType>(PhantomData<TYPES>);
-impl<TYPES: NodeType> ConnectionDef for UserDef<TYPES> {
-    type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
+pub struct UserDef<K: SignatureKey + 'static>(PhantomData<K>);
+impl<K: SignatureKey + 'static> ConnectionDef for UserDef<K> {
+    type Scheme = WrappedSignatureKey<K>;
     type Protocol = Quic;
 }
 
 /// The broker definition for the Push CDN.
 /// Uses the TCP protocol and trusted middleware.
-pub struct BrokerDef<TYPES: NodeType>(PhantomData<TYPES>);
-impl<TYPES: NodeType> ConnectionDef for BrokerDef<TYPES> {
-    type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
+pub struct BrokerDef<K: SignatureKey + 'static>(PhantomData<K>);
+impl<K: SignatureKey> ConnectionDef for BrokerDef<K> {
+    type Scheme = WrappedSignatureKey<K>;
     type Protocol = Tcp;
 }
 
@@ -153,18 +153,18 @@ impl<TYPES: NodeType> ConnectionDef for BrokerDef<TYPES> {
 /// protocol and no middleware. Differs from the user
 /// definition in that is on the client-side.
 #[derive(Clone)]
-pub struct ClientDef<TYPES: NodeType>(PhantomData<TYPES>);
-impl<TYPES: NodeType> ConnectionDef for ClientDef<TYPES> {
-    type Scheme = WrappedSignatureKey<TYPES::SignatureKey>;
+pub struct ClientDef<K: SignatureKey + 'static>(PhantomData<K>);
+impl<K: SignatureKey> ConnectionDef for ClientDef<K> {
+    type Scheme = WrappedSignatureKey<K>;
     type Protocol = Quic;
 }
 
 /// The testing run definition for the Push CDN.
 /// Uses the real protocols, but with an embedded discovery client.
-pub struct TestingDef<TYPES: NodeType>(PhantomData<TYPES>);
-impl<TYPES: NodeType> RunDef for TestingDef<TYPES> {
-    type User = UserDef<TYPES>;
-    type Broker = BrokerDef<TYPES>;
+pub struct TestingDef<K: SignatureKey + 'static>(PhantomData<K>);
+impl<K: SignatureKey + 'static> RunDef for TestingDef<K> {
+    type User = UserDef<K>;
+    type Broker = BrokerDef<K>;
     type DiscoveryClientType = Embedded;
     type Topic = Topic;
 }
@@ -173,14 +173,16 @@ impl<TYPES: NodeType> RunDef for TestingDef<TYPES> {
 /// that helps organize them all.
 #[derive(Clone)]
 /// Is generic over both the type of key and the network protocol.
-pub struct PushCdnNetwork<TYPES: NodeType> {
+pub struct PushCdnNetwork<K: SignatureKey + 'static> {
     /// The underlying client
-    client: Client<ClientDef<TYPES>>,
+    client: Client<ClientDef<K>>,
     /// The CDN-specific metrics
     metrics: Arc<CdnMetricsValue>,
     /// Whether or not the underlying network is supposed to be paused
     #[cfg(feature = "hotshot-testing")]
     is_paused: Arc<AtomicBool>,
+    // The receiver channel for
+    // request_receiver_channel: TakeReceiver,
 }
 
 /// The enum for the topics we can subscribe to in the Push CDN
@@ -197,7 +199,7 @@ pub enum Topic {
 /// topics that are not implemented at the application level.
 impl TopicTrait for Topic {}
 
-impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
+impl<K: SignatureKey + 'static> PushCdnNetwork<K> {
     /// Create a new `PushCdnNetwork` (really a client) from a marshal endpoint, a list of initial
     /// topics we are interested in, and our wrapped keypair that we use to authenticate with the
     /// marshal.
@@ -207,7 +209,7 @@ impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
     pub fn new(
         marshal_endpoint: String,
         topics: Vec<Topic>,
-        keypair: KeyPair<WrappedSignatureKey<TYPES::SignatureKey>>,
+        keypair: KeyPair<WrappedSignatureKey<K>>,
         metrics: CdnMetricsValue,
     ) -> anyhow::Result<Self> {
         // Build config
@@ -258,7 +260,9 @@ impl<TYPES: NodeType> PushCdnNetwork<TYPES> {
 }
 
 #[cfg(feature = "hotshot-testing")]
-impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork<TYPES> {
+impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES>
+    for PushCdnNetwork<TYPES::SignatureKey>
+{
     /// Generate n Push CDN clients, a marshal, and two brokers (that run locally).
     /// Uses a `SQLite` database instead of Redis.
     #[allow(clippy::too_many_lines)]
@@ -317,7 +321,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
             let other_broker_identifier = format!("{other_public_address}/{other_public_address}");
 
             // Configure the broker
-            let config: BrokerConfig<TestingDef<TYPES>> = BrokerConfig {
+            let config: BrokerConfig<TestingDef<TYPES::SignatureKey>> = BrokerConfig {
                 public_advertise_endpoint: public_address.clone(),
                 public_bind_endpoint: public_address,
                 private_advertise_endpoint: private_address.clone(),
@@ -336,7 +340,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
 
             // Create and spawn the broker
             async_spawn(async move {
-                let broker: Broker<TestingDef<TYPES>> =
+                let broker: Broker<TestingDef<TYPES::SignatureKey>> =
                     Broker::new(config).await.expect("broker failed to start");
 
                 // If we are the first broker by identifier, we need to sleep a bit
@@ -369,7 +373,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
 
         // Spawn the marshal
         async_spawn(async move {
-            let marshal: Marshal<TestingDef<TYPES>> = Marshal::new(marshal_config)
+            let marshal: Marshal<TestingDef<TYPES::SignatureKey>> = Marshal::new(marshal_config)
                 .await
                 .expect("failed to spawn marshal");
 
@@ -399,15 +403,16 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
                     };
 
                     // Configure our client
-                    let client_config: ClientConfig<ClientDef<TYPES>> = ClientConfig {
-                        keypair: KeyPair {
-                            public_key: WrappedSignatureKey(public_key),
-                            private_key,
-                        },
-                        subscribed_topics: topics,
-                        endpoint: marshal_endpoint,
-                        use_local_authority: true,
-                    };
+                    let client_config: ClientConfig<ClientDef<TYPES::SignatureKey>> =
+                        ClientConfig {
+                            keypair: KeyPair {
+                                public_key: WrappedSignatureKey(public_key),
+                                private_key,
+                            },
+                            subscribed_topics: topics,
+                            endpoint: marshal_endpoint,
+                            use_local_authority: true,
+                        };
 
                     // Create our client
                     Arc::new(PushCdnNetwork {
@@ -428,7 +433,23 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for PushCdnNetwork
 }
 
 #[async_trait]
-impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for PushCdnNetwork<TYPES> {
+impl<K: SignatureKey + 'static> ConnectedNetwork<K> for PushCdnNetwork<K> {
+    // async fn request_data<ReqDataTYPES: NodeType>(
+    //     &self,
+    //     request: Vec<u8>,
+    //     recipient: ReqDataK,
+    // ) -> Result<Vec<u8>, NetworkError> {
+    //     self.client.send_direct_message(recipient, request).await;
+
+    //     Ok(vec![])
+    // }
+
+    // async fn spawn_request_receiver_task(
+    //     &self,
+    // ) -> Option<mpsc::Receiver<(Vec<u8>, NetworkMsgResponseChannel<Vec<u8>>)>> {
+    //     None
+    // }
+
     /// Pause sending and receiving on the PushCDN network.
     fn pause(&self) {
         #[cfg(feature = "hotshot-testing")]
@@ -482,7 +503,7 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for PushCdnNetwork<T
     async fn da_broadcast_message(
         &self,
         message: Vec<u8>,
-        _recipients: BTreeSet<TYPES::SignatureKey>,
+        _recipients: BTreeSet<K>,
         _broadcast_delay: BroadcastDelay,
     ) -> Result<(), NetworkError> {
         self.broadcast_message(message, Topic::Da)
@@ -497,11 +518,7 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for PushCdnNetwork<T
     ///
     /// - If we fail to serialize the message
     /// - If we fail to send the direct message
-    async fn direct_message(
-        &self,
-        message: Vec<u8>,
-        recipient: TYPES::SignatureKey,
-    ) -> Result<(), NetworkError> {
+    async fn direct_message(&self, message: Vec<u8>, recipient: K) -> Result<(), NetworkError> {
         // If we're paused, don't send the message
         #[cfg(feature = "hotshot-testing")]
         if self.is_paused.load(Ordering::Relaxed) {
@@ -566,8 +583,8 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for PushCdnNetwork<T
     fn queue_node_lookup(
         &self,
         _view_number: ViewNumber,
-        _pk: TYPES::SignatureKey,
-    ) -> Result<(), TrySendError<Option<(ViewNumber, TYPES::SignatureKey)>>> {
+        _pk: K,
+    ) -> Result<(), TrySendError<Option<(ViewNumber, K)>>> {
         Ok(())
     }
 }

@@ -12,6 +12,7 @@ use cdn_marshal::{Config, Marshal};
 use clap::Parser;
 use hotshot::traits::implementations::ProductionDef;
 use hotshot_example_types::node_types::TestTypes;
+use hotshot_types::traits::node_implementation::NodeType;
 use tracing_subscriber::EnvFilter;
 
 // TODO: forall, add logging where we need it
@@ -80,7 +81,8 @@ async fn main() -> Result<()> {
     };
 
     // Create new `Marshal` from the config
-    let marshal = Marshal::<ProductionDef<TestTypes>>::new(config).await?;
+    let marshal =
+        Marshal::<ProductionDef<<TestTypes as NodeType>::SignatureKey>>::new(config).await?;
 
     // Start the main loop, consuming it
     marshal.start().await?;

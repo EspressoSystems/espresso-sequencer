@@ -27,7 +27,7 @@ use hotshot_task_impls::{
     network,
     network::{NetworkEventTaskState, NetworkMessageTaskState},
     request::NetworkRequestState,
-    response::{run_response_task, NetworkResponseState, RequestReceiver},
+    response::{run_response_task, NetworkResponseState},
     transactions::TransactionTaskState,
     upgrade::UpgradeTaskState,
     vid::VidTaskState,
@@ -37,6 +37,7 @@ use hotshot_types::{
     constants::EVENT_CHANNEL_SIZE,
     data::QuorumProposal,
     message::{Messages, Proposal},
+    request_response::RequestReceiver,
     traits::{
         network::ConnectedNetwork,
         node_implementation::{ConsensusTime, NodeImplementation, NodeType},

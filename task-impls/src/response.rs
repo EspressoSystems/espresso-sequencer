@@ -10,7 +10,7 @@ use async_broadcast::Receiver;
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 #[cfg(async_executor_impl = "async-std")]
 use async_std::task::JoinHandle;
-use futures::{channel::mpsc, FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt};
 use hotshot_task::dependency::{Dependency, EventDependency};
 use hotshot_types::{
     consensus::{Consensus, LockedConsensusState, OuterConsensus},
@@ -19,9 +19,10 @@ use hotshot_types::{
         DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message, MessageKind, Proposal,
         SequencingMessage,
     },
+    request_response::{NetworkMsgResponseChannel, RequestReceiver},
     traits::{
         election::Membership,
-        network::{DataRequest, RequestKind, ResponseChannel, ResponseMessage},
+        network::{DataRequest, RequestKind, ResponseMessage},
         node_implementation::NodeType,
         signature_key::SignatureKey,
     },
@@ -32,10 +33,6 @@ use tokio::task::JoinHandle;
 use tracing::instrument;
 
 use crate::events::HotShotEvent;
-
-/// Type alias for the channel that we receive requests from the network on.
-pub type RequestReceiver = mpsc::Receiver<(Vec<u8>, ResponseChannel<Vec<u8>>)>;
-
 /// Time to wait for txns before sending `ResponseMessage::NotFound`
 const TXNS_TIMEOUT: Duration = Duration::from_millis(100);
 
@@ -98,7 +95,7 @@ impl<TYPES: NodeType> NetworkResponseState<TYPES> {
 
     /// Handle an incoming message.  First validates the sender, then handles the contained request.
     /// Sends the response via `chan`
-    async fn handle_message(&self, raw_req: Vec<u8>, chan: ResponseChannel<Vec<u8>>) {
+    async fn handle_message(&self, raw_req: Vec<u8>, chan: NetworkMsgResponseChannel<Vec<u8>>) {
         let req: Message<TYPES> = match bincode::deserialize(&raw_req) {
             Ok(deserialized) => deserialized,
             Err(e) => {

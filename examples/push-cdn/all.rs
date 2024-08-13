@@ -78,27 +78,28 @@ async fn main() {
         let private_address = format!("127.0.0.1:{private_port}");
         let public_address = format!("127.0.0.1:{public_port}");
 
-        let config: cdn_broker::Config<TestingDef<TestTypes>> = cdn_broker::Config {
-            discovery_endpoint: discovery_endpoint.clone(),
-            public_advertise_endpoint: public_address.clone(),
-            public_bind_endpoint: public_address,
-            private_advertise_endpoint: private_address.clone(),
-            private_bind_endpoint: private_address,
+        let config: cdn_broker::Config<TestingDef<<TestTypes as NodeType>::SignatureKey>> =
+            cdn_broker::Config {
+                discovery_endpoint: discovery_endpoint.clone(),
+                public_advertise_endpoint: public_address.clone(),
+                public_bind_endpoint: public_address,
+                private_advertise_endpoint: private_address.clone(),
+                private_bind_endpoint: private_address,
 
-            keypair: KeyPair {
-                public_key: WrappedSignatureKey(broker_public_key),
-                private_key: broker_private_key.clone(),
-            },
+                keypair: KeyPair {
+                    public_key: WrappedSignatureKey(broker_public_key),
+                    private_key: broker_private_key.clone(),
+                },
 
-            metrics_bind_endpoint: None,
-            ca_cert_path: None,
-            ca_key_path: None,
-            global_memory_pool_size: Some(1024 * 1024 * 1024),
-        };
+                metrics_bind_endpoint: None,
+                ca_cert_path: None,
+                ca_key_path: None,
+                global_memory_pool_size: Some(1024 * 1024 * 1024),
+            };
 
         // Create and spawn the broker
         async_spawn(async move {
-            let broker: Broker<TestingDef<TestTypes>> =
+            let broker: Broker<TestingDef<<TestTypes as NodeType>::SignatureKey>> =
                 Broker::new(config).await.expect("broker failed to start");
 
             // Error if we stopped unexpectedly
@@ -124,9 +125,10 @@ async fn main() {
 
     // Spawn the marshal
     async_spawn(async move {
-        let marshal: Marshal<TestingDef<TestTypes>> = Marshal::new(marshal_config)
-            .await
-            .expect("failed to spawn marshal");
+        let marshal: Marshal<TestingDef<<TestTypes as NodeType>::SignatureKey>> =
+            Marshal::new(marshal_config)
+                .await
+                .expect("failed to spawn marshal");
 
         // Error if we stopped unexpectedly
         if let Err(err) = marshal.start().await {

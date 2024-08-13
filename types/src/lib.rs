@@ -26,6 +26,7 @@ pub mod event;
 pub mod light_client;
 pub mod message;
 pub mod qc;
+pub mod request_response;
 pub mod signature_key;
 pub mod simple_certificate;
 pub mod simple_vote;

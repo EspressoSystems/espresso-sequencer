@@ -18,7 +18,10 @@ pub mod transport;
 use std::{collections::HashSet, fmt::Debug, str::FromStr};
 
 use futures::channel::oneshot::{self, Sender};
-use hotshot_types::traits::signature_key::SignatureKey;
+use hotshot_types::{
+    request_response::{Request, Response},
+    traits::signature_key::SignatureKey,
+};
 #[cfg(async_executor_impl = "async-std")]
 use libp2p::dns::async_std::Transport as DnsTransport;
 #[cfg(async_executor_impl = "tokio")]
@@ -42,7 +45,6 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 use transport::StakeTableAuthentication;
 
-use self::behaviours::request_response::{Request, Response};
 pub use self::{
     def::NetworkDef,
     error::NetworkError,

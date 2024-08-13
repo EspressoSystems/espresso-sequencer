@@ -37,8 +37,9 @@ use hotshot_types::{
         COMBINED_NETWORK_MIN_PRIMARY_FAILURES, COMBINED_NETWORK_PRIMARY_CHECK_INTERVAL,
     },
     data::ViewNumber,
+    request_response::NetworkMsgResponseChannel,
     traits::{
-        network::{BroadcastDelay, ConnectedNetwork, ResponseChannel, Topic},
+        network::{BroadcastDelay, ConnectedNetwork, Topic},
         node_implementation::NodeType,
     },
     BoxSyncFuture,
@@ -93,7 +94,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
     /// Panics if `COMBINED_NETWORK_CACHE_SIZE` is 0
     #[must_use]
     pub fn new(
-        primary_network: PushCdnNetwork<TYPES>,
+        primary_network: PushCdnNetwork<TYPES::SignatureKey>,
         secondary_network: Libp2pNetwork<TYPES::SignatureKey>,
         delay_duration: Option<Duration>,
     ) -> Self {
@@ -120,7 +121,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
 
     /// Get a ref to the primary network
     #[must_use]
-    pub fn primary(&self) -> &PushCdnNetwork<TYPES> {
+    pub fn primary(&self) -> &PushCdnNetwork<TYPES::SignatureKey> {
         &self.networks.0
     }
 
@@ -249,7 +250,7 @@ impl<TYPES: NodeType> CombinedNetworks<TYPES> {
 /// on the tuple
 #[derive(Clone)]
 pub struct UnderlyingCombinedNetworks<TYPES: NodeType>(
-    pub PushCdnNetwork<TYPES>,
+    pub PushCdnNetwork<TYPES::SignatureKey>,
     pub Libp2pNetwork<TYPES::SignatureKey>,
 );
 
@@ -265,7 +266,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
         secondary_network_delay: Duration,
     ) -> AsyncGenerator<Arc<Self>> {
         let generators = (
-            <PushCdnNetwork<TYPES> as TestableNetworkingImplementation<TYPES>>::generator(
+            <PushCdnNetwork<TYPES::SignatureKey> as TestableNetworkingImplementation<TYPES>>::generator(
                 expected_node_count,
                 num_bootstrap,
                 network_id,
@@ -291,7 +292,7 @@ impl<TYPES: NodeType> TestableNetworkingImplementation<TYPES> for CombinedNetwor
             Box::pin(async move {
                 // Generate the CDN network
                 let cdn = gen0.await;
-                let cdn = Arc::<PushCdnNetwork<TYPES>>::into_inner(cdn).unwrap();
+                let cdn = Arc::<PushCdnNetwork<TYPES::SignatureKey>>::into_inner(cdn).unwrap();
 
                 // Generate the p2p network
                 let p2p = gen1.await;
@@ -345,7 +346,7 @@ impl<TYPES: NodeType> ConnectedNetwork<TYPES::SignatureKey> for CombinedNetworks
 
     async fn spawn_request_receiver_task(
         &self,
-    ) -> Option<mpsc::Receiver<(Vec<u8>, ResponseChannel<Vec<u8>>)>> {
+    ) -> Option<mpsc::Receiver<(Vec<u8>, NetworkMsgResponseChannel<Vec<u8>>)>> {
         self.secondary().spawn_request_receiver_task().await
     }
 
