@@ -11,12 +11,8 @@ pub enum UpgradeType {
     // Note: Wrapping this in a tuple variant causes deserialization to fail because
     // the 'chain_config' name is also provided in the TOML input.
     ChainConfig { chain_config: ChainConfig },
-    // todo (ab): use empty
-    Marketplace { marketplace: Marketplace },
+    Marketplace {},
 }
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-pub struct Marketplace {}
 
 /// Represents an upgrade based on time (unix timestamp).
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
