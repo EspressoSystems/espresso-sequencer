@@ -2012,8 +2012,6 @@
 <a href="#2012" id="2012">2012</a>
 <a href="#2013" id="2013">2013</a>
 <a href="#2014" id="2014">2014</a>
-<a href="#2015" id="2015">2015</a>
-<a href="#2016" id="2016">2016</a>
 </pre></div><pre class="rust"><code><span class="kw">use super</span>::{
     client_id::ClientId,
     client_message::{ClientMessage, InternalClientMessage},
@@ -3324,7 +3322,7 @@
         <span class="kw">let </span>(internal_client_message_sender, internal_client_message_receiver) = mpsc::channel(<span class="number">1</span>);
         <span class="kw">let </span>(server_message_sender_1, <span class="kw-2">mut </span>server_message_receiver_1) = mpsc::channel(<span class="number">1</span>);
         <span class="kw">let </span>(server_message_sender_2, <span class="kw-2">mut </span>server_message_receiver_2) = mpsc::channel(<span class="number">1</span>);
-        <span class="kw">let </span>process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
+        <span class="kw">let </span>_process_internal_client_message_handle = InternalClientMessageProcessingTask::new(
             internal_client_message_receiver,
             data_state,
             client_thread_state,
@@ -3375,8 +3373,6 @@
                 voters_1, voters_2
             ]))),
         );
-
-        drop(process_internal_client_message_handle)
     }
 
     <span class="attr">#[async_std::test]
