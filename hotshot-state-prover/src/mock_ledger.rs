@@ -19,7 +19,6 @@ use hotshot_stake_table::vec_based::StakeTable;
 use crate::{
     generate_state_update_proof, preprocess, service::one_honest_threshold, Proof, VerifyingKey,
 };
-use ark_std::rand::SeedableRng;
 use hotshot_types::traits::stake_table::StakeTableScheme;
 use hotshot_types::{
     light_client::{GenericLightClientState, GenericPublicInput, LightClientState},
@@ -432,10 +431,9 @@ fn stake_table_for_testing(
 #[allow(clippy::type_complexity)]
 pub fn gen_plonk_proof_for_test(
     num_proof: usize,
-    seed: u64,
 ) -> Vec<(Proof, VerifyingKey, Vec<F>, Option<Vec<u8>>, usize)> {
     // 1. Simulate universal setup
-    let rng = &mut StdRng::seed_from_u64(seed);
+    let rng = &mut jf_utils::test_rng();
     let srs = {
         let aztec_srs = ark_srs::kzg10::aztec20::setup(1024).expect("Aztec SRS fail to load");
 
