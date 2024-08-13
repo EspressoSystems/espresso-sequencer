@@ -442,7 +442,7 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_wait_for_finalized_block() {
+    async fn slow_test_wait_for_finalized_block() {
         setup_test();
 
         let anvil = Anvil::new().block_time(1u32).spawn();
