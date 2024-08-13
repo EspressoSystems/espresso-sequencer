@@ -4,6 +4,7 @@ use crate::{
     v0_3::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
     FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId, SeqTypes,
 };
+use anyhow::Context;
 use async_trait::async_trait;
 use committable::{Commitment, Committable};
 use hotshot_types::{
@@ -291,10 +292,14 @@ impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for SolverAuctionResultsProv
         &self,
         view_number: TYPES::Time,
     ) -> anyhow::Result<TYPES::AuctionResult> {
-        let resp = SurfClient::new(self.0.clone())
-            .get::<TYPES::AuctionResult>(&format!("/v0/api/auction_results/{}", *view_number))
-            .send()
-            .await?;
+        let resp = SurfClient::new(
+            self.0
+                .join("marketplace-solver/")
+                .context("Malformed solver URL")?,
+        )
+        .get::<TYPES::AuctionResult>(&format!("auction_results/{}", *view_number))
+        .send()
+        .await?;
         Ok(resp)
     }
 }
