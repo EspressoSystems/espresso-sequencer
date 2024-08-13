@@ -1579,7 +1579,7 @@ mod test {
     }
 
     #[async_std::test]
-    pub(crate) async fn test_restart() {
+    pub(crate) async fn slow_test_restart() {
         setup_test();
 
         const NUM_NODES: usize = 5;
