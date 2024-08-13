@@ -642,11 +642,11 @@
     <span class="doccomment">/// URL of generic builder
     </span><span class="attr">#[clap(
         long,
-        env = <span class="string">"ESPRESSO_GENERIC_BUILDER_URL"</span>,
+        env = <span class="string">"ESPRESSO_FALLBACK_BUILDER_URL"</span>,
         default_value = <span class="string">"http://localhost:31004"
     </span>)]
     #[derivative(Debug(format_with = <span class="string">"Display::fmt"</span>))]
-    </span><span class="kw">pub </span>generic_builder_url: Url,
+    </span><span class="kw">pub </span>fallback_builder_url: Url,
 
     <span class="doccomment">/// Path to TOML file containing genesis state.
     </span><span class="attr">#[clap(

@@ -1710,7 +1710,7 @@
                     auction_results_provider: Arc::new(SolverAuctionResultsProvider(
                         Url::from_str(<span class="string">"https://some.solver"</span>).unwrap(),
                     )),
-                    generic_builder_url: Url::from_str(<span class="string">"https://some.builder"</span>).unwrap(),
+                    fallback_builder_url: Url::from_str(<span class="string">"https://some.builder"</span>).unwrap(),
                 },
             )
             .<span class="kw">await

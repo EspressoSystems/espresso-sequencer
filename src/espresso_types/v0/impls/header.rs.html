@@ -1679,6 +1679,7 @@
 <a href="#1679" id="1679">1679</a>
 <a href="#1680" id="1680">1680</a>
 <a href="#1681" id="1681">1681</a>
+<a href="#1682" id="1682">1682</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>anyhow::{ensure, Context};
 <span class="kw">use </span>ark_serialize::CanonicalSerialize;
 <span class="kw">use </span>committable::{Commitment, Committable, RawCommitmentBuilder};
@@ -2024,7 +2025,7 @@
     <span class="attr">#[allow(clippy::too_many_arguments)]
     </span><span class="kw">fn </span>from_info(
         payload_commitment: VidCommitment,
-        builder_commitment: <span class="prelude-ty">Option</span>&lt;BuilderCommitment&gt;,
+        builder_commitment: BuilderCommitment,
         ns_table: NsTable,
         parent_leaf: <span class="kw-2">&amp;</span>Leaf,
         <span class="kw-2">mut </span>l1: L1Snapshot,
@@ -2151,7 +2152,7 @@
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment: builder_commitment.unwrap(),
+                builder_commitment,
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
@@ -2167,7 +2168,7 @@
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment: builder_commitment.unwrap(),
+                builder_commitment,
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
@@ -2181,7 +2182,7 @@
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment: builder_commitment.unwrap(),
+                builder_commitment,
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
@@ -2416,6 +2417,7 @@
         instance_state: <span class="kw-2">&amp;</span>&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::ValidatedState <span class="kw">as </span>hotshot_types::traits::ValidatedState&lt;SeqTypes&gt;&gt;::Instance,
         parent_leaf: <span class="kw-2">&amp;</span>hotshot_types::data::Leaf&lt;SeqTypes&gt;,
         payload_commitment: VidCommitment,
+        builder_commitment: BuilderCommitment,
         metadata: &lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::BlockPayload <span class="kw">as </span>BlockPayload&lt;SeqTypes&gt;&gt;::Metadata,
         builder_fee: Vec&lt;BuilderFee&lt;SeqTypes&gt;&gt;,
         _vid_common: VidCommon,
@@ -2516,7 +2518,7 @@
 
         <span class="prelude-val">Ok</span>(<span class="self">Self</span>::from_info(
             payload_commitment,
-            <span class="prelude-val">None</span>,
+            builder_commitment,
             metadata,
             parent_leaf,
             l1_snapshot,
@@ -2632,7 +2634,7 @@
 
         <span class="prelude-val">Ok</span>(<span class="self">Self</span>::from_info(
             payload_commitment,
-            <span class="prelude-val">Some</span>(builder_commitment),
+            builder_commitment,
             metadata,
             parent_leaf,
             l1_snapshot,
@@ -2834,7 +2836,7 @@
 
             <span class="kw">let </span>header = Header::from_info(
                 genesis.header.payload_commitment(),
-                <span class="prelude-val">Some</span>(genesis.header.builder_commitment().clone()),
+                genesis.header.builder_commitment().clone(),
                 genesis.ns_table,
                 <span class="kw-2">&amp;</span>parent_leaf,
                 L1Snapshot {
