@@ -34,11 +34,6 @@ jobs:
         with:
           version: nightly
 
-      - name: Install just command runner
-        run: |
-          sudo snap install --edge --classic just
-          just --version
-
       - uses: taiki-e/install-action@nextest
 
       - name: Checkout Repository
