@@ -1,2 +1,1 @@
 LightClientBench:testCorrectUpdateBench() (gas: 547715)
-PlonkVerifier2_verify_Test:testFuzz_verify_succeeds(uint64) (runs: 256, μ: 385079, ~: 385079)
