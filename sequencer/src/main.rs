@@ -102,7 +102,7 @@ where
         auction_results_provider: Arc::new(SolverAuctionResultsProvider(
             opt.auction_results_solver_url,
         )),
-        fallback_builder_url: opt.generic_builder_url,
+        fallback_builder_url: opt.fallback_builder_url,
     };
 
     // Initialize HotShot. If the user requested the HTTP module, we must initialize the handle in

@@ -116,11 +116,11 @@ pub struct Options {
     /// URL of generic builder
     #[clap(
         long,
-        env = "ESPRESSO_GENERIC_BUILDER_URL",
+        env = "ESPRESSO_FALLBACK_BUILDER_URL",
         default_value = "http://localhost:31004"
     )]
     #[derivative(Debug(format_with = "Display::fmt"))]
-    pub generic_builder_url: Url,
+    pub fallback_builder_url: Url,
 
     /// Path to TOML file containing genesis state.
     #[clap(
