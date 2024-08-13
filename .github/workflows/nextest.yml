@@ -60,5 +60,15 @@ jobs:
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
-          cargo nextest run --locked --release --workspace --all-features --verbose --test-threads 1
+          cargo nextest run --locked --release --workspace --all-features --verbose --test-threads 1 -E '!test(slow_)'
+        timeout-minutes: 5
+
+       - name: SlowTest
+        env:
+          CARGO_TERM_COLOR: always
+        # Build test binary with `testing` feature, which requires `hotshot_example` config
+        run: |
+          export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
+          export PATH="$PWD/target/release:$PATH"
+          cargo nextest run --locked --release --workspace --all-features --verbose --test-threads 1 -E 'test(slow_)'
         timeout-minutes: 90
