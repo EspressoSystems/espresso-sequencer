@@ -9,6 +9,7 @@ import {
 import { Upgrades, Options } from "openzeppelin-foundry-upgrades/Upgrades.sol";
 import { FeeContract as FC } from "../src/FeeContract.sol";
 import { UtilsScript } from "./Utils.s.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @notice use this script to deploy the upgradeable fee contract
 /// without openzepelin defender
@@ -39,6 +40,8 @@ contract FeeContractUpgradeScript is Script {
     string internal originalContractName = "FeeContract.sol";
     string internal upgradeContractName = vm.envString("FEE_CONTRACT_UPGRADE_NAME");
 
+    using Strings for uint256;
+
     function run() public returns (address implementationAddress, bytes memory result) {
         Options memory opts;
         opts.referenceContract = originalContractName;
@@ -54,6 +57,8 @@ contract FeeContractUpgradeScript is Script {
 
         vm.stopBroadcast();
 
+        string memory feeContractAddressStr = uint256(uint160(address(feeContract))).toHexString(20);
+
         // call upgradeToAndCall command so that the proxy can be upgraded to call from the new
         // implementation above and
         // execute the command via the Safe Multisig wallet
@@ -63,7 +68,8 @@ contract FeeContractUpgradeScript is Script {
         cmds[2] = string(
             abi.encodePacked(
                 "source .env.contracts && ts-node contracts/script/multisigTransactionProposals/safeSDK/upgradeProxy.ts upgradeProxy ",
-                address(feeContract)
+                feeContractAddressStr,
+                " 0x"
             )
         );
 
