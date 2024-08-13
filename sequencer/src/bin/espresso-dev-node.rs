@@ -127,14 +127,6 @@ struct Args {
     logging: logging::Config,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct AltChainInfo {
-    pub chain_id: u64,
-    pub provider_url: Url,
-    pub light_client_address: Address,
-    pub prover_port: u16,
-}
-
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
     let cli_params = Args::parse();
@@ -479,6 +471,14 @@ struct DevInfo {
     pub l1_url: Url,
     pub l1_light_client_address: Address,
     pub alt_chains: Vec<AltChainInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AltChainInfo {
+    pub chain_id: u64,
+    pub provider_url: Url,
+    pub light_client_address: Address,
+    pub prover_port: u16,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -2,7 +2,8 @@
 
 Espresso dev node is a node specifically designed for development and testing. It includes various nodes required to run
 a complete Espresso network, such as `builder`, `sequencer`, `state_prover` etc. Additionally, it supports deploying
-light client contracts on alternative chains and running a separate prover for each which can be useful for testing involving L3s. Developers can use dev node for development and testing.
+light client contracts on alternative chains and running a separate prover for each which can be useful for testing
+involving L3s. Developers can use dev node for development and testing.
 
 ## Download
 
@@ -50,9 +51,23 @@ An example response is like this:
 ```json
 {
   "builder_url": "http://localhost:41003/",
-  "prover_port": 23156,
+  "l1_prover_port": 23156,
   "l1_url": "http://localhost:8545/",
-  "light_client_address": "0xb075b82c7a23e0994df4793422a1f03dbcf9136f"
+  "l1_light_client_address": "0xb075b82c7a23e0994df4793422a1f03dbcf9136f",
+  "alt_chains": [
+    {
+      "chain_id": 9,
+      "provider_url": "http://localhost:8546/",
+      "light_client_address": "0xa1b2c3d4e5f678901234567890abcdef12345678",
+      "prover_port": 23157
+    },
+    {
+      "chain_id": 10,
+      "provider_url": "http://localhost:8547/",
+      "light_client_address": "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdef",
+      "prover_port": 23158
+    }
+  ]
 }
 ```
 
@@ -77,7 +92,7 @@ Parameters
 | Name     | Type    | Required | Description                                                                                                   |
 | -------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------- |
 | chain_id | integer | No       | chain id for which the height needs to be frozen. If not provided, the base L1 light client contract is used. |
-| height   | integer | Yes      | The L1 height from which hotshot is down                                                                      |
+| height   | integer | Yes      | The height from which hotshot is down                                                                         |
 
 ### POST /api/set-hotshot-up
 
@@ -96,6 +111,6 @@ curl -X POST "http://localhost:20000/api/set-hotshot-up" \
 
 Parameter
 
-| Name     | Type    | Required | Description                                                                                                      |
-| -------- | ------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
-| chain_id | integer | No       | chain id for which the height needs to be un frozen. If not provided, the base L1 light client contract is used. |
+| Name     | Type    | Required | Description                                                                                                     |
+| -------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| chain_id | integer | No       | chain id for which the height needs to be unfrozen. If not provided, the base L1 light client contract will be used. |
