@@ -52,3 +52,20 @@ contract PlonkVerifierDefenderDeployScript is Script {
         return (contractAddress, multisig);
     }
 }
+
+contract PlonkVerifierDeployScript is Script {
+    string public contractName = "PlonkVerifier.sol";
+
+    function run() public returns (address contractAddress) {
+        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+
+        // Deploy the library
+        Options memory opts;
+        address plonkVeriifer = Upgrades.deployImplementation(contractName, opts);
+
+        vm.stopBroadcast();
+
+        return (plonkVeriifer);
+    }
+}

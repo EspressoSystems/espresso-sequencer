@@ -119,7 +119,7 @@ Client contract have to be upgraded and should use the new PlonkVerifier contrac
 ```bash
    source .env.contracts && \
    forge clean && \
-   forge script contracts/script/LightClientWithDefender.s.sol:LightClientDeployScript $NUM_BLOCKS_PER_EPOCH $NUM_INIT_VALIDATORS $SAFE_MULTISIG_ADDRESS \
+   forge script contracts/script/LightClient.s.sol:LightClientDeployScript $NUM_BLOCKS_PER_EPOCH $NUM_INIT_VALIDATORS $SAFE_MULTISIG_ADDRESS \
    --sig 'run(uint32, uint32, address)' \
    --ffi \
    --rpc-url https://ethereum-sepolia.publicnode.com  \
@@ -133,7 +133,7 @@ Client contract have to be upgraded and should use the new PlonkVerifier contrac
 ```bash
 source .env.contracts && \
 forge clean && \
-forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderDeployScript \
+forge script contracts/script/LightClient.s.sol:LightClientDefenderDeployScript \
 --ffi --rpc-url https://ethereum-sepolia.publicnode.com  \
 --build-info true \
 --libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
@@ -142,7 +142,7 @@ forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderD
 ```
 source .env.contracts && \
 forge clean && \
-forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderDeployScript \
+forge script contracts/script/LightClient.s.sol:LightClientDefenderDeployScript \
 --ffi --rpc-url https://ethereum-sepolia.publicnode.com \
 --build-info true \
 --libraries contracts/src/libraries/PlonkVerifier.sol:PlonkVerifier:$PLONK_VERIFIER_ADDRESS
@@ -231,7 +231,7 @@ Steps:
 ```bash
 source .env.contracts && \
 forge clean && \
-forge script contracts/script/LightClientWithDefender.s.sol:LightClientContractUpgradeScript \
+forge script contracts/script/LightClient.s.sol:LightClientContractUpgradeScript \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com  \
 --build-info true \
@@ -250,7 +250,7 @@ Steps:
 
 ```bash
 source .env.contracts && \
-forge script contracts/script/LightClientWithDefender.s.sol:LightClientDefenderUpgradeScript \
+forge script contracts/script/LightClient.s.sol:LightClientDefenderUpgradeScript \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com  \
 --build-info true \
@@ -280,12 +280,12 @@ foundry profile is set to default when running commands like `just gen-bindings`
 
 Solution: `export FOUNDRY_PROFILE=default`
 
-# Deploying Upgradable Contracts without OpenZeppelin Defender or a Safe Multisig Wallet
+# Deploying Upgradable Contracts without OpenZeppelin Defender and without a Safe Multisig Wallet
 
 ## LightClient Contract Deployment
 
 ```bash
-forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators \
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScriptWithoutMultiSig $numBlocksPerEpoch $numInitValidators \
 --sig 'run(uint32, uint32)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com
@@ -307,7 +307,7 @@ Change the $MNEMONIC in the .env file to the one of the admin
 To Deploy
 
 ```bash
-forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators \
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScriptWithoutMultiSig $numBlocksPerEpoch $numInitValidators \
 --sig 'run(uint32, uint32)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com\
@@ -345,12 +345,32 @@ forge script contracts/script/PlonkVerifierWithDefender.s.sol:PlonkVerifierDefen
 --build-info true
 ```
 
+# Deploy the Plonk Verifier Library without Defender
+
+The Plonk Verifier contract is not upgradeable and deploying we deploy with defender as part of our workflow so that we
+can also deploy it with a multisig wallet. Each time modifications are made to the Plonk Verifier, contracts that depend
+on it such as the Light Client contract have to be upgraded and should use the new PlonkVerifier contract address as
+part of the deployment.
+
+Ensure that you update the salt, `PLONK_VERIFIER_SALT`, in the `.env.contracts` file before each deployment.
+
+```bash
+source .env.contracts && \
+forge clean && \
+forge script contracts/script/PlonkVerifierWithDefender.s.sol:PlonkVerifierDeployScript \
+--ffi \
+--rpc-url https://ethereum-sepolia.publicnode.com \
+--build-info true \
+--legacy \
+--broadcast
+```
+
 # Deploying Upgradable Contracts without OpenZeppelin Defender or a Safe Multisig Wallet
 
 ## LightClient Contract Deployment
 
 ```bash
-forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators \
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScriptWithoutMultiSig $numBlocksPerEpoch $numInitValidators \
 --sig 'run(uint32, uint32)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com
@@ -372,7 +392,7 @@ Change the $MNEMONIC in the .env file to the one of the admin
 To Deploy
 
 ```bash
-forge script contracts/script/LightClient.s.sol:DeployLightClientContractScript $numBlocksPerEpoch $numInitValidators \
+forge script contracts/script/LightClient.s.sol:DeployLightClientContractScriptWithoutMultiSig $numBlocksPerEpoch $numInitValidators \
 --sig 'run(uint32, uint32)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com\

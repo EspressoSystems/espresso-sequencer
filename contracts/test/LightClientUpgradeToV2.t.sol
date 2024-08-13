@@ -5,14 +5,15 @@ pragma experimental ABIEncoderV2;
 import { Test } /*, console2*/ from "forge-std/Test.sol";
 import { LightClient as LCV1 } from "../src/LightClient.sol";
 import { LightClientV2 as LCV2 } from "../test/LightClientV2.sol";
-import { DeployLightClientContractScript } from "../script/LightClient.s.sol";
+import { DeployLightClientContractScriptWithoutMultiSig } from "../script/LightClient.s.sol";
 import { UpgradeLightClientScript } from "../script/UpgradeLightClientToV2.s.sol";
 
 contract LightClientUpgradeToV2Test is Test {
     LCV1 public lcV1Proxy;
     LCV2 public lcV2Proxy;
 
-    DeployLightClientContractScript public deployer = new DeployLightClientContractScript();
+    DeployLightClientContractScriptWithoutMultiSig public deployer =
+        new DeployLightClientContractScriptWithoutMultiSig();
     UpgradeLightClientScript public upgrader = new UpgradeLightClientScript();
 
     LCV1.LightClientState public stateV1;
