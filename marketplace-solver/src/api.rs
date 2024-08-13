@@ -8,6 +8,7 @@ use espresso_types::{
     NamespaceId,
 };
 use futures::FutureExt;
+use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tide_disco::{
@@ -101,11 +102,24 @@ where
     api.post("submit_bid", |_req, _state| {
         async move { Ok("Bid Submitted") }.boxed()
     })?
-    .get("auction_results", |_req, _state| {
-        async move { Ok("Auction Results Gotten") }.boxed()
+    .get("auction_results", |req, state| {
+        async move {
+            let view_num: u64 = req.integer_param("view_number")?;
+            state
+                .calculate_auction_results_permissionless(ViewNumber::new(view_num))
+                .await
+        }
+        .boxed()
     })?
-    .get("auction_results_permissioned", |_req, _state| {
-        async move { Ok("Permissioned Auction Results Gotten") }.boxed()
+    .get("auction_results_permissioned", |req, state| {
+        async move {
+            let view_num: u64 = req.integer_param("view_number")?;
+            let signature = req.blob_param("signature")?;
+            state
+                .calculate_auction_results_permissioned(ViewNumber::new(view_num), signature)
+                .await
+        }
+        .boxed()
     })?
     .post("register_rollup", |req, state| {
         async move {
