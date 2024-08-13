@@ -1013,10 +1013,6 @@
 <a href="#1013" id="1013">1013</a>
 <a href="#1014" id="1014">1014</a>
 <a href="#1015" id="1015">1015</a>
-<a href="#1016" id="1016">1016</a>
-<a href="#1017" id="1017">1017</a>
-<a href="#1018" id="1018">1018</a>
-<a href="#1019" id="1019">1019</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{collections::BTreeMap, io, iter::once, sync::Arc, time::Duration};
 
 <span class="kw">use </span>async_std::task::spawn;
@@ -1691,20 +1687,16 @@
                 .<span class="kw">await</span>;
         }
 
-        <span class="comment">// Now the `submit/submit` endpoint allows the extremely large transactions to be in the mempool.
-        // And we need to check whether this extremely large transaction blocks the building process.
-        // Currently the default value of `max_block_size` is 30720, and this transaction exceeds the limit.
-        // TODO: https://github.com/EspressoSystems/espresso-sequencer/issues/1777
-        </span>{
-            <span class="kw">let </span>extremely_large_tx = Transaction::new(<span class="number">100_u32</span>.into(), <span class="macro">vec!</span>[<span class="number">0</span>; <span class="number">50120</span>]);
-            <span class="kw">let </span>extremely_large_hash: Commitment&lt;Transaction&gt; = api_client
-                .post(<span class="string">"submit/submit"</span>)
+        {
+            <span class="comment">// transactions with size larger than max_block_size result in an error
+            </span><span class="kw">let </span>extremely_large_tx = Transaction::new(<span class="number">100_u32</span>.into(), <span class="macro">vec!</span>[<span class="number">0</span>; <span class="number">50120</span>]);
+            api_client
+                .post::&lt;Commitment&lt;Transaction&gt;&gt;(<span class="string">"submit/submit"</span>)
                 .body_json(<span class="kw-2">&amp;</span>extremely_large_tx)
                 .unwrap()
                 .send()
                 .<span class="kw">await
-                </span>.unwrap();
-            <span class="macro">assert_eq!</span>(extremely_large_tx.commit(), extremely_large_hash);
+                </span>.unwrap_err();
 
             <span class="comment">// Now we send a small transaction to make sure this transaction can be included in a hotshot block.
             </span><span class="kw">let </span>tx = Transaction::new(<span class="number">100_u32</span>.into(), <span class="macro">vec!</span>[<span class="number">0</span>; <span class="number">3</span>]);
