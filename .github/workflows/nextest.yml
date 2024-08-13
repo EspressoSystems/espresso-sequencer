@@ -65,5 +65,5 @@ jobs:
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
           cargo nextest run --locked --release --workspace --all-features --no-run
-          cargo nextest run --locked --release --workspace --all-features --verbose -- --test-threads 1 --nocapture
+          cargo nextest run --locked --release --workspace --all-features --verbose --test-threads 1
         timeout-minutes: 90
