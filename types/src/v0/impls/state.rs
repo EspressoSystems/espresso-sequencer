@@ -510,7 +510,7 @@ impl ValidatedState {
             return;
         };
 
-        if let UpgradeType::ChainConfig { chain_config } = upgrade.upgrade_type {
+        if let UpgradeType::FeeUpgrade { chain_config } = upgrade.upgrade_type {
             self.chain_config = chain_config.into();
         }
     }
@@ -792,6 +792,7 @@ mod test {
     use hotshot_types::{traits::signature_key::BuilderSignatureKey, vid::vid_scheme};
     use jf_vid::VidScheme;
     use sequencer_utils::ser::FromStringOrInteger;
+    use tracing::debug;
 
     use super::*;
     use crate::{
@@ -1063,7 +1064,7 @@ mod test {
         let metadata = parent.block_header().metadata();
         let vid_commitment = parent.payload_commitment();
 
-        dbg!(header.version());
+        debug!("{:?}", header.version());
 
         let key_pair = EthKeyPair::random();
         let account = key_pair.fee_account();

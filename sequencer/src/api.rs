@@ -1473,7 +1473,7 @@ mod test {
             <SeqTypes as NodeType>::Upgrade::VERSION,
             Upgrade {
                 mode,
-                upgrade_type: UpgradeType::ChainConfig {
+                upgrade_type: UpgradeType::FeeUpgrade {
                     chain_config: chain_config_upgrade,
                 },
             },
