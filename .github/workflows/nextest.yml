@@ -1,4 +1,4 @@
-name: NexTest
+name: Test
 
 on:
   push:
@@ -22,7 +22,7 @@ env:
   RUST_LOG: info,libp2p=off,node=error
 
 jobs:
-  nextest:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Fix submodule permissions check
@@ -53,7 +53,7 @@ jobs:
           cargo nextest run --locked --release --workspace --all-features --no-run
         timeout-minutes: 90
 
-      - name: NexTest
+      - name: Test
         env:
           CARGO_TERM_COLOR: always
         # Build test binary with `testing` feature, which requires `hotshot_example` config
