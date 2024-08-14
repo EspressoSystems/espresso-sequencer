@@ -1309,12 +1309,12 @@ dependencies = [
  "hotshot",
  "hotshot-builder-api",
  "hotshot-builder-core",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot)",
  "hotshot-example-types",
  "hotshot-orchestrator",
  "hotshot-stake-table",
  "hotshot-state-prover",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "jf-merkle-tree",
  "jf-signature",
  "libp2p",
@@ -2941,7 +2941,7 @@ dependencies = [
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-testing",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "itertools 0.12.1",
  "jf-merkle-tree",
  "jf-utils",
@@ -4063,7 +4063,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.69#b3796d6abea494780f6220845d729cb186a11f6a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4088,7 +4088,7 @@ dependencies = [
  "hotshot-orchestrator",
  "hotshot-task",
  "hotshot-task-impls",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "jf-signature",
  "libp2p-identity",
  "libp2p-networking",
@@ -4110,14 +4110,14 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.69#b3796d6abea494780f6220845d729cb186a11f6a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
 dependencies = [
  "async-trait",
  "clap",
  "committable",
  "derive_more 1.0.0",
  "futures",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "serde",
  "snafu 0.8.4",
  "tagged-base64",
@@ -4129,7 +4129,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.39"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.40#a052a71980f2b2adac9a32bdf10028a220a1e748"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=update-hotshot#99bcd9a260d246fe61d0f66aeb3d679ce815870f"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4144,8 +4144,8 @@ dependencies = [
  "hex",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service",
- "hotshot-types",
+ "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot)",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "lru 0.12.4",
  "serde",
  "sha2 0.10.8",
@@ -4170,7 +4170,7 @@ dependencies = [
  "contract-bindings",
  "diff-test-bn254",
  "ethers",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "jf-pcs",
  "jf-plonk",
  "jf-utils",
@@ -4181,7 +4181,7 @@ dependencies = [
 [[package]]
 name = "hotshot-events-service"
 version = "0.1.38"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.40#9ed690db7a12a4e8a64bb49a0437086232888765"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=main#9ed690db7a12a4e8a64bb49a0437086232888765"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -4193,7 +4193,33 @@ dependencies = [
  "derive_more 0.99.18",
  "either",
  "futures",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.69)",
+ "rand 0.8.5",
+ "serde",
+ "snafu 0.8.4",
+ "tagged-base64",
+ "tide-disco",
+ "toml",
+ "tracing",
+ "vbs",
+]
+
+[[package]]
+name = "hotshot-events-service"
+version = "0.1.38"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot#8222bf3eaef3403ec0b71d36da24ca48a4814c37"
+dependencies = [
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "derivative",
+ "derive_more 0.99.18",
+ "either",
+ "futures",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "rand 0.8.5",
  "serde",
  "snafu 0.8.4",
@@ -4207,7 +4233,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.69#b3796d6abea494780f6220845d729cb186a11f6a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4223,7 +4249,7 @@ dependencies = [
  "hotshot",
  "hotshot-task",
  "hotshot-task-impls",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "rand 0.8.5",
  "reqwest 0.12.5",
  "serde",
@@ -4240,14 +4266,14 @@ dependencies = [
 [[package]]
 name = "hotshot-fakeapi"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.69#b3796d6abea494780f6220845d729cb186a11f6a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
 dependencies = [
  "anyhow",
  "async-lock 2.8.0",
  "async-trait",
  "futures",
  "hotshot-example-types",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "rand 0.8.5",
  "serde",
  "tide-disco",
@@ -4259,7 +4285,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.69#b3796d6abea494780f6220845d729cb186a11f6a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4270,7 +4296,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.69#b3796d6abea494780f6220845d729cb186a11f6a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4281,7 +4307,7 @@ dependencies = [
  "clap",
  "csv",
  "futures",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "libp2p",
  "multiaddr",
  "serde",
@@ -4300,7 +4326,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.51"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.51#8e0ee4e862de99f19b9cbadd029f0d952782a3dd"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=update-hotshot#ba9a71923fcf6d991a03bcf8cf27f326046a2399"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4322,7 +4348,7 @@ dependencies = [
  "hotshot",
  "hotshot-example-types",
  "hotshot-testing",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "include_dir",
  "itertools 0.12.1",
  "jf-merkle-tree",
@@ -4356,7 +4382,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.69#b3796d6abea494780f6220845d729cb186a11f6a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4365,7 +4391,7 @@ dependencies = [
  "ark-std",
  "digest 0.10.7",
  "ethereum-types",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "jf-crhf",
  "jf-rescue",
  "jf-signature",
@@ -4397,7 +4423,7 @@ dependencies = [
  "futures",
  "hotshot-contract-adapter",
  "hotshot-stake-table",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "itertools 0.12.1",
  "jf-crhf",
  "jf-pcs",
@@ -4421,7 +4447,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.69#b3796d6abea494780f6220845d729cb186a11f6a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4436,7 +4462,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.69#b3796d6abea494780f6220845d729cb186a11f6a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4453,7 +4479,7 @@ dependencies = [
  "futures",
  "hotshot-builder-api",
  "hotshot-task",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "jf-signature",
  "jf-vid",
  "rand 0.8.5",
@@ -4473,7 +4499,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.69#b3796d6abea494780f6220845d729cb186a11f6a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4495,7 +4521,7 @@ dependencies = [
  "hotshot-orchestrator",
  "hotshot-task",
  "hotshot-task-impls",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "itertools 0.13.0",
  "jf-signature",
  "jf-vid",
@@ -4520,6 +4546,59 @@ dependencies = [
 name = "hotshot-types"
 version = "0.1.11"
 source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.69#b3796d6abea494780f6220845d729cb186a11f6a"
+dependencies = [
+ "anyhow",
+ "ark-bn254",
+ "ark-ed-on-bn254",
+ "ark-ff",
+ "ark-serialize",
+ "ark-srs",
+ "ark-std",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "bincode",
+ "bitvec",
+ "blake3",
+ "cdn-proto 0.4.0 (git+https://github.com/EspressoSystems/Push-CDN?tag=0.4.4)",
+ "committable",
+ "custom_debug 0.5.1",
+ "derivative",
+ "digest 0.10.7",
+ "displaydoc",
+ "dyn-clone 1.0.17 (git+https://github.com/dtolnay/dyn-clone?tag=1.0.17)",
+ "either",
+ "espresso-systems-common 0.4.1",
+ "ethereum-types",
+ "futures",
+ "generic-array",
+ "jf-pcs",
+ "jf-signature",
+ "jf-utils",
+ "jf-vid",
+ "lazy_static",
+ "memoize",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "reqwest 0.12.5",
+ "serde",
+ "sha2 0.10.8",
+ "snafu 0.8.4",
+ "tagged-base64",
+ "time 0.3.36",
+ "tokio",
+ "tracing",
+ "typenum",
+ "url",
+ "vbs",
+ "vec1",
+]
+
+[[package]]
+name = "hotshot-types"
+version = "0.1.11"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -5885,7 +5964,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.69#b3796d6abea494780f6220845d729cb186a11f6a"
+source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -5898,7 +5977,7 @@ dependencies = [
  "derive_builder",
  "either",
  "futures",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "lazy_static",
  "libp2p",
  "libp2p-identity",
@@ -6271,13 +6350,13 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot)",
  "hotshot-example-types",
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
  "hotshot-state-prover",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "jf-merkle-tree",
  "jf-signature",
  "libp2p",
@@ -6303,7 +6382,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-core"
 version = "0.0.2"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.0.3#0e74c008a200532a09a637452b7d8cfcfa9fcc5c"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=update-hotshot#4548293814912878117766b5985dd82a7fe0cf70"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6318,9 +6397,9 @@ dependencies = [
  "hex",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=main)",
  "hotshot-task-impls",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "lru 0.12.4",
  "multimap",
  "serde",
@@ -6352,9 +6431,9 @@ dependencies = [
  "espresso-types",
  "futures",
  "hotshot",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot)",
  "hotshot-query-service",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "jf-signature",
  "portpicker",
  "rand 0.8.5",
@@ -6729,7 +6808,7 @@ dependencies = [
  "hotshot-query-service",
  "hotshot-stake-table",
  "hotshot-testing",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "prometheus-parse",
  "reqwest 0.12.5",
  "serde",
@@ -8734,14 +8813,14 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-contract-adapter",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot)",
  "hotshot-example-types",
  "hotshot-orchestrator",
  "hotshot-query-service",
  "hotshot-stake-table",
  "hotshot-state-prover",
  "hotshot-testing",
- "hotshot-types",
+ "hotshot-types 0.1.11 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "include_dir",
  "itertools 0.12.1",
  "jf-crhf",
