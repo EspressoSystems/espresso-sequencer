@@ -367,7 +367,8 @@ processes:
         path: /healthcheck
       failure_threshold: 100
 
-  # We use KeyDB (a Redis variant) to maintain consistency between
+
+  # We use KeyDB (a Redis variant) to maintain consistency between 
   # different parts of the CDN
   # Cheating a bit here too, but KeyDB is not available as a Nix package.
   # Could do local (SQLite) discovery, but removes some of the spirit
@@ -490,7 +491,7 @@ processes:
       failure_threshold: 100
 
   marketplace-reserve-builder:
-    # disabled: true
+    disabled: true
     command: marketplace-builder
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
@@ -515,7 +516,7 @@ processes:
       failure_threshold: 100
 
   marketplace-fallback-builder:
-    # disabled: true
+    disabled: true
     command: marketplace-builder
     ports:
       - "$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT:$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT"
@@ -541,7 +542,6 @@ processes:
       failure_threshold: 100
 
   permissionless-builder:
-    disabled: true
     command: permissionless-builder
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
