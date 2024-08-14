@@ -197,6 +197,7 @@
             cargo-audit
             cargo-edit
             cargo-sort
+            cargo-nextest
             typos
             just
             fenix.packages.${system}.rust-analyzer

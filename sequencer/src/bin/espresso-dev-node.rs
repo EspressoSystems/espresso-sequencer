@@ -541,7 +541,7 @@ mod tests {
     // - APIs update
     // - Types (like `Header`) update
     #[async_std::test]
-    async fn dev_node_test() {
+    async fn slow_dev_node_test() {
         setup_test();
 
         let builder_port = pick_unused_port().unwrap();
@@ -849,7 +849,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn dev_node_multiple_lc_providers_test() {
+    async fn slow_dev_node_multiple_lc_providers_test() {
         setup_test();
 
         let builder_port = pick_unused_port().unwrap();
