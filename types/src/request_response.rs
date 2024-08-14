@@ -7,11 +7,12 @@
 //! Types for the request/response implementations. This module incorporates all
 //! of the shared types for all of the network backends.
 
-use crate::traits::network::NetworkMsg;
 use async_lock::Mutex;
 use futures::channel::{mpsc::Receiver, oneshot};
 use libp2p::request_response::ResponseChannel;
 use serde::{Deserialize, Serialize};
+
+use crate::traits::network::NetworkMsg;
 
 /// Request for Consenus data
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

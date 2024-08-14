@@ -10,9 +10,8 @@ use hotshot_types::traits::signature_key::SignatureKey;
 use libp2p::kad::store::{Error, RecordStore, Result};
 use tracing::warn;
 
-use crate::network::behaviours::dht::record::RecordKey;
-
 use super::record::RecordValue;
+use crate::network::behaviours::dht::record::RecordKey;
 
 /// A `RecordStore` wrapper that validates records before storing them.
 pub struct ValidatedStore<R: RecordStore, K: SignatureKey> {
@@ -89,9 +88,8 @@ mod test {
         PeerId,
     };
 
-    use crate::network::behaviours::dht::record::Namespace;
-
     use super::*;
+    use crate::network::behaviours::dht::record::Namespace;
 
     /// Test that a valid record is stored
     #[test]

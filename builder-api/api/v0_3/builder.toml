@@ -27,7 +27,9 @@ DESCRIPTION = ""
 FORMAT_VERSION = "0.1.0"
 
 [route.bundle]
-PATH = ["bundle/:view_number"]
+PATH = ["bundle/:parent_view/:parent_hash/:view_number"]
+":parent_view" = "Integer"
+":parent_hash" = "TaggedBase64"
 ":view_number" = "Integer"
 DOC = """
 Fetch the bundle from the builder for the specified view.

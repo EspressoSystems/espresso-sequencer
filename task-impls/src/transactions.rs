@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{bail, Result};
+use anyhow::{bail, ensure, Context, Result};
 use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_timeout};
 use async_trait::async_trait;
@@ -34,7 +34,7 @@ use hotshot_types::{
 };
 use tracing::{debug, error, instrument, warn};
 use url::Url;
-use vbs::version::StaticVersionType;
+use vbs::version::{StaticVersionType, Version};
 use vec1::Vec1;
 
 use crate::{
@@ -232,127 +232,118 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         return None;
     }
 
-    #[allow(clippy::too_many_lines)]
-    /// marketplace view change handler
-    pub async fn handle_view_change_marketplace(
+    /// Produce a block by fetching auction results from the solver and bundles from builders.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the solver cannot be contacted, or if none of the builders respond.
+    async fn produce_block_marketplace(
         &mut self,
-        event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
         block_view: TYPES::Time,
-    ) -> Option<HotShotTaskCompleted> {
-        let version = match self.upgrade_lock.version(block_view).await {
-            Ok(v) => v,
-            Err(err) => {
-                error!("Upgrade certificate requires unsupported version, refusing to request blocks: {}", err);
-                return None;
-            }
-        };
+        task_start_time: Instant,
+    ) -> Result<PackedBundle<TYPES>> {
+        ensure!(
+            !self
+                .upgrade_lock
+                .decided_upgrade_certificate
+                .read()
+                .await
+                .as_ref()
+                .is_some_and(|cert| cert.upgrading_in(block_view)),
+            "Not requesting block because we are upgrading",
+        );
 
-        // Only request bundles and propose with a nonempty block if we are not between versions.
-        if !self
-            .upgrade_lock
-            .decided_upgrade_certificate
-            .read()
+        let (parent_view, parent_hash) = self
+            .last_vid_commitment_retry(block_view, task_start_time)
             .await
-            .as_ref()
-            .is_some_and(|cert| cert.upgrading_in(block_view))
-        {
-            let start = Instant::now();
+            .context("Failed to find parent hash in time")?;
 
-            if let Ok(maybe_auction_result) = async_timeout(
-                self.builder_timeout,
-                self.auction_results_provider
-                    .fetch_auction_result(block_view),
-            )
-            .await
-            {
-                let auction_result = maybe_auction_result
-                    .map_err(|e| warn!("Failed to get auction results: {e:#}"))
-                    .unwrap_or_default(); // We continue here, as we still have fallback builder URL
+        let start = Instant::now();
 
-                let mut futures = Vec::new();
+        let maybe_auction_result = async_timeout(
+            self.builder_timeout,
+            self.auction_results_provider
+                .fetch_auction_result(block_view),
+        )
+        .await
+        .context("Timeout while getting auction result")?;
 
-                let mut builder_urls = auction_result.clone().urls();
-                builder_urls.push(self.fallback_builder_url.clone());
+        let auction_result = maybe_auction_result
+            .map_err(|e| warn!("Failed to get auction results: {e:#}"))
+            .unwrap_or_default(); // We continue here, as we still have fallback builder URL
 
-                for url in builder_urls {
-                    futures.push(async_timeout(
-                        self.builder_timeout.saturating_sub(start.elapsed()),
-                        async {
-                            let client = BuilderClientMarketplace::new(url);
-                            client.bundle(*block_view).await
-                        },
-                    ));
+        let mut futures = Vec::new();
+
+        let mut builder_urls = auction_result.clone().urls();
+        builder_urls.push(self.fallback_builder_url.clone());
+
+        for url in builder_urls {
+            futures.push(async_timeout(
+                self.builder_timeout.saturating_sub(start.elapsed()),
+                async {
+                    let client = BuilderClientMarketplace::new(url);
+                    client.bundle(*parent_view, parent_hash, *block_view).await
+                },
+            ));
+        }
+
+        let mut bundles = Vec::new();
+
+        for bundle in join_all(futures).await {
+            match bundle {
+                Ok(Ok(b)) => bundles.push(b),
+                Ok(Err(e)) => {
+                    tracing::debug!("Failed to retrieve bundle: {e}");
+                    continue;
                 }
-
-                let mut bundles = Vec::new();
-
-                for bundle in join_all(futures).await {
-                    match bundle {
-                        Ok(Ok(b)) => bundles.push(b),
-                        _ => continue,
-                    }
+                Err(e) => {
+                    tracing::debug!("Failed to retrieve bundle: {e}");
+                    continue;
                 }
-
-                let mut sequencing_fees = Vec::new();
-                let mut transactions: Vec<
-                    <TYPES::BlockPayload as BlockPayload<TYPES>>::Transaction,
-                > = Vec::new();
-
-                for bundle in bundles {
-                    sequencing_fees.push(bundle.sequencing_fee);
-                    transactions.extend(bundle.transactions);
-                }
-
-                let validated_state = self.consensus.read().await.decided_state();
-
-                if let (Ok(sequencing_fees), Ok((block_payload, metadata))) = (
-                    Vec1::try_from_vec(sequencing_fees),
-                    TYPES::BlockPayload::from_transactions(
-                        transactions,
-                        &validated_state,
-                        &Arc::clone(&self.instance_state),
-                    )
-                    .await,
-                ) {
-                    broadcast_event(
-                        Arc::new(HotShotEvent::BlockRecv(PackedBundle::new(
-                            block_payload.encode(),
-                            metadata,
-                            block_view,
-                            sequencing_fees,
-                            None,
-                            Some(auction_result),
-                        ))),
-                        event_stream,
-                    )
-                    .await;
-
-                    return None;
-                }
-            } else {
-                warn!("Timeout while getting auction results");
             }
         }
 
-        // If we couldn't get any bundles (due to either all of the builders or solver failing to return a result), send an empty block
-        warn!(
-            "Failed to get a block for view {:?}, proposing empty block",
-            block_view
-        );
+        let mut sequencing_fees = Vec::new();
+        let mut transactions: Vec<<TYPES::BlockPayload as BlockPayload<TYPES>>::Transaction> =
+            Vec::new();
 
-        // Increment the metric for number of empty blocks proposed
-        self.consensus
-            .write()
-            .await
-            .metrics
-            .number_of_empty_blocks_proposed
-            .add(1);
+        for bundle in bundles {
+            sequencing_fees.push(bundle.sequencing_fee);
+            transactions.extend(bundle.transactions);
+        }
 
+        let validated_state = self.consensus.read().await.decided_state();
+
+        let sequencing_fees = Vec1::try_from_vec(sequencing_fees)
+            .context("Failed to receive a bundle from any builder.")?;
+        let (block_payload, metadata) = TYPES::BlockPayload::from_transactions(
+            transactions,
+            &validated_state,
+            &Arc::clone(&self.instance_state),
+        )
+        .await?;
+
+        Ok(PackedBundle::new(
+            block_payload.encode(),
+            metadata,
+            block_view,
+            sequencing_fees,
+            None,
+            Some(auction_result),
+        ))
+    }
+
+    /// Produce a null block
+    pub fn null_block(
+        &self,
+        block_view: TYPES::Time,
+        version: Version,
+    ) -> Option<PackedBundle<TYPES>> {
         let membership_total_nodes = self.membership.total_nodes();
         let Some(null_fee) =
             null_block::builder_fee::<TYPES, V>(self.membership.total_nodes(), version)
         else {
-            error!("Failed to get null fee");
+            error!("Failed to calculate null block fee.");
             return None;
         };
 
@@ -361,16 +352,61 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
 
         let (_, precompute_data) = precompute_vid_commitment(&[], membership_total_nodes);
 
-        // Broadcast the empty block
+        Some(PackedBundle::new(
+            vec![].into(),
+            metadata,
+            block_view,
+            vec1::vec1![null_fee],
+            Some(precompute_data),
+            Some(TYPES::AuctionResult::default()),
+        ))
+    }
+
+    #[allow(clippy::too_many_lines)]
+    /// marketplace view change handler
+    pub async fn handle_view_change_marketplace(
+        &mut self,
+        event_stream: &Sender<Arc<HotShotEvent<TYPES>>>,
+        block_view: TYPES::Time,
+    ) -> Option<HotShotTaskCompleted> {
+        let task_start_time = Instant::now();
+
+        let version = match self.upgrade_lock.version(block_view).await {
+            Ok(v) => v,
+            Err(err) => {
+                error!("Upgrade certificate requires unsupported version, refusing to request blocks: {}", err);
+                return None;
+            }
+        };
+
+        let packed_bundle = match self
+            .produce_block_marketplace(block_view, task_start_time)
+            .await
+        {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::info!(
+                    "Failed to get a block for view {:?}: {}. Continuing with empty block.",
+                    block_view,
+                    e
+                );
+
+                let null_block = self.null_block(block_view, version)?;
+
+                // Increment the metric for number of empty blocks proposed
+                self.consensus
+                    .write()
+                    .await
+                    .metrics
+                    .number_of_empty_blocks_proposed
+                    .add(1);
+
+                null_block
+            }
+        };
+
         broadcast_event(
-            Arc::new(HotShotEvent::BlockRecv(PackedBundle::new(
-                vec![].into(),
-                metadata,
-                block_view,
-                vec1::vec1![null_fee],
-                Some(precompute_data),
-                Some(TYPES::AuctionResult::default()),
-            ))),
+            Arc::new(HotShotEvent::BlockRecv(packed_bundle)),
             event_stream,
         )
         .await;
@@ -440,35 +476,56 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
     /// Get VID commitment for the last successful view before `block_view`.
     /// Returns None if we don't have said commitment recorded.
     #[instrument(skip_all, target = "TransactionTaskState", fields(id = self.id, cur_view = *self.cur_view, block_view = *block_view))]
+    async fn last_vid_commitment_retry(
+        &self,
+        block_view: TYPES::Time,
+        task_start_time: Instant,
+    ) -> Result<(TYPES::Time, VidCommitment)> {
+        loop {
+            match self.last_vid_commitment(block_view).await {
+                Ok((view, comm)) => break Ok((view, comm)),
+                Err(e) if task_start_time.elapsed() >= self.builder_timeout => break Err(e),
+                _ => {
+                    // We still have time, will re-try in a bit
+                    async_sleep(RETRY_DELAY).await;
+                    continue;
+                }
+            }
+        }
+    }
+
+    /// Get VID commitment for the last successful view before `block_view`.
+    /// Returns None if we don't have said commitment recorded.
+    #[instrument(skip_all, target = "TransactionTaskState", fields(id = self.id, cur_view = *self.cur_view, block_view = *block_view))]
     async fn last_vid_commitment(
         &self,
         block_view: TYPES::Time,
-    ) -> Option<(TYPES::Time, VidCommitment)> {
+    ) -> Result<(TYPES::Time, VidCommitment)> {
         let consensus = self.consensus.read().await;
         let mut target_view = TYPES::Time::new(block_view.saturating_sub(1));
 
         loop {
-            let Some(view_data) = consensus.validated_state_map().get(&target_view) else {
-                tracing::warn!(?target_view, "Missing record for view in validated state");
-                return None;
-            };
+            let view_data = consensus
+                .validated_state_map()
+                .get(&target_view)
+                .context("Missing record for view {?target_view} in validated state")?;
+
             match view_data.view_inner {
                 ViewInner::Da { payload_commitment } => {
-                    return Some((target_view, payload_commitment))
+                    return Ok((target_view, payload_commitment))
                 }
                 ViewInner::Leaf {
                     leaf: leaf_commitment,
                     ..
                 } => {
-                    let Some(leaf) = consensus.saved_leaves().get(&leaf_commitment) else {
-                        tracing::warn!(?target_view, %leaf_commitment, "Missing leaf in saved_leaves");
-                        return None;
-                    };
-                    return Some((target_view, leaf.payload_commitment()));
+                    let leaf = consensus.saved_leaves().get(&leaf_commitment).context
+                        ("Missing leaf with commitment {leaf_commitment} for view {target_view} in saved_leaves")?;
+                    return Ok((target_view, leaf.payload_commitment()));
                 }
                 ViewInner::Failed => {
                     // For failed views, backtrack
-                    target_view = TYPES::Time::new(target_view.checked_sub(1)?);
+                    target_view =
+                        TYPES::Time::new(target_view.checked_sub(1).context("Reached genesis")?);
                     continue;
                 }
             }
@@ -480,18 +537,14 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TransactionTask
         let task_start_time = Instant::now();
 
         // Find commitment to the block we want to build upon
-        let (parent_view, parent_comm) = loop {
-            match self.last_vid_commitment(block_view).await {
-                Some((view, comm)) => break (view, comm),
-                None if task_start_time.elapsed() < self.builder_timeout => {
-                    // We still have time, will re-try in a bit
-                    async_sleep(RETRY_DELAY).await;
-                    continue;
-                }
-                _ => {
-                    tracing::warn!("Failed to find commitment in time");
-                    return None;
-                }
+        let (parent_view, parent_comm) = match self
+            .last_vid_commitment_retry(block_view, task_start_time)
+            .await
+        {
+            Ok((v, c)) => (v, c),
+            Err(e) => {
+                tracing::warn!("Failed to find last vid commitment in time: {e}");
+                return None;
             }
         };
 

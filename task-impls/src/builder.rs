@@ -203,7 +203,9 @@ pub mod v0_2 {
 /// Version 0.3: marketplace. Bundles.
 pub mod v0_3 {
     pub use hotshot_builder_api::v0_3::Version;
-    use hotshot_types::{bundle::Bundle, traits::node_implementation::NodeType};
+    use hotshot_types::{
+        bundle::Bundle, traits::node_implementation::NodeType, vid::VidCommitment,
+    };
     use vbs::version::StaticVersion;
 
     pub use super::BuilderClientError;
@@ -217,9 +219,14 @@ pub mod v0_3 {
         /// # Errors
         /// - [`BuilderClientError::NotFound`] if block isn't available
         /// - [`BuilderClientError::Api`] if API isn't responding or responds incorrectly
-        pub async fn bundle(&self, view_number: u64) -> Result<Bundle<TYPES>, BuilderClientError> {
+        pub async fn bundle(
+            &self,
+            parent_view: u64,
+            parent_hash: VidCommitment,
+            view_number: u64,
+        ) -> Result<Bundle<TYPES>, BuilderClientError> {
             self.inner
-                .get(&format!("bundle/{view_number}"))
+                .get(&format!("bundle/{parent_view}/{parent_hash}/{view_number}"))
                 .send()
                 .await
                 .map_err(Into::into)
