@@ -97,6 +97,7 @@ sol-test:
 NUM_BLOCKS_PER_EPOCH := "3"
 NUM_INIT_VALIDATORS := "5"
 lc-contract-profiling-sepolia:
+    @sh -c 'source ./.env.contracts'
     #!/usr/bin/env bash
     set -euxo pipefail
     forge script contracts/test/DeployLightClientTestScript.s.sol --sig "runBench(uint32 numBlocksPerEpoch, uint64 numInitValidators)" {{NUM_BLOCKS_PER_EPOCH}} {{NUM_INIT_VALIDATORS}} --fork-url ${SEPOLIA_RPC_URL} --broadcast --verify --etherscan-api-key ${ETHERSCAN_API_KEY} --chain-id sepolia
@@ -126,3 +127,4 @@ download-srs:
 dev-download-srs:
     @echo "Check existence or download SRS for dev/test"
     @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin" ./scripts/download_srs_aztec.sh
+ 
