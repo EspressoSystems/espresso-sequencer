@@ -55,11 +55,11 @@ futures = "0.3"
 hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.70" }
 # Hotshot imports
 hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.70" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.40" }
-marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.0.3" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.40" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "update-hotshot" }
+marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", branch = "update-hotshot" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", branch = "update-hotshot" }
 hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.70" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.51" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "update-hotshot" }
 hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.70" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
 hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.70" }
@@ -136,19 +136,3 @@ paste = "1.0"
 rand = "0.8.5"
 time = "0.3"
 trait-set = "0.3.0"
-
-[patch."https://github.com/EspressoSystems/HotShot.git"]
-hotshot = { path = "../HotShot/crates/hotshot" }
-hotshot-builder-api = { path = "../HotShot/crates/builder-api" }
-hotshot-orchestrator = { path = "../HotShot/crates/orchestrator" }
-hotshot-stake-table = { path = "../HotShot/crates/hotshot-stake-table" }
-hotshot-task = { path = "../HotShot/crates/task" }
-hotshot-testing = { path = "../HotShot/crates/testing" }
-hotshot-types = { path = "../HotShot/crates/types" }
-
-[patch."https://github.com/EspressoSystems/hotshot-events-service.git"]
-hotshot-events-service = { path = "../hotshot-events-service" }
-[patch."https://github.com/EspressoSystems/hotshot-builder-core.git"]
-hotshot-builder-core = { path = "../hotshot-builder-core" }
-[patch."https://github.com/EspressoSystems/hotshot-query-service.git"]
-hotshot-query-service = { path = "../hotshot-query-service" }
