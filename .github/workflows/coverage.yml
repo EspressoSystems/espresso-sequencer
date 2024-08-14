@@ -37,6 +37,8 @@ jobs:
         with:
           version: nightly
 
+      - uses: rui314/setup-mold@v1
+
       - uses: dtolnay/rust-toolchain@nightly
 
       - name: Enable Rust Caching

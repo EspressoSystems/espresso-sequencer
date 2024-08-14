@@ -34,6 +34,8 @@ jobs:
         with:
           version: nightly
 
+      - uses: rui314/setup-mold@v1
+
       - uses: taiki-e/install-action@nextest
 
       - name: Checkout Repository
