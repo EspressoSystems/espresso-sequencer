@@ -15,9 +15,6 @@ jobs:
       - name: Install Protoc
         uses: arduino/setup-protoc@v2
 
-      - name: Install capnproto
-        uses: ./.github/actions/install-capnp
-
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: styfle/cancel-workflow-action@0.12.0
