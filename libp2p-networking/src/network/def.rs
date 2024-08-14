@@ -16,8 +16,11 @@ use libp2p_identity::PeerId;
 use libp2p_swarm_derive::NetworkBehaviour;
 use tracing::{debug, error};
 
-use super::NetworkEventInternal;
-use hotshot_types::request_response::{Request, Response};
+use super::{behaviours::dht::store::ValidatedStore, NetworkEventInternal};
+use hotshot_types::{
+    request_response::{Request, Response},
+    traits::signature_key::SignatureKey,
+};
 
 /// Overarching network behaviour performing:
 /// - network topology discovoery
@@ -26,7 +29,7 @@ use hotshot_types::request_response::{Request, Response};
 /// - connection management
 #[derive(NetworkBehaviour, custom_debug::Debug)]
 #[behaviour(to_swarm = "NetworkEventInternal")]
-pub struct NetworkDef {
+pub struct NetworkDef<K: SignatureKey + 'static> {
     /// purpose: broadcasting messages to many peers
     /// NOTE gossipsub works ONLY for sharing messages right now
     /// in the future it may be able to do peer discovery and routing
@@ -37,7 +40,7 @@ pub struct NetworkDef {
     /// purpose: peer routing
     /// purpose: storing pub key <-> peer id bijection
     #[debug(skip)]
-    pub dht: libp2p::kad::Behaviour<MemoryStore>,
+    pub dht: libp2p::kad::Behaviour<ValidatedStore<MemoryStore, K>>,
 
     /// purpose: identifying the addresses from an outside POV
     #[debug(skip)]
@@ -57,17 +60,17 @@ pub struct NetworkDef {
     pub autonat: libp2p::autonat::Behaviour,
 }
 
-impl NetworkDef {
+impl<K: SignatureKey + 'static> NetworkDef<K> {
     /// Create a new instance of a `NetworkDef`
     #[must_use]
     pub fn new(
         gossipsub: GossipBehaviour,
-        dht: libp2p::kad::Behaviour<MemoryStore>,
+        dht: libp2p::kad::Behaviour<ValidatedStore<MemoryStore, K>>,
         identify: IdentifyBehaviour,
         direct_message: cbor::Behaviour<Vec<u8>, Vec<u8>>,
         request_response: cbor::Behaviour<Request, Response>,
         autonat: autonat::Behaviour,
-    ) -> NetworkDef {
+    ) -> NetworkDef<K> {
         Self {
             gossipsub,
             dht,
@@ -80,7 +83,7 @@ impl NetworkDef {
 }
 
 /// Address functions
-impl NetworkDef {
+impl<K: SignatureKey + 'static> NetworkDef<K> {
     /// Add an address
     pub fn add_address(&mut self, peer_id: &PeerId, address: Multiaddr) {
         // NOTE to get this address to play nice with the other
@@ -94,7 +97,7 @@ impl NetworkDef {
 }
 
 /// Gossip functions
-impl NetworkDef {
+impl<K: SignatureKey + 'static> NetworkDef<K> {
     /// Publish a given gossip
     pub fn publish_gossip(&mut self, topic: IdentTopic, contents: Vec<u8>) {
         if let Err(e) = self.gossipsub.publish(topic, contents) {
@@ -117,7 +120,7 @@ impl NetworkDef {
 }
 
 /// Request/response functions
-impl NetworkDef {
+impl<K: SignatureKey + 'static> NetworkDef<K> {
     /// Add a direct request for a given peer
     pub fn add_direct_request(&mut self, peer_id: PeerId, data: Vec<u8>) -> OutboundRequestId {
         self.direct_message.send_request(&peer_id, data)

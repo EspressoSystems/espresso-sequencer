@@ -15,8 +15,11 @@ use async_lock::RwLock;
 use async_std::prelude::StreamExt;
 use common::{test_bed, HandleSnafu, HandleWithState, TestError};
 use hotshot_types::{signature_key::BLSPubKey, traits::signature_key::SignatureKey};
-use libp2p_networking::network::{NetworkEvent, NetworkNodeHandleError};
-use rand::seq::IteratorRandom;
+use libp2p_networking::network::{
+    behaviours::dht::record::{Namespace, RecordKey, RecordValue},
+    NetworkEvent, NetworkNodeHandleError,
+};
+use rand::{rngs::StdRng, seq::IteratorRandom, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 #[cfg(async_executor_impl = "tokio")]
@@ -373,33 +376,47 @@ async fn run_gossip_one_round<K: SignatureKey + 'static>(
 async fn run_dht_rounds<K: SignatureKey + 'static>(
     handles: &[HandleWithState<CounterState, K>],
     timeout: Duration,
-    starting_val: usize,
+    _starting_val: usize,
     num_rounds: usize,
 ) {
     let mut rng = rand::thread_rng();
     for i in 0..num_rounds {
         debug!("begin round {}", i);
         let msg_handle = random_handle(handles, &mut rng);
-        let mut key = vec![0; DHT_KV_PADDING];
-        let inc_val = u8::try_from(starting_val + i).unwrap();
-        key.push(inc_val);
-        let mut value = vec![0; DHT_KV_PADDING];
-        value.push(inc_val);
+
+        // Create a random keypair
+        let mut rng = StdRng::from_entropy();
+        let (public_key, private_key) = K::generated_from_seed_indexed([1; 32], rng.gen::<u64>());
+
+        // Create a random value to sign
+        let value = (0..DHT_KV_PADDING)
+            .map(|_| rng.gen::<u8>())
+            .collect::<Vec<u8>>();
+
+        // Create the record key
+        let key = RecordKey::new(Namespace::Lookup, public_key.to_bytes().clone());
+
+        // Sign the value
+        let value = RecordValue::new_signed(&key, value, &private_key).expect("signing failed");
 
         // put the key
-        msg_handle.handle.put_record(&key, &value).await.unwrap();
+        msg_handle
+            .handle
+            .put_record(key.clone(), value.clone())
+            .await
+            .unwrap();
 
         // get the key from the other nodes
         for handle in handles {
             let result: Result<Vec<u8>, NetworkNodeHandleError> =
-                handle.handle.record_timeout(&key, timeout).await;
+                handle.handle.get_record_timeout(key.clone(), timeout).await;
             match result {
                 Err(e) => {
                     error!("DHT error {e:?} during GET");
                     std::process::exit(-1);
                 }
                 Ok(v) => {
-                    assert_eq!(v, value);
+                    assert_eq!(v, value.value());
                 }
             }
         }

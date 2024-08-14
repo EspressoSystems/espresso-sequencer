@@ -106,7 +106,7 @@ surf-disco = { workspace = true }
 time = { workspace = true }
 derive_more = { workspace = true }
 portpicker = "0.1"
-lru = "0.12"
+lru.workspace = true
 hotshot-task = { path = "../task" }
 hotshot = { path = "../hotshot" }
 hotshot-example-types = { path = "../example-types" }

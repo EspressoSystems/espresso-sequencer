@@ -14,6 +14,7 @@ mod handle;
 use std::{
     collections::{HashMap, HashSet},
     iter,
+    marker::PhantomData,
     num::{NonZeroU32, NonZeroUsize},
     time::Duration,
 };
@@ -63,7 +64,10 @@ pub use self::{
     },
 };
 use super::{
-    behaviours::dht::bootstrap::{self, DHTBootstrapTask, InputEvent},
+    behaviours::dht::{
+        bootstrap::{self, DHTBootstrapTask, InputEvent},
+        store::ValidatedStore,
+    },
     error::{GossipsubBuildSnafu, GossipsubConfigSnafu, NetworkError, TransportSnafu},
     gen_transport, BoxedTransport, ClientRequest, NetworkDef, NetworkEvent, NetworkEventInternal,
     NetworkNodeType,
@@ -93,7 +97,7 @@ pub struct NetworkNode<K: SignatureKey + 'static> {
     peer_id: PeerId,
     /// the swarm of networkbehaviours
     #[debug(skip)]
-    swarm: Swarm<NetworkDef>,
+    swarm: Swarm<NetworkDef<K>>,
     /// the configuration parameters of the netework
     config: NetworkNodeConfig<K>,
     /// the listener id we are listening on, if it exists
@@ -103,11 +107,14 @@ pub struct NetworkNode<K: SignatureKey + 'static> {
     /// Handler for direct messages
     direct_message_state: DMBehaviour,
     /// Handler for DHT Events
-    dht_handler: DHTBehaviour,
+    dht_handler: DHTBehaviour<K>,
     /// Channel to resend requests, set to Some when we call `spawn_listeners`
     resend_tx: Option<UnboundedSender<ClientRequest>>,
     /// Send to the bootstrap task to tell it to start a bootstrap
     bootstrap_tx: Option<mpsc::Sender<bootstrap::InputEvent>>,
+
+    /// Phantom data to hold the key type
+    pd: PhantomData<K>,
 }
 
 impl<K: SignatureKey + 'static> NetworkNode<K> {
@@ -188,7 +195,7 @@ impl<K: SignatureKey + 'static> NetworkNode<K> {
         .await?;
 
         // Generate the swarm
-        let mut swarm: Swarm<NetworkDef> = {
+        let mut swarm: Swarm<NetworkDef<K>> = {
             // Use the hash of the message's contents as the ID
             // Use blake3 for much paranoia at very high speeds
             let message_id_fn = |message: &GossipsubMessage| {
@@ -286,7 +293,11 @@ impl<K: SignatureKey + 'static> NetworkNode<K> {
                 panic!("Replication factor not set");
             }
 
-            let mut kadem = Behaviour::with_config(peer_id, MemoryStore::new(peer_id), kconfig);
+            let mut kadem = Behaviour::with_config(
+                peer_id,
+                ValidatedStore::new(MemoryStore::new(peer_id)),
+                kconfig,
+            );
             if config.server_mode {
                 kadem.set_mode(Some(Mode::Server));
             }
@@ -362,6 +373,7 @@ impl<K: SignatureKey + 'static> NetworkNode<K> {
             ),
             resend_tx: None,
             bootstrap_tx: None,
+            pd: PhantomData,
         })
     }
 
@@ -457,7 +469,7 @@ impl<K: SignatureKey + 'static> NetworkNode<K> {
                         notify,
                         retry_count,
                     } => {
-                        self.dht_handler.record(
+                        self.dht_handler.get_record(
                             key,
                             notify,
                             NonZeroUsize::new(NUM_REPLICATED_TO_TRUST).unwrap(),

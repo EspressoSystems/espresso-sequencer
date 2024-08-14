@@ -4,7 +4,7 @@
 // You should have received a copy of the MIT License
 // along with the HotShot repository. If not, see <https://mit-license.org/>.
 
-use std::{collections::HashSet, fmt::Debug, time::Duration};
+use std::{collections::HashSet, fmt::Debug, marker::PhantomData, time::Duration};
 
 use async_compatibility_layer::{
     art::{async_sleep, async_timeout, future::to},
@@ -21,6 +21,7 @@ use snafu::{ResultExt, Snafu};
 use tracing::{debug, info, instrument};
 
 use crate::network::{
+    behaviours::dht::record::{Namespace, RecordKey, RecordValue},
     error::{CancelledRequestSnafu, DHTError},
     gen_multiaddr, ClientRequest, NetworkError, NetworkEvent, NetworkNode, NetworkNodeConfig,
     NetworkNodeConfigBuilderError,
@@ -45,6 +46,9 @@ pub struct NetworkNodeHandle<K: SignatureKey + 'static> {
 
     /// human readable id
     id: usize,
+
+    /// Phantom data to hold the key type
+    pd: PhantomData<K>,
 }
 
 /// internal network node receiver
@@ -105,12 +109,13 @@ pub async fn spawn_network_node<K: SignatureKey + 'static>(
         recv_kill: None,
     };
 
-    let handle = NetworkNodeHandle {
+    let handle = NetworkNodeHandle::<K> {
         network_config: config,
         send_network: send_chan,
         listen_addr,
         peer_id,
         id,
+        pd: PhantomData,
     };
     Ok((receiver, handle))
 }
@@ -228,33 +233,45 @@ impl<K: SignatureKey + 'static> NetworkNodeHandle<K> {
         r.await.map_err(|_| NetworkNodeHandleError::RecvError)
     }
 
-    /// Looks up a node's `PeerId` and attempts to validate routing
+    /// Looks up a node's `PeerId` by its staking key. Is authenticated through
+    /// `get_record` assuming each record should be signed.
+    ///
     /// # Errors
-    /// if the peer was unable to be looked up (did not provide a response, DNE)
+    /// If the DHT lookup fails
     pub async fn lookup_node(
         &self,
         key: &[u8],
         dht_timeout: Duration,
     ) -> Result<PeerId, NetworkNodeHandleError> {
-        // get record (from DHT)
-        let pid = self.record_timeout(key, dht_timeout).await?;
+        // Create the record key
+        let key = RecordKey::new(Namespace::Lookup, key.to_vec());
 
-        // pid lookup for routing
-        // self.lookup_pid(pid).await?;
+        // Get the record from the DHT
+        let pid = self.get_record_timeout(key, dht_timeout).await?;
 
-        bincode::deserialize(&pid)
-            .map_err(|e| NetworkNodeHandleError::DeserializationError { source: e.into() })
+        PeerId::from_bytes(&pid).map_err(|_| NetworkNodeHandleError::FailedToDeserialize)
     }
 
     /// Insert a record into the kademlia DHT
     /// # Errors
     /// - Will return [`NetworkNodeHandleError::DHTError`] when encountering an error putting to DHT
     /// - Will return [`NetworkNodeHandleError::SerializationError`] when unable to serialize the key or value
-    pub async fn put_record(&self, key: &[u8], value: &[u8]) -> Result<(), NetworkNodeHandleError> {
+    pub async fn put_record(
+        &self,
+        key: RecordKey,
+        value: RecordValue<K>,
+    ) -> Result<(), NetworkNodeHandleError> {
+        // Serialize the key
+        let key = key.to_bytes();
+
+        // Serialize the record
+        let value = bincode::serialize(&value)
+            .map_err(|e| NetworkNodeHandleError::SerializationError { source: e.into() })?;
+
         let (s, r) = futures::channel::oneshot::channel();
         let req = ClientRequest::PutDHT {
-            key: key.to_vec(),
-            value: value.to_vec(),
+            key: key.clone(),
+            value,
             notify: s,
         };
 
@@ -269,23 +286,33 @@ impl<K: SignatureKey + 'static> NetworkNodeHandle<K> {
     /// - Will return [`NetworkNodeHandleError::DHTError`] when encountering an error putting to DHT
     /// - Will return [`NetworkNodeHandleError::SerializationError`] when unable to serialize the key
     /// - Will return [`NetworkNodeHandleError::DeserializationError`] when unable to deserialize the returned value
-    pub async fn record(
+    pub async fn get_record(
         &self,
-        key: &[u8],
+        key: RecordKey,
         retry_count: u8,
     ) -> Result<Vec<u8>, NetworkNodeHandleError> {
+        // Serialize the key
+        let serialized_key = key.to_bytes();
+
         let (s, r) = futures::channel::oneshot::channel();
         let req = ClientRequest::GetDHT {
-            key: key.to_vec(),
+            key: serialized_key.clone(),
             notify: s,
             retry_count,
         };
         self.send_request(req).await?;
 
-        match r.await.context(CancelledRequestSnafu) {
+        // Map the error
+        let result = match r.await.context(CancelledRequestSnafu) {
             Ok(result) => Ok(result),
             Err(e) => Err(e).context(DHTSnafu),
-        }
+        }?;
+
+        // Deserialize the record's value
+        let record: RecordValue<K> = bincode::deserialize(&result)
+            .map_err(|e| NetworkNodeHandleError::DeserializationError { source: e.into() })?;
+
+        Ok(record.value().to_vec())
     }
 
     /// Get a record from the kademlia DHT with a timeout
@@ -294,12 +321,12 @@ impl<K: SignatureKey + 'static> NetworkNodeHandle<K> {
     /// - Will return [`NetworkNodeHandleError::TimeoutError`] when times out
     /// - Will return [`NetworkNodeHandleError::SerializationError`] when unable to serialize the key
     /// - Will return [`NetworkNodeHandleError::DeserializationError`] when unable to deserialize the returned value
-    pub async fn record_timeout(
+    pub async fn get_record_timeout(
         &self,
-        key: &[u8],
+        key: RecordKey,
         timeout: Duration,
     ) -> Result<Vec<u8>, NetworkNodeHandleError> {
-        let result = async_timeout(timeout, self.record(key, 3)).await;
+        let result = async_timeout(timeout, self.get_record(key, 3)).await;
         match result {
             Err(e) => Err(e).context(TimeoutSnafu),
             Ok(r) => r,
@@ -314,8 +341,8 @@ impl<K: SignatureKey + 'static> NetworkNodeHandle<K> {
     /// - Will return [`NetworkNodeHandleError::SendError`] when underlying `NetworkNode` has been killed
     pub async fn put_record_timeout(
         &self,
-        key: &[u8],
-        value: &[u8],
+        key: RecordKey,
+        value: RecordValue<K>,
         timeout: Duration,
     ) -> Result<(), NetworkNodeHandleError> {
         let result = async_timeout(timeout, self.put_record(key, value)).await;
@@ -554,6 +581,12 @@ pub enum NetworkNodeHandleError {
     },
     /// no known topic matches the hashset of keys
     NoSuchTopic,
+
+    /// Deserialization error
+    FailedToDeserialize,
+
+    /// Signature verification error
+    FailedToVerify,
 }
 
 impl From<NetworkNodeHandleError> for HotshotNetworkError {
