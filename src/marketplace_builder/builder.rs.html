@@ -392,9 +392,6 @@
 <a href="#392" id="392">392</a>
 <a href="#393" id="393">393</a>
 <a href="#394" id="394">394</a>
-<a href="#395" id="395">395</a>
-<a href="#396" id="396">396</a>
-<a href="#397" id="397">397</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
@@ -603,13 +600,11 @@
                 <span class="kw">let </span>res =
                     run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
                         .<span class="kw">await</span>;
-                <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>res, <span class="string">"Reserve builder service exited"</span>);
+                <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>res, <span class="string">"builder service exited"</span>);
                 <span class="kw">if </span>res.is_err() {
-                    <span class="macro">panic!</span>(<span class="string">"Reserve builder should restart."</span>);
+                    <span class="macro">panic!</span>(<span class="string">"Builder should restart."</span>);
                 }
             });
-
-            <span class="macro">tracing::info!</span>(<span class="string">"Reserve builder init finished"</span>);
         } <span class="kw">else </span>{
             <span class="kw">let </span>hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
@@ -617,15 +612,14 @@
                 <span class="kw">let </span>res =
                     run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
                         .<span class="kw">await</span>;
-                <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>res, <span class="string">"Fallback builder service exited"</span>);
+                <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>res, <span class="string">"builder service exited"</span>);
                 <span class="kw">if </span>res.is_err() {
-                    <span class="macro">panic!</span>(<span class="string">"Fallback builder should restart."</span>);
+                    <span class="macro">panic!</span>(<span class="string">"Builder should restart."</span>);
                 }
             });
-
-            <span class="macro">tracing::info!</span>(<span class="string">"Fallback builder init finished"</span>);
         }
 
+        <span class="macro">tracing::info!</span>(<span class="string">"Builder init finished"</span>);
         <span class="prelude-val">Ok</span>(<span class="self">Self </span>{
             global_state,
             hotshot_events_api_url,
