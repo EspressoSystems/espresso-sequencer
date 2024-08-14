@@ -3228,10 +3228,10 @@
     }
 
     <span class="attr">#[async_std::test]
-    </span><span class="kw">async fn </span>test_chain_config_upgrade_view_based() {
+    </span><span class="kw">async fn </span>test_fee_upgrade_view_based() {
         setup_test();
 
-        test_chain_config_upgrade_helper(UpgradeMode::View(ViewBasedUpgrade {
+        test_fee_upgrade_helper(UpgradeMode::View(ViewBasedUpgrade {
             start_voting_view: <span class="prelude-val">None</span>,
             stop_voting_view: <span class="prelude-val">None</span>,
             start_proposing_view: <span class="number">1</span>,
@@ -3241,11 +3241,11 @@
     }
 
     <span class="attr">#[async_std::test]
-    </span><span class="kw">async fn </span>test_chain_config_upgrade_time_based() {
+    </span><span class="kw">async fn </span>test_fee_upgrade_time_based() {
         setup_test();
 
         <span class="kw">let </span>now = OffsetDateTime::now_utc().unix_timestamp() <span class="kw">as </span>u64;
-        test_chain_config_upgrade_helper(UpgradeMode::Time(TimeBasedUpgrade {
+        test_fee_upgrade_helper(UpgradeMode::Time(TimeBasedUpgrade {
             start_proposing_time: Timestamp::from_integer(now).unwrap(),
             stop_proposing_time: Timestamp::from_integer(now + <span class="number">500</span>).unwrap(),
             start_voting_time: <span class="prelude-val">None</span>,
@@ -3254,7 +3254,7 @@
         .<span class="kw">await</span>;
     }
 
-    <span class="kw">async fn </span>test_chain_config_upgrade_helper(mode: UpgradeMode) {
+    <span class="kw">async fn </span>test_fee_upgrade_helper(mode: UpgradeMode) {
         <span class="kw">let </span>port = pick_unused_port().expect(<span class="string">"No ports free"</span>);
         <span class="kw">let </span>anvil = Anvil::new().spawn();
         <span class="kw">let </span>l1 = anvil.endpoint().parse().unwrap();
@@ -3270,7 +3270,7 @@
             &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Upgrade::VERSION,
             Upgrade {
                 mode,
-                upgrade_type: UpgradeType::ChainConfig {
+                upgrade_type: UpgradeType::Fee {
                     chain_config: chain_config_upgrade,
                 },
             },
