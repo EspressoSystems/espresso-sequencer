@@ -20,9 +20,8 @@ contract LightClientCommonTest is Test {
     LC.LightClientState public genesis;
     uint32 public constant BLOCKS_PER_EPOCH_TEST = 3;
     uint32 public constant DELAY_THRESHOLD = 6;
-    uint32 public constant MAX_HISTORY_SECONDS = 86400;
-    uint32 oneDaySeconds = 86400;
-    uint32 initialEpoch = oneDaySeconds;
+    uint32 public constant MAX_HISTORY_SECONDS = 1 days;
+    uint32 initialEpoch = 1 days;
     // this constant should be consistent with `hotshot_contract::light_client.rs`
     uint64 internal constant STAKE_TABLE_CAPACITY = 10;
     DeployLightClientTestScript public deployer = new DeployLightClientTestScript();
@@ -35,7 +34,7 @@ contract LightClientCommonTest is Test {
         uint32 numBlocksPerEpoch,
         uint32 maxHistorySeconds
     ) public returns (address payable, address) {
-        vm.warp(oneDaySeconds);
+        vm.warp(1 days);
         //deploy light client test with a proxy
         (lcTestProxy, admin, state) =
             deployer.deployContract(state, numBlocksPerEpoch, maxHistorySeconds, admin);
@@ -633,7 +632,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         // assert that stateHistoryFirstIndex starts at 0.
         assertEq(lc.stateHistoryFirstIndex(), 0);
         // asset maxStateHistoryDuration is greater or equal to at least one day in seconds.
-        assertGe(lc.maxStateHistoryDuration(), oneDaySeconds);
+        assertGe(lc.maxStateHistoryDuration(), 1 days);
     }
 
     function setMaxStateHistoryDuration(uint32 duration) internal {
@@ -665,7 +664,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         //assert initial conditions
         assertEq(lc.stateHistoryFirstIndex(), 0);
-        assertGe(lc.maxStateHistoryDuration(), oneDaySeconds);
+        assertGe(lc.maxStateHistoryDuration(), 1 days);
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
@@ -689,20 +688,20 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
     function testFuzz_setMaxStateHistoryDuration(uint32 maxHistorySeconds) public {
         vm.prank(admin);
-        vm.assume(maxHistorySeconds >= oneDaySeconds);
+        vm.assume(maxHistorySeconds >= 1 days);
         lc.setMaxStateHistoryDuration(maxHistorySeconds);
         assertEq(maxHistorySeconds, lc.maxStateHistoryDuration());
     }
 
     function test_revertNonAdminSetMaxStateHistoryAllowed() public {
         vm.expectRevert();
-        lc.setMaxStateHistoryDuration(oneDaySeconds);
+        lc.setMaxStateHistoryDuration(1 days);
     }
 
     function test_revertSetMaxStateHistoryAllowedWhenInvalidValueSent() public {
         vm.prank(admin);
         vm.expectRevert(LC.InvalidMaxStateHistory.selector);
-        lc.setMaxStateHistoryDuration(oneDaySeconds - 1);
+        lc.setMaxStateHistoryDuration(1 days - 1);
     }
 
     function test_stateHistoryHandlingWithOneDayMaxHistory() public {
@@ -728,7 +727,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         // Add one numDays worth of a new state
         uint256 i;
         for (i = 0; i < numDays; i++) {
-            vm.warp(initialEpoch + ((i + 1) * oneDaySeconds)); // increase the timestamp for each
+            vm.warp(initialEpoch + ((i + 1) * 1 days)); // increase the timestamp for each
             vm.prank(permissionedProver);
             vm.expectEmit(true, true, true, true);
             emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
@@ -752,7 +751,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         vm.prank(permissionedProver);
         vm.expectEmit(true, true, true, true);
         emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
-        vm.warp(initialEpoch + ((i + 1) * oneDaySeconds)); // increase the timestamp for each
+        vm.warp(initialEpoch + ((i + 1) * 1 days)); // increase the timestamp for each
         lc.newFinalizedState(states[i], proofs[i]);
         i++;
 
@@ -762,7 +761,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         // continue updating the state
         for (uint256 j = i; j < states.length; j++) {
-            vm.warp(initialEpoch + ((j + 1) * oneDaySeconds)); // increase the timestamp for each
+            vm.warp(initialEpoch + ((j + 1) * 1 days)); // increase the timestamp for each
             vm.prank(permissionedProver);
             vm.expectEmit(true, true, true, true);
             emit LC.NewState(states[j].viewNum, states[j].blockHeight, states[j].blockCommRoot);
@@ -799,13 +798,13 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertInitialStateHistoryConditions();
 
         // set the new max block states allowed to half of the number of states available
-        setMaxStateHistoryDuration(oneDaySeconds * numDays);
-        assertEq(lc.maxStateHistoryDuration(), oneDaySeconds * numDays);
+        setMaxStateHistoryDuration(1 days * numDays);
+        assertEq(lc.maxStateHistoryDuration(), 1 days * numDays);
 
         // Update the states to max state history allowed
         uint256 i;
         for (i = 0; i < numDays; i++) {
-            vm.warp(initialEpoch + ((i + 1) * oneDaySeconds)); // increase the timestamp for each
+            vm.warp(initialEpoch + ((i + 1) * 1 days)); // increase the timestamp for each
             vm.prank(permissionedProver);
             vm.expectEmit(true, true, true, true);
             emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
@@ -829,7 +828,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         vm.prank(permissionedProver);
         vm.expectEmit(true, true, true, true);
         emit LC.NewState(states[i].viewNum, states[i].blockHeight, states[i].blockCommRoot);
-        vm.warp(initialEpoch + ((i + 1) * oneDaySeconds)); // increase the timestamp for each
+        vm.warp(initialEpoch + ((i + 1) * 1 days)); // increase the timestamp for each
         lc.newFinalizedState(states[i], proofs[i]);
         i++;
 
@@ -839,7 +838,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         // continue updating the state
         for (uint256 j = i; j < states.length; j++) {
-            vm.warp(initialEpoch + ((j + 1) * oneDaySeconds)); // increase the timestamp for each
+            vm.warp(initialEpoch + ((j + 1) * 1 days)); // increase the timestamp for each
             vm.prank(permissionedProver);
             vm.expectEmit(true, true, true, true);
             emit LC.NewState(states[j].viewNum, states[j].blockHeight, states[j].blockCommRoot);
@@ -872,7 +871,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * 1 days);
         }
 
         LC.HotShotCommitment memory hotShotCommitment =
@@ -923,7 +922,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * 1 days);
         }
 
         for (uint256 i = 0; i < blockNumberUpdates.length; i++) {
@@ -963,7 +962,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * 1 days);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {
@@ -998,7 +997,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * 1 days);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {
@@ -1036,7 +1035,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * 1 days);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {
@@ -1082,7 +1081,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * 1 days);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {
@@ -1123,7 +1122,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * 1 days);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {
@@ -1159,7 +1158,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * 1 days);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {
@@ -1197,7 +1196,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         uint64[] memory blockTimestampUpdates = new uint64[](numUpdates);
         for (uint8 i = 0; i < numUpdates; i++) {
-            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * oneDaySeconds);
+            blockTimestampUpdates[i] = initialEpoch + ((i + 1) * 1 days);
         }
 
         for (uint256 i = 0; i < updates.length; i++) {
