@@ -261,7 +261,7 @@ impl Config {
 /// # };
 /// # use hotshot_query_service::fetching::provider::NoFetching;
 /// # use hotshot_query_service::testing::mocks::{
-/// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
+/// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes, MockVersions as AppVersions
 /// # };
 /// # use tide_disco::App;
 /// # use vbs::version::StaticVersionType;
@@ -272,7 +272,7 @@ impl Config {
 ///
 /// async fn init_server<Ver: StaticVersionType + 'static>(
 ///     config: Config,
-///     hotshot: SystemContextHandle<AppTypes, AppNodeImpl>,
+///     hotshot: SystemContextHandle<AppTypes, AppNodeImpl, AppVersions>,
 /// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
 ///     let mut hotshot_qs = config.connect(NoFetching).await.map_err(Error::internal)?;
 ///     // Initialize storage for other modules, using `hotshot_qs` to access the database.

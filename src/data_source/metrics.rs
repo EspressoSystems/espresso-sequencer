@@ -35,13 +35,13 @@ use async_trait::async_trait;
 /// # use hotshot_query_service::{
 /// #   data_source::MetricsDataSource,
 /// #   status::UpdateStatusData,
-/// #   testing::mocks::{MockNodeImpl as AppNodeImpl, MockTypes as AppTypes},
+/// #   testing::mocks::{MockNodeImpl as AppNodeImpl, MockTypes as AppTypes, MockVersions as AppVersions},
 /// #   Error,
 /// # };
 /// # use hotshot_types::consensus::ConsensusMetricsValue;
 /// # async fn doc() -> Result<(), hotshot_query_service::Error> {
 /// let data_source = MetricsDataSource::default();
-/// let hotshot = SystemContext::<AppTypes, AppNodeImpl>::init(
+/// let hotshot = SystemContext::<AppTypes, AppNodeImpl, AppVersions>::init(
 /// #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
 ///     ConsensusMetricsValue::new(&*data_source.populate_metrics()), panic!(),
 ///     panic!(),
