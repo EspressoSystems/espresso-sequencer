@@ -1,4 +1,4 @@
-name: NexTest
+name: SlowEst
 
 on:
   push:
@@ -10,7 +10,6 @@ on:
       - "20[0-9][0-9][0-1][0-9][0-3][0-9]*"
   schedule:
     - cron: "0 0 * * 1"
-  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -22,7 +21,7 @@ env:
   RUST_LOG: info,libp2p=off,node=error
 
 jobs:
-  nextest:
+  slowest:
     runs-on: ubuntu-latest
     steps:
       - name: Fix submodule permissions check
@@ -53,12 +52,12 @@ jobs:
           cargo nextest run --locked --release --workspace --all-features --no-run
         timeout-minutes: 90
 
-      - name: NexTest
+      - name: SlowEst
         env:
           CARGO_TERM_COLOR: always
         # Build test binary with `testing` feature, which requires `hotshot_example` config
         run: |
           export RUSTFLAGS="$RUSTFLAGS --cfg hotshot_example"
           export PATH="$PWD/target/release:$PATH"
-          cargo nextest run --locked --release --workspace --all-features --retries 2 --verbose -E '!test(slow_)'
-        timeout-minutes: 5
+          cargo nextest run --locked --release --workspace --all-features --verbose -E 'test(slow_)'
+        timeout-minutes: 25
