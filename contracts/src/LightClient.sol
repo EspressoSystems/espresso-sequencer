@@ -40,14 +40,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice a permissioned prover is needed to interact `newFinalizedState`
     event PermissionedProverRequired(address permissionedProver);
 
-    /// @notice an permissioned prover is no longer needed to interact `newFinalizedState`
+    /// @notice a permissioned prover is no longer needed to interact `newFinalizedState`
     event PermissionedProverNotRequired();
 
-    // === Constants ===
+    // === System Parameters ===
     //
-    /// @notice System parameter: number of blocks per epoch
-    /// @dev This variable cannot be made immutable due to how UUPS contracts work. See
-    /// https://forum.openzeppelin.com/t/upgradable-contracts-instantiating-an-immutable-value/28763/2#why-cant-i-use-immutable-variables-1
+    /// @notice number of blocks per epoch
     uint32 public blocksPerEpoch;
 
     /// @notice genesis block commitment index
@@ -87,11 +85,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice a flag that indicates when a permissioned provrer is needed
     bool public permissionedProverEnabled;
 
-    ///@notice Max number of seconds worth of state commitments to record based on this block
+    /// @notice Max number of seconds worth of state commitments to record based on this block
     /// timestamp
     uint32 public maxStateHistoryDuration;
 
-    ///@notice index of first block in block state series
+    /// @notice index of first block in block state series
     ///@dev use this instead of index 0 since old states would be set to zero to keep storage costs
     /// constant to maxStateHistoryDuration
     uint64 public stateHistoryFirstIndex;
@@ -170,8 +168,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice Invalid Max Block States
     error InvalidMaxStateHistory();
 
-    /// @notice since the constructor initializes storage on this contract we disable it
-    /// @dev storage is on the proxy contract since it calls this contract via delegatecall
+    /// @notice Constructor disables initializers to prevent the implementation contract from being
+    /// initialized
+    /// @dev This is standard practice for OpenZeppelin upgradeable contracts. Storage is on the
+    /// proxy contract
+    /// since it calls this cnotract via delegatecall
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -428,8 +429,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                     - stateHistoryCommitments[stateHistoryFirstIndex].l1BlockTimestamp
                     >= maxStateHistoryDuration
         ) {
-            // the stateHistoryCommitments array is the max history duration allowed
-            // so we delete the first non-empty element (FIFO)
+            // The stateHistoryCommitments array has reached the maximum allowed duration
+            // deleting the oldest (first) non-empty element to maintain the FIFO structure.
             delete stateHistoryCommitments[stateHistoryFirstIndex];
 
             // increment the offset to the first non-zero element in the stateHistoryCommitments
@@ -447,11 +448,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         );
     }
 
-    /// @notice check if more than threshold blocks passed since the last state update before
-    /// L1 Block Number
-    /// @param blockNumber The L1 block number
+    /// @notice checks if the state updates lag behind the specified threshold based on the provided
+    /// block number.
+    /// @param blockNumber The block number to compare against the latest state updates
     /// @param threshold The number of blocks updates to this contract is allowed to lag behind
-    /// Marked as `virtual` for easily testing.
+    /// @return bool returns true if the lag exceeds the threshold; otherwise, false
     function lagOverEscapeHatchThreshold(uint256 blockNumber, uint256 threshold)
         public
         view
@@ -461,7 +462,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 updatesCount = stateHistoryCommitments.length;
 
         // Handling Edge Cases
-        // Edgecase 1: The block is in the future or in the past before HotShot was live
+        // Edgecase 1: The block is in the future or
+        // before HotShot was live, allow for at least two updates before considering HotShot live
         if (blockNumber > block.number || updatesCount < 3) {
             revert InsufficientSnapshotHistory();
         }
@@ -482,15 +484,14 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             }
 
             // We've reached the first recorded block
-            // i >= 2 because we normally clear out the array from a FIFO approach
             if (i == stateHistoryFirstIndex) {
                 break;
             }
             i--;
         }
 
-        // If no snapshot is found, we don't have enough history stored to tell whether HotShot was
-        // down.
+        // If no snapshot is found, we don't have enough history stored
+        // to tell whether HotShot was down.
         if (!prevUpdateFound) {
             revert InsufficientSnapshotHistory();
         }
