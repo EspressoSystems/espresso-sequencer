@@ -889,7 +889,7 @@ library PlonkVerifier2 {
             g1AddAssign(bPtr, 0x00) // b += proof.zeta^chal.zeta
 
             // chal.zeta * groupGen or nextEvalPoint
-            tmp := mulmod(scalar, mload(add(domain, 0x40)), R_MOD)
+            tmp := mulmod(scalar, mload(add(mload(add(domain, 0x40)), 0x20)), R_MOD)
             scalar := mulmod(tmp, mload(add(chal, 0xe0)), R_MOD) // u * nextEvalPoint
             base := mload(add(proof, 0x180)) // shiftedOpeningProof or proof.zetaOmega
             scalarMul(base, scalar)

@@ -1,2 +1,2 @@
-LightClientBench:testCorrectUpdateBench() (gas: 547715)
-PlonkVerifier2_verify_Test:test_verify_succeeds() (gas: 385081)
+LightClientBench:testCorrectUpdateBench() (gas: 547602)
+PlonkVerifier2_verify_Test:test_verify_succeeds() (gas: 384899)
