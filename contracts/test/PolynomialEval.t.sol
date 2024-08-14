@@ -26,7 +26,7 @@ contract PolynomialEval_newEvalDomain_Test is Test {
 
             Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSizes[i]);
             assertEq(sizeInv, domain.sizeInv);
-            assertEq(groupGen, domain.groupGen);
+            assertEq(groupGen, domain.elements[1]);
         }
     }
 
@@ -51,7 +51,7 @@ contract PolynomialEvalTest is Test {
         pure
         returns (uint256[] memory elements)
     {
-        uint256 groupGen = self.groupGen;
+        uint256 groupGen = self.elements[1];
         uint256 tmp = 1;
         uint256 p = BN254.R_MOD;
         elements = new uint256[](length);
@@ -71,21 +71,22 @@ contract PolynomialEvalTest is Test {
     }
 
     /// @dev Test if the domain elements are generated correctly
-    function testFuzz_domainElements_matches(uint256 length) external {
+    function test_domainElements_matches() external {
         uint256 logSize = 20;
         Poly.EvalDomain memory domain = Poly.newEvalDomain(2 ** logSize);
-        length = bound(length, 0, 1000);
 
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
         cmds[1] = "eval-domain-elements";
         cmds[2] = vm.toString(logSize);
-        cmds[3] = vm.toString(length);
+        cmds[3] = vm.toString(uint256(8));
 
         bytes memory result = vm.ffi(cmds);
         (uint256[] memory elems) = abi.decode(result, (uint256[]));
 
-        assertEq(elems, domainElements(domain, length));
+        for (uint256 i = 0; i < 8; i++) {
+            assertEq(elems[i], domain.elements[i]);
+        }
     }
 }
 
@@ -174,6 +175,7 @@ contract PolynomialEval_evalDataGen_Test is PolynomialEvalTest {
             uint256 zeta = elements[i];
             uint256 vanishEval = Poly.evaluateVanishingPoly(domain, zeta);
             if (i < 8) {
+                assertEq(vanishEval, 0);
                 assertEq(
                     Poly.evaluatePiPoly(domain, publicInputs, zeta, vanishEval), publicInputs[i]
                 );

@@ -155,7 +155,7 @@ library PlonkVerifier {
             _prepareOpeningProof(verifyingKey, evalData, proof, chal, commScalars, commBases);
 
         uint256 zeta = chal.zeta;
-        uint256 omega = domain.groupGen;
+        uint256 omega = domain.elements[1]; // groupGen
         uint256 p = BN254.R_MOD;
         uint256 zetaOmega;
         assembly {

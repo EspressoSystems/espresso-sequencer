@@ -14,8 +14,7 @@ library PolynomialEval {
     struct EvalDomain {
         uint256 logSize; // log_2(self.size)
         uint256 sizeInv; // Inverse of the size in the field
-        uint256 groupGen; // A generator g of the subgroup
-        uint256[8] domainElements; // 1, g, g^2, ..., g^7
+        uint256[8] elements; // 1, g, g^2, ..., g^7
     }
 
     /// @dev stores vanishing poly, lagrange at 1, and Public input poly
@@ -34,9 +33,8 @@ library PolynomialEval {
             return EvalDomain(
                 16,
                 0x30641e0e92bebef818268d663bcad6dbcfd6c0149170f6d7d350b1b1fa6c1001,
-                0x00eeb2cb5981ed45649abebde081dcff16c8601de4347e7dd1628ba2daac43b7,
                 [
-                    0x0000000000000001,
+                    0x1,
                     0xeeb2cb5981ed45649abebde081dcff16c8601de4347e7dd1628ba2daac43b7,
                     0x2d1ba66f5941dc91017171fa69ec2bd0022a2a2d4115a009a93458fd4e26ecfb,
                     0x86812a00ac43ea801669c640171203c41a496671bfbc065ac8db24d52cf31e5,
@@ -50,9 +48,8 @@ library PolynomialEval {
             return EvalDomain(
                 20,
                 0x30644b6c9c4a72169e4daa317d25f04512ae15c53b34e8f5acd8e155d0a6c101,
-                0x26125da10a0ed06327508aba06d1e303ac616632dbed349f53422da953337857,
                 [
-                    0x0000000000000001,
+                    0x1,
                     0x26125da10a0ed06327508aba06d1e303ac616632dbed349f53422da953337857,
                     0x2260e724844bca5251829353968e4915305258418357473a5c1d597f613f6cbd,
                     0x2087ea2cd664278608fb0ebdb820907f598502c81b6690c185e2bf15cb935f42,
@@ -68,9 +65,8 @@ library PolynomialEval {
             return EvalDomain(
                 5,
                 0x2ee12bff4a2813286a8dc388cd754d9a3ef2490635eba50cb9c2e5e750800001,
-                0x9c532c6306b93d29678200d47c0b2a99c18d51b838eeb1d3eed4c533bb512d0,
                 [
-                    0x0000000000000001,
+                    0x1,
                     0x9c532c6306b93d29678200d47c0b2a99c18d51b838eeb1d3eed4c533bb512d0,
                     0x21082ca216cbbf4e1c6e4f4594dd508c996dfbe1174efb98b11509c6e306460b,
                     0x1277ae6415f0ef18f2ba5fb162c39eb7311f386e2d26d64401f4a25da77c253b,
@@ -160,12 +156,10 @@ library PolynomialEval {
                 if (zeta == group) {
                     return pi[i];
                 }
-                group = mulmod(group, self.groupGen, p);
+                group = mulmod(group, self.elements[1], p);
             }
             return 0;
         }
-
-        uint256[8] memory localDomainElements = self.domainElements;
 
         // In order to compute PiPoly(zeta) in an efficient way, we can do the following derivation:
 
@@ -208,7 +202,7 @@ library PolynomialEval {
         // suffix = [dcb, dc, d, 1]
         assembly {
             let suffixPtr := add(suffix, mul(7, 0x20))
-            let localDomainElementsPtr := add(localDomainElements, mul(7, 0x20))
+            let localDomainElementsPtr := add(mload(add(self, 0x40)), mul(7, 0x20))
             let currentElementSuffix := 1
 
             // Last element of suffix is set to 1
@@ -237,7 +231,7 @@ library PolynomialEval {
             let currentElementPrefix := 1
             let suffixPtr := suffix
             let piPtr := pi
-            let localDomainElementsPtr := localDomainElements
+            let localDomainElementsPtr := mload(add(self, 0x40))
 
             // Compute the sum term \sum_{i=0}^{length} currentElementPrefix * suffix[i] * pi[i] *
             // g^i
