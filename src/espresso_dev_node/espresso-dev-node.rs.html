@@ -1554,7 +1554,7 @@
     // - APIs update
     // - Types (like `Header`) update
     </span><span class="attr">#[async_std::test]
-    </span><span class="kw">async fn </span>dev_node_test() {
+    </span><span class="kw">async fn </span>slow_dev_node_test() {
         setup_test();
 
         <span class="kw">let </span>builder_port = pick_unused_port().unwrap();
@@ -1862,7 +1862,7 @@
     }
 
     <span class="attr">#[async_std::test]
-    </span><span class="kw">async fn </span>dev_node_multiple_lc_providers_test() {
+    </span><span class="kw">async fn </span>slow_dev_node_multiple_lc_providers_test() {
         setup_test();
 
         <span class="kw">let </span>builder_port = pick_unused_port().unwrap();
