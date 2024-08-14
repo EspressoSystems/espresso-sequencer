@@ -36,7 +36,7 @@ use hotshot_query_service::{
     status::UpdateStatusData,
     testing::{
         consensus::DataSourceLifeCycle,
-        mocks::{MockBase, MockMembership, MockNodeImpl, MockTypes},
+        mocks::{MockBase, MockMembership, MockNodeImpl, MockTypes, MockVersions},
     },
     Error,
 };
@@ -143,7 +143,7 @@ async fn main() -> Result<(), Error> {
 
 async fn init_consensus(
     data_sources: &[DataSource],
-) -> Vec<SystemContextHandle<MockTypes, MockNodeImpl>> {
+) -> Vec<SystemContextHandle<MockTypes, MockNodeImpl, MockVersions>> {
     let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..data_sources.len())
         .map(|i| BLSPubKey::generated_from_seed_indexed([0; 32], i as u64))
         .unzip();
@@ -270,7 +270,7 @@ async fn init_consensus(
                     config,
                     memberships,
                     network,
-                    HotShotInitializer::from_genesis(TestInstanceState {})
+                    HotShotInitializer::from_genesis(TestInstanceState::default())
                         .await
                         .unwrap(),
                     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
