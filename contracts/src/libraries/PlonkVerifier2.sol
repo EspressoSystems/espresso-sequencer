@@ -491,9 +491,9 @@ library PlonkVerifier2 {
                 if iszero(l_success) { error_verify() }
             }
 
-            // self: &uint256[2], rhs: &uint256[2]
+            // self: &uint256[2], rhs: &uint256[2] placed at 0x0
             // self += rhs (G1 point addition)
-            function g1AddAssign(self, rhs) {
+            function g1AddAssign(self) {
                 let ptr := mload(0x40) // free memory pointer
                 // layout:
                 // 0x00: self.x
@@ -502,8 +502,8 @@ library PlonkVerifier2 {
                 // 0x60: rhs.y
                 mstore(ptr, mload(self))
                 mstore(add(ptr, 0x20), mload(add(self, 0x20)))
-                mstore(add(ptr, 0x40), mload(rhs))
-                mstore(add(ptr, 0x60), mload(add(rhs, 0x20)))
+                mstore(add(ptr, 0x40), mload(0x0))
+                mstore(add(ptr, 0x60), mload(add(0x0, 0x20)))
                 let l_success := staticcall(gas(), 6, ptr, 0x80, self, 0x40)
                 if iszero(l_success) { error_verify() }
             }
@@ -551,6 +551,9 @@ library PlonkVerifier2 {
             let scalar := 0
             let tmp := 0
             let tmp2 := 0
+
+            let gamma := mload(add(chal, 0x80))
+
             // ============================================
             // Compute coefficient for the permutation product polynomial commitment.
             // firstScalar =
@@ -574,7 +577,7 @@ library PlonkVerifier2 {
                 // (beta * zeta + wireEval0 + gamma)
                 // =================================
                 tmp2 := addmod(tmp, mload(add(proof, 0x1A0)), R_MOD)
-                tmp2 := addmod(tmp2, mload(add(chal, 0x80)), R_MOD)
+                tmp2 := addmod(tmp2, gamma, R_MOD)
                 rhs := mulmod(tmp2, rhs, R_MOD)
 
                 // =================================
@@ -583,7 +586,7 @@ library PlonkVerifier2 {
                 // =================================
                 tmp2 := mulmod(tmp, COSET_K1, R_MOD)
                 tmp2 := addmod(tmp2, mload(add(proof, 0x1C0)), R_MOD)
-                tmp2 := addmod(tmp2, mload(add(chal, 0x80)), R_MOD)
+                tmp2 := addmod(tmp2, gamma, R_MOD)
                 rhs := mulmod(tmp2, rhs, R_MOD)
 
                 // =================================
@@ -592,7 +595,7 @@ library PlonkVerifier2 {
                 // =================================
                 tmp2 := mulmod(tmp, COSET_K2, R_MOD)
                 tmp2 := addmod(tmp2, mload(add(proof, 0x1E0)), R_MOD)
-                tmp2 := addmod(tmp2, mload(add(chal, 0x80)), R_MOD)
+                tmp2 := addmod(tmp2, gamma, R_MOD)
                 rhs := mulmod(tmp2, rhs, R_MOD)
 
                 // =================================
@@ -601,7 +604,7 @@ library PlonkVerifier2 {
                 // =================================
                 tmp2 := mulmod(tmp, COSET_K3, R_MOD)
                 tmp2 := addmod(tmp2, mload(add(proof, 0x200)), R_MOD)
-                tmp2 := addmod(tmp2, mload(add(chal, 0x80)), R_MOD)
+                tmp2 := addmod(tmp2, gamma, R_MOD)
                 rhs := mulmod(tmp2, rhs, R_MOD)
 
                 // =================================
@@ -610,7 +613,7 @@ library PlonkVerifier2 {
                 // =================================
                 tmp2 := mulmod(tmp, COSET_K4, R_MOD)
                 tmp2 := addmod(tmp2, mload(add(proof, 0x220)), R_MOD)
-                tmp2 := addmod(tmp2, mload(add(chal, 0x80)), R_MOD)
+                tmp2 := addmod(tmp2, gamma, R_MOD)
                 rhs := mulmod(tmp2, rhs, R_MOD)
 
                 scalar := addmod(scalar, rhs, R_MOD) // firstScalar
@@ -635,30 +638,30 @@ library PlonkVerifier2 {
             // (wireEval0 + gamma + beta * sigmaEval0)
             tmp := mulmod(mload(add(chal, 0x60)), mload(add(proof, 0x240)), R_MOD)
             tmp := addmod(tmp, mload(add(proof, 0x1A0)), R_MOD)
-            tmp := addmod(tmp, mload(add(chal, 0x80)), R_MOD)
+            tmp := addmod(tmp, gamma, R_MOD)
             scalar := mulmod(scalar, tmp, R_MOD)
 
             // (wireEval1 + gamma + beta * sigmaEval1)
             tmp := mulmod(mload(add(chal, 0x60)), mload(add(proof, 0x260)), R_MOD)
             tmp := addmod(tmp, mload(add(proof, 0x1C0)), R_MOD)
-            tmp := addmod(tmp, mload(add(chal, 0x80)), R_MOD)
+            tmp := addmod(tmp, gamma, R_MOD)
             scalar := mulmod(scalar, tmp, R_MOD)
 
             // (wireEval2 + gamma + beta * sigmaEval2)
             tmp := mulmod(mload(add(chal, 0x60)), mload(add(proof, 0x280)), R_MOD)
             tmp := addmod(tmp, mload(add(proof, 0x1E0)), R_MOD)
-            tmp := addmod(tmp, mload(add(chal, 0x80)), R_MOD)
+            tmp := addmod(tmp, gamma, R_MOD)
             scalar := mulmod(scalar, tmp, R_MOD)
 
             // (wireEval3 + gamma + beta * sigmaEval3)
             tmp := mulmod(mload(add(chal, 0x60)), mload(add(proof, 0x2A0)), R_MOD)
             tmp := addmod(tmp, mload(add(proof, 0x200)), R_MOD)
-            tmp := addmod(tmp, mload(add(chal, 0x80)), R_MOD)
+            tmp := addmod(tmp, gamma, R_MOD)
 
             scalar := sub(R_MOD, mulmod(scalar, tmp, R_MOD)) // secondScalar
             base := mload(add(vk, 0xc0)) // vk.sigma4
             scalarMul(base, scalar) // base^scalar (res stored at 0x00)
-            g1AddAssign(bPtr, 0x00) // b += base^scalar
+            g1AddAssign(bPtr) // b += base^scalar
 
             // ============
             // q_lc: linear combination selectors
@@ -666,22 +669,22 @@ library PlonkVerifier2 {
             scalar := mload(add(proof, 0x1a0)) // proof.wireEval0
             base := mload(add(vk, 0xe0)) // vk.q1
             scalarMul(base, scalar) // q1^wireEval0 (result stored at 0x00)
-            g1AddAssign(bPtr, 0x00) // b += q1^wireEval0
+            g1AddAssign(bPtr) // b += q1^wireEval0
 
             scalar := mload(add(proof, 0x1c0)) // proof.wireEval1
             base := mload(add(vk, 0x100)) // vk.q2
             scalarMul(base, scalar) // q2^wireEval1 (result stored at 0x00)
-            g1AddAssign(bPtr, 0x00) // b += q2^wireEval1
+            g1AddAssign(bPtr) // b += q2^wireEval1
 
             scalar := mload(add(proof, 0x1e0)) // proof.wireEval2
             base := mload(add(vk, 0x120)) // vk.q3
             scalarMul(base, scalar) // q3^wireEval2 (result stored at 0x00)
-            g1AddAssign(bPtr, 0x00) // b += q3^wireEval2
+            g1AddAssign(bPtr) // b += q3^wireEval2
 
             scalar := mload(add(proof, 0x200)) // proof.wireEval3
             base := mload(add(vk, 0x140)) // vk.q4
             scalarMul(base, scalar) // q4^wireEval3 (result stored at 0x00)
-            g1AddAssign(bPtr, 0x00) // b += q4^wireEval3
+            g1AddAssign(bPtr) // b += q4^wireEval3
 
             // ============
             // q_M: multiplication selectors
@@ -690,13 +693,13 @@ library PlonkVerifier2 {
             scalar := mulmod(mload(add(proof, 0x1a0)), mload(add(proof, 0x1c0)), R_MOD)
             base := mload(add(vk, 0x160)) // vk.qM12
             scalarMul(base, scalar) // qM12^(wireEval0 * wireEval1)
-            g1AddAssign(bPtr, 0x00) // b += qM12^(wireEval0 * wireEval1)
+            g1AddAssign(bPtr) // b += qM12^(wireEval0 * wireEval1)
 
             // w_evals[2] * w_evals[3]
             scalar := mulmod(mload(add(proof, 0x1e0)), mload(add(proof, 0x200)), R_MOD)
             base := mload(add(vk, 0x180)) // vk.qM34
             scalarMul(base, scalar) // qM34^(wireEval2 * wireEval3)
-            g1AddAssign(bPtr, 0x00) // b += qM34^(wireEval2 * wireEval3)
+            g1AddAssign(bPtr) // b += qM34^(wireEval2 * wireEval3)
 
             // ============
             // q_H: hash (rescue-friendly) selectors
@@ -708,7 +711,7 @@ library PlonkVerifier2 {
             scalar := mulmod(tmp, tmp2, R_MOD)
             base := mload(add(vk, 0x1e0)) // vk.qH1
             scalarMul(base, scalar) // qH1^(wireEval0.pow(5))
-            g1AddAssign(bPtr, 0x00) // b += qH1^(wireEval0.pow(5))
+            g1AddAssign(bPtr) // b += qH1^(wireEval0.pow(5))
 
             // w_evals[1].pow(5);
             tmp := mload(add(proof, 0x1c0)) // proof.wireEval1
@@ -717,7 +720,7 @@ library PlonkVerifier2 {
             scalar := mulmod(tmp, tmp2, R_MOD)
             base := mload(add(vk, 0x200)) // vk.qH2
             scalarMul(base, scalar) // qH2^(wireEval2.pow(5))
-            g1AddAssign(bPtr, 0x00) // b += qH2^(wireEval1.pow(5))
+            g1AddAssign(bPtr) // b += qH2^(wireEval1.pow(5))
 
             // w_evals[2].pow(5);
             tmp := mload(add(proof, 0x1e0)) // proof.wireEval2
@@ -726,7 +729,7 @@ library PlonkVerifier2 {
             scalar := mulmod(tmp, tmp2, R_MOD)
             base := mload(add(vk, 0x220)) // vk.qH3
             scalarMul(base, scalar) // qH3^(wireEval2.pow(5))
-            g1AddAssign(bPtr, 0x00) // b += qH3^(wireEval2.pow(5))
+            g1AddAssign(bPtr) // b += qH3^(wireEval2.pow(5))
 
             // w_evals[3].pow(5);
             tmp := mload(add(proof, 0x200)) // proof.wireEval3
@@ -735,7 +738,7 @@ library PlonkVerifier2 {
             scalar := mulmod(tmp, tmp2, R_MOD)
             base := mload(add(vk, 0x240)) // vk.qH4
             scalarMul(base, scalar) // qH4^(wireEval3.pow(5))
-            g1AddAssign(bPtr, 0x00) // b += qH4^(wireEval3.pow(5))
+            g1AddAssign(bPtr) // b += qH4^(wireEval3.pow(5))
 
             // ============
             // q_o and q_c: output and constant selectors
@@ -743,12 +746,12 @@ library PlonkVerifier2 {
             scalar := sub(R_MOD, mload(add(proof, 0x220))) // - proof.wireEval4
             base := mload(add(vk, 0x1a0)) // vk.qO
             scalarMul(base, scalar) // qO^(-w_evals[4])
-            g1AddAssign(bPtr, 0x00) // b += qO^(-w_evals[4])
+            g1AddAssign(bPtr) // b += qO^(-w_evals[4])
 
             scalar := 1
             base := mload(add(vk, 0x1c0)) // vk.qC
             scalarMul(base, scalar) // qC
-            g1AddAssign(bPtr, 0x00) // b += qC
+            g1AddAssign(bPtr) // b += qC
 
             // ============
             // q_Ecc: Elliptic Curve Operation selector
@@ -760,7 +763,7 @@ library PlonkVerifier2 {
             scalar := mulmod(tmp, mload(add(proof, 0x220)), R_MOD)
             base := mload(add(vk, 0x260)) // vk.qEcc
             scalarMul(base, scalar) // qEcc^(\prod{w_evals})
-            g1AddAssign(bPtr, 0x00) // b += qEcc^(\prod{w_evals})
+            g1AddAssign(bPtr) // b += qEcc^(\prod{w_evals})
 
             // ============================================
             // splitting quotient commitments
@@ -769,7 +772,7 @@ library PlonkVerifier2 {
             scalar := sub(R_MOD, mload(evalData)) // - vanishEval
             base := mload(add(proof, 0xc0)) // proof.split0
             scalarMul(base, scalar) // split0^(-vanishEval)
-            g1AddAssign(bPtr, 0x00) // b += split0^(-vanishEval)
+            g1AddAssign(bPtr) // b += split0^(-vanishEval)
 
             // (1-zeta^n) * zeta^(n+2)
             tmp := addmod(mload(evalData), 1, R_MOD) // zeta^n
@@ -779,25 +782,25 @@ library PlonkVerifier2 {
             scalar := mulmod(scalar, tmp, R_MOD)
             base := mload(add(proof, 0xe0)) // proof.split1
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += split1^[(1-zeta^n) * zeta^(n+2)]
+            g1AddAssign(bPtr) // b += split1^[(1-zeta^n) * zeta^(n+2)]
 
             // (1-zeta^n) * zeta^2(n+2)
             scalar := mulmod(scalar, tmp, R_MOD)
             base := mload(add(proof, 0x100)) // proof.split2
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += split2^[(1-zeta^n) * zeta^2(n+2)]
+            g1AddAssign(bPtr) // b += split2^[(1-zeta^n) * zeta^2(n+2)]
 
             // (1-zeta^n) * zeta^3(n+2)
             scalar := mulmod(scalar, tmp, R_MOD)
             base := mload(add(proof, 0x120)) // proof.split3
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += split3^[(1-zeta^n) * zeta^3(n+2)]
+            g1AddAssign(bPtr) // b += split3^[(1-zeta^n) * zeta^3(n+2)]
 
             // (1-zeta^n) * zeta^4(n+2)
             scalar := mulmod(scalar, tmp, R_MOD)
             base := mload(add(proof, 0x140)) // proof.split4
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += split4^[(1-zeta^n) * zeta^4(n+2)]
+            g1AddAssign(bPtr) // b += split4^[(1-zeta^n) * zeta^4(n+2)]
 
             // ============================================
             // Add wire witness poly commitments
@@ -809,35 +812,35 @@ library PlonkVerifier2 {
             scalar := tmp // chal.v
             base := mload(proof) // proof.wire0
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += wire0^v
+            g1AddAssign(bPtr) // b += wire0^v
             // eval += v * proof.wireEval0
             eval := addmod(eval, mulmod(scalar, mload(add(proof, 0x1a0)), R_MOD), R_MOD)
 
             scalar := mulmod(scalar, tmp, R_MOD) // v^2
             base := mload(add(proof, 0x20)) // proof.wire1
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += wire1^(v^2)
+            g1AddAssign(bPtr) // b += wire1^(v^2)
             // eval += v^2 * proof.wireEval1
             eval := addmod(eval, mulmod(scalar, mload(add(proof, 0x1c0)), R_MOD), R_MOD)
 
             scalar := mulmod(scalar, tmp, R_MOD) // v^3
             base := mload(add(proof, 0x40)) // proof.wire2
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += wire2^(v^3)
+            g1AddAssign(bPtr) // b += wire2^(v^3)
             // eval += v^3 * proof.wireEval2
             eval := addmod(eval, mulmod(scalar, mload(add(proof, 0x1e0)), R_MOD), R_MOD)
 
             scalar := mulmod(scalar, tmp, R_MOD) // v^4
             base := mload(add(proof, 0x60)) // proof.wire3
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += wire3^(v^4)
+            g1AddAssign(bPtr) // b += wire3^(v^4)
             // eval += v^4 * proof.wireEval3
             eval := addmod(eval, mulmod(scalar, mload(add(proof, 0x200)), R_MOD), R_MOD)
 
             scalar := mulmod(scalar, tmp, R_MOD) // v^5
             base := mload(add(proof, 0x80)) // proof.wire4
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += wire4^(v^5)
+            g1AddAssign(bPtr) // b += wire4^(v^5)
             // eval += v^5 * proof.wireEval4
             eval := addmod(eval, mulmod(scalar, mload(add(proof, 0x220)), R_MOD), R_MOD)
 
@@ -848,28 +851,28 @@ library PlonkVerifier2 {
             scalar := mulmod(scalar, tmp, R_MOD) // v^6
             base := mload(add(vk, 0x40)) // vk.sigma0
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += sigma0^(v^6)
+            g1AddAssign(bPtr) // b += sigma0^(v^6)
             // eval += v^6 * proof.sigmaEval0
             eval := addmod(eval, mulmod(scalar, mload(add(proof, 0x240)), R_MOD), R_MOD)
 
             scalar := mulmod(scalar, tmp, R_MOD) // v^7
             base := mload(add(vk, 0x60)) // vk.sigma1
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += sigma1^(v^7)
+            g1AddAssign(bPtr) // b += sigma1^(v^7)
             // eval += v^7 * proof.sigmaEval1
             eval := addmod(eval, mulmod(scalar, mload(add(proof, 0x260)), R_MOD), R_MOD)
 
             scalar := mulmod(scalar, tmp, R_MOD) // v^8
             base := mload(add(vk, 0x80)) // vk.sigma2
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += sigma2^(v^8)
+            g1AddAssign(bPtr) // b += sigma2^(v^8)
             // eval += v^8 * proof.sigmaEval2
             eval := addmod(eval, mulmod(scalar, mload(add(proof, 0x280)), R_MOD), R_MOD)
 
             scalar := mulmod(scalar, tmp, R_MOD) // v^9
             base := mload(add(vk, 0xa0)) // vk.sigma3
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += sigma3^(v^9)
+            g1AddAssign(bPtr) // b += sigma3^(v^9)
             // eval += v^9 * proof.sigmaEval3
             eval := addmod(eval, mulmod(scalar, mload(add(proof, 0x2a0)), R_MOD), R_MOD)
 
@@ -879,27 +882,27 @@ library PlonkVerifier2 {
             scalar := mload(add(chal, 0xe0)) // chal.u
             base := mload(add(proof, 0xa0)) // proof.prodPerm
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += prodPerm^u
+            g1AddAssign(bPtr) // b += prodPerm^u
             // eval += u * proof.prodPermZetaOmegaEval
             eval := addmod(eval, mulmod(scalar, mload(add(proof, 0x2c0)), R_MOD), R_MOD)
 
             scalar := mload(add(chal, 0xa0)) // chal.zeta or evalPoint
             base := mload(add(proof, 0x160)) // proof.zeta or openingProof
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += proof.zeta^chal.zeta
+            g1AddAssign(bPtr) // b += proof.zeta^chal.zeta
 
             // chal.zeta * groupGen or nextEvalPoint
             tmp := mulmod(scalar, mload(add(mload(add(domain, 0x40)), 0x20)), R_MOD)
             scalar := mulmod(tmp, mload(add(chal, 0xe0)), R_MOD) // u * nextEvalPoint
             base := mload(add(proof, 0x180)) // shiftedOpeningProof or proof.zetaOmega
             scalarMul(base, scalar)
-            g1AddAssign(bPtr, 0x00) // b += proof.zetaOmega^(u * chal.zeta * groupGen)
+            g1AddAssign(bPtr) // b += proof.zetaOmega^(u * chal.zeta * groupGen)
 
             base := mallocG1()
             mstore(base, 1) // BN254.P1.x
             mstore(add(base, 0x20), 2) // BN254.P1.y
             scalarMul(base, sub(R_MOD, eval)) // P1^-eval or [E]1 in paper
-            g1AddAssign(bPtr, 0x00) // b += P1^-eval
+            g1AddAssign(bPtr) // b += P1^-eval
 
             // b = -b
             g1NegateAssign(bPtr)
@@ -913,7 +916,7 @@ library PlonkVerifier2 {
             scalar := mload(add(chal, 0xe0)) // chal.u
             base := mload(add(proof, 0x180)) // shiftedOpeningProof or proof.zetaOmega
             scalarMul(base, scalar)
-            g1AddAssign(aPtr, 0x00) // a += shiftedOpeningProof^u
+            g1AddAssign(aPtr) // a += shiftedOpeningProof^u
 
             // ============================================
             // Final pairing check
