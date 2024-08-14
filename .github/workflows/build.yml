@@ -47,8 +47,8 @@ jobs:
         with:
           prefix-key: v1-rust
 
-
       - uses: rui314/setup-mold@v1
+        mold-version: 2.31.0
           
       - name: Build
         # Build in release without `testing` feature, this should work without `hotshot_example` config.
@@ -106,6 +106,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - uses: rui314/setup-mold@v1
+        mold-version: 2.31.0
 
       - name: Build
         run: |
