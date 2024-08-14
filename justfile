@@ -34,7 +34,7 @@ anvil *args:
     docker run -p 127.0.0.1:8545:8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
 
 test:
-	@echo 'Ommiting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
+	@echo 'Omitting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
 	cargo nextest run --locked --release --workspace --all-features --retries 2 --verbose -E '!test(slow_)'
 
 test-slow:
