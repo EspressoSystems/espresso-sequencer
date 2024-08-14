@@ -431,7 +431,7 @@ use async_std::sync::{Arc, RwLock};
 use futures::StreamExt;
 use hotshot::types::SystemContextHandle;
 use hotshot_types::traits::{
-    node_implementation::{NodeImplementation, NodeType},
+    node_implementation::{NodeImplementation, NodeType, Versions},
     BlockPayload,
 };
 use serde::{Deserialize, Serialize};
@@ -487,11 +487,17 @@ pub struct Options {
 }
 
 /// Run an instance of the HotShot Query service with no customization.
-pub async fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types>, D, Ver>(
+pub async fn run_standalone_service<
+    Types: NodeType,
+    I: NodeImplementation<Types>,
+    D,
+    ApiVer,
+    HsVer: Versions,
+>(
     options: Options,
     data_source: D,
-    hotshot: SystemContextHandle<Types, I>,
-    bind_version: Ver,
+    hotshot: SystemContextHandle<Types, I, HsVer>,
+    bind_version: ApiVer,
 ) -> Result<(), Error>
 where
     Payload<Types>: availability::QueryablePayload<Types>,
@@ -504,7 +510,7 @@ where
         + Send
         + Sync
         + 'static,
-    Ver: StaticVersionType + 'static,
+    ApiVer: StaticVersionType + 'static,
 {
     // Create API modules.
     let availability_api =
@@ -714,8 +720,11 @@ mod test {
             .unwrap();
 
         // Mock up some data and add a block to the store.
-        let leaf =
-            Leaf::<MockTypes>::genesis(&TestValidatedState::default(), &TestInstanceState {}).await;
+        let leaf = Leaf::<MockTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState::default(),
+        )
+        .await;
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
         hotshot_qs.insert_block(block.clone()).await.unwrap();
 

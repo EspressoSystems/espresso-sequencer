@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::mocks::{MockMembership, MockNodeImpl, MockTransaction, MockTypes};
+use super::mocks::{MockMembership, MockNodeImpl, MockTransaction, MockTypes, MockVersions};
 use crate::{
     availability::AvailabilityDataSource,
     data_source::{FileSystemDataSource, SqlDataSource, UpdateDataSource, VersionedDataSource},
@@ -50,7 +50,7 @@ use tracing::{info_span, Instrument};
 use url::Url;
 
 struct MockNode<D: DataSourceLifeCycle> {
-    hotshot: SystemContextHandle<MockTypes, MockNodeImpl>,
+    hotshot: SystemContextHandle<MockTypes, MockNodeImpl, MockVersions>,
     data_source: Arc<RwLock<D>>,
     storage: D::Storage,
 }
@@ -202,7 +202,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             config,
                             memberships,
                             network,
-                            HotShotInitializer::from_genesis(TestInstanceState {})
+                            HotShotInitializer::from_genesis(TestInstanceState::default())
                                 .await
                                 .unwrap(),
                             ConsensusMetricsValue::new(&*data_source.populate_metrics()),
@@ -244,7 +244,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
 }
 
 impl<D: DataSourceLifeCycle> MockNetwork<D> {
-    pub fn handle(&self) -> &SystemContextHandle<MockTypes, MockNodeImpl> {
+    pub fn handle(&self) -> &SystemContextHandle<MockTypes, MockNodeImpl, MockVersions> {
         &self.nodes[0].hotshot
     }
 

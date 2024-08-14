@@ -26,6 +26,7 @@ use hotshot_example_types::{
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
 };
+use hotshot_types::traits::node_implementation::Versions;
 use hotshot_types::{
     data::{QuorumProposal, ViewNumber},
     signature_key::BLSPubKey,
@@ -134,17 +135,25 @@ impl NodeType for MockTypes {
     type ValidatedState = TestValidatedState;
     type Membership = GeneralStaticCommittee<Self, BLSPubKey>;
     type BuilderSignatureKey = BLSPubKey;
+    type AuctionResult = TestAuctionResult;
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct MockVersions {}
+
+impl Versions for MockVersions {
     type Base = StaticVersion<0, 1>;
     type Upgrade = StaticVersion<0, 2>;
-    type AuctionResult = TestAuctionResult;
     const UPGRADE_HASH: [u8; 32] = [
         1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
         0, 0,
     ];
+
+    type Marketplace = StaticVersion<0, 3>;
 }
 
 /// A type alias for the mock base version
-pub type MockBase = <MockTypes as NodeType>::Base;
+pub type MockBase = <MockVersions as Versions>::Base;
 
 pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;
 pub type MockQuorumProposal = QuorumProposal<MockTypes>;
