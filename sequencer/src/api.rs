@@ -1455,10 +1455,10 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_chain_config_upgrade_view_based() {
+    async fn test_fee_upgrade_view_based() {
         setup_test();
 
-        test_chain_config_upgrade_helper(UpgradeMode::View(ViewBasedUpgrade {
+        test_fee_upgrade_helper(UpgradeMode::View(ViewBasedUpgrade {
             start_voting_view: None,
             stop_voting_view: None,
             start_proposing_view: 1,
@@ -1468,11 +1468,11 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_chain_config_upgrade_time_based() {
+    async fn test_fee_upgrade_time_based() {
         setup_test();
 
         let now = OffsetDateTime::now_utc().unix_timestamp() as u64;
-        test_chain_config_upgrade_helper(UpgradeMode::Time(TimeBasedUpgrade {
+        test_fee_upgrade_helper(UpgradeMode::Time(TimeBasedUpgrade {
             start_proposing_time: Timestamp::from_integer(now).unwrap(),
             stop_proposing_time: Timestamp::from_integer(now + 500).unwrap(),
             start_voting_time: None,
@@ -1481,7 +1481,7 @@ mod test {
         .await;
     }
 
-    async fn test_chain_config_upgrade_helper(mode: UpgradeMode) {
+    async fn test_fee_upgrade_helper(mode: UpgradeMode) {
         let port = pick_unused_port().expect("No ports free");
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
@@ -1497,7 +1497,7 @@ mod test {
             <SeqTypes as NodeType>::Upgrade::VERSION,
             Upgrade {
                 mode,
-                upgrade_type: UpgradeType::ChainConfig {
+                upgrade_type: UpgradeType::Fee {
                     chain_config: chain_config_upgrade,
                 },
             },

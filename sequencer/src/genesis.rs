@@ -56,10 +56,8 @@ impl Genesis {
         let upgrades: Vec<&Upgrade> = self.upgrades.values().collect();
 
         for upgrade in upgrades {
-            match upgrade.upgrade_type {
-                UpgradeType::ChainConfig { chain_config } => {
-                    base_fee = std::cmp::max(chain_config.base_fee, base_fee);
-                }
+            if let UpgradeType::Fee { chain_config } = upgrade.upgrade_type {
+                base_fee = std::cmp::max(chain_config.base_fee, base_fee);
             }
         }
 
@@ -401,7 +399,7 @@ mod test {
     }
 
     #[test]
-    fn test_genesis_toml_upgrade_view_mode() {
+    fn test_genesis_toml_fee_upgrade_view_mode() {
         // without optional fields
         // with view settings
         let toml = toml! {
@@ -432,7 +430,9 @@ mod test {
             start_proposing_view = 1
             stop_proposing_view = 15
 
-            [upgrade.chain_config]
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
             chain_id = 12345
             max_block_size = 30000
             base_fee = 1
@@ -454,7 +454,7 @@ mod test {
                 start_proposing_view: 1,
                 stop_proposing_view: 15,
             }),
-            upgrade_type: UpgradeType::ChainConfig {
+            upgrade_type: UpgradeType::Fee {
                 chain_config: genesis.chain_config,
             },
         };
@@ -463,7 +463,7 @@ mod test {
     }
 
     #[test]
-    fn test_genesis_toml_upgrade_time_mode() {
+    fn test_genesis_toml_fee_upgrade_time_mode() {
         // without optional fields
         // with time settings
         let toml = toml! {
@@ -494,7 +494,9 @@ mod test {
             start_proposing_time = "2024-01-01T00:00:00Z"
             stop_proposing_time = "2024-01-02T00:00:00Z"
 
-            [upgrade.chain_config]
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
             chain_id = 12345
             max_block_size = 30000
             base_fee = 1
@@ -518,7 +520,7 @@ mod test {
                 stop_proposing_time: Timestamp::from_string("2024-01-02T00:00:00Z".to_string())
                     .unwrap(),
             }),
-            upgrade_type: UpgradeType::ChainConfig {
+            upgrade_type: UpgradeType::Fee {
                 chain_config: genesis.chain_config,
             },
         };
@@ -527,7 +529,7 @@ mod test {
     }
 
     #[test]
-    fn test_genesis_toml_upgrade_view_and_time_mode() {
+    fn test_genesis_toml_fee_upgrade_view_and_time_mode() {
         // set both time and view parameters
         // this should err
         let toml = toml! {
@@ -560,7 +562,9 @@ mod test {
             start_proposing_time = 1
             stop_proposing_time = 10
 
-            [upgrade.chain_config]
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
             chain_id = 12345
             max_block_size = 30000
             base_fee = 1
@@ -570,5 +574,94 @@ mod test {
         .to_string();
 
         toml::from_str::<Genesis>(&toml).unwrap_err();
+    }
+
+    #[test]
+    fn test_marketplace_upgrade_toml() {
+        let toml = toml! {
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [accounts]
+            "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f" = 100000
+            "0x0000000000000000000000000000000000000000" = 42
+
+            [l1_finalized]
+            number = 64
+            timestamp = "0x123def"
+            hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
+
+
+            [[upgrade]]
+            version = "0.3"
+            start_proposing_view = 1
+            stop_proposing_view = 10
+
+            [upgrade.marketplace]
+        }
+        .to_string();
+
+        toml::from_str::<Genesis>(&toml).unwrap();
+    }
+
+    #[test]
+    fn test_marketplace_and_fee_upgrade_toml() {
+        let toml = toml! {
+            [stake_table]
+            capacity = 10
+
+            [chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+
+            [header]
+            timestamp = 123456
+
+            [accounts]
+            "0x23618e81E3f5cdF7f54C3d65f7FBc0aBf5B21E8f" = 100000
+            "0x0000000000000000000000000000000000000000" = 42
+
+            [l1_finalized]
+            number = 64
+            timestamp = "0x123def"
+            hash = "0x80f5dd11f2bdda2814cb1ad94ef30a47de02cf28ad68c89e104c00c4e51bb7a5"
+
+            [[upgrade]]
+            version = "0.3"
+            start_proposing_view = 1
+            stop_proposing_view = 10
+
+            [upgrade.marketplace]
+
+            [[upgrade]]
+            version = "0.2"
+            start_proposing_view = 1
+            stop_proposing_view = 15
+
+            [upgrade.fee]
+
+            [upgrade.fee.chain_config]
+            chain_id = 12345
+            max_block_size = 30000
+            base_fee = 1
+            fee_recipient = "0x0000000000000000000000000000000000000000"
+            fee_contract = "0x0000000000000000000000000000000000000000"
+        }
+        .to_string();
+
+        toml::from_str::<Genesis>(&toml).unwrap();
     }
 }

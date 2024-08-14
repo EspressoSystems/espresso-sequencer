@@ -85,25 +85,34 @@ TOML file. For an example with upgrades enabled, refer to [`data/genesis/demo.to
 ```toml
 [[upgrade]]
 version = "0.2"
-view = 5
-propose_window = 10
+start_proposing_view = 5
+stop_proposing_view = 15
 
-[upgrade.chain_config]
+[upgrade.fee]
+
+[upgrade.fee.chain_config]
 chain_id = 999999999
-base_fee = '2 wei'
+base_fee = '1 wei'
 max_block_size = '1mb'
 fee_recipient = '0x0000000000000000000000000000000000000000'
 fee_contract = '0xa15bb66138824a1c7167f5e85b957d04dd34e468'
+
+[[upgrade]]
+version = "0.3"
+start_proposing_view = 5
+stop_proposing_view = 15
+
+[upgrade.marketplace]
 ```
 
 In the TOML configuration example above, the `upgrade` section defines an array of tables, each specifying upgrade
-parameters:
+parameters
 
 - **Version:** the new version after an upgrade is successful.
-- **View:** Represents the `start_proposing_view` value at which the upgrade is proposed.
-- **Propose Window:** Refers to the view window between `start_proposing_view` and `stop_proposing_view`.
+- **start_proposing_view:** Represents the `start_proposing_view` value at which the upgrade is proposed.
+- **stop_proposing_view:** Refers to the view view after which the node stops proposing an upgrade.
 
-The `upgrade.chain_config` table contains the complete set of chain config parameters, which can be used, for example,
+The `upgrade.fee.chain_config` table contains the complete set of chain config parameters, which can be used, for example,
 to enable protocol fees or modify other parameters.
 
 ## Fee upgrade
