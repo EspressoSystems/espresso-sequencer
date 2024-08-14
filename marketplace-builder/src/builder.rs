@@ -206,11 +206,13 @@ impl BuilderConfig {
                 let res =
                     run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
                         .await;
-                tracing::error!(?res, "builder service exited");
+                tracing::error!(?res, "Reserve builder service exited");
                 if res.is_err() {
-                    panic!("Builder should restart.");
+                    panic!("Reserve builder should restart.");
                 }
             });
+
+            tracing::info!("Reserve builder init finished");
         } else {
             let hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
@@ -218,14 +220,15 @@ impl BuilderConfig {
                 let res =
                     run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
                         .await;
-                tracing::error!(?res, "builder service exited");
+                tracing::error!(?res, "Fallback builder service exited");
                 if res.is_err() {
-                    panic!("Builder should restart.");
+                    panic!("Fallback builder should restart.");
                 }
             });
+
+            tracing::info!("Fallback builder init finished");
         }
 
-        tracing::info!("Builder init finished");
         Ok(Self {
             global_state,
             hotshot_events_api_url,
