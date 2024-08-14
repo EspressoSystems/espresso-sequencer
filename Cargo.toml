@@ -136,3 +136,19 @@ paste = "1.0"
 rand = "0.8.5"
 time = "0.3"
 trait-set = "0.3.0"
+
+[patch."https://github.com/EspressoSystems/HotShot.git"]
+hotshot = { path = "../HotShot/crates/hotshot" }
+hotshot-builder-api = { path = "../HotShot/crates/builder-api" }
+hotshot-orchestrator = { path = "../HotShot/crates/orchestrator" }
+hotshot-stake-table = { path = "../HotShot/crates/hotshot-stake-table" }
+hotshot-task = { path = "../HotShot/crates/task" }
+hotshot-testing = { path = "../HotShot/crates/testing" }
+hotshot-types = { path = "../HotShot/crates/types" }
+
+[patch."https://github.com/EspressoSystems/hotshot-events-service.git"]
+hotshot-events-service = { path = "../hotshot-events-service" }
+[patch."https://github.com/EspressoSystems/hotshot-builder-core.git"]
+hotshot-builder-core = { path = "../hotshot-builder-core" }
+[patch."https://github.com/EspressoSystems/hotshot-query-service.git"]
+hotshot-query-service = { path = "../hotshot-query-service" }
