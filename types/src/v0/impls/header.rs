@@ -750,7 +750,7 @@ impl BlockHeader<SeqTypes> for Header {
         let chain_config = if version > instance_state.current_version {
             match instance_state.upgrades.get(&version) {
                 Some(upgrade) => match upgrade.upgrade_type {
-                    UpgradeType::FeeUpgrade { chain_config } => chain_config,
+                    UpgradeType::Fee { chain_config } => chain_config,
                     _ => Header::get_chain_config(&validated_state, instance_state).await,
                 },
                 None => Header::get_chain_config(&validated_state, instance_state).await,
@@ -867,7 +867,7 @@ impl BlockHeader<SeqTypes> for Header {
         let chain_config = if version > instance_state.current_version {
             match instance_state.upgrades.get(&version) {
                 Some(upgrade) => match upgrade.upgrade_type {
-                    UpgradeType::FeeUpgrade { chain_config } => chain_config,
+                    UpgradeType::Fee { chain_config } => chain_config,
                     _ => Header::get_chain_config(&validated_state, instance_state).await,
                 },
                 None => Header::get_chain_config(&validated_state, instance_state).await,

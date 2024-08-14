@@ -510,7 +510,7 @@ impl ValidatedState {
             return;
         };
 
-        if let UpgradeType::FeeUpgrade { chain_config } = upgrade.upgrade_type {
+        if let UpgradeType::Fee { chain_config } = upgrade.upgrade_type {
             self.chain_config = chain_config.into();
         }
     }

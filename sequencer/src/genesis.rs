@@ -56,7 +56,7 @@ impl Genesis {
         let upgrades: Vec<&Upgrade> = self.upgrades.values().collect();
 
         for upgrade in upgrades {
-            if let UpgradeType::FeeUpgrade { chain_config } = upgrade.upgrade_type {
+            if let UpgradeType::Fee { chain_config } = upgrade.upgrade_type {
                 base_fee = std::cmp::max(chain_config.base_fee, base_fee);
             }
         }
@@ -430,9 +430,9 @@ mod test {
             start_proposing_view = 1
             stop_proposing_view = 15
 
-            [upgrade.fee_upgrade]
+            [upgrade.fee]
 
-            [upgrade.fee_upgrade.chain_config]
+            [upgrade.fee.chain_config]
             chain_id = 12345
             max_block_size = 30000
             base_fee = 1
@@ -454,7 +454,7 @@ mod test {
                 start_proposing_view: 1,
                 stop_proposing_view: 15,
             }),
-            upgrade_type: UpgradeType::FeeUpgrade {
+            upgrade_type: UpgradeType::Fee {
                 chain_config: genesis.chain_config,
             },
         };
@@ -494,9 +494,9 @@ mod test {
             start_proposing_time = "2024-01-01T00:00:00Z"
             stop_proposing_time = "2024-01-02T00:00:00Z"
 
-            [upgrade.fee_upgrade]
+            [upgrade.fee]
 
-            [upgrade.fee_upgrade.chain_config]
+            [upgrade.fee.chain_config]
             chain_id = 12345
             max_block_size = 30000
             base_fee = 1
@@ -520,7 +520,7 @@ mod test {
                 stop_proposing_time: Timestamp::from_string("2024-01-02T00:00:00Z".to_string())
                     .unwrap(),
             }),
-            upgrade_type: UpgradeType::FeeUpgrade {
+            upgrade_type: UpgradeType::Fee {
                 chain_config: genesis.chain_config,
             },
         };
@@ -562,9 +562,9 @@ mod test {
             start_proposing_time = 1
             stop_proposing_time = 10
 
-            [upgrade.fee_upgrade]
+            [upgrade.fee]
 
-            [upgrade.fee_upgrade.chain_config]
+            [upgrade.fee.chain_config]
             chain_id = 12345
             max_block_size = 30000
             base_fee = 1
@@ -651,9 +651,9 @@ mod test {
             start_proposing_view = 1
             stop_proposing_view = 15
 
-            [upgrade.fee_upgrade]
+            [upgrade.fee]
 
-            [upgrade.fee_upgrade.chain_config]
+            [upgrade.fee.chain_config]
             chain_id = 12345
             max_block_size = 30000
             base_fee = 1

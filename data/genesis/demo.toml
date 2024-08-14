@@ -16,9 +16,9 @@ version = "0.2"
 start_proposing_view = 5
 stop_proposing_view = 15
 
-[upgrade.fee_upgrade]
+[upgrade.fee]
 
-[upgrade.fee_upgrade.chain_config]
+[upgrade.fee.chain_config]
 chain_id = 999999999
 base_fee = '1 wei'
 max_block_size = '1mb'

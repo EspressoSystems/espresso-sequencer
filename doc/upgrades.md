@@ -88,9 +88,9 @@ version = "0.2"
 start_proposing_view = 5
 stop_proposing_view = 15
 
-[upgrade.fee_upgrade]
+[upgrade.fee]
 
-[upgrade.fee_upgrade.chain_config]
+[upgrade.fee.chain_config]
 chain_id = 999999999
 base_fee = '1 wei'
 max_block_size = '1mb'
@@ -106,13 +106,13 @@ stop_proposing_view = 15
 ```
 
 In the TOML configuration example above, the `upgrade` section defines an array of tables, each specifying upgrade
-parameters:
+parameters
 
 - **Version:** the new version after an upgrade is successful.
 - **start_proposing_view:** Represents the `start_proposing_view` value at which the upgrade is proposed.
-- **stop_proposing_view:** Refers to the view at which the proposing an upgrade has stopped.
+- **stop_proposing_view:** Refers to the view view after which the node stops proposing an upgrade.
 
-The `upgrade.fee_upgrade.chain_config` table contains the complete set of chain config parameters, which can be used, for example,
+The `upgrade.fee.chain_config` table contains the complete set of chain config parameters, which can be used, for example,
 to enable protocol fees or modify other parameters.
 
 ## Fee upgrade

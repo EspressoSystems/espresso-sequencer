@@ -9,7 +9,7 @@ use crate::{v0_3::ChainConfig, Timestamp};
 pub enum UpgradeType {
     // Note: Wrapping this in a tuple variant causes deserialization to fail because
     // the 'chain_config' name is also provided in the TOML input.
-    FeeUpgrade { chain_config: ChainConfig },
+    Fee { chain_config: ChainConfig },
     Marketplace {},
 }
 
