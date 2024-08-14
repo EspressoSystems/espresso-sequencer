@@ -82,6 +82,7 @@ use hotshot_types::{
     light_client::StateKeyPair,
     signature_key::{BLSPrivKey, BLSPubKey},
     traits::{
+        auction_results_provider::AuctionResultsProvider,
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
         election::Membership,
         metrics::Metrics,
@@ -390,7 +391,7 @@ pub async fn init_hotshot<
             auction_results_provider: Arc::new(SolverAuctionResultsProvider(
                 Url::from_str("https://some.solver").unwrap(),
             )),
-            generic_builder_url: Url::from_str("https://some.builder").unwrap(),
+            fallback_builder_url: Url::from_str("https://some.builder").unwrap(),
         },
     )
     .await

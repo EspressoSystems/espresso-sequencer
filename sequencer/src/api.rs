@@ -168,12 +168,36 @@ impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: Sequencer
     SubmitDataSource<N, P> for ApiState<N, P, Ver>
 {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
-        self.consensus()
+        let handle = self.consensus().await;
+
+        let consensus_read_lock = handle.read().await;
+
+        // Fetch full chain config from the validated state, if present.
+        // This is necessary because we support chain config upgrades,
+        // so the updated chain config is found in the validated state.
+        let cf = consensus_read_lock
+            .decided_state()
             .await
-            .read()
-            .await
-            .submit_transaction(tx)
-            .await?;
+            .chain_config
+            .resolve();
+
+        // Use the chain config from the validated state if available,
+        // otherwise, use the node state's chain config
+        // The node state's chain config is the node's base version chain config
+        let cf = match cf {
+            Some(cf) => cf,
+            None => self.node_state().await.chain_config,
+        };
+
+        let max_block_size: u64 = cf.max_block_size.into();
+        let txn_size = tx.payload().len() as u64;
+
+        // reject transaction bigger than block size
+        if txn_size > max_block_size {
+            bail!("transaction size ({txn_size}) is greater than max_block_size ({max_block_size})")
+        }
+
+        consensus_read_lock.submit_transaction(tx).await?;
         Ok(())
     }
 }

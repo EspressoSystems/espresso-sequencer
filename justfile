@@ -34,8 +34,15 @@ anvil *args:
     docker run -p 127.0.0.1:8545:8545 ghcr.io/foundry-rs/foundry:latest "anvil {{args}}"
 
 test:
-    cargo build --bin diff-test --release
-    cargo test --release --all-features
+	@echo 'Omitting slow tests. Use `test-slow` for those. Or `test-all` for all tests.'
+	cargo nextest run --locked --release --workspace --all-features --retries 2 --verbose -E '!test(slow_)'
+
+test-slow:
+	@echo 'Only slow tests are included. Use `test` for those deemed not slow. Or `test-all` for all tests.'
+	cargo nextest run --locked --release --workspace --all-features --verbose -E 'test(slow_)'
+
+test-all:
+	cargo nextest run --locked --release --workspace --all-features --verbose
 
 clippy:
     cargo clippy --workspace --all-features --all-targets -- -D warnings
@@ -97,6 +104,7 @@ sol-test:
 NUM_BLOCKS_PER_EPOCH := "3"
 NUM_INIT_VALIDATORS := "5"
 lc-contract-profiling-sepolia:
+    @sh -c 'source ./.env.contracts'
     #!/usr/bin/env bash
     set -euxo pipefail
     forge script contracts/test/DeployLightClientTestScript.s.sol --sig "runBench(uint32 numBlocksPerEpoch, uint64 numInitValidators)" {{NUM_BLOCKS_PER_EPOCH}} {{NUM_INIT_VALIDATORS}} --fork-url ${SEPOLIA_RPC_URL} --broadcast --verify --etherscan-api-key ${ETHERSCAN_API_KEY} --chain-id sepolia
@@ -126,3 +134,4 @@ download-srs:
 dev-download-srs:
     @echo "Check existence or download SRS for dev/test"
     @AZTEC_SRS_PATH="$PWD/data/aztec20/kzg10-aztec20-srs-65544.bin" ./scripts/download_srs_aztec.sh
+ 
