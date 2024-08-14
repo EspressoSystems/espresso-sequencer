@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: ${{ !contains(github.ref, 'main')}}
 
 env:
-  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std"'
+  RUSTFLAGS: '--cfg async_executor_impl="async-std" --cfg async_channel_impl="async-std" -C link-arg=-fuse-ld=/usr/local/bin/mold'
   RUST_LOG: info,libp2p=off,node=error
 
 jobs:
