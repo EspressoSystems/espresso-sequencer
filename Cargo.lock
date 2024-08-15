@@ -1309,7 +1309,7 @@ dependencies = [
  "hotshot",
  "hotshot-builder-api",
  "hotshot-builder-core",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot)",
  "hotshot-example-types",
  "hotshot-orchestrator",
  "hotshot-stake-table",
@@ -4130,7 +4130,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.39"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=update-hotshot#99bcd9a260d246fe61d0f66aeb3d679ce815870f"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?tag=0.1.41#9fdf32825ec363f5783648781b582bb35c319f2e"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4145,7 +4145,7 @@ dependencies = [
  "hex",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.41)",
  "hotshot-types",
  "lru 0.12.4",
  "serde",
@@ -4182,7 +4182,33 @@ dependencies = [
 [[package]]
 name = "hotshot-events-service"
 version = "0.1.38"
-source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot#8222bf3eaef3403ec0b71d36da24ca48a4814c37"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.41#6812369e20eb2972851690f080a117cae0282a6f"
+dependencies = [
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "clap",
+ "derivative",
+ "derive_more 0.99.18",
+ "either",
+ "futures",
+ "hotshot-types",
+ "rand 0.8.5",
+ "serde",
+ "snafu 0.8.4",
+ "tagged-base64",
+ "tide-disco",
+ "toml",
+ "tracing",
+ "vbs",
+]
+
+[[package]]
+name = "hotshot-events-service"
+version = "0.1.38"
+source = "git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot#2e0e26253df6a91aeb6fd339f473fedc486bef21"
 dependencies = [
  "async-broadcast",
  "async-compatibility-layer",
@@ -6272,7 +6298,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot)",
  "hotshot-example-types",
  "hotshot-orchestrator",
  "hotshot-query-service",
@@ -6319,7 +6345,7 @@ dependencies = [
  "hex",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot)",
  "hotshot-task-impls",
  "hotshot-types",
  "lru 0.12.4",
@@ -6353,7 +6379,7 @@ dependencies = [
  "espresso-types",
  "futures",
  "hotshot",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot)",
  "hotshot-query-service",
  "hotshot-types",
  "jf-signature",
@@ -8735,7 +8761,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-contract-adapter",
- "hotshot-events-service",
+ "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot)",
  "hotshot-example-types",
  "hotshot-orchestrator",
  "hotshot-query-service",
