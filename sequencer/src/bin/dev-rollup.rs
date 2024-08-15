@@ -49,7 +49,7 @@ struct Register {
     #[clap(long, default_value_t = 200)]
     pub reserve_price: u64,
 
-    #[clap(long, default_value_t = true)]
+    #[clap(long, default_value_t = false)]
     pub active: bool,
 
     #[clap(long, default_value = "test")]
