@@ -203,9 +203,6 @@ impl BuilderConfig {
             };
 
             async_spawn(async move {
-                // TODO this is probably an error in m-builer-core. It
-                // can use `SequencerVersion` instead of expecting a
-                // generic param.
                 let res = run_non_permissioned_standalone_builder_service::<
                     SeqTypes,
                     SequencerVersions,
@@ -222,7 +219,6 @@ impl BuilderConfig {
             let hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(async move {
-                // TODO see previous
                 let res = run_non_permissioned_standalone_builder_service::<
                     SeqTypes,
                     SequencerVersions,
