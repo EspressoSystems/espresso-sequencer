@@ -261,7 +261,7 @@ mod test {
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
-    use hotshot_query_service::availability::LeafQueryData;
+    use hotshot_query_service::{availability::LeafQueryData, VidCommitment};
     use hotshot_types::{
         bundle::Bundle,
         light_client::StateKeyPair,
@@ -375,9 +375,12 @@ mod test {
         let submission_client: Client<ServerError, BaseVersion> = Client::new(builder_api_url);
         submission_client.connect(None).await;
 
+        // Make an empty commitment (for testing, the commitment is not used)
+        let commitment = vid_commitment(&[0], 1);
+
         // Test getting a bundle
         let _bundle = builder_client
-            .get::<Bundle<SeqTypes>>("block_info/bundle/1")
+            .get::<Bundle<SeqTypes>>(format!("block_info/bundle/1/{}/1", commitment).as_str())
             .send()
             .await
             .unwrap();
