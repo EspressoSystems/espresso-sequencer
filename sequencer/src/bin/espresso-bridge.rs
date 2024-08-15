@@ -21,7 +21,7 @@ use jf_merkle_tree::{
 use sequencer_utils::logging;
 use surf_disco::{error::ClientError, Url};
 
-type EspressoClient = surf_disco::Client<ClientError, <SeqTypes as NodeType>::Base>;
+type EspressoClient = surf_disco::Client<ClientError, <SequencerVersions as Versions>::Base>;
 
 type FeeMerkleProof = MerkleProof<FeeAmount, FeeAccount, Sha3Node, { FeeMerkleTree::ARITY }>;
 

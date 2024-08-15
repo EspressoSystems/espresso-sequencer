@@ -9,7 +9,7 @@ use data_source::{CatchupDataSource, SubmitDataSource};
 use derivative::Derivative;
 use espresso_types::{
     v0::traits::SequencerPersistence, v0_3::ChainConfig, AccountQueryData, BlockMerkleTree,
-    FeeAccountProof, NodeState, PubKey, Transaction,
+    FeeAccountProof, NodeState, PubKey, SequencerVersions, Transaction,
 };
 use ethers::prelude::Address;
 use futures::{
@@ -24,7 +24,9 @@ use hotshot_orchestrator::config::NetworkConfig;
 use hotshot_query_service::data_source::ExtensibleDataSource;
 use hotshot_state_prover::service::light_client_genesis_from_stake_table;
 use hotshot_types::{
-    data::ViewNumber, light_client::StateSignatureRequestBody, traits::network::ConnectedNetwork,
+    data::ViewNumber,
+    light_client::StateSignatureRequestBody,
+    traits::{network::ConnectedNetwork, node_implementation::Versions},
 };
 use jf_merkle_tree::MerkleTreeScheme;
 use vbs::version::StaticVersionType;
@@ -50,19 +52,23 @@ type BoxLazy<T> = Pin<Arc<Lazy<T, BoxFuture<'static, T>>>>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-struct ConsensusState<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType>
-{
+struct ConsensusState<
+    N: ConnectedNetwork<PubKey>,
+    P: SequencerPersistence,
+    Ver: StaticVersionType,
+    V: Versions,
+> {
     state_signer: Arc<StateSigner<Ver>>,
     event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
     node_state: NodeState,
     config: NetworkConfig<PubKey>,
 
     #[derivative(Debug = "ignore")]
-    handle: Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>>>>,
+    handle: Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>, V>>>,
 }
 
 impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType + 'static>
-    From<&SequencerContext<N, P, Ver>> for ConsensusState<N, P, Ver>
+    From<&SequencerContext<N, P, Ver>> for ConsensusState<N, P, Ver, SequencerVersions>
 {
     fn from(ctx: &SequencerContext<N, P, Ver>) -> Self {
         Self {
@@ -77,19 +83,28 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
 
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Debug(bound = ""))]
-struct ApiState<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType> {
+struct ApiState<
+    N: ConnectedNetwork<PubKey>,
+    P: SequencerPersistence,
+    Ver: StaticVersionType,
+    V: Versions,
+> {
     // The consensus state is initialized lazily so we can start the API (and healthcheck endpoints)
     // before consensus has started. Any endpoint that uses consensus state will wait for
     // initialization to finish, but endpoints that do not require a consensus handle can proceed
     // without waiting.
     #[derivative(Debug = "ignore")]
-    consensus: BoxLazy<ConsensusState<N, P, Ver>>,
+    consensus: BoxLazy<ConsensusState<N, P, Ver, V>>,
 }
 
-impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType + 'static>
-    ApiState<N, P, Ver>
+impl<
+        N: ConnectedNetwork<PubKey>,
+        P: SequencerPersistence,
+        Ver: StaticVersionType + 'static,
+        V: Versions,
+    > ApiState<N, P, Ver, V>
 {
-    fn new(init: impl Future<Output = ConsensusState<N, P, Ver>> + Send + 'static) -> Self {
+    fn new(init: impl Future<Output = ConsensusState<N, P, Ver, V>> + Send + 'static) -> Self {
         Self {
             consensus: Arc::pin(Lazy::from_future(init.boxed())),
         }
@@ -110,7 +125,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         &self.consensus.as_ref().get().await.get_ref().event_streamer
     }
 
-    async fn consensus(&self) -> Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>>>> {
+    async fn consensus(&self) -> Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>, V>>> {
         Arc::clone(&self.consensus.as_ref().get().await.get_ref().handle)
     }
 
@@ -123,11 +138,15 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     }
 }
 
-type StorageState<N, P, D, Ver> = ExtensibleDataSource<D, ApiState<N, P, Ver>>;
+type StorageState<N, P, D, Ver, V> = ExtensibleDataSource<D, ApiState<N, P, Ver, V>>;
 
 #[async_trait]
-impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
-    EventsSource<SeqTypes> for ApiState<N, P, Ver>
+impl<
+        N: ConnectedNetwork<PubKey>,
+        Ver: StaticVersionType + 'static,
+        P: SequencerPersistence,
+        V: Versions,
+    > EventsSource<SeqTypes> for ApiState<N, P, Ver, V>
 {
     type EventStream = BoxStream<'static, Arc<Event<SeqTypes>>>;
 
@@ -157,15 +176,20 @@ impl<
         D: Send + Sync,
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
-    > SubmitDataSource<N, P> for StorageState<N, P, D, Ver>
+        V: Versions,
+    > SubmitDataSource<N, P> for StorageState<N, P, D, Ver, V>
 {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
         self.as_ref().submit(tx).await
     }
 }
 
-impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
-    SubmitDataSource<N, P> for ApiState<N, P, Ver>
+impl<
+        N: ConnectedNetwork<PubKey>,
+        Ver: StaticVersionType + 'static,
+        P: SequencerPersistence,
+        V: Versions,
+    > SubmitDataSource<N, P> for ApiState<N, P, Ver, V>
 {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
         let handle = self.consensus().await;
@@ -207,7 +231,8 @@ impl<
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
         D: CatchupDataSource + Send + Sync,
-    > CatchupDataSource for StorageState<N, P, D, Ver>
+        V: Versions,
+    > CatchupDataSource for StorageState<N, P, D, Ver, V>
 {
     #[tracing::instrument(skip(self))]
     async fn get_account(
@@ -265,7 +290,8 @@ impl<
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
         D: ChainConfigPersistence + Send + Sync,
-    > ChainConfigPersistence for StorageState<N, P, D, Ver>
+        V: Versions,
+    > ChainConfigPersistence for StorageState<N, P, D, Ver, V>
 {
     async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
         self.inner_mut().insert_chain_config(chain_config).await
@@ -278,8 +304,12 @@ impl<
     }
 }
 
-impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
-    CatchupDataSource for ApiState<N, P, Ver>
+impl<
+        N: ConnectedNetwork<PubKey>,
+        Ver: StaticVersionType + 'static,
+        P: SequencerPersistence,
+        V: Versions,
+    > CatchupDataSource for ApiState<N, P, Ver, V>
 {
     #[tracing::instrument(skip(self))]
     async fn get_account(
@@ -341,15 +371,20 @@ impl<
         D: Sync,
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
-    > HotShotConfigDataSource for StorageState<N, P, D, Ver>
+        V: Versions,
+    > HotShotConfigDataSource for StorageState<N, P, D, Ver, V>
 {
     async fn get_config(&self) -> PublicNetworkConfig {
         self.as_ref().network_config().await.into()
     }
 }
 
-impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
-    HotShotConfigDataSource for ApiState<N, P, Ver>
+impl<
+        N: ConnectedNetwork<PubKey>,
+        Ver: StaticVersionType + 'static,
+        P: SequencerPersistence,
+        V: Versions,
+    > HotShotConfigDataSource for ApiState<N, P, Ver, V>
 {
     async fn get_config(&self) -> PublicNetworkConfig {
         self.network_config().await.into()
@@ -362,7 +397,8 @@ impl<
         D: Sync,
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
-    > StateSignatureDataSource<N> for StorageState<N, P, D, Ver>
+        V: Versions,
+    > StateSignatureDataSource<N> for StorageState<N, P, D, Ver, V>
 {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.as_ref().get_state_signature(height).await
@@ -370,8 +406,12 @@ impl<
 }
 
 #[async_trait]
-impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
-    StateSignatureDataSource<N> for ApiState<N, P, Ver>
+impl<
+        N: ConnectedNetwork<PubKey>,
+        Ver: StaticVersionType + 'static,
+        P: SequencerPersistence,
+        V: Versions,
+    > StateSignatureDataSource<N> for ApiState<N, P, Ver, V>
 {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.state_signer().await.get_state_signature(height).await
@@ -388,7 +428,7 @@ pub mod test_helpers {
     use espresso_types::{
         mock::MockStateCatchup,
         v0::traits::{PersistenceOptions, StateCatchup},
-        NamespaceId, ValidatedState,
+        NamespaceId, SequencerVersions, ValidatedState,
     };
     use ethers::{prelude::Address, utils::Anvil};
     use futures::{
@@ -397,6 +437,7 @@ pub mod test_helpers {
     };
     use hotshot::types::{Event, EventType};
     use hotshot_contract_adapter::light_client::ParsedLightClientState;
+    use hotshot_example_types::node_types::TestVersions;
     use hotshot_types::traits::node_implementation::NodeType;
     use hotshot_types::{
         event::LeafInfo,
@@ -644,7 +685,7 @@ pub mod test_helpers {
 
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> = Client::new(url);
+        let client: Client<ServerError, <SequencerVersions as Versions>::Base> = Client::new(url);
 
         let options = opt(Options::with_port(port).status(Default::default()));
         let anvil = Anvil::new().spawn();
@@ -654,7 +695,8 @@ pub mod test_helpers {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let _network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let _network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
         client.connect(None).await;
 
         // The status API is well tested in the query service repo. Here we are just smoke testing
@@ -696,7 +738,7 @@ pub mod test_helpers {
         let port = pick_unused_port().expect("No ports free");
 
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> = Client::new(url);
+        let client: Client<ServerError, <SequencerVersions as Versions>::Base> = Client::new(url);
 
         let options = opt(Options::with_port(port).submit(Default::default()));
         let anvil = Anvil::new().spawn();
@@ -706,7 +748,8 @@ pub mod test_helpers {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
         let mut events = network.server.event_stream().await;
 
         client.connect(None).await;
@@ -731,7 +774,7 @@ pub mod test_helpers {
         let port = pick_unused_port().expect("No ports free");
 
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> = Client::new(url);
+        let client: Client<ServerError, <SequencerVersions as Versions>::Base> = Client::new(url);
 
         let options = opt(Options::with_port(port));
         let anvil = Anvil::new().spawn();
@@ -741,7 +784,8 @@ pub mod test_helpers {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
 
         let mut height: u64;
         // Wait for block >=2 appears
@@ -773,7 +817,7 @@ pub mod test_helpers {
 
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> = Client::new(url);
+        let client: Client<ServerError, <SequencerVersions as Versions>::Base> = Client::new(url);
 
         let options = opt(Options::with_port(port).catchup(Default::default()));
         let anvil = Anvil::new().spawn();
@@ -783,7 +827,8 @@ pub mod test_helpers {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
         client.connect(None).await;
 
         // Wait for a few blocks to be decided.
@@ -864,7 +909,7 @@ mod api_tests {
     use data_source::testing::TestableSequencerDataSource;
     use endpoints::NamespaceProofQueryData;
 
-    use espresso_types::{Header, NamespaceId};
+    use espresso_types::{Header, NamespaceId, SequencerVersions};
     use ethers::utils::Anvil;
     use futures::stream::StreamExt;
     use hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
@@ -918,11 +963,12 @@ mod api_tests {
             .api_config(D::options(&storage, Options::with_port(port)).submit(Default::default()))
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
         let mut events = network.server.event_stream().await;
 
         // Connect client.
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let client: Client<ServerError, <espresso_types::SequencerVersions as Versions>::Base> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
@@ -1021,7 +1067,7 @@ mod api_tests {
             events_service_port: hotshot_event_streaming_port,
         };
 
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> = Client::new(url);
+        let client: Client<ServerError, <SequencerVersions as Versions>::Base> = Client::new(url);
 
         let options = Options::with_port(query_service_port).hotshot_events(hotshot_events);
 
@@ -1032,7 +1078,8 @@ mod api_tests {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let _network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let _network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
 
         let mut subscribed_events = client
             .socket("hotshot-events/events")
@@ -1069,8 +1116,8 @@ mod test {
     use espresso_types::{
         mock::MockStateCatchup,
         v0_1::{UpgradeMode, ViewBasedUpgrade},
-        FeeAccount, FeeAmount, Header, TimeBasedUpgrade, Timestamp, Upgrade, UpgradeType,
-        ValidatedState,
+        FeeAccount, FeeAmount, Header, SequencerVersions, TimeBasedUpgrade, Timestamp, Upgrade,
+        UpgradeType, ValidatedState,
     };
     use ethers::utils::Anvil;
     use futures::{
@@ -1118,7 +1165,7 @@ mod test {
 
         let port = pick_unused_port().expect("No ports free");
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> = Client::new(url);
+        let client: Client<ServerError, <SequencerVersions as Versions>::Base> = Client::new(url);
         let options = Options::with_port(port);
         let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
@@ -1127,7 +1174,8 @@ mod test {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let _network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let _network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
 
         client.connect(None).await;
         let health = client.get::<AppHealth>("healthcheck").send().await.unwrap();
@@ -1175,9 +1223,10 @@ mod test {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let mut network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let mut network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> = Client::new(url);
+        let client: Client<ServerError, <SequencerVersions as Versions>::Base> = Client::new(url);
 
         client.connect(None).await;
 
@@ -1240,13 +1289,14 @@ mod test {
             .api_config(Options::with_port(port).catchup(Default::default()))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .catchups(std::array::from_fn(|_| {
-                StatePeers::<<SeqTypes as NodeType>::Base>::from_urls(
+                StatePeers::<<SequencerVersions as Versions>::Base>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
                     Default::default(),
                 )
             }))
             .build();
-        let mut network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let mut network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
 
         // Wait for replica 0 to reach a (non-genesis) decide, before disconnecting it.
         let mut events = network.peers[0].event_stream().await;
@@ -1284,13 +1334,13 @@ mod test {
                 1,
                 ValidatedState::default(),
                 no_storage::Options,
-                StatePeers::<<SeqTypes as NodeType>::Base>::from_urls(
+                StatePeers::<<SequencerVersions as Versions>::Base>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
                     Default::default(),
                 ),
                 &NoMetrics,
                 test_helpers::STAKE_TABLE_CAPACITY_FOR_TEST,
-                <SeqTypes as NodeType>::Base::instance(),
+                <SequencerVersions as Versions>::Base::instance(),
                 Default::default(),
             )
             .await;
@@ -1347,7 +1397,7 @@ mod test {
             .api_config(Options::with_port(port).catchup(Default::default()))
             .states(states)
             .catchups(std::array::from_fn(|_| {
-                StatePeers::<<SeqTypes as NodeType>::Base>::from_urls(
+                StatePeers::<<SequencerVersions as Versions>::Base>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
                     Default::default(),
                 )
@@ -1355,7 +1405,8 @@ mod test {
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
 
-        let mut network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let mut network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
 
         // Wait for few blocks to be decided.
         network
@@ -1424,7 +1475,7 @@ mod test {
             )
             .states(states)
             .catchups(std::array::from_fn(|_| {
-                StatePeers::<<SeqTypes as NodeType>::Base>::from_urls(
+                StatePeers::<<SequencerVersions as Versions>::Base>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
                     Default::default(),
                 )
@@ -1432,7 +1483,8 @@ mod test {
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
 
-        let mut network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let mut network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
 
         // Wait for a few blocks to be decided.
         network
@@ -1494,7 +1546,7 @@ mod test {
         let mut upgrades = std::collections::BTreeMap::new();
 
         upgrades.insert(
-            <SeqTypes as NodeType>::Upgrade::VERSION,
+            <SequencerVersions as Versions>::Upgrade::VERSION,
             Upgrade {
                 mode,
                 upgrade_type: UpgradeType::Fee {
@@ -1516,7 +1568,7 @@ mod test {
                 .status(Default::default()),
             )
             .catchups(std::array::from_fn(|_| {
-                StatePeers::<<SeqTypes as NodeType>::Base>::from_urls(
+                StatePeers::<<SequencerVersions as Versions>::Base>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
                     Default::default(),
                 )
@@ -1529,7 +1581,8 @@ mod test {
             )
             .build();
 
-        let mut network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let mut network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
 
         let mut events = network.server.event_stream().await;
         loop {
@@ -1539,14 +1592,17 @@ mod test {
                 EventType::UpgradeProposal { proposal, .. } => {
                     let upgrade = proposal.data.upgrade_proposal;
                     let new_version = upgrade.new_version;
-                    assert_eq!(new_version, <SeqTypes as NodeType>::Upgrade::VERSION);
+                    assert_eq!(
+                        new_version,
+                        <SequencerVersions as Versions>::Upgrade::VERSION
+                    );
                     break;
                 }
                 _ => continue,
             }
         }
 
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let client: Client<ServerError, <SequencerVersions as Versions>::Base> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
         tracing::info!(port, "server running");
@@ -1604,10 +1660,11 @@ mod test {
             .persistences(persistence)
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
-        let mut network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let mut network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
 
         // Connect client.
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let client: Client<ServerError, <SequencerVersions as Versions>::Base> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
         tracing::info!(port, "server running");
@@ -1674,15 +1731,16 @@ mod test {
                 // Catchup using node 0 as a peer. Node 0 was running the archival state service
                 // before the restart, so it should be able to resume without catching up by loading
                 // state from storage.
-                StatePeers::<<SeqTypes as NodeType>::Base>::from_urls(
+                StatePeers::<<SequencerVersions as Versions>::Base>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
                     Default::default(),
                 )
             }))
             .network_config(TestConfigBuilder::default().l1_url(l1).build())
             .build();
-        let _network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let _network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
+        let client: Client<ServerError, <SequencerVersions as Versions>::Base> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
         tracing::info!(port, "server running");
@@ -1723,7 +1781,8 @@ mod test {
 
         let port = pick_unused_port().expect("No ports free");
         let url: surf_disco::Url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> = Client::new(url.clone());
+        let client: Client<ServerError, <SequencerVersions as Versions>::Base> =
+            Client::new(url.clone());
 
         let options = Options::with_port(port).config(Default::default());
         let anvil = Anvil::new().spawn();
@@ -1733,12 +1792,13 @@ mod test {
             .api_config(options)
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
         client.connect(None).await;
 
         // Fetch a network config from the API server. The first peer URL is bogus, to test the
         // failure/retry case.
-        let peers = StatePeers::<<SeqTypes as NodeType>::Base>::from_urls(
+        let peers = StatePeers::<<SequencerVersions as Versions>::Base>::from_urls(
             vec!["https://notarealnode.network".parse().unwrap(), url],
             Default::default(),
         );

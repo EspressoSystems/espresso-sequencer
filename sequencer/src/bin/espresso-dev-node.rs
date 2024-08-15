@@ -190,7 +190,7 @@ async fn main() -> anyhow::Result<()> {
         .network_config(network_config)
         .build();
 
-    let network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+    let network = TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
     let st = network.cfg.stake_table();
     let total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
     let config = network.cfg.hotshot_config();
@@ -288,7 +288,7 @@ async fn main() -> anyhow::Result<()> {
 
         let prover_handle = spawn(run_prover_service_with_stake_table(
             prover_config,
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
             Arc::new(st.clone()),
         ));
         handles.push(prover_handle);
@@ -301,7 +301,7 @@ async fn main() -> anyhow::Result<()> {
             format!("http://0.0.0.0:{relay_server_port}")
                 .parse()
                 .unwrap(),
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
         )
         .await;
 
@@ -340,7 +340,7 @@ async fn main() -> anyhow::Result<()> {
         dev_node_port,
         mock_contracts,
         dev_info,
-        <SeqTypes as NodeType>::Base::instance(),
+        <SequencerVersions as Versions>::Base::instance(),
     ));
     handles.push(dev_node_handle);
 
@@ -581,7 +581,7 @@ mod tests {
 
         let process = BackgroundProcess(process);
 
-        let api_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let api_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
         api_client.connect(None).await;
 
@@ -755,7 +755,7 @@ mod tests {
             }
         }
 
-        let dev_node_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let dev_node_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
             Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
         dev_node_client.connect(None).await;
 
@@ -899,7 +899,7 @@ mod tests {
 
         let process = BackgroundProcess(process);
 
-        let api_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let api_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
         api_client.connect(None).await;
 
@@ -914,7 +914,7 @@ mod tests {
             .await
             .unwrap();
 
-        let dev_node_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let dev_node_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
             Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
         dev_node_client.connect(None).await;
 

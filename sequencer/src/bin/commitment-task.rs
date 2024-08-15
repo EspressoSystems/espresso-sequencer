@@ -69,7 +69,7 @@ async fn main() {
         start_http_server(
             port,
             opt.hotshot_address,
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
         )
         .unwrap();
     }
@@ -85,7 +85,8 @@ async fn main() {
         query_service_url: Some(opt.sequencer_url),
     };
     tracing::info!("Launching HotShot commitment task..");
-    run_hotshot_commitment_task::<<SeqTypes as NodeType>::Base>(&hotshot_contract_options).await;
+    run_hotshot_commitment_task::<<SequencerVersions as Versions>::Base>(&hotshot_contract_options)
+        .await;
 }
 
 fn start_http_server<Ver: StaticVersionType + 'static>(
@@ -134,11 +135,11 @@ mod test {
         start_http_server(
             port,
             expected_addr,
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
         )
         .expect("Failed to start the server");
 
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let client: Client<ServerError, <SequencerVersions as Versions>::Base> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 

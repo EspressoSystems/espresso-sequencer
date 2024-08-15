@@ -47,7 +47,7 @@ async fn main() {
         None,
         threshold,
         format!("http://0.0.0.0:{}", args.port).parse().unwrap(),
-        <SeqTypes as NodeType>::Base::instance(),
+        <SequencerVersions as Versions>::Base::instance(),
     )
     .await
     .unwrap();

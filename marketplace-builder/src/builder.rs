@@ -325,7 +325,8 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
 
         // Start the builder
         let init = BuilderConfig::init(
@@ -352,7 +353,7 @@ mod test {
         let _builder_config = init.await;
 
         // Wait for at least one empty block to be sequenced (after consensus starts VID).
-        let sequencer_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let sequencer_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
             Client::new(query_api_url);
         sequencer_client.connect(None).await;
         sequencer_client
@@ -371,7 +372,7 @@ mod test {
         builder_client.connect(None).await;
 
         //  TODO(AG): workaround for version mismatch between bundle and submit APIs
-        let submission_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let submission_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
             Client::new(builder_api_url);
         submission_client.connect(None).await;
 

@@ -92,7 +92,7 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     let private_mempool_api = hotshot_builder_api::v0_3::builder::submit_api::<
         ProxyGlobalState<SeqTypes>,
         SeqTypes,
-        <SeqTypes as NodeType>::Base,
+        <SequencerVersions as Versions>::Base,
     >(&HotshotBuilderApiOptions::default())
     .expect("Failed to construct the builder API for private mempool txns");
 
@@ -104,5 +104,5 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     app.register_module("txn_submit", private_mempool_api)
         .expect("Failed to register the private mempool API");
 
-    async_spawn(app.serve(url, <SeqTypes as NodeType>::Base::instance()));
+    async_spawn(app.serve(url, <SequencerVersions as Versions>::Base::instance()));
 }

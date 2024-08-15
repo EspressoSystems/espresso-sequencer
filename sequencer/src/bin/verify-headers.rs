@@ -170,9 +170,8 @@ async fn main() {
     let opt = Arc::new(Options::parse());
     opt.logging.init();
 
-    let seq = Arc::new(SequencerClient::<<SeqTypes as NodeType>::Base>::new(
-        opt.url.clone(),
-    ));
+    let seq =
+        Arc::new(SequencerClient::<<SequencerVersions as Versions>::Base>::new(opt.url.clone()));
 
     let block_height: usize = seq.get("status/latest_block_height").send().await.unwrap();
     let from = opt.from.unwrap_or(0);

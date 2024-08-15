@@ -174,7 +174,7 @@ async fn main() {
     let mut rng = ChaChaRng::seed_from_u64(seed);
 
     // Subscribe to block stream so we can check that our transactions are getting sequenced.
-    let client = Client::<Error, <SeqTypes as NodeType>::Base>::new(opt.url.clone());
+    let client = Client::<Error, <SequencerVersions as Versions>::Base>::new(opt.url.clone());
     let block_height: usize = client.get("status/block-height").send().await.unwrap();
     let mut blocks = client
         .socket(&format!("availability/stream/blocks/{}", block_height - 1))
@@ -189,13 +189,16 @@ async fn main() {
             opt.clone(),
             sender.clone(),
             ChaChaRng::from_rng(&mut rng).unwrap(),
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
         ));
     }
 
     // Start healthcheck endpoint once tasks are running.
     if let Some(port) = opt.port {
-        spawn(server(port, <SeqTypes as NodeType>::Base::instance()));
+        spawn(server(
+            port,
+            <SequencerVersions as Versions>::Base::instance(),
+        ));
     }
 
     // Keep track of the results.

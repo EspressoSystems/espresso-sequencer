@@ -150,7 +150,7 @@ async fn main() -> anyhow::Result<()> {
         genesis.chain_config,
         l1_params,
         opt.state_peers,
-        <SeqTypes as NodeType>::Base::instance(),
+        <SequencerVersions as Versions>::Base::instance(),
     )
     .unwrap();
 

@@ -49,7 +49,7 @@ use pretty_assertions::assert_eq;
 use serde_json::Value;
 use vbs::{version::Version, BinarySerializer};
 
-type Serializer = vbs::Serializer<<SeqTypes as NodeType>::Base>;
+type Serializer = vbs::Serializer<<SequencerVersions as Versions>::Base>;
 
 #[async_std::test]
 #[cfg(feature = "testing")]

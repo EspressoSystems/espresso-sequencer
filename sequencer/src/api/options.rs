@@ -17,6 +17,7 @@ use hotshot_query_service::{
 use hotshot_types::traits::{
     metrics::{Metrics, NoMetrics},
     network::ConnectedNetwork,
+    node_implementation::Versions,
 };
 use tide_disco::{
     listener::RateLimitListener,
@@ -181,23 +182,11 @@ impl Options {
         // we handle the two cases differently.
         let metrics = if let Some(query_opt) = self.query.take() {
             if let Some(opt) = self.storage_sql.take() {
-                self.init_with_query_module_sql::<N, P, Ver>(
-                    query_opt,
-                    opt,
-                    state,
-                    &mut tasks,
-                    bind_version,
-                )
-                .await?
+                self.init_with_query_module_sql(query_opt, opt, state, &mut tasks, bind_version)
+                    .await?
             } else if let Some(opt) = self.storage_fs.take() {
-                self.init_with_query_module_fs::<N, P, Ver>(
-                    query_opt,
-                    opt,
-                    state,
-                    &mut tasks,
-                    bind_version,
-                )
-                .await?
+                self.init_with_query_module_fs(query_opt, opt, state, &mut tasks, bind_version)
+                    .await?
             } else {
                 bail!("query module requested but not storage provided");
             }
@@ -254,16 +243,16 @@ impl Options {
         Ok(init_context(metrics).await.with_task_list(tasks))
     }
 
-    async fn init_app_modules<N, P, D, Ver: StaticVersionType + 'static>(
+    async fn init_app_modules<N, P, D, Ver: StaticVersionType + 'static, V: Versions>(
         &self,
         ds: D,
-        state: ApiState<N, P, Ver>,
+        state: ApiState<N, P, Ver, V>,
         tasks: &mut TaskList,
         bind_version: Ver,
     ) -> anyhow::Result<(
         Box<dyn Metrics>,
-        Arc<RwLock<StorageState<N, P, D, Ver>>>,
-        App<Arc<RwLock<StorageState<N, P, D, Ver>>>, Error>,
+        Arc<RwLock<StorageState<N, P, D, Ver, V>>>,
+        App<Arc<RwLock<StorageState<N, P, D, Ver, V>>>, Error>,
     )>
     where
         N: ConnectedNetwork<PubKey>,
@@ -298,11 +287,11 @@ impl Options {
         Ok((metrics, ds, app))
     }
 
-    async fn init_with_query_module_fs<N, P, Ver: StaticVersionType + 'static>(
+    async fn init_with_query_module_fs<N, P, Ver: StaticVersionType + 'static, V: Versions>(
         &self,
         query_opt: Query,
         mod_opt: persistence::fs::Options,
-        state: ApiState<N, P, Ver>,
+        state: ApiState<N, P, Ver, V>,
         tasks: &mut TaskList,
         bind_version: Ver,
     ) -> anyhow::Result<Box<dyn Metrics>>
@@ -332,11 +321,11 @@ impl Options {
         Ok(metrics)
     }
 
-    async fn init_with_query_module_sql<N, P, Ver: StaticVersionType + 'static>(
+    async fn init_with_query_module_sql<N, P, Ver: StaticVersionType + 'static, V: Versions>(
         self,
         query_opt: Query,
         mod_opt: persistence::sql::Options,
-        state: ApiState<N, P, Ver>,
+        state: ApiState<N, P, Ver, V>,
         tasks: &mut TaskList,
         bind_version: Ver,
     ) -> anyhow::Result<Box<dyn Metrics>>
@@ -438,9 +427,10 @@ impl Options {
         N,
         P: SequencerPersistence,
         Ver: StaticVersionType + 'static,
+        V: Versions,
     >(
         &self,
-        state: ApiState<N, P, Ver>,
+        state: ApiState<N, P, Ver, V>,
         tasks: &mut TaskList,
         bind_version: Ver,
     ) -> anyhow::Result<()>

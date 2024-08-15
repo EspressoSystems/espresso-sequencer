@@ -36,8 +36,8 @@ pub struct BidConfig {
 
 pub async fn connect_to_solver(
     solver_api_url: Url,
-) -> Option<Client<SolverError, <SeqTypes as NodeType>::Base>> {
-    let client = Client::<SolverError, <SeqTypes as NodeType>::Base>::new(
+) -> Option<Client<SolverError, <SequencerVersions as Versions>::Base>> {
+    let client = Client::<SolverError, <SequencerVersions as Versions>::Base>::new(
         solver_api_url.join("marketplace-solver/").unwrap(),
     );
 

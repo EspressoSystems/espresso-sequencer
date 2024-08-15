@@ -405,7 +405,7 @@ impl Queryable for PayloadQueryData<SeqTypes> {
 }
 
 type Connection<T> =
-    socket::Connection<T, socket::Unsupported, ClientError, <SeqTypes as NodeType>::Base>;
+    socket::Connection<T, socket::Unsupported, ClientError, <SequencerVersions as Versions>::Base>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -418,7 +418,7 @@ struct Subscription<T: Queryable> {
 
 #[derive(Debug)]
 struct ResourceManager<T: Queryable> {
-    client: surf_disco::Client<ClientError, <SeqTypes as NodeType>::Base>,
+    client: surf_disco::Client<ClientError, <SequencerVersions as Versions>::Base>,
     open_streams: BTreeMap<u64, Subscription<T>>,
     next_stream_id: u64,
     metrics: Arc<Metrics>,
@@ -1263,7 +1263,7 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
         METHOD = "METRICS"
     };
     let mut app = App::<_, ServerError>::with_state(RwLock::new(metrics));
-    app.module::<ServerError, <SeqTypes as NodeType>::Base>("status", api)
+    app.module::<ServerError, <SequencerVersions as Versions>::Base>("status", api)
         .unwrap()
         .metrics("metrics", |_req, state| {
             async move { Ok(Cow::Borrowed(state)) }.boxed()
@@ -1272,7 +1272,7 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
     if let Err(err) = app
         .serve(
             format!("0.0.0.0:{port}"),
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
         )
         .await
     {

@@ -26,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
             modules,
             opt,
             storage,
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
         )
         .await
     } else if let Some(storage) = modules.storage_sql.take() {
@@ -34,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
             modules,
             opt,
             storage,
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
         )
         .await
     } else {
@@ -43,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
             modules,
             opt,
             persistence::fs::Options::default(),
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
         )
         .await
     }
@@ -253,7 +253,7 @@ mod test {
                 modules,
                 opt,
                 fs::Options::new(tmp.path().into()),
-                <SeqTypes as NodeType>::Base::instance(),
+                <SequencerVersions as Versions>::Base::instance(),
             )
             .await
             {
@@ -265,7 +265,7 @@ mod test {
         // orchestrator.
         tracing::info!("waiting for API to start");
         let url: Url = format!("http://localhost:{port}").parse().unwrap();
-        let client = Client::<ClientError, <SeqTypes as NodeType>::Base>::new(url.clone());
+        let client = Client::<ClientError, <SequencerVersions as Versions>::Base>::new(url.clone());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
         client.get::<()>("healthcheck").send().await.unwrap();
 
