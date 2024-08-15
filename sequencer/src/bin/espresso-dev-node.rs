@@ -4,7 +4,7 @@ use async_std::task::spawn;
 use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
-use espresso_types::{parse_duration, SeqTypes};
+use espresso_types::{parse_duration, SeqTypes, SequencerVersions};
 use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
@@ -16,7 +16,7 @@ use hotshot_state_prover::service::{
     one_honest_threshold, run_prover_service_with_stake_table, StateProverConfig,
 };
 use hotshot_types::traits::{
-    node_implementation::NodeType,
+    node_implementation::{NodeType, Versions},
     stake_table::{SnapshotVersion, StakeTableScheme},
 };
 use portpicker::pick_unused_port;
@@ -503,14 +503,14 @@ mod tests {
     use committable::{Commitment, Committable};
     use contract_bindings::light_client::LightClient;
     use escargot::CargoBuild;
-    use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
+    use espresso_types::{BlockMerkleTree, Header, SeqTypes, SequencerVersions, Transaction};
     use ethers::{providers::Middleware, types::U256};
     use futures::TryStreamExt;
     use hotshot_query_service::{
         availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
         data_source::sql::testing::TmpDb,
     };
-    use hotshot_types::traits::node_implementation::NodeType;
+    use hotshot_types::traits::node_implementation::{NodeType, Versions};
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
     use rand::Rng;

@@ -4,10 +4,10 @@ use std::{cmp::max, process::exit, time::Duration};
 
 use async_std::{sync::Arc, task::sleep};
 use clap::Parser;
-use espresso_types::{Header, L1BlockInfo, SeqTypes};
+use espresso_types::{Header, L1BlockInfo, SeqTypes, SequencerVersions};
 use ethers::prelude::*;
 use futures::future::join_all;
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::node_implementation::{NodeType, Versions};
 use itertools::Itertools;
 use sequencer_utils::logging;
 use surf_disco::Url;

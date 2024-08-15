@@ -6,6 +6,7 @@ use clap::{Parser, Subcommand};
 use contract_bindings::fee_contract::FeeContract;
 use espresso_types::{
     eth_signature_key::EthKeyPair, FeeAccount, FeeAmount, FeeMerkleTree, Header, SeqTypes,
+    SequencerVersions,
 };
 use ethers::{
     middleware::{Middleware, SignerMiddleware},
@@ -13,7 +14,7 @@ use ethers::{
     types::{Address, BlockId, U256},
 };
 use futures::stream::StreamExt;
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::node_implementation::{NodeType, Versions};
 use jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Node},
     MerkleTreeScheme,

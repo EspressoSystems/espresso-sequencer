@@ -19,7 +19,7 @@ use espresso_types::{
     eth_signature_key::EthKeyPair,
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
     v0_3::BidTxBody,
-    SeqTypes,
+    SeqTypes, SequencerVersions,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -56,7 +56,7 @@ use hotshot_types::{
         },
         election::Membership,
         metrics::Metrics,
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
     },
     utils::BuilderCommitment,
     HotShotConfig, PeerConfig, ValidatorConfig,

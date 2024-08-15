@@ -1,10 +1,13 @@
 use std::{net::ToSocketAddrs, sync::Arc};
 
 use clap::Parser;
-use espresso_types::{SeqTypes, SolverAuctionResultsProvider};
+use espresso_types::{SeqTypes, SequencerVersions, SolverAuctionResultsProvider};
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
-use hotshot_types::traits::{metrics::NoMetrics, node_implementation::NodeType};
+use hotshot_types::traits::{
+    metrics::NoMetrics,
+    node_implementation::{NodeType, Versions},
+};
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
     init_node,

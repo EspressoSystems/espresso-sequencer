@@ -1,8 +1,8 @@
 use clap::Parser;
-use espresso_types::SeqTypes;
+use espresso_types::{SeqTypes, SequencerVersions};
 use ethers::types::U256;
 use hotshot_state_prover::service::one_honest_threshold;
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::node_implementation::{NodeType, Versions};
 use sequencer::state_signature::relay_server::run_relay_server;
 use sequencer_utils::logging;
 use vbs::version::StaticVersionType;
