@@ -3341,7 +3341,9 @@ mod test {
         let mut storage = SqlStorage::connect(cfg).await.unwrap();
         let mut leaf = LeafQueryData::<MockTypes>::genesis(
             &TestValidatedState::default(),
-            &TestInstanceState {},
+            &TestInstanceState {
+                delay_config: Default::default(),
+            },
         )
         .await;
         // insert some mock data
@@ -3424,7 +3426,9 @@ mod test {
         let mut storage = SqlStorage::connect(db.config()).await.unwrap();
         let mut leaf = LeafQueryData::<MockTypes>::genesis(
             &TestValidatedState::default(),
-            &TestInstanceState {},
+            &TestInstanceState {
+                delay_config: Default::default(),
+            },
         )
         .await;
         // insert some mock data

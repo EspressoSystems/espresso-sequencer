@@ -263,6 +263,7 @@ impl Config {
 /// # use hotshot_query_service::testing::mocks::{
 /// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 /// # };
+/// # use hotshot_example_types::node_types::TestVersions;
 /// # use tide_disco::App;
 /// # use vbs::version::StaticVersionType;
 /// struct AppState {
@@ -272,7 +273,7 @@ impl Config {
 ///
 /// async fn init_server<Ver: StaticVersionType + 'static>(
 ///     config: Config,
-///     hotshot: SystemContextHandle<AppTypes, AppNodeImpl>,
+///     hotshot: SystemContextHandle<AppTypes, AppNodeImpl, TestVersions>,
 /// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
 ///     let mut hotshot_qs = config.connect(NoFetching).await.map_err(Error::internal)?;
 ///     // Initialize storage for other modules, using `hotshot_qs` to access the database.
@@ -444,7 +445,9 @@ mod test {
         // Insert test data with VID common but no share.
         let leaf = LeafQueryData::<MockTypes>::genesis(
             &TestValidatedState::default(),
-            &TestInstanceState {},
+            &TestInstanceState {
+                delay_config: Default::default(),
+            },
         )
         .await;
         let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);

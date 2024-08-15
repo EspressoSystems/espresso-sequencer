@@ -24,6 +24,7 @@
 //! # use hotshot_query_service::testing::mocks::{
 //! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
 //! # };
+//! # use hotshot_example_types::node_types::TestVersions;
 //! # use hotshot_types::consensus::ConsensusMetricsValue;
 //! # use std::path::Path;
 //! # async fn doc(storage_path: &std::path::Path) -> Result<(), hotshot_query_service::Error> {
@@ -49,7 +50,7 @@
 //!     .map_err(Error::internal)?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
-//! let hotshot = SystemContext::<AppTypes, AppNodeImpl>::init(
+//! let hotshot = SystemContext::<AppTypes, AppNodeImpl, TestVersions>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
 //!     ConsensusMetricsValue::new(&*data_source.populate_metrics()), panic!(),
 //!     panic!()
@@ -102,8 +103,9 @@
 //! # use hotshot_query_service::{data_source::FileSystemDataSource, Error, Options};
 //! # use hotshot_query_service::fetching::provider::NoFetching;
 //! # use hotshot_query_service::testing::mocks::{MockBase, MockNodeImpl, MockTypes};
+//! # use hotshot_example_types::node_types::TestVersions;
 //! # use std::path::Path;
-//! # async fn doc(storage_path: &Path, options: Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl>) -> Result<(), Error> {
+//! # async fn doc(storage_path: &Path, options: Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl, TestVersions>) -> Result<(), Error> {
 //! use hotshot_query_service::run_standalone_service;
 //!
 //! let data_source = FileSystemDataSource::create(storage_path, NoFetching).await.map_err(Error::internal)?;
@@ -431,7 +433,7 @@ use async_std::sync::{Arc, RwLock};
 use futures::StreamExt;
 use hotshot::types::SystemContextHandle;
 use hotshot_types::traits::{
-    node_implementation::{NodeImplementation, NodeType},
+    node_implementation::{NodeImplementation, NodeType, Versions},
     BlockPayload,
 };
 use serde::{Deserialize, Serialize};
@@ -487,10 +489,16 @@ pub struct Options {
 }
 
 /// Run an instance of the HotShot Query service with no customization.
-pub async fn run_standalone_service<Types: NodeType, I: NodeImplementation<Types>, D, Ver>(
+pub async fn run_standalone_service<
+    Types: NodeType,
+    I: NodeImplementation<Types>,
+    D,
+    Ver,
+    V: Versions,
+>(
     options: Options,
     data_source: D,
-    hotshot: SystemContextHandle<Types, I>,
+    hotshot: SystemContextHandle<Types, I, V>,
     bind_version: Ver,
 ) -> Result<(), Error>
 where
@@ -714,8 +722,13 @@ mod test {
             .unwrap();
 
         // Mock up some data and add a block to the store.
-        let leaf =
-            Leaf::<MockTypes>::genesis(&TestValidatedState::default(), &TestInstanceState {}).await;
+        let leaf = Leaf::<MockTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState {
+                delay_config: Default::default(),
+            },
+        )
+        .await;
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
         hotshot_qs.insert_block(block.clone()).await.unwrap();
 

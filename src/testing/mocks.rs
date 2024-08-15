@@ -20,12 +20,14 @@ use hotshot::traits::{
     election::static_committee::GeneralStaticCommittee, implementations::MemoryNetwork,
     NodeImplementation,
 };
+use hotshot_example_types::node_types::TestVersions;
 use hotshot_example_types::{
     auction_results_provider_types::{TestAuctionResult, TestAuctionResultsProvider},
     block_types::{TestBlockHeader, TestBlockPayload, TestTransaction},
     state_types::{TestInstanceState, TestValidatedState},
     storage_types::TestStorage,
 };
+use hotshot_types::traits::node_implementation::Versions;
 use hotshot_types::{
     data::{QuorumProposal, ViewNumber},
     signature_key::BLSPubKey,
@@ -39,7 +41,6 @@ use jf_merkle_tree::{
 };
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
-use vbs::version::StaticVersion;
 
 pub type MockHeader = TestBlockHeader;
 pub type MockPayload = TestBlockPayload;
@@ -134,17 +135,11 @@ impl NodeType for MockTypes {
     type ValidatedState = TestValidatedState;
     type Membership = GeneralStaticCommittee<Self, BLSPubKey>;
     type BuilderSignatureKey = BLSPubKey;
-    type Base = StaticVersion<0, 1>;
-    type Upgrade = StaticVersion<0, 2>;
     type AuctionResult = TestAuctionResult;
-    const UPGRADE_HASH: [u8; 32] = [
-        1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-        0, 0,
-    ];
 }
 
 /// A type alias for the mock base version
-pub type MockBase = <MockTypes as NodeType>::Base;
+pub type MockBase = <TestVersions as Versions>::Base;
 
 pub type MockMembership = GeneralStaticCommittee<MockTypes, <MockTypes as NodeType>::SignatureKey>;
 pub type MockQuorumProposal = QuorumProposal<MockTypes>;

@@ -861,8 +861,13 @@ mod test {
         );
 
         // mock up some consensus data.
-        let leaf =
-            Leaf::<MockTypes>::genesis(&TestValidatedState::default(), &TestInstanceState {}).await;
+        let leaf = Leaf::<MockTypes>::genesis(
+            &TestValidatedState::default(),
+            &TestInstanceState {
+                delay_config: Default::default(),
+            },
+        )
+        .await;
 
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
 
