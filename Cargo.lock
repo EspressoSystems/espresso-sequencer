@@ -4301,7 +4301,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.51"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?branch=update-hotshot#54f7b4fdb06cda1fbe74aeda38c72f595bab6a3d"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.52#432444e27f2883d69f3563964b7ff01b09d31df6"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -8857,9 +8857,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.124"
+version = "1.0.125"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66ad62847a56b3dba58cc891acd13884b9c61138d330c0d7b6181713d4fce38d"
+checksum = "83c8e735a073ccf5be70aa8066aa984eaf2fa000db6c8d0100ae605b366d31ed"
 dependencies = [
  "itoa",
  "memchr",
