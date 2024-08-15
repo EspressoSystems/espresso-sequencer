@@ -5,7 +5,7 @@ use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHea
 use hotshot_types::{
     traits::{
         block_contents::{BlockHeader, BuilderFee},
-        node_implementation::NodeType,
+        node_implementation::{NodeType, Versions},
         signature_key::BuilderSignatureKey,
         BlockPayload, ValidatedState as _,
     },
@@ -28,7 +28,8 @@ use crate::{
     v0_1, v0_2,
     v0_3::{self, ChainConfig, IterableFeeInfo, SolverAuctionResults},
     BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
-    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, UpgradeType,
+    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, SequencerVersions,
+    UpgradeType,
 };
 
 use super::{instance_state::NodeState, state::ValidatedState};
@@ -424,7 +425,7 @@ impl Header {
             fee_amount,
         } in &builder_fee
         {
-            if version < StaticVersion::<0, 3>::version() {
+            if version < <SequencerVersions as Versions>::Marketplace::version() {
                 ensure!(
                     fee_account.validate_fee_signature(
                         fee_signature,
