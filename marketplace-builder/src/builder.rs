@@ -12,7 +12,7 @@ use async_lock::RwLock;
 use async_std::sync::Arc;
 use espresso_types::{
     eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NamespaceId, NodeState,
-    Payload, SeqTypes, ValidatedState,
+    Payload, SeqTypes, SequencerVersions, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -203,9 +203,11 @@ impl BuilderConfig {
             };
 
             async_spawn(async move {
-                let res =
-                    run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
-                        .await;
+                let res = run_non_permissioned_standalone_builder_service::<
+                    SeqTypes,
+                    SequencerVersions,
+                >(hooks, senders, events_url)
+                .await;
                 tracing::error!(?res, "Reserve builder service exited");
                 if res.is_err() {
                     panic!("Reserve builder should restart.");
@@ -217,9 +219,11 @@ impl BuilderConfig {
             let hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(async move {
-                let res =
-                    run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
-                        .await;
+                let res = run_non_permissioned_standalone_builder_service::<
+                    SeqTypes,
+                    SequencerVersions,
+                >(hooks, senders, events_url)
+                .await;
                 tracing::error!(?res, "Fallback builder service exited");
                 if res.is_err() {
                     panic!("Fallback builder should restart.");
@@ -249,7 +253,8 @@ mod test {
     use async_std::{stream::StreamExt, task};
     use committable::Commitment;
     use espresso_types::{
-        mock::MockStateCatchup, FeeAccount, NamespaceId, PubKey, SeqTypes, Transaction,
+        mock::MockStateCatchup, FeeAccount, NamespaceId, PubKey, SeqTypes, SequencerVersions,
+        Transaction,
     };
     use ethers::utils::Anvil;
     use hotshot::types::BLSPrivKey;
@@ -261,12 +266,11 @@ mod test {
     use hotshot_query_service::availability::LeafQueryData;
     use hotshot_types::{
         bundle::Bundle,
-        constants::MarketplaceVersion,
         light_client::StateKeyPair,
         signature_key::BLSPubKey,
         traits::{
             block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
-            node_implementation::NodeType,
+            node_implementation::{NodeType, Versions},
             signature_key::{BuilderSignatureKey, SignatureKey},
         },
     };
@@ -325,7 +329,8 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let network =
+            TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
 
         // Start the builder
         let init = BuilderConfig::init(
@@ -352,7 +357,7 @@ mod test {
         let _builder_config = init.await;
 
         // Wait for at least one empty block to be sequenced (after consensus starts VID).
-        let sequencer_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let sequencer_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
             Client::new(query_api_url);
         sequencer_client.connect(None).await;
         sequencer_client
@@ -366,12 +371,12 @@ mod test {
             .unwrap();
 
         //  Connect to builder
-        let builder_client: Client<ServerError, MarketplaceVersion> =
+        let builder_client: Client<ServerError, <SequencerVersions as Versions>::Marketplace> =
             Client::new(builder_api_url.clone());
         builder_client.connect(None).await;
 
         //  TODO(AG): workaround for version mismatch between bundle and submit APIs
-        let submission_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let submission_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
             Client::new(builder_api_url);
         submission_client.connect(None).await;
 

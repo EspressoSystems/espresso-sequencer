@@ -3,10 +3,10 @@
 use crate::context::TaskList;
 use anyhow::{Context, Result};
 use async_compatibility_layer::channel::{Receiver, Sender};
-use espresso_types::{PubKey, SeqTypes};
+use espresso_types::{PubKey, SeqTypes, SequencerVersions};
 use hotshot::types::{BLSPubKey, Message};
 use hotshot_types::{
-    message::{MessageKind, VersionedMessage},
+    message::{MessageKind, UpgradeLock},
     traits::network::{BroadcastDelay, ConnectedNetwork, Topic},
 };
 use serde::{Deserialize, Serialize};
@@ -56,7 +56,7 @@ pub enum OutboundMessage {
 
 impl ExternalEventHandler {
     /// Creates a new `ExternalEventHandler` with the given network and roll call info
-    pub fn new<N: ConnectedNetwork<PubKey>>(
+    pub async fn new<N: ConnectedNetwork<PubKey>>(
         network: Arc<N>,
         roll_call_info: RollCallInfo,
         public_key: BLSPubKey,
@@ -77,6 +77,7 @@ impl ExternalEventHandler {
         if roll_call_info.public_api_url.is_some() {
             let roll_call_message_bytes =
                 Self::create_roll_call_response(&public_key, &roll_call_info)
+                    .await
                     .with_context(|| "Failed to create roll call response for initial broadcast")?;
 
             outbound_message_sender
@@ -96,7 +97,7 @@ impl ExternalEventHandler {
     ///
     /// # Errors
     /// If the message type is unknown or if there is an error serializing or deserializing the message
-    pub fn handle_event(&self, external_message_bytes: &[u8]) -> Result<()> {
+    pub async fn handle_event(&self, external_message_bytes: &[u8]) -> Result<()> {
         // Deserialize the external message
         let external_message = bincode::deserialize(external_message_bytes)
             .with_context(|| "Failed to deserialize external message")?;
@@ -111,6 +112,7 @@ impl ExternalEventHandler {
 
                 let response_bytes =
                     Self::create_roll_call_response(&self.public_key, &self.roll_call_info)
+                        .await
                         .with_context(|| {
                             "Failed to serialize roll call response for RollCallRequest"
                         })?;
@@ -129,7 +131,7 @@ impl ExternalEventHandler {
     }
 
     /// Creates a roll call response message
-    fn create_roll_call_response(
+    async fn create_roll_call_response(
         public_key: &BLSPubKey,
         roll_call_info: &RollCallInfo,
     ) -> Result<Vec<u8>> {
@@ -144,9 +146,12 @@ impl ExternalEventHandler {
             kind: MessageKind::<SeqTypes>::External(response_bytes),
         };
 
-        let response_bytes =
-            <Message<SeqTypes> as VersionedMessage<SeqTypes>>::serialize(&message, &None)
-                .with_context(|| "Failed to serialize roll call response")?;
+        let upgrade_lock = UpgradeLock::<SeqTypes, SequencerVersions>::new();
+
+        let response_bytes = upgrade_lock
+            .serialize(&message)
+            .await
+            .with_context(|| "Failed to serialize roll call response")?;
 
         Ok(response_bytes)
     }

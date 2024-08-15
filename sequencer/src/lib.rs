@@ -15,8 +15,8 @@ use async_std::sync::RwLock;
 use catchup::StatePeers;
 use context::SequencerContext;
 use espresso_types::{
-    BackoffParams, L1Client, NodeState, PubKey, SeqTypes, SolverAuctionResultsProvider,
-    ValidatedState,
+    BackoffParams, L1Client, NodeState, PubKey, SeqTypes, SequencerVersions,
+    SolverAuctionResultsProvider, ValidatedState,
 };
 use ethers::types::U256;
 #[cfg(feature = "libp2p")]
@@ -59,7 +59,7 @@ use hotshot_types::{
     traits::{
         metrics::Metrics,
         network::{ConnectedNetwork, Topic},
-        node_implementation::{NodeImplementation, NodeType},
+        node_implementation::{NodeImplementation, NodeType, Versions},
         signature_key::{BuilderSignatureKey, StakeTableEntryType},
     },
     utils::BuilderCommitment,
@@ -274,7 +274,7 @@ pub async fn init_node<P: PersistenceOptions, Ver: StaticVersionType + 'static>(
 
     if let Some(upgrade) = genesis
         .upgrades
-        .get(&<SeqTypes as NodeType>::Upgrade::VERSION)
+        .get(&<SequencerVersions as Versions>::Upgrade::VERSION)
     {
         upgrade.set_hotshot_config_parameters(&mut config.config);
     }
@@ -519,7 +519,10 @@ pub mod testing {
         }
 
         pub fn build(mut self) -> TestConfig<NUM_NODES> {
-            if let Some(upgrade) = self.upgrades.get(&<SeqTypes as NodeType>::Upgrade::VERSION) {
+            if let Some(upgrade) = self
+                .upgrades
+                .get(&<SequencerVersions as Versions>::Upgrade::VERSION)
+            {
                 upgrade.set_hotshot_config_parameters(&mut self.config)
             }
 
@@ -830,7 +833,7 @@ mod test {
     #[async_std::test]
     async fn test_skeleton_instantiation() {
         setup_test();
-        let ver = <SeqTypes as NodeType>::Base::instance();
+        let ver = <SequencerVersions as Versions>::Base::instance();
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();
@@ -872,7 +875,7 @@ mod test {
         setup_test();
 
         let success_height = 30;
-        let ver = <SeqTypes as NodeType>::Base::instance();
+        let ver = <SequencerVersions as Versions>::Base::instance();
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();

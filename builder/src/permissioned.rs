@@ -26,8 +26,8 @@ use async_std::{
 use espresso_types::{
     eth_signature_key::EthKeyPair,
     v0::traits::{PersistenceOptions, SequencerPersistence, StateCatchup},
-    FeeAmount, L1Client, NodeState, Payload, PubKey, SeqTypes, SolverAuctionResultsProvider,
-    ValidatedState,
+    FeeAmount, L1Client, NodeState, Payload, PubKey, SeqTypes, SequencerVersions,
+    SolverAuctionResultsProvider, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -339,7 +339,10 @@ pub async fn init_hotshot<
     stake_table_commit: StakeTableCommitmentType,
     _: Ver,
     persistence: P,
-) -> (SystemContextHandle<SeqTypes, Node<N, P>>, StateSigner<Ver>) {
+) -> (
+    SystemContextHandle<SeqTypes, Node<N, P>, SequencerVersions>,
+    StateSigner<Ver>,
+) {
     let combined_known_nodes_with_stake = match stake_table_entries_for_non_voting_nodes {
         Some(stake_table_entries) => {
             let combined_entries = config
