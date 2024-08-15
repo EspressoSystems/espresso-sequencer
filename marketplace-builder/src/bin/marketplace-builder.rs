@@ -105,7 +105,7 @@ struct NonPermissionedBuilderOptions {
     pub namespaces: Vec<u32>,
 
     /// Url we will use to communicate to solver
-    #[clap(long, env = "ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL")]
+    #[clap(long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_URL")]
     solver_url: Url,
 
     /// Bid amount in WEI.

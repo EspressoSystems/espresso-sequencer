@@ -31,30 +31,6 @@ enum Command {
 }
 
 #[derive(Parser, Debug)]
-struct Update {
-    #[clap(short, long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_URL")]
-    pub solver_url: Url,
-
-    #[clap(short = 'n', long)]
-    pub namespace_id: u64,
-
-    #[clap(long, env = "ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL")]
-    pub reserve_url: Option<Url>,
-
-    #[clap(long)]
-    pub reserve_price: Option<u64>,
-
-    #[clap(long)]
-    pub active: Option<bool>,
-
-    #[clap(long, default_value = "test")]
-    pub text: Option<String>,
-
-    #[clap(long = "privkey")]
-    pub private_key: Option<String>,
-}
-
-#[derive(Parser, Debug)]
 struct Register {
     #[clap(short, long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_URL")]
     pub solver_url: Url,
@@ -82,6 +58,30 @@ struct Register {
     pub private_key: Option<String>,
 }
 
+#[derive(Parser, Debug)]
+struct Update {
+    #[clap(short, long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_URL")]
+    pub solver_url: Url,
+
+    #[clap(short = 'n', long)]
+    pub namespace_id: u64,
+
+    #[clap(long, env = "ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL")]
+    pub reserve_url: Option<Url>,
+
+    #[clap(long)]
+    pub reserve_price: Option<u64>,
+
+    #[clap(long)]
+    pub active: Option<bool>,
+
+    #[clap(long, default_value = "test")]
+    pub text: Option<String>,
+
+    #[clap(long = "privkey")]
+    pub private_key: Option<String>,
+}
+
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
     let opt = Options::parse();
@@ -104,7 +104,9 @@ async fn register(opt: Register) -> Result<()> {
         private_key,
     } = opt;
 
-    let client = surf_disco::Client::<SolverError, StaticVersion<0, 1>>::new(solver_url);
+    let client = surf_disco::Client::<SolverError, StaticVersion<0, 1>>::new(
+        solver_url.join("marketplace-solver").unwrap(),
+    );
 
     let (pubkey, privkey) = if let Some(privkey) = private_key {
         let privkey = <BLSPubKey as SignatureKey>::PrivateKey::from_str(&privkey)
@@ -161,8 +163,9 @@ async fn update(opt: Update) -> Result<()> {
         private_key,
     } = opt;
 
-    let client = surf_disco::Client::<SolverError, StaticVersion<0, 1>>::new(solver_url);
-
+    let client = surf_disco::Client::<SolverError, StaticVersion<0, 1>>::new(
+        solver_url.join("marketplace-solver").unwrap(),
+    );
     let (pubkey, privkey) = if let Some(privkey) = private_key {
         let privkey = <BLSPubKey as SignatureKey>::PrivateKey::from_str(&privkey)
             .expect("invalid private key provided");

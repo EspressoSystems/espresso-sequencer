@@ -1,0 +1,15 @@
+FROM ubuntu:jammy
+
+ARG TARGETARCH
+
+RUN apt-get update \
+    &&  apt-get install -y curl libcurl4 wait-for-it tini \
+    &&  rm -rf /var/lib/apt/lists/*
+ENTRYPOINT ["tini", "--"]
+
+COPY target/$TARGETARCH/release/dev-rollup /bin/dev-rollup
+RUN chmod +x /bin/dev-rollup
+
+RUN ln -s /bin/dev-rollup /bin/dev-rollup
+
+CMD [ "/bin/dev-rollup"]
