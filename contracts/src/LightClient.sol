@@ -534,9 +534,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice set Max Block States allowed
     /// @param historySeconds The maximum duration worth of state history updates to store based on
-    /// the block timestamp
+    /// the block timestamp. It must not be less than the current state history retention period
+    /// and the retention period must be at least 1 hour
     function setstateHistoryRetentionPeriod(uint32 historySeconds) public onlyOwner {
-        if (historySeconds < 1 days) revert InvalidMaxStateHistory();
+        if (historySeconds < 1 hours || historySeconds <= stateHistoryRetentionPeriod) {
+            revert InvalidMaxStateHistory();
+        }
 
         stateHistoryRetentionPeriod = historySeconds;
     }

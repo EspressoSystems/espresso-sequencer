@@ -699,9 +699,16 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     }
 
     function test_revertSetMaxStateHistoryAllowedWhenInvalidValueSent() public {
+        // revert when a retention period less than the minimum of 1 hour is sent
         vm.prank(admin);
         vm.expectRevert(LC.InvalidMaxStateHistory.selector);
-        lc.setstateHistoryRetentionPeriod(1 days - 1);
+        lc.setstateHistoryRetentionPeriod(1 hours - 1);
+
+        // revert when a smaller retention period is sent
+        uint32 currentRetentionPeriod = lc.stateHistoryRetentionPeriod();
+        vm.prank(admin);
+        vm.expectRevert(LC.InvalidMaxStateHistory.selector);
+        lc.setstateHistoryRetentionPeriod(currentRetentionPeriod - 1);
     }
 
     function test_stateHistoryHandlingWithOneDayMaxHistory() public {
