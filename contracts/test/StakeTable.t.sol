@@ -58,7 +58,7 @@ contract StakeTable_Test is StakeTableCommonTest {
     LCTest public lc;
     LC.LightClientState public genesis;
     uint32 public constant BLOCKS_PER_EPOCH_TEST = 10;
-    uint32 public constant MAX_HISTORY_SECONDS = 86400;
+    uint32 public constant MAX_HISTORY_SECONDS = 864000;
 
     uint256 public constant INITIAL_BALANCE = 1_000_000_000;
     address public exampleTokenCreator;

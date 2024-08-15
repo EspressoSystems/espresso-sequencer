@@ -96,7 +96,7 @@ sol-test:
 # Deploys the light client contract on Sepolia and call it for profiling purposes.
 NUM_BLOCKS_PER_EPOCH := "3"
 NUM_INIT_VALIDATORS := "5"
-MAX_HISTORY_SECONDS := "86400"
+MAX_HISTORY_SECONDS := "864000" # 10 days
 lc-contract-profiling-sepolia:
     #!/usr/bin/env bash
     set -euxo pipefail

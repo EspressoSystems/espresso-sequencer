@@ -12,12 +12,11 @@ use contract_bindings::{
     light_client_state_update_vk::LightClientStateUpdateVK,
     light_client_state_update_vk_mock::LightClientStateUpdateVKMock,
     plonk_verifier::PlonkVerifier,
-    shared_types::LightClientState,
 };
 use derive_more::Display;
 use ethers::{prelude::*, signers::coins_bip39::English, solc::artifacts::BytecodeObject};
 use futures::future::{BoxFuture, FutureExt};
-use hotshot_contract_adapter::light_client::ParsedLightClientState;
+use hotshot_contract_adapter::light_client::{LightClientConstructorArgs, ParsedLightClientState};
 use url::Url;
 
 /// Set of predeployed contracts.
@@ -245,7 +244,7 @@ pub async fn deploy_light_client_contract<M: Middleware + 'static>(
 pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
     l1: Arc<M>,
     contracts: &mut Contracts,
-    constructor_args: Option<(LightClientState, u32, u32)>,
+    constructor_args: Option<LightClientConstructorArgs>,
 ) -> anyhow::Result<Address> {
     // Deploy library contracts.
     let plonk_verifier = contracts
@@ -292,13 +291,9 @@ pub async fn deploy_mock_light_client_contract<M: Middleware + 'static>(
             .clone(),
         l1,
     );
-    let constructor_args = match constructor_args {
+    let constructor_args: LightClientConstructorArgs = match constructor_args {
         Some(args) => args,
-        None => (
-            ParsedLightClientState::dummy_genesis().into(),
-            u32::MAX,
-            86400,
-        ),
+        None => LightClientConstructorArgs::dummy_genesis(),
     };
     let contract = light_client_factory
         .deploy(constructor_args)?
@@ -361,7 +356,7 @@ pub async fn deploy(
         let light_client = LightClient::new(lc_address, l1.clone());
 
         let data = light_client
-            .initialize(genesis.await?.into(), u32::MAX, 86400, owner)
+            .initialize(genesis.await?.into(), u32::MAX, 864000, owner)
             .calldata()
             .context("calldata for initialize transaction not available")?;
         contracts

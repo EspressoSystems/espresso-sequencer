@@ -20,7 +20,7 @@ contract LightClientUpgradeToV2Test is Test {
     address public admin;
     address public proxy;
 
-    uint32 constant MAX_HISTORY_SECONDS = 86400;
+    uint32 constant MAX_HISTORY_SECONDS = 864000;
 
     // deploy the first implementation with its proxy
     function setUp() public {

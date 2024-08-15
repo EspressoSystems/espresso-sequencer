@@ -23,7 +23,7 @@ contract LightClientDefenderDeployScript is Script {
         // TODO for a production deployment provide the right genesis state and value
         uint32 numBlocksPerEpoch = 5;
         uint32 numInitValidators = 1;
-        uint32 maxHistorySeconds = 86400;
+        uint32 maxHistorySeconds = 864000;
 
         string[] memory cmds = new string[](4);
         cmds[0] = "diff-test";
