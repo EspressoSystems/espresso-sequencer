@@ -6330,7 +6330,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-core"
 version = "0.0.2"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.0.4#877a026f713df185c8655d04d8d6c4cb7988fe56"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?tag=0.0.5#0135f166dc007776a41aecc6d68de1dd6859136d"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6345,7 +6345,7 @@ dependencies = [
  "hex",
  "hotshot",
  "hotshot-builder-api",
- "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?branch=update-hotshot)",
+ "hotshot-events-service 0.1.38 (git+https://github.com/EspressoSystems/hotshot-events-service.git?tag=0.1.41)",
  "hotshot-task-impls",
  "hotshot-types",
  "lru 0.12.4",
