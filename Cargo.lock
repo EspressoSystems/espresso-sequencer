@@ -4140,7 +4140,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-core"
 version = "0.1.39"
-source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=hotshot/rc-0.5.71#1799b3dd942506e6a4dd8240c10f6b4e39534652"
+source = "git+https://github.com/EspressoSystems/hotshot-builder-core?branch=hotshot/rc-0.5.71#a89c8b056fe36c455f7fc561ca343c0c2d417339"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6317,7 +6317,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-core"
 version = "0.0.2"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=bump/rc-0.5.71#122ec1e20961074eb34ecef01ddc1d9a07665f5c"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=bump/rc-0.5.71#ad44f5d4e87547a507496e7a99e5cdfa54a97034"
 dependencies = [
  "anyhow",
  "async-broadcast",
