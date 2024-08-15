@@ -3,7 +3,6 @@ use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
-    constants::MarketplaceVersion,
     traits::{
         block_contents::{BlockHeader, BuilderFee},
         node_implementation::NodeType,
@@ -22,7 +21,7 @@ use serde_json::{Map, Value};
 use std::fmt;
 use thiserror::Error;
 use time::OffsetDateTime;
-use vbs::version::{StaticVersionType, Version};
+use vbs::version::{StaticVersion, StaticVersionType, Version};
 
 use crate::{
     v0::header::{EitherOrVersion, VersionedHeader},
@@ -425,7 +424,7 @@ impl Header {
             fee_amount,
         } in &builder_fee
         {
-            if version < MarketplaceVersion::VERSION {
+            if version < StaticVersion::<0, 3>::version() {
                 ensure!(
                     fee_account.validate_fee_signature(
                         fee_signature,
