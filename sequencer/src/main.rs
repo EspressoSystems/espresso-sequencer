@@ -4,10 +4,7 @@ use clap::Parser;
 use espresso_types::{SequencerVersions, SolverAuctionResultsProvider};
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
-use hotshot_types::traits::{
-    metrics::NoMetrics,
-    node_implementation::Versions,
-};
+use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
     init_node,
@@ -195,10 +192,7 @@ mod test {
     use async_std::task::spawn;
 
     use espresso_types::PubKey;
-    use hotshot_types::{
-        light_client::StateKeyPair,
-        traits::signature_key::SignatureKey,
-    };
+    use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey};
     use portpicker::pick_unused_port;
     use sequencer::{
         api::options::{Http, Status},

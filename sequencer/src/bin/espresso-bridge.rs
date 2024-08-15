@@ -5,8 +5,7 @@ use async_std::{sync::Arc, task::sleep};
 use clap::{Parser, Subcommand};
 use contract_bindings::fee_contract::FeeContract;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, FeeAccount, FeeAmount, FeeMerkleTree, Header,
-    SequencerVersions,
+    eth_signature_key::EthKeyPair, FeeAccount, FeeAmount, FeeMerkleTree, Header, SequencerVersions,
 };
 use ethers::{
     middleware::{Middleware, SignerMiddleware},
