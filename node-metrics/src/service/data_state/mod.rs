@@ -774,9 +774,6 @@ mod tests {
             assert_eq!(data_state.node_identity().last(), Some(&node_identity_2));
         }
 
-        // We explicitly drop these, as it should make the task clean up.
-        drop(node_identity_sender_1);
-
         if let Some(process_node_identity_task_handle) =
             process_node_identity_task_handle.task_handle.take()
         {
