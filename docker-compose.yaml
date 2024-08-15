@@ -542,7 +542,7 @@ services:
     profiles: [marketplace]
     environment:
       - ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE=true
-      - ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
+      - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
       - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10000
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://sequencer0:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer0:$ESPRESSO_SEQUENCER_API_PORT
@@ -574,7 +574,7 @@ services:
     environment:
       - ESPRESSO_BUILDER_SERVER_PORT=$ESPRESSO_FALLBACK_BUILDER_SERVER_PORT
       - ESPRESSO_MARKETPLACE_BUILDER_IS_RESERVE=false
-      - ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
+      - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://localhost:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
       - ESPRESSO_MARKETPLACE_BUILDER_NAMESPACE=10000
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://sequencer0:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
       - ESPRESSO_SEQUENCER_STATE_PEERS=http://sequencer0:$ESPRESSO_SEQUENCER_API_PORT
@@ -738,6 +738,16 @@ services:
     environment:
       - QUERY_SERVICE_URI=http://localhost:$ESPRESSO_SEQUENCER1_API_PORT/v0/
       - NODE_VALIDATOR_URI=ws://localhost:$ESPRESSO_NODE_VALIDATOR_PORT/v0/
+    depends_on:
+      sequencer1:
+        condition: service_healthy
+
+  dev-rollup:
+    image: ghcr.io/espressosystems/dev-rollup:main
+    command:
+      dev-rollup register --ns 1; dev-rollup register --ns 2; dev-rollup register --ns 3
+    environment:
+      - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://marketplace-solver:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
     depends_on:
       sequencer1:
         condition: service_healthy
