@@ -1,5 +1,7 @@
 // Sets features for Rust Analyzer, since some features are required to be set for compilation
 {
-    "rust-analyzer.cargo.features": [
-    ],
+    "rust-analyzer.server.extraEnv": {
+        "RUSTFLAGS": "--cfg async_executor_impl=\"async-std\" --cfg async_channel_impl=\"async-std\"",
+        "CARGO_TARGET_DIR": "vsc/target"
+    },
 }
