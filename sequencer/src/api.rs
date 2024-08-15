@@ -49,6 +49,8 @@ pub use options::Options;
 pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
 
 type BoxLazy<T> = Pin<Arc<Lazy<T, BoxFuture<'static, T>>>>;
+type HotshotSystemContextHandle<N> =
+    Arc<RwLock<SystemContextHandle<SeqTypes, N, SequencerVersions>>>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
@@ -60,7 +62,7 @@ struct ConsensusState<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver:
     config: NetworkConfig<PubKey>,
 
     #[derivative(Debug = "ignore")]
-    handle: Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>, SequencerVersions>>>,
+    handle: HotshotSystemContextHandle<Node<N, P>>,
 }
 
 impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType + 'static>
