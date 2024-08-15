@@ -52,23 +52,19 @@ type BoxLazy<T> = Pin<Arc<Lazy<T, BoxFuture<'static, T>>>>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
-struct ConsensusState<
-    N: ConnectedNetwork<PubKey>,
-    P: SequencerPersistence,
-    Ver: StaticVersionType,
-    V: Versions,
-> {
+struct ConsensusState<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType>
+{
     state_signer: Arc<StateSigner<Ver>>,
     event_streamer: Arc<RwLock<EventsStreamer<SeqTypes>>>,
     node_state: NodeState,
     config: NetworkConfig<PubKey>,
 
     #[derivative(Debug = "ignore")]
-    handle: Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>, V>>>,
+    handle: Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>, SequencerVersions>>>,
 }
 
 impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType + 'static>
-    From<&SequencerContext<N, P, Ver>> for ConsensusState<N, P, Ver, SequencerVersions>
+    From<&SequencerContext<N, P, Ver>> for ConsensusState<N, P, Ver>
 {
     fn from(ctx: &SequencerContext<N, P, Ver>) -> Self {
         Self {
@@ -83,28 +79,19 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
 
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""), Debug(bound = ""))]
-struct ApiState<
-    N: ConnectedNetwork<PubKey>,
-    P: SequencerPersistence,
-    Ver: StaticVersionType,
-    V: Versions,
-> {
+struct ApiState<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType> {
     // The consensus state is initialized lazily so we can start the API (and healthcheck endpoints)
     // before consensus has started. Any endpoint that uses consensus state will wait for
     // initialization to finish, but endpoints that do not require a consensus handle can proceed
     // without waiting.
     #[derivative(Debug = "ignore")]
-    consensus: BoxLazy<ConsensusState<N, P, Ver, V>>,
+    consensus: BoxLazy<ConsensusState<N, P, Ver>>,
 }
 
-impl<
-        N: ConnectedNetwork<PubKey>,
-        P: SequencerPersistence,
-        Ver: StaticVersionType + 'static,
-        V: Versions,
-    > ApiState<N, P, Ver, V>
+impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionType + 'static>
+    ApiState<N, P, Ver>
 {
-    fn new(init: impl Future<Output = ConsensusState<N, P, Ver, V>> + Send + 'static) -> Self {
+    fn new(init: impl Future<Output = ConsensusState<N, P, Ver>> + Send + 'static) -> Self {
         Self {
             consensus: Arc::pin(Lazy::from_future(init.boxed())),
         }
@@ -125,7 +112,9 @@ impl<
         &self.consensus.as_ref().get().await.get_ref().event_streamer
     }
 
-    async fn consensus(&self) -> Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>, V>>> {
+    async fn consensus(
+        &self,
+    ) -> Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>, SequencerVersions>>> {
         Arc::clone(&self.consensus.as_ref().get().await.get_ref().handle)
     }
 
@@ -138,15 +127,11 @@ impl<
     }
 }
 
-type StorageState<N, P, D, Ver, V> = ExtensibleDataSource<D, ApiState<N, P, Ver, V>>;
+type StorageState<N, P, D, Ver> = ExtensibleDataSource<D, ApiState<N, P, Ver>>;
 
 #[async_trait]
-impl<
-        N: ConnectedNetwork<PubKey>,
-        Ver: StaticVersionType + 'static,
-        P: SequencerPersistence,
-        V: Versions,
-    > EventsSource<SeqTypes> for ApiState<N, P, Ver, V>
+impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+    EventsSource<SeqTypes> for ApiState<N, P, Ver>
 {
     type EventStream = BoxStream<'static, Arc<Event<SeqTypes>>>;
 
@@ -176,20 +161,15 @@ impl<
         D: Send + Sync,
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
-        V: Versions,
-    > SubmitDataSource<N, P> for StorageState<N, P, D, Ver, V>
+    > SubmitDataSource<N, P> for StorageState<N, P, D, Ver>
 {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
         self.as_ref().submit(tx).await
     }
 }
 
-impl<
-        N: ConnectedNetwork<PubKey>,
-        Ver: StaticVersionType + 'static,
-        P: SequencerPersistence,
-        V: Versions,
-    > SubmitDataSource<N, P> for ApiState<N, P, Ver, V>
+impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+    SubmitDataSource<N, P> for ApiState<N, P, Ver>
 {
     async fn submit(&self, tx: Transaction) -> anyhow::Result<()> {
         let handle = self.consensus().await;
@@ -231,8 +211,7 @@ impl<
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
         D: CatchupDataSource + Send + Sync,
-        V: Versions,
-    > CatchupDataSource for StorageState<N, P, D, Ver, V>
+    > CatchupDataSource for StorageState<N, P, D, Ver>
 {
     #[tracing::instrument(skip(self))]
     async fn get_account(
@@ -290,8 +269,7 @@ impl<
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
         D: ChainConfigPersistence + Send + Sync,
-        V: Versions,
-    > ChainConfigPersistence for StorageState<N, P, D, Ver, V>
+    > ChainConfigPersistence for StorageState<N, P, D, Ver>
 {
     async fn insert_chain_config(&mut self, chain_config: ChainConfig) -> anyhow::Result<()> {
         self.inner_mut().insert_chain_config(chain_config).await
@@ -304,12 +282,8 @@ impl<
     }
 }
 
-impl<
-        N: ConnectedNetwork<PubKey>,
-        Ver: StaticVersionType + 'static,
-        P: SequencerPersistence,
-        V: Versions,
-    > CatchupDataSource for ApiState<N, P, Ver, V>
+impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+    CatchupDataSource for ApiState<N, P, Ver>
 {
     #[tracing::instrument(skip(self))]
     async fn get_account(
@@ -371,20 +345,15 @@ impl<
         D: Sync,
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
-        V: Versions,
-    > HotShotConfigDataSource for StorageState<N, P, D, Ver, V>
+    > HotShotConfigDataSource for StorageState<N, P, D, Ver>
 {
     async fn get_config(&self) -> PublicNetworkConfig {
         self.as_ref().network_config().await.into()
     }
 }
 
-impl<
-        N: ConnectedNetwork<PubKey>,
-        Ver: StaticVersionType + 'static,
-        P: SequencerPersistence,
-        V: Versions,
-    > HotShotConfigDataSource for ApiState<N, P, Ver, V>
+impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+    HotShotConfigDataSource for ApiState<N, P, Ver>
 {
     async fn get_config(&self) -> PublicNetworkConfig {
         self.network_config().await.into()
@@ -397,8 +366,7 @@ impl<
         D: Sync,
         Ver: StaticVersionType + 'static,
         P: SequencerPersistence,
-        V: Versions,
-    > StateSignatureDataSource<N> for StorageState<N, P, D, Ver, V>
+    > StateSignatureDataSource<N> for StorageState<N, P, D, Ver>
 {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.as_ref().get_state_signature(height).await
@@ -406,12 +374,8 @@ impl<
 }
 
 #[async_trait]
-impl<
-        N: ConnectedNetwork<PubKey>,
-        Ver: StaticVersionType + 'static,
-        P: SequencerPersistence,
-        V: Versions,
-    > StateSignatureDataSource<N> for ApiState<N, P, Ver, V>
+impl<N: ConnectedNetwork<PubKey>, Ver: StaticVersionType + 'static, P: SequencerPersistence>
+    StateSignatureDataSource<N> for ApiState<N, P, Ver>
 {
     async fn get_state_signature(&self, height: u64) -> Option<StateSignatureRequestBody> {
         self.state_signer().await.get_state_signature(height).await

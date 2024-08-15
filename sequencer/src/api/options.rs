@@ -243,16 +243,16 @@ impl Options {
         Ok(init_context(metrics).await.with_task_list(tasks))
     }
 
-    async fn init_app_modules<N, P, D, Ver: StaticVersionType + 'static, V: Versions>(
+    async fn init_app_modules<N, P, D, Ver: StaticVersionType + 'static>(
         &self,
         ds: D,
-        state: ApiState<N, P, Ver, V>,
+        state: ApiState<N, P, Ver>,
         tasks: &mut TaskList,
         bind_version: Ver,
     ) -> anyhow::Result<(
         Box<dyn Metrics>,
-        Arc<RwLock<StorageState<N, P, D, Ver, V>>>,
-        App<Arc<RwLock<StorageState<N, P, D, Ver, V>>>, Error>,
+        Arc<RwLock<StorageState<N, P, D, Ver>>>,
+        App<Arc<RwLock<StorageState<N, P, D, Ver>>>, Error>,
     )>
     where
         N: ConnectedNetwork<PubKey>,
@@ -287,11 +287,11 @@ impl Options {
         Ok((metrics, ds, app))
     }
 
-    async fn init_with_query_module_fs<N, P, Ver: StaticVersionType + 'static, V: Versions>(
+    async fn init_with_query_module_fs<N, P, Ver: StaticVersionType + 'static>(
         &self,
         query_opt: Query,
         mod_opt: persistence::fs::Options,
-        state: ApiState<N, P, Ver, V>,
+        state: ApiState<N, P, Ver>,
         tasks: &mut TaskList,
         bind_version: Ver,
     ) -> anyhow::Result<Box<dyn Metrics>>
@@ -321,11 +321,11 @@ impl Options {
         Ok(metrics)
     }
 
-    async fn init_with_query_module_sql<N, P, Ver: StaticVersionType + 'static, V: Versions>(
+    async fn init_with_query_module_sql<N, P, Ver: StaticVersionType + 'static>(
         self,
         query_opt: Query,
         mod_opt: persistence::sql::Options,
-        state: ApiState<N, P, Ver, V>,
+        state: ApiState<N, P, Ver>,
         tasks: &mut TaskList,
         bind_version: Ver,
     ) -> anyhow::Result<Box<dyn Metrics>>
@@ -427,10 +427,9 @@ impl Options {
         N,
         P: SequencerPersistence,
         Ver: StaticVersionType + 'static,
-        V: Versions,
     >(
         &self,
-        state: ApiState<N, P, Ver, V>,
+        state: ApiState<N, P, Ver>,
         tasks: &mut TaskList,
         bind_version: Ver,
     ) -> anyhow::Result<()>
