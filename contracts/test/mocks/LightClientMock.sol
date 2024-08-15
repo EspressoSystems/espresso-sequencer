@@ -5,7 +5,7 @@ pragma solidity ^0.8.0;
 import { BN254 } from "bn254/BN254.sol";
 import { LightClient as LC } from "../../src/LightClient.sol";
 import { IPlonkVerifier } from "../../src/interfaces/IPlonkVerifier.sol";
-import { PlonkVerifier } from "../../src/libraries/PlonkVerifier.sol";
+import { PlonkVerifier2 } from "../../src/libraries/PlonkVerifier2.sol";
 import { LightClientStateUpdateVKMock as VkLib } from "./LightClientStateUpdateVKMock.sol";
 
 /// @dev A helper that wraps LightClient contract for testing
@@ -46,7 +46,7 @@ contract LightClientMock is LC {
         publicInput[6] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableSchnorrKeyComm);
         publicInput[7] = BN254.ScalarField.unwrap(states[finalizedState].stakeTableAmountComm);
 
-        if (!PlonkVerifier.verify(vk, publicInput, proof)) {
+        if (!PlonkVerifier2.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
     }

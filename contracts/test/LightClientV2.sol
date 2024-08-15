@@ -11,7 +11,7 @@ import { UUPSUpgradeable } from
 
 import { BN254 } from "bn254/BN254.sol";
 import { IPlonkVerifier } from "../src/interfaces/IPlonkVerifier.sol";
-import { PlonkVerifier } from "../src/libraries/PlonkVerifier.sol";
+import { PlonkVerifier2 } from "../src/libraries/PlonkVerifier2.sol";
 import { LightClientStateUpdateVK as VkLib } from "../src/libraries/LightClientStateUpdateVK.sol";
 
 /// @notice A light client for HotShot consensus. Keeping track of its finalized states in safe,
@@ -39,7 +39,7 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint32 internal finalizedState;
 
     // === Storage ===
-    //
+
     /// @notice current (finalized) epoch number
     uint64 public currentEpoch;
     /// @notice The commitment of the stake table used in current voting (i.e. snapshot at the start
@@ -236,7 +236,7 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         IPlonkVerifier.VerifyingKey memory vk = VkLib.getVk();
         uint256[8] memory publicInput = preparePublicInput(state);
 
-        if (!PlonkVerifier.verify(vk, publicInput, proof)) {
+        if (!PlonkVerifier2.verify(vk, publicInput, proof)) {
             revert InvalidProof();
         }
     }

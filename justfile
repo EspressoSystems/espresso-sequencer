@@ -63,7 +63,7 @@ build-docker-images:
     scripts/build-docker-images
 
 # generate rust bindings for contracts
-REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$"
+REGEXP := "^LightClient$|^LightClientStateUpdateVK$|^FeeContract$|^HotShot$|PlonkVerifier$|^ERC1967Proxy$|^LightClientMock$|^LightClientStateUpdateVKMock$|^PlonkVerifier2$"
 gen-bindings:
     forge bind --contracts ./contracts/src/ --crate-name contract-bindings --bindings-path contract-bindings --select "{{REGEXP}}" --overwrite --force
 
@@ -102,7 +102,7 @@ lc-contract-profiling-sepolia:
 
 gas-benchmarks:
     cargo build --bin diff-test --release
-    forge snapshot --mt "test_verify_succeeds|testCorrectUpdateBench"
+    forge snapshot --mt "test_verify_succeeds|testCorrectUpdateBench" --mc "PlonkVerifier2|LightClientBench"
     @[ -n "$(git diff --name-only .gas-snapshot)" ] && echo "⚠️ Uncommitted gas benchmarks, please stage them before committing." && exit 1 || exit 0
 
 # This is meant for local development and produces HTML output. In CI
