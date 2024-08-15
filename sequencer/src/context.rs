@@ -30,7 +30,6 @@ use hotshot_types::{
         election::Membership,
         metrics::Metrics,
         network::{ConnectedNetwork, Topic},
-        node_implementation::Versions,
     },
 };
 use url::Url;

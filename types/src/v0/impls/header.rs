@@ -21,7 +21,7 @@ use serde_json::{Map, Value};
 use std::fmt;
 use thiserror::Error;
 use time::OffsetDateTime;
-use vbs::version::{StaticVersion, StaticVersionType, Version};
+use vbs::version::{StaticVersionType, Version};
 
 use crate::{
     v0::header::{EitherOrVersion, VersionedHeader},

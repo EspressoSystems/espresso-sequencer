@@ -401,8 +401,8 @@ pub mod test_helpers {
     };
     use hotshot::types::{Event, EventType};
     use hotshot_contract_adapter::light_client::ParsedLightClientState;
-    use hotshot_example_types::node_types::TestVersions;
-    use hotshot_types::traits::node_implementation::NodeType;
+    
+    
     use hotshot_types::{
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
@@ -877,7 +877,7 @@ mod api_tests {
     use ethers::utils::Anvil;
     use futures::stream::StreamExt;
     use hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
-    use hotshot_types::traits::node_implementation::NodeType;
+    
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
@@ -1097,7 +1097,7 @@ mod test {
         event::LeafInfo,
         traits::{
             metrics::NoMetrics,
-            node_implementation::{ConsensusTime, NodeType},
+            node_implementation::ConsensusTime,
         },
         ValidatorConfig,
     };

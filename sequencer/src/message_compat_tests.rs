@@ -17,7 +17,7 @@
 use std::path::Path;
 
 use committable::Committable;
-use espresso_types::{Leaf, NodeState, PubKey, SeqTypes, SequencerVersions, ValidatedState};
+use espresso_types::{Leaf, NodeState, PubKey, SequencerVersions, ValidatedState};
 use hotshot::traits::election::static_committee::GeneralStaticCommittee;
 use hotshot_types::{
     data::{
@@ -38,7 +38,7 @@ use hotshot_types::{
         ViewSyncFinalizeVote, ViewSyncPreCommitData, ViewSyncPreCommitVote,
     },
     traits::{
-        node_implementation::{ConsensusTime, NodeType, Versions},
+        node_implementation::{ConsensusTime, Versions},
         signature_key::SignatureKey,
         BlockPayload, EncodeBytes,
     },

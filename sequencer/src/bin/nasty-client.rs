@@ -35,7 +35,7 @@ use hotshot_query_service::{
 };
 use hotshot_types::traits::{
     metrics::{Counter, Gauge, Histogram, Metrics as _},
-    node_implementation::{NodeType, Versions},
+    node_implementation::Versions,
 };
 use jf_merkle_tree::{
     ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,

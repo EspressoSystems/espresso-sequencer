@@ -4,8 +4,8 @@ use anyhow::Context;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{sync::RwLock, task::spawn};
 use clap::Parser;
-use espresso_types::{SeqTypes, SequencerVersions};
-use hotshot_types::traits::node_implementation::{NodeType, Versions};
+use espresso_types::SequencerVersions;
+use hotshot_types::traits::node_implementation::Versions;
 use marketplace_solver::{
     define_api, handle_events,
     state::{GlobalState, SolverState, StakeTable},

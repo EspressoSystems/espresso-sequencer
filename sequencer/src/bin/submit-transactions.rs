@@ -15,7 +15,7 @@ use futures::{
     stream::StreamExt,
 };
 use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, Error};
-use hotshot_types::traits::node_implementation::{NodeType, Versions};
+use hotshot_types::traits::node_implementation::Versions;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;

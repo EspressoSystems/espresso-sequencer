@@ -3,7 +3,7 @@ use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, parse_duration, FeeAmount, NamespaceId, SeqTypes,
+    eth_signature_key::EthKeyPair, parse_duration, FeeAmount, NamespaceId,
     SequencerVersions,
 };
 use hotshot::traits::ValidatedState;
@@ -15,7 +15,6 @@ use marketplace_builder::{
     builder::{build_instance_state, BuilderConfig},
     hooks::BidConfig,
 };
-use marketplace_builder_core::testing::basic_test::NodeType;
 use sequencer::{Genesis, L1Params};
 use url::Url;
 use vbs::version::StaticVersionType;

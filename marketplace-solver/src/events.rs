@@ -6,7 +6,7 @@ use espresso_types::{SeqTypes, SequencerVersions};
 use futures::{Stream, StreamExt as _};
 use hotshot::types::Event;
 use hotshot_events_service::{events, events_source::StartupInfo};
-use hotshot_types::traits::node_implementation::{NodeType, Versions};
+use hotshot_types::traits::node_implementation::Versions;
 use surf_disco::Client;
 use tide_disco::Url;
 

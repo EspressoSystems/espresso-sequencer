@@ -17,7 +17,6 @@ use hotshot_query_service::{
 use hotshot_types::traits::{
     metrics::{Metrics, NoMetrics},
     network::ConnectedNetwork,
-    node_implementation::Versions,
 };
 use tide_disco::{
     listener::RateLimitListener,

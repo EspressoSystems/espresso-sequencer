@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use espresso_types::{parse_duration, SeqTypes, SequencerVersions};
+use espresso_types::{parse_duration, SequencerVersions};
 use ethers::{
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
@@ -9,7 +9,7 @@ use ethers::{
 };
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
-use hotshot_types::traits::node_implementation::{NodeType, Versions};
+use hotshot_types::traits::node_implementation::Versions;
 use sequencer_utils::logging;
 use url::Url;
 use vbs::version::StaticVersionType;

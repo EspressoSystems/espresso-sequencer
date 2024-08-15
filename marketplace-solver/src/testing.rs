@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use async_compatibility_layer::art::async_spawn;
 use async_std::{sync::RwLock, task::JoinHandle};
-use espresso_types::{SeqTypes, SequencerVersions};
+use espresso_types::SequencerVersions;
 use hotshot_query_service::data_source::sql::testing::TmpDb;
-use hotshot_types::traits::node_implementation::{NodeType, Versions};
+use hotshot_types::traits::node_implementation::Versions;
 use portpicker::pick_unused_port;
 use tide_disco::{App, Url};
 use vbs::version::StaticVersionType;

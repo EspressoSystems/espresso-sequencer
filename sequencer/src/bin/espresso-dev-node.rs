@@ -4,7 +4,7 @@ use async_std::task::spawn;
 use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
-use espresso_types::{parse_duration, SeqTypes, SequencerVersions};
+use espresso_types::{parse_duration, SequencerVersions};
 use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
@@ -16,7 +16,7 @@ use hotshot_state_prover::service::{
     one_honest_threshold, run_prover_service_with_stake_table, StateProverConfig,
 };
 use hotshot_types::traits::{
-    node_implementation::{NodeType, Versions},
+    node_implementation::Versions,
     stake_table::{SnapshotVersion, StakeTableScheme},
 };
 use portpicker::pick_unused_port;
@@ -510,7 +510,7 @@ mod tests {
         availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
         data_source::sql::testing::TmpDb,
     };
-    use hotshot_types::traits::node_implementation::{NodeType, Versions};
+    use hotshot_types::traits::node_implementation::Versions;
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
     use rand::Rng;

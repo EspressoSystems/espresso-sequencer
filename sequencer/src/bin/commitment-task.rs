@@ -2,10 +2,10 @@ use std::{io, time::Duration};
 
 use async_std::task::spawn;
 use clap::Parser;
-use espresso_types::{parse_duration, SeqTypes, SequencerVersions};
+use espresso_types::{parse_duration, SequencerVersions};
 use ethers::prelude::*;
 use futures::FutureExt;
-use hotshot_types::traits::node_implementation::{NodeType, Versions};
+use hotshot_types::traits::node_implementation::Versions;
 use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
 use sequencer_utils::logging;
 use tide_disco::{error::ServerError, Api};
@@ -115,8 +115,8 @@ fn start_http_server<Ver: StaticVersionType + 'static>(
 
 #[cfg(test)]
 mod test {
-    use espresso_types::{SeqTypes, SequencerVersions};
-    use hotshot_types::traits::node_implementation::{NodeType, Versions};
+    use espresso_types::SequencerVersions;
+    use hotshot_types::traits::node_implementation::Versions;
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;

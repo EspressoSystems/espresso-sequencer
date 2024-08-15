@@ -1,12 +1,12 @@
 use std::{net::ToSocketAddrs, sync::Arc};
 
 use clap::Parser;
-use espresso_types::{SeqTypes, SequencerVersions, SolverAuctionResultsProvider};
+use espresso_types::{SequencerVersions, SolverAuctionResultsProvider};
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{
     metrics::NoMetrics,
-    node_implementation::{NodeType, Versions},
+    node_implementation::Versions,
 };
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
@@ -194,10 +194,10 @@ mod test {
 
     use async_std::task::spawn;
 
-    use espresso_types::{PubKey, SeqTypes};
+    use espresso_types::PubKey;
     use hotshot_types::{
         light_client::StateKeyPair,
-        traits::{node_implementation::NodeType, signature_key::SignatureKey},
+        traits::signature_key::SignatureKey,
     };
     use portpicker::pick_unused_port;
     use sequencer::{
