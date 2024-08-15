@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use async_compatibility_layer::art::async_spawn;
 use async_std::{sync::RwLock, task::JoinHandle};
-use espresso_types::SeqTypes;
+use espresso_types::{SeqTypes, SequencerVersions};
 use hotshot_query_service::data_source::sql::testing::TmpDb;
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::node_implementation::{NodeType, Versions};
 use portpicker::pick_unused_port;
 use tide_disco::{App, Url};
 use vbs::version::StaticVersionType;
@@ -81,8 +81,11 @@ impl MockSolver {
         let mut api = define_api(Default::default()).unwrap();
         api.with_version(env!("CARGO_PKG_VERSION").parse().unwrap());
 
-        app.register_module::<SolverError, <SeqTypes as NodeType>::Base>("solver_api", api)
-            .unwrap();
+        app.register_module::<SolverError, <SequencerVersions as Versions>::Base>(
+            "solver_api",
+            api,
+        )
+        .unwrap();
 
         let solver_api_port = pick_unused_port().expect("no free port");
         let solver_url: Url = Url::parse(&format!("http://localhost:{solver_api_port}")).unwrap();
@@ -91,7 +94,10 @@ impl MockSolver {
             let solver_url = solver_url.clone();
             async move {
                 let _ = app
-                    .serve(solver_url, <SeqTypes as NodeType>::Base::instance())
+                    .serve(
+                        solver_url,
+                        <SequencerVersions as Versions>::Base::instance(),
+                    )
                     .await;
             }
         });
@@ -122,10 +128,10 @@ mod test {
     use committable::Committable;
     use espresso_types::{
         v0_3::{RollupRegistration, RollupRegistrationBody, RollupUpdate, RollupUpdatebody},
-        SeqTypes,
+        SeqTypes, SequencerVersions,
     };
     use hotshot::types::{BLSPubKey, SignatureKey};
-    use hotshot_types::traits::node_implementation::NodeType;
+    use hotshot_types::traits::node_implementation::{NodeType, Versions};
     use std::str::FromStr;
     use tide_disco::Url;
 
@@ -135,8 +141,9 @@ mod test {
     async fn test_rollup_registration() {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
-        let client =
-            surf_disco::Client::<SolverError, <SeqTypes as NodeType>::Base>::new(solver_api);
+        let client = surf_disco::Client::<SolverError, <SequencerVersions as Versions>::Base>::new(
+            solver_api,
+        );
 
         // Create a list of signature keys for rollup registration data
         let mut signature_keys = Vec::new();
@@ -284,8 +291,9 @@ mod test {
     async fn test_update_rollup_not_registered() {
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
-        let client =
-            surf_disco::Client::<SolverError, <SeqTypes as NodeType>::Base>::new(solver_api);
+        let client = surf_disco::Client::<SolverError, <SequencerVersions as Versions>::Base>::new(
+            solver_api,
+        );
 
         let private_key =
             <BLSPubKey as SignatureKey>::PrivateKey::generate(&mut rand::thread_rng());
@@ -336,8 +344,9 @@ mod test {
 
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
-        let client =
-            surf_disco::Client::<SolverError, <SeqTypes as NodeType>::Base>::new(solver_api);
+        let client = surf_disco::Client::<SolverError, <SequencerVersions as Versions>::Base>::new(
+            solver_api,
+        );
 
         // Create a list of signature keys for rollup registration data
         let mut signature_keys = Vec::new();
@@ -483,8 +492,9 @@ mod test {
 
         let solver_api = mock_solver.solver_api();
 
-        let client =
-            surf_disco::Client::<SolverError, <SeqTypes as NodeType>::Base>::new(solver_api);
+        let client = surf_disco::Client::<SolverError, <SequencerVersions as Versions>::Base>::new(
+            solver_api,
+        );
 
         let result: String = client.post("submit_bid").send().await.unwrap();
         assert_eq!(result, "Bid Submitted".to_string());
