@@ -10,6 +10,4 @@ ENTRYPOINT ["tini", "--"]
 COPY target/$TARGETARCH/release/dev-rollup /bin/dev-rollup
 RUN chmod +x /bin/dev-rollup
 
-RUN ln -s /bin/dev-rollup /bin/dev-rollup
-
 CMD [ "/bin/dev-rollup"]
