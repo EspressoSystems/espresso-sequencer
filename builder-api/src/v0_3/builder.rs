@@ -26,10 +26,17 @@ where
     api.with_version("0.0.3".parse().unwrap())
         .get("bundle", |req, state| {
             async move {
+                let parent_view = req.integer_param("parent_view")?;
+                let parent_hash = req.blob_param("parent_hash")?;
                 let view_number = req.integer_param("view_number")?;
-                state.bundle(view_number).await.context(BlockClaimSnafu {
-                    resource: view_number.to_string(),
-                })
+                state
+                    .bundle(parent_view, &parent_hash, view_number)
+                    .await
+                    .with_context(|_| BlockClaimSnafu {
+                        resource: format!(
+                            "Block for parent {parent_hash}@{parent_view} and view {view_number}"
+                        ),
+                    })
             }
             .boxed()
         })?

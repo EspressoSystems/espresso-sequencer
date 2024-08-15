@@ -39,12 +39,16 @@ use futures::{
     FutureExt, StreamExt,
 };
 use hotshot_orchestrator::config::NetworkConfig;
+#[cfg(feature = "hotshot-testing")]
+use hotshot_types::traits::network::{
+    AsyncGenerator, NetworkReliability, TestableNetworkingImplementation,
+};
 use hotshot_types::{
     boxed_sync,
     constants::LOOK_AHEAD,
     data::ViewNumber,
     message::{DataMessage::DataResponse, Message, MessageKind},
-    request_response::{NetworkMsgResponseChannel, Request, Response},
+    request_response::{NetworkMsgResponseChannel, Request, Response, TakeReceiver},
     traits::{
         election::Membership,
         metrics::{Counter, Gauge, Metrics, NoMetrics},
@@ -53,11 +57,6 @@ use hotshot_types::{
         signature_key::SignatureKey,
     },
     BoxSyncFuture,
-};
-#[cfg(feature = "hotshot-testing")]
-use hotshot_types::{
-    request_response::TakeReceiver,
-    traits::network::{AsyncGenerator, NetworkReliability, TestableNetworkingImplementation},
 };
 use libp2p_identity::{
     ed25519::{self, SecretKey},
