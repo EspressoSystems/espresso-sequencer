@@ -425,7 +425,7 @@ impl Header {
             fee_amount,
         } in &builder_fee
         {
-            if version < MarketplaceVersion::VERSION {
+            if version < MarketplaceVersion::version() {
                 ensure!(
                     fee_account.validate_fee_signature(
                         fee_signature,

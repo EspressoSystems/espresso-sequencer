@@ -6,7 +6,10 @@ use espresso_types::{
     eth_signature_key::EthKeyPair, parse_duration, BaseVersion, FeeAmount, NamespaceId,
 };
 use hotshot::traits::ValidatedState;
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use hotshot_types::{
+    data::ViewNumber,
+    traits::node_implementation::{ConsensusTime, Versions},
+};
 use marketplace_builder::{
     builder::{build_instance_state, BuilderConfig},
     hooks::BidConfig,
@@ -104,7 +107,7 @@ struct NonPermissionedBuilderOptions {
     pub namespaces: Vec<u32>,
 
     /// Url we will use to communicate to solver
-    #[clap(long, env = "ESPRESSO_MARKETPLACE_BUILDER_SOLVER_URL")]
+    #[clap(long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_URL")]
     solver_url: Url,
 
     /// Bid amount in WEI.

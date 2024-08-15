@@ -56,7 +56,7 @@ use hotshot_types::{
         },
         election::Membership,
         metrics::Metrics,
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
     },
     utils::BuilderCommitment,
     HotShotConfig, PeerConfig, ValidatorConfig,

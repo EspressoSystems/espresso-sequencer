@@ -166,6 +166,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
 
         // Create the external event handler
         let external_event_handler = ExternalEventHandler::new(network, roll_call_info, pub_key)
+            .await
             .with_context(|| "Failed to create external event handler")?;
 
         Ok(Self::new(
@@ -350,7 +351,10 @@ async fn handle_events<Ver: StaticVersionType>(
 
         // Handle external messages
         if let EventType::ExternalMessageReceived(external_message_bytes) = &event.event {
-            if let Err(err) = external_event_handler.handle_event(external_message_bytes) {
+            if let Err(err) = external_event_handler
+                .handle_event(external_message_bytes)
+                .await
+            {
                 tracing::warn!("Failed to handle external message: {:?}", err);
             };
         }

@@ -181,6 +181,7 @@ impl BuilderConfig {
         let proxy_global_state = ProxyGlobalState::new(
             global_state.clone(),
             (builder_key_pair.fee_account(), builder_key_pair.clone()),
+            Duration::from_secs(5),
         );
 
         // start the hotshot api service
@@ -268,7 +269,7 @@ mod test {
         signature_key::BLSPubKey,
         traits::{
             block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
-            node_implementation::NodeType,
+            node_implementation::{NodeType, Versions},
             signature_key::{BuilderSignatureKey, SignatureKey},
         },
     };
