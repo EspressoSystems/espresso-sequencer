@@ -22,6 +22,7 @@ use committable::Committable;
 use derivative::Derivative;
 use espresso_types::{
     parse_duration, v0_3::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes,
+    SequencerVersions,
 };
 use futures::{
     future::{FutureExt, TryFuture, TryFutureExt},
@@ -34,7 +35,7 @@ use hotshot_query_service::{
 };
 use hotshot_types::traits::{
     metrics::{Counter, Gauge, Histogram, Metrics as _},
-    node_implementation::NodeType,
+    node_implementation::{NodeType, Versions},
 };
 use jf_merkle_tree::{
     ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
