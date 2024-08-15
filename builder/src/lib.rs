@@ -121,7 +121,7 @@ pub mod testing {
 
     use espresso_types::{
         mock::MockStateCatchup, v0_3::ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey,
-        PubKey, SequencerVersions, Transaction, ValidatedState,
+        PubKey, Transaction, ValidatedState,
     };
     use ethers::{
         types::spoof::State,
