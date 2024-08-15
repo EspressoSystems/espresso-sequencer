@@ -30,6 +30,7 @@ enum Command {
     Update(Update),
 }
 
+// Options for registering a rollup
 #[derive(Parser, Debug)]
 struct Register {
     #[clap(short, long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_URL")]
@@ -54,6 +55,8 @@ struct Register {
     #[clap(long, default_value = "test")]
     pub text: String,
 
+    /// Private key can be provided in tagged-base64 format
+    /// Othwerwise, a default private key with seed = [0;32] and index 9876 is used
     #[clap(long = "privkey")]
     pub private_key: Option<String>,
 }
@@ -78,6 +81,8 @@ struct Update {
     #[clap(long, default_value = "test")]
     pub text: Option<String>,
 
+    /// Private key can be provided in tagged-base64 format
+    /// Othwerwise, a default private key with seed = [0;32] and index 9876 is used
     #[clap(long = "privkey")]
     pub private_key: Option<String>,
 }
@@ -186,7 +191,7 @@ async fn update(opt: Update) -> Result<()> {
         text,
     };
 
-    // Sign the registration body
+    // Sign the rollup update body
     let signature = <SeqTypes as NodeType>::SignatureKey::sign(&privkey, body.commit().as_ref())
         .expect("failed to sign");
 
@@ -195,7 +200,7 @@ async fn update(opt: Update) -> Result<()> {
         signature,
     };
 
-    // registering a rollup
+    // update a rollup
     client
         .post::<RollupRegistration>("register_rollup")
         .body_json(&update)
