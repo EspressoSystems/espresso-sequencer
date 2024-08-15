@@ -8,14 +8,14 @@ use std::{
 use async_std::task::{sleep, spawn};
 use clap::Parser;
 use committable::{Commitment, Committable};
-use espresso_types::{parse_duration, parse_size, SeqTypes, Transaction};
+use espresso_types::{parse_duration, parse_size, SeqTypes, SequencerVersions, Transaction};
 use futures::{
     channel::mpsc::{self, Sender},
     sink::SinkExt,
     stream::StreamExt,
 };
 use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, Error};
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::node_implementation::{NodeType, Versions};
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;

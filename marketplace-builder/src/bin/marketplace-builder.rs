@@ -4,9 +4,13 @@ use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use espresso_types::{
     eth_signature_key::EthKeyPair, parse_duration, FeeAmount, NamespaceId, SeqTypes,
+    SequencerVersions,
 };
 use hotshot::traits::ValidatedState;
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use hotshot_types::{
+    data::ViewNumber,
+    traits::node_implementation::{ConsensusTime, Versions},
+};
 use marketplace_builder::{
     builder::{build_instance_state, BuilderConfig},
     hooks::BidConfig,
