@@ -179,15 +179,20 @@
 <a href="#179" id="179">179</a>
 <a href="#180" id="180">180</a>
 <a href="#181" id="181">181</a>
+<a href="#182" id="182">182</a>
+<a href="#183" id="183">183</a>
+<a href="#184" id="184">184</a>
+<a href="#185" id="185">185</a>
+<a href="#186" id="186">186</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Should probably rename this to "external" or something
 
 </span><span class="kw">use </span><span class="kw">crate</span>::context::TaskList;
 <span class="kw">use </span>anyhow::{Context, <span class="prelude-ty">Result</span>};
 <span class="kw">use </span>async_compatibility_layer::channel::{Receiver, Sender};
-<span class="kw">use </span>espresso_types::{PubKey, SeqTypes};
+<span class="kw">use </span>espresso_types::{PubKey, SeqTypes, SequencerVersions};
 <span class="kw">use </span>hotshot::types::{BLSPubKey, Message};
 <span class="kw">use </span>hotshot_types::{
-    message::{MessageKind, VersionedMessage},
+    message::{MessageKind, UpgradeLock},
     traits::network::{BroadcastDelay, ConnectedNetwork, Topic},
 };
 <span class="kw">use </span>serde::{Deserialize, Serialize};
@@ -237,7 +242,7 @@
 
 <span class="kw">impl </span>ExternalEventHandler {
     <span class="doccomment">/// Creates a new `ExternalEventHandler` with the given network and roll call info
-    </span><span class="kw">pub fn </span>new&lt;N: ConnectedNetwork&lt;PubKey&gt;&gt;(
+    </span><span class="kw">pub async fn </span>new&lt;N: ConnectedNetwork&lt;PubKey&gt;&gt;(
         network: Arc&lt;N&gt;,
         roll_call_info: RollCallInfo,
         public_key: BLSPubKey,
@@ -258,7 +263,8 @@
         </span><span class="kw">if </span>roll_call_info.public_api_url.is_some() {
             <span class="kw">let </span>roll_call_message_bytes =
                 <span class="self">Self</span>::create_roll_call_response(<span class="kw-2">&amp;</span>public_key, <span class="kw-2">&amp;</span>roll_call_info)
-                    .with_context(|| <span class="string">"Failed to create roll call response for initial broadcast"</span>)<span class="question-mark">?</span>;
+                    .<span class="kw">await
+                    </span>.with_context(|| <span class="string">"Failed to create roll call response for initial broadcast"</span>)<span class="question-mark">?</span>;
 
             outbound_message_sender
                 .try_send(OutboundMessage::Broadcast(roll_call_message_bytes))
@@ -277,7 +283,7 @@
     ///
     /// # Errors
     /// If the message type is unknown or if there is an error serializing or deserializing the message
-    </span><span class="kw">pub fn </span>handle_event(<span class="kw-2">&amp;</span><span class="self">self</span>, external_message_bytes: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+    </span><span class="kw">pub async fn </span>handle_event(<span class="kw-2">&amp;</span><span class="self">self</span>, external_message_bytes: <span class="kw-2">&amp;</span>[u8]) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
         <span class="comment">// Deserialize the external message
         </span><span class="kw">let </span>external_message = bincode::deserialize(external_message_bytes)
             .with_context(|| <span class="string">"Failed to deserialize external message"</span>)<span class="question-mark">?</span>;
@@ -292,7 +298,8 @@
 
                 <span class="kw">let </span>response_bytes =
                     <span class="self">Self</span>::create_roll_call_response(<span class="kw-2">&amp;</span><span class="self">self</span>.public_key, <span class="kw-2">&amp;</span><span class="self">self</span>.roll_call_info)
-                        .with_context(|| {
+                        .<span class="kw">await
+                        </span>.with_context(|| {
                             <span class="string">"Failed to serialize roll call response for RollCallRequest"
                         </span>})<span class="question-mark">?</span>;
 
@@ -310,7 +317,7 @@
     }
 
     <span class="doccomment">/// Creates a roll call response message
-    </span><span class="kw">fn </span>create_roll_call_response(
+    </span><span class="kw">async fn </span>create_roll_call_response(
         public_key: <span class="kw-2">&amp;</span>BLSPubKey,
         roll_call_info: <span class="kw-2">&amp;</span>RollCallInfo,
     ) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;&gt; {
@@ -325,9 +332,12 @@
             kind: MessageKind::&lt;SeqTypes&gt;::External(response_bytes),
         };
 
-        <span class="kw">let </span>response_bytes =
-            &lt;Message&lt;SeqTypes&gt; <span class="kw">as </span>VersionedMessage&lt;SeqTypes&gt;&gt;::serialize(<span class="kw-2">&amp;</span>message, <span class="kw-2">&amp;</span><span class="prelude-val">None</span>)
-                .with_context(|| <span class="string">"Failed to serialize roll call response"</span>)<span class="question-mark">?</span>;
+        <span class="kw">let </span>upgrade_lock = UpgradeLock::&lt;SeqTypes, SequencerVersions&gt;::new();
+
+        <span class="kw">let </span>response_bytes = upgrade_lock
+            .serialize(<span class="kw-2">&amp;</span>message)
+            .<span class="kw">await
+            </span>.with_context(|| <span class="string">"Failed to serialize roll call response"</span>)<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(response_bytes)
     }

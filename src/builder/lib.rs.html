@@ -767,6 +767,10 @@
 <a href="#767" id="767">767</a>
 <a href="#768" id="768">768</a>
 <a href="#769" id="769">769</a>
+<a href="#770" id="770">770</a>
+<a href="#771" id="771">771</a>
+<a href="#772" id="772">772</a>
+<a href="#773" id="773">773</a>
 </pre></div><pre class="rust"><code><span class="attr">#![allow(unused_imports)]
 </span><span class="kw">use </span>std::{
     alloc::System,
@@ -890,7 +894,7 @@
 
     <span class="kw">use </span>espresso_types::{
         mock::MockStateCatchup, v0_3::ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey,
-        PubKey, Transaction, ValidatedState,
+        PubKey, SequencerVersions, Transaction, ValidatedState,
     };
     <span class="kw">use </span>ethers::{
         types::spoof::State,
@@ -1108,7 +1112,7 @@
             bind_version: Ver,
             options: <span class="kw">impl </span>PersistenceOptions&lt;Persistence = P&gt;,
         ) -&gt; Vec&lt;(
-            Arc&lt;SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;&gt;&gt;,
+            Arc&lt;SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;, SequencerVersions&gt;&gt;,
             <span class="prelude-ty">Option</span>&lt;StateSigner&lt;Ver&gt;&gt;,
         )&gt; {
             <span class="kw">let </span>num_staked_nodes = <span class="self">self</span>.num_staked_nodes();
@@ -1149,7 +1153,7 @@
             bind_version: Ver,
             persistence: P,
         ) -&gt; (
-            SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;&gt;,
+            SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;, SequencerVersions&gt;,
             StateSigner&lt;Ver&gt;,
         ) {
             <span class="kw">let </span><span class="kw-2">mut </span>config = <span class="self">self</span>.config.clone();
@@ -1234,7 +1238,9 @@
             hotshot_events_api_url: Url,
             known_nodes_with_stake: Vec&lt;PeerConfig&lt;VerKey&gt;&gt;,
             num_non_staking_nodes: usize,
-            hotshot_context_handle: Arc&lt;SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;&gt;&gt;,
+            hotshot_context_handle: Arc&lt;
+                SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;, SequencerVersions&gt;,
+            &gt;,
         ) {
             <span class="comment">// create a event streamer
             </span><span class="kw">let </span>events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
@@ -1371,7 +1377,9 @@
     {
         <span class="kw">pub async fn </span>init_permissioned_builder(
             hotshot_test_config: HotShotTestConfig,
-            hotshot_handle: Arc&lt;SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;&gt;&gt;,
+            hotshot_handle: Arc&lt;
+                SystemContextHandle&lt;SeqTypes, Node&lt;network::Memory, P&gt;, SequencerVersions&gt;,
+            &gt;,
             node_id: u64,
             state_signer: StateSigner&lt;Ver&gt;,
             hotshot_builder_api_url: Url,

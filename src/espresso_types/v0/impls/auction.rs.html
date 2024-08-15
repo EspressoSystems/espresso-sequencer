@@ -350,7 +350,7 @@
 <span class="kw">use crate</span>::{
     eth_signature_key::{EthKeyPair, SigningError},
     v0_3::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
-    FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId, SeqTypes,
+    FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId, SequencerVersions,
 };
 <span class="kw">use </span>anyhow::Context;
 <span class="kw">use </span>async_trait::async_trait;
@@ -359,7 +359,7 @@
     data::ViewNumber,
     traits::{
         auction_results_provider::AuctionResultsProvider,
-        node_implementation::{ConsensusTime, HasUrls, NodeType},
+        node_implementation::{ConsensusTime, HasUrls, NodeType, Versions},
         signature_key::BuilderSignatureKey,
     },
 };
@@ -627,7 +627,7 @@
     }
 }
 
-<span class="kw">type </span>SurfClient = surf_disco::Client&lt;ServerError, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base&gt;;
+<span class="kw">type </span>SurfClient = surf_disco::Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;;
 
 <span class="attr">#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 </span><span class="doccomment">/// Auction Results provider holding the Url of the solver in order to fetch auction results.

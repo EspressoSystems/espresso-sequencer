@@ -479,6 +479,9 @@
 <a href="#479" id="479">479</a>
 <a href="#480" id="480">480</a>
 <a href="#481" id="481">481</a>
+<a href="#482" id="482">482</a>
+<a href="#483" id="483">483</a>
+<a href="#484" id="484">484</a>
 </pre></div><pre class="rust"><code><span class="doccomment">//! Utility program to submit random transactions to an Espresso Sequencer.
 
 </span><span class="kw">use </span>std::{
@@ -489,14 +492,14 @@
 <span class="kw">use </span>async_std::task::{sleep, spawn};
 <span class="kw">use </span>clap::Parser;
 <span class="kw">use </span>committable::{Commitment, Committable};
-<span class="kw">use </span>espresso_types::{parse_duration, parse_size, SeqTypes, Transaction};
+<span class="kw">use </span>espresso_types::{parse_duration, parse_size, SeqTypes, SequencerVersions, Transaction};
 <span class="kw">use </span>futures::{
     channel::mpsc::{<span class="self">self</span>, Sender},
     sink::SinkExt,
     stream::StreamExt,
 };
 <span class="kw">use </span>hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, Error};
-<span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
+<span class="kw">use </span>hotshot_types::traits::node_implementation::Versions;
 <span class="kw">use </span>rand::{Rng, RngCore, SeedableRng};
 <span class="kw">use </span>rand_chacha::ChaChaRng;
 <span class="kw">use </span>rand_distr::Distribution;
@@ -655,7 +658,7 @@
     <span class="kw">let </span><span class="kw-2">mut </span>rng = ChaChaRng::seed_from_u64(seed);
 
     <span class="comment">// Subscribe to block stream so we can check that our transactions are getting sequenced.
-    </span><span class="kw">let </span>client = Client::&lt;Error, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base&gt;::new(opt.url.clone());
+    </span><span class="kw">let </span>client = Client::&lt;Error, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;::new(opt.url.clone());
     <span class="kw">let </span>block_height: usize = client.get(<span class="string">"status/block-height"</span>).send().<span class="kw">await</span>.unwrap();
     <span class="kw">let </span><span class="kw-2">mut </span>blocks = client
         .socket(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"availability/stream/blocks/{}"</span>, block_height - <span class="number">1</span>))
@@ -670,13 +673,16 @@
             opt.clone(),
             sender.clone(),
             ChaChaRng::from_rng(<span class="kw-2">&amp;mut </span>rng).unwrap(),
-            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance(),
+            &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance(),
         ));
     }
 
     <span class="comment">// Start healthcheck endpoint once tasks are running.
     </span><span class="kw">if let </span><span class="prelude-val">Some</span>(port) = opt.port {
-        spawn(server(port, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance()));
+        spawn(server(
+            port,
+            &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance(),
+        ));
     }
 
     <span class="comment">// Keep track of the results.

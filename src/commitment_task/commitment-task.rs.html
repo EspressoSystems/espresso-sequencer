@@ -147,14 +147,15 @@
 <a href="#147" id="147">147</a>
 <a href="#148" id="148">148</a>
 <a href="#149" id="149">149</a>
+<a href="#150" id="150">150</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{io, time::Duration};
 
 <span class="kw">use </span>async_std::task::spawn;
 <span class="kw">use </span>clap::Parser;
-<span class="kw">use </span>espresso_types::{parse_duration, SeqTypes};
+<span class="kw">use </span>espresso_types::{parse_duration, SequencerVersions};
 <span class="kw">use </span>ethers::prelude::<span class="kw-2">*</span>;
 <span class="kw">use </span>futures::FutureExt;
-<span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
+<span class="kw">use </span>hotshot_types::traits::node_implementation::Versions;
 <span class="kw">use </span>sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>tide_disco::{error::ServerError, Api};
@@ -218,7 +219,7 @@
         start_http_server(
             port,
             opt.hotshot_address,
-            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance(),
+            &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance(),
         )
         .unwrap();
     }
@@ -234,7 +235,8 @@
         query_service_url: <span class="prelude-val">Some</span>(opt.sequencer_url),
     };
     <span class="macro">tracing::info!</span>(<span class="string">"Launching HotShot commitment task.."</span>);
-    run_hotshot_commitment_task::&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base&gt;(<span class="kw-2">&amp;</span>hotshot_contract_options).<span class="kw">await</span>;
+    run_hotshot_commitment_task::&lt;&lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;(<span class="kw-2">&amp;</span>hotshot_contract_options)
+        .<span class="kw">await</span>;
 }
 
 <span class="kw">fn </span>start_http_server&lt;Ver: StaticVersionType + <span class="lifetime">'static</span>&gt;(
@@ -263,8 +265,8 @@
 
 <span class="attr">#[cfg(test)]
 </span><span class="kw">mod </span>test {
-    <span class="kw">use </span>espresso_types::SeqTypes;
-    <span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
+    <span class="kw">use </span>espresso_types::SequencerVersions;
+    <span class="kw">use </span>hotshot_types::traits::node_implementation::Versions;
     <span class="kw">use </span>portpicker::pick_unused_port;
     <span class="kw">use </span>sequencer_utils::test_utils::setup_test;
     <span class="kw">use </span>surf_disco::Client;
@@ -283,11 +285,11 @@
         start_http_server(
             port,
             expected_addr,
-            &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance(),
+            &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance(),
         )
         .expect(<span class="string">"Failed to start the server"</span>);
 
-        <span class="kw">let </span>client: Client&lt;ServerError, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base&gt; =
+        <span class="kw">let </span>client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
             Client::new(<span class="macro">format!</span>(<span class="string">"http://localhost:{port}"</span>).parse().unwrap());
         client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 

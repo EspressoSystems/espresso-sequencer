@@ -781,9 +781,6 @@
 <a href="#781" id="781">781</a>
 <a href="#782" id="782">782</a>
 <a href="#783" id="783">783</a>
-<a href="#784" id="784">784</a>
-<a href="#785" id="785">785</a>
-<a href="#786" id="786">786</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>location_details;
 <span class="kw">pub mod </span>node_identity;
 
@@ -1559,9 +1556,6 @@
             <span class="macro">assert_eq!</span>(data_state.node_identity().next(), <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>node_identity_1));
             <span class="macro">assert_eq!</span>(data_state.node_identity().last(), <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>node_identity_2));
         }
-
-        <span class="comment">// We explicitly drop these, as it should make the task clean up.
-        </span>drop(node_identity_sender_1);
 
         <span class="kw">if let </span><span class="prelude-val">Some</span>(process_node_identity_task_handle) =
             process_node_identity_task_handle.task_handle.take()

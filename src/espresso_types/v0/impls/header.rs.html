@@ -1681,10 +1681,9 @@
 <span class="kw">use </span>committable::{Commitment, Committable, RawCommitmentBuilder};
 <span class="kw">use </span>hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 <span class="kw">use </span>hotshot_types::{
-    constants::MarketplaceVersion,
     traits::{
         block_contents::{BlockHeader, BuilderFee},
-        node_implementation::NodeType,
+        node_implementation::{NodeType, Versions},
         signature_key::BuilderSignatureKey,
         BlockPayload, ValidatedState <span class="kw">as _</span>,
     },
@@ -1707,7 +1706,8 @@
     v0_1, v0_2,
     v0_3::{<span class="self">self</span>, ChainConfig, IterableFeeInfo, SolverAuctionResults},
     BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
-    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, UpgradeType,
+    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, SequencerVersions,
+    UpgradeType,
 };
 
 <span class="kw">use super</span>::{instance_state::NodeState, state::ValidatedState};
@@ -2103,7 +2103,7 @@
             fee_amount,
         } <span class="kw">in </span><span class="kw-2">&amp;</span>builder_fee
         {
-            <span class="kw">if </span>version &lt; MarketplaceVersion::VERSION {
+            <span class="kw">if </span>version &lt; &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Marketplace::version() {
                 <span class="macro">ensure!</span>(
                     fee_account.validate_fee_signature(
                         fee_signature,

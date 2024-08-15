@@ -356,7 +356,7 @@
 <span class="kw">use </span>clap::{Parser, Subcommand};
 <span class="kw">use </span>contract_bindings::fee_contract::FeeContract;
 <span class="kw">use </span>espresso_types::{
-    eth_signature_key::EthKeyPair, FeeAccount, FeeAmount, FeeMerkleTree, Header, SeqTypes,
+    eth_signature_key::EthKeyPair, FeeAccount, FeeAmount, FeeMerkleTree, Header, SequencerVersions,
 };
 <span class="kw">use </span>ethers::{
     middleware::{Middleware, SignerMiddleware},
@@ -364,7 +364,7 @@
     types::{Address, BlockId, U256},
 };
 <span class="kw">use </span>futures::stream::StreamExt;
-<span class="kw">use </span>hotshot_types::traits::node_implementation::NodeType;
+<span class="kw">use </span>hotshot_types::traits::node_implementation::Versions;
 <span class="kw">use </span>jf_merkle_tree::{
     prelude::{MerkleProof, Sha3Node},
     MerkleTreeScheme,
@@ -372,7 +372,7 @@
 <span class="kw">use </span>sequencer_utils::logging;
 <span class="kw">use </span>surf_disco::{error::ClientError, Url};
 
-<span class="kw">type </span>EspressoClient = surf_disco::Client&lt;ClientError, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base&gt;;
+<span class="kw">type </span>EspressoClient = surf_disco::Client&lt;ClientError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt;;
 
 <span class="kw">type </span>FeeMerkleProof = MerkleProof&lt;FeeAmount, FeeAccount, Sha3Node, { FeeMerkleTree::ARITY }&gt;;
 

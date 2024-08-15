@@ -228,11 +228,15 @@
 <a href="#228" id="228">228</a>
 <a href="#229" id="229">229</a>
 <a href="#230" id="230">230</a>
-</pre></div><pre class="rust"><code><span class="kw">use crate</span>::{
+<a href="#231" id="231">231</a>
+<a href="#232" id="232">232</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::SequencerVersions;
+<span class="kw">use crate</span>::{
     v0::traits::StateCatchup, v0_3::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
-    SeqTypes, Timestamp, Upgrade, UpgradeMode,
+    Timestamp, Upgrade, UpgradeMode,
 };
-<span class="kw">use </span>hotshot_types::traits::{node_implementation::NodeType, states::InstanceState};
+<span class="kw">use </span>hotshot_types::traits::node_implementation::Versions;
+<span class="kw">use </span>hotshot_types::traits::states::InstanceState;
 <span class="kw">use </span>hotshot_types::HotShotConfig;
 <span class="kw">use </span>std::{collections::BTreeMap, sync::Arc};
 <span class="kw">use </span>vbs::version::{StaticVersionType, Version};
@@ -289,7 +293,7 @@
             },
             l1_genesis: <span class="prelude-val">None</span>,
             upgrades: Default::default(),
-            current_version: &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::version(),
+            current_version: &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::version(),
         }
     }
 

@@ -592,16 +592,25 @@
 <a href="#592" id="592">592</a>
 <a href="#593" id="593">593</a>
 <a href="#594" id="594">594</a>
+<a href="#595" id="595">595</a>
+<a href="#596" id="596">596</a>
+<a href="#597" id="597">597</a>
+<a href="#598" id="598">598</a>
+<a href="#599" id="599">599</a>
+<a href="#600" id="600">600</a>
+<a href="#601" id="601">601</a>
+<a href="#602" id="602">602</a>
+<a href="#603" id="603">603</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">crate</span>::api::node_validator::v0::create_node_validator_api::ExternalMessage;
 <span class="kw">use </span>async_std::task::JoinHandle;
-<span class="kw">use </span>espresso_types::{PubKey, SeqTypes};
+<span class="kw">use </span>espresso_types::{v0::SequencerVersions, PubKey, SeqTypes};
 <span class="kw">use </span>futures::{channel::mpsc::SendError, Sink, SinkExt};
 <span class="kw">use </span>hotshot::{
     traits::NetworkError,
     types::{Message, SignatureKey},
 };
 <span class="kw">use </span>hotshot_types::{
-    message::{MessageKind, VersionedMessage},
+    message::{MessageKind, UpgradeLock},
     traits::{
         network::{BroadcastDelay, ConnectedNetwork, Topic},
         node_implementation::NodeType,
@@ -681,6 +690,7 @@
     {
         network.wait_for_ready().<span class="kw">await</span>;
         <span class="kw">let </span><span class="kw-2">mut </span>url_sender = url_sender;
+        <span class="kw">let </span>upgrade_lock = UpgradeLock::&lt;SeqTypes, SequencerVersions&gt;::new();
 
         <span class="kw">loop </span>{
             <span class="kw">let </span>messages_result = network.recv_msgs().<span class="kw">await</span>;
@@ -694,7 +704,9 @@
 
             <span class="kw">for </span>message <span class="kw">in </span>messages {
                 <span class="comment">// We want to try and decode this message.
-                </span><span class="kw">let </span>message_deserialize_result = Message::&lt;SeqTypes&gt;::deserialize(<span class="kw-2">&amp;</span>message, <span class="kw-2">&amp;</span><span class="prelude-val">None</span>);
+                </span><span class="kw">let </span>message_deserialize_result = upgrade_lock
+                    .deserialize::&lt;Message&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span>message)
+                    .<span class="kw">await</span>;
 
                 <span class="kw">let </span>message = <span class="kw">match </span>message_deserialize_result {
                     <span class="prelude-val">Ok</span>(message) =&gt; message,
@@ -825,6 +837,7 @@
         </span>N: ConnectedNetworkPublisher&lt;&lt;SeqTypes <span class="kw">as </span>NodeType&gt;::SignatureKey&gt; + Send + <span class="lifetime">'static</span>,
     {
         network.wait_for_ready().<span class="kw">await</span>;
+        <span class="kw">let </span>upgrade_lock = UpgradeLock::&lt;SeqTypes, SequencerVersions&gt;::new();
 
         <span class="comment">// We want to send the Roll Call Request
         </span><span class="kw">let </span>rollcall_request = ExternalMessage::RollCallRequest(public_key);
@@ -841,7 +854,7 @@
             kind: MessageKind::External(rollcall_request_serialized),
         };
 
-        <span class="kw">let </span>hotshot_message_serialized = <span class="kw">match </span>hotshot_message.serialize(<span class="kw-2">&amp;</span><span class="prelude-val">None</span>) {
+        <span class="kw">let </span>hotshot_message_serialized = <span class="kw">match </span>upgrade_lock.serialize(<span class="kw-2">&amp;</span>hotshot_message).<span class="kw">await </span>{
             <span class="prelude-val">Ok</span>(hotshot_message_serialized) =&gt; hotshot_message_serialized,
             <span class="prelude-val">Err</span>(err) =&gt; {
                 <span class="macro">tracing::error!</span>(<span class="string">"error serializing hotshot message: {:?}"</span>, err);
@@ -882,7 +895,7 @@
     <span class="kw">use </span>async_std::future::TimeoutError;
     <span class="kw">use </span>async_std::prelude::FutureExt;
     <span class="kw">use </span>core::panic;
-    <span class="kw">use </span>espresso_types::SeqTypes;
+    <span class="kw">use </span>espresso_types::{v0::SequencerVersions, SeqTypes};
     <span class="kw">use </span>futures::channel::mpsc::Sender;
     <span class="kw">use </span>futures::SinkExt;
     <span class="kw">use </span>futures::{
@@ -894,7 +907,7 @@
         traits::NetworkError,
         types::{BLSPubKey, Message},
     };
-    <span class="kw">use </span>hotshot_types::message::{DataMessage, MessageKind, VersionedMessage};
+    <span class="kw">use </span>hotshot_types::message::{DataMessage, MessageKind, UpgradeLock};
     <span class="kw">use </span>hotshot_types::traits::network::{BroadcastDelay, ResponseMessage};
     <span class="kw">use </span>std::time::Duration;
     <span class="kw">use </span>url::Url;
@@ -934,6 +947,8 @@
     /// url_sender appropriately.
     </span><span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_cdn_receive_messages_task() {
+        <span class="kw">let </span>upgrade_lock = UpgradeLock::&lt;SeqTypes, SequencerVersions&gt;::new();
+
         <span class="kw">let </span>test_hotshot_message_serialized = {
             <span class="kw">let </span>test_url = Url::parse(<span class="string">"http://localhost:8080/"</span>).unwrap();
 
@@ -948,7 +963,7 @@
                 kind: MessageKind::External(external_message_encoded),
             };
 
-            hotshot_types::message::VersionedMessage::serialize(<span class="kw-2">&amp;</span>test_message, <span class="kw-2">&amp;</span><span class="prelude-val">None</span>).unwrap()
+            upgrade_lock.serialize(<span class="kw-2">&amp;</span>test_message).<span class="kw">await</span>.unwrap()
         };
 
         <span class="kw">let </span>(url_sender, url_receiver) = mpsc::channel(<span class="number">1</span>);
@@ -1025,15 +1040,15 @@
     /// This really shouldn't happen in practice.
     </span><span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_cdn_receive_messages_task_fails_unexpected_hotshot_message_variant() {
+        <span class="kw">let </span>upgrade_lock = UpgradeLock::&lt;SeqTypes, SequencerVersions&gt;::new();
         <span class="kw">let </span>(url_sender, url_receiver) = mpsc::channel(<span class="number">1</span>);
-        <span class="kw">let </span>bytes = VersionedMessage::serialize(
-            <span class="kw-2">&amp;</span>Message::&lt;SeqTypes&gt; {
+        <span class="kw">let </span>bytes = upgrade_lock
+            .serialize(<span class="kw-2">&amp;</span>Message::&lt;SeqTypes&gt; {
                 sender: BLSPubKey::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">0</span>).<span class="number">0</span>,
                 kind: MessageKind::Data(DataMessage::DataResponse(ResponseMessage::NotFound)),
-            },
-            <span class="kw-2">&amp;</span><span class="prelude-val">None</span>,
-        )
-        .unwrap();
+            })
+            .<span class="kw">await
+            </span>.unwrap();
 
         <span class="kw">let </span>task =
             CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(<span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[bytes])), url_sender);
@@ -1056,15 +1071,15 @@
     /// it encounters an error from the deserialization of the external message.
     </span><span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_cdn_receive_messages_task_fails_decoding_external_message() {
+        <span class="kw">let </span>upgrade_lock = UpgradeLock::&lt;SeqTypes, SequencerVersions&gt;::new();
         <span class="kw">let </span>(url_sender, url_receiver) = mpsc::channel(<span class="number">1</span>);
-        <span class="kw">let </span>bytes = VersionedMessage::serialize(
-            <span class="kw-2">&amp;</span>Message::&lt;SeqTypes&gt; {
+        <span class="kw">let </span>bytes = upgrade_lock
+            .serialize(<span class="kw-2">&amp;</span>Message::&lt;SeqTypes&gt; {
                 sender: BLSPubKey::generated_from_seed_indexed([<span class="number">0</span>; <span class="number">32</span>], <span class="number">0</span>).<span class="number">0</span>,
                 kind: MessageKind::External(<span class="macro">vec!</span>[<span class="number">0</span>]),
-            },
-            <span class="kw-2">&amp;</span><span class="prelude-val">None</span>,
-        )
-        .unwrap();
+            })
+            .<span class="kw">await
+            </span>.unwrap();
 
         <span class="kw">let </span>task =
             CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(<span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[bytes])), url_sender);
@@ -1089,6 +1104,7 @@
     /// really have a point in existing.
     </span><span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_cdn_receive_messages_tasks_exits_when_url_receiver_closed() {
+        <span class="kw">let </span>upgrade_lock = UpgradeLock::&lt;SeqTypes, SequencerVersions&gt;::new();
         <span class="kw">let </span>(url_sender, url_receiver) = mpsc::channel(<span class="number">1</span>);
 
         <span class="kw">let </span>test_hotshot_message_serialized = {
@@ -1105,7 +1121,7 @@
                 kind: MessageKind::External(external_message_encoded),
             };
 
-            hotshot_types::message::VersionedMessage::serialize(<span class="kw-2">&amp;</span>test_message, <span class="kw-2">&amp;</span><span class="prelude-val">None</span>).unwrap()
+            upgrade_lock.serialize(<span class="kw-2">&amp;</span>test_message).<span class="kw">await</span>.unwrap()
         };
         drop(url_receiver);
 
@@ -1148,6 +1164,7 @@
     /// beyond it's initial request.
     </span><span class="attr">#[async_std::test]
     </span><span class="kw">async fn </span>test_cdn_broadcast_roll_call_task() {
+        <span class="kw">let </span>upgrade_lock = UpgradeLock::&lt;SeqTypes, SequencerVersions&gt;::new();
         <span class="kw">let </span>(message_sender, message_receiver) = mpsc::channel(<span class="number">1</span>);
 
         <span class="kw">let </span>task = BroadcastRollCallTask::new(
@@ -1157,9 +1174,10 @@
 
         <span class="kw">let </span><span class="kw-2">mut </span>message_receiver = message_receiver;
         <span class="kw">let </span>next_message = message_receiver.next().<span class="kw">await</span>.unwrap();
-        <span class="kw">let </span>next_message =
-            &lt;Message&lt;SeqTypes&gt; <span class="kw">as </span>VersionedMessage&lt;SeqTypes&gt;&gt;::deserialize(<span class="kw-2">&amp;</span>next_message, <span class="kw-2">&amp;</span><span class="prelude-val">None</span>)
-                .unwrap();
+        <span class="kw">let </span>next_message = upgrade_lock
+            .deserialize::&lt;Message&lt;SeqTypes&gt;&gt;(<span class="kw-2">&amp;</span>next_message)
+            .<span class="kw">await
+            </span>.unwrap();
 
         <span class="kw">let </span>external_message = <span class="kw">match </span>next_message.kind {
             MessageKind::External(external_message) =&gt; external_message,

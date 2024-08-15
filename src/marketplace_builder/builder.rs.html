@@ -395,6 +395,11 @@
 <a href="#395" id="395">395</a>
 <a href="#396" id="396">396</a>
 <a href="#397" id="397">397</a>
+<a href="#398" id="398">398</a>
+<a href="#399" id="399">399</a>
+<a href="#400" id="400">400</a>
+<a href="#401" id="401">401</a>
+<a href="#402" id="402">402</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>anyhow::Context;
@@ -409,7 +414,7 @@
 <span class="kw">use </span>async_std::sync::Arc;
 <span class="kw">use </span>espresso_types::{
     eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NamespaceId, NodeState,
-    Payload, SeqTypes, ValidatedState,
+    Payload, SeqTypes, SequencerVersions, ValidatedState,
 };
 <span class="kw">use </span>ethers::{
     core::k256::ecdsa::SigningKey,
@@ -600,9 +605,11 @@
             };
 
             async_spawn(<span class="kw">async move </span>{
-                <span class="kw">let </span>res =
-                    run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
-                        .<span class="kw">await</span>;
+                <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;
+                    SeqTypes,
+                    SequencerVersions,
+                &gt;(hooks, senders, events_url)
+                .<span class="kw">await</span>;
                 <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>res, <span class="string">"Reserve builder service exited"</span>);
                 <span class="kw">if </span>res.is_err() {
                     <span class="macro">panic!</span>(<span class="string">"Reserve builder should restart."</span>);
@@ -614,9 +621,11 @@
             <span class="kw">let </span>hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(<span class="kw">async move </span>{
-                <span class="kw">let </span>res =
-                    run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
-                        .<span class="kw">await</span>;
+                <span class="kw">let </span>res = run_non_permissioned_standalone_builder_service::&lt;
+                    SeqTypes,
+                    SequencerVersions,
+                &gt;(hooks, senders, events_url)
+                .<span class="kw">await</span>;
                 <span class="macro">tracing::error!</span>(<span class="question-mark">?</span>res, <span class="string">"Fallback builder service exited"</span>);
                 <span class="kw">if </span>res.is_err() {
                     <span class="macro">panic!</span>(<span class="string">"Fallback builder should restart."</span>);
@@ -646,7 +655,8 @@
     <span class="kw">use </span>async_std::{stream::StreamExt, task};
     <span class="kw">use </span>committable::Commitment;
     <span class="kw">use </span>espresso_types::{
-        mock::MockStateCatchup, FeeAccount, NamespaceId, PubKey, SeqTypes, Transaction,
+        mock::MockStateCatchup, FeeAccount, NamespaceId, PubKey, SeqTypes, SequencerVersions,
+        Transaction,
     };
     <span class="kw">use </span>ethers::utils::Anvil;
     <span class="kw">use </span>hotshot::types::BLSPrivKey;
@@ -658,12 +668,11 @@
     <span class="kw">use </span>hotshot_query_service::availability::LeafQueryData;
     <span class="kw">use </span>hotshot_types::{
         bundle::Bundle,
-        constants::MarketplaceVersion,
         light_client::StateKeyPair,
         signature_key::BLSPubKey,
         traits::{
             block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
-            node_implementation::NodeType,
+            node_implementation::{NodeType, Versions},
             signature_key::{BuilderSignatureKey, SignatureKey},
         },
     };
@@ -722,7 +731,8 @@
             )
             .network_config(network_config)
             .build();
-        <span class="kw">let </span>network = TestNetwork::new(config, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base::instance()).<span class="kw">await</span>;
+        <span class="kw">let </span>network =
+            TestNetwork::new(config, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base::instance()).<span class="kw">await</span>;
 
         <span class="comment">// Start the builder
         </span><span class="kw">let </span>init = BuilderConfig::init(
@@ -749,7 +759,7 @@
         <span class="kw">let </span>_builder_config = init.<span class="kw">await</span>;
 
         <span class="comment">// Wait for at least one empty block to be sequenced (after consensus starts VID).
-        </span><span class="kw">let </span>sequencer_client: Client&lt;ServerError, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base&gt; =
+        </span><span class="kw">let </span>sequencer_client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
             Client::new(query_api_url);
         sequencer_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
         sequencer_client
@@ -763,12 +773,12 @@
             .unwrap();
 
         <span class="comment">//  Connect to builder
-        </span><span class="kw">let </span>builder_client: Client&lt;ServerError, MarketplaceVersion&gt; =
+        </span><span class="kw">let </span>builder_client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Marketplace&gt; =
             Client::new(builder_api_url.clone());
         builder_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
         <span class="comment">//  TODO(AG): workaround for version mismatch between bundle and submit APIs
-        </span><span class="kw">let </span>submission_client: Client&lt;ServerError, &lt;SeqTypes <span class="kw">as </span>NodeType&gt;::Base&gt; =
+        </span><span class="kw">let </span>submission_client: Client&lt;ServerError, &lt;SequencerVersions <span class="kw">as </span>Versions&gt;::Base&gt; =
             Client::new(builder_api_url);
         submission_client.connect(<span class="prelude-val">None</span>).<span class="kw">await</span>;
 
