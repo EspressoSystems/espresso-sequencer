@@ -39,6 +39,7 @@ use async_trait::async_trait;
 /// #   Error,
 /// # };
 /// # use hotshot_types::consensus::ConsensusMetricsValue;
+/// # use hotshot_example_types::node_types::TestVersions;
 /// # async fn doc() -> Result<(), hotshot_query_service::Error> {
 /// let data_source = MetricsDataSource::default();
 /// let hotshot = SystemContext::<AppTypes, AppNodeImpl, AppVersions>::init(

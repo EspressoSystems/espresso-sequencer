@@ -24,6 +24,7 @@
 //! # use hotshot_query_service::testing::mocks::{
 //! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes, MockVersions as AppVersions,
 //! # };
+//! # use hotshot_example_types::node_types::TestVersions;
 //! # use hotshot_types::consensus::ConsensusMetricsValue;
 //! # use std::path::Path;
 //! # async fn doc(storage_path: &std::path::Path) -> Result<(), hotshot_query_service::Error> {

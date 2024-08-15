@@ -263,6 +263,7 @@ impl Config {
 /// # use hotshot_query_service::testing::mocks::{
 /// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes, MockVersions as AppVersions
 /// # };
+/// # use hotshot_example_types::node_types::TestVersions;
 /// # use tide_disco::App;
 /// # use vbs::version::StaticVersionType;
 /// struct AppState {
