@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use espresso_types::{parse_duration, SeqTypes};
+use espresso_types::{parse_duration, SeqTypes, SequencerVersions};
 use ethers::{
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
@@ -9,7 +9,7 @@ use ethers::{
 };
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::node_implementation::{NodeType, Versions};
 use sequencer_utils::logging;
 use url::Url;
 use vbs::version::StaticVersionType;
@@ -114,13 +114,16 @@ async fn main() {
 
     if args.daemon {
         // Launching the prover service daemon
-        if let Err(err) = run_prover_service(config, <SeqTypes as NodeType>::Base::instance()).await
+        if let Err(err) =
+            run_prover_service(config, <SequencerVersions as Versions>::Base::instance()).await
         {
             tracing::error!("Error running prover service: {:?}", err);
         };
     } else {
         // Run light client state update once
-        if let Err(err) = run_prover_once(config, <SeqTypes as NodeType>::Base::instance()).await {
+        if let Err(err) =
+            run_prover_once(config, <SequencerVersions as Versions>::Base::instance()).await
+        {
             tracing::error!("Error running prover once: {:?}", err);
         };
     }
