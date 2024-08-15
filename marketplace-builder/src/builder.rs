@@ -371,7 +371,7 @@ mod test {
             .unwrap();
 
         //  Connect to builder
-        let builder_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
+        let builder_client: Client<ServerError, <SequencerVersions as Versions>::Marketplace> =
             Client::new(builder_api_url.clone());
         builder_client.connect(None).await;
 
