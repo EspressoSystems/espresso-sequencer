@@ -35,7 +35,7 @@ struct Register {
     #[clap(short, long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_URL")]
     pub solver_url: Url,
 
-    #[clap(short = 'n', long)]
+    #[clap(short, long = "ns")]
     pub namespace_id: u64,
 
     #[clap(
@@ -63,7 +63,7 @@ struct Update {
     #[clap(short, long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_URL")]
     pub solver_url: Url,
 
-    #[clap(short = 'n', long)]
+    #[clap(short, long = "ns")]
     pub namespace_id: u64,
 
     #[clap(long, env = "ESPRESSO_MARKETPLACE_RESERVE_BUILDER_URL")]

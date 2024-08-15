@@ -745,7 +745,7 @@ services:
   dev-rollup:
     image: ghcr.io/espressosystems/dev-rollup:main
     command:
-      dev-rollup register -n 1
+      dev-rollup register --ns 1; dev-rollup register --ns 2; dev-rollup register --ns 3
     environment:
       - ESPRESSO_MARKETPLACE_SOLVER_API_URL=http://marketplace-solver:$ESPRESSO_MARKETPLACE_SOLVER_API_PORT
     depends_on:
