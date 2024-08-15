@@ -55,12 +55,13 @@ struct Register {
     #[clap(long, default_value = "test")]
     pub text: String,
 
-    /// Private key can be provided in tagged-base64 format
-    /// Othwerwise, a default private key with seed = [0;32] and index 9876 is used
+    /// The private key is provided in tagged-base64 format.
+    /// If not provided, a default private key with a seed of `[0; 32]` and an index of `9876` will be used.
     #[clap(long = "privkey")]
     pub private_key: Option<String>,
 }
 
+// Options for updating an already registered rollup
 #[derive(Parser, Debug)]
 struct Update {
     #[clap(short, long, env = "ESPRESSO_MARKETPLACE_SOLVER_API_URL")]
@@ -81,8 +82,8 @@ struct Update {
     #[clap(long, default_value = "test")]
     pub text: Option<String>,
 
-    /// Private key can be provided in tagged-base64 format
-    /// Othwerwise, a default private key with seed = [0;32] and index 9876 is used
+    /// The private key is provided in tagged-base64 format.
+    /// If not provided, a default private key with a seed of `[0; 32]` and an index of `9876` will be used.
     #[clap(long = "privkey")]
     pub private_key: Option<String>,
 }
