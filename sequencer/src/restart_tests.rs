@@ -51,104 +51,104 @@ async fn test_restart_helper(network: (usize, usize), restart: (usize, usize), c
 }
 
 #[async_std::test]
-async fn test_restart_1_da_with_cdn() {
+async fn slow_test_restart_1_da_with_cdn() {
     test_restart_helper((2, 3), (1, 0), true).await;
 }
 
 #[async_std::test]
-async fn test_restart_1_regular_with_cdn() {
+async fn slow_test_restart_1_regular_with_cdn() {
     test_restart_helper((2, 3), (0, 1), true).await;
 }
 
 #[async_std::test]
-async fn test_restart_f_with_cdn() {
+async fn slow_test_restart_f_with_cdn() {
     test_restart_helper((4, 6), (1, 2), true).await;
 }
 
 #[async_std::test]
-async fn test_restart_f_minus_1_with_cdn() {
+async fn slow_test_restart_f_minus_1_with_cdn() {
     test_restart_helper((4, 6), (1, 1), true).await;
 }
 
 #[async_std::test]
-async fn test_restart_f_plus_1_with_cdn() {
+async fn slow_test_restart_f_plus_1_with_cdn() {
     test_restart_helper((4, 6), (1, 3), true).await;
 }
 
 #[async_std::test]
-async fn test_restart_2f_with_cdn() {
+async fn slow_test_restart_2f_with_cdn() {
     test_restart_helper((4, 6), (1, 5), true).await;
 }
 
 #[async_std::test]
-async fn test_restart_2f_minus_1_with_cdn() {
+async fn slow_test_restart_2f_minus_1_with_cdn() {
     test_restart_helper((4, 6), (1, 4), true).await;
 }
 
 #[async_std::test]
-async fn test_restart_2f_plus_1_with_cdn() {
+async fn slow_test_restart_2f_plus_1_with_cdn() {
     test_restart_helper((4, 6), (2, 5), true).await;
 }
 
 #[ignore]
 #[async_std::test]
-async fn test_restart_all_with_cdn() {
+async fn slow_test_restart_all_with_cdn() {
     test_restart_helper((2, 8), (2, 8), true).await;
 }
 
 #[async_std::test]
-async fn test_restart_all_da_with_cdn() {
+async fn slow_test_restart_all_da_with_cdn() {
     test_restart_helper((2, 8), (2, 0), true).await;
 }
 
 #[async_std::test]
-async fn test_restart_1_da_without_cdn() {
+async fn slow_test_restart_1_da_without_cdn() {
     test_restart_helper((2, 3), (1, 0), false).await;
 }
 
 #[async_std::test]
-async fn test_restart_1_regular_without_cdn() {
+async fn slow_test_restart_1_regular_without_cdn() {
     test_restart_helper((2, 3), (0, 1), false).await;
 }
 
 #[async_std::test]
-async fn test_restart_f_without_cdn() {
+async fn slow_test_restart_f_without_cdn() {
     test_restart_helper((4, 6), (1, 2), false).await;
 }
 
 #[async_std::test]
-async fn test_restart_f_minus_1_without_cdn() {
+async fn slow_test_restart_f_minus_1_without_cdn() {
     test_restart_helper((4, 6), (1, 1), false).await;
 }
 
 #[async_std::test]
-async fn test_restart_f_plus_1_without_cdn() {
+async fn slow_test_restart_f_plus_1_without_cdn() {
     test_restart_helper((4, 6), (1, 3), false).await;
 }
 
 #[async_std::test]
-async fn test_restart_2f_without_cdn() {
+async fn slow_test_restart_2f_without_cdn() {
     test_restart_helper((4, 6), (1, 5), false).await;
 }
 
 #[async_std::test]
-async fn test_restart_2f_minus_1_without_cdn() {
+async fn slow_test_restart_2f_minus_1_without_cdn() {
     test_restart_helper((4, 6), (1, 4), false).await;
 }
 
 #[async_std::test]
-async fn test_restart_2f_plus_1_without_cdn() {
+async fn slow_test_restart_2f_plus_1_without_cdn() {
     test_restart_helper((4, 6), (2, 5), false).await;
 }
 
 #[ignore]
 #[async_std::test]
-async fn test_restart_all_without_cdn() {
+async fn slow_test_restart_all_without_cdn() {
     test_restart_helper((2, 8), (2, 8), false).await;
 }
 
 #[async_std::test]
-async fn test_restart_all_da_without_cdn() {
+async fn slow_test_restart_all_da_without_cdn() {
     test_restart_helper((2, 8), (2, 0), false).await;
 }
 
