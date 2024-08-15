@@ -6,7 +6,7 @@ use async_compatibility_layer::channel::{Receiver, Sender};
 use espresso_types::{PubKey, SeqTypes};
 use hotshot::types::{BLSPubKey, Message};
 use hotshot_types::{
-    message::{MessageKind, VersionedMessage},
+    message::MessageKind,
     traits::network::{BroadcastDelay, ConnectedNetwork, Topic},
 };
 use serde::{Deserialize, Serialize};
@@ -144,9 +144,8 @@ impl ExternalEventHandler {
             kind: MessageKind::<SeqTypes>::External(response_bytes),
         };
 
-        let response_bytes =
-            <Message<SeqTypes> as VersionedMessage<SeqTypes>>::serialize(&message, &None)
-                .with_context(|| "Failed to serialize roll call response")?;
+        let response_bytes = bincode::serialize(&message)
+            .with_context(|| "Failed to serialize roll call response")?;
 
         Ok(response_bytes)
     }

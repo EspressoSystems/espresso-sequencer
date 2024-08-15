@@ -12,7 +12,7 @@ use async_lock::RwLock;
 use async_std::sync::Arc;
 use espresso_types::{
     eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NamespaceId, NodeState,
-    Payload, SeqTypes, ValidatedState,
+    Payload, SeqTypes, SeqVersions, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -203,9 +203,10 @@ impl BuilderConfig {
             };
 
             async_spawn(async move {
-                let res =
-                    run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
-                        .await;
+                let res = run_non_permissioned_standalone_builder_service::<_, SeqVersions>(
+                    hooks, senders, events_url,
+                )
+                .await;
                 tracing::error!(?res, "Reserve builder service exited");
                 if res.is_err() {
                     panic!("Reserve builder should restart.");
@@ -217,9 +218,10 @@ impl BuilderConfig {
             let hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(async move {
-                let res =
-                    run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
-                        .await;
+                let res = run_non_permissioned_standalone_builder_service::<_, SeqVersions>(
+                    hooks, senders, events_url,
+                )
+                .await;
                 tracing::error!(?res, "Fallback builder service exited");
                 if res.is_err() {
                     panic!("Fallback builder should restart.");
@@ -249,7 +251,8 @@ mod test {
     use async_std::{stream::StreamExt, task};
     use committable::Commitment;
     use espresso_types::{
-        mock::MockStateCatchup, FeeAccount, NamespaceId, PubKey, SeqTypes, Transaction,
+        mock::MockStateCatchup, BaseVersion, FeeAccount, MarketplaceVersion, NamespaceId, PubKey,
+        SeqTypes, Transaction,
     };
     use ethers::utils::Anvil;
     use hotshot::types::BLSPrivKey;
@@ -261,7 +264,6 @@ mod test {
     use hotshot_query_service::availability::LeafQueryData;
     use hotshot_types::{
         bundle::Bundle,
-        constants::MarketplaceVersion,
         light_client::StateKeyPair,
         signature_key::BLSPubKey,
         traits::{
@@ -325,7 +327,7 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let network = TestNetwork::new(config, BaseVersion::instance()).await;
 
         // Start the builder
         let init = BuilderConfig::init(
@@ -352,8 +354,7 @@ mod test {
         let _builder_config = init.await;
 
         // Wait for at least one empty block to be sequenced (after consensus starts VID).
-        let sequencer_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
-            Client::new(query_api_url);
+        let sequencer_client: Client<ServerError, BaseVersion> = Client::new(query_api_url);
         sequencer_client.connect(None).await;
         sequencer_client
             .socket("availability/stream/leaves/0")
@@ -371,8 +372,7 @@ mod test {
         builder_client.connect(None).await;
 
         //  TODO(AG): workaround for version mismatch between bundle and submit APIs
-        let submission_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
-            Client::new(builder_api_url);
+        let submission_client: Client<ServerError, BaseVersion> = Client::new(builder_api_url);
         submission_client.connect(None).await;
 
         // Test getting a bundle

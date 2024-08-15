@@ -338,10 +338,7 @@ pub mod testing {
             &self,
             bind_version: Ver,
             options: impl PersistenceOptions<Persistence = P>,
-        ) -> Vec<(
-            Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
-            Option<StateSigner<Ver>>,
-        )> {
+        ) -> Vec<(Arc<Consensus<network::Memory, P>>, Option<StateSigner<Ver>>)> {
             let num_staked_nodes = self.num_staked_nodes();
             let mut is_staked = false;
             let stake_table_commit = static_stake_table_commitment(
@@ -379,10 +376,7 @@ pub mod testing {
             metrics: &dyn Metrics,
             bind_version: Ver,
             persistence: P,
-        ) -> (
-            SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
-            StateSigner<Ver>,
-        ) {
+        ) -> (Consensus<network::Memory, P>, StateSigner<Ver>) {
             let mut config = self.config.clone();
 
             let num_staked_nodes = self.num_staked_nodes();
@@ -465,7 +459,7 @@ pub mod testing {
             hotshot_events_api_url: Url,
             known_nodes_with_stake: Vec<PeerConfig<VerKey>>,
             num_non_staking_nodes: usize,
-            hotshot_context_handle: Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
+            hotshot_context_handle: Arc<Consensus<network::Memory, P>>,
         ) {
             // create a event streamer
             let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
@@ -602,7 +596,7 @@ pub mod testing {
     {
         pub async fn init_permissioned_builder(
             hotshot_test_config: HotShotTestConfig,
-            hotshot_handle: Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
+            hotshot_handle: Arc<Consensus<network::Memory, P>>,
             node_id: u64,
             state_signer: StateSigner<Ver>,
             hotshot_builder_api_url: Url,

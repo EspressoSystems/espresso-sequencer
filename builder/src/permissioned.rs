@@ -339,7 +339,7 @@ pub async fn init_hotshot<
     stake_table_commit: StakeTableCommitmentType,
     _: Ver,
     persistence: P,
-) -> (SystemContextHandle<SeqTypes, Node<N, P>>, StateSigner<Ver>) {
+) -> (Consensus<N, P>, StateSigner<Ver>) {
     let combined_known_nodes_with_stake = match stake_table_entries_for_non_voting_nodes {
         Some(stake_table_entries) => {
             let combined_entries = config

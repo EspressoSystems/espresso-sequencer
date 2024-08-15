@@ -1,8 +1,8 @@
-use super::state::ValidatedState;
+use super::{state::ValidatedState, BaseVersion};
 use crate::{
     eth_signature_key::{EthKeyPair, SigningError},
     v0_3::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
-    FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId, SeqTypes,
+    FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId,
 };
 use anyhow::Context;
 use async_trait::async_trait;
@@ -279,7 +279,7 @@ impl HasUrls for SolverAuctionResults {
     }
 }
 
-type SurfClient = surf_disco::Client<ServerError, <SeqTypes as NodeType>::Base>;
+type SurfClient = surf_disco::Client<ServerError, BaseVersion>;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 /// Auction Results provider holding the Url of the solver in order to fetch auction results.

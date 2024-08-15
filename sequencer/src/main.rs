@@ -1,10 +1,10 @@
 use std::{net::ToSocketAddrs, sync::Arc};
 
 use clap::Parser;
-use espresso_types::{SeqTypes, SolverAuctionResultsProvider};
+use espresso_types::{BaseVersion, SolverAuctionResultsProvider};
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
-use hotshot_types::traits::{metrics::NoMetrics, node_implementation::NodeType};
+use hotshot_types::traits::metrics::NoMetrics;
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
     init_node,
@@ -22,28 +22,16 @@ async fn main() -> anyhow::Result<()> {
     tracing::warn!(?modules, "sequencer starting up");
 
     if let Some(storage) = modules.storage_fs.take() {
-        init_with_storage(
-            modules,
-            opt,
-            storage,
-            <SeqTypes as NodeType>::Base::instance(),
-        )
-        .await
+        init_with_storage(modules, opt, storage, BaseVersion::instance()).await
     } else if let Some(storage) = modules.storage_sql.take() {
-        init_with_storage(
-            modules,
-            opt,
-            storage,
-            <SeqTypes as NodeType>::Base::instance(),
-        )
-        .await
+        init_with_storage(modules, opt, storage, BaseVersion::instance()).await
     } else {
         // Persistence is required. If none is provided, just use the local file system.
         init_with_storage(
             modules,
             opt,
             persistence::fs::Options::default(),
-            <SeqTypes as NodeType>::Base::instance(),
+            BaseVersion::instance(),
         )
         .await
     }
@@ -191,11 +179,8 @@ mod test {
 
     use async_std::task::spawn;
 
-    use espresso_types::{PubKey, SeqTypes};
-    use hotshot_types::{
-        light_client::StateKeyPair,
-        traits::{node_implementation::NodeType, signature_key::SignatureKey},
-    };
+    use espresso_types::PubKey;
+    use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey};
     use portpicker::pick_unused_port;
     use sequencer::{
         api::options::{Http, Status},
@@ -253,7 +238,7 @@ mod test {
                 modules,
                 opt,
                 fs::Options::new(tmp.path().into()),
-                <SeqTypes as NodeType>::Base::instance(),
+                BaseVersion::instance(),
             )
             .await
             {
@@ -265,7 +250,7 @@ mod test {
         // orchestrator.
         tracing::info!("waiting for API to start");
         let url: Url = format!("http://localhost:{port}").parse().unwrap();
-        let client = Client::<ClientError, <SeqTypes as NodeType>::Base>::new(url.clone());
+        let client = Client::<ClientError, BaseVersion>::new(url.clone());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
         client.get::<()>("healthcheck").send().await.unwrap();
 

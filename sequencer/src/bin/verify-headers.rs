@@ -4,10 +4,9 @@ use std::{cmp::max, process::exit, time::Duration};
 
 use async_std::{sync::Arc, task::sleep};
 use clap::Parser;
-use espresso_types::{Header, L1BlockInfo, SeqTypes};
+use espresso_types::{BaseVersion, Header, L1BlockInfo};
 use ethers::prelude::*;
 use futures::future::join_all;
-use hotshot_types::traits::node_implementation::NodeType;
 use itertools::Itertools;
 use sequencer_utils::logging;
 use surf_disco::Url;
@@ -170,9 +169,7 @@ async fn main() {
     let opt = Arc::new(Options::parse());
     opt.logging.init();
 
-    let seq = Arc::new(SequencerClient::<<SeqTypes as NodeType>::Base>::new(
-        opt.url.clone(),
-    ));
+    let seq = Arc::new(SequencerClient::<BaseVersion>::new(opt.url.clone()));
 
     let block_height: usize = seq.get("status/latest_block_height").send().await.unwrap();
     let from = opt.from.unwrap_or(0);

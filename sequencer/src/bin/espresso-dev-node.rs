@@ -4,7 +4,7 @@ use async_std::task::spawn;
 use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
-use espresso_types::{parse_duration, SeqTypes};
+use espresso_types::{parse_duration, BaseVersion};
 use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
@@ -15,10 +15,7 @@ use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt}
 use hotshot_state_prover::service::{
     one_honest_threshold, run_prover_service_with_stake_table, StateProverConfig,
 };
-use hotshot_types::traits::{
-    node_implementation::NodeType,
-    stake_table::{SnapshotVersion, StakeTableScheme},
-};
+use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
 use portpicker::pick_unused_port;
 use sequencer::{
     api::{
@@ -190,7 +187,7 @@ async fn main() -> anyhow::Result<()> {
         .network_config(network_config)
         .build();
 
-    let network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+    let network = TestNetwork::new(config, BaseVersion::instance()).await;
     let st = network.cfg.stake_table();
     let total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
     let config = network.cfg.hotshot_config();
@@ -288,7 +285,7 @@ async fn main() -> anyhow::Result<()> {
 
         let prover_handle = spawn(run_prover_service_with_stake_table(
             prover_config,
-            <SeqTypes as NodeType>::Base::instance(),
+            BaseVersion::instance(),
             Arc::new(st.clone()),
         ));
         handles.push(prover_handle);
@@ -301,7 +298,7 @@ async fn main() -> anyhow::Result<()> {
             format!("http://0.0.0.0:{relay_server_port}")
                 .parse()
                 .unwrap(),
-            <SeqTypes as NodeType>::Base::instance(),
+            BaseVersion::instance(),
         )
         .await;
 
@@ -340,7 +337,7 @@ async fn main() -> anyhow::Result<()> {
         dev_node_port,
         mock_contracts,
         dev_info,
-        <SeqTypes as NodeType>::Base::instance(),
+        BaseVersion::instance(),
     ));
     handles.push(dev_node_handle);
 
@@ -503,14 +500,13 @@ mod tests {
     use committable::{Commitment, Committable};
     use contract_bindings::light_client::LightClient;
     use escargot::CargoBuild;
-    use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
+    use espresso_types::{BaseVersion, BlockMerkleTree, Header, SeqTypes, Transaction};
     use ethers::{providers::Middleware, types::U256};
     use futures::TryStreamExt;
     use hotshot_query_service::{
         availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
         data_source::sql::testing::TmpDb,
     };
-    use hotshot_types::traits::node_implementation::NodeType;
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
     use rand::Rng;
@@ -581,7 +577,7 @@ mod tests {
 
         let process = BackgroundProcess(process);
 
-        let api_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let api_client: Client<ServerError, BaseVersion> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
         api_client.connect(None).await;
 
@@ -755,7 +751,7 @@ mod tests {
             }
         }
 
-        let dev_node_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let dev_node_client: Client<ServerError, BaseVersion> =
             Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
         dev_node_client.connect(None).await;
 
@@ -899,7 +895,7 @@ mod tests {
 
         let process = BackgroundProcess(process);
 
-        let api_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let api_client: Client<ServerError, BaseVersion> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
         api_client.connect(None).await;
 
@@ -914,7 +910,7 @@ mod tests {
             .await
             .unwrap();
 
-        let dev_node_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let dev_node_client: Client<ServerError, BaseVersion> =
             Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
         dev_node_client.connect(None).await;
 

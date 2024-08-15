@@ -7,7 +7,7 @@ use hotshot::{
     types::{Message, SignatureKey},
 };
 use hotshot_types::{
-    message::{MessageKind, VersionedMessage},
+    message::MessageKind,
     traits::{
         network::{BroadcastDelay, ConnectedNetwork, Topic},
         node_implementation::NodeType,
@@ -100,7 +100,8 @@ impl CdnReceiveMessagesTask {
 
             for message in messages {
                 // We want to try and decode this message.
-                let message_deserialize_result = Message::<SeqTypes>::deserialize(&message, &None);
+                let message_deserialize_result: Result<Message<SeqTypes>, _> =
+                    bincode::deserialize(&message);
 
                 let message = match message_deserialize_result {
                     Ok(message) => message,
@@ -247,7 +248,7 @@ impl BroadcastRollCallTask {
             kind: MessageKind::External(rollcall_request_serialized),
         };
 
-        let hotshot_message_serialized = match hotshot_message.serialize(&None) {
+        let hotshot_message_serialized = match bincode::serialize(&hotshot_message) {
             Ok(hotshot_message_serialized) => hotshot_message_serialized,
             Err(err) => {
                 tracing::error!("error serializing hotshot message: {:?}", err);
@@ -300,7 +301,7 @@ mod test {
         traits::NetworkError,
         types::{BLSPubKey, Message},
     };
-    use hotshot_types::message::{DataMessage, MessageKind, VersionedMessage};
+    use hotshot_types::message::{DataMessage, MessageKind};
     use hotshot_types::traits::network::{BroadcastDelay, ResponseMessage};
     use std::time::Duration;
     use url::Url;
@@ -354,7 +355,7 @@ mod test {
                 kind: MessageKind::External(external_message_encoded),
             };
 
-            hotshot_types::message::VersionedMessage::serialize(&test_message, &None).unwrap()
+            bincode::serialize(&test_message).unwrap()
         };
 
         let (url_sender, url_receiver) = mpsc::channel(1);
@@ -432,13 +433,10 @@ mod test {
     #[async_std::test]
     async fn test_cdn_receive_messages_task_fails_unexpected_hotshot_message_variant() {
         let (url_sender, url_receiver) = mpsc::channel(1);
-        let bytes = VersionedMessage::serialize(
-            &Message::<SeqTypes> {
-                sender: BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
-                kind: MessageKind::Data(DataMessage::DataResponse(ResponseMessage::NotFound)),
-            },
-            &None,
-        )
+        let bytes = bincode::serialize(&Message::<SeqTypes> {
+            sender: BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
+            kind: MessageKind::Data(DataMessage::DataResponse(ResponseMessage::NotFound)),
+        })
         .unwrap();
 
         let task =
@@ -463,13 +461,10 @@ mod test {
     #[async_std::test]
     async fn test_cdn_receive_messages_task_fails_decoding_external_message() {
         let (url_sender, url_receiver) = mpsc::channel(1);
-        let bytes = VersionedMessage::serialize(
-            &Message::<SeqTypes> {
-                sender: BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
-                kind: MessageKind::External(vec![0]),
-            },
-            &None,
-        )
+        let bytes = bincode::serialize(&Message::<SeqTypes> {
+            sender: BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
+            kind: MessageKind::External(vec![0]),
+        })
         .unwrap();
 
         let task =
@@ -511,7 +506,7 @@ mod test {
                 kind: MessageKind::External(external_message_encoded),
             };
 
-            hotshot_types::message::VersionedMessage::serialize(&test_message, &None).unwrap()
+            bincode::serialize(&test_message).unwrap()
         };
         drop(url_receiver);
 
@@ -563,9 +558,7 @@ mod test {
 
         let mut message_receiver = message_receiver;
         let next_message = message_receiver.next().await.unwrap();
-        let next_message =
-            <Message<SeqTypes> as VersionedMessage<SeqTypes>>::deserialize(&next_message, &None)
-                .unwrap();
+        let next_message: Message<SeqTypes> = bincode::deserialize(&next_message).unwrap();
 
         let external_message = match next_message.kind {
             MessageKind::External(external_message) => external_message,
