@@ -222,10 +222,6 @@ impl BuilderConfig {
             let hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(async move {
-                let res =
-                    run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
-                        .await;
-                tracing::error!(?res, "Fallback builder service exited");
                 // TODO see previous
                 let res = run_non_permissioned_standalone_builder_service::<
                     SeqTypes,
