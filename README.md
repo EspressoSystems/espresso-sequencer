@@ -41,7 +41,7 @@ The sequence diagram below serves as a complement to the architecture diagram. T
 6. A proof for a HotShot state update is created and verified in the Light Client smart contract.
 7. A ZK rollup proves a correct state transaction by sending a proof to its rollup smart contract.
 8. A dispute is settled in an optimistic rollup. If necessary, the HotShot commitment is read from the Light Client
-   contract.
+   smart contract.
 
 ![Sequence diagram](./doc/sequence-diagram.svg)
 
@@ -179,7 +179,7 @@ Running the script will save a file with details about the deployment in `contra
 
 #### Benchmarking and profiling
 
-The gas consumption for updating the state of the light client contract can be seen by running:
+The gas consumption for updating the state of the Light Client smart contract can be seen by running:
 
 ```
 > just lc-contract-benchmark
@@ -189,7 +189,7 @@ forge test --mt testCorrectUpdateBench | grep testCorrectUpdateBench
 [PASS] testCorrectUpdateBench() (gas: 597104)
 ```
 
-In order to profile the gas consumption of the light client contract do the following:
+In order to profile the gas consumption of the Light Client smart contract do the following:
 
 1. Set the environment variables `SEPOLIA_RPC_URL`, `MNEMONIC` and `ETHERSCAN_API_KEY`.
 2. `just lc-contract-profiling-sepolia`
