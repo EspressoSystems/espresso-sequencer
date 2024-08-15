@@ -48,8 +48,7 @@ use vbs::version::StaticVersionType;
 use crate::{
     tasks::task_state::CreateTaskState, types::SystemContextHandle, ConsensusApi,
     ConsensusMetricsValue, ConsensusTaskRegistry, HotShotConfig, HotShotInitializer,
-    MarketplaceConfig, Memberships, NetworkTaskRegistry, SignatureKey, SystemContext, UpgradeLock,
-    Versions,
+    MarketplaceConfig, Memberships, NetworkTaskRegistry, SignatureKey, SystemContext, Versions,
 };
 
 /// event for global event stream
@@ -193,7 +192,7 @@ pub fn add_network_event_task<
         membership,
         filter,
         storage: Arc::clone(&handle.storage()),
-        upgrade_lock: UpgradeLock::new(),
+        upgrade_lock: handle.hotshot.upgrade_lock.clone(),
     };
     let task = Task::new(
         network_state,
