@@ -631,15 +631,15 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     function assertInitialStateHistoryConditions() internal view {
         // assert that stateHistoryFirstIndex starts at 0.
         assertEq(lc.stateHistoryFirstIndex(), 0);
-        // asset maxStateHistoryDuration is greater or equal to at least one day in seconds.
-        assertGe(lc.maxStateHistoryDuration(), 1 days);
+        // asset stateHistoryRetentionPeriod is greater or equal to at least one day in seconds.
+        assertGe(lc.stateHistoryRetentionPeriod(), 1 days);
     }
 
-    function setMaxStateHistoryDuration(uint32 duration) internal {
+    function setstateHistoryRetentionPeriod(uint32 duration) internal {
         // Set the new max block states allowed to half of the number of states available
         vm.prank(admin);
-        lc.setMaxStateHistoryDuration(duration);
-        assertEq(lc.maxStateHistoryDuration(), duration);
+        lc.setstateHistoryRetentionPeriod(duration);
+        assertEq(lc.stateHistoryRetentionPeriod(), duration);
     }
 
     /**
@@ -664,7 +664,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
         //assert initial conditions
         assertEq(lc.stateHistoryFirstIndex(), 0);
-        assertGe(lc.maxStateHistoryDuration(), 1 days);
+        assertGe(lc.stateHistoryRetentionPeriod(), 1 days);
 
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
@@ -686,22 +686,22 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertEq(lc.getStateHistoryCount(), blockUpdatesCount + 1);
     }
 
-    function testFuzz_setMaxStateHistoryDuration(uint32 maxHistorySeconds) public {
+    function testFuzz_setstateHistoryRetentionPeriod(uint32 maxHistorySeconds) public {
         vm.prank(admin);
         vm.assume(maxHistorySeconds >= 1 days);
-        lc.setMaxStateHistoryDuration(maxHistorySeconds);
-        assertEq(maxHistorySeconds, lc.maxStateHistoryDuration());
+        lc.setstateHistoryRetentionPeriod(maxHistorySeconds);
+        assertEq(maxHistorySeconds, lc.stateHistoryRetentionPeriod());
     }
 
     function test_revertNonAdminSetMaxStateHistoryAllowed() public {
         vm.expectRevert();
-        lc.setMaxStateHistoryDuration(1 days);
+        lc.setstateHistoryRetentionPeriod(1 days);
     }
 
     function test_revertSetMaxStateHistoryAllowedWhenInvalidValueSent() public {
         vm.prank(admin);
         vm.expectRevert(LC.InvalidMaxStateHistory.selector);
-        lc.setMaxStateHistoryDuration(1 days - 1);
+        lc.setstateHistoryRetentionPeriod(1 days - 1);
     }
 
     function test_stateHistoryHandlingWithOneDayMaxHistory() public {
@@ -722,7 +722,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
 
         // set the new max block states allowed to half of the number of states available
-        setMaxStateHistoryDuration(initialEpoch);
+        setstateHistoryRetentionPeriod(initialEpoch);
 
         // Add one numDays worth of a new state
         uint256 i;
@@ -745,7 +745,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         (, uint256 oldestBlockTimestamp,) = lc.stateHistoryCommitments(lc.stateHistoryFirstIndex());
         // assert that the latest Commitment timestamp - oldest Commitment timestamp is == the max
         // history allowed
-        assertEq(latestBlockTimestamp - oldestBlockTimestamp, lc.maxStateHistoryDuration());
+        assertEq(latestBlockTimestamp - oldestBlockTimestamp, lc.stateHistoryRetentionPeriod());
 
         // Add a new state so that the state history duration is only surpassed by one element
         vm.prank(permissionedProver);
@@ -755,7 +755,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         lc.newFinalizedState(states[i], proofs[i]);
         i++;
 
-        // the duration between the updates are more than maxStateHistoryDuration,  so the first
+        // the duration between the updates are more than stateHistoryRetentionPeriod,  so the first
         // index should be one
         assertEq(lc.stateHistoryFirstIndex(), 1);
 
@@ -798,8 +798,8 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         assertInitialStateHistoryConditions();
 
         // set the new max block states allowed to half of the number of states available
-        setMaxStateHistoryDuration(1 days * numDays);
-        assertEq(lc.maxStateHistoryDuration(), 1 days * numDays);
+        setstateHistoryRetentionPeriod(1 days * numDays);
+        assertEq(lc.stateHistoryRetentionPeriod(), 1 days * numDays);
 
         // Update the states to max state history allowed
         uint256 i;
@@ -822,7 +822,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         // assert that the latest Commitment timestamp - oldest Commitment timestamp is == the max
         // history allowed
 
-        assertEq(latestBlockTimestamp - oldestBlockTimestamp, lc.maxStateHistoryDuration());
+        assertEq(latestBlockTimestamp - oldestBlockTimestamp, lc.stateHistoryRetentionPeriod());
 
         // Add a new state so that the state history duration is only surpassed by one element
         vm.prank(permissionedProver);
@@ -832,7 +832,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         lc.newFinalizedState(states[i], proofs[i]);
         i++;
 
-        // the duration between the updates are more than maxStateHistoryDuration,  so the first
+        // the duration between the updates are more than stateHistoryRetentionPeriod,  so the first
         // index should be one
         assertEq(lc.stateHistoryFirstIndex(), 1);
 
@@ -1059,7 +1059,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
     function test_revertWhenSetZeroMaxStateUpdatesAllowed() public {
         vm.prank(admin);
         vm.expectRevert(LC.InvalidMaxStateHistory.selector);
-        lc.setMaxStateHistoryDuration(0);
+        lc.setstateHistoryRetentionPeriod(0);
     }
 
     function test_hotShotIsDownWhenBlockIsHigherThanLastRecordedAndTheDelayThresholdHasPassed()

@@ -383,22 +383,6 @@ pub mod light_client_mock {
                     },],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("maxStateHistoryDuration"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("maxStateHistoryDuration",),
-                        inputs: ::std::vec![],
-                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::string::String::new(),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("uint32"),
-                            ),
-                        },],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
-                    },],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("newFinalizedState"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("newFinalizedState"),
@@ -643,22 +627,6 @@ pub mod light_client_mock {
                     },],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("setMaxStateHistoryDuration"),
-                    ::std::vec![::ethers::core::abi::ethabi::Function {
-                        name: ::std::borrow::ToOwned::to_owned("setMaxStateHistoryDuration",),
-                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
-                            name: ::std::borrow::ToOwned::to_owned("historySeconds"),
-                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
-                            internal_type: ::core::option::Option::Some(
-                                ::std::borrow::ToOwned::to_owned("uint32"),
-                            ),
-                        },],
-                        outputs: ::std::vec![],
-                        constant: ::core::option::Option::None,
-                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
-                    },],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("setPermissionedProver"),
                     ::std::vec![::ethers::core::abi::ethabi::Function {
                         name: ::std::borrow::ToOwned::to_owned("setPermissionedProver",),
@@ -696,6 +664,22 @@ pub mod light_client_mock {
                                 ::std::borrow::ToOwned::to_owned(
                                     "struct LightClient.StateHistoryCommitment[]",
                                 ),
+                            ),
+                        },],
+                        outputs: ::std::vec![],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("setstateHistoryRetentionPeriod"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("setstateHistoryRetentionPeriod",),
+                        inputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::borrow::ToOwned::to_owned("historySeconds"),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint32"),
                             ),
                         },],
                         outputs: ::std::vec![],
@@ -756,6 +740,22 @@ pub mod light_client_mock {
                             kind: ::ethers::core::abi::ethabi::ParamType::Uint(64usize),
                             internal_type: ::core::option::Option::Some(
                                 ::std::borrow::ToOwned::to_owned("uint64"),
+                            ),
+                        },],
+                        constant: ::core::option::Option::None,
+                        state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                    },],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("stateHistoryRetentionPeriod"),
+                    ::std::vec![::ethers::core::abi::ethabi::Function {
+                        name: ::std::borrow::ToOwned::to_owned("stateHistoryRetentionPeriod",),
+                        inputs: ::std::vec![],
+                        outputs: ::std::vec![::ethers::core::abi::ethabi::Param {
+                            name: ::std::string::String::new(),
+                            kind: ::ethers::core::abi::ethabi::ParamType::Uint(32usize),
+                            internal_type: ::core::option::Option::Some(
+                                ::std::borrow::ToOwned::to_owned("uint32"),
                             ),
                         },],
                         constant: ::core::option::Option::None,
@@ -1370,14 +1370,6 @@ pub mod light_client_mock {
                 .method_hash([224, 48, 51, 1], (block_number, threshold))
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `maxStateHistoryDuration` (0x0aa839f3) function
-        pub fn max_state_history_duration(
-            &self,
-        ) -> ::ethers::contract::builders::ContractCall<M, u32> {
-            self.0
-                .method_hash([10, 168, 57, 243], ())
-                .expect("method not found (this should never happen)")
-        }
         ///Calls the contract's `newFinalizedState` (0x409939b7) function
         pub fn new_finalized_state(
             &self,
@@ -1457,15 +1449,6 @@ pub mod light_client_mock {
                 .method_hash([200, 229, 228, 152], ())
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `setMaxStateHistoryDuration` (0xd6c1cd80) function
-        pub fn set_max_state_history_duration(
-            &self,
-            history_seconds: u32,
-        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
-            self.0
-                .method_hash([214, 193, 205, 128], history_seconds)
-                .expect("method not found (this should never happen)")
-        }
         ///Calls the contract's `setPermissionedProver` (0x013fa5fc) function
         pub fn set_permissioned_prover(
             &self,
@@ -1484,6 +1467,15 @@ pub mod light_client_mock {
                 .method_hash([47, 95, 70, 0], state_history_commitments)
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `setstateHistoryRetentionPeriod` (0x96c1ca61) function
+        pub fn setstate_history_retention_period(
+            &self,
+            history_seconds: u32,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
+            self.0
+                .method_hash([150, 193, 202, 97], history_seconds)
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `stateHistoryCommitments` (0x02b592f3) function
         pub fn state_history_commitments(
             &self,
@@ -1499,6 +1491,14 @@ pub mod light_client_mock {
         ) -> ::ethers::contract::builders::ContractCall<M, u64> {
             self.0
                 .method_hash([47, 121, 136, 157], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `stateHistoryRetentionPeriod` (0xc23b9e9e) function
+        pub fn state_history_retention_period(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, u32> {
+            self.0
+                .method_hash([194, 59, 158, 158], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `states` (0x7f17baad) function
@@ -2903,21 +2903,6 @@ pub mod light_client_mock {
         pub block_number: ::ethers::core::types::U256,
         pub threshold: ::ethers::core::types::U256,
     }
-    ///Container type for all input parameters for the `maxStateHistoryDuration` function with signature `maxStateHistoryDuration()` and selector `0x0aa839f3`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(name = "maxStateHistoryDuration", abi = "maxStateHistoryDuration()")]
-    pub struct MaxStateHistoryDurationCall;
     ///Container type for all input parameters for the `newFinalizedState` function with signature `newFinalizedState((uint64,uint64,uint256,uint256,uint256,uint256,uint256,uint256),((uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),(uint256,uint256),uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256))` and selector `0x409939b7`
     #[derive(
         Clone,
@@ -3081,26 +3066,6 @@ pub mod light_client_mock {
     )]
     #[ethcall(name = "setHotShotUp", abi = "setHotShotUp()")]
     pub struct SetHotShotUpCall;
-    ///Container type for all input parameters for the `setMaxStateHistoryDuration` function with signature `setMaxStateHistoryDuration(uint32)` and selector `0xd6c1cd80`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    #[ethcall(
-        name = "setMaxStateHistoryDuration",
-        abi = "setMaxStateHistoryDuration(uint32)"
-    )]
-    pub struct SetMaxStateHistoryDurationCall {
-        pub history_seconds: u32,
-    }
     ///Container type for all input parameters for the `setPermissionedProver` function with signature `setPermissionedProver(address)` and selector `0x013fa5fc`
     #[derive(
         Clone,
@@ -3138,6 +3103,26 @@ pub mod light_client_mock {
     pub struct SetStateHistoryCall {
         pub state_history_commitments: ::std::vec::Vec<StateHistoryCommitment>,
     }
+    ///Container type for all input parameters for the `setstateHistoryRetentionPeriod` function with signature `setstateHistoryRetentionPeriod(uint32)` and selector `0x96c1ca61`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(
+        name = "setstateHistoryRetentionPeriod",
+        abi = "setstateHistoryRetentionPeriod(uint32)"
+    )]
+    pub struct SetstateHistoryRetentionPeriodCall {
+        pub history_seconds: u32,
+    }
     ///Container type for all input parameters for the `stateHistoryCommitments` function with signature `stateHistoryCommitments(uint256)` and selector `0x02b592f3`
     #[derive(
         Clone,
@@ -3171,6 +3156,24 @@ pub mod light_client_mock {
     )]
     #[ethcall(name = "stateHistoryFirstIndex", abi = "stateHistoryFirstIndex()")]
     pub struct StateHistoryFirstIndexCall;
+    ///Container type for all input parameters for the `stateHistoryRetentionPeriod` function with signature `stateHistoryRetentionPeriod()` and selector `0xc23b9e9e`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    #[ethcall(
+        name = "stateHistoryRetentionPeriod",
+        abi = "stateHistoryRetentionPeriod()"
+    )]
+    pub struct StateHistoryRetentionPeriodCall;
     ///Container type for all input parameters for the `states` function with signature `states(uint32)` and selector `0x7f17baad`
     #[derive(
         Clone,
@@ -3273,7 +3276,6 @@ pub mod light_client_mock {
         GetVersion(GetVersionCall),
         Initialize(InitializeCall),
         LagOverEscapeHatchThreshold(LagOverEscapeHatchThresholdCall),
-        MaxStateHistoryDuration(MaxStateHistoryDurationCall),
         NewFinalizedState(NewFinalizedStateCall),
         Owner(OwnerCall),
         PermissionedProver(PermissionedProverCall),
@@ -3284,11 +3286,12 @@ pub mod light_client_mock {
         SetFinalizedState(SetFinalizedStateCall),
         SetHotShotDownSince(SetHotShotDownSinceCall),
         SetHotShotUp(SetHotShotUpCall),
-        SetMaxStateHistoryDuration(SetMaxStateHistoryDurationCall),
         SetPermissionedProver(SetPermissionedProverCall),
         SetStateHistory(SetStateHistoryCall),
+        SetstateHistoryRetentionPeriod(SetstateHistoryRetentionPeriodCall),
         StateHistoryCommitments(StateHistoryCommitmentsCall),
         StateHistoryFirstIndex(StateHistoryFirstIndexCall),
+        StateHistoryRetentionPeriod(StateHistoryRetentionPeriodCall),
         States(StatesCall),
         TransferOwnership(TransferOwnershipCall),
         UpgradeToAndCall(UpgradeToAndCallCall),
@@ -3366,11 +3369,6 @@ pub mod light_client_mock {
                 return Ok(Self::LagOverEscapeHatchThreshold(decoded));
             }
             if let Ok(decoded) =
-                <MaxStateHistoryDurationCall as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::MaxStateHistoryDuration(decoded));
-            }
-            if let Ok(decoded) =
                 <NewFinalizedStateCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::NewFinalizedState(decoded));
@@ -3417,11 +3415,6 @@ pub mod light_client_mock {
                 return Ok(Self::SetHotShotUp(decoded));
             }
             if let Ok(decoded) =
-                <SetMaxStateHistoryDurationCall as ::ethers::core::abi::AbiDecode>::decode(data)
-            {
-                return Ok(Self::SetMaxStateHistoryDuration(decoded));
-            }
-            if let Ok(decoded) =
                 <SetPermissionedProverCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::SetPermissionedProver(decoded));
@@ -3432,6 +3425,11 @@ pub mod light_client_mock {
                 return Ok(Self::SetStateHistory(decoded));
             }
             if let Ok(decoded) =
+                <SetstateHistoryRetentionPeriodCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::SetstateHistoryRetentionPeriod(decoded));
+            }
+            if let Ok(decoded) =
                 <StateHistoryCommitmentsCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::StateHistoryCommitments(decoded));
@@ -3440,6 +3438,11 @@ pub mod light_client_mock {
                 <StateHistoryFirstIndexCall as ::ethers::core::abi::AbiDecode>::decode(data)
             {
                 return Ok(Self::StateHistoryFirstIndex(decoded));
+            }
+            if let Ok(decoded) =
+                <StateHistoryRetentionPeriodCall as ::ethers::core::abi::AbiDecode>::decode(data)
+            {
+                return Ok(Self::StateHistoryRetentionPeriod(decoded));
             }
             if let Ok(decoded) = <StatesCall as ::ethers::core::abi::AbiDecode>::decode(data) {
                 return Ok(Self::States(decoded));
@@ -3498,9 +3501,6 @@ pub mod light_client_mock {
                 Self::LagOverEscapeHatchThreshold(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::MaxStateHistoryDuration(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
                 Self::NewFinalizedState(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Owner(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::PermissionedProver(element) => {
@@ -3517,17 +3517,20 @@ pub mod light_client_mock {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::SetHotShotUp(element) => ::ethers::core::abi::AbiEncode::encode(element),
-                Self::SetMaxStateHistoryDuration(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
                 Self::SetPermissionedProver(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::SetStateHistory(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::SetstateHistoryRetentionPeriod(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::StateHistoryCommitments(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::StateHistoryFirstIndex(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::StateHistoryRetentionPeriod(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::States(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -3559,7 +3562,6 @@ pub mod light_client_mock {
                 Self::GetVersion(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Initialize(element) => ::core::fmt::Display::fmt(element, f),
                 Self::LagOverEscapeHatchThreshold(element) => ::core::fmt::Display::fmt(element, f),
-                Self::MaxStateHistoryDuration(element) => ::core::fmt::Display::fmt(element, f),
                 Self::NewFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Owner(element) => ::core::fmt::Display::fmt(element, f),
                 Self::PermissionedProver(element) => ::core::fmt::Display::fmt(element, f),
@@ -3570,11 +3572,14 @@ pub mod light_client_mock {
                 Self::SetFinalizedState(element) => ::core::fmt::Display::fmt(element, f),
                 Self::SetHotShotDownSince(element) => ::core::fmt::Display::fmt(element, f),
                 Self::SetHotShotUp(element) => ::core::fmt::Display::fmt(element, f),
-                Self::SetMaxStateHistoryDuration(element) => ::core::fmt::Display::fmt(element, f),
                 Self::SetPermissionedProver(element) => ::core::fmt::Display::fmt(element, f),
                 Self::SetStateHistory(element) => ::core::fmt::Display::fmt(element, f),
+                Self::SetstateHistoryRetentionPeriod(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
                 Self::StateHistoryCommitments(element) => ::core::fmt::Display::fmt(element, f),
                 Self::StateHistoryFirstIndex(element) => ::core::fmt::Display::fmt(element, f),
+                Self::StateHistoryRetentionPeriod(element) => ::core::fmt::Display::fmt(element, f),
                 Self::States(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TransferOwnership(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpgradeToAndCall(element) => ::core::fmt::Display::fmt(element, f),
@@ -3653,11 +3658,6 @@ pub mod light_client_mock {
             Self::LagOverEscapeHatchThreshold(value)
         }
     }
-    impl ::core::convert::From<MaxStateHistoryDurationCall> for LightClientMockCalls {
-        fn from(value: MaxStateHistoryDurationCall) -> Self {
-            Self::MaxStateHistoryDuration(value)
-        }
-    }
     impl ::core::convert::From<NewFinalizedStateCall> for LightClientMockCalls {
         fn from(value: NewFinalizedStateCall) -> Self {
             Self::NewFinalizedState(value)
@@ -3708,11 +3708,6 @@ pub mod light_client_mock {
             Self::SetHotShotUp(value)
         }
     }
-    impl ::core::convert::From<SetMaxStateHistoryDurationCall> for LightClientMockCalls {
-        fn from(value: SetMaxStateHistoryDurationCall) -> Self {
-            Self::SetMaxStateHistoryDuration(value)
-        }
-    }
     impl ::core::convert::From<SetPermissionedProverCall> for LightClientMockCalls {
         fn from(value: SetPermissionedProverCall) -> Self {
             Self::SetPermissionedProver(value)
@@ -3723,6 +3718,11 @@ pub mod light_client_mock {
             Self::SetStateHistory(value)
         }
     }
+    impl ::core::convert::From<SetstateHistoryRetentionPeriodCall> for LightClientMockCalls {
+        fn from(value: SetstateHistoryRetentionPeriodCall) -> Self {
+            Self::SetstateHistoryRetentionPeriod(value)
+        }
+    }
     impl ::core::convert::From<StateHistoryCommitmentsCall> for LightClientMockCalls {
         fn from(value: StateHistoryCommitmentsCall) -> Self {
             Self::StateHistoryCommitments(value)
@@ -3731,6 +3731,11 @@ pub mod light_client_mock {
     impl ::core::convert::From<StateHistoryFirstIndexCall> for LightClientMockCalls {
         fn from(value: StateHistoryFirstIndexCall) -> Self {
             Self::StateHistoryFirstIndex(value)
+        }
+    }
+    impl ::core::convert::From<StateHistoryRetentionPeriodCall> for LightClientMockCalls {
+        fn from(value: StateHistoryRetentionPeriodCall) -> Self {
+            Self::StateHistoryRetentionPeriod(value)
         }
     }
     impl ::core::convert::From<StatesCall> for LightClientMockCalls {
@@ -3930,20 +3935,6 @@ pub mod light_client_mock {
         Hash,
     )]
     pub struct LagOverEscapeHatchThresholdReturn(pub bool);
-    ///Container type for all return fields from the `maxStateHistoryDuration` function with signature `maxStateHistoryDuration()` and selector `0x0aa839f3`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthAbiType,
-        ::ethers::contract::EthAbiCodec,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash,
-    )]
-    pub struct MaxStateHistoryDurationReturn(pub u32);
     ///Container type for all return fields from the `owner` function with signature `owner()` and selector `0x8da5cb5b`
     #[derive(
         Clone,
@@ -4032,6 +4023,20 @@ pub mod light_client_mock {
         Hash,
     )]
     pub struct StateHistoryFirstIndexReturn(pub u64);
+    ///Container type for all return fields from the `stateHistoryRetentionPeriod` function with signature `stateHistoryRetentionPeriod()` and selector `0xc23b9e9e`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+    )]
+    pub struct StateHistoryRetentionPeriodReturn(pub u32);
     ///Container type for all return fields from the `states` function with signature `states(uint32)` and selector `0x7f17baad`
     #[derive(
         Clone,

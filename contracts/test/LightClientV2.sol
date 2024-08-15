@@ -67,11 +67,11 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     ///@notice Max number of seconds worth of state commitments to record based on this block
     /// timestamp
-    uint32 public maxStateHistoryDuration;
+    uint32 public stateHistoryRetentionPeriod;
 
     ///@notice index of first block in block state series
     ///@dev use this instead of index 0 since old states would be set to zero to keep storage costs
-    /// constant to maxStateHistoryDuration
+    /// constant to stateHistoryRetentionPeriod
     uint64 public stateHistoryFirstIndex;
 
     /// @notice an array to store the L1 block heights, HotShot Block Heights and their respective
@@ -192,7 +192,7 @@ contract LightClientV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         blocksPerEpoch = numBlockPerEpoch;
 
-        maxStateHistoryDuration = maxHistorySeconds;
+        stateHistoryRetentionPeriod = maxHistorySeconds;
 
         bytes32 initStakeTableComm = computeStakeTableComm(genesis);
         votingStakeTableCommitment = initStakeTableComm;

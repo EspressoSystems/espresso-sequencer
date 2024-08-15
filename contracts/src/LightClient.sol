@@ -86,11 +86,11 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice Max number of seconds worth of state commitments to record based on this block
     /// timestamp
-    uint32 public maxStateHistoryDuration;
+    uint32 public stateHistoryRetentionPeriod;
 
     /// @notice index of first block in block state series
     ///@dev use this instead of index 0 since old states would be set to zero to keep storage costs
-    /// constant to maxStateHistoryDuration
+    /// constant to stateHistoryRetentionPeriod
     uint64 public stateHistoryFirstIndex;
 
     /// @notice an array to store the L1 block heights, HotShot Block Heights and their respective
@@ -244,7 +244,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         blocksPerEpoch = numBlockPerEpoch;
 
-        maxStateHistoryDuration = maxHistorySeconds;
+        stateHistoryRetentionPeriod = maxHistorySeconds;
 
         bytes32 initStakeTableComm = computeStakeTableComm(genesis);
         votingStakeTableCommitment = initStakeTableComm;
@@ -264,7 +264,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// become the snapshots used for vote verifications later on.
     /// @dev in this version, only a permissioned prover doing the computations
     /// can call this function
-    /// @dev the state history for `maxStateHistoryDuration` L1 blocks are also recorded in the
+    /// @dev the state history for `stateHistoryRetentionPeriod` L1 blocks are also recorded in the
     /// `stateHistoryCommitments` array
     /// @notice While `newState.stakeTable*` refers to the (possibly) new stake table states,
     /// the entire `newState` needs to be signed by stakers in `finalizedState`
@@ -405,12 +405,13 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice updates the stateHistoryCommitments array each time a new
     /// finalized state is added to the LightClient contract.
     /// Ensures that the array contains only the most recent data and does not
-    /// exceed the maxStateHistoryDuration duration in seconds.
+    /// exceed the stateHistoryRetentionPeriod duration in seconds.
     /// @dev the block timestamp is used to determine if the stateHistoryCommitments array
-    /// should be pruned, based on the maxStateHistoryDuration duration in seconds.
+    /// should be pruned, based on the stateHistoryRetentionPeriod duration in seconds.
     /// @dev a FIFO (First-In-First-Out) approach is used to delete elements from the start of the
     /// array,
-    /// ensuring that only the most recent states are retained within the maxStateHistoryDuration
+    /// ensuring that only the most recent states are retained within the
+    /// stateHistoryRetentionPeriod
     /// duration.
     /// @dev the `delete` method does not reduce the array length but resets the value at the
     /// specified index to zero.
@@ -426,7 +427,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             stateHistoryCommitments.length != 0
                 && stateHistoryCommitments[stateHistoryCommitments.length - 1].l1BlockTimestamp
                     - stateHistoryCommitments[stateHistoryFirstIndex].l1BlockTimestamp
-                    >= maxStateHistoryDuration
+                    >= stateHistoryRetentionPeriod
         ) {
             // The stateHistoryCommitments array has reached the maximum allowed duration
             // deleting the oldest (first) non-empty element to maintain the FIFO structure.
@@ -534,9 +535,9 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice set Max Block States allowed
     /// @param historySeconds The maximum duration worth of state history updates to store based on
     /// the block timestamp
-    function setMaxStateHistoryDuration(uint32 historySeconds) public onlyOwner {
+    function setstateHistoryRetentionPeriod(uint32 historySeconds) public onlyOwner {
         if (historySeconds < 1 days) revert InvalidMaxStateHistory();
 
-        maxStateHistoryDuration = historySeconds;
+        stateHistoryRetentionPeriod = historySeconds;
     }
 }
