@@ -6318,7 +6318,7 @@ dependencies = [
 [[package]]
 name = "marketplace-builder-core"
 version = "0.0.2"
-source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=bump/rc-0.5.71#29113eb33deef74f2661958503eab11877d2ed29"
+source = "git+https://github.com/EspressoSystems/marketplace-builder-core?branch=bump/rc-0.5.71#7a1d24c9beec7892e44ebd9a3ac004e40c00e189"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -7663,7 +7663,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn 2.0.74",
