@@ -183,8 +183,6 @@ pub enum HotShotEvent<TYPES: NodeType> {
     UpgradeVoteSend(UpgradeVote<TYPES>),
     /// Upgrade certificate has been sent to the network
     UpgradeCertificateFormed(UpgradeCertificate<TYPES>),
-    /// A HotShot upgrade was decided
-    UpgradeDecided(UpgradeCertificate<TYPES>),
 
     /* Consensus State Update Events */
     /// A undecided view has been created and added to the validated state storage.
@@ -421,9 +419,6 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                 "UpgradeCertificateFormed(view_number={:?})",
                 cert.view_number()
             ),
-            HotShotEvent::UpgradeDecided(cert) => {
-                write!(f, "UpgradeDecided(view_number{:?})", cert.view_number())
-            }
             HotShotEvent::QuorumProposalRequest(view_number) => {
                 write!(f, "QuorumProposalRequest(view_number={view_number:?})")
             }

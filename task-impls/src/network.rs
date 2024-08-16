@@ -42,7 +42,6 @@ pub fn quorum_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool 
             | HotShotEvent::QuorumVoteSend(_)
             | HotShotEvent::DacSend(_, _)
             | HotShotEvent::TimeoutVoteSend(_)
-            | HotShotEvent::UpgradeDecided(_)
             | HotShotEvent::ViewChange(_)
     )
 }
@@ -53,7 +52,6 @@ pub fn upgrade_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool
         event.as_ref(),
         HotShotEvent::UpgradeProposalSend(_, _)
             | HotShotEvent::UpgradeVoteSend(_)
-            | HotShotEvent::UpgradeDecided(_)
             | HotShotEvent::ViewChange(_)
     )
 }
@@ -64,7 +62,6 @@ pub fn da_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
         event.as_ref(),
         HotShotEvent::DaProposalSend(_, _)
             | HotShotEvent::DaVoteSend(_)
-            | HotShotEvent::UpgradeDecided(_)
             | HotShotEvent::ViewChange(_)
     )
 }
@@ -73,9 +70,7 @@ pub fn da_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
 pub fn vid_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool {
     !matches!(
         event.as_ref(),
-        HotShotEvent::VidDisperseSend(_, _)
-            | HotShotEvent::UpgradeDecided(_)
-            | HotShotEvent::ViewChange(_)
+        HotShotEvent::VidDisperseSend(_, _) | HotShotEvent::ViewChange(_)
     )
 }
 
@@ -89,7 +84,6 @@ pub fn view_sync_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bo
             | HotShotEvent::ViewSyncPreCommitVoteSend(_)
             | HotShotEvent::ViewSyncCommitVoteSend(_)
             | HotShotEvent::ViewSyncFinalizeVoteSend(_)
-            | HotShotEvent::UpgradeDecided(_)
             | HotShotEvent::ViewChange(_)
     )
 }

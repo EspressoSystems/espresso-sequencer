@@ -95,6 +95,8 @@ pub struct TestDescription<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Ver
     pub behaviour: Rc<dyn Fn(u64) -> Behaviour<TYPES, I, V>>,
     /// Delay config if any to add delays to asynchronous calls
     pub async_delay_config: DelayConfig,
+    /// view in which to propose an upgrade
+    pub upgrade_view: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -377,6 +379,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> Default
             },
             behaviour: Rc::new(|_| Behaviour::Standard),
             async_delay_config: DelayConfig::default(),
+            upgrade_view: None,
         }
     }
 }
@@ -509,7 +512,7 @@ where
                 config,
                 marketplace_config: Box::new(|_| MarketplaceConfig::<TYPES, I> {
                     auction_results_provider: TestAuctionResultsProvider::<TYPES>::default().into(),
-                    fallback_builder_url: Url::parse("http://localhost").unwrap(),
+                    fallback_builder_url: Url::parse("http://localhost:9999").unwrap(),
                 }),
             },
             metadata: self,

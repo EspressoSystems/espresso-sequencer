@@ -29,6 +29,7 @@ use time::OffsetDateTime;
 use vbs::version::Version;
 
 use crate::{
+    auction_results_provider_types::TestAuctionResult,
     node_types::TestTypes,
     state_types::{TestInstanceState, TestValidatedState},
     testable_delay::{DelayConfig, SupportedTraitTypesForAsyncDelay, TestableDelay},
@@ -274,6 +275,7 @@ impl<
             BlockHeader = Self,
             BlockPayload = TestBlockPayload,
             InstanceState = TestInstanceState,
+            AuctionResult = TestAuctionResult,
         >,
     > BlockHeader<TYPES> for TestBlockHeader
 {
@@ -349,7 +351,7 @@ impl<
     }
 
     fn get_auction_results(&self) -> Option<TYPES::AuctionResult> {
-        unimplemented!()
+        Some(TYPES::AuctionResult { urls: vec![] })
     }
 }
 

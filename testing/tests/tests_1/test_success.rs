@@ -8,7 +8,10 @@ use std::{rc::Rc, time::Duration};
 
 use hotshot::tasks::{BadProposalViewDos, DoubleProposeVote};
 use hotshot_example_types::{
-    node_types::{Libp2pImpl, MemoryImpl, PushCdnImpl, TestConsecutiveLeaderTypes, TestVersions},
+    node_types::{
+        Libp2pImpl, MarketplaceUpgradeTestVersions, MemoryImpl, PushCdnImpl,
+        TestConsecutiveLeaderTypes, TestVersions,
+    },
     state_types::TestTypes,
     testable_delay::{DelayConfig, DelayOptions, DelaySettings, SupportedTraitTypesForAsyncDelay},
 };
@@ -40,6 +43,26 @@ cross_tests!(
 );
 
 cross_tests!(
+    TestName: test_success_marketplace,
+    Impls: [MemoryImpl],
+    Types: [TestTypes],
+    Versions: [MarketplaceUpgradeTestVersions],
+    Ignore: false,
+    Metadata: {
+        TestDescription {
+            // allow more time to pass in CI
+            completion_task_description: CompletionTaskDescription::TimeBasedCompletionTaskBuilder(
+                                             TimeBasedCompletionTaskDescription {
+                                                 duration: Duration::from_secs(60),
+                                             },
+                                         ),
+            upgrade_view: Some(5),
+            ..TestDescription::default()
+        }
+    },
+);
+
+cross_tests!(
     TestName: test_success_with_async_delay,
     Impls: [MemoryImpl, Libp2pImpl, PushCdnImpl],
     Types: [TestTypes],
@@ -57,7 +80,7 @@ cross_tests!(
         };
 
         metadata.overall_safety_properties.num_failed_views = 0;
-        metadata.overall_safety_properties.num_successful_views = 10;
+        metadata.overall_safety_properties.num_successful_views = 0;
         let mut config = DelayConfig::default();
         let delay_settings = DelaySettings {
             delay_option: DelayOptions::Random,

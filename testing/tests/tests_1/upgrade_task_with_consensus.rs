@@ -177,7 +177,6 @@ async fn test_upgrade_task_vote() {
                 exact(ViewChange(ViewNumber::new(6))),
                 validated_state_updated(),
                 quorum_proposal_validated(),
-                upgrade_decided(),
                 leaf_decided(),
             ],
             task_state_asserts: vec![decided_upgrade_certificate()],
@@ -604,7 +603,6 @@ async fn test_upgrade_task_blank_blocks() {
                     exact(ViewChange(ViewNumber::new(5))),
                     validated_state_updated(),
                     quorum_proposal_validated(),
-                    upgrade_decided(),
                     leaf_decided(),
                     // This is between versions, but we are receiving a null block and hence should vote affirmatively on it.
                     quorum_vote_send(),

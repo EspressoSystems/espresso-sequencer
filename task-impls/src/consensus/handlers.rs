@@ -550,9 +550,6 @@ pub async fn handle_quorum_proposal_validated<
             .await;
         *decided_certificate_lock = Some(cert.clone());
         drop(decided_certificate_lock);
-        let _ = event_stream
-            .broadcast(Arc::new(HotShotEvent::UpgradeDecided(cert.clone())))
-            .await;
     }
 
     let mut consensus = task_state.consensus.write().await;

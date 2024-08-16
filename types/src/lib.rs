@@ -227,3 +227,17 @@ pub struct HotShotConfig<KEY: SignatureKey> {
     /// Unix time in seconds at which we stop voting on an upgrade. To prevent voting on an upgrade, set stop_voting_time <= start_voting_time.
     pub stop_voting_time: u64,
 }
+
+impl<KEY: SignatureKey> HotShotConfig<KEY> {
+    /// Update a hotshot config to have a view-based upgrade.
+    pub fn set_view_upgrade(&mut self, view: u64) {
+        self.start_proposing_view = view;
+        self.stop_proposing_view = view + 1;
+        self.start_voting_view = view.saturating_sub(1);
+        self.stop_voting_view = view + 10;
+        self.start_proposing_time = 0;
+        self.stop_proposing_time = u64::MAX;
+        self.start_voting_time = 0;
+        self.stop_voting_time = u64::MAX;
+    }
+}

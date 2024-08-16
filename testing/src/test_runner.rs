@@ -208,6 +208,7 @@ where
         let consistency_task_state = ConsistencyTask {
             consensus_leaves: BTreeMap::new(),
             safety_properties: self.launcher.metadata.overall_safety_properties,
+            ensure_upgrade: self.launcher.metadata.upgrade_view.is_some(),
         };
 
         let consistency_task = TestTask::<ConsistencyTask<TYPES>>::new(
@@ -403,6 +404,9 @@ where
 
         for i in 0..total {
             let mut config = config.clone();
+            if let Some(upgrade_view) = self.launcher.metadata.upgrade_view {
+                config.set_view_upgrade(upgrade_view);
+            }
             let node_id = self.next_node_id;
             self.next_node_id += 1;
             tracing::debug!("launch node {}", i);
@@ -451,6 +455,8 @@ where
                 marketplace_config.auction_results_provider = new_auction_results_provider.into();
             }
 
+            marketplace_config.fallback_builder_url = builder_urls.first().unwrap().clone();
+
             let network_clone = network.clone();
             let networks_ready_future = async move {
                 network_clone.wait_for_ready().await;
@@ -487,6 +493,7 @@ where
                     // We assign node's public key and stake value rather than read from config file since it's a test
                     let validator_config =
                         ValidatorConfig::generated_from_seed_indexed([0u8; 32], node_id, 1, is_da);
+
                     let hotshot = Self::add_node_with_config(
                         node_id,
                         network.clone(),

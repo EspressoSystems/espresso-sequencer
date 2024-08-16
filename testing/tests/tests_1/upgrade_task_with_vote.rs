@@ -181,7 +181,6 @@ async fn test_upgrade_task_with_vote() {
         ),
         Expectations::from_outputs_and_task_states(
             all_predicates![
-                upgrade_decided(),
                 exact(LockedViewUpdated(ViewNumber::new(4))),
                 exact(LastDecidedViewUpdated(ViewNumber::new(3))),
                 leaf_decided(),
