@@ -7,7 +7,8 @@ use async_std::{
 };
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::SequencerPersistence, NodeState, PubKey, Transaction, ValidatedState,
+    v0::traits::SequencerPersistence, NodeState, PubKey, SequencerVersions, Transaction,
+    ValidatedState,
 };
 use futures::{
     future::{join_all, Future},
@@ -16,10 +17,10 @@ use futures::{
 use hotshot::{
     traits::election::static_committee::GeneralStaticCommittee,
     types::{Event, EventType, SystemContextHandle},
-    Memberships, SystemContext,
+    MarketplaceConfig, Memberships, SystemContext,
 };
 use hotshot_events_service::events_source::{EventConsumer, EventsStreamer};
-use hotshot_example_types::auction_results_provider_types::TestAuctionResultsProvider;
+
 use hotshot_orchestrator::{client::OrchestratorClient, config::NetworkConfig};
 use hotshot_query_service::Leaf;
 use hotshot_types::{
@@ -40,7 +41,7 @@ use crate::{
     static_stake_table_commitment, Node, SeqTypes,
 };
 /// The consensus handle
-pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>>;
+pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>, SequencerVersions>;
 
 /// The sequencer context contains a consensus handle and other sequencer specific information.
 #[derive(Derivative)]
@@ -89,6 +90,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         stake_table_capacity: u64,
         public_api_url: Option<Url>,
         _: Ver,
+        marketplace_config: MarketplaceConfig<SeqTypes, Node<N, P>>,
     ) -> anyhow::Result<Self> {
         let config = &network_config.config;
         let pub_key = config.my_own_validator_config.public_key;
@@ -150,7 +152,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             initializer,
             ConsensusMetricsValue::new(metrics),
             persistence.clone(),
-            TestAuctionResultsProvider::default(),
+            marketplace_config,
         )
         .await?
         .0;
@@ -165,6 +167,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
 
         // Create the external event handler
         let external_event_handler = ExternalEventHandler::new(network, roll_call_info, pub_key)
+            .await
             .with_context(|| "Failed to create external event handler")?;
 
         Ok(Self::new(
@@ -349,7 +352,10 @@ async fn handle_events<Ver: StaticVersionType>(
 
         // Handle external messages
         if let EventType::ExternalMessageReceived(external_message_bytes) = &event.event {
-            if let Err(err) = external_event_handler.handle_event(external_message_bytes) {
+            if let Err(err) = external_event_handler
+                .handle_event(external_message_bytes)
+                .await
+            {
                 tracing::warn!("Failed to handle external message: {:?}", err);
             };
         }

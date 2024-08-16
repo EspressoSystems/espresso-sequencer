@@ -54,7 +54,7 @@ use crate::snark::{generate_state_update_proof, Proof, ProvingKey};
 type F = ark_ed_on_bn254::Fq;
 
 /// A wallet with local signer and connected to network via http
-pub type L1Wallet = SignerMiddleware<Provider<Http>, LocalWallet>;
+pub type SignerWallet = SignerMiddleware<Provider<Http>, LocalWallet>;
 
 /// Configuration/Parameters used for hotshot state prover
 #[derive(Debug, Clone)]
@@ -65,12 +65,12 @@ pub struct StateProverConfig {
     pub update_interval: Duration,
     /// Interval between retries if a state update fails
     pub retry_interval: Duration,
-    /// URL of layer 1 Ethereum JSON-RPC provider.
-    pub l1_provider: Url,
-    /// Address of LightClient contract on layer 1.
+    /// URL of the chain (layer 1  or any layer 2) JSON-RPC provider.
+    pub provider: Url,
+    /// Address of LightClient contract
     pub light_client_address: Address,
-    /// Transaction signing key for Ethereum
-    pub eth_signing_key: SigningKey,
+    /// Transaction signing key for Ethereum or any other layer 2
+    pub signing_key: SigningKey,
     /// URL of a node that is currently providing the HotShot config.
     /// This is used to initialize the stake table.
     pub sequencer_url: Url,
@@ -247,23 +247,26 @@ pub async fn fetch_latest_state<Ver: StaticVersionType>(
 
 /// prepare a contract interface ready to be read from or written to
 async fn prepare_contract(
-    config: &StateProverConfig,
-) -> Result<LightClient<L1Wallet>, ProverError> {
-    let provider = Provider::try_from(config.l1_provider.to_string())
+    provider: Url,
+    key: SigningKey,
+    light_client_address: Address,
+) -> Result<LightClient<SignerWallet>, ProverError> {
+    let provider = Provider::try_from(provider.as_str())
         .expect("unable to instantiate Provider, likely wrong URL");
-    let signer = Wallet::from(config.eth_signing_key.clone())
-        .with_chain_id(provider.get_chainid().await?.as_u64());
-    let l1_wallet = Arc::new(L1Wallet::new(provider, signer));
+    let signer = Wallet::from(key).with_chain_id(provider.get_chainid().await?.as_u64());
+    let wallet = Arc::new(SignerWallet::new(provider, signer));
 
-    let contract = LightClient::new(config.light_client_address, l1_wallet);
+    let contract = LightClient::new(light_client_address, wallet);
     Ok(contract)
 }
 
 /// get the `finalizedState` from the LightClient contract storage on L1
 pub async fn read_contract_state(
-    config: &StateProverConfig,
+    provider: Url,
+    key: SigningKey,
+    light_client_address: Address,
 ) -> Result<LightClientState, ProverError> {
-    let contract = prepare_contract(config).await?;
+    let contract = prepare_contract(provider, key, light_client_address).await?;
     let state: ParsedLightClientState = match contract.get_finalized_state().call().await {
         Ok(s) => s.into(),
         Err(e) => {
@@ -280,9 +283,11 @@ pub async fn read_contract_state(
 pub async fn submit_state_and_proof(
     proof: Proof,
     public_input: PublicInput,
-    config: &StateProverConfig,
+    provider: Url,
+    key: SigningKey,
+    light_client_address: Address,
 ) -> Result<(), ProverError> {
-    let contract = prepare_contract(config).await?;
+    let contract = prepare_contract(provider, key, light_client_address).await?;
 
     // prepare the input the contract call and the tx itself
     let proof: ParsedPlonkProof = proof.into();
@@ -308,12 +313,21 @@ pub async fn sync_state<Ver: StaticVersionType>(
     relay_server_client: &Client<ServerError, Ver>,
     config: &StateProverConfig,
 ) -> Result<(), ProverError> {
-    tracing::info!("Start syncing light client state.");
+    let light_client_address = config.light_client_address;
+    let provider = config.provider.clone();
+    let key = config.signing_key.clone();
+
+    tracing::info!(
+        ?light_client_address,
+        "Start syncing light client state for provider: {}",
+        provider,
+    );
 
     let bundle = fetch_latest_state(relay_server_client).await?;
     tracing::info!("Bundle accumulated weight: {}", bundle.accumulated_weight);
     tracing::info!("Latest HotShot block height: {}", bundle.state.block_height);
-    let old_state = read_contract_state(config).await?;
+    let old_state =
+        read_contract_state(provider.clone(), key.clone(), light_client_address).await?;
     tracing::info!(
         "Current HotShot block height on contract: {}",
         old_state.block_height
@@ -355,11 +369,12 @@ pub async fn sync_state<Ver: StaticVersionType>(
 
     tracing::info!("Collected latest state and signatures. Start generating SNARK proof.");
     let proof_gen_start = Instant::now();
+    let proving_key_clone = proving_key.clone();
     let stake_table_capacity = config.stake_table_capacity;
     let (proof, public_input) = spawn_blocking(move || {
         generate_state_update_proof::<_, _, _, _>(
             &mut ark_std::rand::thread_rng(),
-            &proving_key,
+            &proving_key_clone,
             &entries,
             signer_bit_vec,
             signatures,
@@ -372,7 +387,7 @@ pub async fn sync_state<Ver: StaticVersionType>(
     let proof_gen_elapsed = Instant::now().signed_duration_since(proof_gen_start);
     tracing::info!("Proof generation completed. Elapsed: {proof_gen_elapsed:.3}");
 
-    submit_state_and_proof(proof, public_input, config).await?;
+    submit_state_and_proof(proof, public_input, provider, key, light_client_address).await?;
 
     tracing::info!("Successfully synced light client state.");
     Ok(())
@@ -380,21 +395,20 @@ pub async fn sync_state<Ver: StaticVersionType>(
 
 fn start_http_server<Ver: StaticVersionType + 'static>(
     port: u16,
-    lightclient_address: Address,
+    light_client_address: Address,
     bind_version: Ver,
 ) -> io::Result<()> {
-    let mut app = tide_disco::App::<(), ServerError>::with_state(());
+    let mut app = tide_disco::App::<_, ServerError>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../api/prover-service.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<(), ServerError, Ver>::new(toml)
+    let mut api = Api::<_, ServerError, Ver>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     api.get("getlightclientcontract", move |_, _| {
-        async move { Ok(lightclient_address) }.boxed()
+        async move { Ok(light_client_address) }.boxed()
     })
     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-
     app.register_module("api", api)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
@@ -423,6 +437,7 @@ pub async fn run_prover_service_with_stake_table<Ver: StaticVersionType + 'stati
     st: Arc<StakeTable<BLSPubKey, StateVerKey, CircuitField>>,
 ) -> Result<()> {
     tracing::info!("Light client address: {:?}", config.light_client_address);
+
     let relay_server_client =
         Arc::new(Client::<ServerError, Ver>::new(config.relay_server.clone()));
 
@@ -636,11 +651,11 @@ mod test {
     async fn deploy_contract_for_test(
         anvil: &AnvilInstance,
         genesis: ParsedLightClientState,
-    ) -> Result<(Arc<L1Wallet>, LightClient<L1Wallet>)> {
+    ) -> Result<(Arc<SignerWallet>, LightClient<SignerWallet>)> {
         let provider = Provider::<Http>::try_from(anvil.endpoint())?;
         let signer = Wallet::from(anvil.keys()[0].clone())
             .with_chain_id(provider.get_chainid().await?.as_u64());
-        let l1_wallet = Arc::new(L1Wallet::new(provider.clone(), signer));
+        let l1_wallet = Arc::new(SignerWallet::new(provider.clone(), signer));
 
         let genesis_constructor_args: LightClientConstructorArgs = LightClientConstructorArgs {
             light_client_state: genesis,
@@ -664,9 +679,9 @@ mod test {
     impl StateProverConfig {
         /// update only L1 related info
         fn update_l1_info(&mut self, anvil: &AnvilInstance, light_client_address: Address) {
-            self.l1_provider = Url::parse(&anvil.endpoint()).unwrap();
+            self.provider = Url::parse(&anvil.endpoint()).unwrap();
             self.light_client_address = light_client_address;
-            self.eth_signing_key = anvil.keys()[0].clone().into();
+            self.signing_key = anvil.keys()[0].clone().into();
         }
     }
     // only for testing purposes
@@ -676,9 +691,9 @@ mod test {
                 relay_server: Url::parse("http://localhost").unwrap(),
                 update_interval: Duration::default(),
                 retry_interval: Duration::default(),
-                l1_provider: Url::parse("http://localhost").unwrap(),
+                provider: Url::parse("http://localhost").unwrap(),
                 light_client_address: Address::default(),
-                eth_signing_key: SigningKey::random(&mut test_rng()),
+                signing_key: SigningKey::random(&mut test_rng()),
                 sequencer_url: Url::parse("http://localhost").unwrap(),
                 port: None,
                 stake_table_capacity: 10,
@@ -700,7 +715,12 @@ mod test {
 
         let mut config = StateProverConfig::default();
         config.update_l1_info(&anvil, contract.address());
-        let state = super::read_contract_state(&config).await?;
+        let state = super::read_contract_state(
+            config.provider,
+            config.signing_key,
+            config.light_client_address,
+        )
+        .await?;
         assert_eq!(state, genesis.into());
         Ok(())
     }
@@ -727,7 +747,14 @@ mod test {
         let (pi, proof) = gen_state_proof(&genesis, new_state.clone(), &state_keys, &st);
         tracing::info!("Successfully generated proof for new state.");
 
-        super::submit_state_and_proof(proof, pi, &config).await?;
+        super::submit_state_and_proof(
+            proof,
+            pi,
+            config.provider,
+            config.signing_key,
+            config.light_client_address,
+        )
+        .await?;
         tracing::info!("Successfully submitted new finalized state to L1.");
         // test if new state is updated in l1
         let finalized_l1: ParsedLightClientState = contract.get_finalized_state().await?.into();
