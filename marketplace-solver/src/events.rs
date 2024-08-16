@@ -2,21 +2,22 @@ use std::{pin::Pin, sync::Arc};
 
 use anyhow::Context;
 use async_std::sync::RwLock;
-use espresso_types::SeqTypes;
+use espresso_types::{SeqTypes, SequencerVersions};
 use futures::{Stream, StreamExt as _};
 use hotshot::types::Event;
 use hotshot_events_service::{events, events_source::StartupInfo};
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::node_implementation::Versions;
 use surf_disco::Client;
 use tide_disco::Url;
 
 use crate::state::GlobalState;
 
-pub struct EventsServiceClient(Client<events::Error, <SeqTypes as NodeType>::Base>);
+pub struct EventsServiceClient(Client<events::Error, <SequencerVersions as Versions>::Base>);
 
 impl EventsServiceClient {
     pub async fn new(url: Url) -> Self {
-        let client = Client::<events::Error, <SeqTypes as NodeType>::Base>::new(url.clone());
+        let client =
+            Client::<events::Error, <SequencerVersions as Versions>::Base>::new(url.clone());
 
         client.connect(None).await;
 

@@ -181,23 +181,11 @@ impl Options {
         // we handle the two cases differently.
         let metrics = if let Some(query_opt) = self.query.take() {
             if let Some(opt) = self.storage_sql.take() {
-                self.init_with_query_module_sql::<N, P, Ver>(
-                    query_opt,
-                    opt,
-                    state,
-                    &mut tasks,
-                    bind_version,
-                )
-                .await?
+                self.init_with_query_module_sql(query_opt, opt, state, &mut tasks, bind_version)
+                    .await?
             } else if let Some(opt) = self.storage_fs.take() {
-                self.init_with_query_module_fs::<N, P, Ver>(
-                    query_opt,
-                    opt,
-                    state,
-                    &mut tasks,
-                    bind_version,
-                )
-                .await?
+                self.init_with_query_module_fs(query_opt, opt, state, &mut tasks, bind_version)
+                    .await?
             } else {
                 bail!("query module requested but not storage provided");
             }

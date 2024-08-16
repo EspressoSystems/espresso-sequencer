@@ -1,9 +1,10 @@
-use std::net::ToSocketAddrs;
+use std::{net::ToSocketAddrs, sync::Arc};
 
 use clap::Parser;
-use espresso_types::SeqTypes;
+use espresso_types::{SequencerVersions, SolverAuctionResultsProvider};
 use futures::future::FutureExt;
-use hotshot_types::traits::{metrics::NoMetrics, node_implementation::NodeType};
+use hotshot::MarketplaceConfig;
+use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
 use sequencer::{
     api::{self, data_source::DataSourceOptions},
     init_node,
@@ -25,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
             modules,
             opt,
             storage,
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
         )
         .await
     } else if let Some(storage) = modules.storage_sql.take() {
@@ -33,7 +34,7 @@ async fn main() -> anyhow::Result<()> {
             modules,
             opt,
             storage,
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
         )
         .await
     } else {
@@ -42,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
             modules,
             opt,
             persistence::fs::Options::default(),
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
         )
         .await
     }
@@ -97,6 +98,13 @@ where
         catchup_backoff: opt.catchup_backoff,
     };
 
+    let marketplace_config = MarketplaceConfig {
+        auction_results_provider: Arc::new(SolverAuctionResultsProvider(
+            opt.auction_results_solver_url,
+        )),
+        fallback_builder_url: opt.fallback_builder_url,
+    };
+
     // Initialize HotShot. If the user requested the HTTP module, we must initialize the handle in
     // a special way, in order to populate the API with consensus metrics. Otherwise, we initialize
     // the handle directly, with no metrics.
@@ -129,6 +137,7 @@ where
             if let Some(config) = modules.config {
                 http_opt = http_opt.config(config);
             }
+
             http_opt
                 .serve(
                     move |metrics| {
@@ -142,6 +151,7 @@ where
                                 bind_version,
                                 opt.is_da,
                                 opt.identity,
+                                marketplace_config,
                             )
                             .await
                             .unwrap()
@@ -162,6 +172,7 @@ where
                 bind_version,
                 opt.is_da,
                 opt.identity,
+                marketplace_config,
             )
             .await?
         }
@@ -180,11 +191,8 @@ mod test {
 
     use async_std::task::spawn;
 
-    use espresso_types::{PubKey, SeqTypes};
-    use hotshot_types::{
-        light_client::StateKeyPair,
-        traits::{node_implementation::NodeType, signature_key::SignatureKey},
-    };
+    use espresso_types::PubKey;
+    use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey};
     use portpicker::pick_unused_port;
     use sequencer::{
         api::options::{Http, Status},
@@ -242,7 +250,7 @@ mod test {
                 modules,
                 opt,
                 fs::Options::new(tmp.path().into()),
-                <SeqTypes as NodeType>::Base::instance(),
+                <SequencerVersions as Versions>::Base::instance(),
             )
             .await
             {
@@ -254,7 +262,7 @@ mod test {
         // orchestrator.
         tracing::info!("waiting for API to start");
         let url: Url = format!("http://localhost:{port}").parse().unwrap();
-        let client = Client::<ClientError, <SeqTypes as NodeType>::Base>::new(url.clone());
+        let client = Client::<ClientError, <SequencerVersions as Versions>::Base>::new(url.clone());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
         client.get::<()>("healthcheck").send().await.unwrap();
 

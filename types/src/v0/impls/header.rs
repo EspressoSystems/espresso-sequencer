@@ -3,10 +3,9 @@ use ark_serialize::CanonicalSerialize;
 use committable::{Commitment, Committable, RawCommitmentBuilder};
 use hotshot_query_service::{availability::QueryableHeader, explorer::ExplorerHeader};
 use hotshot_types::{
-    constants::MarketplaceVersion,
     traits::{
         block_contents::{BlockHeader, BuilderFee},
-        node_implementation::NodeType,
+        node_implementation::{NodeType, Versions},
         signature_key::BuilderSignatureKey,
         BlockPayload, ValidatedState as _,
     },
@@ -29,7 +28,8 @@ use crate::{
     v0_1, v0_2,
     v0_3::{self, ChainConfig, IterableFeeInfo, SolverAuctionResults},
     BlockMerkleCommitment, BuilderSignature, FeeAccount, FeeAmount, FeeInfo, FeeMerkleCommitment,
-    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, UpgradeType,
+    Header, L1BlockInfo, L1Snapshot, Leaf, NamespaceId, NsTable, SeqTypes, SequencerVersions,
+    UpgradeType,
 };
 
 use super::{instance_state::NodeState, state::ValidatedState};
@@ -84,16 +84,6 @@ impl Committable for Header {
         // We use the tag "BLOCK" since blocks are identified by the hash of their header. This will
         // thus be more intuitive to users than "HEADER".
         "BLOCK".into()
-    }
-}
-
-impl Header {
-    pub fn version(&self) -> Version {
-        match self {
-            Self::V1(_) => Version { major: 0, minor: 1 },
-            Self::V2(_) => Version { major: 0, minor: 2 },
-            Self::V3(_) => Version { major: 0, minor: 3 },
-        }
     }
 }
 
@@ -242,6 +232,13 @@ impl<'de> Deserialize<'de> for Header {
 }
 
 impl Header {
+    pub fn version(&self) -> Version {
+        match self {
+            Self::V1(_) => Version { major: 0, minor: 1 },
+            Self::V2(_) => Version { major: 0, minor: 2 },
+            Self::V3(_) => Version { major: 0, minor: 3 },
+        }
+    }
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn create(
         chain_config: ChainConfig,
@@ -346,7 +343,7 @@ impl Header {
     #[allow(clippy::too_many_arguments)]
     fn from_info(
         payload_commitment: VidCommitment,
-        builder_commitment: Option<BuilderCommitment>,
+        builder_commitment: BuilderCommitment,
         ns_table: NsTable,
         parent_leaf: &Leaf,
         mut l1: L1Snapshot,
@@ -428,7 +425,7 @@ impl Header {
             fee_amount,
         } in &builder_fee
         {
-            if version < MarketplaceVersion::VERSION {
+            if version < <SequencerVersions as Versions>::Marketplace::version() {
                 ensure!(
                     fee_account.validate_fee_signature(
                         fee_signature,
@@ -473,7 +470,7 @@ impl Header {
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment: builder_commitment.unwrap(),
+                builder_commitment,
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
@@ -489,7 +486,7 @@ impl Header {
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment: builder_commitment.unwrap(),
+                builder_commitment,
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
@@ -503,7 +500,7 @@ impl Header {
                 l1_head: l1.head,
                 l1_finalized: l1.finalized,
                 payload_commitment,
-                builder_commitment: builder_commitment.unwrap(),
+                builder_commitment,
                 ns_table,
                 block_merkle_tree_root,
                 fee_merkle_tree_root,
@@ -738,6 +735,7 @@ impl BlockHeader<SeqTypes> for Header {
         instance_state: &<<SeqTypes as NodeType>::ValidatedState as hotshot_types::traits::ValidatedState<SeqTypes>>::Instance,
         parent_leaf: &hotshot_types::data::Leaf<SeqTypes>,
         payload_commitment: VidCommitment,
+        builder_commitment: BuilderCommitment,
         metadata: <<SeqTypes as NodeType>::BlockPayload as BlockPayload<SeqTypes>>::Metadata,
         builder_fee: Vec<BuilderFee<SeqTypes>>,
         _vid_common: VidCommon,
@@ -750,13 +748,11 @@ impl BlockHeader<SeqTypes> for Header {
         let mut validated_state = parent_state.clone();
 
         let chain_config = if version > instance_state.current_version {
-            match instance_state
-                .upgrades
-                .get(&version)
-                .map(|upgrade| match upgrade.upgrade_type {
-                    UpgradeType::ChainConfig { chain_config } => chain_config,
-                }) {
-                Some(cf) => cf,
+            match instance_state.upgrades.get(&version) {
+                Some(upgrade) => match upgrade.upgrade_type {
+                    UpgradeType::Fee { chain_config } => chain_config,
+                    _ => Header::get_chain_config(&validated_state, instance_state).await,
+                },
                 None => Header::get_chain_config(&validated_state, instance_state).await,
             }
         } else {
@@ -838,7 +834,7 @@ impl BlockHeader<SeqTypes> for Header {
 
         Ok(Self::from_info(
             payload_commitment,
-            None,
+            builder_commitment,
             metadata,
             parent_leaf,
             l1_snapshot,
@@ -869,13 +865,11 @@ impl BlockHeader<SeqTypes> for Header {
         let mut validated_state = parent_state.clone();
 
         let chain_config = if version > instance_state.current_version {
-            match instance_state
-                .upgrades
-                .get(&version)
-                .map(|upgrade| match upgrade.upgrade_type {
-                    UpgradeType::ChainConfig { chain_config } => chain_config,
-                }) {
-                Some(cf) => cf,
+            match instance_state.upgrades.get(&version) {
+                Some(upgrade) => match upgrade.upgrade_type {
+                    UpgradeType::Fee { chain_config } => chain_config,
+                    _ => Header::get_chain_config(&validated_state, instance_state).await,
+                },
                 None => Header::get_chain_config(&validated_state, instance_state).await,
             }
         } else {
@@ -954,7 +948,7 @@ impl BlockHeader<SeqTypes> for Header {
 
         Ok(Self::from_info(
             payload_commitment,
-            Some(builder_commitment),
+            builder_commitment,
             metadata,
             parent_leaf,
             l1_snapshot,
@@ -1156,7 +1150,7 @@ mod test_headers {
 
             let header = Header::from_info(
                 genesis.header.payload_commitment(),
-                Some(genesis.header.builder_commitment().clone()),
+                genesis.header.builder_commitment().clone(),
                 genesis.ns_table,
                 &parent_leaf,
                 L1Snapshot {

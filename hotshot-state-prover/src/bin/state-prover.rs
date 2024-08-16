@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use clap::Parser;
-use espresso_types::{parse_duration, SeqTypes};
+use espresso_types::{parse_duration, SequencerVersions};
 use ethers::{
     providers::{Http, Middleware, Provider},
     signers::{coins_bip39::English, MnemonicBuilder, Signer},
@@ -9,7 +9,7 @@ use ethers::{
 };
 use hotshot_stake_table::config::STAKE_TABLE_CAPACITY;
 use hotshot_state_prover::service::{run_prover_once, run_prover_service, StateProverConfig};
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::node_implementation::Versions;
 use sequencer_utils::logging;
 use url::Url;
 use vbs::version::StaticVersionType;
@@ -95,9 +95,9 @@ async fn main() {
         relay_server: args.relay_server,
         update_interval: args.update_interval,
         retry_interval: args.retry_interval,
-        l1_provider: args.l1_provider,
+        provider: args.l1_provider,
         light_client_address: args.light_client_address,
-        eth_signing_key: MnemonicBuilder::<English>::default()
+        signing_key: MnemonicBuilder::<English>::default()
             .phrase(args.eth_mnemonic.as_str())
             .index(args.eth_account_index)
             .expect("error building wallet")
@@ -106,6 +106,7 @@ async fn main() {
             .with_chain_id(chain_id)
             .signer()
             .clone(),
+
         sequencer_url: args.sequencer_url,
         port: args.port,
         stake_table_capacity: args.stake_table_capacity,
@@ -113,13 +114,16 @@ async fn main() {
 
     if args.daemon {
         // Launching the prover service daemon
-        if let Err(err) = run_prover_service(config, <SeqTypes as NodeType>::Base::instance()).await
+        if let Err(err) =
+            run_prover_service(config, <SequencerVersions as Versions>::Base::instance()).await
         {
             tracing::error!("Error running prover service: {:?}", err);
         };
     } else {
         // Run light client state update once
-        if let Err(err) = run_prover_once(config, <SeqTypes as NodeType>::Base::instance()).await {
+        if let Err(err) =
+            run_prover_once(config, <SequencerVersions as Versions>::Base::instance()).await
+        {
             tracing::error!("Error running prover once: {:?}", err);
         };
     }
