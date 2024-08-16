@@ -181,7 +181,7 @@ impl BuilderConfig {
         let proxy_global_state = ProxyGlobalState::new(
             global_state.clone(),
             (builder_key_pair.fee_account(), builder_key_pair.clone()),
-            Duration::from_secs(5),
+            max_api_timeout_duration,
         );
 
         // start the hotshot api service
