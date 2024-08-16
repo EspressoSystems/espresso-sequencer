@@ -53,7 +53,7 @@ parameters use Unix timestamps for the same purpose.
 
 To simplify configuration, these parameters are fetched from the genesis TOML file and set in the Hotshot config. The
 TOML file can include either view-based parameters or time-based parameters, but not both. Furthermore, the start and
-stop voting parameters for both time-based and view-based upgrades are optional. Start parameter should be set to 0 so that voting
+stop voting parameters for both time-based and view-based upgrades are optional. If omitted, start parameter will be set to 0 so that voting
 begins as soon as node is started while the stop parameter is set to a maximum value so that the nodes keep voting until
 enough votes are collected.
 
