@@ -180,8 +180,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice This contract is called by the proxy when you deploy this contract
     /// @param genesis The initial state of the light client
     /// @param numBlocksPerEpoch The number of blocks per epoch
-    /// @param maxHistorySeconds The maximum duration worth of state history updates to store based
-    /// on the block timestamp
+    /// @param maxHistorySeconds The maximum retention period (in seconds) for the state history
     /// @param owner The address of the contract owner
     function initialize(
         LightClientState memory genesis,
@@ -217,8 +216,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// contract is upgradable and thus has its constructor method disabled.
     /// @param genesis The initial state of the light client
     /// @param numBlockPerEpoch The number of blocks per epoch
-    /// @param maxHistorySeconds The maximum duration worth of state history updates to store based
-    /// on the block timestamp
+    /// @param maxHistorySeconds The maximum retention period (in seconds) for the state history
     function _initializeState(
         LightClientState memory genesis,
         uint32 numBlockPerEpoch,
@@ -404,18 +402,16 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @notice updates the stateHistoryCommitments array each time a new
     /// finalized state is added to the LightClient contract.
-    /// Ensures that the array contains only the most recent data and does not
-    /// exceed the stateHistoryRetentionPeriod duration in seconds.
+    /// Ensures that the time difference between the most recent and oldest
+    /// elements in this array does not exceed the stateHistoryRetentionPeriod (in seconds).
     /// @dev the block timestamp is used to determine if the stateHistoryCommitments array
-    /// should be pruned, based on the stateHistoryRetentionPeriod duration in seconds.
-    /// @dev a FIFO (First-In-First-Out) approach is used to delete elements from the start of the
-    /// array,
+    /// should be pruned, based on the stateHistoryRetentionPeriod.
+    /// @dev a FIFO approach is used to delete elements from the start of the array,
     /// ensuring that only the most recent states are retained within the
     /// stateHistoryRetentionPeriod
-    /// duration.
     /// @dev the `delete` method does not reduce the array length but resets the value at the
     /// specified index to zero.
-    /// the stateHistoryFirstIndex variable is used as an offset to indicate the starting point for
+    /// the stateHistoryFirstIndex variable acts as an offset to indicate the starting point for
     /// reading the array,
     /// since the length of the array is not reduced even after deletion.
     function updateStateHistory(
@@ -429,8 +425,8 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                     - stateHistoryCommitments[stateHistoryFirstIndex].l1BlockTimestamp
                     >= stateHistoryRetentionPeriod
         ) {
-            // The stateHistoryCommitments array has reached the maximum allowed duration
-            // deleting the oldest (first) non-empty element to maintain the FIFO structure.
+            // The stateHistoryCommitments array has reached the maximum retention period
+            // delete the oldest (first) non-empty element to maintain the FIFO structure.
             delete stateHistoryCommitments[stateHistoryFirstIndex];
 
             // increment the offset to the first non-zero element in the stateHistoryCommitments
@@ -438,7 +434,7 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             stateHistoryFirstIndex++;
         }
 
-        // add the L1 Block to stateUpdateBlockNumbers & HotShot commitment to the genesis state
+        // add the L1 Block & HotShot commitment to the genesis state
         stateHistoryCommitments.push(
             StateHistoryCommitment(
                 blockNumber,
@@ -532,10 +528,12 @@ contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return stateHistoryCommitments.length;
     }
 
-    /// @notice set Max Block States allowed
-    /// @param historySeconds The maximum duration worth of state history updates to store based on
-    /// the block timestamp. It must not be less than the current state history retention period
-    /// and the retention period must be at least 1 hour
+    /// @notice sets the maximum retention period for storing block state history.
+    /// @param historySeconds The maximum number of seconds for which state history updates
+    /// will be stored, based on the block timestamp. It must be greater than or equal to
+    /// the current state history retention period and must be at least 1 hour.
+    /// @dev Reverts with `InvalidMaxStateHistory` if the provided value is less than 1 hour
+    /// or less than or equal to the current state history retention period.
     function setstateHistoryRetentionPeriod(uint32 historySeconds) public onlyOwner {
         if (historySeconds < 1 hours || historySeconds <= stateHistoryRetentionPeriod) {
             revert InvalidMaxStateHistory();

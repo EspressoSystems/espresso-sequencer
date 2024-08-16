@@ -688,7 +688,7 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
 
     function testFuzz_setstateHistoryRetentionPeriod(uint32 maxHistorySeconds) public {
         vm.prank(admin);
-        vm.assume(maxHistorySeconds >= 1 days);
+        vm.assume(maxHistorySeconds > 1 days);
         lc.setstateHistoryRetentionPeriod(maxHistorySeconds);
         assertEq(maxHistorySeconds, lc.stateHistoryRetentionPeriod());
     }
@@ -727,9 +727,6 @@ contract LightClient_StateUpdatesTest is LightClientCommonTest {
         bytes memory result = vm.ffi(cmds);
         (LC.LightClientState[] memory states, V.PlonkProof[] memory proofs) =
             abi.decode(result, (LC.LightClientState[], V.PlonkProof[]));
-
-        // set the new max block states allowed to half of the number of states available
-        setstateHistoryRetentionPeriod(initialEpoch);
 
         // Add one numDays worth of a new state
         uint256 i;
