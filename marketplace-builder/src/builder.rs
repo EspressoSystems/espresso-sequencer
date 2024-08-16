@@ -242,7 +242,7 @@ impl BuilderConfig {
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use async_compatibility_layer::{
         art::{async_sleep, async_spawn},
@@ -256,7 +256,7 @@ mod test {
         SeqTypes, Transaction,
     };
     use ethers::utils::Anvil;
-    use hotshot::types::BLSPrivKey;
+    use hotshot::types::{BLSPrivKey, Event, EventType};
     use hotshot_builder_api::v0_3::builder::BuildError;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
@@ -376,16 +376,6 @@ mod test {
         let submission_client: Client<ServerError, BaseVersion> = Client::new(builder_api_url);
         submission_client.connect(None).await;
 
-        // Make an empty commitment (for testing, the commitment is not used)
-        let commitment = vid_commitment(&[0], 1);
-
-        // Test getting a bundle
-        let _bundle = builder_client
-            .get::<Bundle<SeqTypes>>(format!("block_info/bundle/1/{}/1", commitment).as_str())
-            .send()
-            .await
-            .unwrap();
-
         // Test submitting transactions
         let transactions = (0..10)
             .map(|i| Transaction::new(0u32.into(), vec![1, 1, 1, i]))
@@ -397,5 +387,44 @@ mod test {
             .send()
             .await
             .unwrap();
+
+        let events_service_client =
+            Client::<hotshot_events_service::events::Error, BaseVersion>::new(
+                event_service_url.clone(),
+            );
+        events_service_client.connect(None).await;
+
+        let mut subscribed_events = events_service_client
+            .socket("hotshot-events/events")
+            .subscribe::<Event<SeqTypes>>()
+            .await
+            .unwrap();
+
+        let start = Instant::now();
+        loop {
+            if start.elapsed() > Duration::from_secs(10) {
+                panic!("Didn't get a quorum proposal in 10 seconds");
+            }
+
+            let event = subscribed_events.next().await.unwrap().unwrap();
+            if let EventType::QuorumProposal { proposal, .. } = event.event {
+                let parent_view_number = *proposal.data.view_number;
+                let parent_commitment =
+                    Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
+                let bundle = builder_client
+                    .get::<Bundle<SeqTypes>>(
+                        format!(
+                            "block_info/bundle/{parent_view_number}/{parent_commitment}/{}",
+                            parent_view_number + 1
+                        )
+                        .as_str(),
+                    )
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(bundle.transactions, transactions);
+                break;
+            }
+        }
     }
 }
