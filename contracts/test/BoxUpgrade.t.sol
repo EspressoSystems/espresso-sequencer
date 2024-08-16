@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-import { Test } /*, console2*/ from "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import { DemoBoxV1 } from "../demo/upgradeDemo/DemoBoxV1.sol";
 import { DemoBoxV2 } from "../demo/upgradeDemo/DemoBoxV2.sol";
-import { DeployBoxScript } from "../script/Box.s.sol";
-import { UpgradeBoxScript } from "../script/UpgradeBox.s.sol";
+import { DeployBoxScript } from "./script/Box.s.sol";
+import { UpgradeBoxScript } from "./script/UpgradeBox.s.sol";
 
 contract DemoBoxTest is Test {
     DemoBoxV1 public boxV1Proxy;

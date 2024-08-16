@@ -3,8 +3,8 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Script.sol";
 
-import { LightClientMock as LCMock } from "./mocks/LightClientMock.sol";
-import { LightClient as LC } from "../src/LightClient.sol";
+import { LightClientMock as LCMock } from "../mocks/LightClientMock.sol";
+import { LightClient as LC } from "../../src/LightClient.sol";
 import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 contract DeployLightClientTestScript is Script {

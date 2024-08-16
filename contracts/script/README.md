@@ -339,7 +339,7 @@ Ensure that you update the salt, `PLONK_VERIFIER_SALT`, in the `.env.contracts` 
 ```bash
 source .env.contracts && \
 forge clean && \
-forge script contracts/script/PlonkVerifierWithDefender.s.sol:PlonkVerifierDefenderDeployScript \
+forge script contracts/script/PlonkVerifier.s.sol:PlonkVerifierDefenderDeployScript \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com \
 --build-info true
@@ -357,7 +357,7 @@ Ensure that you update the salt, `PLONK_VERIFIER_SALT`, in the `.env.contracts` 
 ```bash
 source .env.contracts && \
 forge clean && \
-forge script contracts/script/PlonkVerifierWithDefender.s.sol:PlonkVerifierDeployScript \
+forge script contracts/script/PlonkVerifier.s.sol:PlonkVerifierDeployScript \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com \
 --build-info true \
