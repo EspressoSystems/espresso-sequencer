@@ -21,9 +21,9 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @notice max amount allowed to be deposited to prevent fat finger errors
     // @TODO confirm this amount with product
 
-    uint256 public maxDepositAmount;
+    uint256 public constant maxDepositAmount = 1 ether;
 
-    uint256 public minDepositAmount;
+    uint256 public constant minDepositAmount = 0.001 ether;
 
     // === Errors ===
     //
@@ -48,8 +48,6 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function initialize(address multisig) public initializer {
         __Ownable_init(multisig); //sets owner to msg.sender
         __UUPSUpgradeable_init();
-        maxDepositAmount = 1 ether;
-        minDepositAmount = 0.001 ether;
     }
 
     /// @notice Revert if a method name does not exist
