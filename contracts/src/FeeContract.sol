@@ -13,7 +13,6 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     //
     /// @notice Notify a new deposit
     event Deposit(address indexed user, uint256 amount);
-    event Log(string func, uint256 gas);
 
     /// @notice upgrade event when the proxy updates the implementation it's pointing to
     event Upgrade(address implementation);
