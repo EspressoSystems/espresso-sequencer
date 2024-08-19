@@ -122,11 +122,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions>
     pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
-        event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+        event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
+        event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     ) {
         #[cfg(feature = "dependency-tasks")]
         if let HotShotEvent::QuorumProposalRecv(proposal, sender) = event.as_ref() {
-            match handle_quorum_proposal_recv(proposal, sender, &event_stream, self).await {
+            match handle_quorum_proposal_recv(
+                proposal,
+                sender,
+                &event_sender,
+                &event_receiver,
+                self,
+            )
+            .await
+            {
                 Ok(()) => {
                     self.cancel_tasks(proposal.data.view_number()).await;
                 }
@@ -146,9 +155,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
         &mut self,
         event: Arc<Self::Event>,
         sender: &Sender<Arc<Self::Event>>,
-        _receiver: &Receiver<Arc<Self::Event>>,
+        receiver: &Receiver<Arc<Self::Event>>,
     ) -> Result<()> {
-        self.handle(event, sender.clone()).await;
+        self.handle(event, sender.clone(), receiver.clone()).await;
 
         Ok(())
     }

@@ -89,7 +89,7 @@ async fn test_vote_dependency_handle() {
 
         let vote_dependency_handle_state =
             VoteDependencyHandle::<TestTypes, MemoryImpl, TestVersions> {
-                public_key: handle.public_key().clone(),
+                public_key: handle.public_key(),
                 private_key: handle.private_key().clone(),
                 consensus: OuterConsensus::new(consensus.clone()),
                 instance_state: handle.hotshot.instance_state(),

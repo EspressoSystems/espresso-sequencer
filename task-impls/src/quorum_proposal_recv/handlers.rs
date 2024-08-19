@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
-use async_broadcast::{broadcast, Sender};
+use async_broadcast::{broadcast, Receiver, Sender};
 use async_lock::RwLockUpgradableReadGuard;
 use committable::Committable;
 use hotshot_types::{
@@ -131,11 +131,12 @@ pub(crate) async fn handle_quorum_proposal_recv<
     V: Versions,
 >(
     proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
-    sender: &TYPES::SignatureKey,
+    quorum_proposal_sender_key: &TYPES::SignatureKey,
     event_sender: &Sender<Arc<HotShotEvent<TYPES>>>,
+    event_receiver: &Receiver<Arc<HotShotEvent<TYPES>>>,
     task_state: &mut QuorumProposalRecvTaskState<TYPES, I, V>,
 ) -> Result<()> {
-    let sender = sender.clone();
+    let quorum_proposal_sender_key = quorum_proposal_sender_key.clone();
     let cur_view = task_state.cur_view;
 
     validate_proposal_view_and_certs(
@@ -177,8 +178,13 @@ pub(crate) async fn handle_quorum_proposal_recv<
         None => fetch_proposal(
             justify_qc.view_number(),
             event_sender.clone(),
+            event_receiver.clone(),
             Arc::clone(&task_state.quorum_membership),
             OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
+            // Note that we explicitly use the node key here instead of the provided key in the signature.
+            // This is because the key that we receive is for the prior leader, so the payload would be routed
+            // incorrectly.
+            task_state.public_key.clone(),
         )
         .await
         .ok(),
@@ -237,7 +243,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
         Arc::clone(&task_state.upgrade_lock.decided_upgrade_certificate),
         Arc::clone(&task_state.quorum_membership),
         event_sender.clone(),
-        sender,
+        quorum_proposal_sender_key,
         task_state.output_event_stream.clone(),
         task_state.id,
     )

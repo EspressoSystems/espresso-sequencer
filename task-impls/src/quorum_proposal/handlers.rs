@@ -121,6 +121,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
         let (parent_leaf, state) = parent_leaf_and_state(
             self.view_number,
             &self.sender,
+            &self.receiver,
             Arc::clone(&self.quorum_membership),
             self.public_key.clone(),
             OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
@@ -246,7 +247,7 @@ impl<TYPES: NodeType, V: Versions> ProposalDependencyHandle<TYPES, V> {
 impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<TYPES, V> {
     type Output = Vec<Vec<Vec<Arc<HotShotEvent<TYPES>>>>>;
 
-    #[allow(clippy::no_effect_underscore_binding)]
+    #[allow(clippy::no_effect_underscore_binding, clippy::too_many_lines)]
     async fn handle_dep_result(self, res: Self::Output) {
         let high_qc_view_number = self.consensus.read().await.high_qc().view_number;
         if !self
@@ -258,10 +259,20 @@ impl<TYPES: NodeType, V: Versions> HandleDepOutput for ProposalDependencyHandle<
         {
             // The proposal for the high qc view is missing, try to get it asynchronously
             let membership = Arc::clone(&self.quorum_membership);
-            let sender = self.sender.clone();
+            let event_sender = self.sender.clone();
+            let event_receiver = self.receiver.clone();
+            let sender_key = self.public_key.clone();
             let consensus = OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus));
             async_spawn(async move {
-                fetch_proposal(high_qc_view_number, sender, membership, consensus).await
+                fetch_proposal(
+                    high_qc_view_number,
+                    event_sender,
+                    event_receiver,
+                    membership,
+                    consensus,
+                    sender_key,
+                )
+                .await
             });
             // Block on receiving the event from the event stream.
             EventDependency::new(

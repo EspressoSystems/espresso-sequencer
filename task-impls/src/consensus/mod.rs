@@ -39,7 +39,7 @@ use tracing::{debug, error, info, instrument, warn};
 use crate::{
     consensus::handlers::{
         handle_quorum_proposal_recv, handle_quorum_proposal_validated, publish_proposal_if_able,
-        update_state_and_vote_if_able,
+        update_state_and_vote_if_able, VoteInfo,
     },
     events::{HotShotEvent, HotShotTaskCompleted},
     helpers::{broadcast_event, cancel_task, update_view, DONT_SEND_VIEW_CHANGE_EVENT},
@@ -197,11 +197,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
     async fn publish_proposal(
         &mut self,
         view: TYPES::Time,
-        event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+        event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
+        event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     ) -> Result<()> {
         let create_and_send_proposal_handle = publish_proposal_if_able(
             view,
-            event_stream,
+            event_sender,
+            event_receiver,
             Arc::clone(&self.quorum_membership),
             self.public_key.clone(),
             self.private_key.clone(),
@@ -230,7 +232,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
     async fn spawn_vote_task(
         &mut self,
         view: TYPES::Time,
-        event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+        event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
+        event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     ) {
         let Some(proposal) = self.current_proposal.clone() else {
             return;
@@ -256,7 +259,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                 storage,
                 quorum_mem,
                 instance_state,
-                (priv_key, upgrade, da_mem, event_stream),
+                VoteInfo {
+                    private_key: priv_key,
+                    upgrade_lock: upgrade,
+                    da_membership: da_mem,
+                    event_sender,
+                    event_receiver,
+                },
                 id,
             )
             .await;
@@ -269,18 +278,26 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
     pub async fn handle(
         &mut self,
         event: Arc<HotShotEvent<TYPES>>,
-        event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+        event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
+        event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     ) {
         match event.as_ref() {
             HotShotEvent::QuorumProposalRecv(proposal, sender) => {
                 debug!("proposal recv view: {:?}", proposal.data.view_number());
-                match handle_quorum_proposal_recv(proposal, sender, event_stream.clone(), self)
-                    .await
+                match handle_quorum_proposal_recv(
+                    proposal,
+                    sender,
+                    event_sender.clone(),
+                    event_receiver.clone(),
+                    self,
+                )
+                .await
                 {
                     Ok(Some(current_proposal)) => {
                         let view = current_proposal.view_number();
                         self.current_proposal = Some(current_proposal);
-                        self.spawn_vote_task(view, event_stream).await;
+                        self.spawn_vote_task(view, event_sender, event_receiver)
+                            .await;
                     }
                     Ok(None) => {}
                     Err(e) => debug!("Failed to propose {e:#}"),
@@ -288,8 +305,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
             }
             HotShotEvent::QuorumProposalValidated(proposal, _) => {
                 debug!("proposal validated view: {:?}", proposal.view_number());
-                if let Err(e) =
-                    handle_quorum_proposal_validated(proposal, event_stream.clone(), self).await
+                if let Err(e) = handle_quorum_proposal_validated(
+                    proposal,
+                    event_sender.clone(),
+                    event_receiver.clone(),
+                    self,
+                )
+                .await
                 {
                     warn!("Failed to handle QuorumProposalValidated event {e:#}");
                 }
@@ -318,13 +340,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                         TYPES,
                         QuorumVote<TYPES>,
                         QuorumCertificate<TYPES>,
-                    >(&info, event, &event_stream)
+                    >(&info, event, &event_sender)
                     .await;
                 } else {
                     let result = collector
                         .as_mut()
                         .unwrap()
-                        .handle_vote_event(Arc::clone(&event), &event_stream)
+                        .handle_vote_event(Arc::clone(&event), &event_sender)
                         .await;
 
                     if result == Some(HotShotTaskCompleted) {
@@ -357,13 +379,13 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                         TYPES,
                         TimeoutVote<TYPES>,
                         TimeoutCertificate<TYPES>,
-                    >(&info, event, &event_stream)
+                    >(&info, event, &event_sender)
                     .await;
                 } else {
                     let result = collector
                         .as_mut()
                         .unwrap()
-                        .handle_vote_event(Arc::clone(&event), &event_stream)
+                        .handle_vote_event(Arc::clone(&event), &event_sender)
                         .await;
 
                     if result == Some(HotShotTaskCompleted) {
@@ -383,7 +405,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     );
 
                     if let Err(e) = self
-                        .publish_proposal(qc.view_number + 1, event_stream)
+                        .publish_proposal(qc.view_number + 1, event_sender, event_receiver)
                         .await
                     {
                         debug!("Failed to propose; error = {e:?}");
@@ -403,7 +425,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     );
 
                     if let Err(e) = self
-                        .publish_proposal(qc.view_number + 1, event_stream)
+                        .publish_proposal(qc.view_number + 1, event_sender, event_receiver)
                         .await
                     {
                         debug!("Failed to propose; error = {e:?}");
@@ -438,7 +460,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                 if proposal.view_number() != view {
                     return;
                 }
-                self.spawn_vote_task(view, event_stream).await;
+                self.spawn_vote_task(view, event_sender, event_receiver)
+                    .await;
             }
             HotShotEvent::VidShareRecv(disperse) => {
                 let view = disperse.data.view_number();
@@ -477,7 +500,8 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                 if proposal.view_number() != view {
                     return;
                 }
-                self.spawn_vote_task(view, event_stream.clone()).await;
+                self.spawn_vote_task(view, event_sender.clone(), event_receiver.clone())
+                    .await;
             }
             HotShotEvent::ViewChange(new_view) => {
                 let new_view = *new_view;
@@ -513,7 +537,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                 // Returns if the view does not need updating.
                 if let Err(e) = update_view::<TYPES>(
                     new_view,
-                    &event_stream,
+                    &event_sender,
                     self.timeout,
                     OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
                     &mut self.cur_view,
@@ -553,7 +577,7 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                     return;
                 };
 
-                broadcast_event(Arc::new(HotShotEvent::TimeoutVoteSend(vote)), &event_stream).await;
+                broadcast_event(Arc::new(HotShotEvent::TimeoutVoteSend(vote)), &event_sender).await;
                 broadcast_event(
                     Event {
                         view_number: view,
@@ -605,7 +629,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                 if self.quorum_membership.leader(view) == self.public_key
                     && self.consensus.read().await.high_qc().view_number() + 1 == view
                 {
-                    if let Err(e) = self.publish_proposal(view, event_stream.clone()).await {
+                    if let Err(e) = self
+                        .publish_proposal(view, event_sender.clone(), event_receiver.clone())
+                        .await
+                    {
                         error!("Failed to propose; error = {e:?}");
                     };
                 }
@@ -621,14 +648,20 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                             if self.quorum_membership.leader(tc.view_number() + 1)
                                 == self.public_key
                             {
-                                if let Err(e) = self.publish_proposal(view, event_stream).await {
+                                if let Err(e) = self
+                                    .publish_proposal(view, event_sender, event_receiver)
+                                    .await
+                                {
                                     debug!("Failed to propose; error = {e:?}");
                                 };
                             }
                         }
                         ViewChangeEvidence::ViewSync(vsc) => {
                             if self.quorum_membership.leader(vsc.view_number()) == self.public_key {
-                                if let Err(e) = self.publish_proposal(view, event_stream).await {
+                                if let Err(e) = self
+                                    .publish_proposal(view, event_sender, event_receiver)
+                                    .await
+                                {
                                     debug!("Failed to propose; error = {e:?}");
                                 };
                             }
@@ -655,7 +688,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                         *certificate.view_number
                     );
 
-                    if let Err(e) = self.publish_proposal(view, event_stream).await {
+                    if let Err(e) = self
+                        .publish_proposal(view, event_sender, event_receiver)
+                        .await
+                    {
                         debug!("Failed to propose; error = {e:?}");
                     };
                 }
@@ -675,7 +711,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> ConsensusTaskSt
                         "Attempting to publish proposal after voting; now in view: {}",
                         *new_view
                     );
-                    if let Err(e) = self.publish_proposal(new_view, event_stream.clone()).await {
+                    if let Err(e) = self
+                        .publish_proposal(new_view, event_sender.clone(), event_receiver.clone())
+                        .await
+                    {
                         debug!("failed to propose e = {:?}", e);
                     }
                 }
@@ -716,9 +755,9 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>, V: Versions> TaskState
         &mut self,
         event: Arc<Self::Event>,
         sender: &Sender<Arc<Self::Event>>,
-        _receiver: &Receiver<Arc<Self::Event>>,
+        receiver: &Receiver<Arc<Self::Event>>,
     ) -> Result<()> {
-        self.handle(event, sender.clone()).await;
+        self.handle(event, sender.clone(), receiver.clone()).await;
 
         Ok(())
     }

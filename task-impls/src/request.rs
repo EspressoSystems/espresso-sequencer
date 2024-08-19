@@ -22,11 +22,7 @@ use async_trait::async_trait;
 use hotshot_task::task::TaskState;
 use hotshot_types::{
     consensus::OuterConsensus,
-    data::QuorumProposal,
-    message::{
-        DaConsensusMessage, DataMessage, GeneralConsensusMessage, Message, MessageKind, Proposal,
-        SequencingMessage,
-    },
+    message::{DaConsensusMessage, DataMessage, Message, MessageKind, SequencingMessage},
     traits::{
         election::Membership,
         network::{ConnectedNetwork, DataRequest, RequestKind, ResponseMessage},
@@ -41,10 +37,7 @@ use sha2::{Digest, Sha256};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
 
-use crate::{
-    events::{HotShotEvent, ProposalMissing},
-    helpers::broadcast_event,
-};
+use crate::{events::HotShotEvent, helpers::broadcast_event};
 
 /// Amount of time to try for a request before timing out.
 pub const REQUEST_TIMEOUT: Duration = Duration::from_millis(500);
@@ -115,12 +108,22 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> TaskState for NetworkRequest
                 }
                 Ok(())
             }
-            HotShotEvent::QuorumProposalRequest(missing) => {
-                let ProposalMissing {
-                    view,
-                    response_chan: chan,
-                } = missing;
-                self.run_proposal(&RequestKind::Proposal(*view), chan.clone(), *view);
+            HotShotEvent::QuorumProposalRequestRecv(view_number, sender_key) => {
+                if let Some(quorum_proposal) =
+                    self.state.read().await.last_proposals().get(view_number)
+                {
+                    broadcast_event(
+                        HotShotEvent::QuorumProposalResponseSend(
+                            *view_number,
+                            sender_key.clone(),
+                            quorum_proposal.clone(),
+                        )
+                        .into(),
+                        sender,
+                    )
+                    .await;
+                }
+
                 Ok(())
             }
             _ => Ok(()),
@@ -224,29 +227,6 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES>> NetworkRequestState<TYPES, I
         self.spawned_tasks.entry(view).or_default().push(handle);
     }
 
-    /// Spawns a task to send a request for the proposal and send the response on a channel
-    fn run_proposal(
-        &mut self,
-        request: &RequestKind<TYPES>,
-        response_chan: Sender<Option<Proposal<TYPES, QuorumProposal<TYPES>>>>,
-        view: TYPES::Time,
-    ) {
-        let leader = self.da_membership.leader(view);
-        let requester = ProposalRequester::<TYPES, I> {
-            network: Arc::clone(&self.network),
-            sender: response_chan,
-            leader,
-        };
-        let Some(signature) = self.serialize_and_sign(request) else {
-            return;
-        };
-
-        let pub_key = self.public_key.clone();
-        async_spawn(async move {
-            requester.do_proposal(view, signature, pub_key).await;
-        });
-    }
-
     /// Signals delayed requesters to finish
     pub fn set_shutdown_flag(&self) {
         self.shutdown_flag.store(true, Ordering::Relaxed);
@@ -273,72 +253,6 @@ struct DelayedRequester<TYPES: NodeType, I: NodeImplementation<TYPES>> {
     shutdown_flag: Arc<AtomicBool>,
     /// The node's id
     id: u64,
-}
-
-/// A task the requests some data immediately from one peer
-
-struct ProposalRequester<TYPES: NodeType, I: NodeImplementation<TYPES>> {
-    /// The underlying network to send requests on
-    pub network: Arc<I::Network>,
-    /// Channel to send the event when we receive a response
-    sender: Sender<Option<Proposal<TYPES, QuorumProposal<TYPES>>>>,
-    /// Leader for the view of the request
-    leader: TYPES::SignatureKey,
-}
-
-impl<TYPES: NodeType, I: NodeImplementation<TYPES>> ProposalRequester<TYPES, I> {
-    /// Handle sending a request for proposal for a view, does
-    /// not delay
-    async fn do_proposal(
-        &self,
-        view: TYPES::Time,
-        signature: Signature<TYPES>,
-        key: TYPES::SignatureKey,
-    ) {
-        let response = match bincode::serialize(&make_proposal_req::<TYPES>(view, signature, key)) {
-            Ok(serialized_msg) => {
-                async_timeout(
-                    REQUEST_TIMEOUT,
-                    self.network
-                        .request_data::<TYPES>(serialized_msg, &self.leader),
-                )
-                .await
-            }
-            Err(e) => {
-                tracing::error!(
-                    "Failed to serialize outgoing message: this should never happen. Error: {e}"
-                );
-                broadcast_event(None, &self.sender).await;
-                return;
-            }
-        };
-        match response {
-            Ok(Ok(serialized_response)) => {
-                if let Ok(ResponseMessage::Found(msg)) = bincode::deserialize(&serialized_response)
-                {
-                    let SequencingMessage::General(GeneralConsensusMessage::Proposal(prop)) = msg
-                    else {
-                        error!("Requested Proposal but received a non-proposal in response.  Response was {:?}", msg);
-                        broadcast_event(None, &self.sender).await;
-                        return;
-                    };
-                    debug!("proposal found {:?}", prop);
-                    broadcast_event(Some(prop), &self.sender).await;
-                    return;
-                }
-                debug!("Proposal not found");
-                broadcast_event(None, &self.sender).await;
-            }
-            Ok(Err(e)) => {
-                debug!("request for proposal failed with error {:?}", e);
-                broadcast_event(None, &self.sender).await;
-            }
-            Err(e) => {
-                debug!("request for proposal timed out with error {:?}", e);
-                broadcast_event(None, &self.sender).await;
-            }
-        }
-    }
 }
 
 /// Wrapper for the info in a VID request
@@ -466,24 +380,6 @@ fn make_vid<TYPES: NodeType>(
     };
     Message {
         sender: req.1.clone(),
-        kind: MessageKind::Data(DataMessage::RequestData(data_request)),
-    }
-}
-
-/// Build a request for a Proposal
-fn make_proposal_req<TYPES: NodeType>(
-    view: TYPES::Time,
-    signature: Signature<TYPES>,
-    key: TYPES::SignatureKey,
-) -> Message<TYPES> {
-    let kind = RequestKind::Proposal(view);
-    let data_request = DataRequest {
-        view,
-        request: kind,
-        signature,
-    };
-    Message {
-        sender: key,
         kind: MessageKind::Data(DataMessage::RequestData(data_request)),
     }
 }

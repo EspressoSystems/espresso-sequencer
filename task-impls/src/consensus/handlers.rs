@@ -8,7 +8,7 @@ use core::time::Duration;
 use std::{marker::PhantomData, sync::Arc};
 
 use anyhow::{bail, ensure, Context, Result};
-use async_broadcast::Sender;
+use async_broadcast::{Receiver, Sender};
 use async_compatibility_layer::art::{async_sleep, async_spawn};
 use async_lock::RwLock;
 #[cfg(async_executor_impl = "async-std")]
@@ -163,6 +163,7 @@ pub async fn create_and_send_proposal<TYPES: NodeType, V: Versions>(
 pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType, V: Versions>(
     view: TYPES::Time,
     sender: Sender<Arc<HotShotEvent<TYPES>>>,
+    receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     quorum_membership: Arc<TYPES::Membership>,
     public_key: TYPES::SignatureKey,
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
@@ -178,6 +179,7 @@ pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType, V: V
     let (parent_leaf, state) = parent_leaf_and_state(
         view,
         &sender,
+        &receiver,
         quorum_membership,
         public_key.clone(),
         OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
@@ -260,6 +262,7 @@ pub async fn publish_proposal_from_commitment_and_metadata<TYPES: NodeType, V: V
 pub async fn publish_proposal_if_able<TYPES: NodeType, V: Versions>(
     view: TYPES::Time,
     sender: Sender<Arc<HotShotEvent<TYPES>>>,
+    receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     quorum_membership: Arc<TYPES::Membership>,
     public_key: TYPES::SignatureKey,
     private_key: <TYPES::SignatureKey as SignatureKey>::PrivateKey,
@@ -275,6 +278,7 @@ pub async fn publish_proposal_if_able<TYPES: NodeType, V: Versions>(
     publish_proposal_from_commitment_and_metadata(
         view,
         sender,
+        receiver,
         quorum_membership,
         public_key,
         private_key,
@@ -302,7 +306,8 @@ pub(crate) async fn handle_quorum_proposal_recv<
 >(
     proposal: &Proposal<TYPES, QuorumProposal<TYPES>>,
     sender: &TYPES::SignatureKey,
-    event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+    event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
+    event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     task_state: &mut ConsensusTaskState<TYPES, I, V>,
 ) -> Result<Option<QuorumProposal<TYPES>>> {
     let sender = sender.clone();
@@ -333,7 +338,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
     // NOTE: We could update our view with a valid TC but invalid QC, but that is not what we do here
     if let Err(e) = update_view::<TYPES>(
         view,
-        &event_stream,
+        &event_sender,
         task_state.timeout,
         OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
         &mut task_state.cur_view,
@@ -360,9 +365,11 @@ pub(crate) async fn handle_quorum_proposal_recv<
         Some(p) => Some(p),
         None => fetch_proposal(
             justify_qc.view_number(),
-            event_stream.clone(),
+            event_sender.clone(),
+            event_receiver.clone(),
             Arc::clone(&task_state.quorum_membership),
             OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
+            task_state.public_key.clone(),
         )
         .await
         .ok(),
@@ -470,7 +477,8 @@ pub(crate) async fn handle_quorum_proposal_recv<
                 );
                 let create_and_send_proposal_handle = publish_proposal_if_able(
                     qc.view_number + 1,
-                    event_stream,
+                    event_sender,
+                    event_receiver,
                     Arc::clone(&task_state.quorum_membership),
                     task_state.public_key.clone(),
                     task_state.private_key.clone(),
@@ -509,7 +517,7 @@ pub(crate) async fn handle_quorum_proposal_recv<
                 OuterConsensus::new(Arc::clone(&task_state.consensus.inner_consensus)),
                 Arc::clone(&task_state.upgrade_lock.decided_upgrade_certificate),
                 Arc::clone(&task_state.quorum_membership),
-                event_stream.clone(),
+                event_sender.clone(),
                 sender,
                 task_state.output_event_stream.clone(),
                 task_state.id,
@@ -528,7 +536,8 @@ pub async fn handle_quorum_proposal_validated<
     V: Versions,
 >(
     proposal: &QuorumProposal<TYPES>,
-    event_stream: Sender<Arc<HotShotEvent<TYPES>>>,
+    event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
+    event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
     task_state: &mut ConsensusTaskState<TYPES, I, V>,
 ) -> Result<()> {
     let view = proposal.view_number();
@@ -572,14 +581,16 @@ pub async fn handle_quorum_proposal_validated<
         task_state.cancel_tasks(new_decided_view).await;
     }
     task_state.current_proposal = Some(proposal.clone());
-    task_state.spawn_vote_task(view, event_stream.clone()).await;
+    task_state
+        .spawn_vote_task(view, event_sender.clone(), event_receiver.clone())
+        .await;
     if should_propose {
         debug!(
             "Attempting to publish proposal after voting; now in view: {}",
             *new_view
         );
         if let Err(e) = task_state
-            .publish_proposal(new_view, event_stream.clone())
+            .publish_proposal(new_view, event_sender.clone(), event_receiver.clone())
             .await
         {
             debug!("Failed to propose; error = {e:?}");
@@ -632,7 +643,7 @@ pub async fn handle_quorum_proposal_validated<
         decide_sent.await;
         broadcast_event(
             Arc::new(HotShotEvent::LeafDecided(res.leaves_decided)),
-            &event_stream,
+            &event_sender,
         )
         .await;
         debug!("decide send succeeded");
@@ -643,12 +654,22 @@ pub async fn handle_quorum_proposal_validated<
 
 /// Private key, latest decided upgrade certificate, committee membership, and event stream, for
 /// sending the vote.
-type VoteInfo<TYPES, V> = (
-    <<TYPES as NodeType>::SignatureKey as SignatureKey>::PrivateKey,
-    UpgradeLock<TYPES, V>,
-    Arc<<TYPES as NodeType>::Membership>,
-    Sender<Arc<HotShotEvent<TYPES>>>,
-);
+pub(crate) struct VoteInfo<TYPES: NodeType, V: Versions> {
+    /// The private key of the voting node.
+    pub private_key: <<TYPES as NodeType>::SignatureKey as SignatureKey>::PrivateKey,
+
+    /// The locked upgrade of the voting node.
+    pub upgrade_lock: UpgradeLock<TYPES, V>,
+
+    /// The DA Membership handle
+    pub da_membership: Arc<<TYPES as NodeType>::Membership>,
+
+    /// The event sending stream.
+    pub event_sender: Sender<Arc<HotShotEvent<TYPES>>>,
+
+    /// The event receiver stream.
+    pub event_receiver: Receiver<Arc<HotShotEvent<TYPES>>>,
+}
 
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_lines)]
@@ -692,7 +713,13 @@ pub async fn update_state_and_vote_if_able<
         return false;
     };
 
-    if let Some(upgrade_cert) = &vote_info.1.decided_upgrade_certificate.read().await.clone() {
+    if let Some(upgrade_cert) = &vote_info
+        .upgrade_lock
+        .decided_upgrade_certificate
+        .read()
+        .await
+        .clone()
+    {
         if upgrade_cert.upgrading_in(cur_view)
             && Some(proposal.block_header.payload_commitment())
                 != null_block::commitment(quorum_membership.total_nodes())
@@ -722,9 +749,11 @@ pub async fn update_state_and_vote_if_able<
         Some(p) => Some(p),
         None => fetch_proposal(
             justify_qc.view_number(),
-            vote_info.3.clone(),
+            vote_info.event_sender.clone(),
+            vote_info.event_receiver.clone(),
             Arc::clone(&quorum_membership),
             OuterConsensus::new(Arc::clone(&consensus.inner_consensus)),
+            public_key.clone(),
         )
         .await
         .ok(),
@@ -747,7 +776,7 @@ pub async fn update_state_and_vote_if_able<
     };
     drop(read_consnesus);
 
-    let version = match vote_info.1.version(view).await {
+    let version = match vote_info.upgrade_lock.version(view).await {
         Ok(version) => version,
         Err(e) => {
             error!("Failed to calculate the version: {e:?}");
@@ -778,7 +807,7 @@ pub async fn update_state_and_vote_if_able<
     }
 
     // Validate the DAC.
-    let message = if cert.is_valid_cert(vote_info.2.as_ref()) {
+    let message = if cert.is_valid_cert(vote_info.da_membership.as_ref()) {
         // Validate the block payload commitment for non-genesis DAC.
         if cert.date().payload_commit != proposal.block_header.payload_commitment() {
             warn!(
@@ -793,7 +822,7 @@ pub async fn update_state_and_vote_if_able<
             },
             view,
             &public_key,
-            &vote_info.0,
+            &vote_info.private_key,
         ) {
             GeneralConsensusMessage::<TYPES>::Vote(vote)
         } else {
@@ -848,7 +877,11 @@ pub async fn update_state_and_vote_if_able<
             );
             return false;
         }
-        broadcast_event(Arc::new(HotShotEvent::QuorumVoteSend(vote)), &vote_info.3).await;
+        broadcast_event(
+            Arc::new(HotShotEvent::QuorumVoteSend(vote)),
+            &vote_info.event_sender,
+        )
+        .await;
         return true;
     }
     debug!(

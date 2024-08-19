@@ -39,6 +39,8 @@ pub fn quorum_filter<TYPES: NodeType>(event: &Arc<HotShotEvent<TYPES>>) -> bool 
     !matches!(
         event.as_ref(),
         HotShotEvent::QuorumProposalSend(_, _)
+            | HotShotEvent::QuorumProposalRequestSend(..)
+            | HotShotEvent::QuorumProposalResponseSend(..)
             | HotShotEvent::QuorumVoteSend(_)
             | HotShotEvent::DacSend(_, _)
             | HotShotEvent::TimeoutVoteSend(_)
@@ -112,6 +114,15 @@ impl<TYPES: NodeType> NetworkMessageTaskState<TYPES> {
                         SequencingMessage::General(general_message) => match general_message {
                             GeneralConsensusMessage::Proposal(proposal) => {
                                 HotShotEvent::QuorumProposalRecv(proposal, sender)
+                            }
+                            GeneralConsensusMessage::ProposalRequested(view, sender) => {
+                                HotShotEvent::QuorumProposalRequestRecv(view, sender)
+                            }
+                            GeneralConsensusMessage::LeaderProposalAvailable(proposal) => {
+                                HotShotEvent::QuorumProposalResponseRecv(
+                                    proposal.data.view_number,
+                                    proposal,
+                                )
                             }
                             GeneralConsensusMessage::Vote(vote) => {
                                 HotShotEvent::QuorumVoteRecv(vote.clone())
@@ -292,6 +303,20 @@ impl<
                         TransmitType::Direct(membership.leader(vote.view_number() + 1)),
                     )
                 }
+                HotShotEvent::QuorumProposalRequestSend(view_number, sender_key) => (
+                    sender_key.clone(),
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                        GeneralConsensusMessage::ProposalRequested(view_number, sender_key),
+                    )),
+                    TransmitType::Direct(membership.leader(view_number)),
+                ),
+                HotShotEvent::QuorumProposalResponseSend(_view_number, sender_key, proposal) => (
+                    sender_key.clone(),
+                    MessageKind::<TYPES>::from_consensus_message(SequencingMessage::General(
+                        GeneralConsensusMessage::LeaderProposalAvailable(proposal),
+                    )),
+                    TransmitType::Direct(sender_key),
+                ),
                 HotShotEvent::VidDisperseSend(proposal, sender) => {
                     self.handle_vid_disperse_proposal(proposal, &sender).await;
                     return;

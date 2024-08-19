@@ -97,8 +97,18 @@ pub enum HotShotEvent<TYPES: NodeType> {
     /// 3. The justify QC is valid
     /// 4. The proposal passes either liveness or safety check.
     QuorumProposalValidated(QuorumProposal<TYPES>, Leaf<TYPES>),
-    /// A quorum proposal is missing for a view that we need
-    QuorumProposalRequest(ProposalMissing<TYPES>),
+    /// A quorum proposal is missing for a view that we need. Also includes the sender key.
+    QuorumProposalRequestSend(TYPES::Time, TYPES::SignatureKey),
+    /// A quorum proposal was requested by a node for a view. Also includes the sender key.
+    QuorumProposalRequestRecv(TYPES::Time, TYPES::SignatureKey),
+    /// A quorum proposal was missing for a view. As the leader, we send a reply to the recipient with their key.
+    QuorumProposalResponseSend(
+        TYPES::Time,
+        TYPES::SignatureKey,
+        Proposal<TYPES, QuorumProposal<TYPES>>,
+    ),
+    /// A quorum proposal was requested by a node for a view. Also includes the sender key.
+    QuorumProposalResponseRecv(TYPES::Time, Proposal<TYPES, QuorumProposal<TYPES>>),
     /// Send a DA proposal to the DA committee; emitted by the DA leader (which is the same node as the leader of view v + 1) in the DA task
     DaProposalSend(Proposal<TYPES, DaProposal<TYPES>>, TYPES::SignatureKey),
     /// Send a DA vote to the DA leader; emitted by DA committee members in the DA task after seeing a valid DA proposal
@@ -419,8 +429,17 @@ impl<TYPES: NodeType> Display for HotShotEvent<TYPES> {
                 "UpgradeCertificateFormed(view_number={:?})",
                 cert.view_number()
             ),
-            HotShotEvent::QuorumProposalRequest(view_number) => {
-                write!(f, "QuorumProposalRequest(view_number={view_number:?})")
+            HotShotEvent::QuorumProposalRequestSend(view_number, _) => {
+                write!(f, "QuorumProposalRequestSend(view_number={view_number:?})")
+            }
+            HotShotEvent::QuorumProposalRequestRecv(view_number, _) => {
+                write!(f, "QuorumProposalRequestRecv(view_number={view_number:?})")
+            }
+            HotShotEvent::QuorumProposalResponseSend(view_number, _, _) => {
+                write!(f, "QuorumProposalResponseSend(view_number={view_number:?})")
+            }
+            HotShotEvent::QuorumProposalResponseRecv(view_number, _) => {
+                write!(f, "QuorumProposalResponseRecv(view_number={view_number:?})")
             }
             HotShotEvent::ValidatedStateUpdated(view_number, _) => {
                 write!(f, "ValidatedStateUpdated(view_number={view_number:?})")

@@ -112,8 +112,10 @@ impl<TYPES: NodeType, I: NodeImplementation<TYPES> + 'static, V: Versions>
             None => fetch_proposal(
                 justify_qc.view_number(),
                 self.sender.clone(),
+                self.receiver.clone(),
                 Arc::clone(&self.quorum_membership),
                 OuterConsensus::new(Arc::clone(&self.consensus.inner_consensus)),
+                self.public_key.clone(),
             )
             .await
             .ok(),
