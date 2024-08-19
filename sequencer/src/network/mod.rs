@@ -9,6 +9,6 @@ pub mod libp2p;
 pub type Production = CombinedNetworks<SeqTypes>;
 
 #[cfg(not(feature = "libp2p"))]
-pub type Production = PushCdnNetwork<SeqTypes>;
+pub type Production = PushCdnNetwork<PubKey>;
 
 pub type Memory = MemoryNetwork<PubKey>;
