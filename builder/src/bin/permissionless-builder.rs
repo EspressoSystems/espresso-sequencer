@@ -2,7 +2,7 @@ use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 
 use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
-use espresso_types::{eth_signature_key::EthKeyPair, parse_duration};
+use espresso_types::{eth_signature_key::EthKeyPair, parse_duration, MockSequencerVersions};
 use hotshot::traits::ValidatedState;
 use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use sequencer::{Genesis, L1Params};
@@ -107,7 +107,7 @@ async fn main() -> anyhow::Result<()> {
         genesis.chain_config,
         l1_params,
         opt.state_peers,
-        StaticVersion::<0, 1>::instance(),
+        StaticVersion::<0, 1>::version(),
     )
     .unwrap();
 
@@ -136,6 +136,7 @@ async fn main() -> anyhow::Result<()> {
         buffer_view_num_count,
         txn_timeout_duration,
         base_fee,
+        MockSequencerVersions::new(), // change
     )
     .await?;
 

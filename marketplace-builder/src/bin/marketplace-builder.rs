@@ -3,13 +3,11 @@ use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, parse_duration, FeeAmount, NamespaceId, SequencerVersions,
+    eth_signature_key::EthKeyPair, parse_duration, MockSequencerVersions, FeeAmount, MarketplaceVersion,
+    NamespaceId,
 };
 use hotshot::traits::ValidatedState;
-use hotshot_types::{
-    data::ViewNumber,
-    traits::node_implementation::{ConsensusTime, Versions},
-};
+use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
 use marketplace_builder::{
     builder::{build_instance_state, BuilderConfig},
     hooks::BidConfig,
@@ -152,7 +150,7 @@ async fn main() -> anyhow::Result<()> {
         genesis.chain_config,
         l1_params,
         opt.state_peers,
-        <SequencerVersions as Versions>::Base::instance(),
+        MarketplaceVersion::instance(),
     )
     .unwrap();
 
@@ -167,6 +165,8 @@ async fn main() -> anyhow::Result<()> {
 
     let buffer_view_num_count = opt.buffer_view_num_count;
 
+    // todo: change
+    let versions = MockSequencerVersions::new();
     let _builder_config = BuilderConfig::init(
         is_reserve,
         builder_key_pair,
@@ -184,6 +184,7 @@ async fn main() -> anyhow::Result<()> {
         base_fee,
         bid_config,
         opt.solver_url,
+        versions,
     )
     .await?;
 

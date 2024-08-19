@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use hotshot::traits::election::static_committee::GeneralStaticCommittee;
 use hotshot_types::{
     data::ViewNumber,
@@ -19,7 +21,7 @@ pub use impls::{
     StateValidationError,
 };
 pub use utils::*;
-use vbs::version::StaticVersion;
+use vbs::version::{StaticVersion, StaticVersionType};
 
 // This is the single source of truth for minor versions supported by this major version.
 //
@@ -135,18 +137,34 @@ impl NodeType for SeqTypes {
     type BuilderSignatureKey = FeeAccount;
     type AuctionResult = SolverAuctionResults;
 }
-#[derive(Clone, Debug, Copy)]
-pub struct SequencerVersions {}
+#[derive(Clone, Default, Debug, Copy)]
+pub struct SequencerVersions<Base: StaticVersionType, Upgrade: StaticVersionType> {
+    _pd: PhantomData<(Base, Upgrade)>,
+}
 
-impl Versions for SequencerVersions {
-    type Base = StaticVersion<0, 1>;
-    type Upgrade = StaticVersion<0, 2>;
+impl<Base: StaticVersionType, Upgrade: StaticVersionType> SequencerVersions<Base, Upgrade> {
+    pub fn new() -> Self {
+        Self {
+            _pd: Default::default(),
+        }
+    }
+}
+
+pub type MockSequencerVersions = SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>;
+
+pub type MarketplaceVersion = StaticVersion<0, 3>;
+
+impl<Base: StaticVersionType + 'static, Upgrade: StaticVersionType + 'static> Versions
+    for SequencerVersions<Base, Upgrade>
+{
+    type Base = Base;
+    type Upgrade = Upgrade;
     const UPGRADE_HASH: [u8; 32] = [
         1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
         0, 0,
     ];
 
-    type Marketplace = StaticVersion<0, 3>;
+    type Marketplace = MarketplaceVersion;
 }
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;

@@ -5,7 +5,7 @@ use std::{
 use anyhow::{bail, Context};
 use builder::permissioned::init_node;
 use clap::Parser;
-use espresso_types::{eth_signature_key::EthKeyPair, parse_duration};
+use espresso_types::{eth_signature_key::EthKeyPair, parse_duration, MockSequencerVersions};
 use ethers::types::Address;
 use hotshot_types::{
     data::ViewNumber,
@@ -17,7 +17,6 @@ use libp2p::Multiaddr;
 use sequencer::{persistence::no_storage::NoStorage, Genesis, L1Params, NetworkParams};
 use sequencer_utils::logging;
 use url::Url;
-use vbs::version::{StaticVersion, StaticVersionType};
 
 #[derive(Parser, Clone, Debug)]
 pub struct PermissionedBuilderOptions {
@@ -259,7 +258,8 @@ async fn main() -> anyhow::Result<()> {
         catchup_backoff: Default::default(),
     };
 
-    let sequencer_version = StaticVersion::<0, 1>::instance();
+    // todo: change
+    let sequencer_version = MockSequencerVersions::new();
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 

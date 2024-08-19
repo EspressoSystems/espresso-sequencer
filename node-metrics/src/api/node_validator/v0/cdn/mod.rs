@@ -1,6 +1,6 @@
 use crate::api::node_validator::v0::create_node_validator_api::ExternalMessage;
 use async_std::task::JoinHandle;
-use espresso_types::{v0::SequencerVersions, PubKey, SeqTypes};
+use espresso_types::{PubKey, SeqTypes};
 use futures::{channel::mpsc::SendError, Sink, SinkExt};
 use hotshot::{
     traits::NetworkError,
@@ -10,7 +10,7 @@ use hotshot_types::{
     message::{MessageKind, UpgradeLock},
     traits::{
         network::{BroadcastDelay, ConnectedNetwork, Topic},
-        node_implementation::NodeType,
+        node_implementation::{NodeType, Versions},
     },
 };
 use url::Url;
@@ -62,12 +62,14 @@ impl CdnReceiveMessagesTask {
     /// URL sender. Calling this function will create an async task that
     /// will begin executing immediately.  The handle for the task will
     /// be in the returned structure.
-    pub fn new<N, K>(network: N, url_sender: K) -> Self
+    pub fn new<N, K, V>(network: N, url_sender: K, ver: V) -> Self
     where
         N: ConnectedNetworkConsumer<<SeqTypes as NodeType>::SignatureKey> + Send + 'static,
         K: Sink<Url, Error = SendError> + Clone + Send + Unpin + 'static,
+        V: Versions,
     {
-        let task_handle = async_std::task::spawn(Self::process_cdn_messages(network, url_sender));
+        let task_handle =
+            async_std::task::spawn(Self::process_cdn_messages(network, url_sender, ver));
         Self {
             task_handle: Some(task_handle),
         }
@@ -80,14 +82,15 @@ impl CdnReceiveMessagesTask {
     /// [MessageKind::External] messages, and attempts to decode
     /// [ExternalMessage] from those contained pieces of data.  Though, in the
     /// future this may be able to be expanded to other things.
-    async fn process_cdn_messages<N, K>(network: N, url_sender: K)
+    async fn process_cdn_messages<N, K, V>(network: N, url_sender: K, _ver: V)
     where
         N: ConnectedNetworkConsumer<<SeqTypes as NodeType>::SignatureKey> + Send + 'static,
         K: Sink<Url, Error = SendError> + Clone + Send + Unpin + 'static,
+        V: Versions,
     {
         network.wait_for_ready().await;
         let mut url_sender = url_sender;
-        let upgrade_lock = UpgradeLock::<SeqTypes, SequencerVersions>::new();
+        let upgrade_lock = UpgradeLock::<SeqTypes, V>::new();
 
         loop {
             let messages_result = network.recv_msgs().await;
@@ -215,11 +218,13 @@ impl BroadcastRollCallTask {
     ///
     /// This task only performs one action, and then returns.  It is not
     /// long-lived.
-    pub fn new<N>(network: N, public_key: PubKey) -> Self
+    pub fn new<N, V>(network: N, public_key: PubKey, ver: V) -> Self
     where
         N: ConnectedNetworkPublisher<<SeqTypes as NodeType>::SignatureKey> + Send + 'static,
+        V: Versions,
     {
-        let task_handle = async_std::task::spawn(Self::broadcast_roll_call(network, public_key));
+        let task_handle =
+            async_std::task::spawn(Self::broadcast_roll_call(network, public_key, ver));
         Self {
             task_handle: Some(task_handle),
         }
@@ -229,12 +234,13 @@ impl BroadcastRollCallTask {
     /// RollCallRequest to the CDN network in order to request responses from
     /// the rest of the network participants, so we can collect the public API
     /// URLs in the message consuming task.
-    async fn broadcast_roll_call<N>(network: N, public_key: PubKey)
+    async fn broadcast_roll_call<N, V>(network: N, public_key: PubKey, _: V)
     where
         N: ConnectedNetworkPublisher<<SeqTypes as NodeType>::SignatureKey> + Send + 'static,
+        V: Versions,
     {
         network.wait_for_ready().await;
-        let upgrade_lock = UpgradeLock::<SeqTypes, SequencerVersions>::new();
+        let upgrade_lock = UpgradeLock::<SeqTypes, V>::new();
 
         // We want to send the Roll Call Request
         let rollcall_request = ExternalMessage::RollCallRequest(public_key);
@@ -292,6 +298,7 @@ mod test {
     use async_std::future::TimeoutError;
     use async_std::prelude::FutureExt;
     use core::panic;
+    use espresso_types::MockSequencerVersions;
     use espresso_types::{v0::SequencerVersions, SeqTypes};
     use futures::channel::mpsc::Sender;
     use futures::SinkExt;
@@ -308,6 +315,7 @@ mod test {
     use hotshot_types::traits::network::{BroadcastDelay, ResponseMessage};
     use std::time::Duration;
     use url::Url;
+    use vbs::version::StaticVersion;
 
     /// [TestConnectedNetworkConsumer] is a test implementation of the
     /// [ConnectedNetworkConsumer] trait that allows for the simulation of
@@ -344,7 +352,10 @@ mod test {
     /// url_sender appropriately.
     #[async_std::test]
     async fn test_cdn_receive_messages_task() {
-        let upgrade_lock = UpgradeLock::<SeqTypes, SequencerVersions>::new();
+        let upgrade_lock = UpgradeLock::<
+            SeqTypes,
+            SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>,
+        >::new();
 
         let test_hotshot_message_serialized = {
             let test_url = Url::parse("http://localhost:8080/").unwrap();
@@ -367,6 +378,7 @@ mod test {
         let task = CdnReceiveMessagesTask::new(
             TestConnectedNetworkConsumer(Ok(vec![test_hotshot_message_serialized])),
             url_sender,
+            MockSequencerVersions::new(),
         );
 
         let mut url_receiver = url_receiver;
@@ -391,6 +403,7 @@ mod test {
         let task = CdnReceiveMessagesTask::new(
             TestConnectedNetworkConsumer(Err(NetworkError::ChannelSend)),
             url_sender,
+            MockSequencerVersions::new(),
         );
 
         let mut url_receiver = url_receiver;
@@ -415,6 +428,7 @@ mod test {
         let task = CdnReceiveMessagesTask::new(
             TestConnectedNetworkConsumer(Ok(vec![vec![0]])),
             url_sender,
+            MockSequencerVersions::new(),
         );
 
         let mut url_receiver = url_receiver;
@@ -437,7 +451,10 @@ mod test {
     /// This really shouldn't happen in practice.
     #[async_std::test]
     async fn test_cdn_receive_messages_task_fails_unexpected_hotshot_message_variant() {
-        let upgrade_lock = UpgradeLock::<SeqTypes, SequencerVersions>::new();
+        let upgrade_lock = UpgradeLock::<
+            SeqTypes,
+            SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>,
+        >::new();
         let (url_sender, url_receiver) = mpsc::channel(1);
         let bytes = upgrade_lock
             .serialize(&Message::<SeqTypes> {
@@ -447,8 +464,11 @@ mod test {
             .await
             .unwrap();
 
-        let task =
-            CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(Ok(vec![bytes])), url_sender);
+        let task = CdnReceiveMessagesTask::new(
+            TestConnectedNetworkConsumer(Ok(vec![bytes])),
+            url_sender,
+            MockSequencerVersions::new(),
+        );
 
         let mut url_receiver = url_receiver;
         // The task should not panic when it fails to receive a message.
@@ -468,7 +488,10 @@ mod test {
     /// it encounters an error from the deserialization of the external message.
     #[async_std::test]
     async fn test_cdn_receive_messages_task_fails_decoding_external_message() {
-        let upgrade_lock = UpgradeLock::<SeqTypes, SequencerVersions>::new();
+        let upgrade_lock = UpgradeLock::<
+            SeqTypes,
+            SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>,
+        >::new();
         let (url_sender, url_receiver) = mpsc::channel(1);
         let bytes = upgrade_lock
             .serialize(&Message::<SeqTypes> {
@@ -478,8 +501,11 @@ mod test {
             .await
             .unwrap();
 
-        let task =
-            CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(Ok(vec![bytes])), url_sender);
+        let task = CdnReceiveMessagesTask::new(
+            TestConnectedNetworkConsumer(Ok(vec![bytes])),
+            url_sender,
+            MockSequencerVersions::new(),
+        );
 
         let mut url_receiver = url_receiver;
         // The task should not panic when it fails to receive a message.
@@ -501,7 +527,10 @@ mod test {
     /// really have a point in existing.
     #[async_std::test]
     async fn test_cdn_receive_messages_tasks_exits_when_url_receiver_closed() {
-        let upgrade_lock = UpgradeLock::<SeqTypes, SequencerVersions>::new();
+        let upgrade_lock = UpgradeLock::<
+            SeqTypes,
+            SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>,
+        >::new();
         let (url_sender, url_receiver) = mpsc::channel(1);
 
         let test_hotshot_message_serialized = {
@@ -525,6 +554,7 @@ mod test {
         let mut task = CdnReceiveMessagesTask::new(
             TestConnectedNetworkConsumer(Ok(vec![test_hotshot_message_serialized])),
             url_sender.clone(),
+            MockSequencerVersions::new(),
         );
 
         let task_handle = task.task_handle.take();
@@ -561,12 +591,16 @@ mod test {
     /// beyond it's initial request.
     #[async_std::test]
     async fn test_cdn_broadcast_roll_call_task() {
-        let upgrade_lock = UpgradeLock::<SeqTypes, SequencerVersions>::new();
+        let upgrade_lock = UpgradeLock::<
+            SeqTypes,
+            SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>,
+        >::new();
         let (message_sender, message_receiver) = mpsc::channel(1);
 
         let task = BroadcastRollCallTask::new(
             TestConnectedNetworkPublisher(message_sender),
             BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
+            MockSequencerVersions::new(),
         );
 
         let mut message_receiver = message_receiver;

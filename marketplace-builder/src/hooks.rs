@@ -22,6 +22,7 @@ use espresso_types::NamespaceId;
 use hotshot_types::traits::node_implementation::NodeType;
 
 use marketplace_solver::SolverError;
+use sequencer::SequencerApiVersion;
 use surf_disco::Client;
 
 use tide_disco::Url;
@@ -38,8 +39,8 @@ pub struct BidConfig {
 
 pub async fn connect_to_solver(
     solver_api_url: Url,
-) -> Option<Client<SolverError, <SequencerVersions as Versions>::Base>> {
-    let client = Client::<SolverError, <SequencerVersions as Versions>::Base>::new(
+) -> Option<Client<SolverError, SequencerApiVersion>> {
+    let client = Client::<SolverError, SequencerApiVersion>::new(
         solver_api_url.join("marketplace-solver/").unwrap(),
     );
 

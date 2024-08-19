@@ -1,7 +1,7 @@
 use std::{net::ToSocketAddrs, sync::Arc};
 
 use clap::Parser;
-use espresso_types::{SequencerVersions, SolverAuctionResultsProvider};
+use espresso_types::{MockSequencerVersions, SolverAuctionResultsProvider};
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
@@ -11,7 +11,6 @@ use sequencer::{
     options::{Modules, Options},
     persistence, Genesis, L1Params, NetworkParams,
 };
-use vbs::version::StaticVersionType;
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
@@ -21,39 +20,28 @@ async fn main() -> anyhow::Result<()> {
     let mut modules = opt.modules();
     tracing::warn!(?modules, "sequencer starting up");
 
+    // change
     if let Some(storage) = modules.storage_fs.take() {
-        init_with_storage(
-            modules,
-            opt,
-            storage,
-            <SequencerVersions as Versions>::Base::instance(),
-        )
-        .await
+        init_with_storage(modules, opt, storage, MockSequencerVersions::new()).await
     } else if let Some(storage) = modules.storage_sql.take() {
-        init_with_storage(
-            modules,
-            opt,
-            storage,
-            <SequencerVersions as Versions>::Base::instance(),
-        )
-        .await
+        init_with_storage(modules, opt, storage, MockSequencerVersions::new()).await
     } else {
         // Persistence is required. If none is provided, just use the local file system.
         init_with_storage(
             modules,
             opt,
             persistence::fs::Options::default(),
-            <SequencerVersions as Versions>::Base::instance(),
+            MockSequencerVersions::new(),
         )
         .await
     }
 }
 
-async fn init_with_storage<S, Ver: StaticVersionType + 'static>(
+async fn init_with_storage<S, V: Versions>(
     modules: Modules,
     opt: Options,
     storage_opt: S,
-    bind_version: Ver,
+    bind_version: V,
 ) -> anyhow::Result<()>
 where
     S: DataSourceOptions,
@@ -139,27 +127,24 @@ where
             }
 
             http_opt
-                .serve(
-                    move |metrics| {
-                        async move {
-                            init_node(
-                                genesis,
-                                network_params,
-                                &*metrics,
-                                storage_opt,
-                                l1_params,
-                                bind_version,
-                                opt.is_da,
-                                opt.identity,
-                                marketplace_config,
-                            )
-                            .await
-                            .unwrap()
-                        }
-                        .boxed()
-                    },
-                    bind_version,
-                )
+                .serve(move |metrics| {
+                    async move {
+                        init_node(
+                            genesis,
+                            network_params,
+                            &*metrics,
+                            storage_opt,
+                            l1_params,
+                            bind_version,
+                            opt.is_da,
+                            opt.identity,
+                            marketplace_config,
+                        )
+                        .await
+                        .unwrap()
+                    }
+                    .boxed()
+                })
                 .await?
         }
         None => {
@@ -198,6 +183,7 @@ mod test {
         api::options::{Http, Status},
         genesis::StakeTableConfig,
         persistence::fs,
+        SequencerApiVersion,
     };
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::{error::ClientError, Client, Url};
@@ -250,7 +236,7 @@ mod test {
                 modules,
                 opt,
                 fs::Options::new(tmp.path().into()),
-                <SequencerVersions as Versions>::Base::instance(),
+                MockSequencerVersions::new(),
             )
             .await
             {
@@ -262,7 +248,7 @@ mod test {
         // orchestrator.
         tracing::info!("waiting for API to start");
         let url: Url = format!("http://localhost:{port}").parse().unwrap();
-        let client = Client::<ClientError, <SequencerVersions as Versions>::Base>::new(url.clone());
+        let client = Client::<ClientError, SequencerApiVersion>::new(url.clone());
         assert!(client.connect(Some(Duration::from_secs(60))).await);
         client.get::<()>("healthcheck").send().await.unwrap();
 

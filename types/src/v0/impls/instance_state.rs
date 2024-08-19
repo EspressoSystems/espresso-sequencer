@@ -1,13 +1,11 @@
-use crate::SequencerVersions;
 use crate::{
     v0::traits::StateCatchup, v0_3::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
     Timestamp, Upgrade, UpgradeMode,
 };
-use hotshot_types::traits::node_implementation::Versions;
 use hotshot_types::traits::states::InstanceState;
 use hotshot_types::HotShotConfig;
 use std::{collections::BTreeMap, sync::Arc};
-use vbs::version::{StaticVersionType, Version};
+use vbs::version::{StaticVersion, StaticVersionType, Version};
 
 use super::state::ValidatedState;
 
@@ -48,6 +46,7 @@ impl NodeState {
         chain_config: ChainConfig,
         l1_client: L1Client,
         catchup: impl StateCatchup + 'static,
+        current_version: Version,
     ) -> Self {
         Self {
             node_id,
@@ -61,17 +60,20 @@ impl NodeState {
             },
             l1_genesis: None,
             upgrades: Default::default(),
-            current_version: <SequencerVersions as Versions>::Base::version(),
+            current_version,
         }
     }
 
     #[cfg(any(test, feature = "testing"))]
     pub fn mock() -> Self {
+        use vbs::version::StaticVersion;
+
         Self::new(
             0,
             ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
             mock::MockStateCatchup::default(),
+            StaticVersion::<0, 1>::version(),
         )
     }
 
@@ -111,6 +113,7 @@ impl Default for NodeState {
             ChainConfig::default(),
             L1Client::new("http://localhost:3331".parse().unwrap(), 10000),
             mock::MockStateCatchup::default(),
+            StaticVersion::<0, 1>::version(),
         )
     }
 }

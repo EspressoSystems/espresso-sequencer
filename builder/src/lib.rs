@@ -157,13 +157,13 @@ pub mod testing {
             block_contents::{vid_commitment, BlockHeader, GENESIS_VID_NUM_STORAGE_NODES},
             metrics::NoMetrics,
             network::Topic,
-            node_implementation::ConsensusTime,
+            node_implementation::{ConsensusTime, Versions},
             signature_key::BuilderSignatureKey as _,
         },
         ExecutionType, HotShotConfig, PeerConfig, ValidatorConfig,
     };
     use portpicker::pick_unused_port;
-    use sequencer::state_signature::StateSignatureMemStorage;
+    use sequencer::{state_signature::StateSignatureMemStorage, SequencerApiVersion};
     use serde::{Deserialize, Serialize};
     use vbs::version::StaticVersion;
 
@@ -334,13 +334,13 @@ pub mod testing {
             }
         }
 
-        pub async fn init_nodes<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
+        pub async fn init_nodes<P: SequencerPersistence, V: Versions>(
             &self,
-            bind_version: Ver,
+            bind_version: V,
             options: impl PersistenceOptions<Persistence = P>,
         ) -> Vec<(
-            Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>, SequencerVersions>>,
-            Option<StateSigner<Ver>>,
+            Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>, V>>,
+            Option<StateSigner<SequencerApiVersion>>,
         )> {
             let num_staked_nodes = self.num_staked_nodes();
             let mut is_staked = false;
@@ -371,17 +371,17 @@ pub mod testing {
             .await
         }
 
-        pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static>(
+        pub async fn init_node<P: SequencerPersistence, V: Versions>(
             &self,
             i: usize,
             is_staked: bool,
             stake_table_commit: StakeTableCommitmentType,
             metrics: &dyn Metrics,
-            bind_version: Ver,
+            bind_version: V,
             persistence: P,
         ) -> (
-            SystemContextHandle<SeqTypes, Node<network::Memory, P>, SequencerVersions>,
-            StateSigner<Ver>,
+            SystemContextHandle<SeqTypes, Node<network::Memory, P>, V>,
+            StateSigner<SequencerApiVersion>,
         ) {
             let mut config = self.config.clone();
 
@@ -405,8 +405,8 @@ pub mod testing {
                 ChainConfig::default(),
                 L1Client::new(self.anvil.endpoint().parse().unwrap(), 1),
                 MockStateCatchup::default(),
+                V::Base::VERSION,
             )
-            .with_current_version(Ver::VERSION)
             .with_genesis(ValidatedState::default());
 
             tracing::info!("Before init hotshot");
@@ -461,13 +461,11 @@ pub mod testing {
             async_spawn(app.serve(url, StaticVersion::<0, 1>::instance()));
         }
         // enable hotshot event streaming
-        pub fn enable_hotshot_node_event_streaming<P: SequencerPersistence>(
+        pub fn enable_hotshot_node_event_streaming<P: SequencerPersistence, V: Versions>(
             hotshot_events_api_url: Url,
             known_nodes_with_stake: Vec<PeerConfig<VerKey>>,
             num_non_staking_nodes: usize,
-            hotshot_context_handle: Arc<
-                SystemContextHandle<SeqTypes, Node<network::Memory, P>, SequencerVersions>,
-            >,
+            hotshot_context_handle: Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>, V>>,
         ) {
             // create a event streamer
             let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
@@ -535,10 +533,11 @@ pub mod testing {
     impl NonPermissionedBuilderTestConfig {
         pub const SUBSCRIBED_DA_NODE_ID: usize = 5;
 
-        pub async fn init_non_permissioned_builder(
+        pub async fn init_non_permissioned_builder<V: Versions>(
             hotshot_test_config: &HotShotTestConfig,
             hotshot_events_streaming_api_url: Url,
             hotshot_builder_api_url: Url,
+            versions: V,
         ) -> Self {
             // setup the instance state
             let node_state = NodeState::new(
@@ -549,8 +548,8 @@ pub mod testing {
                     1,
                 ),
                 MockStateCatchup::default(),
+                StaticVersion::<0, 1>::VERSION,
             )
-            .with_current_version(StaticVersion::<0, 1>::VERSION)
             .with_genesis(ValidatedState::default());
 
             // generate builder keys
@@ -580,6 +579,7 @@ pub mod testing {
                 15,
                 Duration::from_millis(500),
                 ChainConfig::default().base_fee,
+                versions,
             )
             .await
             .unwrap();
@@ -591,24 +591,17 @@ pub mod testing {
         }
     }
 
-    pub struct PermissionedBuilderTestConfig<
-        P: SequencerPersistence,
-        Ver: StaticVersionType + 'static,
-    > {
-        pub builder_context: BuilderContext<network::Memory, P, Ver>,
+    pub struct PermissionedBuilderTestConfig<P: SequencerPersistence, V: Versions> {
+        pub builder_context: BuilderContext<network::Memory, P, V>,
         pub fee_account: FeeAccount,
     }
 
-    impl<P: SequencerPersistence, Ver: StaticVersionType + 'static>
-        PermissionedBuilderTestConfig<P, Ver>
-    {
+    impl<P: SequencerPersistence, V: Versions> PermissionedBuilderTestConfig<P, V> {
         pub async fn init_permissioned_builder(
             hotshot_test_config: HotShotTestConfig,
-            hotshot_handle: Arc<
-                SystemContextHandle<SeqTypes, Node<network::Memory, P>, SequencerVersions>,
-            >,
+            hotshot_handle: Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>, V>>,
             node_id: u64,
-            state_signer: StateSigner<Ver>,
+            state_signer: StateSigner<SequencerApiVersion>,
             hotshot_builder_api_url: Url,
         ) -> Self {
             // setup the instance state
@@ -620,8 +613,8 @@ pub mod testing {
                     1,
                 ),
                 MockStateCatchup::default(),
+                V::Base::VERSION,
             )
-            .with_current_version(Ver::VERSION)
             .with_genesis(ValidatedState::default());
 
             // generate builder keys
@@ -677,7 +670,7 @@ pub mod testing {
 mod test {
     use async_std::stream::IntoStream;
     use clap::builder;
-    use espresso_types::{Header, NodeState, Payload, ValidatedState};
+    use espresso_types::{MockSequencerVersions, Header, NodeState, Payload, ValidatedState};
     use ethers::providers::Quorum;
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
@@ -704,13 +697,13 @@ mod test {
     async fn test_non_voting_hotshot_node() {
         setup_test();
 
-        let ver = StaticVersion::<0, 1>::instance();
-
         let success_height = 5;
         // Assign `config` so it isn't dropped early.
         let config = HotShotTestConfig::default();
         tracing::debug!("Done with hotshot test config");
-        let handles = config.init_nodes(ver, no_storage::Options).await;
+        let handles = config
+            .init_nodes(MockSequencerVersions::new(), no_storage::Options)
+            .await;
         tracing::debug!("Done with init nodes");
         let total_nodes = HotShotTestConfig::total_nodes();
 

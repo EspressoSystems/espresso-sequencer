@@ -4,17 +4,13 @@ use anyhow::Context;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{sync::RwLock, task::spawn};
 use clap::Parser;
-use espresso_types::SequencerVersions;
-use hotshot_types::traits::node_implementation::Versions;
 use marketplace_solver::{
     define_api, handle_events,
     state::{GlobalState, SolverState, StakeTable},
     EventsServiceClient, Options, SolverError,
 };
 use tide_disco::App;
-use vbs::version::StaticVersionType;
-
-type Version = <SequencerVersions as Versions>::Base;
+use vbs::version::{StaticVersion, StaticVersionType};
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
@@ -63,11 +59,14 @@ async fn main() -> anyhow::Result<()> {
     let mut api = define_api(Default::default())?;
     api.with_version(env!("CARGO_PKG_VERSION").parse()?);
 
-    app.register_module::<SolverError, Version>("marketplace-solver", api)?;
+    app.register_module::<SolverError, StaticVersion<0, 1>>("marketplace-solver", api)?;
 
-    app.serve(format!("0.0.0.0:{}", solver_api_port), Version::instance())
-        .await
-        .unwrap();
+    app.serve(
+        format!("0.0.0.0:{}", solver_api_port),
+        StaticVersion::<0, 1>::instance(),
+    )
+    .await
+    .unwrap();
 
     event_handler.cancel().await;
 

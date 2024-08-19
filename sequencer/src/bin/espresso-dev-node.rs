@@ -4,7 +4,7 @@ use async_std::task::spawn;
 use async_trait::async_trait;
 use clap::Parser;
 use contract_bindings::light_client_mock::LightClientMock;
-use espresso_types::{parse_duration, SequencerVersions};
+use espresso_types::{parse_duration, MockSequencerVersions};
 use ethers::{
     middleware::{MiddlewareBuilder, SignerMiddleware},
     providers::{Http, Middleware, Provider},
@@ -15,10 +15,7 @@ use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt}
 use hotshot_state_prover::service::{
     one_honest_threshold, run_prover_service_with_stake_table, StateProverConfig,
 };
-use hotshot_types::traits::{
-    node_implementation::Versions,
-    stake_table::{SnapshotVersion, StakeTableScheme},
-};
+use hotshot_types::traits::stake_table::{SnapshotVersion, StakeTableScheme};
 use portpicker::pick_unused_port;
 use sequencer::{
     api::{
@@ -28,6 +25,7 @@ use sequencer::{
     persistence,
     state_signature::relay_server::run_relay_server,
     testing::TestConfigBuilder,
+    SequencerApiVersion,
 };
 use sequencer_utils::{
     deployer::{deploy, Contract, Contracts},
@@ -190,7 +188,7 @@ async fn main() -> anyhow::Result<()> {
         .network_config(network_config)
         .build();
 
-    let network = TestNetwork::new(config, <SequencerVersions as Versions>::Base::instance()).await;
+    let network = TestNetwork::new(config, MockSequencerVersions::new()).await;
     let st = network.cfg.stake_table();
     let total_stake = st.total_stake(SnapshotVersion::LastEpochStart).unwrap();
     let config = network.cfg.hotshot_config();
@@ -288,7 +286,7 @@ async fn main() -> anyhow::Result<()> {
 
         let prover_handle = spawn(run_prover_service_with_stake_table(
             prover_config,
-            <SequencerVersions as Versions>::Base::instance(),
+            SequencerApiVersion::instance(),
             Arc::new(st.clone()),
         ));
         handles.push(prover_handle);
@@ -301,7 +299,7 @@ async fn main() -> anyhow::Result<()> {
             format!("http://0.0.0.0:{relay_server_port}")
                 .parse()
                 .unwrap(),
-            <SequencerVersions as Versions>::Base::instance(),
+            SequencerApiVersion::instance(),
         )
         .await;
 
@@ -340,7 +338,7 @@ async fn main() -> anyhow::Result<()> {
         dev_node_port,
         mock_contracts,
         dev_info,
-        <SequencerVersions as Versions>::Base::instance(),
+        SequencerApiVersion::instance(),
     ));
     handles.push(dev_node_handle);
 
@@ -503,18 +501,17 @@ mod tests {
     use committable::{Commitment, Committable};
     use contract_bindings::light_client::LightClient;
     use escargot::CargoBuild;
-    use espresso_types::{BlockMerkleTree, Header, SeqTypes, SequencerVersions, Transaction};
+    use espresso_types::{BlockMerkleTree, Header, SeqTypes, Transaction};
     use ethers::{providers::Middleware, types::U256};
     use futures::TryStreamExt;
     use hotshot_query_service::{
         availability::{BlockQueryData, TransactionQueryData, VidCommonQueryData},
         data_source::sql::testing::TmpDb,
     };
-    use hotshot_types::traits::node_implementation::Versions;
     use jf_merkle_tree::MerkleTreeScheme;
     use portpicker::pick_unused_port;
     use rand::Rng;
-    use sequencer::api::endpoints::NamespaceProofQueryData;
+    use sequencer::{api::endpoints::NamespaceProofQueryData, SequencerApiVersion};
     use sequencer_utils::{init_signer, test_utils::setup_test, Anvil, AnvilOptions};
     use surf_disco::Client;
     use tide_disco::error::ServerError;
@@ -581,7 +578,7 @@ mod tests {
 
         let process = BackgroundProcess(process);
 
-        let api_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
+        let api_client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
         api_client.connect(None).await;
 
@@ -755,7 +752,7 @@ mod tests {
             }
         }
 
-        let dev_node_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
+        let dev_node_client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
         dev_node_client.connect(None).await;
 
@@ -899,7 +896,7 @@ mod tests {
 
         let process = BackgroundProcess(process);
 
-        let api_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
+        let api_client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{api_port}").parse().unwrap());
         api_client.connect(None).await;
 
@@ -914,7 +911,7 @@ mod tests {
             .await
             .unwrap();
 
-        let dev_node_client: Client<ServerError, <SequencerVersions as Versions>::Base> =
+        let dev_node_client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{dev_node_port}").parse().unwrap());
         dev_node_client.connect(None).await;
 

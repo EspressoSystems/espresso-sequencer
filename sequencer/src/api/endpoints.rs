@@ -21,7 +21,10 @@ use hotshot_query_service::{
 };
 use hotshot_types::{
     data::ViewNumber,
-    traits::{network::ConnectedNetwork, node_implementation::ConsensusTime},
+    traits::{
+        network::ConnectedNetwork,
+        node_implementation::{ConsensusTime, Versions},
+    },
 };
 use serde::{de::Error as _, Deserialize, Serialize};
 use snafu::OptionExt;
@@ -39,7 +42,7 @@ use super::{
     },
     StorageState,
 };
-use crate::{SeqTypes, SequencerPersistence};
+use crate::{SeqTypes, SequencerApiVersion, SequencerPersistence};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NamespaceProofQueryData {
@@ -49,14 +52,13 @@ pub struct NamespaceProofQueryData {
 
 pub(super) type AvailState<N, P, D, Ver> = Arc<RwLock<StorageState<N, P, D, Ver>>>;
 
-type AvailabilityApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, availability::Error, Ver>;
+type AvailabilityApi<N, P, D, V, Ver> = Api<AvailState<N, P, D, V>, availability::Error, Ver>;
 
 // TODO (abdul): replace snafu with `this_error` in  hotshot query service
 // Snafu has been replaced by `this_error` everywhere.
 // However, the query service still uses snafu
-pub(super) fn availability<N, P, D, Ver: StaticVersionType + 'static>(
-    bind_version: Ver,
-) -> Result<AvailabilityApi<N, P, D, Ver>>
+pub(super) fn availability<N, P, D, V: Versions>(
+) -> Result<AvailabilityApi<N, P, D, V, SequencerApiVersion>>
 where
     N: ConnectedNetwork<PubKey>,
     D: SequencerDataSource + Send + Sync + 'static,
@@ -67,9 +69,9 @@ where
     options.extensions.push(extension);
     let timeout = options.fetch_timeout;
 
-    let mut api = availability::define_api::<AvailState<N, P, D, Ver>, SeqTypes, Ver>(
+    let mut api = availability::define_api::<AvailState<N, P, D, _>, SeqTypes, _>(
         &options,
-        bind_version,
+        SequencerApiVersion::instance(),
     )?;
 
     api.get("getnamespaceproof", move |req, state| {
@@ -125,33 +127,31 @@ where
     Ok(api)
 }
 
-type ExplorerApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, explorer::Error, Ver>;
+type ExplorerApi<N, P, D, V, Ver> = Api<AvailState<N, P, D, V>, explorer::Error, Ver>;
 
-pub(super) fn explorer<N, P, D, Ver: StaticVersionType + 'static>(
-    bind_version: Ver,
-) -> Result<ExplorerApi<N, P, D, Ver>>
+pub(super) fn explorer<N, P, D, V: Versions>(
+    bind_version: SequencerApiVersion,
+) -> Result<ExplorerApi<N, P, D, V, SequencerApiVersion>>
 where
     N: ConnectedNetwork<PubKey>,
     D: ExplorerStorage<SeqTypes> + Send + Sync + 'static,
     P: SequencerPersistence,
 {
-    let api = explorer::define_api::<AvailState<N, P, D, Ver>, SeqTypes, Ver>(bind_version)?;
+    let api = explorer::define_api::<AvailState<N, P, D, V>, SeqTypes, _>(bind_version)?;
     Ok(api)
 }
 
-type NodeApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, node::Error, Ver>;
+type NodeApi<N, P, D, V, Ver> = Api<AvailState<N, P, D, V>, node::Error, Ver>;
 
-pub(super) fn node<N, P, D, Ver: StaticVersionType + 'static>(
-    bind_version: Ver,
-) -> Result<NodeApi<N, P, D, Ver>>
+pub(super) fn node<N, P, D, V: Versions>() -> Result<NodeApi<N, P, D, V, SequencerApiVersion>>
 where
     N: ConnectedNetwork<PubKey>,
     D: SequencerDataSource + Send + Sync + 'static,
     P: SequencerPersistence,
 {
-    let api = node::define_api::<AvailState<N, P, D, Ver>, SeqTypes, Ver>(
+    let api = node::define_api::<AvailState<N, P, D, V>, SeqTypes, _>(
         &Default::default(),
-        bind_version,
+        SequencerApiVersion::instance(),
     )?;
     Ok(api)
 }
@@ -280,10 +280,10 @@ where
     Ok(api)
 }
 
-type MerklizedStateApi<N, P, D, Ver> = Api<AvailState<N, P, D, Ver>, merklized_state::Error, Ver>;
-pub(super) fn merklized_state<N, P, D, S, Ver: StaticVersionType + 'static, const ARITY: usize>(
-    _: Ver,
-) -> Result<MerklizedStateApi<N, P, D, Ver>>
+type MerklizedStateApi<N, P, D, V, Ver> = Api<AvailState<N, P, D, V>, merklized_state::Error, Ver>;
+pub(super) fn merklized_state<N, P, D, S, V: Versions, const ARITY: usize>(
+    _: SequencerApiVersion,
+) -> Result<MerklizedStateApi<N, P, D, V, V::Base>>
 where
     N: ConnectedNetwork<PubKey>,
     D: MerklizedStateDataSource<SeqTypes, S, ARITY>
@@ -295,7 +295,7 @@ where
     P: SequencerPersistence,
     for<'a> <S::Commit as TryFrom<&'a TaggedBase64>>::Error: std::fmt::Display,
 {
-    let api = merklized_state::define_api::<AvailState<N, P, D, Ver>, SeqTypes, S, Ver, ARITY>(
+    let api = merklized_state::define_api::<AvailState<N, P, D, V>, SeqTypes, S, V::Base, ARITY>(
         &Default::default(),
     )?;
     Ok(api)

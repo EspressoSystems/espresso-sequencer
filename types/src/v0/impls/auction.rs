@@ -2,7 +2,7 @@ use super::state::ValidatedState;
 use crate::{
     eth_signature_key::{EthKeyPair, SigningError},
     v0_3::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
-    FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId, SequencerVersions,
+    FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId,
 };
 use anyhow::Context;
 use async_trait::async_trait;
@@ -11,7 +11,7 @@ use hotshot_types::{
     data::ViewNumber,
     traits::{
         auction_results_provider::AuctionResultsProvider,
-        node_implementation::{ConsensusTime, HasUrls, NodeType, Versions},
+        node_implementation::{ConsensusTime, HasUrls, NodeType},
         signature_key::BuilderSignatureKey,
     },
 };
@@ -19,6 +19,7 @@ use std::str::FromStr;
 use thiserror::Error;
 use tide_disco::error::ServerError;
 use url::Url;
+use vbs::version::StaticVersion;
 
 impl FullNetworkTx {
     /// Proxy for `execute` method of each transaction variant.
@@ -279,7 +280,7 @@ impl HasUrls for SolverAuctionResults {
     }
 }
 
-type SurfClient = surf_disco::Client<ServerError, <SequencerVersions as Versions>::Base>;
+type SurfClient = surf_disco::Client<ServerError, StaticVersion<0, 1>>;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 /// Auction Results provider holding the Url of the solver in order to fetch auction results.

@@ -10,8 +10,8 @@ use async_compatibility_layer::{
 };
 use async_std::sync::{Arc, RwLock};
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NodeState, Payload,
-    SeqTypes, SequencerVersions, ValidatedState,
+    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MockSequencerVersions,
+    NodeState, Payload, SeqTypes, SequencerVersions, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -39,16 +39,16 @@ use hotshot_types::{
     data::{fake_commitment, Leaf, ViewNumber},
     traits::{
         block_contents::{vid_commitment, GENESIS_VID_NUM_STORAGE_NODES},
-        node_implementation::{ConsensusTime, NodeType},
+        node_implementation::{ConsensusTime, NodeType, Versions},
         EncodeBytes,
     },
     utils::BuilderCommitment,
 };
-use sequencer::{catchup::StatePeers, L1Params, NetworkParams};
+use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
-use vbs::version::StaticVersionType;
+use vbs::version::{StaticVersionType, Version};
 
 use crate::run_builder_api_service;
 
@@ -59,28 +59,29 @@ pub struct BuilderConfig {
     pub hotshot_builder_apis_url: Url,
 }
 
-pub fn build_instance_state<Ver: StaticVersionType + 'static>(
+pub fn build_instance_state(
     chain_config: ChainConfig,
     l1_params: L1Params,
     state_peers: Vec<Url>,
-    _: Ver,
+    version: Version,
 ) -> anyhow::Result<NodeState> {
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
     let instance_state = NodeState::new(
         u64::MAX, // dummy node ID, only used for debugging
         chain_config,
         l1_client,
-        Arc::new(StatePeers::<Ver>::from_urls(
+        Arc::new(StatePeers::<SequencerApiVersion>::from_urls(
             state_peers,
             Default::default(),
         )),
+        version,
     );
     Ok(instance_state)
 }
 
 impl BuilderConfig {
     #[allow(clippy::too_many_arguments)]
-    pub async fn init(
+    pub async fn init<V: Versions>(
         builder_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
         tx_channel_capacity: NonZeroUsize,
@@ -94,6 +95,7 @@ impl BuilderConfig {
         buffered_view_num_count: usize,
         maximize_txns_count_timeout_duration: Duration,
         base_fee: FeeAmount,
+        _: V,
     ) -> anyhow::Result<Self> {
         tracing::info!(
             address = %builder_key_pair.fee_account(),
@@ -198,15 +200,14 @@ impl BuilderConfig {
             // TODO this is proabably a mistake in builder-core. These
             // generic params can be removed and the concrete types
             // used instead.
-            let res =
-                run_non_permissioned_standalone_builder_service::<SeqTypes, SequencerVersions>(
-                    da_sender,
-                    qc_sender,
-                    decide_sender,
-                    tx_sender,
-                    events_url,
-                )
-                .await;
+            let res = run_non_permissioned_standalone_builder_service::<SeqTypes, V>(
+                da_sender,
+                qc_sender,
+                decide_sender,
+                tx_sender,
+                events_url,
+            )
+            .await;
             tracing::error!(?res, "builder service exited");
             if res.is_err() {
                 panic!("Builder should restart.");
@@ -270,12 +271,13 @@ mod test {
     async fn test_non_permissioned_builder() {
         setup_test();
 
-        let ver = StaticVersion::<0, 1>::instance();
         // Hotshot Test Config
         let hotshot_config = HotShotTestConfig::default();
 
         // Get the handle for all the nodes, including both the non-builder and builder nodes
-        let handles = hotshot_config.init_nodes(ver, no_storage::Options).await;
+        let handles = hotshot_config
+            .init_nodes(MockSequencerVersions::new(), no_storage::Options)
+            .await;
 
         // start consensus for all the nodes
         for (handle, ..) in handles.iter() {
@@ -296,7 +298,7 @@ mod test {
         let hotshot_events_streaming_api_url = HotShotTestConfig::hotshot_event_streaming_api_url();
 
         // enable a hotshot node event streaming
-        HotShotTestConfig::enable_hotshot_node_event_streaming::<NoStorage>(
+        HotShotTestConfig::enable_hotshot_node_event_streaming::<NoStorage, MockSequencerVersions>(
             hotshot_events_streaming_api_url.clone(),
             known_nodes_with_stake,
             num_non_staking_nodes,
@@ -310,6 +312,7 @@ mod test {
             &hotshot_config,
             hotshot_events_streaming_api_url.clone(),
             hotshot_builder_api_url.clone(),
+            MockSequencerVersions::new(),
         )
         .await;
 

@@ -17,7 +17,7 @@
 use std::path::Path;
 
 use committable::Committable;
-use espresso_types::{Leaf, NodeState, PubKey, SequencerVersions, ValidatedState};
+use espresso_types::{Leaf, NodeState, PubKey, ValidatedState};
 use hotshot::traits::election::static_committee::GeneralStaticCommittee;
 use hotshot_types::{
     data::{
@@ -38,18 +38,19 @@ use hotshot_types::{
         ViewSyncFinalizeVote, ViewSyncPreCommitData, ViewSyncPreCommitVote,
     },
     traits::{
-        node_implementation::{ConsensusTime, Versions},
-        signature_key::SignatureKey,
-        BlockPayload, EncodeBytes,
+        node_implementation::ConsensusTime, signature_key::SignatureKey, BlockPayload, EncodeBytes,
     },
     vid::vid_scheme,
 };
 use jf_vid::VidScheme;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
-use vbs::{version::Version, BinarySerializer};
+use vbs::{
+    version::{StaticVersion, Version},
+    BinarySerializer,
+};
 
-type Serializer = vbs::Serializer<<SequencerVersions as Versions>::Base>;
+type Serializer = vbs::Serializer<StaticVersion<0, 1>>;
 
 #[async_std::test]
 #[cfg(feature = "testing")]
