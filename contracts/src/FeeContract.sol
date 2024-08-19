@@ -21,9 +21,9 @@ contract FeeContract is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     //
     /// @notice max amount allowed to be deposited to prevent fat finger errors
     // @TODO confirm this amount with product
-    uint256 public constant maxDepositAmount = 1 ether;
+    uint256 public maxDepositAmount = 1 ether;
 
-    uint256 public constant minDepositAmount = 0.001 ether;
+    uint256 public minDepositAmount = 0.001 ether;
 
     // === Errors ===
     //
