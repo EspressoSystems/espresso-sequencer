@@ -10,7 +10,7 @@
 // You should have received a copy of the GNU General Public License along with this program. If not,
 // see <https://www.gnu.org/licenses/>.
 
-use super::mocks::{MockMembership, MockNodeImpl, MockTransaction, MockTypes};
+use super::mocks::{MockMembership, MockNodeImpl, MockTransaction, MockTypes, MockVersions};
 use crate::{
     availability::AvailabilityDataSource,
     data_source::{FileSystemDataSource, SqlDataSource, UpdateDataSource, VersionedDataSource},
@@ -32,8 +32,8 @@ use hotshot::{
     HotShotInitializer, MarketplaceConfig, Memberships, SystemContext,
 };
 use hotshot_example_types::{
-    auction_results_provider_types::TestAuctionResultsProvider, node_types::TestVersions,
-    state_types::TestInstanceState, storage_types::TestStorage,
+    auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
+    storage_types::TestStorage,
 };
 use hotshot_testing::block_builder::{SimpleBuilderImplementation, TestBuilderImplementation};
 use hotshot_types::{
@@ -50,7 +50,7 @@ use tracing::{info_span, Instrument};
 use url::Url;
 
 struct MockNode<D: DataSourceLifeCycle> {
-    hotshot: SystemContextHandle<MockTypes, MockNodeImpl, TestVersions>,
+    hotshot: SystemContextHandle<MockTypes, MockNodeImpl, MockVersions>,
     data_source: Arc<RwLock<D>>,
     storage: D::Storage,
 }
@@ -202,11 +202,9 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
                             config,
                             memberships,
                             network,
-                            HotShotInitializer::from_genesis(TestInstanceState {
-                                delay_config: Default::default(),
-                            })
-                            .await
-                            .unwrap(),
+                            HotShotInitializer::from_genesis(TestInstanceState::default())
+                                .await
+                                .unwrap(),
                             ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                             hs_storage,
                             MarketplaceConfig {
@@ -246,7 +244,7 @@ impl<D: DataSourceLifeCycle + UpdateStatusData> MockNetwork<D> {
 }
 
 impl<D: DataSourceLifeCycle> MockNetwork<D> {
-    pub fn handle(&self) -> &SystemContextHandle<MockTypes, MockNodeImpl, TestVersions> {
+    pub fn handle(&self) -> &SystemContextHandle<MockTypes, MockNodeImpl, MockVersions> {
         &self.nodes[0].hotshot
     }
 

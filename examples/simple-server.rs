@@ -26,8 +26,8 @@ use hotshot::{
     HotShotInitializer, MarketplaceConfig, Memberships, SystemContext,
 };
 use hotshot_example_types::{
-    auction_results_provider_types::TestAuctionResultsProvider, node_types::TestVersions,
-    state_types::TestInstanceState, storage_types::TestStorage,
+    auction_results_provider_types::TestAuctionResultsProvider, state_types::TestInstanceState,
+    storage_types::TestStorage,
 };
 use hotshot_query_service::{
     data_source,
@@ -36,7 +36,7 @@ use hotshot_query_service::{
     status::UpdateStatusData,
     testing::{
         consensus::DataSourceLifeCycle,
-        mocks::{MockBase, MockMembership, MockNodeImpl, MockTypes},
+        mocks::{MockBase, MockMembership, MockNodeImpl, MockTypes, MockVersions},
     },
     Error,
 };
@@ -143,7 +143,7 @@ async fn main() -> Result<(), Error> {
 
 async fn init_consensus(
     data_sources: &[DataSource],
-) -> Vec<SystemContextHandle<MockTypes, MockNodeImpl, TestVersions>> {
+) -> Vec<SystemContextHandle<MockTypes, MockNodeImpl, MockVersions>> {
     let (pub_keys, priv_keys): (Vec<_>, Vec<_>) = (0..data_sources.len())
         .map(|i| BLSPubKey::generated_from_seed_indexed([0; 32], i as u64))
         .unzip();
@@ -270,11 +270,9 @@ async fn init_consensus(
                     config,
                     memberships,
                     network,
-                    HotShotInitializer::from_genesis(TestInstanceState {
-                        delay_config: Default::default(),
-                    })
-                    .await
-                    .unwrap(),
+                    HotShotInitializer::from_genesis(TestInstanceState::default())
+                        .await
+                        .unwrap(),
                     ConsensusMetricsValue::new(&*data_source.populate_metrics()),
                     storage,
                     MarketplaceConfig {

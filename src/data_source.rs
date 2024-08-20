@@ -465,16 +465,12 @@ pub mod persistence_tests {
         // Mock up some consensus data.
         let mut qc = QuorumCertificate::<MockTypes>::genesis(
             &TestValidatedState::default(),
-            &TestInstanceState {
-                delay_config: Default::default(),
-            },
+            &TestInstanceState::default(),
         )
         .await;
         let mut leaf = Leaf::<MockTypes>::genesis(
             &TestValidatedState::default(),
-            &TestInstanceState {
-                delay_config: Default::default(),
-            },
+            &TestInstanceState::default(),
         )
         .await;
         // Increment the block number, to distinguish this block from the genesis block, which
@@ -520,16 +516,12 @@ pub mod persistence_tests {
         // Mock up some consensus data.
         let mut qc = QuorumCertificate::<MockTypes>::genesis(
             &TestValidatedState::default(),
-            &TestInstanceState {
-                delay_config: Default::default(),
-            },
+            &TestInstanceState::default(),
         )
         .await;
         let mut leaf = Leaf::<MockTypes>::genesis(
             &TestValidatedState::default(),
-            &TestInstanceState {
-                delay_config: Default::default(),
-            },
+            &TestInstanceState::default(),
         )
         .await;
         // Increment the block number, to distinguish this block from the genesis block, which
@@ -614,18 +606,14 @@ pub mod node_tests {
         let mut leaves = vec![
             LeafQueryData::<MockTypes>::genesis(
                 &TestValidatedState::default(),
-                &TestInstanceState {
-                    delay_config: Default::default(),
-                },
+                &TestInstanceState::default(),
             )
             .await,
         ];
         let mut blocks = vec![
             BlockQueryData::<MockTypes>::genesis(
                 &TestValidatedState::default(),
-                &TestInstanceState {
-                    delay_config: Default::default(),
-                },
+                &TestInstanceState::default(),
             )
             .await,
         ];
@@ -764,9 +752,7 @@ pub mod node_tests {
                 <TestBlockPayload as BlockPayload<TestTypes>>::from_transactions(
                     [mock_transaction(vec![i as u8 % 2])],
                     &TestValidatedState::default(),
-                    &TestInstanceState {
-                        delay_config: Default::default(),
-                    },
+                    &TestInstanceState::default(),
                 )
                 .await
                 .unwrap();
@@ -784,9 +770,7 @@ pub mod node_tests {
 
             let mut leaf = LeafQueryData::<MockTypes>::genesis(
                 &TestValidatedState::default(),
-                &TestInstanceState {
-                    delay_config: Default::default(),
-                },
+                &TestInstanceState::default(),
             )
             .await;
             *leaf.leaf.block_header_mut() = header.clone();
@@ -842,9 +826,7 @@ pub mod node_tests {
         // Insert test data with VID common and a share.
         let leaf = LeafQueryData::<MockTypes>::genesis(
             &TestValidatedState::default(),
-            &TestInstanceState {
-                delay_config: Default::default(),
-            },
+            &TestInstanceState::default(),
         )
         .await;
         let common = VidCommonQueryData::new(leaf.header().clone(), disperse.common);

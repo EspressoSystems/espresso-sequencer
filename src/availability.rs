@@ -863,9 +863,7 @@ mod test {
         // mock up some consensus data.
         let leaf = Leaf::<MockTypes>::genesis(
             &TestValidatedState::default(),
-            &TestInstanceState {
-                delay_config: Default::default(),
-            },
+            &TestInstanceState::default(),
         )
         .await;
 

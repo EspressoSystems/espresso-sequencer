@@ -97,7 +97,7 @@ use std::path::Path;
 /// # };
 /// # use hotshot_query_service::fetching::provider::NoFetching;
 /// # use hotshot_query_service::testing::mocks::{
-/// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
+/// #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes, MockVersions as AppVersions
 /// # };
 /// # use hotshot_example_types::node_types::TestVersions;
 /// # use std::path::Path;
@@ -112,7 +112,7 @@ use std::path::Path;
 ///
 /// async fn init_server<Ver: StaticVersionType + 'static>(
 ///     storage_path: &Path,
-///     hotshot: SystemContextHandle<AppTypes, AppNodeImpl, TestVersions>,
+///     hotshot: SystemContextHandle<AppTypes, AppNodeImpl, AppVersions>,
 /// ) -> Result<App<Arc<RwLock<AppState>>, Error>, Error> {
 ///     let mut loader = AtomicStoreLoader::create(storage_path, "my_app") // or `open`
 ///         .map_err(Error::internal)?;

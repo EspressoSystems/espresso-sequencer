@@ -22,7 +22,7 @@
 //! ```
 //! # use hotshot::types::SystemContextHandle;
 //! # use hotshot_query_service::testing::mocks::{
-//! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes,
+//! #   MockNodeImpl as AppNodeImpl, MockTypes as AppTypes, MockVersions as AppVersions,
 //! # };
 //! # use hotshot_example_types::node_types::TestVersions;
 //! # use hotshot_types::consensus::ConsensusMetricsValue;
@@ -50,7 +50,7 @@
 //!     .map_err(Error::internal)?;
 //!
 //! // Create hotshot, giving it a handle to the status metrics.
-//! let hotshot = SystemContext::<AppTypes, AppNodeImpl, TestVersions>::init(
+//! let hotshot = SystemContext::<AppTypes, AppNodeImpl, AppVersions>::init(
 //! #   panic!(), panic!(), panic!(), panic!(), panic!(), panic!(), panic!(),
 //!     ConsensusMetricsValue::new(&*data_source.populate_metrics()), panic!(),
 //!     panic!()
@@ -102,10 +102,9 @@
 //! # use vbs::version::StaticVersionType;
 //! # use hotshot_query_service::{data_source::FileSystemDataSource, Error, Options};
 //! # use hotshot_query_service::fetching::provider::NoFetching;
-//! # use hotshot_query_service::testing::mocks::{MockBase, MockNodeImpl, MockTypes};
-//! # use hotshot_example_types::node_types::TestVersions;
+//! # use hotshot_query_service::testing::mocks::{MockBase, MockNodeImpl, MockTypes, MockVersions};
 //! # use std::path::Path;
-//! # async fn doc(storage_path: &Path, options: Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl, TestVersions>) -> Result<(), Error> {
+//! # async fn doc(storage_path: &Path, options: Options, hotshot: SystemContextHandle<MockTypes, MockNodeImpl, MockVersions>) -> Result<(), Error> {
 //! use hotshot_query_service::run_standalone_service;
 //!
 //! let data_source = FileSystemDataSource::create(storage_path, NoFetching).await.map_err(Error::internal)?;
@@ -493,13 +492,13 @@ pub async fn run_standalone_service<
     Types: NodeType,
     I: NodeImplementation<Types>,
     D,
-    Ver,
-    V: Versions,
+    ApiVer,
+    HsVer: Versions,
 >(
     options: Options,
     data_source: D,
-    hotshot: SystemContextHandle<Types, I, V>,
-    bind_version: Ver,
+    hotshot: SystemContextHandle<Types, I, HsVer>,
+    bind_version: ApiVer,
 ) -> Result<(), Error>
 where
     Payload<Types>: availability::QueryablePayload<Types>,
@@ -512,7 +511,7 @@ where
         + Send
         + Sync
         + 'static,
-    Ver: StaticVersionType + 'static,
+    ApiVer: StaticVersionType + 'static,
 {
     // Create API modules.
     let availability_api =
@@ -724,9 +723,7 @@ mod test {
         // Mock up some data and add a block to the store.
         let leaf = Leaf::<MockTypes>::genesis(
             &TestValidatedState::default(),
-            &TestInstanceState {
-                delay_config: Default::default(),
-            },
+            &TestInstanceState::default(),
         )
         .await;
         let block = BlockQueryData::new(leaf.block_header().clone(), MockPayload::genesis());
