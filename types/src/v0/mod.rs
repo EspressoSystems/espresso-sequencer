@@ -150,7 +150,7 @@ impl<Base: StaticVersionType, Upgrade: StaticVersionType> SequencerVersions<Base
     }
 }
 
-pub type MockSequencerVersions = SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>;
+pub type BaseV01UpgradeV02 = SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>;
 
 pub type MarketplaceVersion = StaticVersion<0, 3>;
 
@@ -166,6 +166,10 @@ impl<Base: StaticVersionType + 'static, Upgrade: StaticVersionType + 'static> Ve
 
     type Marketplace = MarketplaceVersion;
 }
+
+pub type V0_1 = StaticVersion<0, 1>;
+pub type V0_2 = StaticVersion<0, 2>;
+pub type V0_3 = StaticVersion<0, 3>;
 
 pub type Leaf = hotshot_types::data::Leaf<SeqTypes>;
 pub type Event = hotshot::types::Event<SeqTypes>;

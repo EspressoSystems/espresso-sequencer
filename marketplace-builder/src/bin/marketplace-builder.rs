@@ -3,11 +3,14 @@ use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, parse_duration, MockSequencerVersions, FeeAmount, MarketplaceVersion,
-    NamespaceId,
+    eth_signature_key::EthKeyPair, parse_duration, FeeAmount, MarketplaceVersion, NamespaceId,
+    SequencerVersions, V0_1, V0_2, V0_3,
 };
 use hotshot::traits::ValidatedState;
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use hotshot_types::{
+    data::ViewNumber,
+    traits::node_implementation::{ConsensusTime, Versions},
+};
 use marketplace_builder::{
     builder::{build_instance_state, BuilderConfig},
     hooks::BidConfig,
@@ -124,8 +127,29 @@ async fn main() -> anyhow::Result<()> {
     setup_backtrace();
 
     let opt = NonPermissionedBuilderOptions::parse();
-    let genesis = Genesis::from_file(&opt.genesis_file)?;
 
+    let genesis = Genesis::from_file(&opt.genesis_file)?;
+    tracing::info!(?genesis, "genesis");
+
+    let base = genesis.base_version;
+    let upgrade = genesis.upgrade_version;
+
+    match (base, upgrade) {
+        (V0_1::VERSION, V0_2::VERSION) => {
+            run(genesis, opt, SequencerVersions::<V0_1, V0_2>::new()).await
+        }
+        (V0_2::VERSION, V0_3::VERSION) => {
+            run(genesis, opt, SequencerVersions::<V0_2, V0_3>::new()).await
+        }
+        _ => panic!("invalid versions"),
+    }
+}
+
+async fn run<V: Versions>(
+    genesis: Genesis,
+    opt: NonPermissionedBuilderOptions,
+    versions: V,
+) -> anyhow::Result<()> {
     let l1_params = L1Params {
         url: opt.l1_provider_url,
         events_max_block_range: 10000,
@@ -165,8 +189,6 @@ async fn main() -> anyhow::Result<()> {
 
     let buffer_view_num_count = opt.buffer_view_num_count;
 
-    // todo: change
-    let versions = MockSequencerVersions::new();
     let _builder_config = BuilderConfig::init(
         is_reserve,
         builder_key_pair,

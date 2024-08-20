@@ -10,7 +10,7 @@ use async_compatibility_layer::{
 };
 use async_std::sync::{Arc, RwLock};
 use espresso_types::{
-    eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, MockSequencerVersions,
+    eth_signature_key::EthKeyPair, v0_3::ChainConfig, BaseV01UpgradeV02, FeeAmount, L1Client,
     NodeState, Payload, SeqTypes, SequencerVersions, ValidatedState,
 };
 use ethers::{
@@ -276,7 +276,7 @@ mod test {
 
         // Get the handle for all the nodes, including both the non-builder and builder nodes
         let handles = hotshot_config
-            .init_nodes(MockSequencerVersions::new(), no_storage::Options)
+            .init_nodes(BaseV01UpgradeV02::new(), no_storage::Options)
             .await;
 
         // start consensus for all the nodes
@@ -298,7 +298,7 @@ mod test {
         let hotshot_events_streaming_api_url = HotShotTestConfig::hotshot_event_streaming_api_url();
 
         // enable a hotshot node event streaming
-        HotShotTestConfig::enable_hotshot_node_event_streaming::<NoStorage, MockSequencerVersions>(
+        HotShotTestConfig::enable_hotshot_node_event_streaming::<NoStorage, BaseV01UpgradeV02>(
             hotshot_events_streaming_api_url.clone(),
             known_nodes_with_stake,
             num_non_staking_nodes,
@@ -312,7 +312,7 @@ mod test {
             &hotshot_config,
             hotshot_events_streaming_api_url.clone(),
             hotshot_builder_api_url.clone(),
-            MockSequencerVersions::new(),
+            BaseV01UpgradeV02::new(),
         )
         .await;
 

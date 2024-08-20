@@ -2,9 +2,14 @@ use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 
 use builder::non_permissioned::{build_instance_state, BuilderConfig};
 use clap::Parser;
-use espresso_types::{eth_signature_key::EthKeyPair, parse_duration, MockSequencerVersions};
+use espresso_types::{
+    eth_signature_key::EthKeyPair, parse_duration, SequencerVersions, V0_1, V0_2, V0_3,
+};
 use hotshot::traits::ValidatedState;
-use hotshot_types::{data::ViewNumber, traits::node_implementation::ConsensusTime};
+use hotshot_types::{
+    data::ViewNumber,
+    traits::node_implementation::{ConsensusTime, Versions},
+};
 use sequencer::{Genesis, L1Params};
 use sequencer_utils::logging;
 use url::Url;
@@ -92,7 +97,27 @@ async fn main() -> anyhow::Result<()> {
     opt.logging.init();
 
     let genesis = Genesis::from_file(&opt.genesis_file)?;
+    tracing::info!(?genesis, "genesis");
 
+    let base = genesis.base_version;
+    let upgrade = genesis.upgrade_version;
+
+    match (base, upgrade) {
+        (V0_1::VERSION, V0_2::VERSION) => {
+            run(genesis, opt, SequencerVersions::<V0_1, V0_2>::new()).await
+        }
+        (V0_2::VERSION, V0_3::VERSION) => {
+            run(genesis, opt, SequencerVersions::<V0_2, V0_3>::new()).await
+        }
+        _ => panic!("invalid versions"),
+    }
+}
+
+async fn run<V: Versions>(
+    genesis: Genesis,
+    opt: NonPermissionedBuilderOptions,
+    versions: V,
+) -> anyhow::Result<()> {
     let l1_params = L1Params {
         url: opt.l1_provider_url,
         events_max_block_range: 10000,
@@ -136,7 +161,7 @@ async fn main() -> anyhow::Result<()> {
         buffer_view_num_count,
         txn_timeout_duration,
         base_fee,
-        MockSequencerVersions::new(), // change
+        versions,
     )
     .await?;
 

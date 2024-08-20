@@ -38,6 +38,8 @@ pub enum L1Finalized {
 /// Genesis of an Espresso chain.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Genesis {
+    pub base_version: Version,
+    pub upgrade_version: Version,
     pub chain_config: ChainConfig,
     pub stake_table: StakeTableConfig,
     #[serde(default)]

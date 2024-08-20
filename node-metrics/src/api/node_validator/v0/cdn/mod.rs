@@ -298,7 +298,7 @@ mod test {
     use async_std::future::TimeoutError;
     use async_std::prelude::FutureExt;
     use core::panic;
-    use espresso_types::MockSequencerVersions;
+    use espresso_types::BaseV01UpgradeV02;
     use espresso_types::{v0::SequencerVersions, SeqTypes};
     use futures::channel::mpsc::Sender;
     use futures::SinkExt;
@@ -378,7 +378,7 @@ mod test {
         let task = CdnReceiveMessagesTask::new(
             TestConnectedNetworkConsumer(Ok(vec![test_hotshot_message_serialized])),
             url_sender,
-            MockSequencerVersions::new(),
+            BaseV01UpgradeV02::new(),
         );
 
         let mut url_receiver = url_receiver;
@@ -403,7 +403,7 @@ mod test {
         let task = CdnReceiveMessagesTask::new(
             TestConnectedNetworkConsumer(Err(NetworkError::ChannelSend)),
             url_sender,
-            MockSequencerVersions::new(),
+            BaseV01UpgradeV02::new(),
         );
 
         let mut url_receiver = url_receiver;
@@ -428,7 +428,7 @@ mod test {
         let task = CdnReceiveMessagesTask::new(
             TestConnectedNetworkConsumer(Ok(vec![vec![0]])),
             url_sender,
-            MockSequencerVersions::new(),
+            BaseV01UpgradeV02::new(),
         );
 
         let mut url_receiver = url_receiver;
@@ -467,7 +467,7 @@ mod test {
         let task = CdnReceiveMessagesTask::new(
             TestConnectedNetworkConsumer(Ok(vec![bytes])),
             url_sender,
-            MockSequencerVersions::new(),
+            BaseV01UpgradeV02::new(),
         );
 
         let mut url_receiver = url_receiver;
@@ -504,7 +504,7 @@ mod test {
         let task = CdnReceiveMessagesTask::new(
             TestConnectedNetworkConsumer(Ok(vec![bytes])),
             url_sender,
-            MockSequencerVersions::new(),
+            BaseV01UpgradeV02::new(),
         );
 
         let mut url_receiver = url_receiver;
@@ -554,7 +554,7 @@ mod test {
         let mut task = CdnReceiveMessagesTask::new(
             TestConnectedNetworkConsumer(Ok(vec![test_hotshot_message_serialized])),
             url_sender.clone(),
-            MockSequencerVersions::new(),
+            BaseV01UpgradeV02::new(),
         );
 
         let task_handle = task.task_handle.take();
@@ -600,7 +600,7 @@ mod test {
         let task = BroadcastRollCallTask::new(
             TestConnectedNetworkPublisher(message_sender),
             BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
-            MockSequencerVersions::new(),
+            BaseV01UpgradeV02::new(),
         );
 
         let mut message_receiver = message_receiver;

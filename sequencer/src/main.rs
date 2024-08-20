@@ -1,7 +1,7 @@
 use std::{net::ToSocketAddrs, sync::Arc};
 
 use clap::Parser;
-use espresso_types::{MockSequencerVersions, SolverAuctionResultsProvider};
+use espresso_types::{SequencerVersions, SolverAuctionResultsProvider, V0_1, V0_2, V0_3};
 use futures::future::FutureExt;
 use hotshot::MarketplaceConfig;
 use hotshot_types::traits::{metrics::NoMetrics, node_implementation::Versions};
@@ -11,44 +11,83 @@ use sequencer::{
     options::{Modules, Options},
     persistence, Genesis, L1Params, NetworkParams,
 };
+use vbs::version::StaticVersionType;
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {
     let opt = Options::parse();
     opt.logging.init();
 
-    let mut modules = opt.modules();
+    let modules = opt.modules();
     tracing::warn!(?modules, "sequencer starting up");
 
+    let genesis = Genesis::from_file(&opt.genesis_file)?;
+    tracing::info!(?genesis, "genesis");
+
+    let base = genesis.base_version;
+    let upgrade = genesis.upgrade_version;
+
+    match (base, upgrade) {
+        (V0_1::VERSION, V0_2::VERSION) => {
+            run(
+                genesis,
+                modules,
+                opt,
+                SequencerVersions::<V0_1, V0_2>::new(),
+            )
+            .await
+        }
+        (V0_2::VERSION, V0_3::VERSION) => {
+            run(
+                genesis,
+                modules,
+                opt,
+                SequencerVersions::<V0_2, V0_3>::new(),
+            )
+            .await
+        }
+        _ => panic!("invalid versions"),
+    }
+}
+
+async fn run<V>(
+    genesis: Genesis,
+    mut modules: Modules,
+    opt: Options,
+    versions: V,
+) -> anyhow::Result<()>
+where
+    V: Versions,
+{
     // change
     if let Some(storage) = modules.storage_fs.take() {
-        init_with_storage(modules, opt, storage, MockSequencerVersions::new()).await
+        init_with_storage(genesis, modules, opt, storage, versions).await
     } else if let Some(storage) = modules.storage_sql.take() {
-        init_with_storage(modules, opt, storage, MockSequencerVersions::new()).await
+        init_with_storage(genesis, modules, opt, storage, versions).await
     } else {
         // Persistence is required. If none is provided, just use the local file system.
         init_with_storage(
+            genesis,
             modules,
             opt,
             persistence::fs::Options::default(),
-            MockSequencerVersions::new(),
+            versions,
         )
         .await
     }
 }
 
-async fn init_with_storage<S, V: Versions>(
+async fn init_with_storage<S, V>(
+    genesis: Genesis,
     modules: Modules,
     opt: Options,
     storage_opt: S,
-    bind_version: V,
+    versions: V,
 ) -> anyhow::Result<()>
 where
     S: DataSourceOptions,
+    V: Versions,
 {
-    let genesis = Genesis::from_file(&opt.genesis_file)?;
-    tracing::info!(?genesis, "genesis");
-
     let (private_staking_key, private_state_key) = opt.private_keys()?;
     let l1_params = L1Params {
         url: opt.l1_provider_url,
@@ -135,7 +174,7 @@ where
                             &*metrics,
                             storage_opt,
                             l1_params,
-                            bind_version,
+                            versions,
                             opt.is_da,
                             opt.identity,
                             marketplace_config,
@@ -154,7 +193,7 @@ where
                 &NoMetrics,
                 storage_opt,
                 l1_params,
-                bind_version,
+                versions,
                 opt.is_da,
                 opt.identity,
                 marketplace_config,
@@ -176,7 +215,7 @@ mod test {
 
     use async_std::task::spawn;
 
-    use espresso_types::PubKey;
+    use espresso_types::{BaseV01UpgradeV02, PubKey};
     use hotshot_types::{light_client::StateKeyPair, traits::signature_key::SignatureKey};
     use portpicker::pick_unused_port;
     use sequencer::{
@@ -188,6 +227,7 @@ mod test {
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::{error::ClientError, Client, Url};
     use tempfile::TempDir;
+    use vbs::version::Version;
 
     use super::*;
 
@@ -209,6 +249,8 @@ mod test {
             l1_finalized: Default::default(),
             header: Default::default(),
             upgrades: Default::default(),
+            base_version: Version { major: 0, minor: 1 },
+            upgrade_version: Version { major: 0, minor: 2 },
         };
         genesis.to_file(&genesis_file).unwrap();
 
@@ -233,10 +275,11 @@ mod test {
         tracing::info!(port, "starting sequencer");
         let task = spawn(async move {
             if let Err(err) = init_with_storage(
+                genesis,
                 modules,
                 opt,
                 fs::Options::new(tmp.path().into()),
-                MockSequencerVersions::new(),
+                BaseV01UpgradeV02::new(),
             )
             .await
             {

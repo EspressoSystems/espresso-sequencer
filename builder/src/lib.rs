@@ -670,7 +670,7 @@ pub mod testing {
 mod test {
     use async_std::stream::IntoStream;
     use clap::builder;
-    use espresso_types::{MockSequencerVersions, Header, NodeState, Payload, ValidatedState};
+    use espresso_types::{BaseV01UpgradeV02, Header, NodeState, Payload, ValidatedState};
     use ethers::providers::Quorum;
     use futures::StreamExt;
     use hotshot::types::EventType::Decide;
@@ -702,7 +702,7 @@ mod test {
         let config = HotShotTestConfig::default();
         tracing::debug!("Done with hotshot test config");
         let handles = config
-            .init_nodes(MockSequencerVersions::new(), no_storage::Options)
+            .init_nodes(BaseV01UpgradeV02::new(), no_storage::Options)
             .await;
         tracing::debug!("Done with init nodes");
         let total_nodes = HotShotTestConfig::total_nodes();

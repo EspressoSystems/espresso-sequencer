@@ -553,7 +553,7 @@ mod test {
     use async_lock::RwLock;
     use async_std::task;
 
-    use espresso_types::{MockSequencerVersions, FeeAccount, NamespaceId, Transaction};
+    use espresso_types::{BaseV01UpgradeV02, FeeAccount, NamespaceId, Transaction};
     use hotshot_builder_api::v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
@@ -597,7 +597,7 @@ mod test {
 
         // Get the handle for all the nodes, including both the non-builder and builder nodes
         let mut handles = hotshot_config
-            .init_nodes(MockSequencerVersions::new(), no_storage::Options)
+            .init_nodes(BaseV01UpgradeV02::new(), no_storage::Options)
             .await;
 
         // start consensus for all the nodes
