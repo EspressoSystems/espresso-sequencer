@@ -121,7 +121,7 @@ pub mod testing {
 
     use espresso_types::{
         mock::MockStateCatchup, v0_3::ChainConfig, Event, FeeAccount, L1Client, NodeState, PrivKey,
-        PubKey, Transaction, ValidatedState,
+        PubKey, SequencerVersions, Transaction, ValidatedState,
     };
     use ethers::{
         types::spoof::State,
@@ -339,7 +339,7 @@ pub mod testing {
             bind_version: Ver,
             options: impl PersistenceOptions<Persistence = P>,
         ) -> Vec<(
-            Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
+            Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>, SequencerVersions>>,
             Option<StateSigner<Ver>>,
         )> {
             let num_staked_nodes = self.num_staked_nodes();
@@ -380,7 +380,7 @@ pub mod testing {
             bind_version: Ver,
             persistence: P,
         ) -> (
-            SystemContextHandle<SeqTypes, Node<network::Memory, P>>,
+            SystemContextHandle<SeqTypes, Node<network::Memory, P>, SequencerVersions>,
             StateSigner<Ver>,
         ) {
             let mut config = self.config.clone();
@@ -465,7 +465,9 @@ pub mod testing {
             hotshot_events_api_url: Url,
             known_nodes_with_stake: Vec<PeerConfig<VerKey>>,
             num_non_staking_nodes: usize,
-            hotshot_context_handle: Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
+            hotshot_context_handle: Arc<
+                SystemContextHandle<SeqTypes, Node<network::Memory, P>, SequencerVersions>,
+            >,
         ) {
             // create a event streamer
             let events_streamer = Arc::new(RwLock::new(EventsStreamer::new(
@@ -602,7 +604,9 @@ pub mod testing {
     {
         pub async fn init_permissioned_builder(
             hotshot_test_config: HotShotTestConfig,
-            hotshot_handle: Arc<SystemContextHandle<SeqTypes, Node<network::Memory, P>>>,
+            hotshot_handle: Arc<
+                SystemContextHandle<SeqTypes, Node<network::Memory, P>, SequencerVersions>,
+            >,
             node_id: u64,
             state_signer: StateSigner<Ver>,
             hotshot_builder_api_url: Url,

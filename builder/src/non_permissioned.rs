@@ -11,7 +11,7 @@ use async_compatibility_layer::{
 use async_std::sync::{Arc, RwLock};
 use espresso_types::{
     eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NodeState, Payload,
-    SeqTypes, ValidatedState,
+    SeqTypes, SequencerVersions, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -195,14 +195,18 @@ impl BuilderConfig {
         let events_url = hotshot_events_api_url.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
         async_spawn(async move {
-            let res = run_non_permissioned_standalone_builder_service(
-                da_sender,
-                qc_sender,
-                decide_sender,
-                tx_sender,
-                events_url,
-            )
-            .await;
+            // TODO this is proabably a mistake in builder-core. These
+            // generic params can be removed and the concrete types
+            // used instead.
+            let res =
+                run_non_permissioned_standalone_builder_service::<SeqTypes, SequencerVersions>(
+                    da_sender,
+                    qc_sender,
+                    decide_sender,
+                    tx_sender,
+                    events_url,
+                )
+                .await;
             tracing::error!(?res, "builder service exited");
             if res.is_err() {
                 panic!("Builder should restart.");

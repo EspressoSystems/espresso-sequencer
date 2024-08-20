@@ -2,7 +2,7 @@ use super::state::ValidatedState;
 use crate::{
     eth_signature_key::{EthKeyPair, SigningError},
     v0_3::{BidTx, BidTxBody, FullNetworkTx, SolverAuctionResults},
-    FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId, SeqTypes,
+    FeeAccount, FeeAmount, FeeError, FeeInfo, NamespaceId, SequencerVersions,
 };
 use anyhow::Context;
 use async_trait::async_trait;
@@ -11,7 +11,7 @@ use hotshot_types::{
     data::ViewNumber,
     traits::{
         auction_results_provider::AuctionResultsProvider,
-        node_implementation::{ConsensusTime, HasUrls, NodeType},
+        node_implementation::{ConsensusTime, HasUrls, NodeType, Versions},
         signature_key::BuilderSignatureKey,
     },
 };
@@ -279,11 +279,25 @@ impl HasUrls for SolverAuctionResults {
     }
 }
 
-type SurfClient = surf_disco::Client<ServerError, <SeqTypes as NodeType>::Base>;
+type SurfClient = surf_disco::Client<ServerError, <SequencerVersions as Versions>::Base>;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 /// Auction Results provider holding the Url of the solver in order to fetch auction results.
-pub struct SolverAuctionResultsProvider(pub Url);
+pub struct SolverAuctionResultsProvider {
+    pub url: Url,
+    pub marketplace_path: String,
+    pub results_path: String,
+}
+
+impl Default for SolverAuctionResultsProvider {
+    fn default() -> Self {
+        Self {
+            url: Url::from_str("http://localhost:25000").unwrap(),
+            marketplace_path: "marketplace-solver/".into(),
+            results_path: "auction_results/".into(),
+        }
+    }
+}
 
 #[async_trait]
 impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for SolverAuctionResultsProvider {
@@ -293,11 +307,11 @@ impl<TYPES: NodeType> AuctionResultsProvider<TYPES> for SolverAuctionResultsProv
         view_number: TYPES::Time,
     ) -> anyhow::Result<TYPES::AuctionResult> {
         let resp = SurfClient::new(
-            self.0
-                .join("marketplace-solver/")
+            self.url
+                .join(&self.marketplace_path)
                 .context("Malformed solver URL")?,
         )
-        .get::<TYPES::AuctionResult>(&format!("auction_results/{}", *view_number))
+        .get::<TYPES::AuctionResult>(&format!("{}{}", self.results_path, *view_number))
         .send()
         .await?;
         Ok(resp)

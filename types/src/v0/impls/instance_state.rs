@@ -1,8 +1,10 @@
+use crate::SequencerVersions;
 use crate::{
     v0::traits::StateCatchup, v0_3::ChainConfig, GenesisHeader, L1BlockInfo, L1Client, PubKey,
-    SeqTypes, Timestamp, Upgrade, UpgradeMode,
+    Timestamp, Upgrade, UpgradeMode,
 };
-use hotshot_types::traits::{node_implementation::NodeType, states::InstanceState};
+use hotshot_types::traits::node_implementation::Versions;
+use hotshot_types::traits::states::InstanceState;
 use hotshot_types::HotShotConfig;
 use std::{collections::BTreeMap, sync::Arc};
 use vbs::version::{StaticVersionType, Version};
@@ -59,7 +61,7 @@ impl NodeState {
             },
             l1_genesis: None,
             upgrades: Default::default(),
-            current_version: <SeqTypes as NodeType>::Base::version(),
+            current_version: <SequencerVersions as Versions>::Base::version(),
         }
     }
 

@@ -2,10 +2,10 @@ use std::{io, time::Duration};
 
 use async_std::task::spawn;
 use clap::Parser;
-use espresso_types::{parse_duration, SeqTypes};
+use espresso_types::{parse_duration, SequencerVersions};
 use ethers::prelude::*;
 use futures::FutureExt;
-use hotshot_types::traits::node_implementation::NodeType;
+use hotshot_types::traits::node_implementation::Versions;
 use sequencer::hotshot_commitment::{run_hotshot_commitment_task, CommitmentTaskOptions};
 use sequencer_utils::logging;
 use tide_disco::{error::ServerError, Api};
@@ -69,7 +69,7 @@ async fn main() {
         start_http_server(
             port,
             opt.hotshot_address,
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
         )
         .unwrap();
     }
@@ -85,7 +85,8 @@ async fn main() {
         query_service_url: Some(opt.sequencer_url),
     };
     tracing::info!("Launching HotShot commitment task..");
-    run_hotshot_commitment_task::<<SeqTypes as NodeType>::Base>(&hotshot_contract_options).await;
+    run_hotshot_commitment_task::<<SequencerVersions as Versions>::Base>(&hotshot_contract_options)
+        .await;
 }
 
 fn start_http_server<Ver: StaticVersionType + 'static>(
@@ -114,8 +115,8 @@ fn start_http_server<Ver: StaticVersionType + 'static>(
 
 #[cfg(test)]
 mod test {
-    use espresso_types::SeqTypes;
-    use hotshot_types::traits::node_implementation::NodeType;
+    use espresso_types::SequencerVersions;
+    use hotshot_types::traits::node_implementation::Versions;
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
@@ -134,11 +135,11 @@ mod test {
         start_http_server(
             port,
             expected_addr,
-            <SeqTypes as NodeType>::Base::instance(),
+            <SequencerVersions as Versions>::Base::instance(),
         )
         .expect("Failed to start the server");
 
-        let client: Client<ServerError, <SeqTypes as NodeType>::Base> =
+        let client: Client<ServerError, <SequencerVersions as Versions>::Base> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
 
