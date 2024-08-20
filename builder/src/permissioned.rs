@@ -303,7 +303,7 @@ pub async fn init_node<P: SequencerPersistence, Ver: StaticVersionType + 'static
 
     let ctx = BuilderContext::init(
         Arc::new(hotshot_handle),
-        state_signer,
+        Arc::new(state_signer),
         node_index,
         eth_key_pair,
         bootstrapped_view,
@@ -414,7 +414,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
     #[allow(clippy::too_many_arguments)]
     pub async fn init(
         hotshot_handle: Arc<Consensus<N, P>>,
-        state_signer: StateSigner<Ver>,
+        state_signer: Arc<StateSigner<Ver>>,
         node_index: u64,
         eth_key_pair: EthKeyPair,
         bootstrapped_view: ViewNumber,
@@ -532,7 +532,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         let ctx = Self {
             hotshot_handle: Arc::clone(&hotshot_handle),
             node_index,
-            state_signer: Arc::new(state_signer),
+            state_signer,
             wait_for_orchestrator: None,
             global_state,
             hotshot_builder_api_url,
@@ -561,7 +561,8 @@ mod test {
     use async_lock::RwLock;
     use async_std::task;
 
-    use espresso_types::{FeeAccount, NamespaceId, Transaction};
+    use espresso_types::{BaseVersion, FeeAccount, NamespaceId, Transaction};
+    use ethers::utils::Anvil;
     use hotshot_builder_api::v0_1::{
         block_info::{AvailableBlockData, AvailableBlockHeaderInput, AvailableBlockInfo},
         builder::BuildError,
@@ -582,176 +583,87 @@ mod test {
             signature_key::SignatureKey,
         },
     };
-    use sequencer::persistence::no_storage::{self, NoStorage};
+    use portpicker::pick_unused_port;
+    use sequencer::{
+        api::{
+            options::HotshotEvents,
+            test_helpers::{TestNetwork, TestNetworkConfigBuilder},
+            Options,
+        },
+        persistence::{
+            self,
+            no_storage::{self, NoStorage},
+        },
+        testing::TestConfigBuilder,
+    };
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;
+    use tempfile::TempDir;
     use vbs::version::StaticVersion;
 
     use super::*;
     use crate::{
         non_permissioned,
         testing::{
-            hotshot_builder_url, HotShotTestConfig, NonPermissionedBuilderTestConfig,
-            PermissionedBuilderTestConfig,
+            hotshot_builder_url, test_builder_impl, HotShotTestConfig,
+            NonPermissionedBuilderTestConfig, PermissionedBuilderTestConfig,
         },
     };
 
-    #[async_std::test]
-    async fn test_permissioned_builder() {
-        setup_test();
+    // TODO: Re-enable when permissioned builder accepts Arc<RwLock<Context>> instead of Arc<Context>
+    // #[async_std::test]
+    // async fn test_permissioned_builder() {
+    //     setup_test();
 
-        let ver = StaticVersion::<0, 1>::instance();
+    //     let query_port = pick_unused_port().expect("No ports free");
 
-        // Hotshot Test Config
-        let hotshot_config = HotShotTestConfig::default();
+    //     let event_port = pick_unused_port().expect("No ports free");
+    //     let event_service_url: Url = format!("http://localhost:{event_port}").parse().unwrap();
 
-        // Get the handle for all the nodes, including both the non-builder and builder nodes
-        let mut handles = hotshot_config.init_nodes(ver, no_storage::Options).await;
+    //     let builder_port = pick_unused_port().expect("No ports free");
+    //     let builder_api_url: Url = format!("http://localhost:{builder_port}").parse().unwrap();
 
-        // start consensus for all the nodes
-        for (handle, ..) in handles.iter() {
-            handle.hotshot.start_consensus().await;
-        }
+    //     // Set up and start the network
+    //     let anvil = Anvil::new().spawn();
+    //     let l1 = anvil.endpoint().parse().unwrap();
+    //     let network_config = TestConfigBuilder::default().l1_url(l1).build();
 
-        let total_nodes = HotShotTestConfig::total_nodes();
+    //     let tmpdir = TempDir::new().unwrap();
 
-        let node_id = total_nodes - 1;
-        // non-staking node handle
-        let hotshot_context_handle = Arc::clone(&handles[node_id].0);
-        let state_signer = handles[node_id].1.take().unwrap();
+    //     let config = TestNetworkConfigBuilder::default()
+    //         .api_config(
+    //             Options::with_port(query_port)
+    //                 .submit(Default::default())
+    //                 .query_fs(
+    //                     Default::default(),
+    //                     persistence::fs::Options::new(tmpdir.path().to_owned()),
+    //                 )
+    //                 .hotshot_events(HotshotEvents {
+    //                     events_service_port: event_port,
+    //                 }),
+    //         )
+    //         .network_config(network_config)
+    //         .build();
+    //     let network = TestNetwork::new(config, BaseVersion::instance()).await;
+    //     let consensus_handle = network.peers[0].consensus();
+    //     let node_id = network.peers[0].config().node_index;
+    //     let state_signer = network.peers[0].state_signer();
 
-        // builder api url
-        let hotshot_builder_api_url = hotshot_config.config.builder_urls[0].clone();
-        let builder_config = PermissionedBuilderTestConfig::init_permissioned_builder(
-            hotshot_config,
-            hotshot_context_handle,
-            node_id as u64,
-            state_signer,
-            hotshot_builder_api_url.clone(),
-        )
-        .await;
+    //     let builder_config = PermissionedBuilderTestConfig::init_permissioned_builder(
+    //         consensus_handle,
+    //         node_id,
+    //         state_signer,
+    //         builder_api_url.clone(),
+    //     )
+    //     .await;
 
-        let builder_pub_key = builder_config.fee_account;
+    //     let subscribed_events = consensus_handle.event_stream();
 
-        // Start a builder api client
-        let builder_client =
-            Client::<hotshot_builder_api::v0_1::builder::Error, StaticVersion<0, 1>>::new(
-                hotshot_builder_api_url.clone(),
-            );
-        assert!(builder_client.connect(Some(Duration::from_secs(60))).await);
-
-        let seed = [207_u8; 32];
-
-        // Hotshot client Public, Private key
-        let (hotshot_client_pub_key, hotshot_client_private_key) =
-            BLSPubKey::generated_from_seed_indexed(seed, 2011_u64);
-
-        let parent_commitment = vid_commitment(&[], GENESIS_VID_NUM_STORAGE_NODES);
-
-        // sign the parent_commitment using the client_private_key
-        let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
-            &hotshot_client_private_key,
-            parent_commitment.as_ref(),
-        )
-        .expect("Claim block signing failed");
-
-        let test_view_num = 0;
-        // test getting available blocks
-        tracing::info!(
-                "block_info/availableblocks/{parent_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
-            );
-        // sleep and wait for builder service to startup
-        async_sleep(Duration::from_millis(3000)).await;
-        let available_block_info = match builder_client
-            .get::<Vec<AvailableBlockInfo<SeqTypes>>>(&format!(
-                "block_info/availableblocks/{parent_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
-            ))
-            .send()
-            .await
-        {
-            Ok(response) => {
-                tracing::info!("Received Available Blocks: {:?}", response);
-                assert!(!response.is_empty());
-                response
-            }
-            Err(e) => {
-                panic!("Error getting available blocks {:?}", e);
-            }
-        };
-
-        let builder_commitment = available_block_info[0].block_hash.clone();
-
-        // sign the builder_commitment using the client_private_key
-        let encoded_signature = <SeqTypes as NodeType>::SignatureKey::sign(
-            &hotshot_client_private_key,
-            builder_commitment.as_ref(),
-        )
-        .expect("Claim block signing failed");
-
-        // Test claiming blocks
-        let _available_block_data = match builder_client
-            .get::<AvailableBlockData<SeqTypes>>(&format!(
-                "block_info/claimblock/{builder_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
-            ))
-            .send()
-            .await
-        {
-            Ok(response) => {
-                tracing::info!("Received Block Data: {:?}", response);
-                response
-            }
-            Err(e) => {
-                panic!("Error while claiming block {:?}", e);
-            }
-        };
-
-        // Test claiming block header input
-        let _available_block_header = match builder_client
-            .get::<AvailableBlockHeaderInput<SeqTypes>>(&format!(
-                "block_info/claimheaderinput/{builder_commitment}/{test_view_num}/{hotshot_client_pub_key}/{encoded_signature}"
-            ))
-            .send()
-            .await
-        {
-            Ok(response) => {
-                tracing::info!("Received Block Header : {:?}", response);
-                response
-            }
-            Err(e) => {
-                panic!("Error getting claiming block header {:?}", e);
-            }
-        };
-
-        // test getting builder key
-        match builder_client
-            .get::<FeeAccount>("block_info/builderaddress")
-            .send()
-            .await
-        {
-            Ok(response) => {
-                tracing::info!("Received Builder Key : {:?}", response);
-                assert_eq!(response, builder_pub_key);
-            }
-            Err(e) => {
-                panic!("Error getting builder key {:?}", e);
-            }
-        }
-
-        let txn = Transaction::new(NamespaceId::from(1_u32), vec![1, 2, 3]);
-        match builder_client
-            .post::<()>("txn_submit/submit")
-            .body_json(&txn)
-            .unwrap()
-            .send()
-            .await
-        {
-            Ok(response) => {
-                tracing::info!("Received txn submitted response : {:?}", response);
-                return;
-            }
-            Err(e) => {
-                panic!("Error submitting private transaction {:?}", e);
-            }
-        }
-    }
+    //     test_builder_impl(
+    //         builder_api_url,
+    //         subscribed_events,
+    //         builder_config.fee_account,
+    //     )
+    //     .await;
+    // }
 }

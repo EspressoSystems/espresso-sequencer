@@ -1325,6 +1325,7 @@ dependencies = [
  "serde",
  "surf",
  "surf-disco",
+ "tempfile",
  "tide-disco",
  "tracing",
  "url",
