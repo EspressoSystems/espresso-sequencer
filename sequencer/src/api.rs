@@ -1134,7 +1134,7 @@ mod test {
     }
 
     #[async_std::test]
-    async fn test_merklized_state_api() {
+    async fn slow_test_merklized_state_api() {
         setup_test();
 
         let port = pick_unused_port().expect("No ports free");
@@ -1147,7 +1147,7 @@ mod test {
                 .status(Default::default()),
         );
 
-        let anvil: ethers::utils::AnvilInstance = Anvil::new().spawn();
+        let anvil = Anvil::new().spawn();
         let l1 = anvil.endpoint().parse().unwrap();
         let network_config = TestConfigBuilder::default().l1_url(l1).build();
         let config = TestNetworkConfigBuilder::default()
@@ -1156,7 +1156,7 @@ mod test {
             .build();
         let mut network = TestNetwork::new(config, BaseV01UpgradeV02::new()).await;
         let url = format!("http://localhost:{port}").parse().unwrap();
-        let client: Client<ServerError, StaticVersion<0, 1>> = Client::new(url);
+        let client: Client<ServerError, SequencerApiVersion> = Client::new(url);
 
         client.connect(None).await;
 
