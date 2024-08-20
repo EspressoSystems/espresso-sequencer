@@ -1594,9 +1594,11 @@ mod test {
                     Some(cf) => {
                         dbg!(&cf);
                         dbg!(&chain_config_upgrade);
-                        if height as u64 > stop_voting_view {
-                            assert_eq!(cf, chain_config_upgrade);
+                        if cf == chain_config_upgrade {
                             break 'outer;
+                        }
+                        if height as u64 > stop_voting_view {
+                            panic!("failed to upgrade `ChainConfig`")
                         }
                     }
                     None => continue 'outer,
