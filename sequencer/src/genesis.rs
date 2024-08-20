@@ -38,7 +38,9 @@ pub enum L1Finalized {
 /// Genesis of an Espresso chain.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Genesis {
+    #[serde(with = "version_ser")]
     pub base_version: Version,
+    #[serde(with = "version_ser")]
     pub upgrade_version: Version,
     pub chain_config: ChainConfig,
     pub stake_table: StakeTableConfig,
@@ -46,7 +48,7 @@ pub struct Genesis {
     pub accounts: HashMap<FeeAccount, FeeAmount>,
     pub l1_finalized: Option<L1Finalized>,
     pub header: GenesisHeader,
-    #[serde(rename = "upgrade", with = "upgrade_serialization")]
+    #[serde(rename = "upgrade", with = "upgrade_ser")]
     #[serde(default)]
     pub upgrades: BTreeMap<Version, Upgrade>,
 }
@@ -67,7 +69,47 @@ impl Genesis {
     }
 }
 
-mod upgrade_serialization {
+mod version_ser {
+
+    use vbs::version::Version;
+
+    use serde::{de, Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(ver: &Version, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        println!("SER");
+
+        serializer.serialize_str(&ver.to_string())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Version, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        println!("str");
+
+        let version_str = String::deserialize(deserializer)?;
+
+        println!("{version_str}");
+
+        let version: Vec<_> = version_str.split('.').collect();
+
+        let version = Version {
+            major: version[0]
+                .parse()
+                .map_err(|_| de::Error::custom("invalid version format"))?,
+            minor: version[1]
+                .parse()
+                .map_err(|_| de::Error::custom("invalid version format"))?,
+        };
+
+        Ok(version)
+    }
+}
+
+mod upgrade_ser {
 
     use std::{collections::BTreeMap, fmt};
 
@@ -144,8 +186,12 @@ mod upgrade_serialization {
                     let version: Vec<_> = fields.version.split('.').collect();
 
                     let version = Version {
-                        major: version[0].parse().expect("invalid version"),
-                        minor: version[1].parse().expect("invalid version"),
+                        major: version[0]
+                            .parse()
+                            .map_err(|_| de::Error::custom("invalid version format"))?,
+                        minor: version[1]
+                            .parse()
+                            .map_err(|_| de::Error::custom("invalid version format"))?,
                     };
 
                     match (fields.time_based, fields.view_based) {
@@ -232,6 +278,9 @@ mod test {
     #[test]
     fn test_genesis_from_toml_with_optional_fields() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -307,6 +356,9 @@ mod test {
     #[test]
     fn test_genesis_from_toml_without_optional_fields() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -347,6 +399,9 @@ mod test {
     #[test]
     fn test_genesis_l1_finalized_number_only() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -374,6 +429,9 @@ mod test {
     #[test]
     fn test_genesis_from_toml_units() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -405,6 +463,9 @@ mod test {
         // without optional fields
         // with view settings
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -469,6 +530,9 @@ mod test {
         // without optional fields
         // with time settings
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -535,6 +599,9 @@ mod test {
         // set both time and view parameters
         // this should err
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -581,6 +648,9 @@ mod test {
     #[test]
     fn test_marketplace_upgrade_toml() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
@@ -619,6 +689,9 @@ mod test {
     #[test]
     fn test_marketplace_and_fee_upgrade_toml() {
         let toml = toml! {
+            base_version = "0.1"
+            upgrade_version = "0.2"
+
             [stake_table]
             capacity = 10
 
