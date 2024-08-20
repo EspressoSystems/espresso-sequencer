@@ -73,11 +73,11 @@ hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", br
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
     "runtime-async-std",
     "global-permits",
-], tag = "0.4.3", package = "cdn-broker" }
+], branch = "0.4.4-reuse", package = "cdn-broker" }
 cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
     "runtime-async-std",
     "global-permits",
-], tag = "0.4.3", package = "cdn-marshal" }
+], branch = "0.4.4-reuse", package = "cdn-marshal" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
     "test-apis",
