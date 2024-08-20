@@ -12,6 +12,7 @@ slow-tests = []
 gpu-vid = ["hotshot-types/gpu-vid"]
 dependency-tasks = ["hotshot/dependency-tasks"]
 rewind = ["hotshot/rewind"]
+test-srs = ["jf-vid/test-srs"]
 
 [dependencies]
 automod = "1.0.14"

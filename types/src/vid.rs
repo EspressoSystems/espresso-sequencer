@@ -231,6 +231,12 @@ impl VidScheme for VidSchemeType {
     fn get_multiplicity(common: &Self::Common) -> u32 {
         <Advz as VidScheme>::get_multiplicity(common)
     }
+
+    /// Helper function for testing only
+    #[cfg(feature = "test-srs")]
+    fn corrupt_share_index(&self, share: Self::Share) -> Self::Share {
+        self.0.corrupt_share_index(share)
+    }
 }
 
 impl PayloadProver<LargeRangeProofType> for VidSchemeType {

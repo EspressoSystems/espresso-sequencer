@@ -602,3 +602,78 @@ async fn test_vid_disperse_storage_failure() {
 
     run_test![inputs, consensus_script].await;
 }
+
+/// Tests that VID shares that return validation with an Ok(Err) result
+/// are correctly rejected
+#[cfg(test)]
+#[cfg_attr(async_executor_impl = "tokio", tokio::test(flavor = "multi_thread"))]
+#[cfg_attr(async_executor_impl = "async-std", async_std::test)]
+#[cfg(feature = "test-srs")]
+async fn test_invalid_vid_disperse() {
+    use hotshot_testing::{
+        helpers::{build_payload_commitment, build_vid_proposal},
+        test_builder::TestDescription,
+    };
+    use hotshot_types::traits::{
+        consensus_api::ConsensusApi, network::Topic, node_implementation::NodeType,
+    };
+
+    async_compatibility_layer::logging::setup_logging();
+    async_compatibility_layer::logging::setup_backtrace();
+
+    let handle = build_system_handle::<TestTypes, MemoryImpl, TestVersions>(0)
+        .await
+        .0;
+
+    let quorum_membership = handle.hotshot.memberships.quorum_membership.clone();
+    let da_membership = handle.hotshot.memberships.da_membership.clone();
+
+    let mut generator =
+        TestViewGenerator::generate(quorum_membership.clone(), da_membership.clone());
+
+    let mut proposals = Vec::new();
+    let mut leaders = Vec::new();
+    let mut votes = Vec::new();
+    let mut dacs = Vec::new();
+    let mut vids = Vec::new();
+    for view in (&mut generator).take(1).collect::<Vec<_>>().await {
+        proposals.push(view.quorum_proposal.clone());
+        leaders.push(view.leader_public_key);
+        votes.push(view.create_quorum_vote(&handle));
+        dacs.push(view.da_certificate.clone());
+        vids.push(view.vid_proposal.clone());
+    }
+
+    let vid_scheme =
+        vid_scheme_from_view_number::<TestTypes>(&quorum_membership, ViewNumber::new(0));
+
+    let corrupt_share = vid_scheme.corrupt_share_index(vids[0].0[0].data.share.clone());
+
+    // Corrupt one of the shares
+    let mut share = vid_share(&vids[0].0, handle.public_key());
+    share.data.share = corrupt_share;
+
+    let inputs = vec![random![
+        VidShareRecv(share),
+        DaCertificateRecv(dacs[0].clone()),
+        QuorumProposalRecv(proposals[0].clone(), leaders[0]),
+    ]];
+
+    // If verify_share does not correctly handle this case, a `QuorumVote`
+    // will be emitted and cause a test failure
+    let expectations = vec![Expectations::from_outputs(all_predicates![
+        validated_state_updated(),
+        exact(ViewChange(ViewNumber::new(1))),
+        quorum_proposal_validated(),
+    ])];
+
+    let consensus_state =
+        ConsensusTaskState::<TestTypes, MemoryImpl, TestVersions>::create_from(&handle).await;
+    let mut consensus_script = TaskScript {
+        timeout: TIMEOUT,
+        state: consensus_state,
+        expectations,
+    };
+
+    run_test![inputs, consensus_script].await;
+}
