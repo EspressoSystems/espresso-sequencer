@@ -1,6 +1,7 @@
 use std::{
     alloc::System,
     any,
+    collections::VecDeque,
     fmt::{Debug, Display},
     marker::PhantomData,
     mem,
@@ -487,7 +488,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
             qc_receiver,
             req_receiver,
             tx_receiver,
-            Vec::new() /* tx_queue */,
+            VecDeque::new() /* tx_queue */,
             global_state_clone,
             NonZeroUsize::new(1).unwrap(),
             maximize_txns_count_timeout_duration,
@@ -500,14 +501,15 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, Ver: StaticVersionTyp
         );
 
         let hotshot_handle_clone = Arc::clone(&hotshot_handle);
+        let global_state_clone = global_state.clone();
         // spawn the builder service
         async_spawn(async move {
             run_permissioned_standalone_builder_service(
-                tx_sender,
                 da_sender,
                 qc_sender,
                 decide_sender,
                 hotshot_handle_clone,
+                global_state_clone,
             )
             .await;
         });

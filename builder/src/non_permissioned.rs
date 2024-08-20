@@ -1,4 +1,4 @@
-use std::{num::NonZeroUsize, time::Duration};
+use std::{collections::VecDeque, num::NonZeroUsize, time::Duration};
 
 use anyhow::Context;
 use async_broadcast::{
@@ -164,7 +164,7 @@ impl BuilderConfig {
             qc_receiver,
             req_receiver,
             tx_receiver,
-            Vec::new() /* tx_queue */,
+            VecDeque::new() /* tx_queue */,
             global_state_clone,
             node_count,
             maximize_txns_count_timeout_duration,
@@ -193,14 +193,15 @@ impl BuilderConfig {
 
         // spawn the builder service
         let events_url = hotshot_events_api_url.clone();
+        let global_state_clone = global_state.clone();
         tracing::info!("Running permissionless builder against hotshot events API at {events_url}",);
         async_spawn(async move {
             let res = run_non_permissioned_standalone_builder_service::<_, SeqVersions>(
                 da_sender,
                 qc_sender,
                 decide_sender,
-                tx_sender,
                 events_url,
+                global_state_clone,
             )
             .await;
             tracing::error!(?res, "builder service exited");
