@@ -947,8 +947,6 @@
 <a href="#947" id="947">947</a>
 <a href="#948" id="948">948</a>
 <a href="#949" id="949">949</a>
-<a href="#950" id="950">950</a>
-<a href="#951" id="951">951</a>
 </pre></div><pre class="rust"><code><span class="kw">pub mod </span>api;
 <span class="kw">pub mod </span>catchup;
 <span class="kw">pub mod </span>context;
@@ -1713,9 +1711,7 @@
                 <span class="prelude-val">None</span>, <span class="comment">// The public API URL
                 </span>bind_version,
                 MarketplaceConfig::&lt;SeqTypes, Node&lt;network::Memory, P::Persistence&gt;&gt; {
-                    auction_results_provider: Arc::new(SolverAuctionResultsProvider(
-                        Url::from_str(<span class="string">"https://some.solver"</span>).unwrap(),
-                    )),
+                    auction_results_provider: Arc::new(SolverAuctionResultsProvider::default()),
                     fallback_builder_url: Url::from_str(<span class="string">"https://some.builder"</span>).unwrap(),
                 },
             )

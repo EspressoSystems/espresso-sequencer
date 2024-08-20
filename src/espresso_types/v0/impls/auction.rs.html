@@ -346,6 +346,20 @@
 <a href="#346" id="346">346</a>
 <a href="#347" id="347">347</a>
 <a href="#348" id="348">348</a>
+<a href="#349" id="349">349</a>
+<a href="#350" id="350">350</a>
+<a href="#351" id="351">351</a>
+<a href="#352" id="352">352</a>
+<a href="#353" id="353">353</a>
+<a href="#354" id="354">354</a>
+<a href="#355" id="355">355</a>
+<a href="#356" id="356">356</a>
+<a href="#357" id="357">357</a>
+<a href="#358" id="358">358</a>
+<a href="#359" id="359">359</a>
+<a href="#360" id="360">360</a>
+<a href="#361" id="361">361</a>
+<a href="#362" id="362">362</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span><span class="kw">super</span>::state::ValidatedState;
 <span class="kw">use crate</span>::{
     eth_signature_key::{EthKeyPair, SigningError},
@@ -631,7 +645,21 @@
 
 <span class="attr">#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 </span><span class="doccomment">/// Auction Results provider holding the Url of the solver in order to fetch auction results.
-</span><span class="kw">pub struct </span>SolverAuctionResultsProvider(<span class="kw">pub </span>Url);
+</span><span class="kw">pub struct </span>SolverAuctionResultsProvider {
+    <span class="kw">pub </span>url: Url,
+    <span class="kw">pub </span>marketplace_path: String,
+    <span class="kw">pub </span>results_path: String,
+}
+
+<span class="kw">impl </span>Default <span class="kw">for </span>SolverAuctionResultsProvider {
+    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+        <span class="self">Self </span>{
+            url: Url::from_str(<span class="string">"http://localhost:25000"</span>).unwrap(),
+            marketplace_path: <span class="string">"marketplace-solver/"</span>.into(),
+            results_path: <span class="string">"auction_results/"</span>.into(),
+        }
+    }
+}
 
 <span class="attr">#[async_trait]
 </span><span class="kw">impl</span>&lt;TYPES: NodeType&gt; AuctionResultsProvider&lt;TYPES&gt; <span class="kw">for </span>SolverAuctionResultsProvider {
@@ -641,11 +669,11 @@
         view_number: TYPES::Time,
     ) -&gt; anyhow::Result&lt;TYPES::AuctionResult&gt; {
         <span class="kw">let </span>resp = SurfClient::new(
-            <span class="self">self</span>.<span class="number">0
-                </span>.join(<span class="string">"marketplace-solver/"</span>)
+            <span class="self">self</span>.url
+                .join(<span class="kw-2">&amp;</span><span class="self">self</span>.marketplace_path)
                 .context(<span class="string">"Malformed solver URL"</span>)<span class="question-mark">?</span>,
         )
-        .get::&lt;TYPES::AuctionResult&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"auction_results/{}"</span>, <span class="kw-2">*</span>view_number))
+        .get::&lt;TYPES::AuctionResult&gt;(<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}{}"</span>, <span class="self">self</span>.results_path, <span class="kw-2">*</span>view_number))
         .send()
         .<span class="kw">await</span><span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(resp)
