@@ -270,7 +270,21 @@ contract V2 is V1 {
 }
 ```
 
-## Deployment of Upgrades via the Proxy
+## Deploying the Upgradable Contract
+
+The [OpenZeppelin Upgrade plugins](https://docs.openzeppelin.com/upgrades-plugins/1.x/) are used to assist with upgrades
+so that we can ensure that the base and future implementation contracts are upgrade safe. For example, the
+implementation contract:
+
+- cannot have a constructor.
+- should not use the `selfdestruct` or `delegatecall`.
+- should not initialize state variables.
+- should not make state variables `immutable`.
+
+You can learn more about deploying and upgrading upgradable contracts with OpenZeppelin and Foundry
+[here](https://docs.openzeppelin.com/upgrades-plugins/1.x/foundry-upgrades).
+
+### Upgrading via the Proxy
 
 - Deploy the new (modified) implementation contract. If new state variables that need initialization were added then:
 - Prepare an `upgradeToAndCall` transaction from the multisig admin account which is parameterized with the address of
@@ -278,3 +292,5 @@ contract V2 is V1 {
 - Prepare an `upgradeTo` transaction from the multisig admin account parameterized with the address of the new
   implementation contract: Then:
 - Broadcast the transaction
+
+For more details, check out this [README](../contracts/script/README.md).
