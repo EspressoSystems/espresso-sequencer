@@ -5,20 +5,95 @@ intermediary that can delegate calls to other contracts, called implementation c
 smart contract to be upgraded while keeping the same address and state. This is made possible by two functions in
 Solidity:
 
-- `delegatecall`: contractA can delegatecall contractB but execute the logic within the context of contractA. This means
+- `delegatecall`: ContractA can delegatecall ContractB but execute the logic within the context of ContractA. This means
   that the called contract's code is executed with the storage, caller, and balance of the calling contract.
-- `fallback`: executed when a function doesn't exist. This is often used in proxy contracts to catch all function calls
+- `fallback`: executed when a function does not exist. This is often used in proxy contracts to catch all function calls
   and delegate them to the implementation contract.
 
 OpenZeppelin's [implementation](https://docs.openzeppelin.com/contracts/4.x/api/proxy#UUPSUpgradeable) for the UUPS
 proxy pattern was used.
 
+At the time of writing, we have two upgradable smart contracts:
+
+- LightClient.sol
+- FeeContract.sol
+
+They both use OpenZeppelin's [implementation](https://docs.openzeppelin.com/contracts/4.x/api/proxy#UUPSUpgradeable) for
+the UUPS proxy pattern and is deployed using OpenZeppelin Upgrades library.
+
 ## Writing Upgradable Smart Contracts
 
-This is written with developers in mind to explain the process for upgrading contracts within our repo to ensure safe
+This document is intended for developers to explain the process for upgrading contracts within our repo to ensure safe
 upgrades.
 
 ### Upgrading via Contract Inheritance
+
+When writing the upgrade for upgradable contracts such as the light client contract and the fee contract, the new
+implementation inherits from the latest implementation contract. This new implementation only implements the new or
+modified features or new variables. If any variables have to be initialized, the new implementation contract should
+create a `initializeVx` function, where x is the version number. Here's an example:
+
+The original `LightClient` contract looks like this:
+
+```solidity
+contract LightClient is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+  //...
+}
+```
+
+The 2nd implementation, LightClientV2, that adds a new variable is implemented like this:
+
+```solidity
+contract LightClientV2 is LightClient {
+    uint256 public newField;
+
+    /// @notice this field is used to check initialized versions so that one can ensure that the
+    /// initialization only happens once
+    uint8 internal _initializedVersion;
+
+    /// @notice Initialize v2
+    /// @param _newField   New field amount
+    function initializeV2(uint256 _newField) external {
+        require(_initializedVersion == 0);
+        newField = _newField;
+        _initializedVersion = 2;
+    }
+
+    function newFinalizedState(
+        LightClientState memory newState,
+        IPlonkVerifier.PlonkProof memory proof
+    ) external virtual override {
+      //...
+    }
+
+    //...
+}
+```
+
+The 3rd implementation will now inherit from LightClientV2, ensure that functions are marked as virtual in previous
+versions of the contract if you want to continue overriding it in child contracts
+
+```solidity
+contract LightClientV3 is LightClientV2 {
+    uint256 public anotherField;
+
+    /// @param _newField   New field amount
+    function initializeV3(uint256 _newField) external {
+        require(_initializedVersion == 2, "already initialized");
+        anotherField = _newField;
+        _initializedVersion = 3;
+    }
+
+    function newFinalizedState(
+        LightClientState memory newState,
+        IPlonkVerifier.PlonkProof memory proof
+    ) external virtual override {
+      //...
+    }
+
+    //...
+}
+```
 
 Solidity supports inheritance which means that a function call always executes the function of the same name (and
 parameter types) in the most derived contract in the inheritance hierarchy.
@@ -56,7 +131,7 @@ parameter types) in the most derived contract in the inheritance hierarchy.
 Thanks to C3 linearization, the order in which you inherit from the previous version of the contract dictates the
 storage layout so be sure to be mindful when declaring new variables.
 
-Criteria:
+Criteria for New State Variables:
 
 - New variable names must be used otherwise it leads to a compilation error due to shadowing.
 - New variables added _must_ be declared as type `internal` or `public`, `private` can never be used.
@@ -115,11 +190,12 @@ contract V2 is V1 {
 
 #### Modifying Existing Logic (Function Overriding)
 
-The logic in exiting functions can be overridden but be sure not to introduce breaking changes.
+The logic in existing functions can be overridden but be sure not to introduce breaking changes.
 
-Criteria:
+Criteria for Overriding Functions::
 
-- a function must be `virtual` to be able to be overridden in a derived contract.
+- a function must be marked as `virtual` in the base contract so that it can be eligible to be overridden in a derived
+  contract.
 - a function with `private` visibility cannot be overridden or inherited.
 - Public state variables can override `external` functions if the parameter and return types of the function matches the
   getter function of the variable:
@@ -131,17 +207,27 @@ _Example:_
 pragma solidity >=0.6.0 <0.9.0;
 
 contract A {
-    function f() external view virtual returns(uint) { return 5; }
+     function getValue() public view virtual returns (uint) {
+        return 1;
+    }
 }
 
 contract B is A {
-    uint public override f;
+    function getValue() public view virtual override returns (uint) {
+        return 2;
+    }
 }
 ```
 
 - The overriding function may only change the visibility of the overridden function from `external` to `public`.
 - The mutability may be changed to a more strict one following the order: `nonpayable` can be overridden by `view` and
   `pure`. `view` can be overridden by `pure`. `payable` is an exception and cannot be changed to any other mutability.
+
+##### Avoiding breaking changes when overriding functions
+
+- When overriding a function, consider whether it’s necessary to call the parent contract’s implementation using
+  `super`. This can preserve the original logic as you extend with new functionality.
+- Ensure that any side effects are handled appropriately, e.g. event emissions, state variable modifications etc
 
 ### Upgrades that become complicated through inheritance
 
@@ -186,7 +272,7 @@ contract V2 is V1 {
 
 ## Deployment of Upgrades via the Proxy
 
-- Deploy the new (modified) implementation contract If new state variables that need initialization were added then:
+- Deploy the new (modified) implementation contract. If new state variables that need initialization were added then:
 - Prepare an `upgradeToAndCall` transaction from the multisig admin account which is parameterized with the address of
   the new implementation contract and an internal call to invoke initializeV[X] with the new state variables data. Else:
 - Prepare an `upgradeTo` transaction from the multisig admin account parameterized with the address of the new
