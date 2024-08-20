@@ -163,6 +163,10 @@
 <a href="#163" id="163">163</a>
 <a href="#164" id="164">164</a>
 <a href="#165" id="165">165</a>
+<a href="#166" id="166">166</a>
+<a href="#167" id="167">167</a>
+<a href="#168" id="168">168</a>
+<a href="#169" id="169">169</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::{num::NonZeroUsize, time::Duration};
 
 <span class="kw">use </span>clap::Parser;
@@ -232,7 +236,11 @@
 
     <span class="doccomment">/// The number of nodes a Libp2p node should try to maintain
     /// a connection with at one time.
-    </span><span class="attr">#[arg(long, env = <span class="string">"ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N"</span>, default_value = <span class="string">"4"</span>)]
+    </span><span class="attr">#[arg(
+        long,
+        env = <span class="string">"ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N"</span>,
+        default_value = <span class="string">"20"
+    </span>)]
     </span>libp2p_mesh_n: usize,
 
     <span class="doccomment">/// Seed to use for generating node keys.
