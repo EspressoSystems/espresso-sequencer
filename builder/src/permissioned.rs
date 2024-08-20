@@ -388,9 +388,7 @@ pub async fn init_hotshot<
         ConsensusMetricsValue::new(metrics),
         da_storage,
         MarketplaceConfig {
-            auction_results_provider: Arc::new(SolverAuctionResultsProvider(
-                Url::from_str("https://some.solver").unwrap(),
-            )),
+            auction_results_provider: Arc::new(SolverAuctionResultsProvider::default()),
             fallback_builder_url: Url::from_str("https://some.builder").unwrap(),
         },
     )

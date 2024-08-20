@@ -87,9 +87,11 @@ where
     };
 
     let marketplace_config = MarketplaceConfig {
-        auction_results_provider: Arc::new(SolverAuctionResultsProvider(
-            opt.auction_results_solver_url,
-        )),
+        auction_results_provider: Arc::new(SolverAuctionResultsProvider {
+            url: opt.auction_results_solver_url,
+            marketplace_path: opt.marketplace_solver_path,
+            results_path: opt.auction_results_path,
+        }),
         fallback_builder_url: opt.fallback_builder_url,
     };
 
