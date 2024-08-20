@@ -1,0 +1,4 @@
+# The restart tests run an entire sequencing network, and so are quite resource intensive.
+[[profile.default.overrides]]
+filter = 'test(slow_test_restart)'
+threads-required = 'num-cpus'

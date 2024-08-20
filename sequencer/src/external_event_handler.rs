@@ -40,9 +40,6 @@ pub struct ExternalEventHandler {
     // The public key of the node
     pub public_key: BLSPubKey,
 
-    // The tasks that are running
-    pub _tasks: TaskList,
-
     // The outbound message queue
     pub outbound_message_sender: Sender<OutboundMessage>,
 }
@@ -57,6 +54,7 @@ pub enum OutboundMessage {
 impl ExternalEventHandler {
     /// Creates a new `ExternalEventHandler` with the given network and roll call info
     pub async fn new<N: ConnectedNetwork<PubKey>>(
+        tasks: &mut TaskList,
         network: Arc<N>,
         roll_call_info: RollCallInfo,
         public_key: BLSPubKey,
@@ -64,8 +62,6 @@ impl ExternalEventHandler {
         // Create the outbound message queue
         let (outbound_message_sender, outbound_message_receiver) =
             async_compatibility_layer::channel::bounded(10);
-
-        let mut tasks: TaskList = Default::default();
 
         // Spawn the outbound message handling loop
         tasks.spawn(
@@ -88,7 +84,6 @@ impl ExternalEventHandler {
         Ok(Self {
             roll_call_info,
             public_key,
-            _tasks: tasks,
             outbound_message_sender,
         })
     }

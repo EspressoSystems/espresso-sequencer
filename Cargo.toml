@@ -49,35 +49,36 @@ clap = { version = "4.4", features = ["derive", "env", "string"] }
 cld = "0.5"
 derive_more = "0.99.17"
 dotenvy = "0.15"
+dyn-clone = "1.0"
 ethers = { version = "2.0", features = ["solc"] }
 futures = "0.3"
 
-hotshot = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.70" }
+hotshot = { git = "https://github.com/EspressoSystems/hotshot", branch = "jp/revert-3535" }
 # Hotshot imports
-hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", tag = "0.5.70" }
-hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", tag = "0.1.41" }
-marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", tag = "0.0.5" }
-hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", tag = "0.1.41" }
-hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.70" }
-hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", tag = "0.1.52" }
-hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.70" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems/HotShot.git", branch = "jp/revert-3535" }
+hotshot-builder-core = { git = "https://github.com/EspressoSystems/hotshot-builder-core", branch = "jp/debug-restart" }
+marketplace-builder-core = { git = "https://github.com/EspressoSystems/marketplace-builder-core", branch = "jp/debug-restart" }
+hotshot-events-service = { git = "https://github.com/EspressoSystems/hotshot-events-service.git", branch = "jp/debug-restart" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems/hotshot", branch = "jp/revert-3535" }
+hotshot-query-service = { git = "https://github.com/EspressoSystems/hotshot-query-service", branch = "jp/debug-restart" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems/hotshot", branch = "jp/revert-3535" }
 hotshot-state-prover = { version = "0.1.0", path = "hotshot-state-prover" }
-hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.70" }
-hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.70" }
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.70" }
+hotshot-task = { git = "https://github.com/EspressoSystems/hotshot", branch = "jp/revert-3535" }
+hotshot-testing = { git = "https://github.com/EspressoSystems/hotshot", branch = "jp/revert-3535" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "jp/revert-3535" }
 hotshot-contract-adapter = { version = "0.1.0", path = "contracts/rust/adapter" }
 # Temporary, used to pull in the mock auction results provider
-hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.70" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems/hotshot", branch = "jp/revert-3535" }
 
 # Push CDN imports
 cdn-broker = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
     "runtime-async-std",
     "global-permits",
-], tag = "0.4.3", package = "cdn-broker" }
+], tag = "0.4.4", package = "cdn-broker" }
 cdn-marshal = { git = "https://github.com/EspressoSystems/Push-CDN", features = [
     "runtime-async-std",
     "global-permits",
-], tag = "0.4.3", package = "cdn-marshal" }
+], tag = "0.4.4", package = "cdn-marshal" }
 
 jf-plonk = { git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
     "test-apis",
@@ -120,6 +121,7 @@ rand_distr = "0.4"
 reqwest = "0.12"
 serde = { version = "1.0.195", features = ["derive"] }
 serde_json = "^1.0.113"
+tempfile = "3.9"
 toml = "0.8"
 url = "2.3"
 vbs = "0.1"
