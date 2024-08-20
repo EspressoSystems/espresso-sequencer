@@ -79,8 +79,6 @@ mod version_ser {
     where
         S: Serializer,
     {
-        println!("SER");
-
         serializer.serialize_str(&ver.to_string())
     }
 
@@ -88,11 +86,7 @@ mod version_ser {
     where
         D: Deserializer<'de>,
     {
-        println!("str");
-
         let version_str = String::deserialize(deserializer)?;
-
-        println!("{version_str}");
 
         let version: Vec<_> = version_str.split('.').collect();
 

@@ -65,7 +65,7 @@ use sequencer::{
     context::{Consensus, SequencerContext},
     network,
     state_signature::{static_stake_table_commitment, StakeTableCommitmentType, StateSigner},
-    L1Params, NetworkParams, Node,
+    L1Params, NetworkParams, Node, SequencerApiVersion,
 };
 use tide_disco::{app, method::ReadState, App, Url};
 use vbs::version::{StaticVersion, StaticVersionType};
@@ -98,7 +98,7 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     app.register_module("txn_submit", private_mempool_api)
         .expect("Failed to register the private mempool API");
 
-    async_spawn(app.serve(url, StaticVersion::<0, 1>::instance()));
+    async_spawn(app.serve(url, SequencerApiVersion::instance()));
 }
 
 #[cfg(test)]
@@ -458,7 +458,7 @@ pub mod testing {
             app.register_module("hotshot-events", hotshot_events_api)
                 .expect("Failed to register hotshot events API");
 
-            async_spawn(app.serve(url, StaticVersion::<0, 1>::instance()));
+            async_spawn(app.serve(url, SequencerApiVersion::instance()));
         }
         // enable hotshot event streaming
         pub fn enable_hotshot_node_event_streaming<P: SequencerPersistence, V: Versions>(
@@ -548,7 +548,7 @@ pub mod testing {
                     1,
                 ),
                 MockStateCatchup::default(),
-                StaticVersion::<0, 1>::VERSION,
+                V::Base::VERSION,
             )
             .with_genesis(ValidatedState::default());
 

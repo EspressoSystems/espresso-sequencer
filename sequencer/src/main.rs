@@ -59,7 +59,6 @@ async fn run<V>(
 where
     V: Versions,
 {
-    // change
     if let Some(storage) = modules.storage_fs.take() {
         init_with_storage(genesis, modules, opt, storage, versions).await
     } else if let Some(storage) = modules.storage_sql.take() {

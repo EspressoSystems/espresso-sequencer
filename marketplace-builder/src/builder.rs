@@ -46,7 +46,7 @@ use marketplace_builder_core::{
         ProxyGlobalState, ReceivedTransaction,
     },
 };
-use sequencer::{catchup::StatePeers, L1Params, NetworkParams};
+use sequencer::{catchup::StatePeers, L1Params, NetworkParams, SequencerApiVersion};
 use surf::http::headers::ACCEPT;
 use surf_disco::Client;
 use tide_disco::{app, method::ReadState, App, Url};
@@ -64,11 +64,10 @@ pub struct BuilderConfig {
     pub hotshot_builder_apis_url: Url,
 }
 
-pub fn build_instance_state<Ver: StaticVersionType + 'static>(
+pub fn build_instance_state<V: Versions>(
     chain_config: ChainConfig,
     l1_params: L1Params,
     state_peers: Vec<Url>,
-    _: Ver,
 ) -> anyhow::Result<NodeState> {
     let l1_client = L1Client::new(l1_params.url, l1_params.events_max_block_range);
 
@@ -76,11 +75,11 @@ pub fn build_instance_state<Ver: StaticVersionType + 'static>(
         u64::MAX, // dummy node ID, only used for debugging
         chain_config,
         l1_client,
-        Arc::new(StatePeers::<Ver>::from_urls(
+        Arc::new(StatePeers::<SequencerApiVersion>::from_urls(
             state_peers,
             Default::default(),
         )),
-        Ver::version(),
+        V::Base::version(),
     );
     Ok(instance_state)
 }
@@ -379,11 +378,6 @@ mod test {
             Client::new(builder_api_url.clone());
         builder_client.connect(None).await;
 
-        //  TODO(AG): workaround for version mismatch between bundle and submit APIs
-        let submission_client: Client<ServerError, StaticVersion<0, 1>> =
-            Client::new(builder_api_url);
-        submission_client.connect(None).await;
-
         // Test getting a bundle
         let _bundle = builder_client
             .get::<Bundle<SeqTypes>>("block_info/bundle/1")
@@ -395,7 +389,7 @@ mod test {
         let transactions = (0..10)
             .map(|i| Transaction::new(0u32.into(), vec![1, 1, 1, i]))
             .collect::<Vec<_>>();
-        submission_client
+        builder_client
             .post::<Vec<Commitment<Transaction>>>("txn_submit/batch")
             .body_json(&transactions)
             .unwrap()

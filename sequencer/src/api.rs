@@ -1495,7 +1495,7 @@ mod test {
                 .status(Default::default()),
             )
             .catchups(std::array::from_fn(|_| {
-                StatePeers::<<BaseV01UpgradeV02 as Versions>::Base>::from_urls(
+                StatePeers::<SequencerApiVersion>::from_urls(
                     vec![format!("http://localhost:{port}").parse().unwrap()],
                     Default::default(),
                 )
@@ -1528,7 +1528,7 @@ mod test {
             }
         }
 
-        let client: Client<ServerError, <BaseV01UpgradeV02 as Versions>::Base> =
+        let client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
         tracing::info!(port, "server running");
@@ -1589,7 +1589,7 @@ mod test {
         let mut network = TestNetwork::new(config, BaseV01UpgradeV02::new()).await;
 
         // Connect client.
-        let client: Client<ServerError, <BaseV01UpgradeV02 as Versions>::Base> =
+        let client: Client<ServerError, SequencerApiVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
         tracing::info!(port, "server running");

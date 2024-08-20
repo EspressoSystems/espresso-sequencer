@@ -275,10 +275,7 @@ pub async fn init_node<P: PersistenceOptions, V: Versions>(
         }
     };
 
-    //todo: get from toml
-    let v = StaticVersion::<0, 1>::VERSION;
-
-    if let Some(upgrade) = genesis.upgrades.get(&v) {
+    if let Some(upgrade) = genesis.upgrades.get(&V::Upgrade::VERSION) {
         upgrade.set_hotshot_config_parameters(&mut config.config);
     }
 
@@ -738,7 +735,7 @@ pub mod testing {
                 state.chain_config.resolve().unwrap_or_default(),
                 L1Client::new(self.l1_url.clone(), 1000),
                 catchup::local_and_remote(persistence_opt.clone(), catchup).await,
-                StaticVersion::<0, 1>::version(),
+                V::Base::VERSION,
             )
             .with_current_version(V::Base::version())
             .with_genesis(state)

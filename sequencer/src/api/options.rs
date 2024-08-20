@@ -213,17 +213,13 @@ impl Options {
 
             // Initialize status API.
             let status_api =
-                status::define_api(&Default::default(), <V as Versions>::Base::instance())?;
+                status::define_api(&Default::default(), SequencerApiVersion::instance())?;
             app.register_module("status", status_api)?;
 
-            self.init_hotshot_modules::<_, _, _, V>(&mut app)?;
+            self.init_hotshot_modules(&mut app)?;
 
             if self.hotshot_events.is_some() {
-                self.init_and_spawn_hotshot_event_streaming_module(
-                    state,
-                    &mut tasks,
-                    SequencerApiVersion::instance(),
-                )?;
+                self.init_and_spawn_hotshot_event_streaming_module(state, &mut tasks)?;
             }
 
             tasks.spawn(
@@ -241,19 +237,15 @@ impl Options {
             // better have been provided the leaf ahead of time if we want it at all.
             let mut app = App::<_, Error>::with_state(RwLock::new(state.clone()));
 
-            self.init_hotshot_modules::<_, _, _, V>(&mut app)?;
+            self.init_hotshot_modules(&mut app)?;
 
             if self.hotshot_events.is_some() {
-                self.init_and_spawn_hotshot_event_streaming_module(
-                    state,
-                    &mut tasks,
-                    SequencerApiVersion::instance(),
-                )?;
+                self.init_and_spawn_hotshot_event_streaming_module(state, &mut tasks)?;
             }
 
             tasks.spawn(
                 "API server",
-                self.listen(self.http.port, app, <V as Versions>::Base::instance()),
+                self.listen(self.http.port, app, SequencerApiVersion::instance()),
             );
 
             Box::new(NoMetrics)
@@ -296,7 +288,7 @@ impl Options {
         app.register_module("availability", endpoints::availability()?)?;
         app.register_module("node", endpoints::node()?)?;
 
-        self.init_hotshot_modules::<_, _, _, V>(&mut app)?;
+        self.init_hotshot_modules(&mut app)?;
 
         tasks.spawn(
             "query storage updater",
@@ -330,7 +322,7 @@ impl Options {
             .await?;
 
         if self.hotshot_events.is_some() {
-            self.init_and_spawn_hotshot_event_streaming_module(state, tasks, bind_version)?;
+            self.init_and_spawn_hotshot_event_streaming_module(state, tasks)?;
         }
 
         tasks.spawn("API server", self.listen(self.http.port, app, bind_version));
@@ -360,19 +352,19 @@ impl Options {
             .await?;
 
         if self.explorer.is_some() {
-            app.register_module("explorer", endpoints::explorer(bind_version)?)?;
+            app.register_module("explorer", endpoints::explorer()?)?;
         }
 
         if self.state.is_some() {
             // Initialize merklized state module for block merkle tree
             app.register_module(
                 "block-state",
-                endpoints::merklized_state::<N, P, _, BlockMerkleTree, _, 3>(bind_version)?,
+                endpoints::merklized_state::<N, P, _, BlockMerkleTree, _, 3>()?,
             )?;
             // Initialize merklized state module for fee merkle tree
             app.register_module(
                 "fee-state",
-                endpoints::merklized_state::<N, P, _, FeeMerkleTree, _, 256>(bind_version)?,
+                endpoints::merklized_state::<N, P, _, FeeMerkleTree, _, 256>()?,
             )?;
 
             let state = state.clone();
@@ -384,12 +376,12 @@ impl Options {
         }
 
         if self.hotshot_events.is_some() {
-            self.init_and_spawn_hotshot_event_streaming_module(state, tasks, bind_version)?;
+            self.init_and_spawn_hotshot_event_streaming_module(state, tasks)?;
         }
 
         tasks.spawn(
             "API server",
-            self.listen(self.http.port, app, V::Base::instance()),
+            self.listen(self.http.port, app, SequencerApiVersion::instance()),
         );
         Ok(metrics)
     }
@@ -399,10 +391,7 @@ impl Options {
     /// This function adds the `submit`, `state`, and `state_signature` API modules to the given
     /// app. These modules only require a HotShot handle as state, and thus they work with any data
     /// source, so initialization is the same no matter what mode the service is running in.
-    fn init_hotshot_modules<N, P, S, V: Versions>(
-        &self,
-        app: &mut App<S, Error>,
-    ) -> anyhow::Result<()>
+    fn init_hotshot_modules<N, P, S>(&self, app: &mut App<S, Error>) -> anyhow::Result<()>
     where
         S: 'static + Send + Sync + ReadState + WriteState,
         P: SequencerPersistence,
@@ -414,10 +403,10 @@ impl Options {
             + HotShotConfigDataSource,
         N: ConnectedNetwork<PubKey>,
     {
-        let bind_version = V::Base::instance();
+        let bind_version = SequencerApiVersion::instance();
         // Initialize submit API
         if self.submit.is_some() {
-            let submit_api = endpoints::submit::<_, _, _, V::Base>()?;
+            let submit_api = endpoints::submit::<_, _, _, SequencerApiVersion>()?;
             app.register_module("submit", submit_api)?;
         }
 
@@ -447,7 +436,6 @@ impl Options {
         &self,
         state: ApiState<N, P, V>,
         tasks: &mut TaskList,
-        bind_version: SequencerApiVersion,
     ) -> anyhow::Result<()>
     where
         N: ConnectedNetwork<PubKey>,
@@ -471,7 +459,7 @@ impl Options {
             self.listen(
                 self.hotshot_events.unwrap().events_service_port,
                 app,
-                bind_version,
+                SequencerApiVersion::instance(),
             ),
         );
 

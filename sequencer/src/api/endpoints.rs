@@ -130,14 +130,15 @@ where
 type ExplorerApi<N, P, D, V, Ver> = Api<AvailState<N, P, D, V>, explorer::Error, Ver>;
 
 pub(super) fn explorer<N, P, D, V: Versions>(
-    bind_version: SequencerApiVersion,
 ) -> Result<ExplorerApi<N, P, D, V, SequencerApiVersion>>
 where
     N: ConnectedNetwork<PubKey>,
     D: ExplorerStorage<SeqTypes> + Send + Sync + 'static,
     P: SequencerPersistence,
 {
-    let api = explorer::define_api::<AvailState<N, P, D, V>, SeqTypes, _>(bind_version)?;
+    let api = explorer::define_api::<AvailState<N, P, D, V>, SeqTypes, _>(
+        SequencerApiVersion::instance(),
+    )?;
     Ok(api)
 }
 
@@ -282,8 +283,7 @@ where
 
 type MerklizedStateApi<N, P, D, V, Ver> = Api<AvailState<N, P, D, V>, merklized_state::Error, Ver>;
 pub(super) fn merklized_state<N, P, D, S, V: Versions, const ARITY: usize>(
-    _: SequencerApiVersion,
-) -> Result<MerklizedStateApi<N, P, D, V, V::Base>>
+) -> Result<MerklizedStateApi<N, P, D, V, SequencerApiVersion>>
 where
     N: ConnectedNetwork<PubKey>,
     D: MerklizedStateDataSource<SeqTypes, S, ARITY>
@@ -295,9 +295,13 @@ where
     P: SequencerPersistence,
     for<'a> <S::Commit as TryFrom<&'a TaggedBase64>>::Error: std::fmt::Display,
 {
-    let api = merklized_state::define_api::<AvailState<N, P, D, V>, SeqTypes, S, V::Base, ARITY>(
-        &Default::default(),
-    )?;
+    let api = merklized_state::define_api::<
+        AvailState<N, P, D, V>,
+        SeqTypes,
+        S,
+        SequencerApiVersion,
+        ARITY,
+    >(&Default::default())?;
     Ok(api)
 }
 

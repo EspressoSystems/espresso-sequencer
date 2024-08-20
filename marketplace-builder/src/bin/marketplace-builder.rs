@@ -3,8 +3,8 @@ use std::{num::NonZeroUsize, path::PathBuf, time::Duration};
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use clap::Parser;
 use espresso_types::{
-    eth_signature_key::EthKeyPair, parse_duration, FeeAmount, MarketplaceVersion, NamespaceId,
-    SequencerVersions, V0_1, V0_2, V0_3,
+    eth_signature_key::EthKeyPair, parse_duration, FeeAmount, NamespaceId, SequencerVersions, V0_1,
+    V0_2, V0_3,
 };
 use hotshot::traits::ValidatedState;
 use hotshot_types::{
@@ -170,13 +170,8 @@ async fn run<V: Versions>(
 
     let builder_server_url: Url = format!("http://0.0.0.0:{}", opt.port).parse().unwrap();
 
-    let instance_state = build_instance_state(
-        genesis.chain_config,
-        l1_params,
-        opt.state_peers,
-        MarketplaceVersion::instance(),
-    )
-    .unwrap();
+    let instance_state =
+        build_instance_state::<V>(genesis.chain_config, l1_params, opt.state_peers).unwrap();
 
     let base_fee = genesis.max_base_fee();
 
