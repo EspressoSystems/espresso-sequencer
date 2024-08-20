@@ -1531,7 +1531,7 @@ mod test {
 
         upgrades.insert(UpgradeVersion::VERSION, Upgrade { mode, upgrade_type });
 
-        let stop_voting_view = u64::MAX;
+        let stop_voting_view = 30u64;
 
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
@@ -1585,21 +1585,23 @@ mod test {
                 .send()
                 .await
                 .unwrap();
-
+            dbg!(&stop_voting_view);
+            dbg!(&height);
             for peer in &network.peers {
                 let state = peer.consensus().read().await.decided_state().await;
 
                 match state.chain_config.resolve() {
                     Some(cf) => {
-                        if cf != chain_config_upgrade && height as u64 > stop_voting_view {
-                            panic!("failed to upgrade chain config");
+                        dbg!(&cf);
+                        dbg!(&chain_config_upgrade);
+                        if height as u64 > stop_voting_view {
+                            assert_eq!(cf, chain_config_upgrade);
+                            break 'outer;
                         }
                     }
                     None => continue 'outer,
                 }
             }
-
-            break;
         }
 
         network.server.shut_down().await;
