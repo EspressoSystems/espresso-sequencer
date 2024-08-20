@@ -48,7 +48,7 @@ contract LightClientUpgradeToVxTest is Test {
         assertEq(lcV1Proxy.frozenThreshold(), stateV1.threshold);
     }
 
-    // that the data remains the same after upgrading the implementation
+    // test that the data remains the same after upgrading the implementation
     function testUpgradeSameDataV1ToV2() public {
         // Upgrade LightClient and check that the genesis state is not changed and that the new
         // field
@@ -81,7 +81,7 @@ contract LightClientUpgradeToVxTest is Test {
         );
     }
 
-    // that the data remains the same after upgrading the implementation
+    // test that the data remains the same after upgrading the implementation
     function testExpectRevertUpgradeSameDataV1ToV2ReinitializeTwice() public {
         // Upgrade LightClient and check that the genesis state is not changed and that the new
         // field
