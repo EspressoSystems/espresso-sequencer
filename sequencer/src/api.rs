@@ -1585,27 +1585,32 @@ mod test {
                 .send()
                 .await
                 .unwrap();
-            dbg!(&stop_voting_view);
-            dbg!(&height);
             for peer in &network.peers {
                 let state = peer.consensus().read().await.decided_state().await;
 
                 match state.chain_config.resolve() {
                     Some(cf) => {
-                        if cf != chain_config_upgrade {
-                            continue 'outer;
-                        }
+                        // Fail test if we've waited long enough
                         if height as u64 > stop_voting_view {
                             panic!("failed to upgrade `ChainConfig`")
+                        }
+                        // if state.chain_config is not upgraded return to the outer loop
+                        // and check the peers again
+                        if cf != chain_config_upgrade {
+                            continue 'outer;
                         }
                     }
                     None => continue 'outer,
                 }
             }
+            // if we make it here that means all chain_configs for a
+            // set of peers have been upgraded. Test is therefore
+            // successful and we can exit the loop.
             break;
         }
 
         network.server.shut_down().await;
+        // TODO I don't think this drop does anything.
         drop(network);
     }
 
