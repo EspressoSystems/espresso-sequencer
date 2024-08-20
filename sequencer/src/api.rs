@@ -1592,10 +1592,8 @@ mod test {
 
                 match state.chain_config.resolve() {
                     Some(cf) => {
-                        dbg!(&cf);
-                        dbg!(&chain_config_upgrade);
-                        if cf == chain_config_upgrade {
-                            break 'outer;
+                        if cf != chain_config_upgrade {
+                            continue 'outer;
                         }
                         if height as u64 > stop_voting_view {
                             panic!("failed to upgrade `ChainConfig`")
@@ -1604,6 +1602,7 @@ mod test {
                     None => continue 'outer,
                 }
             }
+            break;
         }
 
         network.server.shut_down().await;
