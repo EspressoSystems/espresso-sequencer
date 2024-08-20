@@ -7,7 +7,7 @@ use async_std::{
 };
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::SequencerPersistence, NodeState, PubKey, SeqVersions, Transaction, ValidatedState,
+    v0::traits::SequencerPersistence, NodeState, PubKey, SequencerVersions, Transaction, ValidatedState,
 };
 use futures::{
     future::{join_all, Future},
@@ -40,7 +40,7 @@ use crate::{
     static_stake_table_commitment, Node, SeqTypes,
 };
 /// The consensus handle
-pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>, SeqVersions>;
+pub type Consensus<N, P> = SystemContextHandle<SeqTypes, Node<N, P>, SequencerVersions>;
 
 /// The sequencer context contains a consensus handle and other sequencer specific information.
 #[derive(Derivative)]

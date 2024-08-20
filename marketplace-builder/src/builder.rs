@@ -12,7 +12,7 @@ use async_lock::RwLock;
 use async_std::sync::Arc;
 use espresso_types::{
     eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NamespaceId, NodeState,
-    Payload, SeqTypes, SeqVersions, ValidatedState,
+    Payload, SeqTypes, SequencerVersions, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -204,7 +204,7 @@ impl BuilderConfig {
             };
 
             async_spawn(async move {
-                let res = run_non_permissioned_standalone_builder_service::<_, SeqVersions>(
+                let res = run_non_permissioned_standalone_builder_service::<_, SequencerVersions>(
                     hooks, senders, events_url,
                 )
                 .await;
@@ -219,7 +219,7 @@ impl BuilderConfig {
             let hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(async move {
-                let res = run_non_permissioned_standalone_builder_service::<_, SeqVersions>(
+                let res = run_non_permissioned_standalone_builder_service::<_, SequencerVersions>(
                     hooks, senders, events_url,
                 )
                 .await;
