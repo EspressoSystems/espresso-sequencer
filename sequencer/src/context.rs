@@ -7,7 +7,8 @@ use async_std::{
 };
 use derivative::Derivative;
 use espresso_types::{
-    v0::traits::SequencerPersistence, NodeState, PubKey, SequencerVersions, Transaction, ValidatedState,
+    v0::traits::SequencerPersistence, NodeState, PubKey, SequencerVersions, Transaction,
+    ValidatedState,
 };
 use futures::{
     future::{join_all, Future},
