@@ -17,10 +17,6 @@ contract LightClientV2 is LightClient {
     /// that has the new struct type, or put the struct inside a map.
     uint256 public newField;
 
-    /// @notice this field is used to check initialized versions so that one can ensure that the
-    /// initialization only happens once
-    uint8 internal _initializedVersion;
-
     struct ExtendedLightClientState {
         uint256 extraField;
     }
@@ -30,10 +26,14 @@ contract LightClientV2 is LightClient {
 
     /// @notice Initialize v2
     /// @param _newField   New field amount
-    function initializeV2(uint256 _newField) external {
-        require(_initializedVersion == 0);
+    /// @dev the reinitializer modifier is used to reinitialize new versions of a contract and
+    /// is called at most once. The modifier has an uint64 argument which indicates the next
+    /// contract version.
+    /// when the base implementation contract is initialized for the first time, the _initialized
+    /// version
+    /// is set to 1. Since this is the 2nd implementation, the next contract version is 2.
+    function initializeV2(uint256 _newField) external reinitializer(2) {
         newField = _newField;
-        _initializedVersion = 2;
     }
 
     /// @notice Use this to get the implementation contract version

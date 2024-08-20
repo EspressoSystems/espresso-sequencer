@@ -11,6 +11,7 @@ import { UpgradeLightClientScript } from "./UpgradeLightClientToV2.s.sol";
 import { UpgradeLightClientScript as ULCV3 } from "./UpgradeLightClientToV3.s.sol";
 import { OwnableUpgradeable } from
     "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 contract LightClientUpgradeToVxTest is Test {
     LCV1 public lcV1Proxy;
@@ -81,6 +82,43 @@ contract LightClientUpgradeToVxTest is Test {
     }
 
     // that the data remains the same after upgrading the implementation
+    function testExpectRevertUpgradeSameDataV1ToV2ReinitializeTwice() public {
+        // Upgrade LightClient and check that the genesis state is not changed and that the new
+        // field
+        // of the upgraded contract is set to 0
+        uint256 myNewField = 123;
+        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, admin));
+
+        assertEq(lcV2Proxy.newField(), myNewField);
+        assertEq(lcV2Proxy.blocksPerEpoch(), 10);
+        assertEq(lcV2Proxy.currentEpoch(), 0);
+
+        LCV1.LightClientState memory expectedLightClientState = LCV1.LightClientState(
+            stateV1.viewNum,
+            stateV1.blockHeight,
+            stateV1.blockCommRoot,
+            stateV1.feeLedgerComm,
+            stateV1.stakeTableBlsKeyComm,
+            stateV1.stakeTableSchnorrKeyComm,
+            stateV1.stakeTableAmountComm,
+            stateV1.threshold
+        );
+
+        LCV2.ExtendedLightClientState memory expectedExtendedLightClientState =
+            LCV2.ExtendedLightClientState(0);
+
+        assertEq(abi.encode(lcV2Proxy.getFinalizedState()), abi.encode(expectedLightClientState));
+        assertEq(
+            abi.encode(lcV2Proxy.getExtendedFinalizedState()),
+            abi.encode(expectedExtendedLightClientState)
+        );
+
+        // expect a revert when we try to reinitialize
+        vm.expectRevert(Initializable.InvalidInitialization.selector);
+        lcV2Proxy.initializeV2(5);
+    }
+
+    // test that the data remains the same after upgrading the implementation
     function testUpgradeSameDataV2ToV3() public {
         // Upgrade LightClient and check that the genesis state is not changed and that the new
         // field
@@ -126,6 +164,59 @@ contract LightClientUpgradeToVxTest is Test {
             abi.encode(lcV3Proxy.getExtendedFinalizedState()),
             abi.encode(expectedExtendedLightClientState)
         );
+    }
+
+    // test that the tx reverts if we try to reinitialize more than once
+    function testExpectRevertUpgradeSameDataV2ToV3ReinitializeTwice() public {
+        // Upgrade LightClient and check that the genesis state is not changed and that the new
+        // field
+        // of the upgraded contract is set to 0
+        uint256 myNewField = 123;
+        uint256 myNewFieldV3 = 456;
+        // upgrade to v2 first
+        lcV2Proxy = LCV2(upgraderV2.run(proxy, myNewField, admin));
+
+        assertEq(lcV2Proxy.newField(), myNewField);
+        assertEq(lcV2Proxy.blocksPerEpoch(), 10);
+        assertEq(lcV2Proxy.currentEpoch(), 0);
+
+        LCV1.LightClientState memory expectedLightClientState = LCV1.LightClientState(
+            stateV1.viewNum,
+            stateV1.blockHeight,
+            stateV1.blockCommRoot,
+            stateV1.feeLedgerComm,
+            stateV1.stakeTableBlsKeyComm,
+            stateV1.stakeTableSchnorrKeyComm,
+            stateV1.stakeTableAmountComm,
+            stateV1.threshold
+        );
+
+        LCV2.ExtendedLightClientState memory expectedExtendedLightClientState =
+            LCV2.ExtendedLightClientState(0);
+
+        assertEq(abi.encode(lcV2Proxy.getFinalizedState()), abi.encode(expectedLightClientState));
+        assertEq(
+            abi.encode(lcV2Proxy.getExtendedFinalizedState()),
+            abi.encode(expectedExtendedLightClientState)
+        );
+
+        // upgrade to v3
+        lcV3Proxy = LCV3(upgraderV3.run(proxy, myNewFieldV3, admin));
+
+        assertEq(lcV3Proxy.newField(), myNewField);
+        assertEq(lcV3Proxy.anotherField(), myNewFieldV3);
+        assertEq(lcV3Proxy.blocksPerEpoch(), 10);
+        assertEq(lcV3Proxy.currentEpoch(), 0);
+
+        assertEq(abi.encode(lcV3Proxy.getFinalizedState()), abi.encode(expectedLightClientState));
+        assertEq(
+            abi.encode(lcV3Proxy.getExtendedFinalizedState()),
+            abi.encode(expectedExtendedLightClientState)
+        );
+
+        // expect a revert when we try to reinitialize
+        vm.expectRevert(Initializable.InvalidInitialization.selector);
+        lcV3Proxy.initializeV3(6);
     }
 
     // check that the proxy address remains the same

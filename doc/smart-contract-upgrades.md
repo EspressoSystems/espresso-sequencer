@@ -31,7 +31,19 @@ upgrades.
 When writing the upgrade for upgradable contracts such as the light client contract and the fee contract, the new
 implementation inherits from the latest implementation contract. This new implementation only implements the new or
 modified features or new variables. If any variables have to be initialized, the new implementation contract should
-create a `initializeVx` function, where x is the version number. Here's an example:
+create a `initializeVx` function, where x is the version number.
+
+The `reinitializer` modifier, provided by the
+[`Initializable`](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/proxy/utils/Initializable.sol)
+library, ensures that the new implementation is reinitialized at most once. The modifier takes a `uint64` argument,
+which specifies the contract's version.
+
+When the base implementation contract is initialized, its `_initializedVersion` is set to 1. The `reinitializer`
+modifier ensures that the initialization logic is only executed if the \_initializedVersion is less than the specified
+version number. Therefore, when upgrading a contract, the `reinitializer` modifier should be set to the previous
+`_initializedVersion` plus 1 to indicate the new version.
+
+Here's an example:
 
 The original `LightClient` contract looks like this:
 
@@ -47,16 +59,14 @@ The 2nd implementation, LightClientV2, that adds a new variable is implemented l
 contract LightClientV2 is LightClient {
     uint256 public newField;
 
-    /// @notice this field is used to check initialized versions so that one can ensure that the
-    /// initialization only happens once
-    uint8 internal _initializedVersion;
-
     /// @notice Initialize v2
     /// @param _newField   New field amount
-    function initializeV2(uint256 _newField) external {
-        require(_initializedVersion == 0);
+    /// @dev the reinitializer modifier is used to reinitialize new versions of a contract and
+    /// is called at most once. The modifier has an uint64 argument which indicates the next contract version.
+    /// when the base implementation contract is initialized for the first time, the _initialized version
+    /// is set to 1. Since this is the 2nd implementation, the next contract version is 2.
+    function initializeV2(uint256 _newField) external reinitializer(2){
         newField = _newField;
-        _initializedVersion = 2;
     }
 
     function newFinalizedState(
@@ -70,18 +80,16 @@ contract LightClientV2 is LightClient {
 }
 ```
 
-The 3rd implementation will now inherit from LightClientV2, ensure that functions are marked as virtual in previous
-versions of the contract if you want to continue overriding it in child contracts
+The third implementation, LightClientV3, will inherit from LightClientV2. Ensure that functions are marked as `virtual`
+in previous versions of the contract if you intend to override them in child contracts.
 
 ```solidity
 contract LightClientV3 is LightClientV2 {
     uint256 public anotherField;
 
     /// @param _newField   New field amount
-    function initializeV3(uint256 _newField) external {
-        require(_initializedVersion == 2, "already initialized");
+    function initializeV3(uint256 _newField) external reinitializer(3){
         anotherField = _newField;
-        _initializedVersion = 3;
     }
 
     function newFinalizedState(
@@ -136,7 +144,7 @@ Criteria for New State Variables:
 - New variable names must be used otherwise it leads to a compilation error due to shadowing.
 - New variables added _must_ be declared as type `internal` or `public`, `private` can never be used.
 - If the new variable needs to be initialized, then the initialize function with a separate initV[X] function should be
-  added. The initV[X] function allows the contract to initialize only the new variables added in the new contract.
+  added. The initializeVx function allows the contract to initialize only the new variables added in the new contract.
 
 _Example:_
 
@@ -288,7 +296,7 @@ You can learn more about deploying and upgrading upgradable contracts with OpenZ
 
 - Deploy the new (modified) implementation contract. If new state variables that need initialization were added then:
 - Prepare an `upgradeToAndCall` transaction from the multisig admin account which is parameterized with the address of
-  the new implementation contract and an internal call to invoke initializeV[X] with the new state variables data. Else:
+  the new implementation contract and an internal call to invoke initializeVx with the new state variables data. Else:
 - Prepare an `upgradeTo` transaction from the multisig admin account parameterized with the address of the new
   implementation contract: Then:
 - Broadcast the transaction
