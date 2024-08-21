@@ -289,7 +289,7 @@ mod test {
     use async_std::future::TimeoutError;
     use async_std::prelude::FutureExt;
     use core::panic;
-    use espresso_types::{v0::SequencerVersions, SeqTypes};
+    use espresso_types::SeqTypes;
     use futures::channel::mpsc::Sender;
     use futures::SinkExt;
     use futures::{
@@ -301,11 +301,10 @@ mod test {
         traits::NetworkError,
         types::{BLSPubKey, Message},
     };
-    use hotshot_types::message::{DataMessage, MessageKind, UpgradeLock};
+    use hotshot_types::message::{DataMessage, MessageKind};
     use hotshot_types::traits::network::{BroadcastDelay, ResponseMessage};
     use std::time::Duration;
     use url::Url;
-    use vbs::version::StaticVersion;
 
     /// [TestConnectedNetworkConsumer] is a test implementation of the
     /// [ConnectedNetworkConsumer] trait that allows for the simulation of
@@ -342,11 +341,6 @@ mod test {
     /// url_sender appropriately.
     #[async_std::test]
     async fn test_cdn_receive_messages_task() {
-        let upgrade_lock = UpgradeLock::<
-            SeqTypes,
-            SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>,
-        >::new();
-
         let test_hotshot_message_serialized = {
             let test_url = Url::parse("http://localhost:8080/").unwrap();
 
@@ -361,7 +355,7 @@ mod test {
                 kind: MessageKind::External(external_message_encoded),
             };
 
-            upgrade_lock.serialize(&test_message).await.unwrap()
+            bincode::serialize(&test_message).unwrap()
         };
 
         let (url_sender, url_receiver) = mpsc::channel(1);
@@ -438,18 +432,12 @@ mod test {
     /// This really shouldn't happen in practice.
     #[async_std::test]
     async fn test_cdn_receive_messages_task_fails_unexpected_hotshot_message_variant() {
-        let upgrade_lock = UpgradeLock::<
-            SeqTypes,
-            SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>,
-        >::new();
         let (url_sender, url_receiver) = mpsc::channel(1);
-        let bytes = upgrade_lock
-            .serialize(&Message::<SeqTypes> {
-                sender: BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
-                kind: MessageKind::Data(DataMessage::DataResponse(ResponseMessage::NotFound)),
-            })
-            .await
-            .unwrap();
+        let bytes = bincode::serialize(&Message::<SeqTypes> {
+            sender: BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
+            kind: MessageKind::Data(DataMessage::DataResponse(ResponseMessage::NotFound)),
+        })
+        .unwrap();
 
         let task =
             CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(Ok(vec![bytes])), url_sender);
@@ -472,18 +460,12 @@ mod test {
     /// it encounters an error from the deserialization of the external message.
     #[async_std::test]
     async fn test_cdn_receive_messages_task_fails_decoding_external_message() {
-        let upgrade_lock = UpgradeLock::<
-            SeqTypes,
-            SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>,
-        >::new();
         let (url_sender, url_receiver) = mpsc::channel(1);
-        let bytes = upgrade_lock
-            .serialize(&Message::<SeqTypes> {
-                sender: BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
-                kind: MessageKind::External(vec![0]),
-            })
-            .await
-            .unwrap();
+        let bytes = bincode::serialize(&Message::<SeqTypes> {
+            sender: BLSPubKey::generated_from_seed_indexed([0; 32], 0).0,
+            kind: MessageKind::External(vec![0]),
+        })
+        .unwrap();
 
         let task =
             CdnReceiveMessagesTask::new(TestConnectedNetworkConsumer(Ok(vec![bytes])), url_sender);
@@ -508,10 +490,6 @@ mod test {
     /// really have a point in existing.
     #[async_std::test]
     async fn test_cdn_receive_messages_tasks_exits_when_url_receiver_closed() {
-        let upgrade_lock = UpgradeLock::<
-            SeqTypes,
-            SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>,
-        >::new();
         let (url_sender, url_receiver) = mpsc::channel(1);
 
         let test_hotshot_message_serialized = {
@@ -528,7 +506,7 @@ mod test {
                 kind: MessageKind::External(external_message_encoded),
             };
 
-            upgrade_lock.serialize(&test_message).await.unwrap()
+            bincode::serialize(&test_message).unwrap()
         };
         drop(url_receiver);
 
@@ -571,10 +549,6 @@ mod test {
     /// beyond it's initial request.
     #[async_std::test]
     async fn test_cdn_broadcast_roll_call_task() {
-        let upgrade_lock = UpgradeLock::<
-            SeqTypes,
-            SequencerVersions<StaticVersion<0, 1>, StaticVersion<0, 2>>,
-        >::new();
         let (message_sender, message_receiver) = mpsc::channel(1);
 
         let task = BroadcastRollCallTask::new(
@@ -584,10 +558,7 @@ mod test {
 
         let mut message_receiver = message_receiver;
         let next_message = message_receiver.next().await.unwrap();
-        let next_message = upgrade_lock
-            .deserialize::<Message<SeqTypes>>(&next_message)
-            .await
-            .unwrap();
+        let next_message = bincode::deserialize::<Message<SeqTypes>>(&next_message).unwrap();
 
         let external_message = match next_message.kind {
             MessageKind::External(external_message) => external_message,
