@@ -1560,7 +1560,7 @@ mod test {
         let mut network = TestNetwork::new(config, BaseVersion::instance()).await;
 
         let mut events = network.server.event_stream().await;
-        loop {
+        let new_version_first_view = loop {
             let event = events.next().await.unwrap();
 
             match event.event {
@@ -1568,23 +1568,22 @@ mod test {
                     let upgrade = proposal.data.upgrade_proposal;
                     let new_version = upgrade.new_version;
                     assert_eq!(new_version, UpgradeVersion::VERSION);
-                    break;
+                    break upgrade.new_version_first_view;
                 }
                 _ => continue,
             }
-        }
+        };
 
         let client: Client<ServerError, BaseVersion> =
             Client::new(format!("http://localhost:{port}").parse().unwrap());
         client.connect(None).await;
         tracing::info!(port, "server running");
 
-        let expected_height = 10usize;
         let expected: Vec<ChainConfig> = (0..NUM_NODES).map(|_| chain_config_upgrade).collect();
 
         loop {
             let height = client
-                .get::<usize>("status/block-height")
+                .get::<ViewNumber>("status/block-height")
                 .send()
                 .await
                 .unwrap();
@@ -1603,13 +1602,12 @@ mod test {
 
             // ChainConfig will eventually be resolved
             if let Some(configs) = configs {
-                if height > expected_height {
+                if height > new_version_first_view {
                     assert_eq!(expected, configs);
                     break;
                 }
-            } else {
-                continue;
             }
+            sleep(Duration::from_secs(1));
         }
 
         network.server.shut_down().await;
