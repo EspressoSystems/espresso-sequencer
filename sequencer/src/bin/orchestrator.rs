@@ -67,7 +67,11 @@ struct Args {
 
     /// The number of nodes a Libp2p node should try to maintain
     /// a connection with at one time.
-    #[arg(long, env = "ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N", default_value = "4")]
+    #[arg(
+        long,
+        env = "ESPRESSO_ORCHESTRATOR_LIBP2P_MESH_N",
+        default_value = "20"
+    )]
     libp2p_mesh_n: usize,
 
     /// Seed to use for generating node keys.

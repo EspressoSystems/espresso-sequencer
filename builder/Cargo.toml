@@ -50,3 +50,4 @@ vec1 = { workspace = true }
 
 [dev-dependencies]
 sequencer = { path = "../sequencer", features = ["testing"] }
+tempfile = "3.10.1"

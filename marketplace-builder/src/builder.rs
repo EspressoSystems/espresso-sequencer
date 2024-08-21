@@ -12,7 +12,7 @@ use async_lock::RwLock;
 use async_std::sync::Arc;
 use espresso_types::{
     eth_signature_key::EthKeyPair, v0_3::ChainConfig, FeeAmount, L1Client, NamespaceId, NodeState,
-    Payload, SeqTypes, ValidatedState,
+    Payload, SeqTypes, SequencerVersions, ValidatedState,
 };
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -186,6 +186,7 @@ impl BuilderConfig {
         let proxy_global_state = ProxyGlobalState::new(
             global_state.clone(),
             (builder_key_pair.fee_account(), builder_key_pair.clone()),
+            max_api_timeout_duration,
         );
 
         // start the hotshot api service
@@ -209,9 +210,10 @@ impl BuilderConfig {
             };
 
             async_spawn(async move {
-                let res =
-                    run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
-                        .await;
+                let res = run_non_permissioned_standalone_builder_service::<_, SequencerVersions>(
+                    hooks, senders, events_url,
+                )
+                .await;
                 tracing::error!(?res, "Reserve builder service exited");
                 if res.is_err() {
                     panic!("Reserve builder should restart.");
@@ -223,9 +225,10 @@ impl BuilderConfig {
             let hooks = hooks::EspressoFallbackHooks { solver_api_url };
 
             async_spawn(async move {
-                let res =
-                    run_non_permissioned_standalone_builder_service(hooks, senders, events_url)
-                        .await;
+                let res = run_non_permissioned_standalone_builder_service::<_, SequencerVersions>(
+                    hooks, senders, events_url,
+                )
+                .await;
                 tracing::error!(?res, "Fallback builder service exited");
                 if res.is_err() {
                     panic!("Fallback builder should restart.");
@@ -257,25 +260,23 @@ mod test {
     use committable::Commitment;
     use committable::Committable;
     use espresso_types::{
-        mock::MockStateCatchup, v0_3::{RollupRegistration, RollupRegistrationBody}, FeeAccount, NamespaceId, PubKey, SeqTypes, Transaction
+        mock::MockStateCatchup, v0_3::{RollupRegistration, RollupRegistrationBody}, BaseVersion, FeeAccount, MarketplaceVersion, NamespaceId, PubKey, SeqTypes, Transaction
     };
-    use ethers::{solc::resolver::print, utils::Anvil};
-    use hotshot::types::BLSPrivKey;
+    use ethers::utils::Anvil;
+    use hotshot::types::{BLSPrivKey, Event, EventType};
     use hotshot_builder_api::v0_3::builder::BuildError;
     use hotshot_events_service::{
         events::{Error as EventStreamApiError, Options as EventStreamingApiOptions},
         events_source::{EventConsumer, EventsStreamer},
     };
-    use hotshot_example_types::block_types::TestTransaction;
-    use hotshot_query_service::availability::LeafQueryData;
+    use hotshot_query_service::{availability::LeafQueryData, VidCommitment};
     use hotshot_types::{
         bundle::Bundle,
-        constants::MarketplaceVersion,
         light_client::StateKeyPair,
         signature_key::BLSPubKey,
         traits::{
             block_contents::{BlockPayload, GENESIS_VID_NUM_STORAGE_NODES},
-            node_implementation::NodeType,
+            node_implementation::{NodeType, Versions},
             signature_key::{BuilderSignatureKey, SignatureKey},
         },
     };
@@ -339,7 +340,7 @@ mod test {
             )
             .network_config(network_config)
             .build();
-        let network = TestNetwork::new(config, <SeqTypes as NodeType>::Base::instance()).await;
+        let network = TestNetwork::new(config, BaseVersion::instance()).await;
 
         let mock_solver = MockSolver::init().await;
         let solver_api = mock_solver.solver_api();
@@ -419,8 +420,7 @@ mod test {
         println!("here after await");
 
         // Wait for at least one empty block to be sequenced (after consensus starts VID).
-        let sequencer_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
-            Client::new(query_api_url);
+        let sequencer_client: Client<ServerError, BaseVersion> = Client::new(query_api_url);
         sequencer_client.connect(None).await;
         sequencer_client
             .socket("availability/stream/leaves/0")
@@ -438,97 +438,59 @@ mod test {
         builder_client.connect(None).await;
 
         //  TODO(AG): workaround for version mismatch between bundle and submit APIs
-        let submission_client: Client<ServerError, <SeqTypes as NodeType>::Base> =
-            Client::new(builder_api_url);
+        let submission_client: Client<ServerError, BaseVersion> = Client::new(builder_api_url);
         submission_client.connect(None).await;
 
-        // Test getting a bundle
-let _bundle = builder_client
-    .get::<Bundle<SeqTypes>>("block_info/bundle/1")
-    .send()
-    .await
-    .unwrap();
-
-            println!("here after bundle");
         // Test submitting transactions
-        let tx_registered = Transaction::new(1u32.into(), vec![1, 1, 1, 1]);
-        let tx_unregistered = Transaction::new(50u32.into(), vec![1, 1, 1, 1]);
-        let global_state = builder_config.global_state.read().await;
-        println!("here global_state {:?}",global_state);
-
-        global_state
-            .tx_sender
-            .try_broadcast(Arc::new(ReceivedTransaction {
-                tx: tx_registered.clone(),
-                source: TransactionSource::External,
-                commit: tx_registered.commit(),
-                time_in: Instant::now(),
-            }))
-            .unwrap();
-        println!("here after global_state {:?}",global_state.tx_sender);
-        drop(global_state);
-
-        let (response_sender, response_receiver) = unbounded();
-        let request_message = MessageType::<SeqTypes>::RequestMessage(RequestMessage {
-            requested_view_number: ViewNumber::new(0),
-            response_channel: response_sender,
-        });
-        let transactions = Vec::new();
-        let encoded_transactions = TestTransaction::encode(&transactions);
-        let block_vid_commitment = vid_commitment(&encoded_transactions, GENESIS_VID_NUM_STORAGE_NODES);
-        let req_msg = (
-            response_receiver,
-            BuilderStateId {
-                parent_commitment: block_vid_commitment,
-                view: ViewNumber::genesis(),
-            },
-            request_message,
-        );
-
-        // give builder state time to fork
-        async_sleep(Duration::from_millis(100)).await;
-
-        // get the builder state for parent view we've just simulated
-        builder_config.global_state
-            .read_arc()
-            .await
-            .spawned_builder_states
-            .get(&req_msg.1)
-            .expect("Failed to get channel for matching builder")
-            .broadcast(req_msg.2.clone())
-            .await
-            .unwrap();
-
-        // get response
-        let res_msg = req_msg
-            .0
-            .recv()
-            .timeout(Duration::from_secs(10))
+        let transactions = (0..10)
+            .map(|i| Transaction::new(0u32.into(), vec![1, 1, 1, i]))
+            .collect::<Vec<_>>();
+        submission_client
+            .post::<Vec<Commitment<Transaction>>>("txn_submit/batch")
+            .body_json(&transactions)
+            .unwrap()
+            .send()
             .await
             .unwrap()
             .unwrap();
-        println!("here after res_msg {:?}",res_msg);
 
-        let global_state = builder_config.global_state.read().await;
-        println!("here after global_state {:?}",global_state.tx_sender);
-        println!("here after blocks {:?}",global_state.blocks);
-        assert_eq!(global_state.blocks.len(), 0);
+        let events_service_client =
+            Client::<hotshot_events_service::events::Error, BaseVersion>::new(
+                event_service_url.clone(),
+            );
+        events_service_client.connect(None).await;
 
-        global_state
-            .tx_sender
-            .try_broadcast(Arc::new(ReceivedTransaction {
-                tx: tx_unregistered.clone(),
-                source: TransactionSource::External,
-                commit: tx_unregistered.commit(),
-                time_in: Instant::now(),
-            }))
+        let mut subscribed_events = events_service_client
+            .socket("hotshot-events/events")
+            .subscribe::<Event<SeqTypes>>()
+            .await
             .unwrap();
 
-            println!("here after global_state {:?}",global_state.tx_sender);
-            println!("here after global_state {:?}",global_state.spawned_builder_states);
+        let start = Instant::now();
+        loop {
+            if start.elapsed() > Duration::from_secs(10) {
+                panic!("Didn't get a quorum proposal in 10 seconds");
+            }
 
-        // assert_eq!(global_state.blocks.len(), 1);
-        // println!("here after tx unregistered");
-
+            let event = subscribed_events.next().await.unwrap().unwrap();
+            if let EventType::QuorumProposal { proposal, .. } = event.event {
+                let parent_view_number = *proposal.data.view_number;
+                let parent_commitment =
+                    Leaf::from_quorum_proposal(&proposal.data).payload_commitment();
+                let bundle = builder_client
+                    .get::<Bundle<SeqTypes>>(
+                        format!(
+                            "block_info/bundle/{parent_view_number}/{parent_commitment}/{}",
+                            parent_view_number + 1
+                        )
+                        .as_str(),
+                    )
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(bundle.transactions, transactions);
+                break;
+            }
+        }
     }
 }

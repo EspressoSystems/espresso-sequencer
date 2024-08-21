@@ -8,14 +8,13 @@ use std::{
 use async_std::task::{sleep, spawn};
 use clap::Parser;
 use committable::{Commitment, Committable};
-use espresso_types::{parse_duration, parse_size, SeqTypes, Transaction};
+use espresso_types::{parse_duration, parse_size, BaseVersion, SeqTypes, Transaction};
 use futures::{
     channel::mpsc::{self, Sender},
     sink::SinkExt,
     stream::StreamExt,
 };
 use hotshot_query_service::{availability::BlockQueryData, types::HeightIndexed, Error};
-use hotshot_types::traits::node_implementation::NodeType;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rand_distr::Distribution;
@@ -174,7 +173,7 @@ async fn main() {
     let mut rng = ChaChaRng::seed_from_u64(seed);
 
     // Subscribe to block stream so we can check that our transactions are getting sequenced.
-    let client = Client::<Error, <SeqTypes as NodeType>::Base>::new(opt.url.clone());
+    let client = Client::<Error, BaseVersion>::new(opt.url.clone());
     let block_height: usize = client.get("status/block-height").send().await.unwrap();
     let mut blocks = client
         .socket(&format!("availability/stream/blocks/{}", block_height - 1))
@@ -189,13 +188,13 @@ async fn main() {
             opt.clone(),
             sender.clone(),
             ChaChaRng::from_rng(&mut rng).unwrap(),
-            <SeqTypes as NodeType>::Base::instance(),
+            BaseVersion::instance(),
         ));
     }
 
     // Start healthcheck endpoint once tasks are running.
     if let Some(port) = opt.port {
-        spawn(server(port, <SeqTypes as NodeType>::Base::instance()));
+        spawn(server(port, BaseVersion::instance()));
     }
 
     // Keep track of the results.

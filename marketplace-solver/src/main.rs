@@ -4,8 +4,7 @@ use anyhow::Context;
 use async_compatibility_layer::logging::{setup_backtrace, setup_logging};
 use async_std::{sync::RwLock, task::spawn};
 use clap::Parser;
-use espresso_types::SeqTypes;
-use hotshot_types::traits::node_implementation::NodeType;
+use espresso_types::BaseVersion;
 use marketplace_solver::{
     define_api, handle_events,
     state::{GlobalState, SolverState, StakeTable},
@@ -14,7 +13,7 @@ use marketplace_solver::{
 use tide_disco::App;
 use vbs::version::StaticVersionType;
 
-type Version = <SeqTypes as NodeType>::Base;
+type Version = BaseVersion;
 
 #[async_std::main]
 async fn main() -> anyhow::Result<()> {

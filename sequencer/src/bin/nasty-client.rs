@@ -21,7 +21,8 @@ use clap::Parser;
 use committable::Committable;
 use derivative::Derivative;
 use espresso_types::{
-    parse_duration, v0_3::IterableFeeInfo, BlockMerkleTree, FeeMerkleTree, Header, SeqTypes,
+    parse_duration, v0_3::IterableFeeInfo, BaseVersion, BlockMerkleTree, FeeMerkleTree, Header,
+    SeqTypes,
 };
 use futures::{
     future::{FutureExt, TryFuture, TryFutureExt},
@@ -32,10 +33,7 @@ use hotshot_query_service::{
     metrics::PrometheusMetrics,
     node::TimeWindowQueryData,
 };
-use hotshot_types::traits::{
-    metrics::{Counter, Gauge, Histogram, Metrics as _},
-    node_implementation::NodeType,
-};
+use hotshot_types::traits::metrics::{Counter, Gauge, Histogram, Metrics as _};
 use jf_merkle_tree::{
     ForgetableMerkleTreeScheme, MerkleCommitment, MerkleTreeScheme, UniversalMerkleTreeScheme,
 };
@@ -404,8 +402,7 @@ impl Queryable for PayloadQueryData<SeqTypes> {
     }
 }
 
-type Connection<T> =
-    socket::Connection<T, socket::Unsupported, ClientError, <SeqTypes as NodeType>::Base>;
+type Connection<T> = socket::Connection<T, socket::Unsupported, ClientError, BaseVersion>;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -418,7 +415,7 @@ struct Subscription<T: Queryable> {
 
 #[derive(Debug)]
 struct ResourceManager<T: Queryable> {
-    client: surf_disco::Client<ClientError, <SeqTypes as NodeType>::Base>,
+    client: surf_disco::Client<ClientError, BaseVersion>,
     open_streams: BTreeMap<u64, Subscription<T>>,
     next_stream_id: u64,
     metrics: Arc<Metrics>,
@@ -1263,17 +1260,14 @@ async fn serve(port: u16, metrics: PrometheusMetrics) {
         METHOD = "METRICS"
     };
     let mut app = App::<_, ServerError>::with_state(RwLock::new(metrics));
-    app.module::<ServerError, <SeqTypes as NodeType>::Base>("status", api)
+    app.module::<ServerError, BaseVersion>("status", api)
         .unwrap()
         .metrics("metrics", |_req, state| {
             async move { Ok(Cow::Borrowed(state)) }.boxed()
         })
         .unwrap();
     if let Err(err) = app
-        .serve(
-            format!("0.0.0.0:{port}"),
-            <SeqTypes as NodeType>::Base::instance(),
-        )
+        .serve(format!("0.0.0.0:{port}"), BaseVersion::instance())
         .await
     {
         tracing::error!("web server exited unexpectedly: {err:#}");
