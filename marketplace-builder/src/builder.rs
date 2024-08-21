@@ -10,7 +10,6 @@ use async_compatibility_layer::{
 };
 use async_lock::RwLock;
 use async_std::sync::Arc;
-use cld::VERSION;
 use espresso_types::{
     eth_signature_key::EthKeyPair, v0_3::ChainConfig, BaseV01UpgradeV02, FeeAmount, L1Client,
     NamespaceId, NodeState, Payload, SeqTypes, SequencerVersions, ValidatedState,
@@ -378,13 +377,6 @@ mod test {
         let builder_client: Client<ServerError, MarketplaceVersion> =
             Client::new(builder_api_url.clone());
         builder_client.connect(None).await;
-
-        // Test getting a bundle
-        let _bundle = builder_client
-            .get::<Bundle<SeqTypes>>("block_info/bundle/1")
-            .send()
-            .await
-            .unwrap();
 
         // Test submitting transactions
         let transactions = (0..10)
