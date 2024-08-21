@@ -3993,7 +3993,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#a68d39a44b5de591b8e4909b380b7e604e2f8b60"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4017,7 +4017,7 @@ dependencies = [
  "futures",
  "hotshot-orchestrator",
  "hotshot-task",
- "hotshot-task-impls",
+ "hotshot-task-impls 0.5.69 (git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown)",
  "hotshot-types",
  "jf-signature",
  "libp2p-identity",
@@ -4040,7 +4040,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#a68d39a44b5de591b8e4909b380b7e604e2f8b60"
 dependencies = [
  "async-trait",
  "clap",
@@ -4137,7 +4137,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#a68d39a44b5de591b8e4909b380b7e604e2f8b60"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4152,7 +4152,7 @@ dependencies = [
  "futures",
  "hotshot",
  "hotshot-task",
- "hotshot-task-impls",
+ "hotshot-task-impls 0.5.69 (git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown)",
  "hotshot-types",
  "rand 0.8.5",
  "reqwest 0.12.5",
@@ -4170,7 +4170,7 @@ dependencies = [
 [[package]]
 name = "hotshot-fakeapi"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#a68d39a44b5de591b8e4909b380b7e604e2f8b60"
 dependencies = [
  "anyhow",
  "async-lock 2.8.0",
@@ -4189,7 +4189,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#a68d39a44b5de591b8e4909b380b7e604e2f8b60"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4200,7 +4200,7 @@ dependencies = [
 [[package]]
 name = "hotshot-orchestrator"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#a68d39a44b5de591b8e4909b380b7e604e2f8b60"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -4286,7 +4286,7 @@ dependencies = [
 [[package]]
 name = "hotshot-stake-table"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#a68d39a44b5de591b8e4909b380b7e604e2f8b60"
 dependencies = [
  "ark-bn254",
  "ark-ed-on-bn254",
@@ -4351,7 +4351,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#a68d39a44b5de591b8e4909b380b7e604e2f8b60"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4401,9 +4401,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotshot-task-impls"
+version = "0.5.69"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#a68d39a44b5de591b8e4909b380b7e604e2f8b60"
+dependencies = [
+ "anyhow",
+ "async-broadcast",
+ "async-compatibility-layer",
+ "async-lock 2.8.0",
+ "async-std",
+ "async-trait",
+ "bincode",
+ "bitvec",
+ "cdn-proto",
+ "chrono",
+ "committable",
+ "either",
+ "futures",
+ "hotshot-builder-api",
+ "hotshot-task",
+ "hotshot-types",
+ "jf-signature",
+ "jf-vid",
+ "rand 0.8.5",
+ "serde",
+ "sha2 0.10.8",
+ "snafu 0.8.4",
+ "surf-disco",
+ "tagged-base64",
+ "time 0.3.36",
+ "tokio",
+ "tracing",
+ "url",
+ "vbs",
+ "vec1",
+]
+
+[[package]]
 name = "hotshot-testing"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#a68d39a44b5de591b8e4909b380b7e604e2f8b60"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -4424,7 +4461,7 @@ dependencies = [
  "hotshot-macros",
  "hotshot-orchestrator",
  "hotshot-task",
- "hotshot-task-impls",
+ "hotshot-task-impls 0.5.69 (git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown)",
  "hotshot-types",
  "itertools 0.13.0",
  "jf-signature",
@@ -4449,7 +4486,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#a68d39a44b5de591b8e4909b380b7e604e2f8b60"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -5815,7 +5852,7 @@ dependencies = [
 [[package]]
 name = "libp2p-networking"
 version = "0.5.69"
-source = "git+https://github.com/EspressoSystems/hotshot?tag=0.5.70#3e38cdf852816d73a3b4ffc58c5ccd3a0c6e8028"
+source = "git+https://github.com/EspressoSystems//hotshot?branch=ss/fix-shutdown#a68d39a44b5de591b8e4909b380b7e604e2f8b60"
 dependencies = [
  "anyhow",
  "async-compatibility-layer",
@@ -6249,7 +6286,7 @@ dependencies = [
  "hotshot",
  "hotshot-builder-api",
  "hotshot-events-service",
- "hotshot-task-impls",
+ "hotshot-task-impls 0.5.69 (git+https://github.com/EspressoSystems/hotshot?tag=0.5.70)",
  "hotshot-types",
  "lru 0.12.4",
  "multimap",
@@ -7578,7 +7615,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81bddcdb20abf9501610992b6759a4c888aef7d1a7247ef75e2404275ac24af1"
 dependencies = [
  "anyhow",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn 2.0.74",

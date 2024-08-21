@@ -138,3 +138,13 @@ paste = "1.0"
 rand = "0.8.5"
 time = "0.3"
 trait-set = "0.3.0"
+
+[patch.'https://github.com/EspressoSystems/hotshot']
+hotshot = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-shutdown" }
+hotshot-orchestrator = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-shutdown" }
+hotshot-builder-api = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-shutdown" }
+hotshot-stake-table = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-shutdown" }
+hotshot-task = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-shutdown" }
+hotshot-testing = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-shutdown" }
+hotshot-types = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-shutdown" }
+hotshot-example-types = { git = "https://github.com/EspressoSystems//hotshot", branch = "ss/fix-shutdown" }
