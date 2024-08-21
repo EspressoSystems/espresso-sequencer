@@ -22,7 +22,7 @@ env:
   RUST_LOG: info,libp2p=off,node=error
 
 jobs:
-  slowtests:
+  slow-tests:
     runs-on: ubuntu-latest
     steps:
       - name: Fix submodule permissions check
