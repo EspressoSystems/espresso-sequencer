@@ -7,6 +7,5 @@ async fn main() {
     setup_logging();
     setup_backtrace();
 
-    // change
     run_standalone_service(Options::parse()).await;
 }
