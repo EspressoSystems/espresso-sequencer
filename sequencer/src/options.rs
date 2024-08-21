@@ -112,7 +112,20 @@ pub struct Options {
     )]
     #[derivative(Debug(format_with = "Display::fmt"))]
     pub auction_results_solver_url: Url,
-
+    #[clap(
+        long,
+        env = "ESPRESSO_MARKETPLACE_SOLVER_PATH",
+        default_value = "marketplace-solver/"
+    )]
+    /// API path of marketplace-solver
+    pub marketplace_solver_path: String,
+    #[clap(
+        long,
+        env = "ESPRESSO_AUCTION_RESULTS_PATH",
+        default_value = "auction_results/"
+    )]
+    /// API path of marketplace-solver auction results
+    pub auction_results_path: String,
     /// URL of generic builder
     #[clap(
         long,

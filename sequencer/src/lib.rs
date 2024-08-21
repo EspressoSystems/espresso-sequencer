@@ -762,9 +762,7 @@ pub mod testing {
                 None, // The public API URL
                 bind_version,
                 MarketplaceConfig::<SeqTypes, Node<network::Memory, P::Persistence>> {
-                    auction_results_provider: Arc::new(SolverAuctionResultsProvider(
-                        Url::from_str("https://some.solver").unwrap(),
-                    )),
+                    auction_results_provider: Arc::new(SolverAuctionResultsProvider::default()),
                     fallback_builder_url: Url::from_str("https://some.builder").unwrap(),
                 },
             )
