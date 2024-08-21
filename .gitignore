@@ -49,4 +49,4 @@ data/*-actual.bin
 .direnv/
 
 # Deployments to Sepolia
-./contracts/broadcast/*/11155111
+contracts/broadcast/*/11155111/
