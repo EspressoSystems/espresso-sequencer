@@ -1577,8 +1577,6 @@ mod test {
         client.connect(None).await;
         tracing::info!(port, "server running");
 
-        let expected: Vec<ChainConfig> = (0..NUM_NODES).map(|_| chain_config_upgrade).collect();
-
         loop {
             let height = client
                 .get::<ViewNumber>("status/block-height")
@@ -1598,11 +1596,13 @@ mod test {
                 .map(|state| state.chain_config.resolve())
                 .collect();
 
-            // ChainConfig will eventually be resolved
+            // ChainConfigs will eventually be resolved
             if let Some(configs) = configs {
                 if height > new_version_first_view {
-                    assert_eq!(expected, configs);
-                    break;
+                    for config in configs {
+                        assert_eq!(config, chain_config_upgrade);
+                    }
+                    break; // if assertion did not panic, we need to exit the loop
                 }
             }
             sleep(Duration::from_secs(1)).await;
