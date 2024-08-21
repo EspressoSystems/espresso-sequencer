@@ -36,8 +36,11 @@ contract LightClientDeployScript is Script {
         bytes memory result = vm.ffi(cmds);
         (state,,) = abi.decode(result, (LC.LightClientState, bytes32, bytes32));
 
-        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        vm.startBroadcast(deployerPrivateKey);
+        // get the deployer info from the environment and start broadcast as the deployer
+        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        vm.startBroadcast(admin);
 
         proxyAddress = Upgrades.deployUUPSProxy(
             contractName, abi.encodeCall(LC.initialize, (state, numBlocksPerEpoch, owner))
@@ -66,8 +69,11 @@ contract LightClientContractUpgradeScript is Script {
         // validate that the new implementation contract is upgrade safe
         Upgrades.validateUpgrade(upgradeContractName, opts);
 
-        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        vm.startBroadcast(deployerPrivateKey);
+        // get the deployer info from the environment and start broadcast as the deployer
+        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        vm.startBroadcast(admin);
 
         // deploy the new implementation contract
         LCV2 implementationContract = new LCV2();
@@ -115,8 +121,11 @@ contract LightClientContractUpgradeSameContractScript is Script {
         // validate that the new implementation contract is upgrade safe
         Upgrades.validateUpgrade(upgradeContractName, opts);
 
-        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        vm.startBroadcast(deployerPrivateKey);
+        // get the deployer info from the environment and start broadcast as the deployer
+        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        vm.startBroadcast(admin);
 
         // deploy the new implementation contract
         LC implementationContract = new LC();
@@ -306,8 +315,10 @@ contract DeployLightClientContractScriptWithoutMultiSig is Script {
         private
         returns (address payable proxyAddress, address admin, LC.LightClientState memory)
     {
-        string memory seedPhrase = vm.envString("MNEMONIC");
-        (admin,) = deriveRememberKey(seedPhrase, 0);
+        // get the deployer info from the environment and start broadcast as the deployer
+        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+        (admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
         vm.startBroadcast(admin);
 
         LC lightClientContract = new LC();

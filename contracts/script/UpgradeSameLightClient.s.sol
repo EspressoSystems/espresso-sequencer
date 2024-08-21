@@ -11,13 +11,13 @@ contract UpgradeLightClientScript is Script {
     /// @param mostRecentlyDeployedProxy address of deployed proxy
     /// @return address of the proxy
     /// TODO get the most recent deployment from the devops tooling
-    function run(uint32 seedPhraseOffset, address mostRecentlyDeployedProxy)
-        external
-        returns (address)
-    {
-        string memory seedPhrase = vm.envString("MNEMONIC");
+    function run(address mostRecentlyDeployedProxy) external returns (address) {
+        // get the deployer info from the environment and start broadcast as the deployer
+        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
         (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
         vm.startBroadcast(admin);
+
         address proxy = upgradeLightClient(mostRecentlyDeployedProxy, address(new LCV2()));
         return proxy;
     }

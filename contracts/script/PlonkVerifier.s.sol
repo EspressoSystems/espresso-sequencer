@@ -57,8 +57,11 @@ contract PlonkVerifierDeployScript is Script {
     string public contractName = "PlonkVerifier.sol";
 
     function run() public returns (address contractAddress) {
-        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        vm.startBroadcast(deployerPrivateKey);
+        // get the deployer info from the environment and start broadcast as the deployer
+        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        vm.startBroadcast(admin);
 
         // Deploy the library
         Options memory opts;

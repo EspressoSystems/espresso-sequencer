@@ -47,7 +47,7 @@ contract LightClientUpgradeSameContractTest is Test {
         // Upgrade LightClient and check that the genesis state is not changed and that the new
         // field
         // of the upgraded contract is set to 0
-        lcV2Proxy = LCV2(upgrader.run(0, proxy));
+        lcV2Proxy = LCV2(upgrader.run(proxy));
 
         assertEq(lcV2Proxy.blocksPerEpoch(), 10);
         assertEq(lcV2Proxy.currentEpoch(), 0);
@@ -74,7 +74,7 @@ contract LightClientUpgradeSameContractTest is Test {
         assertEq(patch, 0);
 
         //upgrade box
-        lcV2Proxy = LCV2(upgrader.run(0, proxy));
+        lcV2Proxy = LCV2(upgrader.run(proxy));
         assertEq(address(lcV2Proxy), address(lcV1Proxy));
     }
 
@@ -84,6 +84,6 @@ contract LightClientUpgradeSameContractTest is Test {
         //attempted upgrade as attacker will revert
         vm.prank(attacker);
         vm.expectRevert();
-        lcV2Proxy = LCV2(upgrader.run(0, address(proxy)));
+        lcV2Proxy = LCV2(upgrader.run(address(proxy)));
     }
 }

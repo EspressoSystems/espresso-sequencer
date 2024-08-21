@@ -20,8 +20,10 @@ contract FeeContractDeployScript is Script {
         public
         returns (address payable proxy, address implementationAddress)
     {
-        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        vm.startBroadcast(deployerPrivateKey);
+        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        vm.startBroadcast(admin);
 
         address proxyAddress =
             Upgrades.deployUUPSProxy(contractName, abi.encodeCall(FC.initialize, (owner)));
@@ -48,8 +50,11 @@ contract FeeContractUpgradeScript is Script {
         // validate that the new implementation contract is upgrade safe
         Upgrades.validateUpgrade(upgradeContractName, opts);
 
-        uint256 deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-        vm.startBroadcast(deployerPrivateKey);
+        // get the deployer info from the environment and start broadcast as the deployer
+        string memory seedPhrase = vm.envString("DEPLOYER_MNEMONIC");
+        uint32 seedPhraseOffset = uint32(vm.envUint("DEPLOYER_MNEMONIC_OFFSET"));
+        (address admin,) = deriveRememberKey(seedPhrase, seedPhraseOffset);
+        vm.startBroadcast(admin);
 
         // deploy the new implementation contract
         FC implementationContract = new FC();

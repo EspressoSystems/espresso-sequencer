@@ -8,21 +8,28 @@ file is used.
 
 1. Create a multisig wallet using [Safe](https://app.safe.global/welcome/accounts) on the network you'd like to deploy
    to.
-2. In [OpenZeppelin Defender](https://www.openzeppelin.com/defender), create an Approval Process that requires the
-   multisig wallet you created above. `Manage > Approval Processes`.
+2. In the home folder of this repo, you're in a nix shell: Enter `nix-shell` in the terminal
+3. If the contracts have never been compiled, run `forge build`
+4. Set the values for `NUM_BLOCKS_PER_EPOCH` and `NUM_INIT_VALIDATORS` in the `.env.contracts` file.
+
+If using [OpenZeppelin Defender](https://www.openzeppelin.com/defender), follow these steps:
+
+1. Create an Approval Process that requires the multisig wallet you created above. `Manage > Approval Processes`.
    1. Enter a name for your approval process
    1. Enter the multisig address from shown in te Safe UI
    1. Enter one of multisig owner address addresses
    1. Save the changes
-3. In OpenZeppelin Defender, create a deployment environment by clicking on "Setup" in the
+2. In OpenZeppelin Defender, create a deployment environment by clicking on "Setup" in the
    [deploy](https://defender.openzeppelin.com/v2/#/deploy) tab. Use "Test Environment" for deploying to testnets (e. g.
    Sepolia) and "Production Environment" for mainnet.
    1. Choose a network
    1. Select the approval process created in Step 2
    1. Be sure to save `DEFENDER_SECRET` ("Team Secret key") and `DEFENDER_KEY` ("Team API Key"), that is shown at the
       end of this step, into the `.env.contracts` file. The keys won't be available later at a later point.
-4. In the home folder of this repo, you're in a nix shell: Enter `nix-shell` in the terminal
-5. If the contracts have never been compiled run, `forge build`
+
+If not using OpenZeppelin Defender, follow these steps:
+
+1. Set the values for `DEPLOYER_MNEMONIC` and `DEPLOYER_MNEMONIC_OFFSET` in the `.env.contracts` file.
 
 ## Deployments
 
@@ -317,8 +324,8 @@ forge script contracts/script/LightClient.s.sol:DeployLightClientContractScriptW
 To Upgrade (assuming it's the same LightClient.sol file being used (pre-mainnet))
 
 ```bash
-forge script contracts/script/UpgradeSameLightClient.s.sol:UpgradeLightClientScript $mnemonicOffset $mostRecentlyDeployedProxy \
---sig 'run(uint32, address)' \
+forge script contracts/script/UpgradeSameLightClient.s.sol:UpgradeLightClientScript $mostRecentlyDeployedProxy \
+--sig 'run(address)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com \
 --broadcast --legacy
@@ -402,8 +409,8 @@ forge script contracts/script/LightClient.s.sol:DeployLightClientContractScriptW
 To Upgrade (assuming it's the same LightClient.sol file being used (pre-mainnet))
 
 ```bash
-forge script contracts/script/UpgradeSameLightClient.s.sol:UpgradeLightClientScript $mnemonicOffset $mostRecentlyDeployedProxy \
---sig 'run(uint32, address)' \
+forge script contracts/script/UpgradeSameLightClient.s.sol:UpgradeLightClientScript $mostRecentlyDeployedProxy \
+--sig 'run(address)' \
 --ffi \
 --rpc-url https://ethereum-sepolia.publicnode.com \
 --broadcast --legacy
