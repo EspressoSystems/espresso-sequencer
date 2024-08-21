@@ -1531,8 +1531,6 @@ mod test {
 
         upgrades.insert(UpgradeVersion::VERSION, Upgrade { mode, upgrade_type });
 
-        let stop_voting_view = 30u64;
-
         const NUM_NODES: usize = 5;
         let config = TestNetworkConfigBuilder::<NUM_NODES, _, _>::with_num_nodes()
             .api_config(
@@ -1607,7 +1605,7 @@ mod test {
                     break;
                 }
             }
-            sleep(Duration::from_secs(1));
+            sleep(Duration::from_secs(1)).await;
         }
 
         network.server.shut_down().await;
