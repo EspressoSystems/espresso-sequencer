@@ -16,7 +16,7 @@ use futures::{
     future::{BoxFuture, Future, FutureExt},
     stream::{BoxStream, Stream},
 };
-use hotshot::types::{Event, SystemContextHandle};
+use hotshot::types::Event;
 use hotshot_events_service::events_source::{
     EventFilterSet, EventsSource, EventsStreamer, StartupInfo,
 };
@@ -32,8 +32,8 @@ use jf_merkle_tree::MerkleTreeScheme;
 
 use self::data_source::{HotShotConfigDataSource, PublicNetworkConfig, StateSignatureDataSource};
 use crate::{
-    network, persistence::ChainConfigPersistence, state_signature::StateSigner, Node, SeqTypes,
-    SequencerApiVersion, SequencerContext,
+    context::Consensus, network, persistence::ChainConfigPersistence, state_signature::StateSigner,
+    SeqTypes, SequencerApiVersion, SequencerContext,
 };
 
 pub mod data_source;
@@ -48,7 +48,6 @@ pub use options::Options;
 pub type BlocksFrontier = <BlockMerkleTree as MerkleTreeScheme>::MembershipProof;
 
 type BoxLazy<T> = Pin<Arc<Lazy<T, BoxFuture<'static, T>>>>;
-type HotshotSystemContextHandle<N, V> = Arc<RwLock<SystemContextHandle<SeqTypes, N, V>>>;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
@@ -59,7 +58,7 @@ struct ConsensusState<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: V
     config: NetworkConfig<PubKey>,
 
     #[derivative(Debug = "ignore")]
-    handle: HotshotSystemContextHandle<Node<N, P>, V>,
+    handle: Arc<RwLock<Consensus<N, P, V>>>,
 }
 
 impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions>
@@ -109,7 +108,7 @@ impl<N: ConnectedNetwork<PubKey>, P: SequencerPersistence, V: Versions> ApiState
         &self.consensus.as_ref().get().await.get_ref().event_streamer
     }
 
-    async fn consensus(&self) -> Arc<RwLock<SystemContextHandle<SeqTypes, Node<N, P>, V>>> {
+    async fn consensus(&self) -> Arc<RwLock<Consensus<N, P, V>>> {
         Arc::clone(&self.consensus.as_ref().get().await.get_ref().handle)
     }
 
@@ -384,7 +383,6 @@ pub mod test_helpers {
     };
     use hotshot::types::{Event, EventType};
     use hotshot_contract_adapter::light_client::ParsedLightClientState;
-
     use hotshot_types::{
         event::LeafInfo,
         traits::{metrics::NoMetrics, node_implementation::ConsensusTime},
@@ -848,7 +846,6 @@ mod api_tests {
     use ethers::utils::Anvil;
     use futures::stream::StreamExt;
     use hotshot_query_service::availability::{LeafQueryData, VidCommonQueryData};
-
     use portpicker::pick_unused_port;
     use sequencer_utils::test_utils::setup_test;
     use surf_disco::Client;

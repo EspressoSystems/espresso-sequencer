@@ -92,7 +92,7 @@ pub fn run_builder_api_service(url: Url, source: ProxyGlobalState<SeqTypes>) {
     let private_mempool_api = hotshot_builder_api::v0_3::builder::submit_api::<
         ProxyGlobalState<SeqTypes>,
         SeqTypes,
-        StaticVersion<0, 3>,
+        MarketplaceVersion,
     >(&HotshotBuilderApiOptions::default())
     .expect("Failed to construct the builder API for private mempool txns");
 

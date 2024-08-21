@@ -12,11 +12,12 @@ use vbs::version::StaticVersion;
 
 use crate::state::GlobalState;
 
+// TODO (ab): Change
 pub struct EventsServiceClient(Client<events::Error, StaticVersion<0, 1>>);
 
 impl EventsServiceClient {
     pub async fn new(url: Url) -> Self {
-        let client = Client::<events::Error, StaticVersion<0, 1>>::new(url.clone());
+        let client = Client::new(url.clone());
 
         client.connect(None).await;
 

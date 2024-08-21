@@ -763,9 +763,7 @@ pub mod testing {
                 None, // The public API URL
                 bind_version,
                 MarketplaceConfig::<SeqTypes, Node<network::Memory, P::Persistence>> {
-                    auction_results_provider: Arc::new(SolverAuctionResultsProvider(
-                        Url::from_str("https://some.solver").unwrap(),
-                    )),
+                    auction_results_provider: Arc::new(SolverAuctionResultsProvider::default()),
                     fallback_builder_url: Url::from_str("https://some.builder").unwrap(),
                 },
             )
@@ -834,7 +832,6 @@ mod test {
     #[async_std::test]
     async fn test_skeleton_instantiation() {
         setup_test();
-
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();
@@ -876,7 +873,6 @@ mod test {
         setup_test();
 
         let success_height = 30;
-
         // Assign `config` so it isn't dropped early.
         let anvil = AnvilOptions::default().spawn().await;
         let url = anvil.url();
