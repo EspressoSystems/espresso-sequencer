@@ -50,9 +50,9 @@ pub struct NamespaceProofQueryData {
     pub transactions: Vec<Transaction>,
 }
 
-pub(super) type AvailState<N, P, D, Ver> = Arc<RwLock<StorageState<N, P, D, Ver>>>;
+pub(super) type AvailState<N, P, D, ApiVer> = Arc<RwLock<StorageState<N, P, D, ApiVer>>>;
 
-type AvailabilityApi<N, P, D, V, Ver> = Api<AvailState<N, P, D, V>, availability::Error, Ver>;
+type AvailabilityApi<N, P, D, V, ApiVer> = Api<AvailState<N, P, D, V>, availability::Error, ApiVer>;
 
 // TODO (abdul): replace snafu with `this_error` in  hotshot query service
 // Snafu has been replaced by `this_error` everywhere.
@@ -127,7 +127,7 @@ where
     Ok(api)
 }
 
-type ExplorerApi<N, P, D, V, Ver> = Api<AvailState<N, P, D, V>, explorer::Error, Ver>;
+type ExplorerApi<N, P, D, V, ApiVer> = Api<AvailState<N, P, D, V>, explorer::Error, ApiVer>;
 
 pub(super) fn explorer<N, P, D, V: Versions>(
 ) -> Result<ExplorerApi<N, P, D, V, SequencerApiVersion>>
@@ -142,7 +142,7 @@ where
     Ok(api)
 }
 
-type NodeApi<N, P, D, V, Ver> = Api<AvailState<N, P, D, V>, node::Error, Ver>;
+type NodeApi<N, P, D, V, ApiVer> = Api<AvailState<N, P, D, V>, node::Error, ApiVer>;
 
 pub(super) fn node<N, P, D, V: Versions>() -> Result<NodeApi<N, P, D, V, SequencerApiVersion>>
 where
@@ -156,7 +156,7 @@ where
     )?;
     Ok(api)
 }
-pub(super) fn submit<N, P, S, Ver: StaticVersionType + 'static>() -> Result<Api<S, Error, Ver>>
+pub(super) fn submit<N, P, S, ApiVer: StaticVersionType + 'static>() -> Result<Api<S, Error, ApiVer>>
 where
     N: ConnectedNetwork<PubKey>,
     S: 'static + Send + Sync + WriteState,
@@ -164,12 +164,12 @@ where
     S::State: Send + Sync + SubmitDataSource<N, P>,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/submit.toml"))?;
-    let mut api = Api::<S, Error, Ver>::new(toml)?;
+    let mut api = Api::<S, Error, ApiVer>::new(toml)?;
 
     api.at("submit", |req, state| {
         async move {
             let tx = req
-                .body_auto::<Transaction, Ver>(Ver::instance())
+                .body_auto::<Transaction, ApiVer>(ApiVer::instance())
                 .map_err(Error::from_request_error)?;
 
             let hash = tx.commit();
@@ -185,16 +185,16 @@ where
     Ok(api)
 }
 
-pub(super) fn state_signature<N, S, Ver: StaticVersionType + 'static>(
-    _: Ver,
-) -> Result<Api<S, Error, Ver>>
+pub(super) fn state_signature<N, S, ApiVer: StaticVersionType + 'static>(
+    _: ApiVer,
+) -> Result<Api<S, Error, ApiVer>>
 where
     N: ConnectedNetwork<PubKey>,
     S: 'static + Send + Sync + ReadState,
     S::State: Send + Sync + StateSignatureDataSource<N>,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/state_signature.toml"))?;
-    let mut api = Api::<S, Error, Ver>::new(toml)?;
+    let mut api = Api::<S, Error, ApiVer>::new(toml)?;
 
     api.get("get_state_signature", |req, state| {
         async move {
@@ -215,13 +215,15 @@ where
     Ok(api)
 }
 
-pub(super) fn catchup<S, Ver: StaticVersionType + 'static>(_: Ver) -> Result<Api<S, Error, Ver>>
+pub(super) fn catchup<S, ApiVer: StaticVersionType + 'static>(
+    _: ApiVer,
+) -> Result<Api<S, Error, ApiVer>>
 where
     S: 'static + Send + Sync + ReadState,
     S::State: Send + Sync + CatchupDataSource,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/catchup.toml"))?;
-    let mut api = Api::<S, Error, Ver>::new(toml)?;
+    let mut api = Api::<S, Error, ApiVer>::new(toml)?;
 
     api.get("account", |req, state| {
         async move {
@@ -281,7 +283,8 @@ where
     Ok(api)
 }
 
-type MerklizedStateApi<N, P, D, V, Ver> = Api<AvailState<N, P, D, V>, merklized_state::Error, Ver>;
+type MerklizedStateApi<N, P, D, V, ApiVer> =
+    Api<AvailState<N, P, D, V>, merklized_state::Error, ApiVer>;
 pub(super) fn merklized_state<N, P, D, S, V: Versions, const ARITY: usize>(
 ) -> Result<MerklizedStateApi<N, P, D, V, SequencerApiVersion>>
 where
@@ -305,13 +308,15 @@ where
     Ok(api)
 }
 
-pub(super) fn config<S, Ver: StaticVersionType + 'static>(_: Ver) -> Result<Api<S, Error, Ver>>
+pub(super) fn config<S, ApiVer: StaticVersionType + 'static>(
+    _: ApiVer,
+) -> Result<Api<S, Error, ApiVer>>
 where
     S: 'static + Send + Sync + ReadState,
     S::State: Send + Sync + HotShotConfigDataSource,
 {
     let toml = toml::from_str::<toml::Value>(include_str!("../../api/config.toml"))?;
-    let mut api = Api::<S, Error, Ver>::new(toml)?;
+    let mut api = Api::<S, Error, ApiVer>::new(toml)?;
 
     let env_variables = get_public_env_vars()
         .map_err(|err| Error::catch_all(StatusCode::INTERNAL_SERVER_ERROR, format!("{err:#}")))?;

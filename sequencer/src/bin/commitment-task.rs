@@ -85,16 +85,16 @@ async fn main() {
     run_hotshot_commitment_task::<SequencerApiVersion>(&hotshot_contract_options).await;
 }
 
-fn start_http_server<Ver: StaticVersionType + 'static>(
+fn start_http_server<ApiVer: StaticVersionType + 'static>(
     port: u16,
     hotshot_address: Address,
-    bind_version: Ver,
+    bind_version: ApiVer,
 ) -> io::Result<()> {
     let mut app = tide_disco::App::<(), ServerError>::with_state(());
     let toml = toml::from_str::<toml::value::Value>(include_str!("../../api/commitment_task.toml"))
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<(), ServerError, Ver>::new(toml)
+    let mut api = Api::<(), ServerError, ApiVer>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
     api.get("gethotshotcontract", move |_, _| {

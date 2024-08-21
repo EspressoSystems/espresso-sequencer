@@ -54,11 +54,11 @@ struct Options {
     logging: logging::Config,
 }
 
-type SequencerClient<Ver> = surf_disco::Client<hotshot_query_service::Error, Ver>;
+type SequencerClient<ApiVer> = surf_disco::Client<hotshot_query_service::Error, ApiVer>;
 
-async fn verify_header<Ver: StaticVersionType>(
+async fn verify_header<ApiVer: StaticVersionType>(
     opt: &Options,
-    seq: &SequencerClient<Ver>,
+    seq: &SequencerClient<ApiVer>,
     l1: Option<&Provider<Http>>,
     parent: Option<Header>,
     height: usize,
@@ -117,7 +117,10 @@ async fn verify_header<Ver: StaticVersionType>(
     (header, ok)
 }
 
-async fn get_header<Ver: StaticVersionType>(seq: &SequencerClient<Ver>, height: usize) -> Header {
+async fn get_header<ApiVer: StaticVersionType>(
+    seq: &SequencerClient<ApiVer>,
+    height: usize,
+) -> Header {
     loop {
         match seq
             .get(&format!("availability/header/{height}"))

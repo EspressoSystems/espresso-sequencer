@@ -367,18 +367,18 @@ impl<S: Signer + Clone + 'static> ReadState for ApiState<S> {
     }
 }
 
-async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone + 'static>(
+async fn run_dev_node_server<ApiVer: StaticVersionType + 'static, S: Signer + Clone + 'static>(
     port: u16,
     contracts: BTreeMap<u64, LightClientMock<SignerMiddleware<Provider<Http>, S>>>,
     dev_info: DevInfo,
-    bind_version: Ver,
+    bind_version: ApiVer,
 ) -> anyhow::Result<()> {
     let mut app = tide_disco::App::<_, ServerError>::with_state(ApiState(contracts));
     let toml =
         toml::from_str::<toml::value::Value>(include_str!("../../api/espresso_dev_node.toml"))
             .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
 
-    let mut api = Api::<_, ServerError, Ver>::new(toml)
+    let mut api = Api::<_, ServerError, ApiVer>::new(toml)
         .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
     api.get("devinfo", move |_, _| {
         let info = dev_info.clone();
@@ -388,7 +388,7 @@ async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone
     .at("sethotshotdown", move |req, state: &ApiState<S>| {
         async move {
             let body = req
-                .body_auto::<SetHotshotDownReqBody, Ver>(Ver::instance())
+                .body_auto::<SetHotshotDownReqBody, ApiVer>(ApiVer::instance())
                 .map_err(ServerError::from_request_error)?;
 
             // if chain id is not provided, primary L1 light client is used
@@ -423,7 +423,7 @@ async fn run_dev_node_server<Ver: StaticVersionType + 'static, S: Signer + Clone
     .at("sethotshotup", move |req, state| {
         async move {
             let chain_id = req
-                .body_auto::<Option<SetHotshotUpReqBody>, Ver>(Ver::instance())
+                .body_auto::<Option<SetHotshotUpReqBody>, ApiVer>(ApiVer::instance())
                 .map_err(ServerError::from_request_error)?
                 .map(|b| b.chain_id);
 

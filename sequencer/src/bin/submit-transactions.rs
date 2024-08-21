@@ -381,15 +381,15 @@ struct SubmittedTransaction {
     submitted_at: Instant,
 }
 
-async fn submit_transactions<Ver: StaticVersionType>(
+async fn submit_transactions<ApiVer: StaticVersionType>(
     opt: Options,
     mut sender: Sender<SubmittedTransaction>,
     mut rng: ChaChaRng,
-    _: Ver,
+    _: ApiVer,
 ) {
     let url = opt.submit_url();
     tracing::info!(%url, "starting load generator task");
-    let client = Client::<Error, Ver>::new(url);
+    let client = Client::<Error, ApiVer>::new(url);
 
     // Create an exponential distribution for sampling delay times. The distribution should have
     // mean `opt.delay`, or parameter `\lambda = 1 / opt.delay`.
@@ -455,7 +455,7 @@ async fn submit_transactions<Ver: StaticVersionType>(
     }
 }
 
-async fn server<Ver: StaticVersionType + 'static>(port: u16, bind_version: Ver) {
+async fn server<ApiVer: StaticVersionType + 'static>(port: u16, bind_version: ApiVer) {
     if let Err(err) = App::<(), ServerError>::with_state(())
         .serve(format!("0.0.0.0:{port}"), bind_version)
         .await

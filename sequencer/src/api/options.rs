@@ -466,16 +466,16 @@ impl Options {
         Ok(())
     }
 
-    fn listen<S, E, Ver>(
+    fn listen<S, E, ApiVer>(
         &self,
         port: u16,
         app: App<S, E>,
-        bind_version: Ver,
+        bind_version: ApiVer,
     ) -> impl Future<Output = anyhow::Result<()>>
     where
         S: Send + Sync + 'static,
         E: Send + Sync + tide_disco::Error,
-        Ver: StaticVersionType + 'static,
+        ApiVer: StaticVersionType + 'static,
     {
         let max_connections = self.http.max_connections;
 
